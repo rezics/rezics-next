@@ -1,16 +1,27 @@
+import { isDeepStrictEqual } from 'node:util';
+import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } from './train-resolver.ts';
+import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
+import { authenticatedManager } from './priority-authority.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
-import { matchesPath, readRiskOwnership } from './briefs.ts';
+import { matchesPath, parseBrief, readRiskOwnership } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type {
   AttemptFence,
   ControlPlaneBatchManifest,
+  ControlPlaneBatchRefContinuation,
   ControlPlaneBatchResult,
   ControlPlaneBatchDisposition,
+  ControlPlaneBatchSupersession,
+  ControlPlaneBatchSupersessionResult,
+  ControlPlaneBatchSource,
+  ControlPlaneScopeApprovalReceipt,
+  ControlPlaneBatchDevHandoff,
+  ControlPlaneBatchDevHandoffRequest,
   AttemptRef,
   GateOutcome,
   GateOutcomeSink,
@@ -55,7 +66,9 @@ import { installShared } from './shared-dependencies.ts';
 import {
   assertControlPlaneMember,
   controlPlaneBatchId,
+  controlPlaneScopeApproval,
   parseControlPlaneBatchManifest,
+  parseControlPlaneBatchRefContinuation,
 } from './control-plane-batch.ts';
 
 export type DerivedFile = {
@@ -623,6 +636,7 @@ type ControlPlaneReleaseRecord = {
   compatibilityCommand: string[];
   recordedAt: string;
   batchId?: string;
+  scopeApprovals?: Record<string, string | null>;
   members?: {
     entryId: number;
     request: LandingRequest;
@@ -636,6 +650,21 @@ type PreparedControlPlaneRelease = {
   record: ControlPlaneReleaseRecord;
 };
 
+type ControlPlaneProof = GateResult & {
+  failedCommand?: readonly string[];
+  moved?: boolean;
+  negativeOnly?: boolean;
+  lifecycleEvidence?: string;
+  compatibilityCommand?: string[];
+};
+type CompletedControlPlaneProof = {
+  candidate: string;
+  snapshot: ControlPlaneReleaseSnapshot;
+  sources: ControlPlaneBatchManifest['members'];
+  result: ControlPlaneProof;
+  completedAt: string;
+  scopeApprovals?: Record<string, string | null>;
+};
 type ControlPlaneBatchNode = {
   indices: number[];
   attempts: number;
@@ -644,6 +673,11 @@ type ControlPlaneBatchNode = {
   failure?: string;
   prepared?: PreparedControlPlaneRelease;
   completed?: boolean;
+  /** Persisted before any native evidence can be produced for these members. */
+  nativeMembers?: number[];
+  proofs?: CompletedControlPlaneProof[];
+  /** A passing probe is never release evidence. Only full proof can prepare a release. */
+  negativeProbes?: string[][];
 };
 type ControlPlaneBatchJournal = {
   version: 1;
@@ -651,7 +685,44 @@ type ControlPlaneBatchJournal = {
   manifest: ControlPlaneBatchManifest;
   nodes: Record<string, ControlPlaneBatchNode>;
   results: ControlPlaneBatchDisposition[];
+  identities?: Record<string, string>;
+  scopeApprovals?: Record<string, ControlPlaneScopeApprovalReceipt | null>;
+  controller?: ProcessIdentity;
+  superseded?: ControlPlaneBatchSupersessionResult;
+  refContinuation?: { receiptId: string; controller: ProcessIdentity };
 };
+
+type ControlPlaneRefContinuationReceipt = {
+  id: string;
+  input: ControlPlaneBatchRefContinuation;
+  actor: { managerId: string; sessionId: string };
+  previousJournal: string;
+  previousController: ProcessIdentity;
+  controller: ProcessIdentity;
+  receivedAt: string;
+};
+const refContinuationNode = 'ref-continuation';
+
+/** Same ordinary dev lease, bounded like lifecycle waits, without blocking the current train's event loop. */
+export async function acquireControlPlaneDevLane(stateDirectory: string, timeoutMs = 30_000) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 30_000)
+    throw new Error('Control-plane dev lease wait must be within 30 seconds');
+  const deadline = performance.now() + timeoutMs;
+  for (;;) {
+    try {
+      return acquireDirectoryLease(join(stateDirectory, 'train.lease'));
+    } catch (error) {
+      if (!(error instanceof LeaseHeldError)) throw error;
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new LeaseHeldError(`Dev train lease held after waiting ${timeoutMs}ms`);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
+    }
+  }
+}
+
+function controlPlaneBriefHash(markdown: string): string {
+  return createHash('sha256').update(markdown.replace(/\r\n?/g, '\n').trimEnd()).digest('hex');
+}
 
 function isAncestor(cwd: string, ancestor: string, descendant: string): boolean {
   return spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd }).status === 0;
@@ -1093,6 +1164,8 @@ export type TrainOptions = {
   runControlPlaneGate?: GateRunner;
   /** Candidate Git seam used for integrity checks and prepared control-plane merges. */
   runCandidateGit?: CandidateGitRunner;
+  /** The delivered bounded resolver; production supplies the configured task/pool runtime. */
+  trainResolver?: TrainResolver;
   /** Real launch smoke seam; production uses the bounded candidate smoke after control-plane checks. */
   runLaunchSmoke?: GateRunner;
   /** Ordinary main releases wait asynchronously for dev, then defer. Bounded to at most 30 seconds. */
@@ -2814,12 +2887,11 @@ export class MergeTrain {
             candidate,
             releaseSnapshot!,
             logPath,
+            undefined,
+            undefined,
+            [],
             custody,
           );
-          if (proof.moved) {
-            retryMovedControlPlaneRefs();
-            continue;
-          }
           o.fence.assertCurrent(request);
           if (!proof.passed) {
             result.timedOut = proof.timedOut;
@@ -2827,6 +2899,10 @@ export class MergeTrain {
             if (proof.failedCommand) result.failedCommand = [...proof.failedCommand];
             result.stage = 'gate';
             return finish();
+          }
+          if (proof.moved) {
+            retryMovedControlPlaneRefs();
+            continue;
           }
           lifecycleEvidence = proof.lifecycleEvidence;
           compatibilityCommand = proof.compatibilityCommand;
@@ -3565,6 +3641,14 @@ export class MergeTrain {
     return true;
   }
 
+  /** Combined main cohorts need separate exact-source owner authority for every additional file. */
+  private checkControlPlaneScope(files: readonly string[], request: LandingRequest, logPath: string): void {
+    this.checkScope(files, request, logPath);
+    const outside = outsideScope(files, request.declaredPaths);
+    if (outside.length)
+      throw new Error(`Control-plane source needs native owning-manager scope approval: ${outside.join(', ')}`);
+  }
+
   /**
    * Declared paths say where the work is expected, not a fence: a worker may change other files its acceptance or a
    * defect blocking it needs, and they are logged. Only risk areas the brief did not declare stay closed.
@@ -3704,17 +3788,916 @@ export class MergeTrain {
     }
   }
 
-  /** Explicit main cohort release; shares the ordinary main lease, proof, fence, ref transaction and sink. */
-  async releaseControlPlaneBatch(input: ControlPlaneBatchManifest): Promise<ControlPlaneBatchResult> {
+  private assertLegacyControlPlaneGeneration(
+    store: WorkerStore,
+    request: LandingRequest,
+    acceptedCommit: string,
+  ): void {
+    const task = store.task(request.taskId);
+    // Before identity snapshots existed, native requests and immutable brief files carried this generation.
+    const requested = store.events(request.taskId, request.attempt).find((event) => event.kind === 'landing-requested');
+    const authorized = store
+      .events(request.taskId, request.attempt)
+      .findLast((event) => event.kind === 'manager-landing-authorized');
+    const { managerLanding: _authorization, ...original } = request;
+    const priorRequest = requested ? (JSON.parse(requested.body) as LandingRequest) : undefined;
+    if (priorRequest?.managerLanding) delete priorRequest.managerLanding;
+    // The original settlement names workerCommit. Older manager authorization rebuilt the request
+    // without that optional field. Accept that existing representation only when the original source
+    // itself equals the immutable manager-accepted commit; never substitute a guessed identity.
+    if (priorRequest?.workerCommit && !original.workerCommit) {
+      if (priorRequest.workerCommit !== acceptedCommit)
+        throw new Error('Legacy readmission original source differs from accepted source');
+      delete priorRequest.workerCommit;
+    }
+    if (
+      !priorRequest ||
+      !isDeepStrictEqual(priorRequest, original) ||
+      !authorized ||
+      !isDeepStrictEqual(JSON.parse(authorized.body), request.managerLanding) ||
+      readFileSync(task.briefPath, 'utf8') !== task.brief.markdown
+    )
+      throw new Error('Legacy readmission contract/request generation is not exact');
+  }
+
+  /** Historical generations have immutable objects and receipts, not current branch/attempt fences. */
+  private historicalControlPlaneIdentity(
+    store: WorkerStore,
+    previous: ControlPlaneBatchJournal,
+    member: ControlPlaneBatchSource,
+  ): string {
+    const entry = this.options.queue.entry(member);
+    if (
+      !entry ||
+      entry.batchId !== previous.batchId ||
+      entry.outcome ||
+      entry.delivered ||
+      entry.candidate ||
+      entry.request.managerLanding?.managerId !== previous.manifest.managerId ||
+      entry.request.managerLanding.acceptedCommit !== member.acceptedCommit ||
+      (entry.request.workerCommit && entry.request.workerCommit !== member.acceptedCommit)
+    )
+      throw new Error('Historical cohort request is processed, published, changed or claimed elsewhere');
+    if (git(this.options.mainCheckout, 'rev-parse', `${member.acceptedCommit}^{commit}`) !== member.acceptedCommit)
+      throw new Error('Historical accepted source object is unavailable');
+    const published = this.readControlPlaneRecord(entry.request);
+    if (published && this.controlPlaneRecordPublished(published))
+      throw new Error('Prior published release record is immutable');
+    const saved = previous.identities?.[member.taskId];
+    if (saved) {
+      const identity = JSON.parse(saved) as { request: LandingRequest; brief: Task['brief'] };
+      if (!isDeepStrictEqual(identity.request, entry.request) || identity.brief.manager !== previous.manifest.managerId)
+        throw new Error('Historical request/contract generation changed');
+      return saved;
+    }
+    // Public retries retain brief files and hash links. Reconstruct only this exact historical generation.
+    let markdown = readFileSync(join(this.options.stateDirectory, 'briefs', `${member.taskId}.md`), 'utf8');
+    for (const attempt of store.attempts(member.taskId).filter((value) => value.attempt <= member.attempt)) {
+      if (!attempt.newBriefHash) continue;
+      if (attempt.previousBriefHash !== controlPlaneBriefHash(markdown))
+        throw new Error('Historical brief retry lineage changed');
+      markdown = readFileSync(
+        join(this.options.stateDirectory, 'briefs', `${member.taskId}-${attempt.attempt}.md`),
+        'utf8',
+      );
+      if (attempt.newBriefHash !== controlPlaneBriefHash(markdown)) throw new Error('Historical brief hash changed');
+    }
+    const brief = parseBrief(
+      markdown,
+      readRiskOwnership(this.options.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json')),
+    );
+    const requested = store.events(member.taskId, member.attempt).find((event) => event.kind === 'landing-requested');
+    const authorized = store
+      .events(member.taskId, member.attempt)
+      .findLast((event) => event.kind === 'manager-landing-authorized');
+    const { managerLanding: _authorization, ...original } = entry.request;
+    const settled = requested ? (JSON.parse(requested.body) as LandingRequest) : undefined;
+    if (settled?.managerLanding) delete settled.managerLanding;
+    if (settled?.workerCommit && !original.workerCommit && settled.workerCommit === member.acceptedCommit)
+      delete settled.workerCommit;
+    if (
+      brief.manager !== previous.manifest.managerId ||
+      brief.goal !== 'control-plane' ||
+      !isDeepStrictEqual(brief.paths, entry.request.declaredPaths) ||
+      !isDeepStrictEqual(brief.acceptance.command, entry.request.gate) ||
+      !isDeepStrictEqual(settled, original) ||
+      !authorized ||
+      !isDeepStrictEqual(JSON.parse(authorized.body), entry.request.managerLanding)
+    )
+      throw new Error('Historical accepted request/brief/source lineage is not exact');
+    return JSON.stringify({ request: entry.request, brief });
+  }
+
+  private assertControlPlaneRetryLineage(
+    store: WorkerStore,
+    prior: ControlPlaneBatchSource,
+    current: ControlPlaneBatchSource,
+    historicalIdentity: string,
+  ): void {
+    if (
+      current.taskId !== prior.taskId ||
+      current.attempt <= prior.attempt ||
+      current.acceptedCommit === prior.acceptedCommit
+    )
+      throw new Error('Corrected generation must be a newer accepted source of the same task');
+    let hash = controlPlaneBriefHash((JSON.parse(historicalIdentity) as { brief: Task['brief'] }).brief.markdown);
+    for (let number = prior.attempt; number < current.attempt; number++) {
+      const old = store.attempt({ taskId: prior.taskId, attempt: number });
+      const next = store.attempt({ taskId: prior.taskId, attempt: number + 1 });
+      if (
+        old.state !== 'superseded' ||
+        !old.supersededFinalized ||
+        !store.events(prior.taskId, next.attempt).some((event) => event.kind === 'worker-run-started')
+      )
+        throw new Error('Corrected generation requires the actual public retry lineage');
+      if (next.newBriefHash || next.previousBriefHash) {
+        if (next.previousBriefHash !== hash || !next.newBriefHash)
+          throw new Error('Corrected brief retry lineage changed');
+        hash = next.newBriefHash;
+      }
+    }
+    const task = store.task(current.taskId);
+    const requested = store.events(current.taskId, current.attempt).find((event) => event.kind === 'landing-requested');
+    const settled = requested ? (JSON.parse(requested.body) as LandingRequest) : undefined;
+    if (
+      hash !== controlPlaneBriefHash(task.brief.markdown) ||
+      readFileSync(task.briefPath, 'utf8') !== task.brief.markdown ||
+      settled?.workerCommit !== current.acceptedCommit ||
+      settled.branch !== task.branch ||
+      settled.worktree !== task.worktree
+    )
+      throw new Error('Corrected generation lacks its exact public brief/source settlement');
+  }
+
+  /** Owner receiving operation: no checks, refs, task transitions or outcome rewriting. */
+  async supersedeControlPlaneBatch(
+    input: ControlPlaneBatchSupersession,
+    env: NodeJS.ProcessEnv = process.env,
+  ): Promise<ControlPlaneBatchSupersessionResult> {
+    const o = this.options;
+    if (!(o.fence instanceof WorkerStore) || o.queue.db !== o.fence.db)
+      throw new Error('Supersession requires the native shared worker store');
+    const store = o.fence;
+    const manifest = parseControlPlaneBatchManifest(input.replacement);
+    const actor = authenticatedManager(store.db, env);
+    if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT || !actor || actor.id !== manifest.managerId)
+      throw new Error('Supersession requires an authenticated owning manager session');
+    if (
+      input.version !== 1 ||
+      !/^[0-9a-f]{64}$/.test(input.previousBatchId) ||
+      !input.handoff ||
+      !/^[0-9a-f]{64}$/.test(input.handoff.journalHash) ||
+      !input.handoff.evidence?.trim() ||
+      !Array.isArray(input.handoff.ownedCommands) ||
+      (input.handoff.inventory !== undefined &&
+        !['complete', 'legacy-inventory-unavailable'].includes(input.handoff.inventory)) ||
+      !Array.isArray(input.changedInputs) ||
+      !input.changedInputs.length
+    )
+      throw new Error('Supersession requires exact verified terminal handoff and changed producer inputs');
+    const batchId = controlPlaneBatchId(manifest);
+    if (batchId === input.previousBatchId) throw new Error('Replacement cohort must genuinely change');
+    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'));
+    try {
+      const path = join(o.stateDirectory, `control-plane-batch-${input.previousBatchId}.json`);
+      const writeClosure = (previous: ControlPlaneBatchJournal, result: ControlPlaneBatchSupersessionResult) => {
+        const temporary = `${path}.${randomUUID()}.tmp`;
+        writeFileSync(temporary, JSON.stringify({ ...previous, superseded: result }, null, 2) + '\n', { mode: 0o600 });
+        renameSync(temporary, path);
+      };
+      const saved = o.queue.controlPlaneSupersession(input.previousBatchId);
+      if (saved) {
+        const receipt = JSON.parse(saved) as {
+          input: ControlPlaneBatchSupersession;
+          previous: ControlPlaneBatchJournal;
+          result: ControlPlaneBatchSupersessionResult;
+        };
+        if (!isDeepStrictEqual(receipt.input, input))
+          throw new Error('Supersession already has a different immutable replacement');
+        // The transaction is authoritative if a crash interrupted journal materialization.
+        writeClosure(receipt.previous, receipt.result);
+        return receipt.result;
+      }
+      const raw = readFileSync(path, 'utf8');
+      const previous = JSON.parse(raw) as ControlPlaneBatchJournal;
+      if (
+        createHash('sha256').update(raw).digest('hex') !== input.handoff.journalHash ||
+        previous.version !== 1 ||
+        previous.batchId !== input.previousBatchId ||
+        previous.superseded ||
+        controlPlaneBatchId(previous.manifest) !== input.previousBatchId ||
+        previous.manifest.managerId !== actor.id
+      )
+        throw new Error('Supersession journal identity, owner or generation changed');
+      const dead = (identity: ProcessIdentity) => {
+        if (
+          !identity ||
+          !Number.isSafeInteger(identity.pid) ||
+          identity.pid < 1 ||
+          !Number.isSafeInteger(identity.group) ||
+          identity.group < 1 ||
+          !/^\d+$/.test(identity.start) ||
+          !identity.boot
+        )
+          throw new Error('Verified physical process incarnation is required');
+        if (
+          sameProcess(identity) ||
+          groupMembers(identity.group).some(
+            (member) => member.boot === identity.boot && BigInt(member.start) >= BigInt(identity.start),
+          )
+        )
+          throw new Error('Prior controller or owned command is still active');
+      };
+      dead(input.handoff.controller);
+      for (const command of input.handoff.ownedCommands) dead(command);
+      if (previous.controller && !isDeepStrictEqual(previous.controller, input.handoff.controller))
+        throw new Error('Terminal handoff names the wrong controller incarnation');
+      // Unknown legacy children are not a physical cleanup receipt. Inspect only positively recorded identities.
+      for (const member of previous.manifest.members) {
+        for (const event of store
+          .events(member.taskId, member.attempt)
+          .filter((event) => event.kind === 'train-resolver-process')) {
+          const identity = (JSON.parse(event.body) as { process?: ProcessIdentity }).process;
+          if (identity) dead(identity);
+        }
+      }
+      const failures: { candidate: string; indices: number[] }[] = [];
+      for (const [key, node] of Object.entries(previous.nodes)) {
+        if (
+          (node.prepared && this.controlPlaneRecordPublished(node.prepared.record)) ||
+          previous.results.some((result) => result.disposition !== 'excluded')
+        )
+          throw new Error('A published prior cohort cannot be superseded');
+        for (const proof of node.proofs ?? [])
+          if (!proof.result.passed && !proof.result.timedOut) {
+            if (!proof.result.failedCommand?.length || !proof.result.output)
+              throw new Error('Retained negative proof lacks its actual command or output');
+            failures.push({
+              candidate: proof.candidate,
+              indices: proof.sources.map((source) =>
+                previous.manifest.members.findIndex(
+                  (member) =>
+                    member.taskId === source.taskId &&
+                    member.attempt === source.attempt &&
+                    member.acceptedCommit === source.acceptedCommit,
+                ),
+              ),
+            });
+          }
+        if (!node.proofs?.length && node.failure) {
+          const supplied = input.handoff.failures?.find((failure) => failure.node === key);
+          const log = readFileSync(node.logPath, 'utf8');
+          if (
+            !supplied ||
+            !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(supplied.candidate) ||
+            supplied.output !== node.failure ||
+            !log.includes(supplied.output) ||
+            !log.includes(`Control-plane checks on ${supplied.candidate},`) ||
+            !CONTROL_PLANE_CHECKS.some((command) => isDeepStrictEqual(command, supplied.failedCommand)) ||
+            !log.includes(`(${supplied.failedCommand.join(' ')}: failed in `)
+          )
+            throw new Error('Legacy supersession requires exact retained failed candidate, command and output');
+          failures.push({ candidate: supplied.candidate, indices: node.nativeMembers ?? node.indices });
+        }
+      }
+      if (!failures.length) throw new Error('Supersession requires a retained completed native failure');
+      for (const failure of failures)
+        for (const index of failure.indices) {
+          const member = previous.manifest.members[index];
+          if (!member || !isAncestor(o.mainCheckout, member.acceptedCommit, failure.candidate))
+            throw new Error('Retained failure candidate does not contain its actual accepted sources');
+        }
+      const priorMembers = previous.manifest.members;
+      const added = manifest.members.filter((member) => !priorMembers.some((prior) => prior.taskId === member.taskId));
+      const sameSource = (left: ControlPlaneBatchSource, right: ControlPlaneBatchSource) =>
+        left.taskId === right.taskId && left.attempt === right.attempt && left.acceptedCommit === right.acceptedCommit;
+      const mappings =
+        input.memberMapping ??
+        priorMembers.map((previous) => ({ previous, disposition: 'replacement' as const, current: previous }));
+      if (
+        !Array.isArray(mappings) ||
+        mappings.length !== priorMembers.length ||
+        new Set(mappings.map((mapping) => mapping.previous?.taskId)).size !== priorMembers.length ||
+        mappings.some(
+          (mapping) =>
+            !mapping.previous ||
+            !priorMembers.some((prior) => sameSource(prior, mapping.previous)) ||
+            (mapping.disposition === 'replacement'
+              ? !mapping.current ||
+                mapping.current.taskId !== mapping.previous.taskId ||
+                !manifest.members.some((member) => sameSource(member, mapping.current))
+              : mapping.disposition !== 'deferred-to-dev' ||
+                !mapping.cause?.trim() ||
+                manifest.members.some((member) => member.taskId === mapping.previous.taskId)),
+        ) ||
+        manifest.members.some((member) => member.readmitFrom)
+      )
+        throw new Error(
+          'Replacement mapping must cover every exact prior identity once with the same task or an explicit dev deferral',
+        );
+      const deferred = mappings.filter((mapping) => mapping.disposition === 'deferred-to-dev');
+      if (
+        deferred.length &&
+        (!input.deferralAuthorization?.order?.trim() ||
+          !Number.isSafeInteger(input.deferralAuthorization.expectedDeferredCount) ||
+          input.deferralAuthorization.expectedDeferredCount !== deferred.length)
+      )
+        throw new Error('Dev deferral requires the owning manager Root order and exact deferred count');
+      if (
+        !added.length &&
+        !mappings.some(
+          (mapping) => mapping.disposition === 'replacement' && !sameSource(mapping.previous, mapping.current),
+        )
+      )
+        throw new Error('Replacement must include genuinely changed accepted producer sources');
+      if (existsSync(join(o.stateDirectory, `control-plane-batch-${batchId}.json`)))
+        throw new Error('Replacement must be a fresh unpublished cohort');
+      const verify = () => {
+        if (readFileSync(path, 'utf8') !== raw) throw new Error('Supersession journal changed under its fence');
+        for (const mapping of mappings) {
+          const prior = mapping.previous;
+          const historicalIdentity = this.historicalControlPlaneIdentity(store, previous, prior);
+          if (mapping.disposition === 'replacement') {
+            if (!sameSource(prior, mapping.current))
+              this.assertControlPlaneRetryLineage(store, prior, mapping.current, historicalIdentity);
+          } else {
+            // Deferral is restricted to members that never reached native validation, even in another node.
+            const index = priorMembers.findIndex((member) => sameSource(member, prior));
+            const result = previous.results.find((member) => sameSource(member, prior));
+            const legacyPreparation =
+              result?.phase === undefined &&
+              result?.files?.length &&
+              result.reason?.startsWith(`Source ${prior.acceptedCommit}: Error: Source merge conflicts:`);
+            const native = Object.values(previous.nodes).some(
+              (node) =>
+                node.nativeMembers?.includes(index) ||
+                node.proofs?.some((proof) => proof.sources.some((source) => sameSource(source, prior))) ||
+                (node.failure && node.indices.includes(index)) ||
+                node.prepared?.record.members?.some((member) => sameSource(member.disposition, prior)),
+            );
+            if (
+              result?.disposition !== 'excluded' ||
+              result.mergedCommit ||
+              (result.phase !== 'preparation' && !legacyPreparation) ||
+              native
+            )
+              throw new Error('Dev deferral requires an exact preparation exclusion without native evidence');
+            assertControlPlaneMember(store, prior.taskId, actor.id);
+            store.assertCurrent(prior);
+            const task = store.task(prior.taskId);
+            const entry = o.queue.entry(prior)!;
+            if (
+              task.state !== 'landing' ||
+              (previous.identities &&
+                previous.identities[prior.taskId] !==
+                  JSON.stringify({
+                    request: entry.request,
+                    brief: task.brief,
+                    base: task.base,
+                    frozen: frozenFilesForTask(o.stateDirectory, task.id),
+                  })) ||
+              (!previous.identities && !isDeepStrictEqual(JSON.parse(historicalIdentity).brief, task.brief))
+            )
+              throw new Error('Deferred request/contract generation changed');
+            if (!previous.identities)
+              this.assertLegacyControlPlaneGeneration(store, entry.request, prior.acceptedCommit);
+            assertManagerLandingEvidence(entry.request, store, {
+              allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`),
+            });
+          }
+        }
+        for (const member of manifest.members) {
+          assertControlPlaneMember(store, member.taskId, actor.id);
+          store.assertCurrent(member);
+          const task = store.task(member.taskId);
+          const entry = o.queue.entry(member);
+          const prior = priorMembers.find((item) => sameSource(item, member));
+          if (
+            !entry ||
+            entry.outcome ||
+            entry.delivered ||
+            entry.candidate ||
+            entry.batchId !== (prior ? input.previousBatchId : null) ||
+            entry.request.managerLanding?.managerId !== actor.id ||
+            entry.request.managerLanding.acceptedCommit !== member.acceptedCommit ||
+            task.state !== 'landing' ||
+            (entry.request.workerCommit && entry.request.workerCommit !== member.acceptedCommit)
+          )
+            throw new Error('Supersession source is processed, published, claimed elsewhere or changed');
+          const published = this.readControlPlaneRecord(entry.request);
+          if (published && this.controlPlaneRecordPublished(published))
+            throw new Error('Prior published release record is immutable');
+          for (const event of store
+            .events(member.taskId, member.attempt)
+            .filter((event) => event.kind === 'train-resolver-process')) {
+            const resolverProcess = (JSON.parse(event.body) as { process?: ProcessIdentity }).process;
+            if (resolverProcess) dead(resolverProcess);
+          }
+          if (prior) {
+            const identity = JSON.stringify({
+              request: entry.request,
+              brief: task.brief,
+              base: task.base,
+              frozen: frozenFilesForTask(o.stateDirectory, task.id),
+            });
+            if (previous.identities) {
+              if (previous.identities[task.id] !== identity)
+                throw new Error('Supersession request/contract generation changed');
+            } else this.assertLegacyControlPlaneGeneration(store, entry.request, member.acceptedCommit);
+          }
+          assertManagerLandingEvidence(entry.request, store, {
+            allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`),
+          });
+        }
+        for (const changed of input.changedInputs) {
+          // Preparation-excluded old members can be the omitted producers: their source never reached
+          // the failed candidate, even though the old manifest already named them.
+          const member = manifest.members.find((item) => item.taskId === changed.taskId);
+          if (
+            !member ||
+            !changed.reason?.trim() ||
+            !/^tools\/goal\/[a-zA-Z0-9_./-]+$/.test(changed.path) ||
+            changed.path.split('/').includes('..') ||
+            !matchesPath(changed.path, store.task(member.taskId).brief.paths)
+          )
+            throw new Error(
+              'Changed producer input must name an actual omitted or added owner source and relevance reason',
+            );
+          const fork = git(o.mainCheckout, 'merge-base', store.task(member.taskId).base, member.acceptedCommit);
+          if (
+            failures.some((failure) => isAncestor(o.mainCheckout, member.acceptedCommit, failure.candidate)) ||
+            !changedPathsBetween(o.mainCheckout, fork, member.acceptedCommit).includes(changed.path) ||
+            failures.some(
+              (failure) =>
+                spawnSync('git', ['diff', '--quiet', failure.candidate, member.acceptedCommit, '--', changed.path], {
+                  cwd: o.mainCheckout,
+                }).status !== 1,
+            )
+          )
+            throw new Error('Replacement producer input is unchanged from a retained failed candidate');
+        }
+      };
+      const failedIndices = new Set(failures.flatMap((failure) => failure.indices));
+      const result: ControlPlaneBatchSupersessionResult = {
+        previousBatchId: input.previousBatchId,
+        replacementBatchId: batchId,
+        status: 'superseded/interrupted',
+        members: priorMembers.map((member, index) => ({
+          taskId: member.taskId,
+          attempt: member.attempt,
+          acceptedCommit: member.acceptedCommit,
+          disposition: failedIndices.has(index) ? 'failed' : 'unknown',
+        })),
+        physicalInventory: input.handoff.inventory ?? 'complete',
+        ...(deferred.length
+          ? {
+              devHandoff: {
+                previousBatchId: input.previousBatchId,
+                replacementBatchId: batchId,
+                ownerId: actor.id,
+                authorization: input.deferralAuthorization!,
+                members: deferred.map((mapping) => {
+                  const member = mapping.previous;
+                  const entry = o.queue.entry(member)!;
+                  return {
+                    ...member,
+                    queueEntryId: entry.id,
+                    claimBatchId: input.previousBatchId,
+                    request: entry.request,
+                    contractIdentity: this.historicalControlPlaneIdentity(store, previous, member),
+                    cause: mapping.cause,
+                  };
+                }),
+              },
+            }
+          : {}),
+      };
+      o.queue.claimControlPlaneBatch(
+        batchId,
+        manifest.members,
+        priorMembers
+          .filter((prior) => manifest.members.some((member) => sameSource(member, prior)))
+          .map((member) => ({
+            ...member,
+            fromBatchId: input.previousBatchId,
+            request: o.queue.entry(member)!.request,
+          })),
+        verify,
+        {
+          previousBatchId: input.previousBatchId,
+          body: JSON.stringify({ input, previous, result, failures }),
+          historicalClaims: priorMembers.map((member) => ({ ...member, request: o.queue.entry(member)!.request })),
+        },
+      );
+      writeClosure(previous, result);
+      return result;
+    } finally {
+      lease.release();
+    }
+  }
+
+  /** Consume retained preparation deferrals only after the complete corrected main cohort was published. */
+  async receiveControlPlaneBatchDevHandoff(
+    input: ControlPlaneBatchDevHandoffRequest,
+    receiveDev: (handoff: ControlPlaneBatchDevHandoff) => void,
+    env: NodeJS.ProcessEnv = process.env,
+  ): Promise<ControlPlaneBatchDevHandoff> {
+    const o = this.options;
+    if (!(o.fence instanceof WorkerStore) || o.queue.db !== o.fence.db)
+      throw new Error('Dev handoff requires the native shared worker store');
+    const store = o.fence;
+    const actor = authenticatedManager(store.db, env);
+    if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT || !actor)
+      throw new Error('Dev handoff requires an authenticated owning manager session');
+    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'));
+    try {
+      const raw = o.queue.controlPlaneSupersession(input.previousBatchId);
+      const receipt = raw
+        ? (JSON.parse(raw) as {
+            previous: ControlPlaneBatchJournal;
+            input: ControlPlaneBatchSupersession;
+            result: ControlPlaneBatchSupersessionResult;
+          })
+        : undefined;
+      const handoff = receipt?.result.devHandoff;
+      if (
+        !receipt ||
+        !handoff ||
+        handoff.ownerId !== actor.id ||
+        input.replacementBatchId !== handoff.replacementBatchId
+      )
+        throw new Error('No exact owning manager dev handoff exists for this replacement');
+      const verify = () => {
+        if (o.queue.controlPlaneSupersession(input.previousBatchId) !== raw)
+          throw new Error('Dev handoff changed under its native fence');
+        const journal = JSON.parse(
+          readFileSync(join(o.stateDirectory, `control-plane-batch-${input.replacementBatchId}.json`), 'utf8'),
+        ) as ControlPlaneBatchJournal;
+        const root = journal.nodes.root;
+        const record = root?.prepared?.record;
+        if (
+          journal.superseded ||
+          !isDeepStrictEqual(journal.manifest, receipt.input.replacement) ||
+          !record ||
+          !this.controlPlaneRecordPublished(record) ||
+          record.members?.length !== receipt.input.replacement.members.length ||
+          !receipt.input.replacement.members.every((member) =>
+            record.members?.some(
+              (item) =>
+                item.request.taskId === member.taskId &&
+                item.request.attempt === member.attempt &&
+                item.disposition.acceptedCommit === member.acceptedCommit,
+            ),
+          ) ||
+          !root?.proofs?.some(
+            (proof) => proof.candidate === record.mainCommit && proof.result.passed && !proof.result.negativeOnly,
+          )
+        )
+          throw new Error('Dev handoff requires the complete corrected cohort published with fresh full native proof');
+        for (const member of handoff.members) {
+          assertControlPlaneMember(store, member.taskId, actor.id);
+          store.assertCurrent(member);
+          const task = store.task(member.taskId);
+          const identity = this.historicalControlPlaneIdentity(store, receipt.previous, member);
+          if (
+            identity !== member.contractIdentity ||
+            o.queue.entry(member)?.id !== member.queueEntryId ||
+            (receipt.previous.identities &&
+              identity !==
+                JSON.stringify({
+                  request: member.request,
+                  brief: task.brief,
+                  base: task.base,
+                  frozen: frozenFilesForTask(o.stateDirectory, task.id),
+                })) ||
+            (!receipt.previous.identities && !isDeepStrictEqual(JSON.parse(identity).brief, task.brief))
+          )
+            throw new Error('Deferred current request/contract identity changed before migration');
+          if (!receipt.previous.identities)
+            this.assertLegacyControlPlaneGeneration(store, member.request, member.acceptedCommit);
+          assertManagerLandingEvidence(member.request, store, {
+            allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`),
+          });
+        }
+      };
+      o.queue.consumeControlPlaneDevHandoff(handoff, verify, receiveDev);
+      return handoff;
+    } finally {
+      lease.release();
+    }
+  }
+
+  /** Main -> dev is the only nested train order. Dev never takes main while holding its lane. */
+  private async withControlPlaneBatchLanes<T>(run: () => Promise<T>): Promise<T> {
+    const main = acquireDirectoryLease(join(this.options.stateDirectory, 'train-main.lease'));
+    try {
+      const dev = await acquireControlPlaneDevLane(this.options.stateDirectory);
+      try {
+        return await run();
+      } finally {
+        dev.release();
+      }
+    } finally {
+      main.release();
+    }
+  }
+
+  /** Authenticated, append-only receiving operation for the same exact ref-starved source generation. */
+  async continueControlPlaneBatchRefs(
+    value: ControlPlaneBatchRefContinuation,
+    env: NodeJS.ProcessEnv = process.env,
+  ): Promise<ControlPlaneBatchResult> {
+    const input = parseControlPlaneBatchRefContinuation(value);
+    const manifest = input.manifest;
+    const batchId = controlPlaneBatchId(manifest);
+    const o = this.options;
+    if (!(o.fence instanceof WorkerStore) || o.queue.db !== o.fence.db)
+      throw new Error('Ref continuation requires the native shared worker store');
+    const store = o.fence;
+    const actor = authenticatedManager(store.db, env);
+    if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT || !actor || actor.id !== manifest.managerId)
+      throw new Error('Ref continuation requires an authenticated owning manager session');
+    return this.withControlPlaneBatchLanes(async () => {
+      const path = join(o.stateDirectory, `control-plane-batch-${batchId}.json`);
+      const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+      const saved = o.queue.controlPlaneRefContinuation(batchId);
+      const raw = readFileSync(path, 'utf8');
+      const journal = JSON.parse(raw) as ControlPlaneBatchJournal;
+      const member = manifest.members[0]!;
+      const identity = () => {
+        const task = store.task(member.taskId);
+        return JSON.stringify({
+          request: o.queue.entry(member)?.request,
+          brief: task.brief,
+          base: task.base,
+          frozen: frozenFilesForTask(o.stateDirectory, member.taskId),
+        });
+      };
+      const assertSource = (recovery = false) => {
+        if (!isDeepStrictEqual(authenticatedManager(store.db, env), actor))
+          throw new Error('Ref continuation manager session changed while waiting');
+        assertControlPlaneMember(store, member.taskId, manifest.managerId);
+        store.assertCurrent(member);
+        const task = store.task(member.taskId);
+        const entry = o.queue.entry(member);
+        if (
+          !entry ||
+          entry.batchId !== batchId ||
+          journal.identities?.[member.taskId] !== identity() ||
+          readFileSync(task.briefPath, 'utf8') !== task.brief.markdown ||
+          entry.request.managerLanding?.managerId !== actor.id ||
+          entry.request.managerLanding.acceptedCommit !== member.acceptedCommit ||
+          (entry.request.workerCommit && entry.request.workerCommit !== member.acceptedCommit) ||
+          git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !== member.acceptedCommit ||
+          (!recovery &&
+            (entry.outcome || entry.delivered || entry.candidate || task.integratedCommit || task.mergedCommit))
+        )
+          throw new Error('Ref continuation source, contract, request or claim changed or was processed');
+        const claim = o.queue.db
+          .query('SELECT request FROM landing_batch_claims WHERE batch=? AND task=? AND attempt=?')
+          .get(batchId, member.taskId, member.attempt) as { request: string } | null;
+        if (!claim || !isDeepStrictEqual(JSON.parse(claim.request), entry.request))
+          throw new Error('Ref continuation requires the exact retained native claim');
+        assertManagerLandingEvidence(entry.request, store, {
+          allowIntegrated: recovery,
+          allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`),
+        });
+        if (
+          !isDeepStrictEqual(
+            journal.scopeApprovals?.[member.taskId] ?? null,
+            controlPlaneScopeApproval(member, {
+              store,
+              queue: o.queue,
+              ...(o.mainBranch ? { mainBranch: o.mainBranch } : {}),
+              ...(o.riskAreasFile ? { riskAreasFile: o.riskAreasFile } : {}),
+            }) ?? null,
+          )
+        )
+          throw new Error('Ref continuation native scope approval changed');
+      };
+      if (
+        journal.version !== 1 ||
+        journal.batchId !== batchId ||
+        !isDeepStrictEqual(journal.manifest, manifest) ||
+        journal.superseded ||
+        o.queue.controlPlaneSupersession(batchId)
+      )
+        throw new Error('Ref continuation manifest or journal changed');
+      if (saved) {
+        const receipt = JSON.parse(saved) as ControlPlaneRefContinuationReceipt;
+        const { id, ...body } = receipt;
+        const previous = JSON.parse(receipt.previousJournal) as ControlPlaneBatchJournal;
+        const node = journal.nodes[refContinuationNode];
+        if (
+          id !== digest(JSON.stringify(body)) ||
+          !isDeepStrictEqual(receipt.input, input) ||
+          digest(receipt.previousJournal) !== input.handoff.journalHash ||
+          journal.refContinuation?.receiptId !== id ||
+          !isDeepStrictEqual(journal.refContinuation.controller, receipt.controller) ||
+          digest(readFileSync(previous.nodes.root!.logPath, 'utf8')) !== input.logHash ||
+          Object.keys(journal.nodes).length !== 2 ||
+          !isDeepStrictEqual(journal.controller, previous.controller) ||
+          !isDeepStrictEqual(journal.nodes.root, previous.nodes.root) ||
+          !isDeepStrictEqual(journal.identities, previous.identities) ||
+          !isDeepStrictEqual(journal.scopeApprovals, previous.scopeApprovals)
+        )
+          throw new Error('Ref continuation already has different immutable authority or history');
+        if (!node || node.attempts !== 1 || node.children)
+          throw new Error('Ref continuation is already live, interrupted or spent; no second candidate is allowed');
+        const proof = node.proofs?.[0];
+        const published = node.prepared && this.controlPlaneRecordPublished(node.prepared.record);
+        const exclusion =
+          journal.results.length === 1 &&
+          journal.results[0]!.disposition === 'excluded' &&
+          !journal.results[0]!.mergedCommit &&
+          isDeepStrictEqual(
+            {
+              taskId: journal.results[0]!.taskId,
+              attempt: journal.results[0]!.attempt,
+              acceptedCommit: journal.results[0]!.acceptedCommit,
+            },
+            member,
+          );
+        if (published) {
+          if (
+            node.proofs?.length !== 1 ||
+            proof?.result.passed !== true ||
+            proof.result.timedOut !== false ||
+            proof.candidate !== node.prepared!.record.mainCommit ||
+            !proof.result.lifecycleEvidence ||
+            !proof.result.compatibilityCommand ||
+            proof.result.lifecycleEvidence !== node.prepared!.record.lifecycleEvidence ||
+            !isDeepStrictEqual(proof.result.compatibilityCommand, node.prepared!.record.compatibilityCommand) ||
+            !isDeepStrictEqual(proof.snapshot, node.prepared!.snapshot) ||
+            !isDeepStrictEqual(proof.sources, manifest.members)
+          )
+            throw new Error('Ref continuation published proof identity changed');
+        } else if (
+          !exclusion ||
+          node.prepared ||
+          !(
+            (node.failure &&
+              node.proofs?.length === 1 &&
+              proof?.result.passed === false &&
+              node.failure === proof.result.output) ||
+            (node.completed && !node.proofs?.length)
+          )
+        ) {
+          throw new Error('Ref continuation is already live, interrupted or spent; no second candidate is allowed');
+        }
+        assertSource(true);
+        return this.executeControlPlaneBatch(manifest, env, receipt);
+      }
+      const root = journal.nodes.root;
+      if (
+        digest(raw) !== input.handoff.journalHash ||
+        journal.refContinuation ||
+        Object.keys(journal.nodes).length !== 1 ||
+        !root ||
+        root.attempts !== 3 ||
+        !isDeepStrictEqual(root.indices, [0]) ||
+        !isDeepStrictEqual(root.nativeMembers, [0]) ||
+        root.children ||
+        root.failure ||
+        root.prepared ||
+        root.completed ||
+        root.negativeProbes?.length ||
+        journal.results.length ||
+        root.proofs?.length !== 3 ||
+        !journal.controller ||
+        !isDeepStrictEqual(journal.controller, input.handoff.controller)
+      )
+        throw new Error('Ref continuation requires an exact unpublished three-attempt ref-only exhaustion');
+      const dead = (identity: ProcessIdentity) => {
+        if (
+          !identity ||
+          !Number.isSafeInteger(identity.pid) ||
+          identity.pid < 1 ||
+          !Number.isSafeInteger(identity.group) ||
+          identity.group < 1 ||
+          !/^\d+$/.test(identity.start) ||
+          !identity.boot
+        )
+          throw new Error('Ref continuation requires verified physical process incarnations');
+        if (
+          sameProcess(identity) ||
+          groupMembers(identity.group).some(
+            (member) => member.boot === identity.boot && BigInt(member.start) >= BigInt(identity.start),
+          )
+        )
+          throw new Error('Prior controller or positively recorded owned operation is still active');
+      };
+      dead(input.handoff.controller);
+      for (const command of input.handoff.ownedCommands) dead(command);
+      for (const event of store
+        .events(member.taskId, member.attempt)
+        .filter((event) => event.kind === 'train-resolver-process')) {
+        const process = (JSON.parse(event.body) as { process?: ProcessIdentity }).process;
+        if (process) dead(process);
+      }
+      const logPath = join(o.stateDirectory, `control-plane-batch-${batchId}-root.log`);
+      if (root.logPath !== logPath) throw new Error('Ref continuation root log path changed');
+      const log = readFileSync(logPath, 'utf8');
+      const segments = log.split(/\nCohort root attempt [1-3]\n/);
+      if (digest(log) !== input.logHash || segments.length !== 4)
+        throw new Error('Ref continuation requires the exact retained three-attempt log');
+      for (const [offset, proof] of root.proofs.entries()) {
+        const section = segments[offset + 1]!;
+        if (
+          proof.result.passed !== true ||
+          proof.result.timedOut !== false ||
+          proof.result.failedCommand ||
+          proof.result.negativeOnly ||
+          !proof.completedAt ||
+          !isDeepStrictEqual(proof.sources, manifest.members) ||
+          !isDeepStrictEqual(
+            proof.scopeApprovals ?? {},
+            Object.fromEntries(
+              manifest.members.map((source) => [source.taskId, journal.scopeApprovals?.[source.taskId]?.id ?? null]),
+            ),
+          ) ||
+          proof.snapshot.mainBranch !== (o.mainBranch ?? 'main') ||
+          proof.snapshot.devBranch !== (o.integrationBranch ?? 'dev') ||
+          !section.includes(`Control-plane checks on ${proof.candidate}, main ${proof.snapshot.mainHead}\n`) ||
+          !section.includes('Captured refs moved; rebuilding bounded cohort\n') ||
+          CONTROL_PLANE_CHECKS.some((command) => !section.includes(`(${command.join(' ')}: passed in `)) ||
+          /: failed in /.test(section) ||
+          git(o.mainCheckout, 'rev-parse', `refs/goal/control-plane-proof/${batchId}/root/${offset + 1}`) !==
+            proof.candidate
+        )
+          throw new Error('Ref continuation refuses failed, unknown, timed-out or incomplete retained source proof');
+      }
+      assertSource();
+      if (existsSync(this.controlPlaneRecordPath(o.queue.entry(member)!.request)))
+        throw new Error('Ref continuation refuses any existing release/prepared record');
+      const controller = processIdentity();
+      if (!controller) throw new Error('Cannot identify the native continuation controller');
+      const body = {
+        input,
+        actor: { managerId: actor.id, sessionId: actor.sessionId },
+        previousJournal: raw,
+        previousController: journal.controller,
+        controller,
+        receivedAt: new Date().toISOString(),
+      };
+      const receipt: ControlPlaneRefContinuationReceipt = { id: digest(JSON.stringify(body)), ...body };
+      // No changes to prior proofs, logs, controller, attempt counts, claims or source results.
+      store.write(member, () => {
+        assertSource();
+        o.queue.recordControlPlaneRefContinuation(batchId, JSON.stringify(receipt));
+      });
+      journal.refContinuation = { receiptId: receipt.id, controller };
+      journal.nodes[refContinuationNode] = {
+        indices: [0],
+        attempts: 0,
+        logPath: join(o.stateDirectory, `control-plane-batch-${batchId}-${refContinuationNode}.log`),
+      };
+      const temporary = `${path}.${randomUUID()}.tmp`;
+      writeFileSync(temporary, `${JSON.stringify(journal, null, 2)}\n`, { mode: 0o600 });
+      renameSync(temporary, path);
+      return this.executeControlPlaneBatch(manifest, env, receipt);
+    });
+  }
+
+  /** Explicit main cohort release; holds both ordinary lanes through capture, proof, propagation and CAS. */
+  async releaseControlPlaneBatch(
+    input: ControlPlaneBatchManifest,
+    env: NodeJS.ProcessEnv = process.env,
+  ): Promise<ControlPlaneBatchResult> {
+    return this.withControlPlaneBatchLanes(() => this.executeControlPlaneBatch(input, env));
+  }
+
+  private async executeControlPlaneBatch(
+    input: ControlPlaneBatchManifest,
+    env: NodeJS.ProcessEnv,
+    continuation?: ControlPlaneRefContinuationReceipt,
+  ): Promise<ControlPlaneBatchResult> {
     const manifest = parseControlPlaneBatchManifest(input);
     const batchId = controlPlaneBatchId(manifest);
     const o = this.options;
     if (!(o.fence instanceof WorkerStore) || o.queue.db !== o.fence.db)
       throw new Error('Control-plane batches require the shared worker store and landing queue');
     const store = o.fence;
+    const readmitted = manifest.members.filter((member) => member.readmitFrom);
+    if (readmitted.length) {
+      const actor = authenticatedManager(store.db, env);
+      if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT || !actor || actor.id !== manifest.managerId)
+        throw new Error('Readmission requires an authenticated owning manager session');
+    }
+    const resolver = o.trainResolver ?? new TrainResolver(store);
     mkdirSync(o.stateDirectory, { recursive: true });
-    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'));
-    try {
+    {
+      if (o.queue.controlPlaneRefContinuation(batchId) && !continuation)
+        throw new Error('Ref-exhausted cohort requires its exact authenticated continuation receiver');
+      if (o.queue.controlPlaneSupersession(batchId)) throw new Error('This cohort was superseded/interrupted');
+      const replacement = o.queue.controlPlaneReplacement(batchId);
+      const replacementInputs = replacement
+        ? (JSON.parse(replacement) as {
+            input: ControlPlaneBatchSupersession;
+            previous: ControlPlaneBatchJournal;
+            failures: { candidate: string; indices: number[] }[];
+          })
+        : undefined;
       const path = join(o.stateDirectory, `control-plane-batch-${batchId}.json`);
       let journal: ControlPlaneBatchJournal;
       if (existsSync(path)) {
@@ -3745,8 +4728,151 @@ export class MergeTrain {
         writeFileSync(temporary, `${JSON.stringify(journal, null, 2)}\n`, { mode: 0o600 });
         renameSync(temporary, path);
       };
+      const identity = (taskId: string) => {
+        const task = store.task(taskId);
+        return JSON.stringify({
+          request: o.queue.entry({ taskId, attempt: task.currentAttempt })?.request,
+          brief: task.brief,
+          base: task.base,
+          frozen: frozenFilesForTask(o.stateDirectory, taskId),
+        });
+      };
+      if (journal.superseded) throw new Error('This cohort was superseded/interrupted');
+      // Save original generations, including preparation exclusions, before any model or native work.
+      journal.identities ??= Object.fromEntries(
+        manifest.members.map((member) => [member.taskId, identity(member.taskId)]),
+      );
+      const scopeRuntime = { store, queue: o.queue, ...(o.riskAreasFile ? { riskAreasFile: o.riskAreasFile } : {}) };
+      if (!journal.scopeApprovals) {
+        const approvals = Object.fromEntries(
+          manifest.members.map((member) => [member.taskId, controlPlaneScopeApproval(member, scopeRuntime) ?? null]),
+        );
+        if (
+          Object.values(approvals).some(Boolean) &&
+          Object.values(journal.nodes).some(
+            (node) => node.proofs?.length || node.prepared || node.nativeMembers?.length,
+          )
+        )
+          throw new Error('New scope approval requires a fresh cohort, never an inherited native proof');
+        journal.scopeApprovals = approvals;
+      }
+      const scopeEvidence = (indices: readonly number[]) =>
+        Object.fromEntries(
+          indices.map((index) => {
+            const taskId = manifest.members[index]!.taskId;
+            return [taskId, journal.scopeApprovals![taskId]?.id ?? null];
+          }),
+        );
+      const transfers = readmitted
+        .filter((member) => o.queue.entry(member)?.batchId !== batchId)
+        .map((member) => {
+          const entry = o.queue.entry(member);
+          if (!entry) throw new Error(`Missing exact readmission request for ${member.taskId}`);
+          return { ...member, fromBatchId: member.readmitFrom!, request: entry.request };
+        });
+      for (const member of readmitted) {
+        const entry = o.queue.entry(member);
+        if (entry?.batchId !== batchId) continue;
+        const claim = o.queue.db
+          .query('SELECT previous_batch, request FROM landing_batch_claims WHERE batch=? AND task=? AND attempt=?')
+          .get(batchId, member.taskId, member.attempt) as { previous_batch: string | null; request: string } | null;
+        if (
+          !claim ||
+          claim.previous_batch !== member.readmitFrom ||
+          !isDeepStrictEqual(JSON.parse(claim.request), entry.request)
+        )
+          throw new Error('Readmission recovery has no exact durable transfer claim');
+      }
+      const verifyReadmissions = () => {
+        for (const member of readmitted) {
+          const previousPath = join(o.stateDirectory, `control-plane-batch-${member.readmitFrom}.json`);
+          const previous = JSON.parse(readFileSync(previousPath, 'utf8')) as ControlPlaneBatchJournal;
+          if (
+            previous.version !== 1 ||
+            previous.batchId !== member.readmitFrom ||
+            controlPlaneBatchId(previous.manifest) !== member.readmitFrom ||
+            previous.manifest.managerId !== manifest.managerId
+          )
+            throw new Error('Readmission journal owner or identity changed');
+          const terminal = (key: string): boolean => {
+            const node = previous.nodes[key];
+            return (
+              !!node &&
+              (node.children
+                ? node.children.every(terminal)
+                : !!node.completed || (!!node.failure && node.indices.length === 1))
+            );
+          };
+          if (
+            !terminal('root') ||
+            previous.results.length !== previous.manifest.members.length ||
+            previous.manifest.members.some(
+              (item) =>
+                previous.results.filter(
+                  (result) =>
+                    result.taskId === item.taskId &&
+                    result.attempt === item.attempt &&
+                    result.acceptedCommit === item.acceptedCommit,
+                ).length !== 1,
+            )
+          )
+            throw new Error('Readmission requires a terminal prior cohort journal');
+          const index = previous.manifest.members.findIndex(
+            (item) =>
+              item.taskId === member.taskId &&
+              item.attempt === member.attempt &&
+              item.acceptedCommit === member.acceptedCommit,
+          );
+          const result = previous.results.find((item) => item.taskId === member.taskId);
+          // Legacy journals removed preparation conflicts from node.indices before starting native proof.
+          // Any ancestor's native participation disqualifies a member, even if a later child excludes it.
+          const hadNativeEvidence = Object.values(previous.nodes).some((node) =>
+            (node.nativeMembers ?? node.indices).includes(index),
+          );
+          const legacyConflict =
+            result?.phase === undefined &&
+            result?.files?.length &&
+            result.reason?.startsWith(`Source ${member.acceptedCommit}: Error: Source merge conflicts:`);
+          if (
+            index < 0 ||
+            result?.disposition !== 'excluded' ||
+            result.mergedCommit ||
+            (result.phase !== 'preparation' && !legacyConflict) ||
+            hadNativeEvidence
+          )
+            throw new Error('Readmission requires an exact preparation-only exclusion without native evidence');
+          assertControlPlaneMember(store, member.taskId, manifest.managerId);
+          store.assertCurrent(member);
+          const entry = o.queue.entry(member);
+          const task = store.task(member.taskId);
+          if (
+            !entry ||
+            (entry.batchId !== member.readmitFrom && entry.batchId !== batchId) ||
+            entry.outcome ||
+            entry.delivered ||
+            entry.candidate ||
+            entry.request.managerLanding?.managerId !== manifest.managerId ||
+            entry.request.managerLanding.acceptedCommit !== member.acceptedCommit
+          )
+            throw new Error('Readmission source/request is no longer unprocessed and exact');
+          if (previous.identities) {
+            if (previous.identities[member.taskId] !== identity(member.taskId))
+              throw new Error('Readmission contract/request generation changed');
+          } else {
+            this.assertLegacyControlPlaneGeneration(store, entry.request, member.acceptedCommit);
+          }
+          assertManagerLandingEvidence(entry.request, store, {
+            allowNoDeltaOn: git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`),
+          });
+        }
+      };
+      // The main lane excludes every live old controller. The shared SQLite fence covers the entire transfer.
       save();
-      o.queue.claimControlPlaneBatch(batchId, manifest.members);
+      o.queue.claimControlPlaneBatch(batchId, manifest.members, transfers, verifyReadmissions);
+      const controller = processIdentity();
+      if (!controller) throw new Error('Cannot identify the native cohort controller incarnation');
+      if (!continuation) journal.controller = controller;
+      save();
       const disposition = (value: ControlPlaneBatchDisposition) => {
         journal.results = journal.results.filter((member) => member.taskId !== value.taskId);
         journal.results.push(value);
@@ -3756,6 +4882,15 @@ export class MergeTrain {
         assertControlPlaneMember(store, member.taskId, manifest.managerId);
         store.assertCurrent(member);
         const entry = o.queue.entry(member);
+        if (journal.identities?.[member.taskId] !== identity(member.taskId))
+          throw new Error(`Batch member generation changed for ${member.taskId}`);
+        if (
+          !isDeepStrictEqual(
+            journal.scopeApprovals![member.taskId],
+            controlPlaneScopeApproval(member, scopeRuntime) ?? null,
+          )
+        )
+          throw new Error(`Batch member native scope approval changed for ${member.taskId}`);
         if (
           !entry ||
           entry.batchId !== batchId ||
@@ -3791,6 +4926,8 @@ export class MergeTrain {
         if (record.batchId !== batchId || !record.members?.length || !this.controlPlaneRecordPublished(record))
           throw new Error('Cannot recover batch without its exact verified published release record');
         const members = record.members;
+        if (record.scopeApprovals && !isDeepStrictEqual(record.scopeApprovals, scopeEvidence(node.indices)))
+          throw new Error('Published batch scope approval evidence changed');
         for (const index of node.indices) assertMember(index, true);
         for (const member of members) {
           if (JSON.stringify(o.queue.entry(member.request)?.request) !== JSON.stringify(member.request))
@@ -3812,6 +4949,17 @@ export class MergeTrain {
         cleanup(record, node.logPath);
         for (const member of members) {
           disposition(member.disposition);
+          const resolution = store
+            .events(member.request.taskId, member.request.attempt)
+            .filter((event) => event.kind === 'train-resolution')
+            .map((event) => JSON.parse(event.body) as TrainConflict)
+            .findLast(
+              (conflict) =>
+                conflict.sourceCommit === member.disposition.acceptedCommit &&
+                !!conflict.resolvedCommit &&
+                isAncestor(o.mainCheckout, conflict.resolvedCommit, record.mainCommit),
+            );
+          if (resolution) resolver.landed(member.request, resolution, record.mainCommit);
           const entry = o.queue.entry(member.request)!;
           if (!entry.delivered) {
             o.sink.onGateOutcome(member.outcome);
@@ -3849,6 +4997,7 @@ export class MergeTrain {
               ...member,
               disposition: 'excluded',
               logPath: node.logPath,
+              phase: 'native',
               reason: `Owning manager must fix this source; native proof failed: ${reason}`,
             });
           } else {
@@ -3856,17 +5005,45 @@ export class MergeTrain {
             node.children = [`${key}-left`, `${key}-right`];
             for (const [offset, indices] of [node.indices.slice(0, middle), node.indices.slice(middle)].entries()) {
               const child = node.children[offset]!;
+              const failed = node.proofs?.findLast((proof) => !proof.result.passed && !proof.result.timedOut);
+              const files =
+                failed?.result.failedCommand &&
+                JSON.stringify(failed.result.failedCommand) === JSON.stringify(CONTROL_PLANE_CHECKS[3])
+                  ? failingTestFiles(failed.result.output)
+                      .filter(
+                        (file) =>
+                          /^tools\/goal\/src\/[a-zA-Z0-9_./-]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) &&
+                          !file.split('/').includes('..'),
+                      )
+                      .slice(0, 3)
+                  : [];
               journal.nodes[child] = {
                 indices,
                 attempts: 0,
+                ...(files.length
+                  ? { negativeProbes: [['bun', 'test', '--timeout', '30000', ...files]] }
+                  : failed?.result.negativeOnly
+                    ? { negativeProbes: node.negativeProbes }
+                    : {}),
                 logPath: join(o.stateDirectory, `control-plane-batch-${batchId}-${child}.log`),
               };
             }
           }
           save();
         };
+        const retainedFailure = node.proofs?.findLast((proof) => !proof.result.passed);
+        if (retainedFailure) {
+          split(retainedFailure.result.output);
+          for (const child of node.children ?? []) await visit(child);
+          return;
+        }
         for (;;) {
-          if (node.attempts >= 3) throw new Error(`Control-plane batch ${key} exhausted three candidate/ref attempts`);
+          if (node.attempts >= (continuation ? 1 : 3))
+            throw new Error(
+              continuation
+                ? 'Control-plane ref continuation exhausted its single candidate/ref attempt'
+                : `Control-plane batch ${key} exhausted three candidate/ref attempts`,
+            );
           node.attempts++;
           save();
           appendFileSync(node.logPath, `\nCohort ${key} attempt ${node.attempts}\n`);
@@ -3881,7 +5058,7 @@ export class MergeTrain {
             } catch (error) {
               const reason = `Source ${member.acceptedCommit}: ${error}; owning manager must repair or resubmit`;
               appendFileSync(node.logPath, `${member.taskId}: ${reason}\n`);
-              disposition({ ...member, disposition: 'excluded', logPath: node.logPath, reason });
+              disposition({ ...member, disposition: 'excluded', phase: 'preparation', logPath: node.logPath, reason });
             }
           }
           if (eligible.length !== node.indices.length) {
@@ -3933,6 +5110,10 @@ export class MergeTrain {
           try {
             const preparedMembers: NonNullable<ControlPlaneReleaseRecord['members']> = [];
             const contributionBases = new Map<string, string>();
+            const resolutions: { request: LandingRequest; conflict: TrainConflict }[] = [];
+            const cohortFrozen = node.indices.flatMap((index) =>
+              frozenFilesForTask(o.stateDirectory, manifest.members[index]!.taskId),
+            );
             let excluded = false;
             for (const [offset, entry] of entries.entries()) {
               const index = node.indices[offset]!;
@@ -3946,36 +5127,44 @@ export class MergeTrain {
               const risk = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
               const guardedRequest = {
                 ...entry.request,
-                protectedPaths: Object.entries(risk.areas)
-                  .filter(([area]) => !task.brief.riskAreas.includes(area))
-                  .flatMap(([, paths]) => paths),
+                declaredPaths: [
+                  ...entry.request.declaredPaths,
+                  ...(journal.scopeApprovals![task.id]?.additionalPaths.map((addition) => addition.path) ?? []),
+                ],
+                protectedPaths: [
+                  ...(entry.request.protectedPaths ?? []),
+                  ...Object.entries(risk.areas)
+                    .filter(([area]) => !task.brief.riskAreas.includes(area))
+                    .flatMap(([, paths]) => paths),
+                ],
               };
               let files: string[] = [];
+              let resolution: TrainConflict | undefined;
               try {
                 if (sourcePaths.some((path) => !path.startsWith(CONTROL_PLANE_PATH)))
                   throw new Error(`Source is outside tools/goal: ${sourcePaths.join(', ')}`);
-                this.checkScope(sourcePaths, guardedRequest, node.logPath);
+                this.checkControlPlaneScope(sourcePaths, guardedRequest, node.logPath);
                 git(tree, 'reset', '--hard', tip);
                 files = changedFrozenFiles(tree, frozen);
                 if (files.length) throw new Error(`Frozen acceptance files changed: ${files.join(', ')}`);
                 git(tree, 'reset', '--hard', before);
                 if (!isAncestor(tree, tip, before)) {
-                  const merged = candidateGit(
+                  const conflict = await resolver.compose(
+                    guardedRequest,
                     tree,
-                    ['merge', '--no-ff', '--no-edit', '-m', `Merge accepted source ${entry.request.branch}`, tip],
-                    o.runCandidateGit,
+                    before,
+                    `refs/heads/${snapshot.mainBranch}`,
+                    tip,
+                    cohortFrozen.map((file) => file.path),
+                    node.logPath,
                   );
-                  appendFileSync(node.logPath, `${merged.stdout}${merged.stderr}\n`);
-                  if (merged.status !== 0) {
-                    files = unmergedFiles(tree);
-                    const resolved =
-                      files.length && resolveMechanicalConflicts(tree, files, o.formatCommand, 'union', 3);
-                    if (resolved === false || !files.length)
+                  if (conflict) {
+                    files = conflict.conflictFiles;
+                    if (!conflict.resolvedCommit)
                       throw new Error(
-                        `Source merge conflicts: ${files.join(', ')}; ${merged.stderr || merged.stdout || merged.error}`,
+                        `Source merge conflicts: ${files.join(', ')}; ${conflict.detail ?? 'unresolved'}`,
                       );
-                    stagePaths(tree, files);
-                    git(tree, 'commit', '--no-edit');
+                    resolution = conflict;
                   }
                 }
                 let after = git(tree, 'rev-parse', 'HEAD');
@@ -4003,7 +5192,7 @@ export class MergeTrain {
                   }
                 }
                 const changed = changedPathsBetween(tree, before, after);
-                this.checkScope(changed, guardedRequest, node.logPath);
+                this.checkControlPlaneScope(changed, guardedRequest, node.logPath);
                 const nonGenerated = nonGeneratedFiles(tree, changed);
                 contributionBases.set(task.id, before);
                 preparedMembers.push({
@@ -4027,7 +5216,9 @@ export class MergeTrain {
                     logPath: node.logPath,
                   },
                 });
+                if (resolution) resolutions.push({ request: guardedRequest, conflict: resolution });
               } catch (error) {
+                if (error instanceof TrainResolverInfrastructureError) throw error;
                 try {
                   git(tree, 'merge', '--abort');
                 } catch {
@@ -4036,7 +5227,14 @@ export class MergeTrain {
                 git(tree, 'reset', '--hard', before);
                 const reason = `Source ${tip}: ${error}; owning manager must fix files [${files.join(', ')}]`;
                 appendFileSync(node.logPath, `${task.id}: ${reason}\n`);
-                disposition({ ...member, disposition: 'excluded', logPath: node.logPath, reason, files });
+                disposition({
+                  ...member,
+                  disposition: 'excluded',
+                  phase: 'preparation',
+                  logPath: node.logPath,
+                  reason,
+                  files,
+                });
                 excluded = true;
               }
             }
@@ -4056,25 +5254,124 @@ export class MergeTrain {
             );
             const changed = changedPathsBetween(tree, snapshot.mainHead, git(tree, 'rev-parse', 'HEAD'));
             this.formatControlPlaneCandidate(tree, changed, node.logPath);
+            const allowed = preparedMembers.flatMap((member) => [
+              ...member.request.declaredPaths,
+              ...(journal.scopeApprovals![member.request.taskId]?.additionalPaths.map((addition) => addition.path) ??
+                []),
+            ]);
+            const outside = outsideScope(
+              changedPathsBetween(tree, snapshot.mainHead, git(tree, 'rev-parse', 'HEAD')),
+              allowed,
+            );
+            if (outside.length) throw new Error(`Combined candidate changed unapproved files: ${outside.join(', ')}`);
             const frozenChanges = changedFrozenFiles(tree, frozen);
             if (frozenChanges.length)
               throw new Error(`Combined candidate changed frozen acceptance files: ${frozenChanges.join(', ')}`);
-            const candidate = git(tree, 'rev-parse', 'HEAD');
+            let candidate = git(tree, 'rev-parse', 'HEAD');
+            if (replacementInputs) {
+              const formerlyFailed = replacementInputs.failures.flatMap((failure) =>
+                failure.indices.map((index) => replacementInputs.previous.manifest.members[index]!.taskId),
+              );
+              const needsProducer = node.indices.some((index) =>
+                formerlyFailed.includes(manifest.members[index]!.taskId),
+              );
+              const missingProducer =
+                needsProducer &&
+                replacementInputs.failures.some(
+                  (failure) =>
+                    treeDiffIsEmpty(tree, failure.candidate, candidate) ||
+                    replacementInputs.input.changedInputs.some(
+                      (input) =>
+                        spawnSync('git', ['diff', '--quiet', failure.candidate, candidate, '--', input.path], {
+                          cwd: tree,
+                        }).status !== 1,
+                    ),
+                );
+              if (missingProducer) {
+                const reason =
+                  'Replacement composition omitted its changed producer inputs; retained native failure remains failed';
+                if (key === 'root') throw new Error(reason);
+                // A split that removed the required producer cannot retest the unchanged failed source.
+                // This is an inherited negative, never new native proof or an inferred pass.
+                split(reason);
+                break;
+              }
+            }
+            node.nativeMembers = [...new Set([...(node.nativeMembers ?? []), ...node.indices])];
+            save();
             // Formatting is controller-owned; each affected member still carries its original source and contribution.
             for (const member of preparedMembers) {
               member.outcome.mergedCommit = candidate;
               member.disposition.mergedCommit = candidate;
             }
-            const proof = await this.verifyControlPlaneCandidate(tree, candidate, snapshot, node.logPath);
+            const proof = await this.verifyControlPlaneCandidate(
+              tree,
+              candidate,
+              snapshot,
+              node.logPath,
+              async (output) => {
+                // Only actual TypeScript diagnostics in a resolved file can spend the single repair budget.
+                const resolved = resolutions.findLast(
+                  (item) =>
+                    /error TS\d+/.test(output) && item.conflict.conflictFiles.some((file) => output.includes(file)),
+                );
+                if (
+                  !resolved ||
+                  !(await resolver.repair(resolved.request, tree, resolved.conflict, output, node.logPath))
+                )
+                  return;
+                const repaired = git(tree, 'rev-parse', 'HEAD');
+                if (repaired === candidate) return;
+                const frozenChanges = changedFrozenFiles(tree, cohortFrozen);
+                if (frozenChanges.length)
+                  throw new Error(`Typing repair changed frozen inputs: ${frozenChanges.join(', ')}`);
+                this.checkControlPlaneScope(
+                  changedPathsBetween(tree, candidate, repaired),
+                  resolved.request,
+                  node.logPath,
+                );
+                for (const member of preparedMembers) {
+                  const erased = pathsChangedByTaskButUnchangedOnDev(
+                    tree,
+                    contributionBases.get(member.request.taskId)!,
+                    repaired,
+                    member.disposition.acceptedCommit,
+                    member.outcome.changedFiles,
+                  );
+                  if (erased.length)
+                    throw new Error(`Typing repair erased accepted contribution: ${erased.join(', ')}`);
+                }
+                assertIdentities();
+                return repaired;
+              },
+              (head, result) => {
+                git(tree, 'update-ref', `refs/goal/control-plane-proof/${batchId}/${key}/${node.attempts}`, head);
+                (node.proofs ??= []).push({
+                  candidate: head,
+                  snapshot,
+                  sources: node.indices.map((index) => manifest.members[index]!),
+                  result,
+                  completedAt: new Date().toISOString(),
+                  scopeApprovals: scopeEvidence(node.indices),
+                });
+                save();
+              },
+              node.negativeProbes,
+            );
+            candidate = git(tree, 'rev-parse', 'HEAD');
+            for (const member of preparedMembers) {
+              member.outcome.mergedCommit = candidate;
+              member.disposition.mergedCommit = candidate;
+            }
+            if (!proof.passed) {
+              split(proof.output);
+              break;
+            }
             if (proof.moved) {
               appendFileSync(node.logPath, 'Captured refs moved; rebuilding bounded cohort\n');
               continue;
             }
             assertIdentities();
-            if (!proof.passed) {
-              split(proof.output);
-              break;
-            }
             if (!proof.lifecycleEvidence || !proof.compatibilityCommand)
               throw new Error('Control-plane batch has no exact native release evidence');
             const release = this.prepareControlPlaneRelease(
@@ -4096,6 +5393,7 @@ export class MergeTrain {
             for (const member of preparedMembers)
               member.outcome.hostMs = Math.round((Date.now() - started) / preparedMembers.length);
             record.batchId = batchId;
+            record.scopeApprovals = scopeEvidence(node.indices);
             record.members = preparedMembers;
             node.prepared = release.prepared;
             // Record proof and candidate before any externally visible ref update.
@@ -4143,13 +5441,11 @@ export class MergeTrain {
         const children = journal.nodes[key]?.children;
         if (children) for (const child of children) await visit(child);
       };
-      await visit('root');
+      await visit(continuation ? refContinuationNode : 'root');
       return {
         batchId,
         members: manifest.members.map((member) => journal.results.find((result) => result.taskId === member.taskId)!),
       };
-    } finally {
-      lease.release();
     }
   }
 
@@ -4179,25 +5475,57 @@ export class MergeTrain {
     candidate: string,
     snapshot: ControlPlaneReleaseSnapshot,
     logPath: string,
+    repairTyping?: (output: string) => Promise<string | undefined>,
+    record?: (candidate: string, result: ControlPlaneProof) => void,
+    negativeProbes: readonly string[][] = [],
     custody?: OrdinaryProofCustody,
-  ): Promise<
-    GateResult & {
-      failedCommand?: readonly string[];
-      moved?: boolean;
-      lifecycleEvidence?: string;
-      compatibilityCommand?: string[];
-    }
-  > {
+  ): Promise<ControlPlaneProof> {
     const o = this.options;
     const runner = o.runControlPlaneGate ?? o.runGate ?? gateRunner(600_000, o.stateDirectory);
     const run = custody ? custody.run(runner) : runner;
     const integrity = (cwd: string, head: string, phase: string) =>
       assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit);
     const moved = () => !this.controlPlaneSnapshotMatches(snapshot);
+    const finish = (result: ControlPlaneProof): ControlPlaneProof => {
+      // Failure evidence is durable before publication-ref movement can request a rebuild.
+      record?.(candidate, result);
+      return { ...result, ...(moved() ? { moved: true } : {}) };
+    };
     appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${snapshot.mainHead}\n`);
     const installs = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(0, 2), tree, logPath, run);
     integrity(tree, candidate, 'control-plane dependency installs');
-    const validation = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2), tree, logPath, run);
+    if (!installs.passed) return finish(installs);
+    // At most one bounded file probe inherited from the failed parent's actual full-suite output.
+    // A green or inconclusive probe always falls through to every mandatory full-head check.
+    for (const command of negativeProbes.slice(0, 1)) {
+      const files = command.slice(4);
+      if (!files.length || files.some((file) => !existsSync(join(tree, file)))) continue;
+      const probe = await runIntegrationChecks(
+        [command],
+        tree,
+        logPath,
+        o.runControlPlaneGate ?? o.runGate ?? gateRunner(60_000, o.stateDirectory),
+      );
+      integrity(tree, candidate, 'negative-only bisection probe');
+      if (!probe.passed && !probe.timedOut) return finish({ ...probe, negativeOnly: true });
+    }
+    let validation: Awaited<ReturnType<typeof runIntegrationChecks>>;
+    if (repairTyping) {
+      let typing = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2, 3), tree, logPath, run);
+      integrity(tree, candidate, 'control-plane typecheck');
+      if (installs.passed && !typing.passed && !typing.timedOut && !moved()) {
+        const repaired = await repairTyping(typing.output);
+        if (repaired) {
+          candidate = repaired;
+          typing = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2, 3), tree, logPath, run);
+          integrity(tree, candidate, 'control-plane repaired typecheck');
+        }
+      }
+      validation =
+        typing.passed && installs.passed
+          ? await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(3), tree, logPath, run)
+          : typing;
+    } else validation = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2), tree, logPath, run);
     integrity(tree, candidate, 'control-plane typecheck and test suite');
     const checked = {
       passed: installs.passed && validation.passed,
@@ -4207,8 +5535,7 @@ export class MergeTrain {
         ? { failedCommand: installs.failedCommand ?? validation.failedCommand }
         : {}),
     };
-    if (!checked.passed) return checked;
-    if (moved()) return { ...checked, moved: true };
+    if (!checked.passed || moved()) return finish(checked);
     integrity(tree, candidate, 'control-plane verification');
     const devTree = resolve(o.worktreeRoot, `control-plane-dev-${randomUUID()}`);
     const compatibilityCommand = ['bun', 'tools/goal/scripts/check-compatibility.ts', '--scripts-root', devTree];
@@ -4218,13 +5545,11 @@ export class MergeTrain {
       const devInstall = await runIntegrationChecks([['bun', 'install', '--frozen-lockfile']], devTree, logPath, run);
       integrity(tree, candidate, 'control-plane dev compatibility install');
       integrity(devTree, snapshot.devHead, 'control-plane dev compatibility install');
-      if (!devInstall.passed) return devInstall;
-      if (moved()) return { ...devInstall, moved: true };
+      if (!devInstall.passed || moved()) return finish(devInstall);
       const compatibility = await runIntegrationChecks([compatibilityCommand], tree, logPath, run);
       integrity(tree, candidate, 'main-dev compatibility contract');
       integrity(devTree, snapshot.devHead, 'main-dev compatibility contract');
-      if (!compatibility.passed) return compatibility;
-      if (moved()) return { ...compatibility, moved: true };
+      if (!compatibility.passed || moved()) return finish(compatibility);
     } finally {
       git(o.mainCheckout, 'worktree', 'remove', '--force', devTree);
     }
@@ -4246,19 +5571,18 @@ export class MergeTrain {
         (smoke.passed && !lifecycleEvidence) ||
         /infrastructure\/unverified|exceeded the smoke time budget|smoke budget exhausted/i.test(smoke.output);
       if (timedOut) appendFileSync(logPath, 'Lifecycle suite result classified as infrastructure/unverified\n');
-      return {
+      return finish({
         passed: false,
         timedOut,
         failedCommand: smokeCommand,
         output: !smoke.passed ? smoke.output : `Lifecycle smoke omitted exact release evidence: ${prefix}`,
-      };
+      });
     }
-    if (moved()) return { ...smoke, moved: true };
     appendFileSync(
       logPath,
       `Verified ${lifecycleEvidence}; compatibility command passed: ${compatibilityCommand.join(' ')}\n`,
     );
-    return { passed: true, timedOut: false, output: smoke.output, lifecycleEvidence, compatibilityCommand };
+    return finish({ passed: true, timedOut: false, output: smoke.output, lifecycleEvidence, compatibilityCommand });
   }
 
   private controlPlaneSnapshot(mainBranch: string): ControlPlaneReleaseSnapshot {

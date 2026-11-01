@@ -11,6 +11,7 @@ import type { Database } from 'bun:sqlite';
 import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
+import { TrainResolver } from './train-resolver.ts';
 import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { requestManagerLanding } from './manager-landing.ts';
@@ -465,6 +466,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     queue,
     fence: store,
     sink: job,
+    trainResolver: new TrainResolver(store, tasks),
     derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
     promote: () => promoteNow(),
     runGate,
