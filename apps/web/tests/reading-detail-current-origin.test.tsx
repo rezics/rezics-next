@@ -687,3 +687,36 @@ test('publication uncertainty settles during healthy rotation and resumes explic
     await h.close();
   }
 });
+
+test('losing restore admission preserves the known restored revision for the independent delete command', async () => {
+  const resolver = spyOn(exposure, 'operationIsAdmitted').mockImplementation((operation, groups) =>
+    operation === 'published_log.delete' || operation === 'published_log.create'
+      ? (groups?.includes(operation) ?? false)
+      : (groups?.includes('reading_progress') ?? false),
+  );
+  const h = await mount('log');
+  try {
+    await settle(() =>
+      h.cache.setQueryData(h.scoped(), {
+        subject: 'A',
+        admitted: ['reading_progress', 'published_log.delete', 'published_log.create'],
+      }),
+    );
+    if (owners.length) await settle(() => owners.at(-1)!.work.resolve(log()));
+    await h.remove();
+    const deletionId = crypto.randomUUID();
+    await settle(() => writes[0]!.work.resolve({ ok: true, id: 'original', undo: { deletionId, revision: 8 } }));
+    await h.click(m.editor_undo());
+    expect(writes[1]!.data).toMatchObject({ id: 'original', deletionId, revision: 8 });
+    await settle(() => writes[1]!.work.resolve({ ok: true, id: 'original', revision: 11 }));
+    await settle(() =>
+      h.cache.setQueryData(h.scoped(), { subject: 'A', admitted: ['reading_progress', 'published_log.delete'] }),
+    );
+    await h.remove();
+    expect(writes[2]!.data).toMatchObject({ id: 'original', revision: 11 });
+    expect(writes[2]!.data.idempotencyKey).not.toBe(writes[0]!.data.idempotencyKey);
+  } finally {
+    await h.close();
+    resolver.mockRestore();
+  }
+});

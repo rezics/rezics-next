@@ -141,6 +141,11 @@ export function PublishedLogPageView({
     const restoreChanged = page.origin?.restore.lifetime !== originating?.restore.lifetime;
     const removeObservationChanged = page.origin?.remove.observation !== originating?.remove.observation;
     const restoreObservationChanged = page.origin?.restore.observation !== originating?.restore.observation;
+    const advanceRevision =
+      !page.deleteStarted &&
+      !page.deleted &&
+      loadedRevision !== undefined &&
+      (page.revision === undefined || loadedRevision >= page.revision);
     if (
       ((removeChanged || removeObservationChanged) && busy.current?.operation === 'remove') ||
       ((restoreChanged || restoreObservationChanged) && busy.current?.operation === 'restore')
@@ -150,7 +155,7 @@ export function PublishedLogPageView({
       ...page,
       origin: originating,
       loadedRevision,
-      ...(!page.deleteStarted && !page.deleted ? { revision: loadedRevision } : {}),
+      ...(advanceRevision ? { revision: loadedRevision } : {}),
       ...(removeChanged || removeObservationChanged
         ? {
             ...(removeChanged ? { confirming: false } : {}),
@@ -195,7 +200,7 @@ export function PublishedLogPageView({
       update({
         idempotencyKey: crypto.randomUUID(),
         confirming: false,
-        undo: !originating || originating.restore.isCurrent() ? result.undo : undefined,
+        undo: result.undo,
         deleted: true,
         undoKey: crypto.randomUUID(),
       });
