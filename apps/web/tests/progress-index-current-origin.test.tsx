@@ -571,6 +571,7 @@ test('healthy same-viewer rotation and equivalent refresh retain exact uncertain
         await tick(() => h.client.setQueryData(sessionQuery.queryKey, viewer('A', 'current')));
         await tick(h.callback(kind));
         const retry = writes[1]!;
+        const retainedSubmit = h.callback(kind);
         expect(retry.data).toEqual(exact);
         expect(retry.headers).toEqual({ 'x-csrf-token': 'current' });
         if (kind === 'start') {
@@ -582,12 +583,17 @@ test('healthy same-viewer rotation and equivalent refresh retain exact uncertain
             idempotencyKey: exact.idempotencyKey,
             ...(mode === 'completed_units' ? {} : { total: '0' }),
           });
-          await tick(() => retry.work.resolve({ ok: true, id: id(90) }));
+          await tick(async () => {
+            retry.work.resolve({ ok: true, id: id(90) });
+            await Promise.resolve();
+            retainedSubmit();
+            expect(writes).toHaveLength(2);
+          });
           expect(h.redirects).toHaveLength(1);
           expect(h.redirects[0]).toContain(`/library/progress/${id(90)}`);
         } else {
           expect(exact).toEqual({ sessionId: id(20), revision: 7, action: kind, idempotencyKey: exact.idempotencyKey });
-          await tick(() =>
+          await tick(async () => {
             retry.work.resolve({
               ok: true,
               session: {
@@ -595,8 +601,11 @@ test('healthy same-viewer rotation and equivalent refresh retain exact uncertain
                 revision: 8,
                 state: kind === 'complete' ? 'completed' : 'abandoned',
               },
-            }),
-          );
+            });
+            await Promise.resolve();
+            retainedSubmit();
+            expect(writes).toHaveLength(2);
+          });
           expect(h.host.textContent).toContain(
             kind === 'complete' ? m.library_progress_state_completed() : m.library_progress_state_abandoned(),
           );

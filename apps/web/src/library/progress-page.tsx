@@ -258,14 +258,15 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
     setChosen(next ? [pickerSubject(next)] : []);
   }
 
+  const draftLocked = pending || (!!authority && intent.current !== null);
   const [, renderDraft] = useState(0);
-  const draftScope = JSON.stringify([subject, chosen[0]?.type, version[0]?.id, mode, unit, total]);
+  const draftScope = JSON.stringify([subject, chosen[0]?.type, version[0]?.id, mode, unit, total, key]);
   const draftRef = useRef<{ scope: string; token: object }>({ scope: draftScope, token: {} });
   if (draftRef.current.scope !== draftScope) draftRef.current = { scope: draftScope, token: {} };
   const draft = draftRef.current;
   const draftCurrent = () => current() && draftRef.current === draft;
   const changeDraft = (change: () => void) => {
-    if (!draftCurrent() || episode.pending) return;
+    if (!draftCurrent() || episode.pending || (!!authority && intent.current !== null)) return;
     draftRef.current = { scope: draftScope, token: {} };
     renderDraft((value) => value + 1);
     change();
@@ -296,17 +297,20 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
         setAlert(progressFailureMessage(result.reason));
         if (authority && result.reason !== 'unavailable') {
           intent.current = null;
+          draftRef.current = { scope: draftScope, token: {} };
           setKey(crypto.randomUUID());
         }
         return;
       }
+      intent.current = null;
+      draftRef.current = { scope: draftScope, token: {} };
       setKey(crypto.randomUUID());
-      if (!draftCurrent()) return;
+      if (!current()) return;
       window.location.assign(router.buildLocation({ to: '/library/progress/$id', params: { id: result.id } }).href);
     } catch {
       if (draftCurrent()) setAlert(m.library_progress_unavailable());
     } finally {
-      if (draftCurrent()) {
+      if (current()) {
         origin.pending = false;
         setPending(false);
       }
@@ -357,10 +361,10 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
               <ProgressPicker
                 key={episode.generation}
                 isCurrent={draftCurrent}
-                disabled={pending}
+                disabled={draftLocked}
                 value={chosen}
                 onValueChange={async (value) => {
-                  if (!draftCurrent() || episode.pending) return;
+                  if (!draftCurrent() || episode.pending || (!!authority && intent.current !== null)) return;
                   draftRef.current = { scope: draftScope, token: {} };
                   renderDraft((value) => value + 1);
                   const request = ++choiceRequest.current;
@@ -409,7 +413,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                   <ProgressPicker
                     key={episode.generation}
                     isCurrent={draftCurrent}
-                    disabled={pending}
+                    disabled={draftLocked}
                     label={m.library_progress_version()}
                     value={version}
                     onValueChange={(value) => {
@@ -437,7 +441,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                   <FieldLegend variant="label">{m.library_current_choices()}</FieldLegend>
                   <RadioGroup
                     name="progress-mode"
-                    disabled={pending}
+                    disabled={draftLocked}
                     value={mode}
                     onValueChange={(value) => {
                       changeDraft(() => setMode(value as ProgressMode));
@@ -460,7 +464,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                     <NativeSelect
                       id="progress-unit"
                       name="unit"
-                      disabled={pending}
+                      disabled={draftLocked}
                       value={unit}
                       onChange={(event) => {
                         const value = event.currentTarget.value;
@@ -480,7 +484,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                       <Input
                         id="progress-total"
                         name="total"
-                        disabled={pending}
+                        disabled={draftLocked}
                         type="number"
                         min={pair?.min}
                         max={pair?.max}
@@ -635,6 +639,7 @@ function SessionRow({
         setError(true);
         if (authority && result.reason !== 'unavailable') {
           intent.current = null;
+          confirmation.current = { value: action, token: {} };
           setKey(crypto.randomUUID());
         }
         return;
@@ -644,6 +649,7 @@ function SessionRow({
         return;
       }
       intent.current = null;
+      confirmation.current = { value: null, token: {} };
       setSession((current) =>
         result.session.id === current.id && result.session.revision >= current.revision
           ? { ...current, ...result.session }
