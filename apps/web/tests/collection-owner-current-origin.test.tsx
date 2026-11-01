@@ -470,11 +470,9 @@ describe('Complete saved rule and selected Publication owner authority preserves
       await select(h, [1, 0]);
       const publish = handler(h.button(m.library_publication_publish()), 'onClick');
       const choose = handler(checkboxes(h.host)[0]!, 'onChange');
-      const key = h.client
-        .getQueryCache()
-        .findAll({
-          queryKey: collectionPublicationQuery({ subject: 'alice', csrfToken: 'csrf-one' }, address).queryKey,
-        })[0]!.queryKey;
+      const key = h.client.getQueryCache().findAll({
+        queryKey: collectionPublicationQuery({ subject: 'alice', csrfToken: 'csrf-one' }, address).queryKey,
+      })[0]!.queryKey;
       await h.perform(() => {
         h.client.setQueryData(key, publication('alice', address, 'csrf-one', 8));
         choose();
