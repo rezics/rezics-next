@@ -1107,7 +1107,11 @@ test('external distinct and structurally shared successes retire cancellation-aw
       const external =
         replacementKind === 'equal-shared'
           ? structuredClone(seed)
-          : pageFor(threadId, { privateRead: true, title: 'External successor title', body: 'External successor body' });
+          : pageFor(threadId, {
+              privateRead: true,
+              title: 'External successor title',
+              body: 'External successor body',
+            });
       externalSuccessStarted = true;
       await act(async () => {
         page.client.setQueryData(key, external);

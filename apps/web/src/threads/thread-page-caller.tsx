@@ -616,11 +616,7 @@ export class ThreadPageCaller {
     let owned = false;
     let external = false;
     for (const continuation of this.refreshContinuations) {
-      if (
-        !continuation.active ||
-        !isThreadPageFor(event.query.queryKey, continuation.identity.id)
-      )
-        continue;
+      if (!continuation.active || !isThreadPageFor(event.query.queryKey, continuation.identity.id)) continue;
       const boundary = continuation.boundary;
       const capturedByBoundary = boundary?.queries.has(event.query) === true;
       const ownCancelEvent =
@@ -657,7 +653,12 @@ export class ThreadPageCaller {
   }
 
   private isOwnedPageEvent(read: OwnedPageRead | undefined, event: QueryCacheEvent) {
-    if (event.type !== 'updated' || event.action?.type !== 'success' || event.action.manual === true || !read?.resultReady)
+    if (
+      event.type !== 'updated' ||
+      event.action?.type !== 'success' ||
+      event.action.manual === true ||
+      !read?.resultReady
+    )
       return false;
     if (!matchingKey(event.query.queryKey, read.queryKey)) return false;
     const current = this.source.queryStamp(read.queryKey);
@@ -895,8 +896,7 @@ export class ThreadPageCaller {
   }
 
   markOwnedPageReadStarted(queryKey: QueryKey) {
-    if (!this.ownedPageRead || !matchingKey(queryKey, this.ownedPageRead.queryKey))
-      throw new ThreadPageCallerRetired();
+    if (!this.ownedPageRead || !matchingKey(queryKey, this.ownedPageRead.queryKey)) throw new ThreadPageCallerRetired();
     this.ownedPageRead.started = true;
     const query = this.source.queryStamp(queryKey);
     if (query && !this.ownedPageRead.query) this.ownedPageRead.query = query.query;
