@@ -247,6 +247,7 @@ export function ReadingCard({
           <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_reading_text()}</CardDescription>
+        <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-4">
         <FieldGroup>

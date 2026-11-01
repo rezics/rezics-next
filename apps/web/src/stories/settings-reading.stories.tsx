@@ -13,8 +13,16 @@ export const ReadingAndDisplay: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
-    await userEvent.click(await view.findByRole('radio', { name: m.settings_spoiler_1_title() }));
-    await view.findByText(m.settings_saved());
+    const reading = within(await view.findByRole('region', { name: m.settings_reading_heading() }));
+    const fixture = readingPageFixture()!;
+    await expect(reading.getByText(m.settings_automatic_save_help())).toBeVisible();
+    await expect(fixture.calls).toHaveLength(0);
+    await userEvent.click(await reading.findByRole('radio', { name: m.settings_spoiler_1_title() }));
+    await reading.findByText(m.settings_saved());
+    await expect(fixture.calls).toHaveLength(1);
+    await expect(fixture.calls[0]).toMatchObject({ expectedVersion: 0, spoilerLevel: 1 });
+    await expect(fixture.calls[0]).not.toHaveProperty('suitability');
+    await expect(fixture.current()).toMatchObject({ spoilerLevel: 1, suitability: 'blur', version: 1 });
     await selectSettingsCategory(context.canvasElement, m.settings_display_heading());
     await view.findByRole('heading', { name: m.settings_display_heading() });
     const display = within(await view.findByRole('region', { name: m.shell_appearance() }));
