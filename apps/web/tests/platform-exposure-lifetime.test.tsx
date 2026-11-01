@@ -102,12 +102,12 @@ const subjectA = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const subjectB = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
 const rowTime = '2026-11-01T00:00:00.123456Z';
 
-function readyPage(group: string): Page {
+function readyPage(group: string, next: string | null = null): Page {
   return {
     status: 'ready',
     groups: [group],
     inventory: 'visible-only',
-    current: { status: 'available', exposureGroups: [{ group, open: false, at: rowTime }], next: null },
+    current: { status: 'available', exposureGroups: [{ group, open: false, at: rowTime }], next },
     authority: { status: 'available', offered: ['open', 'close'] },
   };
 }
@@ -277,12 +277,23 @@ test('production route and page retire reader-bound work without losing same-own
   expect(changeCalls).toHaveLength(1);
   expect(changeCalls[0]!.csrfToken).toBe('csrf-one');
   const originalIntent = changeCalls[0]!.operation;
-  await resolveChange(0, { status: 'uncertain', operation: originalIntent, current: readyPage('collections') });
+  await resolveChange(0, {
+    status: 'uncertain',
+    operation: originalIntent,
+    current: readyPage('collections', 'retry-cursor'),
+  });
   expect(container.textContent).toContain(m.exposure_uncertain());
 
-  await click(button(container, m.exposure_reload()));
+  // Same-owner paging keeps the unresolved intent and the original readback query for retry.
+  await click(button(container, m.exposure_next_page()));
   expect(readCalls).toHaveLength(2);
+  expect(readCalls[1]!.query).toEqual({ cursor: 'retry-cursor', limit: 20 });
   await resolveRead(1, envelope(subjectA, 'collections'));
+  expect(container.textContent).toContain(m.exposure_retry());
+
+  await click(button(container, m.exposure_reload()));
+  expect(readCalls).toHaveLength(3);
+  await resolveRead(2, envelope(subjectA, 'collections'));
   expect(container.textContent).toContain(m.exposure_retry());
   await click(button(container, m.exposure_retry()));
   expect(changeCalls).toHaveLength(2);
@@ -316,8 +327,8 @@ test('production route and page retire reader-bound work without losing same-own
   await replaceSession(originalClient, signedIn(subjectB, 'csrf-b'));
   expect(container.textContent).not.toContain('collections');
   await click(button(container, m.exposure_reload()));
-  expect(readCalls).toHaveLength(3);
-  await resolveRead(2, envelope(subjectB, 'search'));
+  expect(readCalls).toHaveLength(4);
+  await resolveRead(3, envelope(subjectB, 'search'));
   expect(container.textContent).toContain('search');
   await resolveChange(3, {
     status: 'recorded',
@@ -332,14 +343,14 @@ test('production route and page retire reader-bound work without losing same-own
   await replaceSession(originalClient, signedIn(subjectA, 'csrf-a2'));
   expect(container.textContent).not.toContain('search');
   await click(button(container, m.exposure_reload()));
-  await resolveRead(3, envelope(subjectA, 'collections'));
+  await resolveRead(4, envelope(subjectA, 'collections'));
   expect(container.textContent).toContain('collections');
 
   await replaceSession(originalClient, { state: 'signed-out', subject: null, csrfToken: null });
   expect(container.textContent).not.toContain('collections');
   await replaceSession(originalClient, signedIn(subjectA, 'csrf-a3'));
   await click(button(container, m.exposure_reload()));
-  await resolveRead(4, envelope(subjectA, 'collections'));
+  await resolveRead(5, envelope(subjectA, 'collections'));
   expect(container.textContent).toContain('collections');
 
   const cachedSession = originalClient.getQueryData(sessionQuery.queryKey);
@@ -359,7 +370,7 @@ test('production route and page retire reader-bound work without losing same-own
   expect(container.textContent).not.toContain('collections');
   await replaceSession(originalClient, signedIn(subjectA, 'csrf-a4'));
   await click(button(container, m.exposure_reload()));
-  await resolveRead(5, envelope(subjectA, 'collections'));
+  await resolveRead(6, envelope(subjectA, 'collections'));
 
   await act(async () => {
     originalClient.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
@@ -368,7 +379,7 @@ test('production route and page retire reader-bound work without losing same-own
   expect(container.textContent).not.toContain('collections');
   await replaceSession(originalClient, signedIn(subjectA, 'csrf-a5'));
   await click(button(container, m.exposure_reload()));
-  await resolveRead(6, envelope(subjectA, 'collections'));
+  await resolveRead(7, envelope(subjectA, 'collections'));
 
   // Replacing the provider changes the session source even when the loader envelope is unchanged.
   const replacementClient = createClient(signedIn(subjectB, 'csrf-provider'));
@@ -376,13 +387,13 @@ test('production route and page retire reader-bound work without losing same-own
   await act(async () => root.render(app()));
   expect(container.textContent).not.toContain('collections');
   await click(button(container, m.exposure_reload()));
-  await resolveRead(7, envelope(subjectB, 'search'));
+  await resolveRead(8, envelope(subjectB, 'search'));
   expect(container.textContent).toContain('search');
 
   // A late rejection from a read whose page unmounted cannot publish into a later route visit.
   await click(button(container, m.exposure_reload()));
-  expect(readCalls).toHaveLength(9);
-  const lateRead = readCalls[8]!;
+  expect(readCalls).toHaveLength(10);
+  const lateRead = readCalls[9]!;
   await act(async () => root.unmount());
   await Promise.resolve();
   lateRead.result.reject(new Error('late unmounted read'));

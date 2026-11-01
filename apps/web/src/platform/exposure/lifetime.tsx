@@ -126,6 +126,8 @@ export class ExposureVisit {
   private expectedSubject: string | null;
   private pendingRead: ReadTicket | null = null;
   private pendingCommand: CommandTicket | null = null;
+  private commandIntent: Intent | null = null;
+  private commandQuery: ExposureQuery | null = null;
   private readGeneration = 0;
   private commandGeneration = 0;
   private mutationRevision: number;
@@ -309,7 +311,11 @@ export class ExposureVisit {
   review(group: string, action: Action) {
     if (!this.mutationCurrent() || this.busy || this.operation.intent) return false;
     const reviewed = this.operation.review({ group, action, key: crypto.randomUUID(), body: {} });
-    if (reviewed) this.changed();
+    if (reviewed) {
+      this.commandIntent = null;
+      this.commandQuery = null;
+      this.changed();
+    }
     return reviewed;
   }
 
@@ -370,12 +376,18 @@ export class ExposureVisit {
     const token = observed.csrfToken;
     if (!token) return;
     const operation = this.operation;
+    const intent = operation.intent;
+    if (this.commandIntent !== intent || !this.commandQuery) {
+      this.commandIntent = intent;
+      this.commandQuery = Object.freeze({ ...this.selection });
+    }
+    const query = this.commandQuery;
     const ticket: CommandTicket = { generation: ++this.commandGeneration, operation };
     this.pendingCommand = ticket;
     this.changed();
 
     const result = await operation.send(
-      (intent, csrfToken) => this.io.change(intent, { ...this.selection }, csrfToken ?? token),
+      (submitted, csrfToken) => this.io.change(submitted, { ...query }, csrfToken ?? token),
       token,
     );
 
