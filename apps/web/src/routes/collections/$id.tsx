@@ -154,7 +154,7 @@ function CollectionContentLifetime({
   id: string;
   search: { cursor?: string; filters?: Record<string, string | string[]>; layout?: 'grid' | 'list' };
   initialPage?: CollectionPageResult | undefined;
-  session: 'unknown' | 'signed-in' | 'signed-out';
+  session: ReturnType<typeof useSession>['state'];
   viewerId: string | null;
   canRead: boolean;
 }) {
@@ -191,7 +191,12 @@ function CollectionContentLifetime({
     return <CollectionAccessState state={isNotFound(sessionPage.error) ? 'not-found' : 'unavailable'} />;
   const page = privatePage ?? publicPage;
   if (!page) {
-    const state = session === 'unknown' || (canRead && sessionPage.isPending) ? 'loading' : 'not-found';
+    const state =
+      session === 'unavailable'
+        ? 'unavailable'
+        : session === 'unknown' || (canRead && sessionPage.isPending)
+          ? 'loading'
+          : 'not-found';
     return <CollectionAccessState state={state} />;
   }
   const mode = privatePage ? ('session' as const) : ('anonymous' as const);
