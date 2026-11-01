@@ -569,7 +569,11 @@ export async function runLocalGate(
 
   for (const failure of remainingFailures) writeOutput(failure.block, 'stdout', env);
   if (remainingFailures.length > 0)
-    writeOutput(`Failed workspaces: ${remainingFailures.map((failure) => failure.directory).join(' ')}\n`, 'stdout', env);
+    writeOutput(
+      `Failed workspaces: ${remainingFailures.map((failure) => failure.directory).join(' ')}\n`,
+      'stdout',
+      env,
+    );
 
   let controlPlane: GateResultFile['controlPlane'];
   if (code === 0 && remainingFailures.length === 0 && selection.controlPlane) {
@@ -601,8 +605,7 @@ async function main(): Promise<number> {
   const selection = readWorkspaceSelection(args);
   const placement = gatePlacement(root, process.env);
   if (placement.kind === 'local') return await runLocalGate(args);
-  if (placement.kind === 'unavailable')
-    throw new Error(`gate: ${placement.reason}; refusing to run the gate locally`);
+  if (placement.kind === 'unavailable') throw new Error(`gate: ${placement.reason}; refusing to run the gate locally`);
 
   const allWorkspaces = await readWorkspaces();
   const workspaces = selection.directories

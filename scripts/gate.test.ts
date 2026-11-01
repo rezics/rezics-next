@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import {
-  DEFAULT_DURATIONS,
-  loadDurationTable,
-  runLocalGate,
-  splitWorkspaces,
-  type Workspace,
-} from './gate.ts';
+import { DEFAULT_DURATIONS, loadDurationTable, runLocalGate, splitWorkspaces, type Workspace } from './gate.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const gate = join(repository, 'scripts/gate.ts');
@@ -437,7 +431,7 @@ test("the gate writes a JSON result with each workspace's outcome, failing files
   });
 });
 
-test("a transport failure is not replayed, and local load-induced reruns keep their reports", async () => {
+test('a transport failure is not replayed, and local load-induced reruns keep their reports', async () => {
   const { env, events } = scenario();
   const result = await runGate({ ...env, FAKE_DROP_FIRST_RUN: '1', FAKE_DROP_GROUP: '0', GATE_REMOTE_SLOTS: '4' });
   expect(result.code).toBe(75);
