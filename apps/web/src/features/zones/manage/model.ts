@@ -8,6 +8,7 @@ export type ListInput = { deleted: boolean; cursor?: string };
 export type Failure = {
   kind: 'signed-out' | 'denied' | 'closed' | 'actor' | 'missing' | 'invalid' | 'conflict' | 'stale' | 'unavailable';
   fields?: string[];
+  ownerObservation?: OwnerReadObservation;
 };
 export type ListOutcome = ({ kind: 'ready'; page: OwnedZoneList } | Failure) & {
   ownerObservation?: OwnerReadObservation;
