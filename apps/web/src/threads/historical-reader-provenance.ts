@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { Query, QueryClient } from '@tanstack/react-query';
 import type { ReadCredentialMode } from '../kernel/credential';
 
 export type HistoricalReaderState = 'unknown' | 'signed-in' | 'signed-out' | 'preparing' | 'unavailable';
@@ -69,7 +69,7 @@ export type HistoricalReaderSource = {
 };
 
 type SessionRecord = { state?: unknown; subject?: unknown; csrfToken?: unknown };
-type CachedQuery = NonNullable<ReturnType<ReturnType<QueryClient['getQueryCache']>['find']>>;
+type CachedQuery = Query<unknown, Error, unknown, readonly unknown[]>;
 type StoredLineage = { id: string; generation: number };
 type RawSnapshot = HistoricalReaderExpectation & {
   dataUpdateCount: number;

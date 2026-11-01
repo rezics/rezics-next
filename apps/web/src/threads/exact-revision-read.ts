@@ -11,6 +11,7 @@ import {
   validateHistoricalReadBinding,
   type HistoricalReadBinding,
   type HistoricalReadEnvelope,
+  type HistoricalReadTarget,
 } from './historical-reader-provenance';
 import { loadExactRevision } from './exact-revision';
 
@@ -35,7 +36,7 @@ export const readExactRevision = createServerFn({ method: 'GET' })
       (input.credentialMode !== 'anonymous' && input.credentialMode !== 'session')
     )
       throw notFound();
-    const target = {
+    const target: HistoricalReadTarget = {
       kind: 'exact-revision' as const,
       postId: input.postId,
       revisionId: input.revisionId,
