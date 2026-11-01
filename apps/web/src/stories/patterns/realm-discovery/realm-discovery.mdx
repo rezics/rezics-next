@@ -20,6 +20,10 @@ it does no refill, row lookup or permission inference. The native source checks 
 Space, publication and generation authority. A rejected or unavailable read has no rows; platform closure is distinct
 from both empty and unavailable. Empty-with-next is a continuable page, not completion.
 
+Ready Realm results use shared `ContentItem` rows. Each title is a level-three heading and the primary link name;
+descriptions remain optional one-line previews, while avatar media and its attribution use only supplied presentation
+values.
+
 All examples use explicit presentation-contract responses through that adapter. The identity/title/description come
 from the existing recorded Realm. The examples do not assert that it qualified in any native ranking window.
 Image uses an explicitly selected, same-Realm image summary with an existing Storybook derivative asset. Installed
@@ -33,6 +37,7 @@ These plays and local typing do not establish native source correctness or Web v
 page IDs and their placement review remain with those owners; this Pattern is not a replacement page preview.
 
 <Canvas of={Discovery.Available} />
+<Canvas of={Discovery.ComposedRows} />
 <Canvas of={Discovery.Image} />
 <Canvas of={Discovery.Initials} />
 <Canvas of={Discovery.Sparse} />

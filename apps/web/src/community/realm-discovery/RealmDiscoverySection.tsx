@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { ContentItem } from '@rezics/ui/content-item';
 import { MediaImage } from '@rezics/ui/media-image';
 import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../../media/cover-src';
@@ -39,12 +40,15 @@ export function RealmDiscoverySection({
           {state.realms.length > 0 ? (
             <ul className="space-y-1">
               {state.realms.map((realm) => (
-                <li key={realm.realmId}>
-                  <a
-                    href={`/${language}/realms/${encodeURIComponent(realm.realmId)}`}
-                    className="flex min-h-16 min-w-0 items-center gap-3 rounded-xl p-2 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  >
-                    {realm.avatar ? (
+                <ContentItem
+                  key={realm.realmId}
+                  title={realm.name}
+                  titleDataSlot="realm-discovery-title"
+                  headingLevel={3}
+                  href={`/${language}/realms/${encodeURIComponent(realm.realmId)}`}
+                  className="items-center"
+                  visual={
+                    realm.avatar ? (
                       <MediaImage
                         media={realm.avatar.id}
                         width={realm.avatar.width}
@@ -71,15 +75,14 @@ export function RealmDiscoverySection({
                       >
                         {initials(realm.name)}
                       </span>
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{realm.name}</span>
-                      {realm.description ? (
-                        <span className="line-clamp-1 text-xs text-muted-foreground">{realm.description}</span>
-                      ) : null}
-                    </span>
-                  </a>
-                </li>
+                    )
+                  }
+                  preview={
+                    realm.description ? (
+                      <p className="line-clamp-1 text-xs text-muted-foreground">{realm.description}</p>
+                    ) : undefined
+                  }
+                />
               ))}
             </ul>
           ) : (
