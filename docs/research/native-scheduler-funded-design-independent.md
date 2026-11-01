@@ -55,23 +55,23 @@ this report. No independent report draft or live worker was consulted.
 The following complete manager documents were read by exact absolute path below
 `/home/edge/projects/rezics/rezics-next/`:
 
-| Document | Controlling consequence |
-| --- | --- |
-| `.temp/goal/performance/decisions/native-discovery-owner-contract.md` | Complete native class, revised queue outcomes, unchanged retention and custody |
-| `.temp/goal/performance/native-discovery-approved-continuation.md` | Original retained acceptance and stopped continuation scope |
-| `.temp/goal/performance/decisions/native-scheduler-accounting-boundary-20261101.md` | Static autonomous call-chain finding; owner exchange boundary |
-| `.temp/goal/commerce/native-scheduler-work-reservation-disposition-20261102.md` | Actual default Work admission, full inclusive costs, no fallback |
-| `.temp/goal/search/native-scheduler-source-owner-disposition-20261102.md` | Source authority and original same-frame accounting survive |
-| `.temp/goal/semantic/native-scheduler-accounting-owner-disposition-20261102.md` | Missing costs unavailable; numerical funding is not lifecycle authority |
+| Document                                                                            | Controlling consequence                                                        |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `.temp/goal/performance/decisions/native-discovery-owner-contract.md`               | Complete native class, revised queue outcomes, unchanged retention and custody |
+| `.temp/goal/performance/native-discovery-approved-continuation.md`                  | Original retained acceptance and stopped continuation scope                    |
+| `.temp/goal/performance/decisions/native-scheduler-accounting-boundary-20261101.md` | Static autonomous call-chain finding; owner exchange boundary                  |
+| `.temp/goal/commerce/native-scheduler-work-reservation-disposition-20261102.md`     | Actual default Work admission, full inclusive costs, no fallback               |
+| `.temp/goal/search/native-scheduler-source-owner-disposition-20261102.md`           | Source authority and original same-frame accounting survive                    |
+| `.temp/goal/semantic/native-scheduler-accounting-owner-disposition-20261102.md`     | Missing costs unavailable; numerical funding is not lifecycle authority        |
 
 Committed evidence was read at its specified revision, including superseded
 requirements as historical evidence rather than current instructions:
 
-| Revision and path | Use here |
-| --- | --- |
-| `aa9428eb40e82bffeb05afefbd4060043c8bed12:docs/research/kernel-bounded-work-source-gaps.md` | Full 434-line source specification, inversion, native paths and frozen scales |
+| Revision and path                                                                            | Use here                                                                          |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `aa9428eb40e82bffeb05afefbd4060043c8bed12:docs/research/kernel-bounded-work-source-gaps.md`  | Full 434-line source specification, inversion, native paths and frozen scales     |
 | `49803a1c4d772bfb596170fe890e650b08391089:docs/research/native-eligible-key-index-design.md` | Full 634-line rejected-index analysis, cross-version veto and custody obligations |
-| `36b3bb204ca0b31783372593d964d65222c89a0e:.temp/native-discovery-continuation-accounting.md` | Full 143-line stopped accounting evidence |
+| `36b3bb204ca0b31783372593d964d65222c89a0e:.temp/native-discovery-continuation-accounting.md` | Full 143-line stopped accounting evidence                                         |
 
 AGENTS, the development entry point and linked Goal definitions, architecture,
 scope, the rezics-workflow skill and design reference, and the complete
@@ -94,12 +94,12 @@ Metadata: [exact npm release](https://registry.npmjs.org/@dbos-inc%2fdbos-sdk/5.
 The original release source was shallow-fetched into the permitted reference area
 and read; none of its code was installed, built or run.
 
-| Observed file | SHA-256 |
-| --- | --- |
+| Observed file                                      | SHA-256                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
 | `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch` | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
-| Installed `dist/src/system_database.js` | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
-| Installed `dist/src/wfqueue.js` | `9be7bd806fb41bbb73d87b848a2c8ac1cb8bc8e615c6cadd7158bffb8b0698c5` |
-| Installed `dist/src/client.js` | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
+| Installed `dist/src/system_database.js`            | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
+| Installed `dist/src/wfqueue.js`                    | `9be7bd806fb41bbb73d87b848a2c8ac1cb8bc8e615c6cadd7158bffb8b0698c5` |
+| Installed `dist/src/client.js`                     | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
 
 The entire installed patch was read. It adds permanent writer fences, native
 restore-domain checks, client retirement APIs and guarded resume/rewind/fork
@@ -128,11 +128,11 @@ Existing clones were reused where possible; the exact missing DBOS release was
 fetched under `native-scheduler-funded-design/dbos-transact-ts/`.
 The shared reference INDEX records topic, URL, revision, licence and date.
 
-| Source | Pinned revision; licence; local path | Relevant primary bodies |
-| --- | --- | --- |
-| DBOS TypeScript | `627990fc59619d3584ce88511ab546bc7483f4b9`; MIT; `native-scheduler-funded-design/dbos-transact-ts/` | `src/wfqueue.ts:710–960`; `src/system_database.ts:1647–2160,2498–3170,4279–4905,5723–5990`; `src/sysdb_migrations/internal/migrations.ts` |
-| Temporal Server | `3eb5fb80523443d8583bcec463843275908f1bbc`; MIT; reused `delivery-tooling/temporal/` | `common/tasks/rate_limited_scheduler.go`; `service/history/queues/iterator.go`; `service/history/queues/queue_base.go:262–418` |
-| PostgreSQL | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; PostgreSQL licence; reused `library-shelf-maintenance/postgres/` | `src/backend/access/nbtree/README`; `src/include/access/nbtree.h:155–175`; `COPYRIGHT` |
+| Source          | Pinned revision; licence; local path                                                                         | Relevant primary bodies                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| DBOS TypeScript | `627990fc59619d3584ce88511ab546bc7483f4b9`; MIT; `native-scheduler-funded-design/dbos-transact-ts/`          | `src/wfqueue.ts:710–960`; `src/system_database.ts:1647–2160,2498–3170,4279–4905,5723–5990`; `src/sysdb_migrations/internal/migrations.ts` |
+| Temporal Server | `3eb5fb80523443d8583bcec463843275908f1bbc`; MIT; reused `delivery-tooling/temporal/`                         | `common/tasks/rate_limited_scheduler.go`; `service/history/queues/iterator.go`; `service/history/queues/queue_base.go:262–418`            |
+| PostgreSQL      | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; PostgreSQL licence; reused `library-shelf-maintenance/postgres/` | `src/backend/access/nbtree/README`; `src/include/access/nbtree.h:155–175`; `COPYRIGHT`                                                    |
 
 Links to the pinned bodies:
 [DBOS scheduler](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/src/wfqueue.ts),
@@ -186,21 +186,21 @@ The class is larger than a balance object. It includes admission, queue registry
 reconciliation, queue selection/claim, retention, every native writer, migration,
 coverage, restore, copy inventory and owner-authorized removal.
 
-| Existing call site | Required proposed change and payer |
-| --- | --- |
-| `worker.ts:startWorker` | Construct one Work issuer using the exact created Pool; install it before any DBOS launch I/O requiring Work funding |
-| `work/registry.ts:composeWork` | Receive the issuer explicitly; queue registration and module registration retain their actual launch caller; pass required native admission into SDK configuration |
-| `DBOS.launch` / runner setup | Pay bounded queue/version discovery before the first selector; startup is not an unbounded migration window |
-| `WFQueueRunner.runDispatchLoop` | Initial refresh is a paid resumable registry page, not free setup |
-| `schedulerLoop` | Choose a finite action, obtain one admission, and await settlement; timers do not mint child balances |
-| `scheduleDueQueues` | Maintain due work from bounded registry pages; avoid sorting an unbounded DB-backed queue registry inside one priced action |
-| `runQueuePoll` | Own one invocation through result classification, committed progress and cleanup; keep lane release separate from funding settlement |
-| `pollQueue` | Explicitly pass invocation to version/scope/selector/claim; propagate three outcomes instead of boolean contention alone |
-| `systemDatabase` selectors | Reserve complete SQL plus triggers before dispatch; preserve fixed candidate ownership and conditional native claims |
-| `runWorkflowRetentionSweep` | Admit its autonomous Work invocation before selection; keep one original cutoff and a durable sweep state |
-| `runWorkflowRetentionBatch` | Return progress plus selected/deleted counts and authoritative exhaustion; a short incomplete page is not final |
-| Additive migration/backfill/repair | Separate admitted bounded steps, with durable committed coverage; never charged retrospectively to a later poll |
-| Original Source maintenance entry | Use its exact Source token, callbacks, Pool, deadline and inclusive aggregate, without calling the autonomous issuer |
+| Existing call site                 | Required proposed change and payer                                                                                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `worker.ts:startWorker`            | Construct one Work issuer using the exact created Pool; install it before any DBOS launch I/O requiring Work funding                                               |
+| `work/registry.ts:composeWork`     | Receive the issuer explicitly; queue registration and module registration retain their actual launch caller; pass required native admission into SDK configuration |
+| `DBOS.launch` / runner setup       | Pay bounded queue/version discovery before the first selector; startup is not an unbounded migration window                                                        |
+| `WFQueueRunner.runDispatchLoop`    | Initial refresh is a paid resumable registry page, not free setup                                                                                                  |
+| `schedulerLoop`                    | Choose a finite action, obtain one admission, and await settlement; timers do not mint child balances                                                              |
+| `scheduleDueQueues`                | Maintain due work from bounded registry pages; avoid sorting an unbounded DB-backed queue registry inside one priced action                                        |
+| `runQueuePoll`                     | Own one invocation through result classification, committed progress and cleanup; keep lane release separate from funding settlement                               |
+| `pollQueue`                        | Explicitly pass invocation to version/scope/selector/claim; propagate three outcomes instead of boolean contention alone                                           |
+| `systemDatabase` selectors         | Reserve complete SQL plus triggers before dispatch; preserve fixed candidate ownership and conditional native claims                                               |
+| `runWorkflowRetentionSweep`        | Admit its autonomous Work invocation before selection; keep one original cutoff and a durable sweep state                                                          |
+| `runWorkflowRetentionBatch`        | Return progress plus selected/deleted counts and authoritative exhaustion; a short incomplete page is not final                                                    |
+| Additive migration/backfill/repair | Separate admitted bounded steps, with durable committed coverage; never charged retrospectively to a later poll                                                    |
+| Original Source maintenance entry  | Use its exact Source token, callbacks, Pool, deadline and inclusive aggregate, without calling the autonomous issuer                                               |
 
 The existing default chain is `startWorker → createWorkClient → composeWork →
 work.launch → DBOS.launch → runner → schedulerLoop → scheduleDueQueues →
@@ -220,13 +220,22 @@ replacement for every DBOS deployment.
 
 The following is a proposed Work interface, **not installed source**:
 
-~~~ts
+```ts
 type NativeAmount = Readonly<{
-  rows: number; points: number; statements: number;
-  bytes: number; engineRequests: number;
+  rows: number;
+  points: number;
+  statements: number;
+  bytes: number;
+  engineRequests: number;
 }>;
-type Action = 'registry-page' | 'queue-visit' | 'queue-empty-seal'
-  | 'retention-page' | 'retention-delete' | 'coverage-row' | 'repair-row';
+type Action =
+  | 'registry-page'
+  | 'queue-visit'
+  | 'queue-empty-seal'
+  | 'retention-page'
+  | 'retention-delete'
+  | 'coverage-row'
+  | 'repair-row';
 type Invocation = opaque; // process-private WeakMap brand, never caller JSON
 
 async function invokeWork(pool, action, body) {
@@ -236,8 +245,11 @@ async function invokeWork(pool, action, body) {
   const issued = issuer.admit(pool, action, proof.inclusiveMax);
   if (!issued) return REFUSED;
   // issuer, not the callback, fixes UUID, Pool, allocation, original deadline.
-  try { return await body(issued.invocation); }
-  finally { issuer.settleAndInvalidate(issued.invocation); }
+  try {
+    return await body(issued.invocation);
+  } finally {
+    issuer.settleAndInvalidate(issued.invocation);
+  }
 }
 
 function dispatch(invocation, pool, dispatchId, args, connection) {
@@ -248,10 +260,10 @@ function dispatch(invocation, pool, dispatchId, args, connection) {
   require(price && price.authoritiesValid(args, connection));
   require(allFiveAxesAreSafeNonnegativeIntegers(price));
   require(componentwise(f.used + price <= f.allocation));
-  f.used += price;                 // synchronously, before query or callback
+  f.used += price; // synchronously, before query or callback
   return sendOnce(connection, dispatchId, args, f.deadline);
 }
-~~~
+```
 
 One invocation's parent vector is the componentwise sum of reached dispatch
 maxima, including its cleanup path. The issuer records the allocation as committed
@@ -331,12 +343,12 @@ tagged exact application/version bucket and the all-application/version bucket.
 That is constant writer work, independent of the number of registered versions.
 Do not enumerate applications when a nameless worker polls.
 
-| Worker | Membership streams | Head predicates |
-| --- | --- | --- |
-| Named, nonlatest | `(A,v)`, `(NULL,v)` | Exact queue, key, status, application and version |
-| Named, latest | Previous two plus `(A,NULL)`, `(NULL,NULL)` | Same, with each NULL branch explicit |
-| Nameless, nonlatest | `(ANY_APPLICATION,v)` | Application unrestricted, version exact |
-| Nameless, latest | Previous plus `(ANY_APPLICATION,NULL)` | Application unrestricted; two version branches |
+| Worker              | Membership streams                          | Head predicates                                   |
+| ------------------- | ------------------------------------------- | ------------------------------------------------- |
+| Named, nonlatest    | `(A,v)`, `(NULL,v)`                         | Exact queue, key, status, application and version |
+| Named, latest       | Previous two plus `(A,NULL)`, `(NULL,NULL)` | Same, with each NULL branch explicit              |
+| Nameless, nonlatest | `(ANY_APPLICATION,v)`                       | Application unrestricted, version exact           |
+| Nameless, latest    | Previous plus `(ANY_APPLICATION,NULL)`      | Application unrestricted; two version branches    |
 
 The original cross-application/version PENDING veto uses queue plus actual Session
 partition key and native scope only. It must not use these eligibility buckets.
@@ -350,7 +362,7 @@ These are proposed tables/indexes, not executed DDL. Native text storage and ind
 width admissibility remain explicit conditions; a UUID hash cannot replace exact
 identity or silently resolve a collision.
 
-~~~sql
+```sql
 -- Nullable components are represented by (is_null,value), with a canonical
 -- empty value ONLY when is_null=true; exact non-null empty text stays distinct.
 CREATE TABLE dbos.discovery_bucket (
@@ -420,7 +432,7 @@ CREATE TABLE dbos.discovery_epoch_stream (
 --  priority,created_at,workflow_uuid) WHERE status='ENQUEUED'
 -- Shared gate:
 -- (queue_name,queue_partition_key) WHERE status='PENDING'
-~~~
+```
 
 The contribution row is a bounded reverse ownership record, not permission to
 retain account-bearing metadata forever. Bucket dictionary creation must itself
@@ -473,21 +485,21 @@ many prepaid steps within the original invocation, not hidden refill. A logical
 poll may therefore return no claim even when an eligible Session exists elsewhere.
 The maximum number of streams is four, independent of V and N.
 
-| Step | Concrete operation | Maximum result / fixed work |
-| --- | --- | --- |
-| Q0 | Validate live invocation, mode and exact Pool; prepay cleanup and full chosen branch | No DB I/O on refusal |
-| Q1 | BEGIN; set remaining original statement deadline and finite lock wait | One transaction; no renewed deadline |
-| Q2 | Lock domain cursor NOWAIT; read restore/coverage and latest-version observations | One domain; at most four stream records; two eligible owner version heads for a named app |
-| Q3 | If new epoch, capture each allocator high-water/revision and queue/coverage revision | At most four buckets; one queue clock; no member enumeration |
-| Q4 | Select next non-done stream round-robin; seek its first ticket after cursor and at/below epoch_end | One indexed member result or one paid miss |
-| Q5 | If miss, mark only that stream done; otherwise try original native partition lock for this one Session | One fixed Session; contention is incomplete |
-| Q6 | Under partition lock, probe the shared native PENDING gate | One existence result across all apps/versions |
-| Q7 | If clear, read top head from each compatible exact branch for this Session | At most four native head rows, ordered priority/created/actual ID |
-| Q8 | Merge those at most four heads; lock the single fixed winning actual ID SKIP LOCKED | Never LIMIT-and-slide to a later same-Session workflow |
-| Q9 | Reread/recheck native queue/key/status/app/version/latest/restore and shared gate before conditional flip | One fixed ID, one shared existence probe; a lost candidate is incomplete |
-| Q10 | UPDATE exact candidate to PENDING with original owner token/executor/version/app claim/deadline rules | At most one status row plus all native and new writer hooks |
-| Q11 | Persist advanced stream ticket and domain rotation; COMMIT | Progress and claim commit together |
-| Q12 | On error, use prepaid ROLLBACK; return incomplete with no uncommitted cursor advancement | Failed work stays charged; no internal retry |
+| Step | Concrete operation                                                                                        | Maximum result / fixed work                                                               |
+| ---- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Q0   | Validate live invocation, mode and exact Pool; prepay cleanup and full chosen branch                      | No DB I/O on refusal                                                                      |
+| Q1   | BEGIN; set remaining original statement deadline and finite lock wait                                     | One transaction; no renewed deadline                                                      |
+| Q2   | Lock domain cursor NOWAIT; read restore/coverage and latest-version observations                          | One domain; at most four stream records; two eligible owner version heads for a named app |
+| Q3   | If new epoch, capture each allocator high-water/revision and queue/coverage revision                      | At most four buckets; one queue clock; no member enumeration                              |
+| Q4   | Select next non-done stream round-robin; seek its first ticket after cursor and at/below epoch_end        | One indexed member result or one paid miss                                                |
+| Q5   | If miss, mark only that stream done; otherwise try original native partition lock for this one Session    | One fixed Session; contention is incomplete                                               |
+| Q6   | Under partition lock, probe the shared native PENDING gate                                                | One existence result across all apps/versions                                             |
+| Q7   | If clear, read top head from each compatible exact branch for this Session                                | At most four native head rows, ordered priority/created/actual ID                         |
+| Q8   | Merge those at most four heads; lock the single fixed winning actual ID SKIP LOCKED                       | Never LIMIT-and-slide to a later same-Session workflow                                    |
+| Q9   | Reread/recheck native queue/key/status/app/version/latest/restore and shared gate before conditional flip | One fixed ID, one shared existence probe; a lost candidate is incomplete                  |
+| Q10  | UPDATE exact candidate to PENDING with original owner token/executor/version/app claim/deadline rules     | At most one status row plus all native and new writer hooks                               |
+| Q11  | Persist advanced stream ticket and domain rotation; COMMIT                                                | Progress and claim commit together                                                        |
+| Q12  | On error, use prepaid ROLLBACK; return incomplete with no uncommitted cursor advancement                  | Failed work stays charged; no internal retry                                              |
 
 A blocked/missing member or a lost fixed claim advances the visited ticket only
 when its bounded no-claim attempt commits. A failure to lock the domain cursor
@@ -514,12 +526,12 @@ not something a queue counter proves by itself.
 
 ### Outcomes and authoritative empty
 
-~~~ts
+```ts
 type QueueResult =
   | { kind: 'claim'; ids: readonly string[]; ownerXid: string; progress: Receipt }
   | { kind: 'incomplete'; reason: string; progress: Receipt | null }
   | { kind: 'empty'; domain: ExactDomain; observation: EmptyReceipt };
-~~~
+```
 
 Claims identify only committed native flips. A batch wrapper preserves already
 committed claims even if a later paid step fails, as the original SDK does for
@@ -633,7 +645,7 @@ depth expression and exact app/NULL branch, with a creation range and keyset bou
 An all-application variant is needed only if the retention entry actually supports
 the native nameless application mode; do not interpret that mode as NULL-only.
 
-~~~sql
+```sql
 CREATE TABLE dbos.retention_projection (
   workflow_uuid text PRIMARY KEY,
   status text NOT NULL,
@@ -665,7 +677,7 @@ WHERE status IN ('SUCCESS','ERROR','CANCELLED',
   AND created_at < $original_cutoff
   AND (created_at,workflow_uuid) > ($after_created,$after_id)
 ORDER BY created_at,workflow_uuid LIMIT 1;
-~~~
+```
 
 The illustrative `d` is an emitted literal in each DDL/query, not a SQL column or
 runtime parameter whose planner implication is assumed. For an initial head there
@@ -692,17 +704,17 @@ heap row and all 64 index copies in this proposal remain actual owned copies.
 
 ### Literal retention steps and continuation
 
-| Step | Concrete body | Required outcome |
-| --- | --- | --- |
-| R0 | Validate policy and original cutoff; admit full selected branch | Invalid policy refuses before I/O |
-| R1 | Read/lock sweep state and current restore/coverage revision | Incomplete coverage cannot prove exhaustion |
-| R2 | Decompose cutoff into at most 64 prefixes; choose at most two application branches | Fixed CPU domain, no history enumeration |
-| R3 | Read at most 128 stream heads through the matching indexes | All exact status/application/cutoff predicates |
-| R4 | Merge and refill winning stream up to 1,000 selected IDs | Original creation order, bounded result count |
-| R5 | Before deletion, obtain actual owner authorization and permanent native writer closure for each actual ID | Numerical Work money is not that authority |
-| R6 | Execute funded native `deleteWorkflows(ids,false)` one-attempt body | Four explicit families and four native FK families; no child workflows |
-| R7 | Remove derived contributions/copies in the same authorized native transaction; persist progress with deletion | No receipt for an uncommitted deletion |
-| R8 | Commit or prepaid rollback; classify progress separately from exhaustion | Error/rollback work charged, no renewal |
+| Step | Concrete body                                                                                                 | Required outcome                                                       |
+| ---- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| R0   | Validate policy and original cutoff; admit full selected branch                                               | Invalid policy refuses before I/O                                      |
+| R1   | Read/lock sweep state and current restore/coverage revision                                                   | Incomplete coverage cannot prove exhaustion                            |
+| R2   | Decompose cutoff into at most 64 prefixes; choose at most two application branches                            | Fixed CPU domain, no history enumeration                               |
+| R3   | Read at most 128 stream heads through the matching indexes                                                    | All exact status/application/cutoff predicates                         |
+| R4   | Merge and refill winning stream up to 1,000 selected IDs                                                      | Original creation order, bounded result count                          |
+| R5   | Before deletion, obtain actual owner authorization and permanent native writer closure for each actual ID     | Numerical Work money is not that authority                             |
+| R6   | Execute funded native `deleteWorkflows(ids,false)` one-attempt body                                           | Four explicit families and four native FK families; no child workflows |
+| R7   | Remove derived contributions/copies in the same authorized native transaction; persist progress with deletion | No receipt for an uncommitted deletion                                 |
+| R8   | Commit or prepaid rollback; classify progress separately from exhaustion                                      | Error/rollback work charged, no renewal                                |
 
 Short results caused by price limits, unavailable owners, migration, races or lock
 loss return incomplete and retain continuation. Fewer than 1,000 deletions does
@@ -746,34 +758,34 @@ The original release's `src/system_database.ts`, native migration SQL writers an
 the installed patch are the authority for this inventory. A status-row native hook
 must compare OLD and NEW, not infer behavior from a public method's name.
 
-| Native entry / mutation | Required maintained effect and original safety |
-| --- | --- |
-| `initWorkflowStatus`, standalone and transaction forms | Insert status plus input in the original transaction; maintain actual initial ENQUEUED/PENDING/DELAYED state; no-op conflict still pays its attempted guard |
-| `initChildWorkflowStatus` | Preserve parent owner check and operation receipt; count child status/input/parent-related guards and contributions in the same transaction |
-| `enqueueWorkflows` | All actual 500-row chunks and input rows; no arbitrary-length caller array as one fixed price; preserve dedup/conflict behavior |
-| `#assignBatchCreatedAt` / `#maxPartitionKeyCreatedAt` | Replace first-seen-key MAX/GROUP BY over active history with bounded exact top-1 access or maintained per-key cursor; original creation ordering survives restart |
-| Native SQL enqueue function in migration history | Same status/input hooks and fence checks as client writes; old SQL callers cannot bypass maintenance |
-| `insertWorkflowStatus` and conflict reuse | Reconcile only committed native change, retain returned actual ID and existing owner; charge BEFORE-trigger work even when conflict resolves to a no-op |
-| `recordWorkflowOutput/Error`, CTE and fallback transaction | Preserve owner-qualified PENDING update and conditional output write; remove gate contribution and maintain terminal projection only on actual update |
-| `updateWorkflowStatus` / `setWorkflowStatus` | Reconcile every changed status/application/version/queue/key/priority/creation/completion field, including recovery failure status |
-| `deadLetterWorkflows` | MAX_RECOVERY_ATTEMPTS_EXCEEDED is terminal; maintain completion eligibility exactly as actually stored, not assumed from status alone |
-| `reenqueueWorkflowsForRecovery` | PENDING to ENQUEUED removes shared veto and adds membership; original executor/version/app scope; original bulk UPDATE needs bounded ordered steps |
-| Nonpartitioned and partitioned claims | ENQUEUED to PENDING; owner token, app adoption and version assignment may move projections; shared gate becomes visible atomically |
-| `setWorkflowPriority` | Reorder exact head access and invalidate observation without replacing stable membership ticket |
-| `setWorkflowDelay` | Preserve DELAYED-only condition; maintain due-time access and revisions |
-| Debounce update plus input upsert | Preserve capped delay and name/class/app match; application COALESCE may change exact bucket; charge both writer guards |
-| `transitionDelayedWorkflows` | Due DELAYED to ENQUEUED, clearing debounced dedup key; use bounded due-time page and same-transaction hooks; original UPDATE is unbounded |
-| `cancelTimedOutWorkflows(limit)` | Preserve native active statuses, deadline order and fixed limit; all returned IDs and status hooks paid |
-| `cancelWorkflows` / `resumeWorkflows` | Preserve exact legal no-ops and existence checks; queue moves, completion reset and gate changes; arrays/descendant traversal must be bounded by actual admitted input |
-| `rewindWorkflow` | Preserve terminal precondition, event-history undo, stream sentinel/message/operation/output removal and conditional ENQUEUED update; its history work is additional, not one status-row price |
-| `forkWorkflow` / `bulkForkWorkflows` | New actual IDs, original/fork guards, input and copied operation/stream/history/event rows; no aggregate copied history bound follows from one fork ID |
-| Application rename/adopt-unclaimed | Queues, schedules, version metadata, active status and terminal/status/operation batches all retain native ownership; move exact-app projection only, keep all-app projection consistent |
-| Version create/timestamp/owner adoption | Maintain latest lookup/revision; no per-version Ready rewrite and no version cap |
-| Input replacement and output/operation writes | Existing eight-family fence/copy protocol applies even if queue eligibility is unchanged; their payload bytes cannot be priced as zero |
-| Events/history/notifications/streams | Original owner checks, actual destination ID and ALWAYS guards; no workflow-wide row cap inferred from one operation/key |
-| `deleteWorkflows(ids,false)` | Remove input/output/operations/status and four FK-owned families; same-transaction new projection/contribution removal; leave child workflow statuses independent |
-| Delete with descendants | Not retention's path; recursive child discovery is separately bounded/authorized, never silently charged as false |
-| Direct SQL, COPY and restore | Native guards and contribution reconciliation execute for supported old writers; restored derived rows are not authoritative merely because they exist |
+| Native entry / mutation                                    | Required maintained effect and original safety                                                                                                                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initWorkflowStatus`, standalone and transaction forms     | Insert status plus input in the original transaction; maintain actual initial ENQUEUED/PENDING/DELAYED state; no-op conflict still pays its attempted guard                                    |
+| `initChildWorkflowStatus`                                  | Preserve parent owner check and operation receipt; count child status/input/parent-related guards and contributions in the same transaction                                                    |
+| `enqueueWorkflows`                                         | All actual 500-row chunks and input rows; no arbitrary-length caller array as one fixed price; preserve dedup/conflict behavior                                                                |
+| `#assignBatchCreatedAt` / `#maxPartitionKeyCreatedAt`      | Replace first-seen-key MAX/GROUP BY over active history with bounded exact top-1 access or maintained per-key cursor; original creation ordering survives restart                              |
+| Native SQL enqueue function in migration history           | Same status/input hooks and fence checks as client writes; old SQL callers cannot bypass maintenance                                                                                           |
+| `insertWorkflowStatus` and conflict reuse                  | Reconcile only committed native change, retain returned actual ID and existing owner; charge BEFORE-trigger work even when conflict resolves to a no-op                                        |
+| `recordWorkflowOutput/Error`, CTE and fallback transaction | Preserve owner-qualified PENDING update and conditional output write; remove gate contribution and maintain terminal projection only on actual update                                          |
+| `updateWorkflowStatus` / `setWorkflowStatus`               | Reconcile every changed status/application/version/queue/key/priority/creation/completion field, including recovery failure status                                                             |
+| `deadLetterWorkflows`                                      | MAX_RECOVERY_ATTEMPTS_EXCEEDED is terminal; maintain completion eligibility exactly as actually stored, not assumed from status alone                                                          |
+| `reenqueueWorkflowsForRecovery`                            | PENDING to ENQUEUED removes shared veto and adds membership; original executor/version/app scope; original bulk UPDATE needs bounded ordered steps                                             |
+| Nonpartitioned and partitioned claims                      | ENQUEUED to PENDING; owner token, app adoption and version assignment may move projections; shared gate becomes visible atomically                                                             |
+| `setWorkflowPriority`                                      | Reorder exact head access and invalidate observation without replacing stable membership ticket                                                                                                |
+| `setWorkflowDelay`                                         | Preserve DELAYED-only condition; maintain due-time access and revisions                                                                                                                        |
+| Debounce update plus input upsert                          | Preserve capped delay and name/class/app match; application COALESCE may change exact bucket; charge both writer guards                                                                        |
+| `transitionDelayedWorkflows`                               | Due DELAYED to ENQUEUED, clearing debounced dedup key; use bounded due-time page and same-transaction hooks; original UPDATE is unbounded                                                      |
+| `cancelTimedOutWorkflows(limit)`                           | Preserve native active statuses, deadline order and fixed limit; all returned IDs and status hooks paid                                                                                        |
+| `cancelWorkflows` / `resumeWorkflows`                      | Preserve exact legal no-ops and existence checks; queue moves, completion reset and gate changes; arrays/descendant traversal must be bounded by actual admitted input                         |
+| `rewindWorkflow`                                           | Preserve terminal precondition, event-history undo, stream sentinel/message/operation/output removal and conditional ENQUEUED update; its history work is additional, not one status-row price |
+| `forkWorkflow` / `bulkForkWorkflows`                       | New actual IDs, original/fork guards, input and copied operation/stream/history/event rows; no aggregate copied history bound follows from one fork ID                                         |
+| Application rename/adopt-unclaimed                         | Queues, schedules, version metadata, active status and terminal/status/operation batches all retain native ownership; move exact-app projection only, keep all-app projection consistent       |
+| Version create/timestamp/owner adoption                    | Maintain latest lookup/revision; no per-version Ready rewrite and no version cap                                                                                                               |
+| Input replacement and output/operation writes              | Existing eight-family fence/copy protocol applies even if queue eligibility is unchanged; their payload bytes cannot be priced as zero                                                         |
+| Events/history/notifications/streams                       | Original owner checks, actual destination ID and ALWAYS guards; no workflow-wide row cap inferred from one operation/key                                                                       |
+| `deleteWorkflows(ids,false)`                               | Remove input/output/operations/status and four FK-owned families; same-transaction new projection/contribution removal; leave child workflow statuses independent                              |
+| Delete with descendants                                    | Not retention's path; recursive child discovery is separately bounded/authorized, never silently charged as false                                                                              |
+| Direct SQL, COPY and restore                               | Native guards and contribution reconciliation execute for supported old writers; restored derived rows are not authoritative merely because they exist                                         |
 
 All actual native status values remain meaningful. Only ENQUEUED contributes queue
 membership, PENDING contributes the shared veto, DELAYED uses due-time activation,
@@ -793,15 +805,15 @@ closure receipts or erase the restore-domain row during retention or migration.
 Use a separate native coverage record per family/restore generation, with a finite
 committed source frontier and phase. It must not be a process-local boolean.
 
-| Phase | One admitted body | Commit rule |
-| --- | --- | --- |
-| Install | Create empty additive relations/indexes and native functions/triggers without renumbering SDK migration history | Explicit migration payer and finite catalog/body prices required |
-| Capture | Under native writer serialization, capture a committed source boundary/revision | Never publish complete coverage here |
-| Scan | Read at most 100 existing status IDs after the saved native PK boundary, projecting only required scalar fields | Each row's actual derived writes and guards are prepaid before applying it |
-| Reconcile | Lock one actual ID, compare current native revision and existing contribution/projection, apply the exact delta | Native row and contribution serialize with concurrent old/new writer |
-| Advance | Save last fully reconciled source position in the same transaction | Error/rollback cannot advance coverage |
-| Repair | Process one fixed dirty identity/revision; acknowledge only if still at that revision | A newer dirty revision survives old acknowledgment |
-| Seal | Verify source boundary, complete scan and all required current-domain writer/repair coverage under revision locks | Publish authoritative coverage only after these checks |
+| Phase     | One admitted body                                                                                                 | Commit rule                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Install   | Create empty additive relations/indexes and native functions/triggers without renumbering SDK migration history   | Explicit migration payer and finite catalog/body prices required           |
+| Capture   | Under native writer serialization, capture a committed source boundary/revision                                   | Never publish complete coverage here                                       |
+| Scan      | Read at most 100 existing status IDs after the saved native PK boundary, projecting only required scalar fields   | Each row's actual derived writes and guards are prepaid before applying it |
+| Reconcile | Lock one actual ID, compare current native revision and existing contribution/projection, apply the exact delta   | Native row and contribution serialize with concurrent old/new writer       |
+| Advance   | Save last fully reconciled source position in the same transaction                                                | Error/rollback cannot advance coverage                                     |
+| Repair    | Process one fixed dirty identity/revision; acknowledge only if still at that revision                             | A newer dirty revision survives old acknowledgment                         |
+| Seal      | Verify source boundary, complete scan and all required current-domain writer/repair coverage under revision locks | Publish authoritative coverage only after these checks                     |
 
 The 100-row page is the repository's existing bounded-job page unit, not evidence
 that 100 copies of the missing body fit any current price. An implementation may
@@ -843,14 +855,14 @@ unmetered administrative escape hatch.
 
 ### Account-bearing copy inventory and authorized removal
 
-| New copy | Reverse owner / deletion rule |
-| --- | --- |
-| Contribution workflow ID, Session key and bucket references | One actual-workflow reverse key; remove in its authorized native delete transaction |
-| Membership Session key, count and ticket | Shared owner union represented by current contributions; decrement exactly this workflow, remove only at zero |
-| Bucket application/version/queue and allocator state | Shared references; remove obsolete identity-bearing data only after no owned contribution/progress references remain |
-| Epoch domain app/version/queue and stream references | Bound to real polling domain; minimize obsolete identity-bearing state by an owner-approved lifecycle, not permanent scheduler tombstones |
-| Retention projection and its 64 index entries | One workflow reverse key; native row removal drops every associated index entry atomically |
-| Dirty/coverage/frontier records and any dictionaries | Inventory actual identifiers and scopes; a progress table is not outside identity accounting |
+| New copy                                                    | Reverse owner / deletion rule                                                                                                             |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Contribution workflow ID, Session key and bucket references | One actual-workflow reverse key; remove in its authorized native delete transaction                                                       |
+| Membership Session key, count and ticket                    | Shared owner union represented by current contributions; decrement exactly this workflow, remove only at zero                             |
+| Bucket application/version/queue and allocator state        | Shared references; remove obsolete identity-bearing data only after no owned contribution/progress references remain                      |
+| Epoch domain app/version/queue and stream references        | Bound to real polling domain; minimize obsolete identity-bearing state by an owner-approved lifecycle, not permanent scheduler tombstones |
+| Retention projection and its 64 index entries               | One workflow reverse key; native row removal drops every associated index entry atomically                                                |
+| Dirty/coverage/frontier records and any dictionaries        | Inventory actual identifiers and scopes; a progress table is not outside identity accounting                                              |
 
 The existing `hasRetainedWorkCopies` probes exactly eight SDK families. It does not
 know these new families. The existing identity History inspector likewise has an
@@ -915,23 +927,23 @@ writer-state input validation. They are not a generic retention deletion tariff
 or independently executed physical evidence. Their declared byte accounting must
 also be distinguished from the stricter inclusive internal-byte requirement below.
 
-| Dispatch | Rows | Points | Statements | Bytes | Engine requests |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Prepaid possible rollback | 0 | 0 | 1 | 0 | 0 |
-| BEGIN | 0 | 0 | 1 | 0 | 0 |
-| Settings | 1 | 0 | 1 | 128 | 0 |
-| Native writer-state lock/check | 4 | 2 | 4 | 8,192 | 0 |
-| Retire native writer | 8 | 5 | 9 | 32,768 | 0 |
-| COMMIT | 0 | 0 | 1 | 0 | 0 |
-| Delete input | 1 | 1 | 1 | 0 | 0 |
-| Delete output | 1 | 1 | 1 | 0 | 0 |
-| Delete operation outputs | 64 | 1 | 1 | 0 | 0 |
-| Delete status and native cascades | 73 | 5 | 5 | 0 | 0 |
+| Dispatch                          | Rows | Points | Statements |  Bytes | Engine requests |
+| --------------------------------- | ---: | -----: | ---------: | -----: | --------------: |
+| Prepaid possible rollback         |    0 |      0 |          1 |      0 |               0 |
+| BEGIN                             |    0 |      0 |          1 |      0 |               0 |
+| Settings                          |    1 |      0 |          1 |    128 |               0 |
+| Native writer-state lock/check    |    4 |      2 |          4 |  8,192 |               0 |
+| Retire native writer              |    8 |      5 |          9 | 32,768 |               0 |
+| COMMIT                            |    0 |      0 |          1 |      0 |               0 |
+| Delete input                      |    1 |      1 |          1 |      0 |               0 |
+| Delete output                     |    1 |      1 |          1 |      0 |               0 |
+| Delete operation outputs          |   64 |      1 |          1 |      0 |               0 |
+| Delete status and native cascades |   73 |      5 |          5 |      0 |               0 |
 
 Full componentwise sums of those declared finite dispatch paths, including
 possible cleanup, are:
 
-~~~text
+```text
 retire:
  rows       = 0 + 0 + 1 + 4 + 8 + 0                  = 13
  points     = 0 + 0 + 0 + 2 + 5 + 0                  = 7
@@ -945,16 +957,17 @@ delete under the narrow verified inventory:
  statements = 1 + 1 + 1 + 4 + 1 + 1 + 1 + 5 + 1     = 16
  bytes      = 128 + 8192                             = 8320
  engineRequests                                      = 0
-~~~
+```
 
 The 73 status/cascade rows are status 1 + events 8 + history 64 + notifications 0
-+ streams 0. Its five points/statements are the keyed delete plus four FK families.
-The original payload/operation tables have no cascading FK and are explicitly
-deleted. Stored payload bytes remaining inside PostgreSQL are not wire output
-bytes; explicit payload conversions and new copy work would still count where
-their actual accounting definition includes them. No DELETE writer guard was
-added by the existing patch, so one must not charge an imaginary INSERT/UPDATE
-guard there or forget newly proposed actual removal triggers.
+
+- streams 0. Its five points/statements are the keyed delete plus four FK families.
+  The original payload/operation tables have no cascading FK and are explicitly
+  deleted. Stored payload bytes remaining inside PostgreSQL are not wire output
+  bytes; explicit payload conversions and new copy work would still count where
+  their actual accounting definition includes them. No DELETE writer guard was
+  added by the existing patch, so one must not charge an imaginary INSERT/UPDATE
+  guard there or forget newly proposed actual removal triggers.
 
 The native state check's four rows/statements include its outer call, restore
 domain lock, actual fence lock and returned observation. The retirement body
@@ -969,22 +982,22 @@ body without rederivation would not be evidence.
 `(1,0,4,128,0)`. It then probes a literal family inventory, each at LIMIT plus one,
 charging `(limit+1,1,1,(limit+1)*80,0)` before the query:
 
-| Family | Supported count | Probe count including overflow sentinel |
-| --- | ---: | ---: |
-| Status | 1 | 2 |
-| Input | 1 | 2 |
-| Output | 1 | 2 |
-| Operations | 64 | 65 |
-| Events | 8 | 9 |
-| Event history | 64 | 65 |
-| Notifications | 0 | 1 |
-| Streams | 0 | 1 |
-| Total | 139 | 147 |
+| Family        | Supported count | Probe count including overflow sentinel |
+| ------------- | --------------: | --------------------------------------: |
+| Status        |               1 |                                       2 |
+| Input         |               1 |                                       2 |
+| Output        |               1 |                                       2 |
+| Operations    |              64 |                                      65 |
+| Events        |               8 |                                       9 |
+| Event history |              64 |                                      65 |
+| Notifications |               0 |                                       1 |
+| Streams       |               0 |                                       1 |
+| Total         |             139 |                                     147 |
 
 The body returns scalar inventory/size/validity observations, not all payloads.
 Its actual existing declared reservation total is therefore:
 
-~~~text
+```text
 inspect = (1+147, 8, 4+8, 128+147*80, 0)
         = (148, 8, 12, 11888, 0)
 
@@ -992,7 +1005,7 @@ inspect + retire + delete + inspect
         = (148+13+144+148, 8+7+10+8, 12+17+16+12,
            11888+41088+8320+11888, 0)
         = (453, 33, 57, 73184, 0)
-~~~
+```
 
 This last vector is a complete sum of the **four named sub-bodies only**, not of
 the durable identity minimizer. That minimizer also invokes current Source consumer
@@ -1028,16 +1041,16 @@ The following counts come from the explicit algorithms above. They are deliberat
 not labelled complete NativeAmount vectors: a query count is not a row/byte price,
 and a fixed result limit is not a plan proof.
 
-| Finite proposed body | Traceable bounded operands | Additional work that must be included before admission |
-| --- | --- | --- |
-| Queue epoch open | Domain 1; stream rows at most 4; bucket high-waters at most 4; queue revision 1; named latest heads at most 2; fixed restore/coverage observations | Exact SQL/function bodies, native locks/control and all byte widths |
-| One Session visit | Member seek 1; partition lock 1; shared gate probes at most 2; head branches at most 4; fixed candidate lock/read/update at most 1 each; cursor update 1 | Contribution trigger, permanent guard, bucket/dictionary transitions, version/coverage validation, rollback, copy hooks |
-| Membership reconciliation | One old contribution; at most 2 removals + 2 additions; at most 2 new memberships/allocator increments; at most 2 affected queues | Exact existing/new-path SQL, zero-count delete, unique conflicts and native ID/payload conversion bytes |
-| Terminal projection reconciliation | At most one prior and one new projection row for one status; 64 expression index entries per present row | All index descents/writes, reverse inventory, old/new bytes and native writer guard |
-| Retention selection | At most 64 disjoint completion prefixes × 2 app branches + 1,000 refills = 1,128 head seeks | Up to 1,000 native fixed-ID predicate/fence rechecks; merge/control/frontier bytes; owner readiness |
-| Retention native deletion | At most 1,000 IDs; 4 explicit delete statements per native batch plus native FK descendants | No general finite per-ID descendant bound exists in this contract's original native input domain |
-| Coverage page | At most 100 source IDs; one actual reconcile per reached ID; frontier commit once | All per-row writer/copy/index/owner costs and all failed/rollback paths |
-| Repair step | One dirty identity; current native revision; one exact reconciliation; conditional acknowledgment | Newer dirty revision, locks, no-op/error and nested hooks remain paid |
+| Finite proposed body               | Traceable bounded operands                                                                                                                               | Additional work that must be included before admission                                                                  |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Queue epoch open                   | Domain 1; stream rows at most 4; bucket high-waters at most 4; queue revision 1; named latest heads at most 2; fixed restore/coverage observations       | Exact SQL/function bodies, native locks/control and all byte widths                                                     |
+| One Session visit                  | Member seek 1; partition lock 1; shared gate probes at most 2; head branches at most 4; fixed candidate lock/read/update at most 1 each; cursor update 1 | Contribution trigger, permanent guard, bucket/dictionary transitions, version/coverage validation, rollback, copy hooks |
+| Membership reconciliation          | One old contribution; at most 2 removals + 2 additions; at most 2 new memberships/allocator increments; at most 2 affected queues                        | Exact existing/new-path SQL, zero-count delete, unique conflicts and native ID/payload conversion bytes                 |
+| Terminal projection reconciliation | At most one prior and one new projection row for one status; 64 expression index entries per present row                                                 | All index descents/writes, reverse inventory, old/new bytes and native writer guard                                     |
+| Retention selection                | At most 64 disjoint completion prefixes × 2 app branches + 1,000 refills = 1,128 head seeks                                                              | Up to 1,000 native fixed-ID predicate/fence rechecks; merge/control/frontier bytes; owner readiness                     |
+| Retention native deletion          | At most 1,000 IDs; 4 explicit delete statements per native batch plus native FK descendants                                                              | No general finite per-ID descendant bound exists in this contract's original native input domain                        |
+| Coverage page                      | At most 100 source IDs; one actual reconcile per reached ID; frontier commit once                                                                        | All per-row writer/copy/index/owner costs and all failed/rollback paths                                                 |
+| Repair step                        | One dirty identity; current native revision; one exact reconciliation; conditional acknowledgment                                                        | Newer dirty revision, locks, no-op/error and nested hooks remain paid                                                   |
 
 Every point/seek above counts even when empty, busy or incompatible. Rows read for
 the four heads are additional to rows visited by membership, version, coverage,
@@ -1128,19 +1141,19 @@ exhausts possible implementations.
 This is the admission checklist for the manager's normal substantive receiving,
 not a request to repeat the settled accounting-owner exchange.
 
-| Required artifact | Available at source pin? | Exact missing item |
-| --- | --- | --- |
-| Default autonomous Work issuer | No | Actual startWorker/composeWork/SDK option, capacity source, finite deadline policy, positive inclusive price map and settlement implementation |
-| Funded native runner ABI | No | Required invocation passed through setup, registry, schedulerLoop, runQueuePoll, pollQueue, native selectors/claims and cleanup; no unmetered default |
-| Bounded native queue bodies | No | All contribution/clock/epoch SQL, locking, fixed rechecks, one-attempt native claim and three-outcome caller propagation |
-| Native mutation funding | No | Each old/native writer's actual parent payer and inclusive charge for added hooks before I/O; an AFTER trigger alone supplies maintenance, not funding |
-| Retention selector | No | Concrete admissible original-domain access representation and body, including 64-index cost acceptance or a better proved representation |
-| Funded native deletion | Narrow port only | General `deleteWorkflows(ids,false)` one-attempt dispatch with complete per-ID inventory, transitive deletion/cascade/removal prices and owner authority |
-| Autonomous Source/History hook | No | Owner-approved callable accepting the real transaction, explicit Work payer, original deadline and exact authority; complete nested five/eight-axis costs |
-| Enlarged copy absence | No | Actual owned inventory and same-transaction removal for all new families; updated original absence probes and their reservations |
-| Migration/repair/restore body | No | Actual bounded install/capture/scan/reconcile/seal bodies and prices, writer-install gap handling, current restore-domain authority |
-| Counter/dictionary uniformity | No | Exact original key-domain representation, collision/width handling and bounded ticket/revision rollover preserving active domains |
-| Whole physical proof | UNRUN | Original fixed populations, budgets, plan capture, write amplification and mounted consumer proof |
+| Required artifact              | Available at source pin? | Exact missing item                                                                                                                                        |
+| ------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default autonomous Work issuer | No                       | Actual startWorker/composeWork/SDK option, capacity source, finite deadline policy, positive inclusive price map and settlement implementation            |
+| Funded native runner ABI       | No                       | Required invocation passed through setup, registry, schedulerLoop, runQueuePoll, pollQueue, native selectors/claims and cleanup; no unmetered default     |
+| Bounded native queue bodies    | No                       | All contribution/clock/epoch SQL, locking, fixed rechecks, one-attempt native claim and three-outcome caller propagation                                  |
+| Native mutation funding        | No                       | Each old/native writer's actual parent payer and inclusive charge for added hooks before I/O; an AFTER trigger alone supplies maintenance, not funding    |
+| Retention selector             | No                       | Concrete admissible original-domain access representation and body, including 64-index cost acceptance or a better proved representation                  |
+| Funded native deletion         | Narrow port only         | General `deleteWorkflows(ids,false)` one-attempt dispatch with complete per-ID inventory, transitive deletion/cascade/removal prices and owner authority  |
+| Autonomous Source/History hook | No                       | Owner-approved callable accepting the real transaction, explicit Work payer, original deadline and exact authority; complete nested five/eight-axis costs |
+| Enlarged copy absence          | No                       | Actual owned inventory and same-transaction removal for all new families; updated original absence probes and their reservations                          |
+| Migration/repair/restore body  | No                       | Actual bounded install/capture/scan/reconcile/seal bodies and prices, writer-install gap handling, current restore-domain authority                       |
+| Counter/dictionary uniformity  | No                       | Exact original key-domain representation, collision/width handling and bounded ticket/revision rollover preserving active domains                         |
+| Whole physical proof           | UNRUN                    | Original fixed populations, budgets, plan capture, write amplification and mounted consumer proof                                                         |
 
 The existing patched `maintainWorkflowOnce` and
 `checkWorkflowWriterStateInTransaction` really are installed narrow callable
@@ -1277,20 +1290,20 @@ manager's integrated proof boundary; this report supplies no passing receipt.
 
 ## Decisions made in this research
 
-* Treat the full launch contract and complete current owner agreements as authority;
+- Treat the full launch contract and complete current owner agreements as authority;
   retain stopped evidence as history, without reopening the solved funding owner.
-* Pin native release analysis to npm's exact Git revision, and distinguish the older
+- Pin native release analysis to npm's exact Git revision, and distinguish the older
   reused reference and installed local fence patch explicitly.
-* Use exact membership plus paid finite visits as the candidate queue direction;
+- Use exact membership plus paid finite visits as the candidate queue direction;
   reject eager per-version Ready maintenance and unlimited residual polling.
-* Treat end-of-epoch and short-result conditions as incomplete unless separately
+- Treat end-of-epoch and short-result conditions as incomplete unless separately
   sealed authoritative observations prove emptiness/exhaustion.
-* Show an exact fixed-depth completion-prefix retention direction, disclose its
+- Show an exact fixed-depth completion-prefix retention direction, disclose its
   64-index write amplification, migrate through an empty native projection, and
   withhold admission until key-domain and original physical limits are proved.
-* Preserve original Source frame and mutation/copy authority; do not infer installed
+- Preserve original Source frame and mutation/copy authority; do not infer installed
   WorkClient ports or autonomous owner hooks from lifecycle prose or empty receipts.
-* Publish exact known narrow literal sums, and mark unavailable full native operands
+- Publish exact known narrow literal sums, and mark unavailable full native operands
   rather than manufacture a positive default admission price.
 
 There are no tracked changes outside this report. The sole external administrative
