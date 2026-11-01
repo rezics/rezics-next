@@ -176,15 +176,21 @@ export function useHistoryAddress(path: string | null, cursor: string | undefine
     };
   }, [router, path, cursor]);
   const snapshot = useSyncExternalStore(store.subscribe, store.read, store.read);
-  const ref = useRef({ snapshot, locale, active: true });
-  if (ref.current.snapshot !== snapshot || ref.current.locale !== locale) {
+  const ref = useRef({ snapshot, locale, active: true, generation: 0 });
+  if (!ref.current.active || ref.current.snapshot !== snapshot || ref.current.locale !== locale) {
     ref.current.active = false;
-    ref.current = { snapshot, locale, active: true };
+    ref.current = { snapshot, locale, active: true, generation: ref.current.generation + 1 };
   }
   const address = ref.current;
   return {
     cursor: router ? snapshot.cursor : cursor || null,
-    key: JSON.stringify([path, router ? snapshot.cursor : cursor || null, locale, snapshot.episode]),
+    key: JSON.stringify([
+      path,
+      router ? snapshot.cursor : cursor || null,
+      locale,
+      snapshot.episode,
+      address.generation,
+    ]),
     isCurrent: () => {
       if (store.read() !== snapshot || getLocale() !== locale) address.active = false;
       return address.active && snapshot.active;

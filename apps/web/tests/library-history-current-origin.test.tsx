@@ -357,6 +357,18 @@ test('observed suspended address/target ABA cannot revive retained callers or po
   await settle(logs.at(-1)!, history('A'));
   expect(host.textContent).toContain('A history');
 
+  const beforeLocale = logs.length;
+  await act(async () => {
+    setLocale('ja', { reload: false });
+    startTransition(() => root.render(tree(page(undefined, true))));
+    await tick();
+  });
+  setLocale('en', { reload: false });
+  await paint(page(undefined));
+  expect(logs).toHaveLength(beforeLocale + 1);
+  expect(host.textContent).not.toContain('A history');
+  await settle(logs.at(-1)!, history('A'));
+
   const target = (id: string, paused = false) => (
     <Suspense fallback={<p>Pending target</p>}>
       <FollowTargetControl targetId={id} idempotencyKey={key} />
@@ -428,6 +440,14 @@ test('directional deletion survives denied reads and create loss, while cache AB
   expect(removedA).toBe(0);
   expect(removedB).toBe(0);
   await settle(b, { ok: false, reason: 'unavailable' });
+  await paint(
+    <FollowTargetControl
+      targetId={targetId}
+      following={false}
+      onRemoved={() => removedB++}
+      idempotencyKey={crypto.randomUUID()}
+    />,
+  );
   const retry = retainedClick(button(m.library_follow_unfollow()));
   await act(async () => {
     client.setQueryData(sessionQuery.queryKey, viewer('B', 'rotated-current-token'));
