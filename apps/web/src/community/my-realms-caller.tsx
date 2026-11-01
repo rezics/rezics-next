@@ -157,6 +157,10 @@ class MyRealmsSessionSource {
 
   getRevision = () => this.revision;
 
+  publish() {
+    this.notify();
+  }
+
   read() {
     return {
       session: this.snapshot,
@@ -266,7 +270,7 @@ export class MyRealmsCaller {
 
   static async capture(
     client: QueryClient,
-    input: { cursor?: string; locale: string; credentialMode: ReadCredentialMode },
+    input: { cursor?: string | undefined; locale: string; credentialMode: ReadCredentialMode },
     options: { preserveQuery?: boolean } = {},
   ) {
     const source = sourceFor(client);
@@ -351,7 +355,9 @@ export class MyRealmsCaller {
     );
   }
 
-  isCurrentAddress(address: { target: string; cursor?: string; locale: string; credentialMode: ReadCredentialMode }) {
+  isCurrentAddress(
+    address: { target: string; cursor?: string | undefined; locale: string; credentialMode: ReadCredentialMode },
+  ) {
     return (
       address.target.replace(/\/$/u, '') === this.visit.target &&
       (address.cursor || null) === this.visit.cursor &&
@@ -496,7 +502,7 @@ export class MyRealmsCaller {
 
 export async function captureMyRealmsCaller(
   client: QueryClient,
-  input: { cursor?: string; locale: string; credentialMode: ReadCredentialMode },
+  input: { cursor?: string | undefined; locale: string; credentialMode: ReadCredentialMode },
   options: { preserveQuery?: boolean } = {},
 ) {
   return MyRealmsCaller.capture(client, input, options);
@@ -538,7 +544,7 @@ export function MyRealmsCallerHost({
   cursor,
 }: {
   initial: { page: MyRealmsPage; visit: MyRealmsVisit };
-  cursor?: string;
+  cursor?: string | undefined;
 }) {
   const client = useQueryClient();
   const location = useLocation();
