@@ -94,7 +94,8 @@ mock.module('../src/threads/reactions', () => ({
 }));
 
 const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider, QueryObserver, useQuery, useQueryClient } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, QueryObserver, useQuery, useQueryClient } =
+  await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
 const { subjectReactionsQuery } = await import('../src/features/pages/subject-queries');
 const { useSubjectReactionAdmissionForZone, useSubjectReactionReader } =
@@ -587,24 +588,33 @@ test('provider replacement and unmount retire old private reads, writes and refr
   expect(host.querySelector('[role="status"]')).toBeNull();
 });
 
-
 for (const source of ['manual', 'fetch'] as const)
   test(`${source} equal success synchronously retires a shared StrictMode observation and requires a fresh matching own response`, async () => {
     let observed!: ReturnType<typeof useSubjectReactionReader>;
     function Witness() {
       observed = useSubjectReactionReader({
-        subjectId: 'subject-one', locale: 'en', view: 'overview', session: currentSession(client),
+        subjectId: 'subject-one',
+        locale: 'en',
+        view: 'overview',
+        session: currentSession(client),
       });
       return null;
     }
     await act(async () => {
-      root.render(<StrictMode><QueryClientProvider client={client}>
-        <SubjectOwner id="subject-one" /><Witness />
-      </QueryClientProvider></StrictMode>);
+      root.render(
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <SubjectOwner id="subject-one" />
+            <Witness />
+          </QueryClientProvider>
+        </StrictMode>,
+      );
     });
     await until(() => privateReads.length === 1 && publicReads.length === 1);
     const oldOrigin = observed.origin;
-    const oldKey = client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] })
+    const oldKey = client
+      .getQueryCache()
+      .findAll({ queryKey: ['subject-own-reaction'] })
       .find((query) => query.state.fetchStatus === 'fetching')!.queryKey;
     const observer = new QueryObserver(client, sessionQuery);
     const unsubscribeObserver = observer.subscribe(() => {});
@@ -619,8 +629,12 @@ for (const source of ['manual', 'fetch'] as const)
     const prior = client.getQueryData(sessionQuery.queryKey);
     const successData: unknown[] = [];
     const unsubscribe = client.getQueryCache().subscribe((event) => {
-      if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session' &&
-          event.type === 'updated' && event.action.type === 'success') {
+      if (
+        event.query.queryKey.length === 1 &&
+        event.query.queryKey[0] === 'session' &&
+        event.type === 'updated' &&
+        event.action.type === 'success'
+      ) {
         successData.push(event.query.state.data);
         expect(oldOrigin.isCurrent()).toBe(false);
         setPrivateRead(0, 'love');
@@ -646,10 +660,16 @@ for (const source of ['manual', 'fetch'] as const)
     setPrivateRead(1, null);
     await until(() => chips().some((button) => !button.disabled));
     await clickKind('like');
-    await act(async () => { writes[0]!.resolve({ ok: true }); await tick(); });
+    await act(async () => {
+      writes[0]!.resolve({ ok: true });
+      await tick();
+    });
     await until(() => chip('like').getAttribute('aria-pressed') === 'true');
     await clickKind('like');
-    await act(async () => { writes[1]!.resolve({ ok: true }); await tick(); });
+    await act(async () => {
+      writes[1]!.resolve({ ok: true });
+      await tick();
+    });
     await until(() => chips().every((button) => button.getAttribute('aria-pressed') !== 'true'));
     expect(privateReads).toHaveLength(2);
     expect(publicReads).toHaveLength(1);
@@ -660,26 +680,37 @@ for (const source of ['manual', 'fetch'] as const)
     expect(writes.every((write) => write.headers.get('x-csrf-token') === 'csrf-one')).toBe(true);
   });
 
-
 for (const size of [1, 10, 100])
   test(`${size} mounted observers share one own read per equal-success admission without public read growth`, async () => {
     await act(async () => {
-      root.render(<StrictMode><QueryClientProvider client={client}>
-        <SubjectOwner id="subject-one" />
-        {Array.from({ length: size - 1 }, (_, index) => <SubjectReaderWitness key={index} id="subject-one" />)}
-      </QueryClientProvider></StrictMode>);
+      root.render(
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <SubjectOwner id="subject-one" />
+            {Array.from({ length: size - 1 }, (_, index) => (
+              <SubjectReaderWitness key={index} id="subject-one" />
+            ))}
+          </QueryClientProvider>
+        </StrictMode>,
+      );
     });
     await until(() => privateReads.length === 1 && publicReads.length === 1);
     setPrivateRead(0, null);
     await until(() => chips().some((button) => !button.disabled));
-    await act(async () => { client.setQueryData(sessionQuery.queryKey, { ...viewer() }); await tick(); });
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...viewer() });
+      await tick();
+    });
     await until(() => privateReads.length === 2);
     expect(chips().every((button) => button.disabled)).toBe(true);
     expect(publicReads).toHaveLength(1);
     setPrivateRead(1, null);
     await until(() => chips().some((button) => !button.disabled));
     await clickKind('like');
-    await act(async () => { writes[0]!.resolve({ ok: true }); await tick(); });
+    await act(async () => {
+      writes[0]!.resolve({ ok: true });
+      await tick();
+    });
     expect(writes).toHaveLength(1);
     expect(privateReads).toHaveLength(2);
     expect(publicReads).toHaveLength(1);

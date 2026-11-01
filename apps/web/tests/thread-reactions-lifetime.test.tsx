@@ -460,7 +460,6 @@ test('SSR, unknown sessions and readiness remain disabled, while anonymous URLs 
   expect(pressed()).toEqual([`${m.reaction_love()}4`]);
 });
 
-
 // UNRUN: qualifying equal successes replace work; no helper/queue/admission is mocked.
 for (const source of ['manual', 'fetch'] as const)
   for (const target of ['thread', 'post', 'subject'] as const)
@@ -474,8 +473,12 @@ for (const source of ['manual', 'fetch'] as const)
         const oldData = client.getQueryData(sessionQuery.queryKey);
         const successes: unknown[] = [];
         const unsubscribe = client.getQueryCache().subscribe((event) => {
-          if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session' &&
-              event.type === 'updated' && event.action.type === 'success') {
+          if (
+            event.query.queryKey.length === 1 &&
+            event.query.queryKey[0] === 'session' &&
+            event.type === 'updated' &&
+            event.action.type === 'success'
+          ) {
             successes.push(event.query.state.data);
             oldButton.click();
             if (outcome === 'lost-response') calls[0]!.reject(new Error('Response lost'));
@@ -517,8 +520,15 @@ for (const source of ['manual', 'fetch'] as const)
         await click(m.reaction_love());
         await settle(2);
         expect(calls.map((call) => call.data.kind)).toEqual(['love', 'love', null]);
-        expect(calls.every((call) => call.data.target === target && call.data.id === 'one' &&
-          call.data.expectedReader === 'reader-one' && call.headers.get('x-csrf-token') === 'csrf-one')).toBe(true);
+        expect(
+          calls.every(
+            (call) =>
+              call.data.target === target &&
+              call.data.id === 'one' &&
+              call.data.expectedReader === 'reader-one' &&
+              call.headers.get('x-csrf-token') === 'csrf-one',
+          ),
+        ).toBe(true);
         expect(refreshed).toEqual(['original', 'original']);
         expect(pressed()).toEqual([]);
       });
@@ -528,8 +538,13 @@ for (const source of ['manual', 'fetch'] as const) {
     await paint();
     const oldButton = chip(m.reaction_sad());
     const unsubscribe = client.getQueryCache().subscribe((event) => {
-      if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session' &&
-          event.type === 'updated' && event.action.type === 'success') oldButton.click();
+      if (
+        event.query.queryKey.length === 1 &&
+        event.query.queryKey[0] === 'session' &&
+        event.type === 'updated' &&
+        event.action.type === 'success'
+      )
+        oldButton.click();
     });
     await act(async () => {
       if (source === 'fetch') {
@@ -550,7 +565,12 @@ for (const source of ['manual', 'fetch'] as const) {
   for (const reject of [false, true])
     test(`${source} equal success retires an already-started refresh and its late ${reject ? 'failure' : 'completion'}`, async () => {
       const refresh = deferred<void>();
-      await paint({ onMutation: async () => { refreshed.push('started'); await refresh.promise; } });
+      await paint({
+        onMutation: async () => {
+          refreshed.push('started');
+          await refresh.promise;
+        },
+      });
       await click(m.reaction_love());
       await click(m.reaction_sad());
       await settle(0);

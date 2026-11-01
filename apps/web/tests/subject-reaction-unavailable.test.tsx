@@ -690,7 +690,6 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(personalCalls).toHaveLength(callsAtUnmount);
 });
 
-
 // UNRUN: both production consumers, the real session Query, own-query registry and shared queue are connected.
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 async function paintOrdinary(id = subjectId, queryClient = client) {
@@ -702,15 +701,26 @@ async function paintOrdinary(id = subjectId, queryClient = client) {
   queryClient.setQueryData(subjectRelationsQuery(pageRelationProperties(page), 'en').queryKey, {});
   queryClient.setQueryData(subjectRatingQuery(id, 'en').queryKey, null);
   const data = {
-    page, tabs: [], reader: null, frame: {}, relations: {}, ratings: null,
+    page,
+    tabs: [],
+    reader: null,
+    frame: {},
+    relations: {},
+    ratings: null,
     verification: { sitekey: '', scriptUrl: '' },
   } as unknown as ComponentProps<typeof SubjectOverview>['data'];
   await act(async () => {
-    root.render(<StrictMode><QueryClientProvider client={queryClient}>
-      <RouterContextProvider router={router}>
-        <Suspense fallback={<p>Loading</p>}><SubjectOverview data={data} search={{}} /></Suspense>
-      </RouterContextProvider>
-    </QueryClientProvider></StrictMode>);
+    root.render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <RouterContextProvider router={router}>
+            <Suspense fallback={<p>Loading</p>}>
+              <SubjectOverview data={data} search={{}} />
+            </Suspense>
+          </RouterContextProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    );
     await tick();
   });
 }
@@ -720,8 +730,13 @@ async function equalSuccess(source: 'manual' | 'fetch', afterCommit: () => void)
   expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
   const successes: unknown[] = [];
   const unsubscribe = client.getQueryCache().subscribe((event) => {
-    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session' ||
-        event.type !== 'updated' || event.action.type !== 'success') return;
+    if (
+      event.query.queryKey.length !== 1 ||
+      event.query.queryKey[0] !== 'session' ||
+      event.type !== 'updated' ||
+      event.action.type !== 'success'
+    )
+      return;
     successes.push(event.query.state.data);
     // Settle/click inside the actual cache event, before a React commit or held promise continuation.
     afterCommit();
@@ -752,11 +767,13 @@ function independentZonePayload(combined: number, counts: number, follows = 1) {
 function independentZone(combined: number, counts: number) {
   independentZonePayload(combined, counts);
   expect(libraryEntryButton()?.disabled).toBe(false);
-  const follow = [...host.querySelectorAll<HTMLButtonElement>('button')]
-    .find((button) => button.textContent?.trim() === m.library_follow());
+  const follow = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent?.trim() === m.library_follow(),
+  );
   expect(follow?.disabled).toBe(false);
-  const report = [...host.querySelectorAll<HTMLButtonElement>('button')]
-    .find((button) => button.getAttribute('aria-label') === m.report_more());
+  const report = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.getAttribute('aria-label') === m.report_more(),
+  );
   expect(report?.disabled).toBe(false);
 }
 
@@ -770,7 +787,9 @@ for (const source of ['manual', 'fetch'] as const)
     queueNativeRead(freshOwn);
     await paint(zoneOutcome(subjectId));
     await until(() => ownReads.length === 1 && personalCalls[0]?.result !== undefined);
-    const oldKey = client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] })
+    const oldKey = client
+      .getQueryCache()
+      .findAll({ queryKey: ['subject-own-reaction'] })
       .find((query) => query.state.fetchStatus === 'fetching')!.queryKey;
     await equalSuccess(source, () => {
       oldOwn.resolve({ status: 200, data: { kind: 'love' } });
@@ -789,7 +808,8 @@ for (const source of ['manual', 'fetch'] as const)
     await clickKind('like');
     await until(() => nativeWrites.length === 2 && chip('like').getAttribute('aria-pressed') !== 'true');
     expect(nativeWrites.map((write) => [write.method, write.kind, write.authorization])).toEqual([
-      ['put', 'like', 'Bearer token-reader-one'], ['delete', null, 'Bearer token-reader-one'],
+      ['put', 'like', 'Bearer token-reader-one'],
+      ['delete', null, 'Bearer token-reader-one'],
     ]);
     expect(ownReads).toHaveLength(2);
     independentZone(1, 1);
@@ -804,7 +824,9 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
         else await paintOrdinary();
         await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
-        const oldOwnQuery = client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] })
+        const oldOwnQuery = client
+          .getQueryCache()
+          .findAll({ queryKey: ['subject-own-reaction'] })
           .find((query) => query.state.status === 'success')!;
         const priorOwn = oldOwnQuery.state.data;
         const write = deferred<NativeWriteResult>();
@@ -840,7 +862,9 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         await clickKind('like');
         await until(() => nativeWrites.length === 3 && chip('like').getAttribute('aria-pressed') !== 'true');
         expect(nativeWrites.map((write) => write.kind)).toEqual(['like', 'like', null]);
-        expect(nativeWrites.every((write) => write.id === subjectId && write.authorization === 'Bearer token-reader-one')).toBe(true);
+        expect(
+          nativeWrites.every((write) => write.id === subjectId && write.authorization === 'Bearer token-reader-one'),
+        ).toBe(true);
         expect(ownReads).toHaveLength(2);
         if (surface === 'production Zone') independentZone(1, 1);
         else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
@@ -866,7 +890,6 @@ for (const source of ['manual', 'fetch'] as const)
     noSelection();
     expect(ownReads).toHaveLength(2);
   });
-
 
 for (const surface of ['ordinary Subject', 'production Zone'] as const)
   test(`${surface} preserves a useful serialized queue during real non-success notifications`, async () => {
@@ -901,7 +924,11 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') independentZone(1, 1);
     else expect(countReads).toHaveLength(4); // Initial public count and each of the three current callbacks.
     // Only its eventual successful commit retires the observation.
-    await act(async () => { sessionResponse.resolve(storySession()); await fetch; await tick(); });
+    await act(async () => {
+      sessionResponse.resolve(storySession());
+      await fetch;
+      await tick();
+    });
     await until(() => ownReads.length === 2);
   });
 
@@ -914,9 +941,15 @@ test('production Zone keeps exact independent loads across private refusal, reta
   noSelection();
   expect(chips().every((button) => button.disabled)).toBe(true);
   await act(async () => {
-    await client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: async () => {
-      throw new Error('session cache refresh failed');
-    } }).catch(() => undefined);
+    await client
+      .fetchQuery({
+        ...sessionQuery,
+        staleTime: 0,
+        queryFn: async () => {
+          throw new Error('session cache refresh failed');
+        },
+      })
+      .catch(() => undefined);
     await tick();
   });
   expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
@@ -954,7 +987,6 @@ test('anonymous production Zone makes zero private reaction reads and preserves 
   noSelection();
 });
 
-
 for (const surface of ['ordinary Subject', 'production Zone'] as const)
   test(`${surface} retires undispatched choices synchronously on equal success`, async () => {
     client.setQueryData(sessionQuery.queryKey, sessionData());
@@ -980,7 +1012,6 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
   });
-
 
 for (const boundary of ['target', 'provider', 'unmount', 'observed ABA'] as const)
   test(`actual ordinary Subject ${boundary} retirement rejects old own responses and admits only a fresh one`, async () => {
@@ -1019,17 +1050,20 @@ for (const boundary of ['target', 'provider', 'unmount', 'observed ABA'] as cons
     await until(() => nativeWrites.length === 1);
     expect(nativeWrites[0]).toMatchObject({
       id: boundary === 'target' ? '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06' : subjectId,
-      method: 'put', kind: 'like', authorization: 'Bearer token-reader-one',
+      method: 'put',
+      kind: 'like',
+      authorization: 'Bearer token-reader-one',
     });
   });
-
 
 test('ordinary Subject does not start a later count refresh if an equal session success retires its current mutation cache update', async () => {
   client.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 200, data: { kind: null } });
   await paintOrdinary();
   await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
-  const oldOwnQuery = client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] })
+  const oldOwnQuery = client
+    .getQueryCache()
+    .findAll({ queryKey: ['subject-own-reaction'] })
     .find((query) => query.state.status === 'success')!;
   const write = deferred<NativeWriteResult>();
   nativeWriteQueue.push(() => write.promise);
