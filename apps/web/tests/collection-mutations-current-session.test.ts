@@ -179,7 +179,9 @@ test('admitted requests preserve exact revision and idempotency inputs, placemen
     expect(credentialReads - preparations).toBe(calls.length);
     expect(
       calls.every(
-        (call) => call.cache === 'no-store' && call.redirect === 'manual' &&
+        (call) =>
+          call.cache === 'no-store' &&
+          call.redirect === 'manual' &&
           call.headers.get('authorization') === 'Bearer current-viewer',
       ),
     ).toBe(true);
