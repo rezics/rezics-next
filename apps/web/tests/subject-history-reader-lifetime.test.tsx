@@ -340,75 +340,91 @@ test('Subject history list pagination and revision explanation belong to the ori
     // on a freshly admitted visit with its own pending request.
     for (const operation of ['initial', 'more', 'detail', 'retry', 'detail-retry'] as const) {
       for (const delivery of ['success', 'failure', 'throw'] as const) {
-        if (operation === 'retry') {
-          const failed = hold('delivery');
-          await h.click(m.changes_more());
-          await failed.entered.promise;
-          failed.release.resolve('failure');
-          await h.settle();
-        }
-        if (operation === 'detail-retry') {
-          detailStatus = 503;
-          await h.click(revision);
-          detailStatus = 200;
-        }
-        const oldCallback = h.queued(
-          h.button(
-            operation === 'retry'
-              ? m.changes_retry()
-              : operation === 'detail-retry'
-                ? m.changes_retry_detail()
-                : operation === 'detail'
-                  ? revision
-                  : m.changes_more(),
-          ),
-        );
-        const gate = hold('delivery');
-        if (operation === 'initial') await h.revisit();
-        else
-          await h.click(
-            operation === 'retry'
-              ? m.changes_retry()
-              : operation === 'detail-retry'
-                ? m.changes_retry_detail()
-                : operation === 'detail'
-                  ? revision
-                  : m.changes_more(),
+        for (const transition of ['session', 'A-B-A', 'reader', 'remount'] as const) {
+          if (operation === 'retry') {
+            const failed = hold('delivery');
+            await h.click(m.changes_more());
+            await failed.entered.promise;
+            failed.release.resolve('failure');
+            await h.settle();
+          }
+          if (operation === 'detail-retry') {
+            detailStatus = 503;
+            await h.click(revision);
+            detailStatus = 200;
+          }
+          const oldCallback = h.queued(
+            h.button(
+              operation === 'retry'
+                ? m.changes_retry()
+                : operation === 'detail-retry'
+                  ? m.changes_retry_detail()
+                  : operation === 'detail'
+                    ? revision
+                    : m.changes_more(),
+            ),
           );
-        await gate.entered.promise;
-        const fresh = hold('delivery');
-        fresh.poison = false;
-        await h.update(signedIn(alice, serverCsrf === csrfA ? csrfB : csrfA));
-        await fresh.entered.promise;
-        h.outside.focus();
-        const snapshot = h.host.innerHTML;
-        const cache = h.client
-          .getQueryCache()
-          .getAll()
-          .map((query) => [query.queryKey, query.state.data]);
-        const count = envelopes.length;
-        gate.release.resolve(delivery);
-        await h.settle();
-        oldCallback();
-        await h.settle();
-        expect(h.host.innerHTML).toBe(snapshot);
-        expect(h.host.querySelector('article')!.getAttribute('aria-busy')).toBe('true');
-        expect(envelopes).toHaveLength(count);
-        expect(h.window.document.activeElement).toBe(h.outside);
-        expect(
-          h.client
+          const gate = hold('delivery');
+          if (operation === 'initial') await h.revisit();
+          else
+            await h.click(
+              operation === 'retry'
+                ? m.changes_retry()
+                : operation === 'detail-retry'
+                  ? m.changes_retry_detail()
+                  : operation === 'detail'
+                    ? revision
+                    : m.changes_more(),
+            );
+          await gate.entered.promise;
+          const fresh = hold('delivery');
+          fresh.poison = false;
+          if (transition === 'remount') await h.revisit();
+          else if (transition === 'A-B-A') {
+            const original = h.client.getQueryData<ReturnType<typeof signedIn>>(sessionQuery.queryKey)!;
+            await act(async () => {
+              h.client.setQueryData(sessionQuery.queryKey, signedIn(original.subject === alice ? bob : alice, csrfA));
+              h.client.setQueryData(sessionQuery.queryKey, original);
+            });
+            await h.settle();
+          } else
+            await h.update(
+              signedIn(
+                transition === 'reader' ? (serverReader === alice ? bob : alice) : serverReader!,
+                serverCsrf === csrfA ? csrfB : csrfA,
+              ),
+            );
+          await fresh.entered.promise;
+          h.outside.focus();
+          const snapshot = h.host.innerHTML;
+          const cache = h.client
             .getQueryCache()
             .getAll()
-            .map((query) => [query.queryKey, query.state.data]),
-        ).toEqual(cache);
-        fresh.release.resolve('success');
-        await h.settle();
-        await h.until(ready);
-        expect(envelopes.at(-1)!.data.session).toBeUndefined();
-        const next = envelopes.length;
-        await h.click(revision);
-        expect(envelopes[next]!.data.session).not.toBe('retired-continuation');
-        expect(h.host.textContent).toContain(m.changes_abstained_detail());
+            .map((query) => [query.queryKey, query.state.data]);
+          const count = envelopes.length;
+          gate.release.resolve(delivery);
+          await h.settle();
+          oldCallback();
+          await h.settle();
+          expect(h.host.innerHTML).toBe(snapshot);
+          expect(h.host.querySelector('article')!.getAttribute('aria-busy')).toBe('true');
+          expect(envelopes).toHaveLength(count);
+          expect(h.window.document.activeElement).toBe(h.outside);
+          expect(
+            h.client
+              .getQueryCache()
+              .getAll()
+              .map((query) => [query.queryKey, query.state.data]),
+          ).toEqual(cache);
+          fresh.release.resolve('success');
+          await h.settle();
+          await h.until(ready);
+          expect(envelopes.at(-1)!.data.session).toBeUndefined();
+          const next = envelopes.length;
+          await h.click(revision);
+          expect(envelopes[next]!.data.session).not.toBe('retired-continuation');
+          expect(h.host.textContent).toContain(m.changes_abstained_detail());
+        }
       }
     }
 
