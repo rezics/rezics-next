@@ -271,7 +271,7 @@ export const ExpiredPageRecovery: Story = {
     await userEvent.selectOptions(kind, 'schema:Book');
     await userEvent.click(canvas.getByRole('button', { name: m.search_close_filters() }));
     const selected = canvas.getByRole('list', { name: m.refinement_selected() });
-    const selectedLabel = kind.selectedOptions[0]!.textContent!;
+    const selectedLabel = kind.querySelector<HTMLOptionElement>('option:checked')!.textContent!;
     await expect(selected).toHaveTextContent(selectedLabel);
     await userEvent.click(canvas.getByRole('button', { name: m.library_next_page() }));
     await expect(await canvas.findByText(m.home_feed_cursor())).toBeVisible();
