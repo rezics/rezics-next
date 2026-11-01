@@ -49,8 +49,7 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
       }
     }
   }
-  if (options.localPublication)
-    options.print(`Storybook validation placement: local (${expectedCommit}).`);
+  if (options.localPublication) options.print(`Storybook validation placement: local (${expectedCommit}).`);
   if (options.validate) await options.validate(options.localPublication ? expectedCommit : undefined);
   else {
     await options.build();
@@ -165,12 +164,15 @@ export async function validateStorybook(localPublicationCommit?: string): Promis
   delete validationEnvironment[localStorybookPublicationRevisionEnvironment];
   if (localPublicationCommit)
     validationEnvironment[localStorybookPublicationRevisionEnvironment] = localPublicationCommit;
-  const code = await routeWebCheck({
-    root,
-    cwd: app,
-    command: ['bun', 'scripts/storybook-deploy.ts', '--validate-only'],
-    returns: [workspacePath(root, output)],
-  }, validationEnvironment);
+  const code = await routeWebCheck(
+    {
+      root,
+      cwd: app,
+      command: ['bun', 'scripts/storybook-deploy.ts', '--validate-only'],
+      returns: [workspacePath(root, output)],
+    },
+    validationEnvironment,
+  );
   if (code !== null) {
     if (code !== 0) throw new WebCheckFailure(code, 'Storybook validation');
     return;

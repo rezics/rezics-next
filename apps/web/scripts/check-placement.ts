@@ -306,11 +306,7 @@ const runtime: WebPlacementRuntime = {
   execute: executeDriver,
 };
 
-function isLocalStorybookPublicationValidation(
-  command: readonly string[],
-  cwd: string,
-  returnCount: number,
-): boolean {
+function isLocalStorybookPublicationValidation(command: readonly string[], cwd: string, returnCount: number): boolean {
   if (cwd !== 'apps/web') return false;
   if (command.length === 3 && command[0] === 'bun' && command[1] === 'scripts/storybook-deploy.ts')
     return command[2] === '--validate-only' && returnCount === 1;
@@ -344,10 +340,7 @@ export async function routeWebCheck(
       throw new Error(`Web check unavailable: unsupported host-absolute argument ${argument}`);
   }
   const localRevision = env[localStorybookPublicationRevisionEnvironment];
-  if (
-    localRevision !== undefined &&
-    isLocalStorybookPublicationValidation(run.command, cwd, returns.length)
-  ) {
+  if (localRevision !== undefined && isLocalStorybookPublicationValidation(run.command, cwd, returns.length)) {
     if (!/^[0-9a-f]{40}$/.test(localRevision))
       throw new Error('Web check unavailable: local Storybook publication requires a full committed revision');
     if (adapter.revision(workspace) !== localRevision)
