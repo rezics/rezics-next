@@ -157,12 +157,53 @@ function git(directory: string, args: string[]): string {
   return result.stdout.trim();
 }
 
-function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string {
-  const integrated = mainCheckout(workspace);
-  if (!integrated) throw new Error('Web check unavailable: no integrated Performance driver checkout');
-  const driverRoot = realpathSync(env.WEB_CHECK_DRIVER_ROOT ?? integrated);
+function commonGitDirectory(directory: string, label: string): string {
+  const result = spawnSync(
+    'git',
+    ['-C', directory, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { encoding: 'utf8' },
+  );
+  if (result.error) throw new Error(`Web check unavailable: cannot resolve the ${label} common Git directory`);
+  if (result.status !== 0)
+    throw new Error(`Web check unavailable: cannot resolve the ${label} common Git directory`);
+  try {
+    return realpathSync(result.stdout.trim());
+  } catch {
+    throw new Error(`Web check unavailable: the ${label} common Git directory is unavailable`);
+  }
+}
+
+function canonicalDevRevision(commonDirectory: string): string {
+  const result = spawnSync(
+    'git',
+    ['--git-dir', commonDirectory, 'rev-parse', '--verify', 'refs/heads/dev^{commit}'],
+    { encoding: 'utf8' },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0)
+    throw new Error('Web check unavailable: canonical refs/heads/dev is absent from the candidate common Git directory');
+  return result.stdout.trim();
+}
+
+/** Selects only a clean snapshot in the candidate's repository that is integrated into canonical dev. */
+export function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string {
+  const candidateCommon = commonGitDirectory(workspace, 'candidate');
+  // Read this canonical ref once from the shared repository; the main checkout may lag behind it.
+  const devRevision = canonicalDevRevision(candidateCommon);
+  const fallback = env.WEB_CHECK_DRIVER_ROOT ? undefined : mainCheckout(workspace);
+  const requestedRoot = env.WEB_CHECK_DRIVER_ROOT ?? fallback;
+  if (!requestedRoot) throw new Error('Web check unavailable: no Performance driver snapshot was selected');
+  let driverRoot: string;
+  try {
+    driverRoot = realpathSync(requestedRoot);
+  } catch {
+    throw new Error('Web check unavailable: the selected Performance driver snapshot is missing');
+  }
   if (driverRoot === realpathSync(workspace))
     throw new Error('Web check unavailable: the trusted driver must be separate from candidate source');
+  const driverCommon = commonGitDirectory(driverRoot, 'Performance driver');
+  if (driverCommon !== candidateCommon)
+    throw new Error('Web check unavailable: the Performance driver must share the candidate common Git repository');
   const file = join(driverRoot, 'scripts/check-run.ts');
   if (!existsSync(file)) throw new Error('Web check unavailable: integrated scripts/check-run.ts is absent');
   // Do not import a live producer edit, including edits to its helper imports.
@@ -170,18 +211,17 @@ function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string {
     throw new Error('Web check unavailable: the trusted Performance checkout must be clean');
   git(driverRoot, ['ls-files', '--error-unmatch', 'scripts/check-run.ts']);
   const producerRevision = git(driverRoot, ['rev-parse', 'HEAD']);
-  const integratedRevision = git(integrated, ['rev-parse', 'HEAD']);
   const ancestry = spawnSync('git', [
-    '-C',
-    integrated,
+    '--git-dir',
+    candidateCommon,
     'merge-base',
     '--is-ancestor',
     producerRevision,
-    integratedRevision,
+    devRevision,
   ]);
   if (ancestry.error) throw ancestry.error;
   if (ancestry.status !== 0)
-    throw new Error('Web check unavailable: the selected Performance snapshot is not integrated');
+    throw new Error('Web check unavailable: the selected Performance snapshot is not integrated into canonical dev');
   const committed = spawnSync('git', ['-C', driverRoot, 'show', 'HEAD:scripts/check-run.ts']);
   if (committed.status !== 0 || !committed.stdout.equals(readFileSync(file)))
     throw new Error('Web check unavailable: Performance driver differs from its committed source');

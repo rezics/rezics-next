@@ -20,11 +20,14 @@ The adapter invokes the agreed Performance CLI with individual argv tokens:
 bun <trusted-root>/scripts/check-run.ts --hosts <absolute-hosts-json> --workspace <absolute-candidate-root> --cwd <workspace-relative-directory> --source-revision <full-candidate-commit> --env-file <absolute-environment-json> [--returns <workspace-relative-path>]... -- <original-argv...>
 ```
 
-The default trusted root is the integrated main checkout discovered through Git's common directory; a caller may
-select a separate integrated snapshot with `WEB_CHECK_DRIVER_ROOT`. Its producer must be tracked, committed and
-clean, including helper source, and its commit must be an ancestor of the integrated checkout's current revision.
-The real driver root must differ from the candidate root; a candidate cannot select its own newly committed driver.
-This is a source-integrity guard, not verifier admission or a release receipt.
+The default trusted root is the main checkout discovered through Git's common directory; a caller may select a
+separate snapshot with `WEB_CHECK_DRIVER_ROOT`. Selection captures `refs/heads/dev` once from the candidate's common
+Git directory. The chosen driver must be a separate physical checkout in that same common repository, and its full
+HEAD must be an ancestor of the captured dev commit. The main checkout may lag behind dev; its current HEAD is not
+the integration authority. A missing dev ref, foreign repository, unintegrated snapshot, dirty tree (including
+helper source), untracked producer or changed committed producer bytes is unavailable before spawning. The driver
+root must differ from the candidate root; a candidate cannot select its own newly committed driver. This is a
+source-integrity guard, not verifier admission or a release receipt.
 The candidate revision comes from the candidate's Git identity, independently of the driver root. Performance must
 freeze/verify exact candidate inputs, native Git identity and same-snapshot generated Web inputs, and use its pinned
 Bun/frozen dependency preparation. Absent or unsupported producer source is unavailable, never an installed receipt.

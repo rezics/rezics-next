@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
-import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { Browser } from 'playwright';
 import {
   hasWebCheckCustody,
   placeWebCheck,
   routeWebCheck,
+  trustedDriver,
   webCheckDriverCommand,
   webCheckEnvironment,
   workspacePath,
@@ -52,6 +55,211 @@ function fixture() {
   };
   return { adapter, calls, overlays, closed: () => closed };
 }
+
+function git(directory: string, args: string[]): string {
+  const result = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8' });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed`);
+  return result.stdout.trim();
+}
+
+function commit(directory: string, message: string): string {
+  git(directory, ['add', '-A']);
+  git(directory, ['commit', '-m', message]);
+  return git(directory, ['rev-parse', 'HEAD']);
+}
+
+function createDriverGitFixture() {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const temporaryRoot = mkdtempSync(join(root, '.temp', 'web-driver-git-'));
+  const repository = join(temporaryRoot, 'repository');
+  const candidateRoot = join(temporaryRoot, 'candidate');
+  const integratedRoot = join(temporaryRoot, 'integrated-driver');
+  const unintegratedRoot = join(temporaryRoot, 'unintegrated-driver');
+  mkdirSync(repository, { recursive: true });
+  git(repository, ['init', '--initial-branch=main']);
+  git(repository, ['config', 'user.name', 'Web placement fixture']);
+  git(repository, ['config', 'user.email', 'web-placement@example.invalid']);
+
+  const scripts = join(repository, 'scripts');
+  mkdirSync(scripts, { recursive: true });
+  writeFileSync(join(scripts, 'check-run.ts'), "import { run } from './driver-helper.ts';\nexport { run };\n");
+  const helperPath = join(scripts, 'driver-helper.ts');
+  writeFileSync(helperPath, 'export function run(): number { return 1; }\n');
+  const mainRevision = commit(repository, 'base driver');
+
+  git(repository, ['switch', '-c', 'dev']);
+  writeFileSync(helperPath, 'export function run(): number { return 2; }\n');
+  const integratedRevision = commit(repository, 'integrated driver');
+  writeFileSync(join(repository, 'dev-marker.txt'), 'dev has advanced beyond the driver snapshot\n');
+  const devRevision = commit(repository, 'advance canonical dev');
+  git(repository, ['switch', 'main']);
+  git(repository, ['worktree', 'add', '--detach', candidateRoot, mainRevision]);
+  git(repository, ['worktree', 'add', '--detach', integratedRoot, integratedRevision]);
+
+  git(repository, ['switch', '-c', 'unintegrated', mainRevision]);
+  writeFileSync(helperPath, 'export function run(): number { return 3; }\n');
+  const unintegratedRevision = commit(repository, 'unintegrated driver');
+  git(repository, ['switch', 'dev']);
+  git(repository, ['worktree', 'add', '--detach', unintegratedRoot, unintegratedRevision]);
+
+  return {
+    temporaryRoot,
+    repository,
+    candidateRoot,
+    integratedRoot,
+    unintegratedRoot,
+    helperPath: join(integratedRoot, 'scripts', 'driver-helper.ts'),
+    mainRevision,
+    integratedRevision,
+    devRevision,
+  };
+}
+
+function createForeignDriver(temporaryRoot: string): string {
+  const repository = join(temporaryRoot, 'foreign-repository');
+  mkdirSync(join(repository, 'scripts'), { recursive: true });
+  git(repository, ['init', '--initial-branch=main']);
+  git(repository, ['config', 'user.name', 'Web placement fixture']);
+  git(repository, ['config', 'user.email', 'web-placement@example.invalid']);
+  writeFileSync(join(repository, 'scripts', 'check-run.ts'), 'export {};\n');
+  git(repository, ['add', '-A']);
+  git(repository, ['commit', '-m', 'foreign driver']);
+  return repository;
+}
+
+function gitFixtureAdapter(candidateRoot: string) {
+  const f = fixture();
+  f.adapter.custody = () => false;
+  f.adapter.driver = trustedDriver;
+  f.adapter.revision = () => git(candidateRoot, ['rev-parse', 'HEAD']);
+  return f;
+}
+
+async function routeWithGitDriver(
+  candidateRoot: string,
+  driverRoot: string,
+  adapter: WebPlacementRuntime,
+) {
+  return routeWebCheck(
+    {
+      root: candidateRoot,
+      cwd: candidateRoot,
+      command: ['bun', 'test', 'tests/placement fixture.test.ts'],
+    },
+    { WEB_CHECK_DRIVER_ROOT: driverRoot },
+    adapter,
+  );
+}
+
+test('canonical dev accepts an integrated snapshot while main lags and keeps candidate argv identity', async () => {
+  const gitFixture = createDriverGitFixture();
+  try {
+    expect(git(gitFixture.repository, ['rev-parse', 'main'])).toBe(gitFixture.mainRevision);
+    expect(git(gitFixture.repository, ['rev-parse', 'dev'])).toBe(gitFixture.devRevision);
+    expect(gitFixture.mainRevision).not.toBe(gitFixture.devRevision);
+    expect(gitFixture.integratedRevision).not.toBe(gitFixture.devRevision);
+
+    const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    const command = ['bun', 'test', 'tests/placement fixture.test.ts'];
+    await routeWithGitDriver(gitFixture.candidateRoot, gitFixture.integratedRoot, f.adapter);
+
+    expect(f.calls).toHaveLength(1);
+    const argv = f.calls[0]!.command;
+    expect(argv[1]).toBe(join(gitFixture.integratedRoot, 'scripts', 'check-run.ts'));
+    expect(argv[argv.indexOf('--source-revision') + 1]).toBe(gitFixture.mainRevision);
+    expect(argv.slice(argv.indexOf('--') + 1)).toEqual(command);
+  } finally {
+    rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('changed committed producer bytes are refused even when Git reports a clean snapshot', async () => {
+  const gitFixture = createDriverGitFixture();
+  try {
+    git(gitFixture.repository, ['config', 'core.autocrlf', 'true']);
+    const producerPath = join(gitFixture.integratedRoot, 'scripts', 'check-run.ts');
+    const producer = readFileSync(producerPath, 'utf8');
+    writeFileSync(producerPath, producer.replace(/\r?\n/g, '\r\n'));
+    expect(git(gitFixture.integratedRoot, ['status', '--porcelain', '--untracked-files=normal'])).toBe('');
+
+    const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    await expect(routeWithGitDriver(gitFixture.candidateRoot, gitFixture.integratedRoot, f.adapter)).rejects.toThrow(
+      'differs from its committed source',
+    );
+    expect(f.calls).toHaveLength(0);
+  } finally {
+    rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('unintegrated driver is refused before the trusted process starts', async () => {
+  const gitFixture = createDriverGitFixture();
+  try {
+    const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    await expect(
+      routeWithGitDriver(gitFixture.candidateRoot, gitFixture.unintegratedRoot, f.adapter),
+    ).rejects.toThrow('not integrated into canonical dev');
+    expect(f.calls).toHaveLength(0);
+  } finally {
+    rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('foreign common repository is refused before the trusted process starts', async () => {
+  const gitFixture = createDriverGitFixture();
+  try {
+    const foreignDriver = createForeignDriver(gitFixture.temporaryRoot);
+    const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    await expect(routeWithGitDriver(gitFixture.candidateRoot, foreignDriver, f.adapter)).rejects.toThrow(
+      'share the candidate common Git repository',
+    );
+    expect(f.calls).toHaveLength(0);
+  } finally {
+    rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('dirty helper source is refused before the trusted process starts', async () => {
+  const gitFixture = createDriverGitFixture();
+  try {
+    writeFileSync(gitFixture.helperPath, `${readFileSync(gitFixture.helperPath, 'utf8')}\n// dirty\n`);
+    const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    await expect(routeWithGitDriver(gitFixture.candidateRoot, gitFixture.integratedRoot, f.adapter)).rejects.toThrow(
+      'checkout must be clean',
+    );
+    expect(f.calls).toHaveLength(0);
+  } finally {
+    rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('missing canonical dev is refused before the trusted process starts', async () => {
+  const gitFixture = createDriverGitFixture();
+  try {
+    git(gitFixture.repository, ['update-ref', '-d', 'refs/heads/dev']);
+    const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    await expect(routeWithGitDriver(gitFixture.candidateRoot, gitFixture.integratedRoot, f.adapter)).rejects.toThrow(
+      'canonical refs/heads/dev is absent',
+    );
+    expect(f.calls).toHaveLength(0);
+  } finally {
+    rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('candidate cannot be selected as its own trusted driver', async () => {
+  const gitFixture = createDriverGitFixture();
+  try {
+    const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    await expect(routeWithGitDriver(gitFixture.candidateRoot, gitFixture.candidateRoot, f.adapter)).rejects.toThrow(
+      'separate from candidate source',
+    );
+    expect(f.calls).toHaveLength(0);
+  } finally {
+    rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
 
 // These are logical check invocations, never spawned by this suite. Includes both composition builds and UI's
 // slow-frame route, not just package wrappers. Production callers keep their native assertions and fixture cleanup.
