@@ -24,12 +24,29 @@ type DynamicCollectionPageProps = {
 
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
   const [source, setSource] = useState({ page: props.page, lifetime: 0 });
+  const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   // A newly observed loader object starts a page before any of its children render, even at the same URL.
   if (source.page !== props.page) setSource({ page: props.page, lifetime: source.lifetime + 1 });
-  return <DynamicCollectionPageLifetime key={source.lifetime} {...props} />;
+  return (
+    <DynamicCollectionPageLifetime
+      key={source.lifetime}
+      {...props}
+      pins={props.page.pins ?? navigation.data?.pins ?? { state: 'closed' }}
+      collections={props.page.navigationCollections ?? navigation.data?.collections ?? []}
+    />
+  );
 }
 
-function DynamicCollectionPageLifetime({ page, readMembers, search }: DynamicCollectionPageProps) {
+function DynamicCollectionPageLifetime({
+  page,
+  readMembers,
+  search,
+  pins,
+  collections,
+}: DynamicCollectionPageProps & {
+  pins: NonNullable<DynamicCollectionPageData['pins']>;
+  collections: NonNullable<DynamicCollectionPageData['navigationCollections']>;
+}) {
   const [current, setCurrent] = useState(page);
   const [retries, setRetries] = useState(0);
   const [retrying, setRetrying] = useState(false);
@@ -37,9 +54,6 @@ function DynamicCollectionPageLifetime({ page, readMembers, search }: DynamicCol
   // The route's reader closes over the originating filter; callback churn must not retarget a timer.
   const reader = useRef(readMembers);
   const active = useRef(false);
-  const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
-  const pins = current.pins ?? navigation.data?.pins ?? { state: 'closed' as const };
-  const collections = current.navigationCollections ?? navigation.data?.collections ?? [];
   useLayoutEffect(() => {
     active.current = true;
     return () => {
