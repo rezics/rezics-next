@@ -92,6 +92,77 @@ async function setup() {
   };
 }
 
+test('Codex turn boundaries pin model and effort through active steer and idle wake', async () => {
+  const s = await setup();
+  try {
+    expect(readFileSync(join(s.spec.pool.codexHome, 'config.toml'), 'utf8')).toContain(
+      'model = "gpt-6.1-terra"\nmodel_reasoning_effort = "low"',
+    );
+    const manager = await s.managers.start(s.spec);
+    await s.managers.flush();
+
+    const threadStart = s.requests().find((request) => request.method === 'thread/start');
+    expect(threadStart!.params).toEqual({
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+      cwd: s.path,
+      model: 'gpt-6.1-sol',
+      config: { model_reasoning_effort: 'high', model_auto_compact_token_limit: 300000 },
+    });
+    const openingTurn = s.requests().find((request) => request.method === 'turn/start');
+    expect(openingTurn!.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Resolve the conflict' });
+    await s.managers.wake(manager.id);
+    const steer = s.requests().find((request) => request.method === 'turn/steer');
+    expect(steer!.params.expectedTurnId).toBe(manager.activeTurnId);
+    expect(steer!.params.input).toEqual([{ type: 'text', text: 'Resolve the conflict', text_elements: [] }]);
+    expect(steer!.params).not.toHaveProperty('model');
+    expect(steer!.params).not.toHaveProperty('effort');
+
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id).activeTurnId).toBeNull();
+    s.inbox.deliver({ managerId: manager.id, kind: 'spec-conflict', summary: 'Choose a contract' });
+    await s.managers.wake(manager.id);
+
+    const turnStarts = s.requests().filter((request) => request.method === 'turn/start');
+    expect(turnStarts).toHaveLength(2);
+    expect(turnStarts[1]!.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+    expect(s.managers.get(manager.id).activeTurnId).toBe('turn-2');
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+  } finally {
+    await s.close();
+  }
+});
+
+test('a steer racing a completed turn resumes and starts the next turn with pinned settings', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.managers.flush();
+    // Let the server's completion notification settle before restoring the stale turn observation.
+    await s.client.request('turn/interrupt', { threadId: manager.threadId, turnId: manager.activeTurnId });
+    await s.managers.flush();
+    s.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(JSON.stringify(manager), manager.id);
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake after the race' });
+    await s.managers.wake(manager.id);
+    await s.managers.flush();
+
+    const resumed = s.requests().find((request) => request.method === 'thread/resume');
+    expect(resumed!.params.model).toBe('gpt-6.1-sol');
+    expect(resumed!.params.config.model_reasoning_effort).toBe('high');
+    const turnStarts = s.requests().filter((request) => request.method === 'turn/start');
+    expect(turnStarts[1]!.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+    expect(s.managers.get(manager.id).activeTurnId).toBe('turn-2');
+  } finally {
+    await s.close();
+  }
+});
+
 test('renewing a paused Codex manager starts a fresh thread under the same id and keeps its inbox', async () => {
   const s = await setup();
   try {
