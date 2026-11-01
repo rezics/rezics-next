@@ -512,8 +512,7 @@ test('Default composed member recovery admits only its live reader and preserves
         cacheReader = 'reader-two';
         await setReader('reader-two');
       }
-      if (boundary === 'viewer')
-        await setReader('reader-two');
+      if (boundary === 'viewer') await setReader('reader-two');
       if (boundary === 'context')
         context = {
           id: '00000000-0000-8000-8000-000000000001',
@@ -565,15 +564,13 @@ test('Default composed member recovery admits only its live reader and preserves
     const currentA = hold();
     await press(replacementTrigger);
     expect(
-      nativeCalls
-        .slice(-2)
-        .map(({ input, authorization, context: currentContext }) => ({
-          node: input.continuation?.node,
-          cursor: input.continuation?.cursor,
-          authorization,
-          context: currentContext?.id,
-          populationId: currentContext?.population.kind === 'realm' ? currentContext.population.id : undefined,
-        })),
+      nativeCalls.slice(-2).map(({ input, authorization, context: currentContext }) => ({
+        node: input.continuation?.node,
+        cursor: input.continuation?.cursor,
+        authorization,
+        context: currentContext?.id,
+        populationId: currentContext?.population.kind === 'realm' ? currentContext.population.id : undefined,
+      })),
     ).toEqual([
       {
         node: 'members',
