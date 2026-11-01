@@ -7,7 +7,8 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { locales } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { assertPublicCacheReadAllowed } from '../security/page-cache';
 import { UUID } from './price';
 import { benefitCreatorName, capturedBenefit } from './benefit';
 
@@ -19,6 +20,36 @@ export type EntitlementsRead<T> =
   | { kind: 'denied' | 'unavailable' | 'preparing' | 'cursor-error' };
 export type BuyerEntitlementsPage = EntitlementsRead<NativePage>;
 export type BuyerEntitlementPage = EntitlementsRead<BuyerEntitlement> & { creatorName?: string | undefined };
+export type EntitlementsAddress =
+  | { kind: 'list'; locale: string; cursor: string | null }
+  | { kind: 'detail'; locale: string; id: string };
+export type BuyerEntitlementsCurrentRead<T = BuyerEntitlementsPage> = {
+  sessionSubject: string | null;
+  requested: EntitlementsAddress;
+  page: T;
+};
+export type BuyerEntitlementCurrentRead = BuyerEntitlementsCurrentRead<BuyerEntitlementPage>;
+
+export function sameEntitlementsAddress(a: EntitlementsAddress, b: EntitlementsAddress): boolean {
+  return (
+    a.locale === b.locale &&
+    (a.kind === 'list' && b.kind === 'list'
+      ? a.cursor === b.cursor
+      : a.kind === 'detail' && b.kind === 'detail' && a.id === b.id)
+  );
+}
+
+type PreparedRead<T> = { sessionSubject: string | null; page: T };
+
+async function prepareBuyer(request: Request, sessionEnv: Partial<SessionEnv>) {
+  if (await prepareSession(request, sessionEnv)) return null;
+  const authorization = viewerCredential(request);
+  if (!authorization) return null;
+  // Snapshot the association consumed by this native call, before IO or optional enrichment.
+  // Explicit bearer authority is still supported, but does not identify a browser session.
+  const subject = request.headers.has('authorization') ? null : sessionSubject(request) || null;
+  return { authorization, subject };
+}
 
 export function entitlementSearch(input: Record<string, unknown>): { cursor?: string } {
   const cursor = input.cursor;
@@ -61,16 +92,26 @@ export async function loadBuyerEntitlements(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<BuyerEntitlementsPage> {
-  if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
-  const authorization = viewerCredential(request);
-  if (!authorization) return { kind: 'denied' };
+  return (await loadEntitlementsBody(client, request, sessionEnv, input)).page;
+}
+
+async function loadEntitlementsBody(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { cursor?: string },
+): Promise<PreparedRead<BuyerEntitlementsPage>> {
+  const prepared = await prepareBuyer(request, sessionEnv);
+  if (!prepared) return { sessionSubject: null, page: { kind: 'denied' } };
+  const { authorization, subject: sessionSubject } = prepared;
+  const finish = (page: BuyerEntitlementsPage) => ({ sessionSubject, page });
   try {
     const result = await client.entitlements.get({
       query: { limit: ENTITLEMENTS_PAGE_SIZE, ...(input.cursor ? { cursor: input.cursor } : {}) },
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    if (result.error || result.status !== 200 || !result.data) return failure(result.status);
+    if (result.error || result.status !== 200 || !result.data) return finish(failure(result.status));
     const page = result.data;
     if (
       !Array.isArray(page.entitlements) ||
@@ -78,11 +119,11 @@ export async function loadBuyerEntitlements(
       !page.entitlements.every(validRecord) ||
       !(page.next === null || (typeof page.next === 'string' && page.next.length > 0 && page.next.length <= 4096))
     )
-      return { kind: 'unavailable' };
-    return { kind: 'ready', data: page };
+      return finish({ kind: 'unavailable' });
+    return finish({ kind: 'ready', data: page });
   } catch (error) {
     if (isPlatformClosedError(error)) throw error;
-    return { kind: 'unavailable' };
+    return finish({ kind: 'unavailable' });
   }
 }
 
@@ -93,24 +134,34 @@ export async function loadBuyerEntitlement(
   sessionEnv: Partial<SessionEnv>,
   id: string,
 ): Promise<BuyerEntitlementPage> {
-  if (!UUID.test(id)) return { kind: 'denied' };
-  if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
-  const authorization = viewerCredential(request);
-  if (!authorization) return { kind: 'denied' };
+  return (await loadEntitlementBody(client, request, sessionEnv, id)).page;
+}
+
+async function loadEntitlementBody(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  id: string,
+): Promise<PreparedRead<BuyerEntitlementPage>> {
+  if (!UUID.test(id)) return { sessionSubject: null, page: { kind: 'denied' } };
+  const prepared = await prepareBuyer(request, sessionEnv);
+  if (!prepared) return { sessionSubject: null, page: { kind: 'denied' } };
+  const { authorization, subject: sessionSubject } = prepared;
+  const finish = (page: BuyerEntitlementPage) => ({ sessionSubject, page });
   try {
     const result = await client.entitlements({ entitlementId: id }).get({
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    if (result.error || result.status !== 200 || !result.data) return failure(result.status);
+    if (result.error || result.status !== 200 || !result.data) return finish(failure(result.status));
     const row = result.data.entitlement;
-    if (row.id !== id || !validRecord(row)) return { kind: 'unavailable' };
+    if (row.id !== id || !validRecord(row)) return finish({ kind: 'unavailable' });
     const benefit = capturedBenefit(row.contentEdition, row.targetSubjectId);
     const creatorName = await benefitCreatorName(client, benefit);
-    return { kind: 'ready', data: row, ...(creatorName ? { creatorName } : {}) };
+    return finish({ kind: 'ready', data: row, ...(creatorName ? { creatorName } : {}) });
   } catch (error) {
     if (isPlatformClosedError(error)) throw error;
-    return { kind: 'unavailable' };
+    return finish({ kind: 'unavailable' });
   }
 }
 
@@ -121,13 +172,48 @@ export const readBuyerEntitlements = createServerFn({ method: 'GET' })
     return loadBuyerEntitlements(kernelClient(data.locale), getRequest(), env as Partial<SessionEnv>, data);
   });
 
+function validateDetailInput(input: unknown) {
+  const data = validateInput(input);
+  if (!data.id) throw notFound();
+  return { id: data.id, locale: data.locale };
+}
+
+function freshBuyerRequest() {
+  const request = getRequest();
+  assertPublicCacheReadAllowed(request, 'session');
+  return new Request(request);
+}
+
 export const readBuyerEntitlement = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => {
-    const data = validateInput(input);
-    if (!data.id) throw notFound();
-    return { id: data.id, locale: data.locale };
-  })
+  .validator(validateDetailInput)
   .handler(async ({ data }): Promise<BuyerEntitlementPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadBuyerEntitlement(kernelClient(data.locale), getRequest(), env as Partial<SessionEnv>, data.id);
+  });
+
+/** Fresh request maps ensure a skipped/refused preparation cannot certify retained associations. */
+export const readBuyerEntitlementsCurrent = createServerFn({ method: 'GET' })
+  .validator(validateInput)
+  .handler(async ({ data }): Promise<BuyerEntitlementsCurrentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const result = await loadEntitlementsBody(
+      kernelClient(data.locale),
+      freshBuyerRequest(),
+      env as Partial<SessionEnv>,
+      data,
+    );
+    return { ...result, requested: { kind: 'list', locale: data.locale, cursor: data.cursor ?? null } };
+  });
+
+export const readBuyerEntitlementCurrent = createServerFn({ method: 'GET' })
+  .validator(validateDetailInput)
+  .handler(async ({ data }): Promise<BuyerEntitlementCurrentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const result = await loadEntitlementBody(
+      kernelClient(data.locale),
+      freshBuyerRequest(),
+      env as Partial<SessionEnv>,
+      data.id,
+    );
+    return { ...result, requested: { kind: 'detail', locale: data.locale, id: data.id } };
   });
