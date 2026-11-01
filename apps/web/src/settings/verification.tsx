@@ -159,7 +159,11 @@ export function verificationRecoveryIO(
           queryFn: () =>
             guard(async () => {
               const result = await transport.read(accountId);
-              if (result.accountId !== owner.subject) throw new Error('Verification account changed');
+              if (
+                result.accountId !== owner.subject ||
+                (result.verificationRequest && result.verificationRequest.accountId !== owner.subject)
+              )
+                throw new Error('Verification account changed');
               return result;
             }),
           staleTime: 0,

@@ -84,12 +84,16 @@ const standaloneCurrent = () => true;
 const unavailable = () => false;
 
 /** Does not read the session transport. Standalone injected examples can omit a QueryClient entirely. */
-export function useSettingsSessionOwner(token: string | null, subject?: string | null, standalone = false) {
+export function useSettingsSessionOwner(token: string | null | undefined, subject?: string | null, standalone = false) {
   const client = useContext(QueryClientContext);
   const inherited = useContext(SettingsSessionContext);
   const [local] = useState(() =>
     !inherited && client && (!standalone || client.getQueryState(sessionQuery.queryKey))
-      ? new SettingsSessionOwner(client, token, subject)
+      ? new SettingsSessionOwner(
+          client,
+          token === undefined ? (client.getQueryData(sessionQuery.queryKey)?.csrfToken ?? null) : token,
+          subject,
+        )
       : null,
   );
   const owner = inherited ?? local;

@@ -74,10 +74,10 @@ function failureText(failure: CollectionPrivacyFailure | 'invalid' | undefined |
 }
 
 export function CollectionRow({ collection, io }: { collection: OwnedCollection; io?: CollectionPrivacyIO }) {
-  const { csrfToken } = useSession();
+  const owner = useSettingsSessionOwner(undefined, undefined, !!io);
+  const csrfToken = owner?.credential() ?? null;
   const canSave = useOperation('collection.update');
   const canRead = useOperation('collection.get');
-  const owner = useSettingsSessionOwner(csrfToken, undefined, !!io);
   const isCurrent = useSettingsLiveness(owner?.isCurrent ?? (() => !!io));
   const [editor] = useState(
     () => new CollectionPrivacyEditor(collection, io ?? collectionPrivacyIO(owner!), isCurrent),
@@ -274,8 +274,7 @@ export function CollectionPrivacyView({
   read?: CollectionPrivacyPageRead;
   io?: CollectionPrivacyIO;
 }) {
-  const { csrfToken } = useSession();
-  const owner = useSettingsSessionOwner(csrfToken, undefined, !!io || read !== nativePageRead);
+  const owner = useSettingsSessionOwner(undefined, undefined, !!io || read !== nativePageRead);
   const isCurrent = useSettingsLiveness(owner?.isCurrent ?? (() => read !== nativePageRead));
   const [pager] = useState(
     () => new CollectionPrivacyPager((cursor) => (owner ? owner.guard(() => read(cursor)) : read(cursor)), isCurrent),
