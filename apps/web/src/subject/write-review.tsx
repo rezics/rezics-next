@@ -2,10 +2,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { useEffect, useState, type MouseEvent } from 'react';
-import {
-  readMyRealmsPageForReview,
-  type ReviewMyRealmsRead,
-} from '../community/space-actions';
+import { readMyRealmsPageForReview, type ReviewMyRealmsRead } from '../community/space-actions';
 import type { RealmLink } from '../community/space';
 import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
@@ -195,11 +192,7 @@ function WriteReviewVisitView({
       if (!reviewEntryReadIsCurrent(ticket)) return;
       const result = (await readMyRealmsPageForReview({ data: { expected } })) as ReviewMyRealmsRead;
       if (!reviewEntryReadIsCurrent(ticket)) return;
-      if (
-        result.kind !== 'ready' ||
-        !result.page.signedIn ||
-        !sameReviewReader(expected, result.provenance)
-      ) {
+      if (result.kind !== 'ready' || !result.page.signedIn || !sameReviewReader(expected, result.provenance)) {
         setRealmRead({ state: 'failed' });
         return;
       }

@@ -138,7 +138,9 @@ const globals = {
   MouseEvent: window.MouseEvent,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -207,7 +209,9 @@ async function createSurface(options: { strict?: boolean; session?: Session } = 
       session: 'signed-in',
     });
   const tree = () =>
-    createElement(QueryClientProvider, { client },
+    createElement(
+      QueryClientProvider,
+      { client },
       options.strict ? createElement(StrictMode, null, action()) : action(),
     );
   const render = async (next?: typeof target) => {
@@ -319,9 +323,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await until(() => membershipCalls().length > pagesBeforeEqualReplacement, 'the replacement membership read');
   await surface.clickWrite();
   await until(() => navigations.length === 1, 'the single-choice navigation');
-  expect(navigations).toEqual([
-    `/en/boards/${boardA}/new?subject=${subjectA}&subjectTitle=Original%20title`,
-  ]);
+  expect(navigations).toEqual([`/en/boards/${boardA}/new?subject=${subjectA}&subjectTitle=Original%20title`]);
 
   // The existing native board reader still pages in native order, filters purpose/availability/
   // disclosure, and terminates when the cursor repeats. The connected chooser keeps two choices.
@@ -344,7 +346,11 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await surface.clickWrite();
   await until(() => boardCalls().length >= boardsBeforeMany + 2, 'both native board pages');
   await until(() => surface.host.querySelectorAll('a[href*="/boards/"]').length === 2, 'the filtered chooser');
-  expect(boardCalls().slice(boardsBeforeMany).map((call) => call.query)).toEqual(['?limit=100', '?limit=100&cursor=review-cursor']);
+  expect(
+    boardCalls()
+      .slice(boardsBeforeMany)
+      .map((call) => call.query),
+  ).toEqual(['?limit=100', '?limit=100&cursor=review-cursor']);
   expect([...surface.host.querySelectorAll('a[href*="/boards/"]')].map((link) => link.textContent?.trim())).toEqual([
     'First review boardRealm 1',
     'Second review boardRealm 1',
@@ -368,14 +374,18 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   // A credential refresh for the same account also replaces the owner and binds the new read.
   serverReader = readerA;
   serverCsrf = 'csrf-a';
-  boardResponse = () => response([reviewBoard(boardA, 'Refreshed credential choice'), reviewBoard(boardB, 'Second choice')]);
+  boardResponse = () =>
+    response([reviewBoard(boardA, 'Refreshed credential choice'), reviewBoard(boardB, 'Second choice')]);
   const pagesBeforeCredentialChange = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, 'csrf-a')));
   await until(() => membershipCalls().length > pagesBeforeCredentialChange, 'the refreshed-credential page');
   const boardsBeforeCredentialChange = boardCalls().length;
   await surface.clickWrite();
   await until(() => boardCalls().length > boardsBeforeCredentialChange, 'the refreshed-credential boards');
-  await until(() => (surface.host.textContent ?? '').includes('Refreshed credential choice'), 'the refreshed-credential choices');
+  await until(
+    () => (surface.host.textContent ?? '').includes('Refreshed credential choice'),
+    'the refreshed-credential choices',
+  );
   expect(credentialReads.at(-1)).toEqual({ subject: readerA, csrfToken: 'csrf-a' });
 
   serverReader = readerA;
@@ -400,11 +410,13 @@ test('one connected review-entry preparation and chooser admits only same-prepar
     .fetchQuery({ queryKey: sessionQuery.queryKey, queryFn: () => sessionGate.promise, staleTime: 0, retry: false })
     .catch(() => undefined);
   await until(() => surface.client.getQueryState(sessionQuery.queryKey)?.fetchStatus === 'fetching', 'fetch status');
-  oldBoardGate.resolve(response([
-    reviewBoard(boardA, 'Healthy after fetch start'),
-    reviewBoard(boardB, 'Second healthy choice'),
-  ]));
-  await until(() => (surface.host.textContent ?? '').includes('Healthy after fetch start'), 'the healthy pending result');
+  oldBoardGate.resolve(
+    response([reviewBoard(boardA, 'Healthy after fetch start'), reviewBoard(boardB, 'Second healthy choice')]),
+  );
+  await until(
+    () => (surface.host.textContent ?? '').includes('Healthy after fetch start'),
+    'the healthy pending result',
+  );
   expect(membershipCalls().length - pagesBeforeFetch).toBe(1);
   const pagesBeforeFetchSuccess = membershipCalls().length;
   await act(async () => {
@@ -434,7 +446,9 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   expect(surface.host.textContent ?? '').not.toContain('Obsolete single choice');
   expect(surface.host.textContent ?? '').toContain(m.thread_review_boards_loading());
 
-  newTargetGate.resolve(response([reviewBoard(boardB, 'Current target board'), reviewBoard(boardC, 'Another current board')]));
+  newTargetGate.resolve(
+    response([reviewBoard(boardB, 'Current target board'), reviewBoard(boardC, 'Another current board')]),
+  );
   await until(() => (surface.host.textContent ?? '').includes('Current target board'), 'the new target choices');
   expect(surface.host.querySelector<HTMLAnchorElement>('a')?.getAttribute('href')).toContain(
     `/zh-Hant/boards/${boardB}/new?subject=${subjectB}&subjectTitle=Changed%20title%20%26%20name`,
@@ -518,17 +532,26 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   const freshBoardsAfterAba = boardCalls().length;
   await surface.clickWrite();
   await until(() => boardCalls().length > freshBoardsAfterAba, 'the usable ABA replacement owner');
-  await until(() => (surface.host.textContent ?? '').includes(m.thread_review_no_board()), 'the ABA owner empty choices');
+  await until(
+    () => (surface.host.textContent ?? '').includes(m.thread_review_no_board()),
+    'the ABA owner empty choices',
+  );
 
   // Unknown, signed-out and signed-in-without-subject cache states are never ready for a private read.
   const pagesBeforeNotReady = membershipCalls().length;
-  await act(async () => surface.client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null }));
+  await act(async () =>
+    surface.client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null }),
+  );
   await settle();
   expect(membershipCalls()).toHaveLength(pagesBeforeNotReady);
-  await act(async () => surface.client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }));
+  await act(async () =>
+    surface.client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
+  );
   await settle();
   expect(membershipCalls()).toHaveLength(pagesBeforeNotReady);
-  await act(async () => surface.client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: null, csrfToken: null }));
+  await act(async () =>
+    surface.client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: null, csrfToken: null }),
+  );
   await settle();
   expect(membershipCalls()).toHaveLength(pagesBeforeNotReady);
 
@@ -539,7 +562,10 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
   await until(() => membershipCalls().length > pagesBeforeEmpty, 'the recovered current page');
   await surface.clickWrite();
-  await until(() => (surface.host.textContent ?? '').includes(m.thread_review_no_realms()), 'the empty membership result');
+  await until(
+    () => (surface.host.textContent ?? '').includes(m.thread_review_no_realms()),
+    'the empty membership result',
+  );
 
   realmItems = [realm(1)];
   const pagesBeforeFinal = membershipCalls().length;
@@ -556,5 +582,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await settle();
   expect(navigations).toHaveLength(navigationCount);
   expect(serverCalls.every(({ data }) => !JSON.stringify(data).includes('access-'))).toBe(true);
-  expect(responseHeaders.every(({ name, value }) => name.toLowerCase() === 'cache-control' && value === 'private, no-store')).toBe(true);
+  expect(
+    responseHeaders.every(({ name, value }) => name.toLowerCase() === 'cache-control' && value === 'private, no-store'),
+  ).toBe(true);
 });

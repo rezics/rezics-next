@@ -103,8 +103,7 @@ function validateCursor(input: unknown): { cursor?: string } {
 }
 
 function validateReviewMyRealmsRead(input: unknown): { expected: ReviewReaderExpectation } {
-  if (!input || typeof input !== 'object' || !('expected' in input))
-    throw new Error('Invalid review reader');
+  if (!input || typeof input !== 'object' || !('expected' in input)) throw new Error('Invalid review reader');
   return { expected: validateReviewReaderExpectation(input.expected) };
 }
 

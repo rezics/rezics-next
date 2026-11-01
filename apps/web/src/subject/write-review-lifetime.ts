@@ -130,7 +130,12 @@ function sameTarget(left: ReviewEntryTarget, right: ReviewEntryTarget) {
 }
 
 function readySession(session: string, snapshot: SessionSnapshot) {
-  return session === 'signed-in' && snapshot.state === 'signed-in' && snapshot.queryStatus === 'success' && !!snapshot.subject;
+  return (
+    session === 'signed-in' &&
+    snapshot.state === 'signed-in' &&
+    snapshot.queryStatus === 'success' &&
+    !!snapshot.subject
+  );
 }
 
 function bindingIsCurrent(visit: ReviewEntryVisit) {
