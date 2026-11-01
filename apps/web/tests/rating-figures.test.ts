@@ -11,12 +11,14 @@ import { subjectOwnRatingQuery, subjectRatingQuery } from '../src/features/pages
 import {
   GLOBAL,
   QUESTION,
+  preparedRatingReader,
   readRatings,
   readOwnRating,
   writeOwnRating,
   type PublicFigure,
   type RatingQuestion,
 } from '../src/features/pages/subject-ratings';
+import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
 import { ResultRow } from '../src/search/results';
 
 const subjectId = recorded.subject;
@@ -36,6 +38,48 @@ const ready: PublicFigure = {
   mean: 8.4,
   score: 7.9,
 };
+
+function ratingLease(): SubjectPersonalLease {
+  let operationId = 0;
+  let owner = 0;
+  let committed: Awaited<ReturnType<typeof readOwnRating>> | undefined;
+  const reader = 'reader-a';
+  const scope = { reader, admission: 1, view: 'overview', cacheEpoch: 0 } as const;
+  return {
+    key: JSON.stringify([subjectId, 'en', reader, 1]),
+    reader,
+    subjectId,
+    locale: 'en',
+    view: 'overview',
+    scope,
+    isCurrent: () => true,
+    retire: () => {},
+    beginRatingWrite: (before) => {
+      if (committed === undefined) committed = before;
+      const id = ++operationId;
+      owner = id;
+      const operation: SubjectRatingWriteOperation = {
+        id,
+        sequence: id,
+        ownsCache: () => owner === id,
+        commit: (value) => {
+          committed = value;
+          if (owner === id) owner = 0;
+        },
+        rollback: (fallback) => {
+          if (owner !== id) return null;
+          owner = 0;
+          return committed ?? fallback;
+        },
+        preserveUncertainty: (value) => {
+          committed = value;
+          if (owner === id) owner = 0;
+        },
+      };
+      return operation;
+    },
+  };
+}
 
 test('question-driven save and clear include zero, enforce the live scale and preserve private session behavior', async () => {
   const requests: Request[] = [];
@@ -78,9 +122,10 @@ test('question-driven save and clear include zero, enforce the live scale and pr
   expect(html).toContain('method="post"');
 
   const cache = new QueryClient();
-  const ownKey = subjectOwnRatingQuery(subjectId, 'en').queryKey;
+  const binding = ratingLease();
+  const ownKey = subjectOwnRatingQuery(subjectId, 'en', binding.scope).queryKey;
   const publicKey = subjectRatingQuery(subjectId, 'en').queryKey;
-  cache.setQueryData(ownKey, { kind: 'ready', units: null });
+  cache.setQueryData(ownKey, { reader: binding.reader, kind: 'ready', units: null });
   cache.setQueryData(publicKey, { figure: ready });
   for (const units of [0, 40, null]) {
     expect(
@@ -88,6 +133,7 @@ test('question-driven save and clear include zero, enforce the live scale and pr
         queryClient: cache,
         subjectId,
         locale: 'en',
+        binding,
         units,
         write: ({ units, idempotencyKey }) => writeOwnRating(client, subjectId, 'Bearer reader', units, idempotencyKey),
         onFailure: () => {
@@ -96,18 +142,11 @@ test('question-driven save and clear include zero, enforce the live scale and pr
       }),
     ).toBe(true);
     expect(stored).toBe(units);
-    expect(cache.getQueryData(ownKey)).toEqual({ kind: 'ready', units });
+    expect(cache.getQueryData(ownKey)).toEqual({ reader: binding.reader, kind: 'ready', units });
     expect(cache.getQueryData(publicKey)).toEqual({ figure: ready });
-    expect(
-      await readOwnRating(
-        client,
-        new Request('https://site.example', {
-          headers: { authorization: 'Bearer reader' },
-        }),
-        {},
-        subjectId,
-      ),
-    ).toEqual({ kind: 'ready', units });
+    const request = new Request('https://site.example', { headers: { authorization: 'Bearer reader' } });
+    const reader = await preparedRatingReader(request, 'Bearer reader');
+    expect(await readOwnRating(client, request, {}, subjectId)).toEqual({ reader, kind: 'ready', units });
   }
   expect(await writeOwnRating(client, subjectId, 'Bearer reader', 2, crypto.randomUUID())).toBe(false);
   expect(requests.filter((request) => ['PUT', 'DELETE'].includes(request.method))).toHaveLength(3);
@@ -117,6 +156,7 @@ test('question-driven save and clear include zero, enforce the live scale and pr
       queryClient: cache,
       subjectId,
       locale: 'en',
+      binding,
       units: 4,
       write: async () => false,
       onFailure: () => {},

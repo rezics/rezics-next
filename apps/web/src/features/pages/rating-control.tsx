@@ -6,6 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { changeSubjectRating } from './rating-actions';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
 import { displayRating, type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
+import type { SubjectPersonalLease } from './subject-personal-reader';
 
 export type RatingControlState =
   | { kind: 'unknown' }
@@ -13,7 +14,11 @@ export type RatingControlState =
   | { kind: 'signed-out' }
   | { kind: 'ready'; units: number | null };
 
-type RatingWrite = (input: { units: number | null; idempotencyKey: string }) => Promise<boolean>;
+export type RatingWrite = (input: {
+  units: number | null;
+  idempotencyKey: string;
+  expectedReader: string;
+}) => Promise<boolean>;
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -22,33 +27,43 @@ export async function applyOptimisticRatingChange(input: {
   queryClient: ReturnType<typeof useQueryClient>;
   subjectId: string;
   locale: string;
+  binding: SubjectPersonalLease;
   units: number | null;
   write: RatingWrite;
-  onFailure: () => void;
+  onFailure: (result: { uncertain: boolean }) => void;
 }): Promise<boolean> {
-  const { queryClient, subjectId, locale, units, write, onFailure } = input;
-  const ownQueryOptions = subjectOwnRatingQuery(subjectId, locale);
+  const { queryClient, subjectId, locale, binding, units, write, onFailure } = input;
+  if (!binding.isCurrent() || binding.subjectId !== subjectId || binding.locale !== locale) return false;
+  const ownQueryOptions = subjectOwnRatingQuery(subjectId, locale, binding.scope);
   const ownKey = ownQueryOptions.queryKey;
-  const ownQuery = queryClient.getQueryCache().build(queryClient, ownQueryOptions);
-  const before = ownQuery.state.data;
-  void queryClient.cancelQueries({ queryKey: ownKey });
-  ownQuery.setData({ kind: 'ready', units });
+  const before = queryClient.getQueryData<SubjectOwnRating>(ownKey);
+  const operation = binding.beginRatingWrite(before);
+  if (!operation || !binding.isCurrent()) return false;
+  const optimistic: SubjectOwnRating = { reader: binding.reader, kind: 'ready', units };
+  queryClient.setQueryData(ownKey, optimistic);
 
   let saved = false;
   try {
-    saved = await write({ units, idempotencyKey: crypto.randomUUID() });
+    saved = await write({ units, idempotencyKey: crypto.randomUUID(), expectedReader: binding.reader });
   } catch {
-    saved = false;
-  }
-  if (!saved) {
-    if (before === undefined) queryClient.removeQueries({ queryKey: ownKey, exact: true });
-    else ownQuery.setData(before);
-    onFailure();
+    if (binding.isCurrent()) {
+      operation.preserveUncertainty(optimistic);
+      onFailure({ uncertain: true });
+    }
     return false;
   }
+  if (!binding.isCurrent()) return false;
+  if (!saved) {
+    const rollback = operation.rollback({ reader: binding.reader, kind: 'unavailable' });
+    if (rollback) queryClient.setQueryData(ownKey, rollback);
+    onFailure({ uncertain: false });
+    return false;
+  }
+  operation.commit(optimistic);
 
   // Public figures publish asynchronously; refresh them in the background after the vote succeeds.
-  void queryClient.invalidateQueries({ queryKey: subjectRatingQuery(subjectId, locale).queryKey }).catch(() => {});
+  if (binding.isCurrent())
+    void queryClient.invalidateQueries({ queryKey: subjectRatingQuery(subjectId, locale).queryKey }).catch(() => {});
   return true;
 }
 
@@ -292,7 +307,9 @@ export function SubjectRatingControl({
   returnTo,
   session,
   own,
+  binding,
   initialFailure = false,
+  write,
 }: {
   subjectId: string;
   locale: string;
@@ -300,13 +317,25 @@ export function SubjectRatingControl({
   question: RatingQuestion;
   session: 'unknown' | 'unavailable' | 'signed-out' | 'signed-in';
   own: SubjectOwnRating | undefined;
+  binding?: SubjectPersonalLease;
   initialFailure?: boolean;
+  write?: RatingWrite;
 }) {
   const queryClient = useQueryClient();
-  const [pending, setPending] = useState(false);
-  const [failure, setFailure] = useState<string | null>(
-    initialFailure ? m.subject_rating_control_error({}, { locale: locale as never }) : null,
-  );
+  const bindingKey = binding?.key ?? `inactive:${subjectId}:${locale}`;
+  const bindingRef = useRef(binding);
+  bindingRef.current = binding;
+  const pendingId = useRef(0);
+  const activePending = useRef<{ scope: string; id: number } | null>(null);
+  const [pendingState, setPendingState] = useState<{ scope: string; id: number } | null>(null);
+  const [failureState, setFailureState] = useState<{ scope: string; message: string } | null>(null);
+  const pending = pendingState?.scope === bindingKey;
+  const failure =
+    failureState?.scope === bindingKey
+      ? failureState.message
+      : initialFailure
+        ? m.subject_rating_control_error({}, { locale: locale as never })
+        : null;
   const state: RatingControlState =
     session === 'unknown'
       ? { kind: 'unknown' }
@@ -314,29 +343,53 @@ export function SubjectRatingControl({
         ? { kind: 'unavailable' }
         : session === 'signed-out'
           ? { kind: 'signed-out' }
-          : own === undefined
+          : !binding || !binding.isCurrent() || own === undefined || own.reader !== binding.reader
             ? { kind: 'unknown' }
             : own.kind === 'unavailable'
               ? { kind: 'unavailable' }
               : { kind: 'ready', units: own.units };
 
   const change = async (units: number | null) => {
-    setPending(true);
-    setFailure(null);
-    await applyOptimisticRatingChange({
-      queryClient,
-      subjectId,
-      locale,
-      units,
-      write: async ({ idempotencyKey }) => changeSubjectRating({ data: { subjectId, units, idempotencyKey } }),
-      onFailure: () => setFailure(m.subject_rating_control_error({}, { locale: locale as never })),
-    });
-    setPending(false);
+    const originatingBinding = bindingRef.current;
+    if (!originatingBinding || !originatingBinding.isCurrent()) return;
+    const scope = originatingBinding.key;
+    if (activePending.current?.scope === scope) return;
+    const id = ++pendingId.current;
+    activePending.current = { scope, id };
+    setPendingState({ scope, id });
+    setFailureState(null);
+    try {
+      await applyOptimisticRatingChange({
+        queryClient,
+        subjectId,
+        locale,
+        binding: originatingBinding,
+        units,
+        write:
+          write ??
+          (async ({ idempotencyKey, expectedReader }) =>
+            changeSubjectRating({ data: { subjectId, units, idempotencyKey, expectedReader } })),
+        onFailure: () => {
+          if (originatingBinding.isCurrent() && bindingRef.current?.key === scope)
+            setFailureState({ scope, message: m.subject_rating_control_error({}, { locale: locale as never }) });
+        },
+      });
+    } finally {
+      if (
+        originatingBinding.isCurrent() &&
+        bindingRef.current?.key === scope &&
+        activePending.current?.scope === scope &&
+        activePending.current.id === id
+      ) {
+        activePending.current = null;
+        setPendingState(null);
+      }
+    }
   };
 
   return (
     <RatingControlView
-      key={`${question.id}:${question.revision}`}
+      key={`${bindingKey}:${question.id}:${question.revision}`}
       question={question}
       failure={failure}
       locale={locale}

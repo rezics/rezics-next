@@ -16,6 +16,7 @@ import {
 } from '../src/features/pages/subject-queries';
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
+const anonymousPersonalScope = { reader: null, admission: 0, view: 'overview', cacheEpoch: 0 } as const;
 
 test('public subject data is read through locale and view keyed public query factories', async () => {
   const queries = [
@@ -39,15 +40,15 @@ test('public subject data is read through locale and view keyed public query fac
 test('personal subject data queries are disabled during server rendering', async () => {
   const queries = [
     subjectLibraryQuery(id, 'en'),
-    subjectReaderQuery(id, 'en'),
+    subjectReaderQuery(id, 'en', anonymousPersonalScope),
     subjectOwnReactionQuery(id, 'en'),
-    subjectOwnRatingQuery(id, 'en'),
+    subjectOwnRatingQuery(id, 'en', anonymousPersonalScope),
   ];
   expect(queries.map((query) => query.queryKey)).toEqual([
     ['subject-library', id, 'en'],
-    ['subject-reader', id, 'en'],
+    ['subject-reader', id, 'en', null, 0, 'overview', 0],
     ['subject-own-reaction', id, 'en'],
-    ['subject-own-rating', id, 'en'],
+    ['subject-own-rating', id, 'en', null, 0, 'overview', 0],
   ]);
   expect(queries.every((query) => query.enabled === false)).toBe(true);
 });
@@ -82,16 +83,26 @@ test('the subject server loader only ensures public reads and personal reads are
   expect(route).toContain('context.queryClient.ensureQueryData(subjectRelationsQuery');
   expect(route).toContain('useSuspenseQuery(subjectPageQuery');
   expect(route).toContain("enabled: session === 'signed-in'");
+  expect(route).toContain('useSubjectPersonalReader');
+  expect(route).toContain("view: 'overview'");
+  expect(route).toContain('includeOwnRating: true');
   expect(route).not.toContain('loadSubjectLibrarySlot(');
   expect(route).not.toContain('loadReader(');
   expect(route).not.toContain('loadSubjectReactions(');
   expect(route).not.toContain('loadSubjectRatings(');
   const view = await Bun.file(join(import.meta.dir, '../src/routes/subjects/$id_.$slug_.$view.tsx')).text();
   expect(view).toMatch(/context\.queryClient\.ensureQueryData\(\s*subjectViewPagesQuery/);
-  expect(view).toContain('subjectReaderQuery');
+  expect(view).toContain('useSubjectPersonalReader');
+  expect(view).toContain('enabled: currentReader');
   expect(view).not.toContain('loadReader(');
   const relations = await Bun.file(join(import.meta.dir, '../src/routes/subjects/$id_.$slug_.relations.tsx')).text();
   expect(relations).toContain('context.queryClient.ensureQueryData(subjectPageQuery');
   expect(relations).toContain('context.queryClient.ensureQueryData(subjectRelationsQuery');
+  expect(relations).toContain('useSubjectPersonalReader');
+  expect(relations).toContain("view: 'relations'");
   expect(relations).not.toContain('loadReader(');
+  const adapter = await Bun.file(join(import.meta.dir, '../src/features/pages/subject-personal-reader.tsx')).text();
+  expect(adapter).toContain('subjectReaderQuery(subjectId, locale, queryScope, transport)');
+  expect(adapter).toContain('subjectOwnRatingQuery(subjectId, locale, queryScope, transport)');
+  expect(adapter).toContain('personalRead.enabled');
 });

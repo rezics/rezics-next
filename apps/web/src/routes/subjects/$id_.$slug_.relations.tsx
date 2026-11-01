@@ -1,9 +1,9 @@
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
+import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
-import { useQuery } from '@tanstack/react-query';
 import { RelationsView } from '../../features/pages/relations-view';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
@@ -22,13 +22,11 @@ import {
   accountHref,
   keepSearch,
   subjectPageQuery,
-  subjectReaderQuery,
   subjectRelationsQuery,
   subjectUrlForView,
   subjectViewPaths,
   subjectViewPagesQuery,
 } from '../../features/pages/subject-queries';
-import { defaultReader } from '../../subject/reader';
 import { m } from '../../paraglide/messages.js';
 import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
 import { subjectHead } from '../../features/pages/subject-head';
@@ -244,11 +242,14 @@ function RelationsRoute() {
   const { state: session } = browserSession;
   const readerKey = subjectReaderPartition(realm, data.reader, browserSession);
   const currentReader = useSubjectReaderRefresh(data.reader, readerKey);
-  const { data: loadedReader } = useQuery({
-    ...subjectReaderQuery(frame.id, getLocale()),
-    enabled: session === 'signed-in',
+  const personal = useSubjectPersonalReader({
+    subjectId: frame.id,
+    locale: getLocale(),
+    view: 'relations',
+    session: browserSession,
+    enabled: currentReader,
   });
-  const reader = loadedReader ?? defaultReader;
+  const reader = personal.reader;
   const { property } = Route.useSearch();
   if (!currentReader) return <PendingPage />;
   const frameElement = (

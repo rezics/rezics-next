@@ -1,6 +1,7 @@
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
+import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { isView, type View } from '@rezics/composition';
 import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
@@ -18,14 +19,11 @@ import {
   canonicalRedirect,
   accountHref,
   keepSearch,
-  subjectReaderQuery,
   subjectUrlForView,
   subjectViewPaths,
   subjectViewPagesQuery,
 } from '../../features/pages/subject-queries';
 import { useSession } from '../../session/query';
-import { useQuery } from '@tanstack/react-query';
-import { defaultReader } from '../../subject/reader';
 import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -220,10 +218,14 @@ function SubjectViewRoute() {
   const { state: session } = browserSession;
   const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
   const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
-  const { data: reader } = useQuery({
-    ...subjectReaderQuery(page.subject!, getLocale()),
-    enabled: session === 'signed-in',
+  const personal = useSubjectPersonalReader({
+    subjectId: page.subject!,
+    locale: getLocale(),
+    view,
+    session: browserSession,
+    enabled: currentReader,
   });
+  const reader = personal.reader;
   const reviewSession = session === 'unknown' ? 'unavailable' : session;
   const nonce = useRouter().options.ssr?.nonce;
   const locale = getLocale();
@@ -237,7 +239,7 @@ function SubjectViewRoute() {
       }
       locale={locale}
       messages={subjectPageMessages()}
-      reader={reader ?? defaultReader}
+      reader={reader}
       {...(type.label ? { typeLabel: type.label } : {})}
       {...(type.ratio ? { ratio: type.ratio } : {})}
       link={SubjectLink}
@@ -262,7 +264,7 @@ function SubjectViewRoute() {
           realm={realm}
           locale={locale}
           link={SubjectLink}
-          reader={reader ?? defaultReader}
+      reader={reader}
           coverLabels={{
             withheld: m.subject_cover_withheld(),
             reveal: m.subject_cover_reveal(),

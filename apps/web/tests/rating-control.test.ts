@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { QUESTION, readOwnRating, type RatingQuestion } from '../src/features/pages/subject-ratings';
+import { QUESTION, preparedRatingReader, readOwnRating, type RatingQuestion, type SubjectOwnRating } from '../src/features/pages/subject-ratings';
+import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
 import {
   applyOptimisticRatingChange,
   RatingControlView,
@@ -20,6 +21,54 @@ const ratingQuestion: RatingQuestion = {
   grain: 'work',
   scale: { min: 0, max: 20, displayStep: 1 },
 };
+
+function personalLease(subjectId = subjectIdValue, locale = 'en'): SubjectPersonalLease {
+  let sequence = 0;
+  let owner = 0;
+  let committed: SubjectOwnRating | undefined;
+  let current = true;
+  const reader = 'reader-a';
+  const scope = { reader, admission: 1, view: 'overview', cacheEpoch: 0 } as const;
+  return {
+    key: JSON.stringify([subjectId, locale, reader, 1, 'overview', 0]),
+    reader,
+    subjectId,
+    locale,
+    view: 'overview',
+    scope,
+    isCurrent: () => current,
+    retire: () => {
+      current = false;
+    },
+    beginRatingWrite: (before) => {
+      if (!current) return null;
+      if (committed === undefined) committed = before;
+      const id = ++sequence;
+      owner = id;
+      const operation: SubjectRatingWriteOperation = {
+        id,
+        sequence: id,
+        ownsCache: () => owner === id,
+        commit: (value) => {
+          committed = value;
+          if (owner === id) owner = 0;
+        },
+        rollback: (fallback) => {
+          if (owner !== id) return null;
+          owner = 0;
+          return committed ?? fallback;
+        },
+        preserveUncertainty: (value) => {
+          committed = value;
+          if (owner === id) owner = 0;
+        },
+      };
+      return operation;
+    },
+  };
+}
+
+const subjectIdValue = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 
 function view(state: RatingControlState, { question = ratingQuestion, pending = false, locale = 'en' } = {}) {
   return renderToStaticMarkup(
@@ -209,6 +258,8 @@ test('a forbidden own-vote read leaves its reserved space without a control', ()
 });
 
 test('a missing own vote is unrated while denied own-vote reads hide the control', async () => {
+  const request = new Request('https://site.example/en/subjects/example', { headers: { authorization: 'Bearer reader' } });
+  const reader = await preparedRatingReader(request, 'Bearer reader');
   const read = async (status: number, units?: number) => {
     const client = {
       subjects: () => ({
@@ -219,27 +270,28 @@ test('a missing own vote is unrated while denied own-vote reads hide the control
     } as never;
     return readOwnRating(
       client,
-      new Request('https://site.example/en/subjects/example', { headers: { authorization: 'Bearer reader' } }),
+      request,
       {},
       subjectId,
     );
   };
 
-  await expect(read(200, 15)).resolves.toEqual({ kind: 'ready', units: 15 });
-  await expect(read(404)).resolves.toEqual({ kind: 'ready', units: null });
-  await expect(read(401)).resolves.toEqual({ kind: 'unavailable' });
-  await expect(read(403)).resolves.toEqual({ kind: 'unavailable' });
+  await expect(read(200, 15)).resolves.toEqual({ reader, kind: 'ready', units: 15 });
+  await expect(read(404)).resolves.toEqual({ reader, kind: 'ready', units: null });
+  await expect(read(401)).resolves.toEqual({ reader, kind: 'unavailable' });
+  await expect(read(403)).resolves.toEqual({ reader, kind: 'unavailable' });
 });
 
 test('writes update the personal query optimistically, carry idempotency keys and restore failed values', async () => {
   const client = new QueryClient();
-  const queryKey = subjectOwnRatingQuery(subjectId, 'en').queryKey;
-  client.setQueryData(queryKey, { kind: 'ready', units: 8 } as const);
+  const binding = personalLease(subjectId, 'en');
+  const queryKey = subjectOwnRatingQuery(subjectId, 'en', binding.scope).queryKey;
+  client.setQueryData(queryKey, { reader: binding.reader, kind: 'ready', units: 8 } as const);
 
   let finish!: (ok: boolean) => void;
-  let written: { units: number | null; idempotencyKey: string } | undefined;
+  let written: { units: number | null; idempotencyKey: string; expectedReader: string } | undefined;
   let failures = 0;
-  const write = (input: { units: number | null; idempotencyKey: string }) => {
+  const write = (input: { units: number | null; idempotencyKey: string; expectedReader: string }) => {
     written = input;
     return new Promise<boolean>((resolve) => {
       finish = resolve;
@@ -249,17 +301,18 @@ test('writes update the personal query optimistically, carry idempotency keys an
     queryClient: client,
     subjectId,
     locale: 'en',
+    binding,
     units: 15,
     write,
     onFailure: () => failures++,
   });
 
-  expect(client.getQueryData(queryKey)).toEqual({ kind: 'ready', units: 15 });
+  expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: 15 });
   finish(false);
   await expect(operation).resolves.toBe(false);
-  expect(written).toMatchObject({ units: 15 });
+  expect(written).toMatchObject({ units: 15, expectedReader: binding.reader });
   expect(written?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
-  expect(client.getQueryData(queryKey)).toEqual({ kind: 'ready', units: 8 });
+  expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: 8 });
   expect(failures).toBe(1);
 
   await client.cancelQueries();
@@ -267,10 +320,11 @@ test('writes update the personal query optimistically, carry idempotency keys an
 
 test('setting, changing and clearing each issue one bounded write', async () => {
   const client = new QueryClient();
-  const queryKey = subjectOwnRatingQuery(subjectId, 'en').queryKey;
-  client.setQueryData(queryKey, { kind: 'ready', units: null } as const);
-  const writes: { units: number | null; idempotencyKey: string }[] = [];
-  const write = async (input: { units: number | null; idempotencyKey: string }) => {
+  const binding = personalLease(subjectId, 'en');
+  const queryKey = subjectOwnRatingQuery(subjectId, 'en', binding.scope).queryKey;
+  client.setQueryData(queryKey, { reader: binding.reader, kind: 'ready', units: null } as const);
+  const writes: { units: number | null; idempotencyKey: string; expectedReader: string }[] = [];
+  const write = async (input: { units: number | null; idempotencyKey: string; expectedReader: string }) => {
     writes.push(input);
     return true;
   };
@@ -280,6 +334,7 @@ test('setting, changing and clearing each issue one bounded write', async () => 
       queryClient: client,
       subjectId,
       locale: 'en',
+      binding,
       units,
       write,
       onFailure: () => {},
@@ -288,6 +343,6 @@ test('setting, changing and clearing each issue one bounded write', async () => 
   expect(writes.map(({ units }) => units)).toEqual([15, 18, null]);
   expect(new Set(writes.map(({ idempotencyKey }) => idempotencyKey)).size).toBe(3);
   expect(writes.every(({ idempotencyKey }) => /^[0-9a-f-]{36}$/i.test(idempotencyKey))).toBe(true);
-  expect(client.getQueryData(queryKey)).toEqual({ kind: 'ready', units: null });
+  expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: null });
   await client.cancelQueries();
 });

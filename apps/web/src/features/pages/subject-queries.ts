@@ -5,13 +5,14 @@ import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { personalRead, publicRead } from '../../kernel/query';
 import { loadSubjectLibrarySlot, type SubjectLabelUndo } from '../../library/subject-slot';
+import { loadSettingsPage } from '../../settings/preferences';
 import type { SessionEnv } from '../../session/client';
-import { loadReader } from '../../subject/load-reader';
+import { defaultReader, type Reader } from '../../subject/reader';
 import type { typeFrame as TypeFrame } from '../../subject/definitions';
 import { validatePageRealm, validatePageNode, validateViewCursor } from './view-cursor';
 import { loadSubjectPage, PageReadError } from './subject';
 import { loadContextSubject } from './context-subject';
-import { readRatings, readOwnRating } from './subject-ratings';
+import { readRatings, readOwnRating, type SubjectOwnRating } from './subject-ratings';
 import { readReactionCounts, readOwnReaction } from './subject-reactions';
 import { communityOverview, withComposedCommunity } from './subject-community';
 import { projectShareCardPage } from '../../media/share-card-page';
@@ -291,7 +292,19 @@ const readSubjectReader = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     const { env } = await import('cloudflare:workers');
     setResponseHeader('cache-control', 'private, no-store');
-    return loadReader((await subjectKernelClient(data.locale)).client, getRequest(), env as Partial<SessionEnv>);
+    const settings = await loadSettingsPage(
+      (await subjectKernelClient(data.locale)).client,
+      getRequest(),
+      env as Partial<SessionEnv>,
+    );
+    if (!settings.signedIn) return { reader: null, preferences: defaultReader };
+    const preferences = 'preferences' in settings ? settings.preferences : undefined;
+    return {
+      reader: settings.accountId ?? null,
+      preferences: preferences
+        ? { spoilerLevel: preferences.spoilerLevel, suitability: preferences.suitability }
+        : defaultReader,
+    };
   });
 
 const readSubjectReactions = createServerFn({ method: 'GET', strict: false })
@@ -356,10 +369,12 @@ const readSubjectOwnRating = createServerFn({ method: 'GET', strict: false })
       typeof value.id !== 'string' ||
       value.id.length > 128 ||
       typeof value.locale !== 'string' ||
-      value.locale.length > 35
+      value.locale.length > 35 ||
+      (value.expectedReader !== null &&
+        (typeof value.expectedReader !== 'string' || !value.expectedReader || value.expectedReader.length > 128))
     )
       throw notFound();
-    return { id: value.id, locale: value.locale };
+    return { id: value.id, locale: value.locale, expectedReader: value.expectedReader as string | null };
   })
   .handler(async ({ data }) => {
     const { env } = await import('cloudflare:workers');
@@ -369,8 +384,55 @@ const readSubjectOwnRating = createServerFn({ method: 'GET', strict: false })
       getRequest(),
       env as Partial<SessionEnv>,
       data.id,
+      data.expectedReader,
     );
   });
+
+export type SubjectReaderObservation = { reader: string | null; preferences: Reader };
+
+export type SubjectPersonalQueryScope = {
+  reader: string | null;
+  admission: number;
+  view: string;
+  cacheEpoch: number;
+  errorEpoch?: number;
+  scopeKey?: string;
+  getWriteRevision?: () => number;
+  hasLiveObserver?: () => boolean;
+  isCurrent?: () => boolean;
+  recordRatingRead?: (rating: SubjectOwnRating) => void;
+};
+
+export type SubjectPersonalReadTransport = {
+  readReader: (input: { id: string; locale: string }) => Promise<SubjectReaderObservation>;
+  readOwnRating: (input: { id: string; locale: string; expectedReader: string | null }) => Promise<SubjectOwnRating>;
+};
+
+const defaultSubjectPersonalTransport: SubjectPersonalReadTransport = {
+  readReader: (data) => readSubjectReader({ data }),
+  readOwnRating: (data) => readSubjectOwnRating({ data }),
+};
+
+const emptySubjectPersonalScope: SubjectPersonalQueryScope = {
+  reader: null,
+  admission: 0,
+  view: 'overview',
+  cacheEpoch: 0,
+};
+
+function subjectPersonalMeta(
+  id: string,
+  locale: string,
+  scope: SubjectPersonalQueryScope,
+  kind: 'reader' | 'own-rating',
+) {
+  return {
+    subjectPersonalScope: scope.scopeKey ?? JSON.stringify([id, locale, scope.reader, scope.admission, scope.view]),
+    subjectPersonalCacheEpoch: scope.cacheEpoch,
+    subjectPersonalErrorEpoch: scope.errorEpoch ?? 0,
+    subjectPersonalKind: kind,
+  };
+}
 
 const key = (kind: string, id: string, locale: string, view?: string) =>
   [kind, id, locale, ...(view ? [view] : [])] as const;
@@ -481,11 +543,31 @@ export const subjectLibraryQuery = (
     retry: false,
   });
 
-export const subjectReaderQuery = (id: string, locale: string) =>
+export const subjectReaderQuery = (
+  id: string,
+  locale: string,
+  scope: SubjectPersonalQueryScope = emptySubjectPersonalScope,
+  transport: SubjectPersonalReadTransport = defaultSubjectPersonalTransport,
+) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['subject-reader', id, locale] as const,
-    queryFn: () => readSubjectReader({ data: { id, locale } }),
+    queryKey: [
+      'subject-reader',
+      id,
+      locale,
+      scope.reader,
+      scope.admission,
+      scope.view,
+      scope.cacheEpoch,
+    ] as const,
+    meta: subjectPersonalMeta(id, locale, scope, 'reader'),
+    queryFn: async () => {
+      const result = await transport.readReader({ id, locale });
+      if ((scope.isCurrent && !scope.isCurrent()) || (scope.hasLiveObserver && !scope.hasLiveObserver()))
+        throw new Error('Subject preference observation retired');
+      if (result.reader !== scope.reader) throw new Error('Subject preference reader changed');
+      return result;
+    },
     retry: false,
   });
 
@@ -511,10 +593,29 @@ export const subjectOwnReactionQuery = (id: string, locale: string) =>
     retry: false,
   });
 
-export const subjectOwnRatingQuery = (id: string, locale: string) =>
+export const subjectOwnRatingQuery = (
+  id: string,
+  locale: string,
+  scope: SubjectPersonalQueryScope = emptySubjectPersonalScope,
+  transport: SubjectPersonalReadTransport = defaultSubjectPersonalTransport,
+) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['subject-own-rating', id, locale] as const,
-    queryFn: () => readSubjectOwnRating({ data: { id, locale } }),
+    queryKey: ['subject-own-rating', id, locale, scope.reader, scope.admission, scope.view, scope.cacheEpoch] as const,
+    meta: subjectPersonalMeta(id, locale, scope, 'own-rating'),
+    queryFn: async (context) => {
+      const writeRevision = scope.getWriteRevision?.() ?? 0;
+      const result = await transport.readOwnRating({ id, locale, expectedReader: scope.reader });
+      if ((scope.isCurrent && !scope.isCurrent()) || (scope.hasLiveObserver && !scope.hasLiveObserver()))
+        throw new Error('Subject rating observation retired');
+      if (scope.getWriteRevision && scope.getWriteRevision() !== writeRevision) {
+        const current = context.client.getQueryData<SubjectOwnRating>(context.queryKey);
+        if (current !== undefined) return current;
+        throw new Error('Subject rating read superseded by a write');
+      }
+      if (result.reader !== scope.reader) throw new Error('Subject rating reader changed');
+      scope.recordRatingRead?.(result);
+      return result;
+    },
     retry: false,
   });

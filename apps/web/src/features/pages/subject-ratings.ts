@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
@@ -78,7 +78,18 @@ export async function readRatingQuestion(client: KernelClient): Promise<RatingQu
   return result.status === 200 && result.data ? result.data : null;
 }
 
-export type SubjectOwnRating = { kind: 'ready'; units: number | null } | { kind: 'unavailable' };
+export type SubjectOwnRating =
+  | { reader: string | null; kind: 'ready'; units: number | null }
+  | { reader: string | null; kind: 'unavailable' };
+
+/** Identify the credential prepared for this request without exposing the bearer in browser cache keys. */
+export async function preparedRatingReader(request: Request, authorization: string | null): Promise<string | null> {
+  const subject = sessionSubject(request);
+  if (subject) return subject;
+  if (!authorization) return null;
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(authorization)));
+  return `credential:${Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
 
 export async function readRatings(
   client: KernelClient,
@@ -139,20 +150,24 @@ export async function readOwnRating(
   request: Request,
   env: Partial<SessionEnv>,
   id: string,
+  expectedReader?: string | null,
 ): Promise<SubjectOwnRating> {
+  let reader: string | null = null;
   try {
     await prepareSession(request, env);
     const authorization = viewerCredential(request);
-    if (!authorization) return { kind: 'unavailable' };
+    reader = await preparedRatingReader(request, authorization);
+    if (!authorization || (expectedReader !== undefined && reader !== expectedReader))
+      return { reader, kind: 'unavailable' };
     const result = await client
       .subjects({ id })
       .ratings({ questionId: QUESTION })
       .vote.get({ headers: { authorization } });
-    if (result.status === 200) return { kind: 'ready', units: result.data?.units ?? null };
-    if (result.status === 404) return { kind: 'ready', units: null };
-    return { kind: 'unavailable' };
+    if (result.status === 200) return { reader, kind: 'ready', units: result.data?.units ?? null };
+    if (result.status === 404) return { reader, kind: 'ready', units: null };
+    return { reader, kind: 'unavailable' };
   } catch {
-    return { kind: 'unavailable' };
+    return { reader, kind: 'unavailable' };
   }
 }
 

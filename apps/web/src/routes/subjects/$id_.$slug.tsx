@@ -14,11 +14,11 @@ import { subjectTabs } from '../../features/pages/views';
 import { SubjectHeaderActions } from '../../features/pages/subject-reactions-view';
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { RatingControlContext, RatingsContext } from '../../features/pages/subject-ratings-view';
+import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { postSubjectRatingForm } from '../../features/pages/rating-actions';
 import {
   subjectFrameQuery,
   subjectLibraryQuery,
-  subjectOwnRatingQuery,
   subjectOwnReactionQuery,
   subjectCanonicalQuery,
   subjectRequestReader,
@@ -28,7 +28,6 @@ import {
   keepSearch,
   subjectPageQuery,
   subjectRatingQuery,
-  subjectReaderQuery,
   subjectRelationsQuery,
   subjectReactionsQuery,
   subjectUrlForView,
@@ -334,9 +333,17 @@ function SubjectRoute() {
     ...subjectLibraryQuery(id, locale, slot === 'collections', labelResult, labelUndo, subjectPageType(page)),
     enabled: session === 'signed-in',
   });
-  const { data: reader } = useQuery({ ...subjectReaderQuery(id, locale), enabled: session === 'signed-in' });
+  const personal = useSubjectPersonalReader({
+    subjectId: id,
+    locale,
+    view: 'overview',
+    session: browserSession,
+    enabled: currentReader,
+    includeOwnRating: true,
+  });
   const { data: ownReaction } = useQuery({ ...subjectOwnReactionQuery(id, locale), enabled: session === 'signed-in' });
-  const { data: ownRating } = useQuery({ ...subjectOwnRatingQuery(id, locale), enabled: session === 'signed-in' });
+  const reader = personal.reader;
+  const ownRating = personal.ownRating;
   const reactions = publicReactions
     ? { ...publicReactions, value: session === 'signed-in' ? (ownReaction ?? null) : null }
     : null;
@@ -354,6 +361,7 @@ function SubjectRoute() {
         returnTo,
         session,
         own: ownRating,
+        ...(personal.binding ? { binding: personal.binding } : {}),
         ...(ratingFailure ? { failure: true } : {}),
       }}
     >
@@ -363,7 +371,7 @@ function SubjectRoute() {
           curation={realm ? undefined : <SubjectCandidateCuration id={id} locale={locale} />}
           locale={getLocale()}
           messages={subjectPageMessages()}
-          {...(reader ? { reader } : {})}
+          reader={reader}
           {...(frame.label ? { typeLabel: frame.label } : {})}
           {...(frame.ratio ? { ratio: frame.ratio } : {})}
           relations={relations}

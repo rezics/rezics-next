@@ -4,6 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { SubjectRatingControl } from './rating-control';
 import type { SubjectOwnRating } from './subject-ratings';
+import type { SubjectPersonalLease } from './subject-personal-reader';
 import { displayRating, GLOBAL, PUBLIC_RATING_SCALE, type Figure, type Ratings } from './subject-ratings';
 import { PublicRatingFigure } from './public-rating-figure';
 import { RatingDistribution } from './rating-distribution';
@@ -22,6 +23,7 @@ export const RatingControlContext = createContext<{
   returnTo: string;
   session: 'unknown' | 'unavailable' | 'signed-out' | 'signed-in';
   own: SubjectOwnRating | undefined;
+  binding?: SubjectPersonalLease;
   failure?: boolean;
 } | null>(null);
 
@@ -123,6 +125,7 @@ export function RatingsView({
             question={data.question}
             locale={control.locale}
             own={control.own}
+            binding={control.binding}
             returnTo={control.returnTo}
             session={control.session}
             subjectId={control.subjectId}

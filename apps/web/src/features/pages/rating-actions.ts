@@ -3,11 +3,16 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
-import { writeOwnRating } from './subject-ratings';
+import { preparedRatingReader, writeOwnRating } from './subject-ratings';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function validateChange(input: unknown): { subjectId: string; units: number | null; idempotencyKey: string } {
+function validateChange(input: unknown): {
+  subjectId: string;
+  units: number | null;
+  idempotencyKey: string;
+  expectedReader: string;
+} {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid rating change');
   const value = input as Record<string, unknown>;
   if (
@@ -15,10 +20,32 @@ function validateChange(input: unknown): { subjectId: string; units: number | nu
     !uuid.test(value.subjectId) ||
     (value.units !== null && (typeof value.units !== 'number' || !Number.isSafeInteger(value.units))) ||
     typeof value.idempotencyKey !== 'string' ||
-    !uuid.test(value.idempotencyKey)
+    !uuid.test(value.idempotencyKey) ||
+    typeof value.expectedReader !== 'string' ||
+    !value.expectedReader ||
+    value.expectedReader.length > 128
   )
     throw new Error('Invalid rating change');
-  return value as { subjectId: string; units: number | null; idempotencyKey: string };
+  return value as { subjectId: string; units: number | null; idempotencyKey: string; expectedReader: string };
+}
+
+/** Apply one enhanced vote only when the request's prepared credential matches its originating reader. */
+export async function writeSubjectRatingForCurrentReader(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ReturnType<typeof validateChange>,
+): Promise<boolean> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    if (!authorization) return false;
+    const reader = await preparedRatingReader(request, authorization);
+    if (reader !== input.expectedReader) return false;
+    return writeOwnRating(client, input.subjectId, authorization, input.units, input.idempotencyKey);
+  } catch {
+    return false;
+  }
 }
 
 /** The enhanced rating control writes through the session held by the Worker. */
@@ -30,10 +57,7 @@ export const changeSubjectRating = createServerFn({ method: 'POST' })
     try {
       const { env } = await import('cloudflare:workers');
       const { kernelClient } = await import('../../kernel/client');
-      await prepareSession(request, env as Partial<SessionEnv>);
-      const authorization = viewerCredential(request);
-      if (!authorization) return false;
-      return writeOwnRating(kernelClient(), data.subjectId, authorization, data.units, data.idempotencyKey);
+      return writeSubjectRatingForCurrentReader(kernelClient(), request, env as Partial<SessionEnv>, data);
     } catch {
       return false;
     }
