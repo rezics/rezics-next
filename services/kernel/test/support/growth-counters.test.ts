@@ -114,6 +114,8 @@ test('counted medians require complete matching non-negative safe-integer repeti
   expect(() => medianCounted([{ examined: 1 }, { rows: 2 }])).toThrow(/missing or mismatched unit names/);
   expect(() => medianCounted([{ examined: -1 }])).toThrow(/non-negative safe integer/);
   expect(() => medianCounted([{ examined: Number.NaN }])).toThrow(/non-negative safe integer/);
+  const sparseRuns = [{ examined: 1 }, , { examined: 3 }] as Array<{ examined: number }>;
+  expect(() => medianCounted(sparseRuns)).toThrow(/missing item 2/);
   expect(medianCounted([{ examined: 1 }, { examined: 2 }])).toEqual({ examined: 1.5 });
   expect(countedSample([{ examined: 1 }, { examined: 2 }])).toEqual({
     examined: { value: 1.5, repetitions: [1, 2] },

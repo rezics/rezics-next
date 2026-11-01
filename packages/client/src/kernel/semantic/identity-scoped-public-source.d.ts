@@ -43,4 +43,10 @@ export declare const createPublicIdentitySourceCapture: CreatePublicIdentitySour
 /** Native committed capture + current local Source owner, on the caller's own command client. */
 export declare function verifyPublicIdentitySourceCapture(tx: CommandTransaction, capture: PublicIdentitySourceCapture): Promise<boolean>;
 export declare function verifyPublicIdentitySourceCaptureLocator(tx: CommandTransaction, locator: Locator): Promise<boolean>;
+/** Native receiving uses only persisted Semantic selectors on the actual shared command. */
+export declare function lockPublicIdentityOutputCaptureDisposition(tx: CommandTransaction, selection: import('../library/native-public-output-contract.ts').PublicOutputDispositionSelection, context: import('../library/native-public-output-contract.ts').PublicOutputCommandContext): Promise<Readonly<{
+    status: 'changed' | 'unavailable';
+    dependency?: string;
+    work: import("../library/collection-source.ts").WorkReceipt;
+}> | import("../library/native-public-output-contract.ts").LockedPublicOutputDisposition>;
 export {};

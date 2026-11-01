@@ -1,12 +1,14 @@
-import { type Pool } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
 import { type OperationalTransaction } from '../command/operational.ts';
 import { type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import { NativeCollectionWork } from './collection-source-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOrdinalKey } from './collection-source-order.ts';
+export { readNativePublicCollectionOutput, lockNativePublicCollectionOutput, bindAndHoldNativePublicCollectionOutput, revalidateNativePublicCollectionOutputHold, transferNativePublicCollectionOutputHold, releaseNativePublicCollectionOutputHold, } from './native-public-output-custody.ts';
 /** Structural alias of the existing raw owner key; no canonical-order or Access claim. */
 export type CanonicalRangeKey = CanonicalRawKey;
 type Options = {
@@ -17,6 +19,7 @@ type Options = {
     /** Original native creation command; independent of mechanical work authority. */
     commandTx?: CommandTransaction;
 };
+type QueryClient = Pick<PoolClient, 'query'>;
 type Ref = {
     route: number;
     collectionId: string;
@@ -102,6 +105,8 @@ export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref
 } & {
     work: WorkReceipt;
 }>;
+/** Public-only observation on the caller's already metered snapshot/client. */
+export declare function observeNativePublicCollectionOutput(client: QueryClient, ref: Ref, work: NativeCollectionWork): Promise<NativeCollectionMetadata | null>;
 export declare function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options): Promise<{
     metadata: Readonly<Ref & {
         curatorAccountId: string | null;
@@ -185,4 +190,3 @@ export declare function probeNativeCollectionOriginal(pool: Pool, metadata: Nati
     keyHint?: CanonicalRangeKey;
     after?: CanonicalRangeKey | null;
 }): Promise<NativeCollectionProbe>;
-export {};

@@ -147,7 +147,7 @@ test('series classification refuses overflowed intervals, coordinates and regres
     /uncertainty upper bound/,
   );
   expect(() => classifySeries(series([Number.MIN_VALUE, 1, 2], [1, 1, 1]), 'linear')).toThrow(
-    /Linear scale (difference|coordinate)/,
+    /Linear scale (ratio|coordinate)/,
   );
   expect(() =>
     classifySeries(
@@ -155,6 +155,17 @@ test('series classification refuses overflowed intervals, coordinates and regres
       'linear',
     ),
   ).toThrow(/Regression slope/);
+  const sparseRepetitions = [1, , 1] as number[];
+  expect(() =>
+    classifySeries(
+      [
+        { scale: 1, repetitions: [1], uncertainty: 0 },
+        { scale: 4, repetitions: sparseRepetitions, uncertainty: 0 },
+        { scale: 16, repetitions: [1], uncertainty: 0 },
+      ],
+      'constant',
+    ),
+  ).toThrow(/missing item 2/);
 });
 
 test('finite uncertainty keeps legitimate unbounded slope ranges feasible', () => {

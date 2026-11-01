@@ -1,4 +1,11 @@
-import { checkedAdd, checkedDivide, checkedMultiply, checkedSubtract, requireNonNegativeFiniteNumber } from './growth-numeric.ts';
+import {
+  checkedAdd,
+  checkedDivide,
+  checkedMultiply,
+  checkedSubtract,
+  requireDenseArray,
+  requireNonNegativeFiniteNumber,
+} from './growth-numeric.ts';
 import type { Bound, Slack } from './growth-bound.ts';
 
 export type CountedValues = Readonly<Record<string, number>>;
@@ -84,12 +91,13 @@ function rawMedian(values: readonly number[], name: string): number {
 }
 
 export function medianCounted(repetitions: readonly CountedValues[]): CountedValues {
-  if (!Array.isArray(repetitions)) throw new TypeError('Counted repetitions must be an array');
+  requireDenseArray(repetitions, 'Counted repetitions');
   if (repetitions.length === 0) return {};
   const names = Object.keys(repetitions[0]!);
   if (names.some((name) => !name)) throw new TypeError('Counted unit names must not be empty');
   const expected = new Set(names);
-  repetitions.forEach((run, index) => {
+  for (let index = 0; index < repetitions.length; index += 1) {
+    const run = repetitions[index];
     if (!isRecord(run)) throw new TypeError(`Counted repetition ${index + 1} must be an object`);
     const current = Object.keys(run);
     if (current.length !== expected.size || current.some((name) => !expected.has(name)))
@@ -97,7 +105,7 @@ export function medianCounted(repetitions: readonly CountedValues[]): CountedVal
     for (const [name, value] of Object.entries(run))
       if (!name || typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
         throw new TypeError(`Counted unit ${name || '<empty>'} at repetition ${index + 1} must be a non-negative safe integer`);
-  });
+  }
   return Object.fromEntries(
     names.map((name) => [name, rawMedian(repetitions.map((run) => run[name]!), name)]),
   );
@@ -140,6 +148,7 @@ export function countedViolations(
   const names = countedNames(check);
   if (names.length === 0) return [];
   if (!Array.isArray(samples)) throw new TypeError('Counted samples must be an array');
+  requireDenseArray(samples, 'Counted samples');
   validateCountedScaleSeries(samples.map(({ scale }) => scale));
 
   let repetitionCount: number | undefined;

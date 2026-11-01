@@ -2,6 +2,7 @@ import {
   checkedAdd,
   checkedMultiply,
   checkedSubtract,
+  requireDenseArray,
   requireNonNegativeFiniteNumber,
   sumFinite,
 } from './growth-numeric.ts';
@@ -485,8 +486,10 @@ function addRelation(
 
 function validateByteMeasurements(values: readonly number[] | undefined, expected: number, label: string): void {
   if (values === undefined) return;
+  requireDenseArray(values, label);
   if (values.length !== expected) throw new TypeError(`${label} must have one value per statement`);
-  values.forEach((value, index) => requireNonNegativeFiniteNumber(value, `${label} at index ${index}`));
+  for (let index = 0; index < values.length; index += 1)
+    requireNonNegativeFiniteNumber(values[index], `${label} at index ${index}`);
 }
 
 export function costOf(capture: Capture): Cost {
@@ -709,6 +712,7 @@ function validateCostEvidence(cost: Cost, index: number): void {
 }
 
 export function medianCost(costs: readonly Cost[]): Cost {
+  requireDenseArray(costs, 'Cost repetitions');
   if (costs.length === 0) throw new RangeError('Cannot take the median of no costs');
   costs.forEach(validateCostEvidence);
   const blocks = lowerMedian(costs.map((cost) => cost.blocks));

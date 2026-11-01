@@ -1,10 +1,11 @@
 import type { CommandTransaction } from '../command/command.ts';
 import type { NativeSourceCapture, NativeSourceFrontier, NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { NativePublicOutputIdentity } from '../library/native-source-output-types.ts';
-import type { WorkAllowance } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityReceivingRecord, IdentityReceivingSelection } from './identity-receiving-effects-types.ts';
 import type { NativePublicSource } from './public-filter-source-binding.ts';
+import type { PublicIdentityOutputCapture } from './identity-public-output-types.ts';
 import type { PublicIdentitySourceCapture } from './identity-scoped-public-source.ts';
 export type IdentityScopeLibraryIdentity = NativeSourceIdentity | NativePublicOutputIdentity;
 export type IdentityScopeLibraryCapture = Omit<NativeSourceCapture, 'identity'> & Readonly<{
@@ -27,6 +28,8 @@ export type IdentityScopeWork = Readonly<{
     points: number;
     statements: number;
     bytes: number;
+    /** Complete eight-axis debit for the explicit public-output branch, instead of its legacy projection. */
+    outputWork?: WorkReceipt;
 }>;
 export type IdentityScopeFailure = Readonly<{
     status: 'unavailable' | 'stale';
@@ -41,6 +44,10 @@ export type IdentityScopeCapture = Readonly<{
 }> | Readonly<{
     kind: 'public';
     capture: PublicIdentitySourceCapture;
+}> | Readonly<{
+    kind: 'public-output';
+    capture: PublicIdentityOutputCapture;
+    allowance: WorkAllowance;
 }>;
 export type IdentityScopeRegistration = Readonly<{
     key: IdentityScopeKey;
@@ -94,6 +101,8 @@ export type IdentityScopeRevalidateInput = Readonly<{
     key: IdentityScopeKey;
     expected: IdentityScopeObservation;
     deadline: number;
+    /** Required for public-output current validation; transferred from the caller's existing frame. */
+    allowance?: WorkAllowance;
     /** Optional source-local command; never opens a foreign connection while this is held. */
     tx?: CommandTransaction;
 }>;

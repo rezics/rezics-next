@@ -1,6 +1,9 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly 'com.rezics.semantic.public-output.capture.v1': Type.TObject<{
+        captureId: Type.TString;
+    }>;
     readonly "com.rezics.definitions.catalogue.artifact.v1": Type.TObject<{
         digest: Type.TString;
         kind: Type.TUnion<Type.TLiteral<string>[]>;

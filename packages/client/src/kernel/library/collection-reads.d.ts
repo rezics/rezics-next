@@ -77,10 +77,7 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         next: string | null;
     }>;
     readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<{
-        members: {
-            kind: 'dynamic';
-            subjectId: string;
-        }[];
+        members: import("./builtin-runtime.ts").DynamicMemberView[];
         next: string | null;
     } | {
         preparing: true;

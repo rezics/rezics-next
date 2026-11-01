@@ -1,4 +1,11 @@
-import { checkedAdd, checkedDivide, checkedMultiply, checkedSubtract, requireNonNegativeFiniteNumber } from './growth-numeric.ts';
+import {
+  checkedAdd,
+  checkedDivide,
+  checkedMultiply,
+  checkedSubtract,
+  requireDenseArray,
+  requireNonNegativeFiniteNumber,
+} from './growth-numeric.ts';
 
 export type Metric = 'rows' | 'blocks' | 'statements';
 export type ByteMetric = 'requestBytes' | 'responseBytes';
@@ -67,6 +74,7 @@ export class GrowthEvidenceError extends Error {
 const METRICS: readonly Metric[] = ['rows', 'blocks', 'statements'];
 
 function validateSamples(samples: readonly GrowthSample[]): void {
+  requireDenseArray(samples, 'Growth samples');
   if (samples.length < 3 || samples.length > 5) throw new TypeError('Growth checks require three to five samples');
   const scales = samples.map(({ scale }) => scale);
   if (
@@ -111,6 +119,7 @@ function validateSamples(samples: readonly GrowthSample[]): void {
     }
     if (sample.repetitions !== undefined) {
       if (!Array.isArray(sample.repetitions)) throw new TypeError('Growth repetitions must be an array');
+      requireDenseArray(sample.repetitions, 'Growth repetitions');
       sample.repetitions.forEach((repetition, index) => {
         if (typeof repetition !== 'object' || repetition === null)
           throw new TypeError(`Growth repetition ${index} must be an object`);

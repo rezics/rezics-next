@@ -4,6 +4,7 @@ import {
   checkedMultiply,
   checkedMultiplyDivide,
   checkedSubtract,
+  requireDenseArray,
   requireNonNegativeFiniteNumber,
 } from './growth-numeric.ts';
 
@@ -56,6 +57,7 @@ function validatePoints(points: readonly SeriesPoint[], bound: GrowthModelBound)
   if (bound !== 'constant' && bound !== 'logarithmic' && bound !== 'linear')
     throw new TypeError(`Unknown growth bound: ${String(bound)}`);
   if (points.length < 3) throw new TypeError('Growth classification requires at least three scales');
+  requireDenseArray(points, 'Growth points');
 
   let previousScale = 0;
   for (const [index, point] of points.entries()) {
@@ -66,9 +68,12 @@ function validatePoints(points: readonly SeriesPoint[], bound: GrowthModelBound)
     previousScale = point.scale;
     if (!Array.isArray(point.repetitions) || point.repetitions.length === 0)
       throw new TypeError('Each scale requires at least one repetition');
-    point.repetitions.forEach((value, repetition) =>
-      requireNonNegativeFiniteNumber(value, `Repetition ${repetition + 1} at scale ${point.scale}`),
-    );
+    requireDenseArray(point.repetitions, `Repetitions at scale ${point.scale}`);
+    for (let repetition = 0; repetition < point.repetitions.length; repetition += 1)
+      requireNonNegativeFiniteNumber(
+        point.repetitions[repetition],
+        `Repetition ${repetition + 1} at scale ${point.scale}`,
+      );
     requireNonNegativeFiniteNumber(point.uncertainty, `Uncertainty at scale ${point.scale}`);
   }
 }
@@ -82,7 +87,7 @@ function familyCoordinates(points: readonly SeriesPoint[], family: GrowthFamily)
       break;
     case 'logarithmic':
       coordinates = points.map(({ scale }) => {
-        const difference = checkedSubtract(scale, firstScale, 'Logarithmic scale difference');
+        const difference = scale - firstScale;
         const relativeDifference = difference / firstScale;
         const coordinate = Number.isFinite(relativeDifference) && (relativeDifference !== 0 || difference === 0)
           ? Math.log1p(relativeDifference)
@@ -92,9 +97,13 @@ function familyCoordinates(points: readonly SeriesPoint[], family: GrowthFamily)
       });
       break;
     case 'linear':
-      coordinates = points.map(({ scale }) =>
-        checkedDivide(checkedSubtract(scale, firstScale, 'Linear scale difference'), firstScale, 'Linear scale coordinate'),
-      );
+      coordinates = points.map(({ scale }) => {
+        const ratio = checkedDivide(scale, firstScale, 'Linear scale ratio');
+        const coordinate = ratio - 1;
+        if (!Number.isFinite(coordinate) || (scale > firstScale && coordinate === 0))
+          throw new TypeError('Linear scale coordinate is not representable');
+        return coordinate;
+      });
       break;
   }
   if (family !== 'constant' && coordinates.some((coordinate, index) => index > 0 && coordinate <= coordinates[index - 1]!))

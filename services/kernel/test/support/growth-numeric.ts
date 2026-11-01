@@ -9,6 +9,12 @@ export function requireNonNegativeFiniteNumber(value: unknown, label: string): a
   if (value < 0) throw new TypeError(`${label} must be non-negative`);
 }
 
+export function requireDenseArray(values: readonly unknown[], label: string): void {
+  if (!Array.isArray(values)) throw new TypeError(`${label} must be an array`);
+  for (let index = 0; index < values.length; index += 1)
+    if (!Object.hasOwn(values, index)) throw new TypeError(`${label} is missing item ${index + 1}`);
+}
+
 function finiteResult(value: number, label: string): number {
   if (!Number.isFinite(value)) throw new TypeError(`${label} is not representable as a finite number`);
   return value;
@@ -84,5 +90,6 @@ export function checkedMultiplyDivide(a: number, b: number, c: number, label: st
 }
 
 export function sumFinite(values: readonly number[], label: string): number {
+  requireDenseArray(values, label);
   return values.reduce((sum, value) => checkedAdd(sum, value, label), 0);
 }

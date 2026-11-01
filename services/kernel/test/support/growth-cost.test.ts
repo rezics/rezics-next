@@ -484,6 +484,42 @@ test('plan extraction refuses overflow in row, block, relation and CTE accumulat
       ],
     }),
   ).toThrow(/Total background examined rows/);
+  expect(() =>
+    costOf({
+      statements: [],
+      plans: [],
+      backgroundPlans: [
+        { Plan: seqPlan(0, Number.MAX_VALUE) },
+        { Plan: seqPlan(0, Number.MAX_VALUE) },
+      ],
+    }),
+  ).toThrow(/Total background blocks/);
+  const producer = (child?: Record<string, unknown>) => ({
+    'Node Type': 'Result',
+    'Subplan Name': 'CTE items',
+    'Actual Rows': 0,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': Number.MAX_VALUE,
+    'Shared Read Blocks': 0,
+    ...(child === undefined ? {} : { Plans: [child] }),
+  });
+  expect(() =>
+    costOf({
+      statements: [],
+      plans: [
+        {
+          Plan: {
+            'Node Type': 'Result',
+            'Actual Rows': 0,
+            'Actual Loops': 1,
+            'Shared Hit Blocks': Number.MAX_VALUE,
+            'Shared Read Blocks': 0,
+            Plans: [producer(producer())],
+          },
+        },
+      ],
+    }),
+  ).toThrow(/Inclusive hit blocks for CTE items/);
 });
 
 test('catalog filtering cannot hide malformed physical plan measurements', () => {
@@ -526,6 +562,10 @@ test('byte aggregation rejects non-representable totals and preserves absent opt
       backgroundResponseBytes: [Number.MAX_VALUE, Number.MAX_VALUE],
     }),
   ).toThrow(/Background response bytes/);
+  const sparseBytes = [1, , 3] as number[];
+  expect(() =>
+    costOf({ statements: ['select 1', 'select 2', 'select 3'], requestBytes: sparseBytes, plans: [] }),
+  ).toThrow(/missing item 2/);
   expect(costOf({ statements: [], plans: [] })).not.toHaveProperty('requestBytes');
 });
 

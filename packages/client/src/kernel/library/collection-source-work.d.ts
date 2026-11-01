@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 /** Private accounting only. SQL/API owners supply the proved footprint before dispatch. */
 export declare class NativeCollectionWork {
@@ -26,6 +26,7 @@ export declare class NativeCollectionWork {
     /** Undefined means unproved, including for an operation expected to return no rows. */
     reserve(footprint: WorkDimensions | undefined, cleanup?: boolean): {
         dispatch(): void;
+        query<T>(operation: () => Promise<T>): Promise<T>;
         settle(actual?: Partial<WorkDimensions>): void;
         cancel(): void;
     };
@@ -33,7 +34,7 @@ export declare class NativeCollectionWork {
 }
 type Footprint = (sql: string, values: readonly unknown[]) => WorkDimensions | undefined;
 /** Observe the original pool/clients: no shadow pool, client proxy or identity/time registration changes. */
-export declare function instrumentNativeCollectionWork<T>(pool: Pool, work: NativeCollectionWork, footprint: Footprint, operation: () => Promise<T>): Promise<T>;
+export declare function instrumentNativeCollectionWork<T>(pool: Pool, work: NativeCollectionWork, footprint: Footprint, operation: () => Promise<T>, client?: PoolClient): Promise<T>;
 /** One physical Source reservation shared by metadata, native drivers, scope and derived work. */
 export declare class CollectionSourceLedger {
     readonly initial: WorkAllowance;
