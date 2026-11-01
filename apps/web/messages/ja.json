@@ -3522,6 +3522,8 @@
   "library_copy_meaning_unknown": "過去の意味は不明です。保存された種別と状態の識別子をそのまま表示します。",
   "library_copy_status_unavailable": "状態の選択肢を一時的に取得できません。ほかの詳細の編集や所持記録の削除は可能です。",
   "library_copy_status_unsupported": "この所持記録では新しい状態を設定できません。保存された値は引き続き表示できます。",
+  "library_copy_history_details": "記録された種類と状態",
+  "library_copy_history_notice": "一部の蔵書は元のラベルを確認できません。「記録された種類と状態」を開くと、保存されている値を確認できます。",
   "library_copy_new_status": "新しい状態",
   "manga_title": "漫画シリーズ・巻を作成",
   "manga_edit": "漫画シリーズ・巻を編集",

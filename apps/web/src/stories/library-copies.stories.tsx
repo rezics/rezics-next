@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { setCopiesStoryMode, type CopiesStoryMode } from '../kernel/fake/copies-page-stories';
 import { useState } from 'react';
-import { CopyForm } from '../library/copies-page';
+import { CopyForm, CopiesPage } from '../library/copies-page';
 import type { CopyItem } from '../library/copies-read';
 import { setCopyKindsStory } from '../kernel/fake/copies-kinds';
 import recording from '../kernel/recorded/library-copies.json';
@@ -37,11 +37,19 @@ export const ManyCopies: Story = {
     const kokoro = (await canvas.findByText(recordedCopy.note, { exact: true })).closest('li');
     if (!kokoro) throw new globalThis.Error('The recorded Kokoro copy did not render in the list.');
     expect(kokoro.textContent).toContain('Kokoro');
-    // No historical profile labels accompany this recording; preserve the raw kind and status.
+    expect(canvas.getAllByText(m.library_copy_history_notice(), { exact: true })).toHaveLength(1);
+    // The ordinary row stays readable; the closed disclosure retains this copy's exact evidence.
     expect(kokoro.textContent).toContain('digital');
     expect(kokoro.textContent).not.toContain('physical');
     expect(kokoro.textContent).toContain(recordedCopy.status);
+    const disclosure = within(kokoro).getByText(m.library_copy_history_details(), { exact: true });
+    expect(disclosure.closest('details')).not.toHaveAttribute('open');
+    expect(within(kokoro).getByText('digital', { exact: true })).not.toBeVisible();
+    expect(within(kokoro).getByText(m.library_history_unavailable(), { exact: true })).not.toBeVisible();
+    await userEvent.click(disclosure);
+    expect(within(kokoro).getByText('digital', { exact: true })).toBeVisible();
     expect(within(kokoro).getByText(m.library_history_unavailable(), { exact: true })).toBeVisible();
+    await userEvent.click(disclosure);
     const image = kokoro.querySelector('[data-slot="cover"] img');
     if (!image?.getAttribute('src')?.includes(`/media/${coverMedia}/`)) {
       throw new globalThis.Error('The recorded Kokoro copy cover did not render from its /media/ fixture.');
@@ -116,10 +124,9 @@ export const UnsupportedProfile: Story = {
   },
 };
 
-// Bounded view inputs for the adopted presentation. These do not supply a native presentation adapter:
-// this base's generated point DTO still lacks that body and its presentation query.
+// Bounded inputs illustrate historical presentation; these fixtures do not establish native acceptance.
 type HistoricMode = 'known' | 'retired' | 'unknown' | 'unavailable';
-function HistoricView({ mode }: { mode: HistoricMode }) {
+function HistoricView({ mode, list = false }: { mode: HistoricMode; list?: boolean }) {
   const [copy, setCopy] = useState<CopyItem>(() => {
     setCopiesStoryMode('one');
     setCopyKindsStory();
@@ -148,20 +155,32 @@ function HistoricView({ mode }: { mode: HistoricMode }) {
   return (
     <PatternStory visitor="Signed In" path={pagePaths['library-copies']}>
       <div className="w-full max-w-4xl p-4">
-        <CopyForm
-          key={`${copy.id}:${copy.revision}`}
-          copy={copy}
-          inline
-          subjectId={null}
-          // Today's renamed labels are deliberately irrelevant to accepted holding meaning.
-          profile={{ kinds: [{ id: 'print', label: 'Renamed at current head', statuses: [] }] }}
-          addKey={copy.idempotencyKey}
-          onClose={() => {}}
-          onCreated={() => {}}
-          onSaved={setCopy}
-          onRemoved={() => {}}
-          onKey={() => {}}
-        />
+        {list ? (
+          <CopiesPage
+            page={{
+              signedIn: true,
+              copies: [copy],
+              subjectId: null,
+              next: null,
+              addKey: copy.idempotencyKey,
+            }}
+          />
+        ) : (
+          <CopyForm
+            key={`${copy.id}:${copy.revision}`}
+            copy={copy}
+            inline
+            subjectId={null}
+            // Today's renamed labels are deliberately irrelevant to accepted holding meaning.
+            profile={{ kinds: [{ id: 'print', label: 'Renamed at current head', statuses: [] }] }}
+            addKey={copy.idempotencyKey}
+            onClose={() => {}}
+            onCreated={() => {}}
+            onSaved={setCopy}
+            onRemoved={() => {}}
+            onKey={() => {}}
+          />
+        )}
       </div>
     </PatternStory>
   );
@@ -180,20 +199,39 @@ export const KnownHistoricalLabels: Story = {
 };
 export const UnknownLegacy: Story = {
   name: 'Unknown legacy meaning (bounded view)',
-  render: () => <HistoricView mode="unknown" />,
-  async play() {
-    const view = within(document.body);
-    await view.findByText('legacy-unspecified');
-    await view.findByText(m.library_copy_meaning_unknown());
-    expect(view.queryByRole('combobox')).not.toBeInTheDocument();
+  render: () => <HistoricView mode="unknown" list />,
+  async play({ canvasElement }) {
+    await ready({ canvasElement });
+    const canvas = within(canvasElement);
+    expect(canvas.getByText(m.library_copy_history_notice())).toBeVisible();
+    const disclosure = canvas.getByText(m.library_copy_history_details());
+    expect(disclosure.closest('details')).not.toHaveAttribute('open');
+    expect(canvas.getByText('legacy-unspecified')).not.toBeVisible();
+    await userEvent.click(disclosure);
+    expect(canvas.getByText('legacy-unspecified')).toBeVisible();
+    expect(canvas.getByText(m.library_copy_meaning_unknown())).toBeVisible();
+    expect(canvas.queryByText('Renamed at current head')).not.toBeInTheDocument();
+    expect(canvas.queryByRole('combobox')).not.toBeInTheDocument();
   },
 };
 export const RequiredReleaseUnavailable: Story = {
   name: 'Accepted release unavailable (bounded view)',
-  render: () => <HistoricView mode="unavailable" />,
-  async play() {
+  render: () => <HistoricView mode="unavailable" list />,
+  async play({ canvasElement }) {
+    await ready({ canvasElement });
+    const canvas = within(canvasElement);
+    expect(canvas.getByText(m.library_copy_history_notice())).toBeVisible();
+    const disclosure = canvas.getByText(m.library_copy_history_details());
+    expect(disclosure.closest('details')).not.toHaveAttribute('open');
+    await userEvent.click(disclosure);
+    expect(canvas.getByText(m.library_history_unavailable())).toBeVisible();
+    expect(canvas.queryByText('Renamed at current head')).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_more_actions() }));
     const view = within(document.body);
-    await view.findByText(m.library_history_unavailable());
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    const actions = await view.findByRole(sheet ? 'dialog' : 'menu', { name: m.library_copy_more_actions() });
+    await userEvent.click(within(actions).getByRole(sheet ? 'button' : 'menuitem', { name: m.library_copy_edit() }));
+    await view.findByRole('dialog', { name: m.library_copy_edit() });
     await view.findByText(m.library_copy_status_unavailable());
     await view.findByRole('button', { name: m.library_copy_delete() });
   },

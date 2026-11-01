@@ -117,7 +117,13 @@ export const HistoricalMeaningUnavailable: Story = {
   render: () => renderCopies('one'),
   async play({ canvasElement }) {
     await copiesReady(canvasElement);
-    await within(canvasElement).findByText(m.library_history_unavailable());
+    const canvas = within(canvasElement);
+    expect(canvas.getAllByText(m.library_copy_history_notice())).toHaveLength(1);
+    const disclosure = canvas.getByText(m.library_copy_history_details());
+    expect(disclosure.closest('details')).not.toHaveAttribute('open');
+    expect(canvas.getByText(m.library_history_unavailable())).not.toBeVisible();
+    await userEvent.click(disclosure);
+    expect(canvas.getByText(m.library_history_unavailable())).toBeVisible();
   },
 };
 export const StaleDelete: Story = {

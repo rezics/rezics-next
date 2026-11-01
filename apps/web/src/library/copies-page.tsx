@@ -591,6 +591,8 @@ export function CopyForm({
   );
 }
 
+const hasUnresolvedHistory = (copy: CopyItem) => copy.meaning !== 'known' || !copy.kindLabel || !copy.statusLabel;
+
 function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; ratio: CoverRatio }) {
   const pageLocale = locale();
   const localizedTitle = copy.subject ? displayLibraryTitle(copy.subject.label, pageLocale) : null;
@@ -605,28 +607,27 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
     '';
   return (
     <ListRow className="flex items-center gap-3 py-4 sm:gap-4">
-      <ListRowLink href={href?.href ?? '#'} className="z-[2]">
-        {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
-      </ListRowLink>
+      {href && copy.subject ? (
+        <ListRowLink href={href.href} className="z-[2]">
+          <LibraryTitle label={copy.subject.label} locale={pageLocale} />
+        </ListRowLink>
+      ) : null}
       <div className="w-[72px] shrink-0 sm:w-24">
         <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
       </div>
       <div className="min-w-0 flex-1">
-        <p aria-hidden="true" className="font-medium break-words">
+        <p aria-hidden={copy.subject ? true : undefined} className="font-medium break-words">
           {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
         </p>
         <p className="text-sm text-muted-foreground">
           <MetaLine
             items={[
               kind,
-              copy.kindLabel ? <span lang={copy.kindLabelLanguage}>{copy.kindLabel}</span> : copy.kind,
-              copy.statusLabel ? <span lang={copy.statusLabelLanguage}>{copy.statusLabel}</span> : copy.status,
+              copy.kindLabel ? <span lang={copy.kindLabelLanguage}>{copy.kindLabel}</span> : null,
+              copy.statusLabel ? <span lang={copy.statusLabelLanguage}>{copy.statusLabel}</span> : null,
             ]}
           />
         </p>
-        {!copy.kindLabel || !copy.statusLabel ? (
-          <p className="text-sm text-muted-foreground">{m.library_history_unavailable()}</p>
-        ) : null}
         {copy.acquiredOn ? (
           <p className="text-sm text-muted-foreground">
             <span>{m.library_copy_acquired()}: </span>
@@ -642,6 +643,32 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
           </p>
         ) : null}
         {copy.note ? <p className="line-clamp-2 text-sm text-muted-foreground">{copy.note}</p> : null}
+        {hasUnresolvedHistory(copy) ? (
+          <ListRowControl className="mt-2">
+            <details className="text-sm">
+              <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.library_copy_history_details()}
+              </summary>
+              <div className="space-y-2 pt-2 text-muted-foreground">
+                <p>{copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}</p>
+                <dl className="space-y-2">
+                  <div>
+                    <dt>{m.library_copy_kind()}</dt>
+                    <dd className="break-all text-foreground">
+                      <code>{copy.kind ?? 'null'}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{m.library_copy_status()}</dt>
+                    <dd className="break-all text-foreground">
+                      <code>{copy.status}</code>
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </details>
+          </ListRowControl>
+        ) : null}
       </div>
       <ListRowControl className="shrink-0">
         <Menu
@@ -770,16 +797,21 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
         </p>
       ) : null}
       {copies.length ? (
-        <ul className="m-0 list-none p-0">
-          {copies.map((copy) => (
-            <CopyRow
-              key={`${copy.id}:${copy.revision}`}
-              copy={copy}
-              ratio={rowRatio([copy.subject])}
-              onEdit={() => void inspect(copy)}
-            />
-          ))}
-        </ul>
+        <>
+          {copies.some(hasUnresolvedHistory) ? (
+            <p className="text-sm text-muted-foreground">{m.library_copy_history_notice()}</p>
+          ) : null}
+          <ul className="m-0 list-none p-0">
+            {copies.map((copy) => (
+              <CopyRow
+                key={`${copy.id}:${copy.revision}`}
+                copy={copy}
+                ratio={rowRatio([copy.subject])}
+                onEdit={() => void inspect(copy)}
+              />
+            ))}
+          </ul>
+        </>
       ) : (
         <p className="text-muted-foreground">
           {page.subjectId ? m.library_copy_filtered_empty() : m.library_copy_empty()}

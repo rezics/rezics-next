@@ -3674,6 +3674,8 @@
   "library_copy_meaning_unknown": "Historical meaning is unknown. Stored kind and status identifiers are shown unchanged.",
   "library_copy_status_unavailable": "Status choices are temporarily unavailable. You can still edit other details or delete this holding.",
   "library_copy_status_unsupported": "New statuses are not supported for this holding. Its stored values remain readable.",
+  "library_copy_history_details": "Stored kind and status",
+  "library_copy_history_notice": "Some original copy labels are unresolved. Open “Stored kind and status” for the recorded values.",
   "library_copy_new_status": "New status",
   "manga_title": "Create manga series or volume",
   "manga_edit": "Edit manga series or volume",

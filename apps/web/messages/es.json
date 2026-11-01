@@ -3522,6 +3522,8 @@
   "library_copy_meaning_unknown": "Se desconoce el significado histórico. Los identificadores de tipo y estado guardados se muestran sin cambios.",
   "library_copy_status_unavailable": "Las opciones de estado no están disponibles temporalmente. Puedes editar otros detalles o eliminar este ejemplar.",
   "library_copy_status_unsupported": "Este ejemplar no admite nuevos estados. Los valores guardados siguen siendo legibles.",
+  "library_copy_history_details": "Tipo y estado registrados",
+  "library_copy_history_notice": "Algunas etiquetas originales de los ejemplares no se han podido determinar. Abre «Tipo y estado registrados» para consultar los valores guardados.",
   "library_copy_new_status": "Nuevo estado",
   "manga_title": "Crear serie de manga o volumen",
   "manga_edit": "Editar serie de manga o volumen",

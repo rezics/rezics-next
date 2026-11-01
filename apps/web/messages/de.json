@@ -3522,6 +3522,8 @@
   "library_copy_meaning_unknown": "Die historische Bedeutung ist unbekannt. Gespeicherte Kennungen für Art und Status bleiben unverändert.",
   "library_copy_status_unavailable": "Statusoptionen sind vorübergehend nicht verfügbar. Andere Details können weiterhin bearbeitet und der Bestand gelöscht werden.",
   "library_copy_status_unsupported": "Für diesen Bestand werden keine neuen Statuswerte unterstützt. Gespeicherte Werte bleiben lesbar.",
+  "library_copy_history_details": "Art und Status im Datensatz",
+  "library_copy_history_notice": "Einige ursprüngliche Bezeichnungen der Exemplare sind ungeklärt. Die erfassten Werte stehen unter „Art und Status im Datensatz“.",
   "library_copy_new_status": "Neuer Status",
   "manga_title": "Mangaserie oder Band erstellen",
   "manga_edit": "Mangaserie oder Band bearbeiten",

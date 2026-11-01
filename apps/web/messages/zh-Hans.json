@@ -3523,6 +3523,8 @@
   "library_copy_meaning_unknown": "历史含义不明。原有的种类与状态标识符保持不变。",
   "library_copy_status_unavailable": "暂时无法获取状态选项。你仍可修改其他详情或删除这份持有记录。",
   "library_copy_status_unsupported": "这份持有记录不支持新状态，原有数据仍可阅读。",
+  "library_copy_history_details": "已存储的种类与状态",
+  "library_copy_history_notice": "部分复本的原始标签尚无法确认。展开“已存储的种类与状态”可查看原始记录值。",
   "library_copy_new_status": "新状态",
   "manga_title": "创建漫画系列或单行本",
   "manga_edit": "编辑漫画系列或单行本",

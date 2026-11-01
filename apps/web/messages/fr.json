@@ -3522,6 +3522,8 @@
   "library_copy_meaning_unknown": "Le sens historique est inconnu. Les identifiants de type et de statut enregistrés restent inchangés.",
   "library_copy_status_unavailable": "Les choix de statut sont temporairement indisponibles. Vous pouvez modifier les autres détails ou supprimer cet exemplaire.",
   "library_copy_status_unsupported": "Les nouveaux statuts ne sont pas pris en charge pour cet exemplaire. Les valeurs enregistrées restent lisibles.",
+  "library_copy_history_details": "Type et statut enregistrés",
+  "library_copy_history_notice": "Certains libellés d’origine des exemplaires restent indéterminés. Ouvrez « Type et statut enregistrés » pour consulter les valeurs conservées.",
   "library_copy_new_status": "Nouveau statut",
   "manga_title": "Créer une série de manga ou un volume",
   "manga_edit": "Modifier une série de manga ou un volume",
