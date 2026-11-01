@@ -12,7 +12,6 @@ import { BoardParticipation, BoardStartThread } from '../../threads/board-commun
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import {
   BoardPageCallerHost,
-  boardPageResultIsCurrent,
   createBoardPageCaller,
   useBoardPageErrorLifecycle,
   type BoardPageLoadResult,
@@ -63,18 +62,7 @@ export const Route = createFileRoute('/boards/$id')({
       throw error;
     }
   },
-  head: ({ loaderData, params, deps, context }) => {
-    const input = {
-      id: params.id,
-      ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
-      ...(deps.sort === undefined ? {} : { sort: deps.sort }),
-      locale: getLocale(),
-      credentialMode: context.credentialMode,
-    };
-    return loaderData && boardPageResultIsCurrent(context.queryClient, loaderData, input)
-      ? boardPageHead(loaderData)
-      : { meta: [{ title: m.threads_untitled() }] };
-  },
+  head: ({ loaderData }) => (loaderData ? boardPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
   pendingComponent: () => <BoardCommunityStatus state="loading" />,
   errorComponent: BoardPageError,
   component: BoardPage,
@@ -127,14 +115,13 @@ function BoardPageError({ error }: { error: unknown }) {
     locale: getLocale(),
     credentialMode: router.options.context.credentialMode,
   });
+  const canRetry = lifecycle.caller && lifecycle.current;
   return (
     <BoardCommunityStatus
       state={lifecycle.caller && !lifecycle.current ? 'loading' : isPlatformClosedError(error) ? 'closed' : 'error'}
-      onRetry={
-        lifecycle.caller && lifecycle.current
-          ? () => lifecycle.retry(() => void router.invalidate())
-          : undefined
-      }
+      {...(canRetry
+        ? { onRetry: () => void lifecycle.retry(() => void router.invalidate()) }
+        : {})}
     />
   );
 }

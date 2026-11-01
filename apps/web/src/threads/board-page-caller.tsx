@@ -93,7 +93,7 @@ function sessionSource(client: QueryClient): SessionSource {
   client.getQueryCache().subscribe(({ query }) => {
     if (
       query.queryKey.length !== sessionQuery.queryKey.length ||
-      query.queryKey.some((part, index) => part !== sessionQuery.queryKey[index])
+      query.queryKey.some((part: unknown, index: number) => part !== sessionQuery.queryKey[index])
     )
       return;
     revision++;
@@ -179,7 +179,7 @@ export class BoardPageCaller {
   readonly source: SessionSource;
   readonly sourceCapture: SessionCapture;
   readonly input: BoardPageCallerInput;
-  private readonly signal?: AbortSignal;
+  private readonly signal: AbortSignal | undefined;
   private binding: () => LiveBinding;
   private queryKey?: readonly unknown[];
   private result?: BoardPageLoadResult;
@@ -189,9 +189,9 @@ export class BoardPageCaller {
   private revision = 0;
   private reason?: RetireReason;
   private readonly listeners = new Set<() => void>();
-  private stopWatching?: () => void;
-  private stopNavigation?: () => void;
-  private stopLoad?: () => void;
+  private stopWatching: (() => void) | undefined;
+  private stopNavigation: (() => void) | undefined;
+  private stopLoad: (() => void) | undefined;
   private readonly abortListener: () => void;
   private readonly createdOnServer: boolean;
   private registryKey: string;
@@ -292,7 +292,7 @@ export class BoardPageCaller {
     if (!this.check('input')) throw new Error('Board page caller retired');
   }
 
-  queryOptions<T extends { queryKey: readonly unknown[]; queryFn: (...args: never[]) => unknown }>(options: T): T {
+  queryOptions<T extends { queryKey: readonly unknown[] }>(options: T): T {
     const queryKey =
       this.input.credentialMode === 'session' ? [...options.queryKey, 'board-page-caller', this.id] : options.queryKey;
     this.queryKey = queryKey;
@@ -347,6 +347,14 @@ export class BoardPageCaller {
 
   get connectionTicket(): number {
     return this.connection;
+  }
+
+  adoptTransferredPublicResult(result: BoardPageLoadResult, receiptId: string) {
+    this.result = result;
+    const visits = visitsFor(this.client);
+    if (visits.get(this.registryKey) === this) visits.delete(this.registryKey);
+    this.registryKey = receiptId;
+    visits.set(receiptId, this);
   }
 
   get retiredReason(): RetireReason | undefined {
@@ -427,13 +435,9 @@ function transferredPublicCaller(
   )
     return undefined;
   const caller = new BoardPageCaller(client, input, undefined, true);
-  caller.result = result;
   consumedPublicTransfers.add(result);
   // Preserve the server marker for this one public transfer so later mounts cannot revive a retired session result.
-  const visits = visitsFor(client);
-  visits.delete(caller.registryKey);
-  caller.registryKey = receipt.id;
-  visits.set(receipt.id, caller);
+  caller.adoptTransferredPublicResult(result, receipt.id);
   return caller;
 }
 
@@ -511,7 +515,7 @@ function BoardPageVisit({
   const router = useRouter();
   const [caller] = useState(() => (client ? currentCallerForResult(client, result, input) : undefined));
   const lifecycle = useCallerLifecycle(caller, input);
-  const reloadFor = useRef<string>();
+  const reloadFor = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     const needsCurrentVisit = !lifecycle.current && (lifecycle.reason === 'session' || !caller);
