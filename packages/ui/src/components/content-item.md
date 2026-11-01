@@ -22,7 +22,11 @@ primary hit area; do not wrap an entire preview in `ListRowControl` just to rais
 <ContentItem
   href="/works/stars"
   title="A journey through the city of stars"
-  visual={<a href="/people/artist" aria-label="Open the artist profile">Artist credit</a>}
+  visual={
+    <a href="/people/artist" aria-label="Open the artist profile">
+      Artist credit
+    </a>
+  }
   context={
     <>
       <a href="/series/stars">The Stars series</a>

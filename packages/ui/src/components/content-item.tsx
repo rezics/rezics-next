@@ -147,10 +147,7 @@ export function ContentItem({
         </ListRowLink>
       )}
       {hasSlot(visual) && (
-        <div
-          data-content-item-slot="visual"
-          className={cn('shrink-0', independentInteractiveLayerClassName)}
-        >
+        <div data-content-item-slot="visual" className={cn('shrink-0', independentInteractiveLayerClassName)}>
           {visual}
         </div>
       )}
