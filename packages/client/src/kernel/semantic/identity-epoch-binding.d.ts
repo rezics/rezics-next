@@ -1,3 +1,4 @@
+import { type AccountIdentityReversalSettlement } from '../access/agent-verification-identity.ts';
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
 import type { IdentityAdmissionAuthority, IdentityAdmissionInput, IdentityJobRef } from './identity-epoch-contract.ts';
@@ -124,5 +125,5 @@ export declare function readIdentitySourceConsumerWork(pool: Pool, reference: Id
  * binding and checks native generations; immutable undo/replay input still requires
  * genuine Accounts acceptance. No publication or directory fact proves reversal.
  */
-export declare function lockIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference, expected: IdentitySourceConsumerGeneration): Promise<IdentitySourceConsumerDisposition | null>;
-export declare function verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference, expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition): Promise<boolean>;
+export declare function lockIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference, expected: IdentitySourceConsumerGeneration, reversal?: AccountIdentityReversalSettlement): Promise<IdentitySourceConsumerDisposition | null>;
+export declare function verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference, expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition, reversal?: AccountIdentityReversalSettlement): Promise<boolean>;
