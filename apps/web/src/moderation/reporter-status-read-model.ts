@@ -10,6 +10,7 @@ export type ReporterStatusRead = {
   id: string;
   generation: string;
   viewer: ReporterStatusViewer | null;
+  browserGeneration?: number;
   result: { state: 'loaded'; report: ReporterStatus } | { state: 'unavailable' | 'concealed' | 'closed' };
 };
 export type ReporterStatusReader = (input: { id: string; generation: string }) => Promise<ReporterStatusRead>;
@@ -17,7 +18,23 @@ export type ReporterStatusNavigation = { isCurrent: () => boolean; subscribe: (r
 type BrowserSession = { state: string; subject?: string | null; csrfToken: string | null };
 const concealed = { state: 'concealed' } as const;
 const retired = new WeakSet<ReporterStatusRead>();
-const handovers = new WeakMap<ReporterStatusRead, () => void>();
+// One in-memory observer per cache also closes the loader-to-mount gap if the router copies loader data.
+const browserLifetimes = new WeakMap<QueryClient, { generation: number }>();
+function browserLifetime(cache: QueryClient) {
+  let lifetime = browserLifetimes.get(cache);
+  if (!lifetime) {
+    lifetime = { generation: 0 };
+    browserLifetimes.set(cache, lifetime);
+    const current = lifetime;
+    let viewer = currentViewer(cache);
+    cache.getQueryCache().subscribe(() => {
+      const next = currentViewer(cache);
+      if ((viewer !== null || next !== null) && !sameViewer(viewer, next)) current.generation++;
+      viewer = next;
+    });
+  }
+  return lifetime;
+}
 
 export function reporterStatusViewer(session: BrowserSession | undefined): ReporterStatusViewer | null {
   return session?.state === 'signed-in' && session.subject && session.csrfToken
@@ -38,28 +55,17 @@ export async function prepareReporterStatusRead(
   read: ReporterStatusReader,
   signal?: AbortSignal,
 ) {
+  const lifetime = browserLifetime(cache);
+  const browserGeneration = lifetime.generation;
   const viewer = currentViewer(cache);
   const generation = crypto.randomUUID();
   let active = !!viewer && !signal?.aborted;
   if (!active) return { id, generation, viewer: null, result: concealed } satisfies ReporterStatusRead;
-  let settled: ReporterStatusRead | undefined;
-  let handingOver = false;
-  const release = () => {
-    signal?.removeEventListener('abort', abort);
-    unsubscribe();
-    if (settled) handovers.delete(settled);
-  };
   const abort = () => {
     active = false;
-    if (settled) {
-      retired.add(settled);
-      settled.result = concealed;
-      settled.viewer = null;
-      release();
-    }
   };
   const unsubscribe = cache.getQueryCache().subscribe(() => {
-    if (!sameViewer(viewer, currentViewer(cache))) abort();
+    if (!sameViewer(viewer, currentViewer(cache)) || lifetime.generation !== browserGeneration) active = false;
   });
   signal?.addEventListener('abort', abort, { once: true });
   try {
@@ -70,22 +76,18 @@ export async function prepareReporterStatusRead(
       retired.add(result);
       return { id, generation, viewer: null, result: concealed } satisfies ReporterStatusRead;
     }
-    settled = result;
-    // Keep observing between client loader settlement and the mounted subscriber's handover.
-    if (typeof window !== 'undefined') {
-      handingOver = true;
-      handovers.set(result, release);
-    }
-    return result;
+    return Object.assign(result, typeof window === 'undefined' ? {} : { browserGeneration });
   } catch {
     return {
       id,
       generation,
       viewer: active ? viewer : null,
+      ...(typeof window === 'undefined' ? {} : { browserGeneration }),
       result: active ? { state: 'unavailable' as const } : concealed,
     };
   } finally {
-    if (!handingOver) release();
+    signal?.removeEventListener('abort', abort);
+    unsubscribe();
   }
 }
 
@@ -96,6 +98,8 @@ export function createReporterStatusJourney(
   read: ReporterStatusReader,
   navigation?: ReporterStatusNavigation,
 ) {
+  const lifetime = browserLifetime(cache);
+  const browserGeneration = initial.browserGeneration ?? lifetime.generation;
   let result: ReporterStatusResult = retired.has(initial) ? concealed : initial.result;
   let viewer = initial.viewer;
   let generation = 0;
@@ -114,7 +118,12 @@ export function createReporterStatusJourney(
     if (result !== concealed) publish(concealed);
   };
   const observe = () => {
-    if (!sameViewer(viewer, currentViewer(cache)) || navigation?.isCurrent() === false) retire();
+    if (
+      !sameViewer(viewer, currentViewer(cache)) ||
+      lifetime.generation !== browserGeneration ||
+      navigation?.isCurrent() === false
+    )
+      retire();
   };
   const snapshot = () => {
     observe();
@@ -128,7 +137,6 @@ export function createReporterStatusJourney(
       listeners.add(listener);
       const unsubscribe = cache.getQueryCache().subscribe(observe);
       const unsubscribeNavigation = navigation?.subscribe(retire);
-      handovers.get(initial)?.();
       observe();
       return () => {
         unsubscribe();
@@ -145,7 +153,11 @@ export function createReporterStatusJourney(
       };
     },
     isCurrent: () =>
-      !disposed && listeners.size > 0 && sameViewer(viewer, currentViewer(cache)) && navigation?.isCurrent() !== false,
+      !disposed &&
+      listeners.size > 0 &&
+      sameViewer(viewer, currentViewer(cache)) &&
+      lifetime.generation === browserGeneration &&
+      navigation?.isCurrent() !== false,
     async retry() {
       observe();
       if (disposed || !listeners.size || result.state !== 'unavailable') return;

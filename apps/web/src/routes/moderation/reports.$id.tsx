@@ -17,7 +17,6 @@ export const Route = createFileRoute('/moderation/reports/$id')({
       (data) => readReporterStatus({ data }),
       abortController.signal,
     );
-    // Preserve the envelope identity so pending-read observation hands over without a disclosure gap.
     return Object.assign(read, { navigationKey: location.state.__TSR_key ?? location.href });
   },
   pendingMs: 0,

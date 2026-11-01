@@ -27,7 +27,7 @@ Pure presenter fixtures may still inject `report` and `onRetry` directly; these 
 
 Session logout, account replacement, replacement sessions for the same account, report navigation and unmount retire
 the old journey. Returning to an old session cannot revive retired results. The route observes session changes during
-a pending read and through handover to the mounted page; mounted reads and retries drop private bytes before any
+a pending read and through handover to the mounted page using an in-memory session generation; mounted reads and retries drop private bytes before any
 asynchronous settlement. Navigation aborts the old admission; navigation and reload events also retire mounted generations immediately. Clipboard success/failure from an obsolete journey is
 ignored. Route entries are immediately stale and have no retained cache lifetime.
 
