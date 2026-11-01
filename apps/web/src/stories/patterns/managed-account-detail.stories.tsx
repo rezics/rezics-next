@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { detailExample, human, organization } from '../../accounts/management/story-api';
+import { automation, detailExample, human, inventoryExample, organization } from '../../accounts/management/story-api';
 import { m } from '../../paraglide/messages.js';
 import { ManagedAccountDetailCard } from '../../settings/managed-account-detail';
 import { ManagedAccountReader, type DetailRead, type DetailSection } from '../../settings/managed-account-detail-read';
@@ -110,6 +110,7 @@ export const MemberRestricted: Story = {
     await expect(canvas.getByText(m.settings_managed_responsibilities_unavailable())).toBeVisible();
     await expect(canvas.queryByText(m.managed_no_holders())).toBeNull();
     await expect(canvas.queryByText(m.managed_no_responsibilities())).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 4 })).toBeNull();
   },
 };
 
@@ -120,6 +121,18 @@ export const ManagerObservations: Story = {
     await canvas.findByText(m.managed_current());
     await expect(canvas.getByText(m.managed_reconciling())).toBeVisible();
     await expect(canvas.getByText(m.settings_managed_observation())).toBeVisible();
+    const holder = canvas.getByRole('heading', { level: 4, name: human.displayName }).closest('li')!;
+    await expect(holder).toHaveRole('listitem');
+    await expect(within(holder).queryByRole('link')).toBeNull();
+    await expect(holder.querySelector('[data-content-item-slot="metadata"]')).toHaveTextContent(`@${human.handle}`);
+    await expect(holder.querySelector('[data-content-item-slot="state"]')).toHaveTextContent(m.managed_owner());
+    const responsibilities = within(canvas.getByRole('region', { name: m.managed_operated_title() }));
+    await expect(responsibilities.getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual([
+      automation.displayName,
+      inventoryExample().responsibilities.items[1]!.accountId,
+    ]);
+    await expect(responsibilities.queryByRole('link')).toBeNull();
+    await expect(responsibilities.getByText(m.settings_managed_detail_identity_unavailable())).toBeVisible();
   },
 };
 
@@ -132,6 +145,8 @@ export const IndependentPaging: Story = {
       await canvas.findByRole('button', { name: `${m.managed_next()} · ${m.managed_holders_title()}` }),
     );
     await canvas.findByText('Atlas editor 21');
+    await expect(canvas.getByRole('heading', { level: 4, name: 'Atlas editor 21' })).toBeVisible();
+    await expect(canvas.queryByRole('heading', { level: 4, name: 'Atlas editor 1' })).toBeNull();
     await expect(canvas.getByText(m.managed_current())).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: `${m.managed_next()} · ${m.managed_operated_title()}` }));
     await canvas.findByRole('alert');

@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { selectManagementStory } from '../../../../accounts/management/story-api';
+import { automation, organization, selectManagementStory } from '../../../../accounts/management/story-api';
 import { m } from '../../../../paraglide/messages.js';
+import { getLocale } from '../../../../paraglide/runtime.js';
 import { PageStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
 const meta = { title: 'Pages/Account/Management/Accounts', parameters: reviewParameters } satisfies Meta;
@@ -26,6 +27,24 @@ export const Current: Story = {
       'href',
       'https://auth.example.test/organizations/new',
     );
+    const membership = main.getByRole('heading', { level: 3, name: organization.displayName }).closest('li')!;
+    await expect(membership).toHaveRole('listitem');
+    await expect(within(membership).getByRole('link', { name: organization.displayName })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/organizations/${organization.id}`,
+    );
+    await expect(membership.querySelector('[data-content-item-slot="metadata"]')).toHaveTextContent(
+      `@${organization.handle}`,
+    );
+    await expect(membership.querySelector('[data-content-item-slot="state"]')).toHaveTextContent(m.managed_owner());
+    await expect(main.getByRole('heading', { level: 3, name: automation.displayName })).toBeVisible();
+    await expect(main.getByRole('link', { name: automation.displayName })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/accounts/${automation.id}`,
+    );
+    const missing = main.getByRole('heading', { level: 3, name: m.managed_missing_title() }).closest('li')!;
+    await expect(within(missing).queryByRole('link')).toBeNull();
+    await expect(missing.querySelector('[data-content-item-slot="state"]')).toHaveTextContent(m.managed_reconciling());
   },
 };
 export const Empty: Story = { render: () => render('empty'), play: ready };

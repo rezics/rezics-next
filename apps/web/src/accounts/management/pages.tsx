@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
@@ -108,14 +109,27 @@ function Responsibilities({ page, cursors }: { page: Inventory['responsibilities
       </CardHeader>
       <CardContent className="space-y-4">
         {page.items.length ? (
-          <ul className="divide-y">
+          <ul>
             {page.items.map((item) => (
-              <li key={item.reservationId} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <IdentityLink account={item.account} management={item.state === 'current'} />
-                <Badge variant="secondary">
-                  {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
-                </Badge>
-              </li>
+              <ContentItem
+                key={item.reservationId}
+                headingLevel={3}
+                title={item.account ? name(item.account) : m.managed_missing_title()}
+                {...(item.account && (item.state === 'current' || item.account.handle)
+                  ? {
+                      href:
+                        item.state === 'current'
+                          ? managementHref(item.account)
+                          : `/${getLocale()}/@${encodeURIComponent(item.account.handle!)}`,
+                    }
+                  : {})}
+                metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
+                state={
+                  <Badge variant="secondary">
+                    {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
+                  </Badge>
+                }
+              />
             ))}
           </ul>
         ) : (
@@ -179,12 +193,16 @@ export function ManagedAccountsPage({
           {page.value.organizations.state === 'preparing' ? (
             <p role="status">{m.managed_preparing_text()}</p>
           ) : page.value.organizations.items.length ? (
-            <ul className="divide-y">
+            <ul>
               {page.value.organizations.items.map(({ account, role }) => (
-                <li className="flex flex-wrap items-center justify-between gap-3 py-3" key={account.id}>
-                  <IdentityLink account={account} />
-                  <Badge variant="secondary">{role === 'owner' ? m.managed_owner() : m.managed_member()}</Badge>
-                </li>
+                <ContentItem
+                  key={account.id}
+                  headingLevel={3}
+                  title={name(account)}
+                  href={managementHref(account)}
+                  metadata={account.handle && account.displayName ? <p>@{account.handle}</p> : null}
+                  state={<Badge variant="secondary">{role === 'owner' ? m.managed_owner() : m.managed_member()}</Badge>}
+                />
               ))}
             </ul>
           ) : (
@@ -292,12 +310,22 @@ export function AccountManagementPage({
             {value.members.state === 'denied' ? (
               <p>{m.managed_holders_denied()}</p>
             ) : value.members.items.length ? (
-              <ul className="divide-y">
+              <ul>
                 {value.members.items.map((item) => (
-                  <li key={item.accountId} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <IdentityLink account={item.account} management={false} />
-                    <Badge variant="secondary">{item.role === 'owner' ? m.managed_owner() : m.managed_member()}</Badge>
-                  </li>
+                  <ContentItem
+                    key={item.accountId}
+                    headingLevel={3}
+                    title={item.account ? name(item.account) : m.managed_missing_title()}
+                    {...(item.account?.handle
+                      ? { href: `/${getLocale()}/@${encodeURIComponent(item.account.handle)}` }
+                      : {})}
+                    metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
+                    state={
+                      <Badge variant="secondary">
+                        {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
+                      </Badge>
+                    }
+                  />
                 ))}
               </ul>
             ) : (

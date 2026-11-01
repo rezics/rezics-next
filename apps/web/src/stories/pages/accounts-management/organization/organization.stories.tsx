@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
-import { selectManagementStory, organization } from '../../../../accounts/management/story-api';
+import { selectManagementStory, organization, human } from '../../../../accounts/management/story-api';
 import { m } from '../../../../paraglide/messages.js';
 import { getLocale } from '../../../../paraglide/runtime.js';
 import { PageStory } from '../../../page';
@@ -22,6 +22,16 @@ export const Owner: Story = {
       `/${getLocale()}/settings?managedAccount=${encodeURIComponent(organization.id)}#account`,
     );
     await expect(within(context.canvasElement).getByText(m.managed_options_guidance())).toBeVisible();
+    const holder = within(context.canvasElement)
+      .getByRole('heading', { level: 3, name: human.displayName })
+      .closest('li')!;
+    await expect(holder).toHaveRole('listitem');
+    await expect(within(holder).getByRole('link', { name: human.displayName })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/@${human.handle}`,
+    );
+    await expect(holder.querySelector('[data-content-item-slot="metadata"]')).toHaveTextContent(`@${human.handle}`);
+    await expect(holder.querySelector('[data-content-item-slot="state"]')).toHaveTextContent(m.managed_owner());
   },
 };
 export const Member: Story = {
@@ -30,6 +40,10 @@ export const Member: Story = {
     await ready(context);
     await expect(within(context.canvasElement).getByText(m.managed_holders_denied())).toBeVisible();
     await expect(within(context.canvasElement).queryByRole('heading', { name: m.managed_operated_title() })).toBeNull();
+    await expect(
+      within(context.canvasElement).queryByRole('heading', { level: 3, name: human.displayName }),
+    ).toBeNull();
+    await expect(within(context.canvasElement).queryByRole('link', { name: human.displayName })).toBeNull();
     await expect(within(context.canvasElement).getByRole('link', { name: m.managed_options() })).toHaveAttribute(
       'href',
       `/${getLocale()}/settings?managedAccount=${encodeURIComponent(organization.id)}#account`,

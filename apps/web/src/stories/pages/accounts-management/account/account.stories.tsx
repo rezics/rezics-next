@@ -25,6 +25,16 @@ export const OwnAccount: Story = {
       `/${getLocale()}/settings?managedAccount=${encodeURIComponent(human.id)}#account`,
     );
     await expect(within(context.canvasElement).getByText(m.managed_options_guidance())).toBeVisible();
+    const canvas = within(context.canvasElement);
+    const responsibility = canvas.getByRole('heading', { level: 3, name: automation.displayName }).closest('li')!;
+    await expect(responsibility).toHaveRole('listitem');
+    await expect(within(responsibility).getByRole('link', { name: automation.displayName })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/accounts/${automation.id}`,
+    );
+    await expect(responsibility.querySelector('[data-content-item-slot="state"]')).toHaveTextContent(
+      m.managed_current(),
+    );
   },
 };
 export const CurrentOperator: Story = {
@@ -46,6 +56,7 @@ export const Denied: Story = {
   play: async (context) => {
     await ready(context);
     await expect(within(context.canvasElement).queryByRole('link', { name: m.managed_options() })).toBeNull();
+    await expect(within(context.canvasElement).queryByRole('heading', { level: 3 })).toBeNull();
   },
 };
 export const Unavailable: Story = { render: () => render('unavailable'), play: ready };

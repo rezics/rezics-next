@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -211,14 +212,28 @@ export function ManagedAccountDetailCard({
               ) : members.page ? (
                 <>
                   {members.page.items.length ? (
-                    <ul className="divide-y rounded-lg border px-4">
+                    <ul>
                       {members.page.items.map((item) => (
-                        <li className="flex flex-wrap items-start justify-between gap-3 py-3" key={item.accountId}>
-                          <Identity account={item.account} accountId={item.accountId} />
-                          <span className="text-sm">
-                            {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
-                          </span>
-                        </li>
+                        <ContentItem
+                          key={item.accountId}
+                          headingLevel={4}
+                          title={
+                            item.account?.displayName ||
+                            (item.account?.handle ? `@${item.account.handle}` : item.accountId)
+                          }
+                          metadata={
+                            item.account?.displayName && item.account.handle ? (
+                              <p>@{item.account.handle}</p>
+                            ) : !item.account ? (
+                              <p>{m.settings_managed_detail_identity_unavailable()}</p>
+                            ) : null
+                          }
+                          state={
+                            <span className="text-sm">
+                              {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
+                            </span>
+                          }
+                        />
                       ))}
                     </ul>
                   ) : (
@@ -253,14 +268,28 @@ export function ManagedAccountDetailCard({
               ) : responsibilities.page ? (
                 <>
                   {responsibilities.page.items.length ? (
-                    <ul className="divide-y rounded-lg border px-4">
+                    <ul>
                       {responsibilities.page.items.map((item) => (
-                        <li className="space-y-2 py-3" key={item.reservationId}>
-                          <Identity account={item.account} accountId={item.accountId} />
-                          <p className="text-sm">
-                            {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
-                          </p>
-                        </li>
+                        <ContentItem
+                          key={item.reservationId}
+                          headingLevel={4}
+                          title={
+                            item.account?.displayName ||
+                            (item.account?.handle ? `@${item.account.handle}` : item.accountId)
+                          }
+                          metadata={
+                            item.account?.displayName && item.account.handle ? (
+                              <p>@{item.account.handle}</p>
+                            ) : !item.account ? (
+                              <p>{m.settings_managed_detail_identity_unavailable()}</p>
+                            ) : null
+                          }
+                          state={
+                            <p className="text-sm">
+                              {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
+                            </p>
+                          }
+                        />
                       ))}
                     </ul>
                   ) : (
