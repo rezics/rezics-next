@@ -53,15 +53,22 @@ function present(log: RawPublishedLog): PublishedLog {
   };
 }
 
-/** Reads the public snapshot and determines ownership from the current authenticated identity. */
-export async function loadPublishedLog(
+export type PublishedLogDetail = { log: PublishedLog; isOwner: boolean; revision?: number };
+export type PublishedLogOwner = { sessionSubject: string; accountId: string; id: string; revision: number };
+export type PublishedLogCurrentRead = PublishedLogDetail & { requestedId: string; owner: PublishedLogOwner | null };
+
+async function readPublishedLogSnapshot(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { id: string },
-): Promise<{ log: PublishedLog; isOwner: boolean; revision?: number }> {
+): Promise<PublishedLogCurrentRead> {
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
+  // Capture the successful preparation before dispatch, never from a later preparation
+  // or an explicit bearer's unrelated retained Request subject.
+  const accountId =
+    refused || !authorization || request.headers.has('authorization') ? undefined : sessionSubject(request);
   const result = await client.publishedLogs({ logId: input.id }).get({
     query: libraryFullQuery(),
     fetch: { cache: 'no-store', redirect: 'manual' },
@@ -69,10 +76,34 @@ export async function loadPublishedLog(
   });
   const log = readLibraryResult(result).publishedLog;
   if ('deleted' in log) throw notFound();
-  const accountId = refused ? undefined : sessionSubject(request);
   const isOwner = Boolean(accountId && accountId === log.accountId);
   const revision = isOwner ? nativeRevision(result.response.headers.get('Library-Published-Log-Revision')) : undefined;
-  return { log: present(log), isOwner, ...(revision === undefined ? {} : { revision }) };
+  const owner =
+    isOwner && accountId && log.id === input.id && revision !== undefined
+      ? { sessionSubject: accountId, accountId: log.accountId, id: input.id, revision }
+      : null;
+  return { log: present(log), isOwner, ...(revision === undefined ? {} : { revision }), requestedId: input.id, owner };
+}
+
+/** Compatible pure public reader; owner metadata never comes from the public account handle. */
+export async function loadPublishedLog(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { id: string },
+): Promise<PublishedLogDetail> {
+  const { log, isOwner, revision } = await readPublishedLogSnapshot(client, request, sessionEnv, input);
+  return { log, isOwner, ...(revision === undefined ? {} : { revision }) };
+}
+
+/** One preparation and one point read, with no retained Request WeakMap provenance. */
+export function loadPublishedLogCurrent(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { id: string },
+): Promise<PublishedLogCurrentRead> {
+  return readPublishedLogSnapshot(client, new Request(request), sessionEnv, input);
 }
 
 async function readLogPage(client: KernelClient, accountId: string, authorization: string, cursor?: string) {

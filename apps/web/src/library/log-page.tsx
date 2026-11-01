@@ -29,6 +29,13 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Additive operands keep standalone presentation compatible; the route supplies actual authority. */
+export type PublishedLogOrigin = {
+  lifetime: object;
+  remove: { lifetime: object; isCurrent: () => boolean; headers: () => HeadersInit | null };
+  restore: { lifetime: object; isCurrent: () => boolean; headers: () => HeadersInit | null };
+};
+
 type PublicationPage = {
   id: string;
   isOwner: boolean;
@@ -42,9 +49,16 @@ type PublicationPage = {
   pending: boolean;
   error: string | null;
   idempotencyKey: string;
+  origin: PublishedLogOrigin | undefined;
+  restoreGeneration: number;
 };
 
-function publicationPage(id: string, isOwner: boolean, loadedRevision: number | undefined): PublicationPage {
+function publicationPage(
+  id: string,
+  isOwner: boolean,
+  loadedRevision: number | undefined,
+  origin?: PublishedLogOrigin,
+): PublicationPage {
   return {
     id,
     isOwner,
@@ -58,6 +72,8 @@ function publicationPage(id: string, isOwner: boolean, loadedRevision: number | 
     pending: false,
     error: null,
     idempotencyKey: crypto.randomUUID(),
+    origin,
+    restoreGeneration: 0,
   };
 }
 
@@ -65,12 +81,14 @@ export function PublishedLogPageView({
   log,
   isOwner,
   revision: loadedRevision,
+  originating,
 }: {
   log: PublishedLog;
   isOwner: boolean;
   revision?: number;
+  originating?: PublishedLogOrigin;
 }) {
-  const [page, setPage] = useState(() => publicationPage(log.id, isOwner, loadedRevision));
+  const [page, setPage] = useState(() => publicationPage(log.id, isOwner, loadedRevision, originating));
   const committed = useRef<{
     lifetime: symbol;
     revision: number | undefined;
@@ -78,7 +96,7 @@ export function PublishedLogPageView({
     deletionId: string | undefined;
     deletionRevision: number | undefined;
   } | null>(null);
-  const busy = useRef<symbol | null>(null);
+  const busy = useRef<{ lifetime: symbol; operation: 'remove' | 'restore' } | null>(null);
   const { lifetime, revision, undo, deleteStarted, confirming, deleted, pending, error, idempotencyKey } = page;
   const deletionId = undo?.deletionId;
   const deletionRevision = undo?.revision;
@@ -92,41 +110,80 @@ export function PublishedLogPageView({
 
   // Compare loader primitives, not object identity or the locally restored revision.
   // Reset before committing children so an old UndoNotice cannot survive a new page.
-  if (page.id !== log.id || page.isOwner !== isOwner || page.loadedRevision !== loadedRevision) {
-    setPage(publicationPage(log.id, isOwner, loadedRevision));
+  if (
+    page.id !== log.id ||
+    page.isOwner !== isOwner ||
+    page.loadedRevision !== loadedRevision ||
+    page.origin?.lifetime !== originating?.lifetime
+  ) {
+    committed.current = null;
+    setPage(publicationPage(log.id, isOwner, loadedRevision, originating));
+  } else if (
+    page.origin?.remove.lifetime !== originating?.remove.lifetime ||
+    page.origin?.restore.lifetime !== originating?.restore.lifetime
+  ) {
+    const removeChanged = page.origin?.remove.lifetime !== originating?.remove.lifetime;
+    const restoreChanged = page.origin?.restore.lifetime !== originating?.restore.lifetime;
+    if (
+      (removeChanged && busy.current?.operation === 'remove') ||
+      (restoreChanged && busy.current?.operation === 'restore')
+    )
+      busy.current = null;
+    setPage({
+      ...page,
+      origin: originating,
+      ...(removeChanged
+        ? {
+            confirming: false,
+            pending: false,
+            error: null,
+            idempotencyKey: crypto.randomUUID(),
+            deleteStarted: page.deleted ? page.deleteStarted : null,
+          }
+        : {}),
+      ...(restoreChanged ? { undo: undefined, restoreGeneration: page.restoreGeneration + 1 } : {}),
+    });
   }
 
-  const isCurrent = () => committed.current?.lifetime === lifetime && page.isOwner;
+  const isCurrent = (operation: 'remove' | 'restore') =>
+    committed.current?.lifetime === lifetime && page.isOwner && (!originating || originating[operation].isCurrent());
   function update(change: Partial<PublicationPage>) {
     setPage((current) => (current.lifetime === lifetime ? { ...current, ...change } : current));
   }
 
   async function remove() {
     if (
-      !isCurrent() ||
-      busy.current === lifetime ||
+      !isCurrent('remove') ||
+      busy.current?.lifetime === lifetime ||
       committed.current?.deleted ||
       committed.current?.revision !== revision ||
       revision === undefined
     )
       return;
-    busy.current = lifetime;
+    const headers = originating ? originating.remove.headers() : csrfHeaders();
+    if (!headers) return;
+    busy.current = { lifetime, operation: 'remove' };
     update({ deleteStarted: deleteStarted ?? Date.now(), pending: true, error: null });
     try {
       const result = await removePublishedLog({
         data: { id: page.id, revision, idempotencyKey },
-        headers: csrfHeaders(),
+        headers,
       });
-      if (!isCurrent()) return;
+      if (!isCurrent('remove')) return;
       if (!result.ok) {
         update({ error: result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed() });
         return;
       }
-      update({ idempotencyKey: crypto.randomUUID(), confirming: false, undo: result.undo, deleted: true });
+      update({
+        idempotencyKey: crypto.randomUUID(),
+        confirming: false,
+        undo: !originating || originating.restore.isCurrent() ? result.undo : undefined,
+        deleted: true,
+      });
     } catch {
-      if (isCurrent()) update({ error: m.library_logs_write_failed() });
+      if (isCurrent('remove')) update({ error: m.library_logs_write_failed() });
     } finally {
-      if (isCurrent()) {
+      if (isCurrent('remove')) {
         busy.current = null;
         update({ pending: false });
       }
@@ -135,8 +192,8 @@ export function PublishedLogPageView({
 
   async function restore(idempotencyKey: string) {
     if (
-      !isCurrent() ||
-      busy.current === lifetime ||
+      !isCurrent('restore') ||
+      busy.current?.lifetime === lifetime ||
       !committed.current?.deleted ||
       !undo ||
       committed.current.deletionId !== undo.deletionId ||
@@ -144,17 +201,19 @@ export function PublishedLogPageView({
       Date.now() >= (deleteStarted ?? 0) + 30_000
     )
       return false;
-    busy.current = lifetime;
+    const headers = originating ? originating.restore.headers() : csrfHeaders();
+    if (!headers) return false;
+    busy.current = { lifetime, operation: 'restore' };
     try {
       const result = await restorePublishedLog({
         data: { id: page.id, ...undo, idempotencyKey },
-        headers: csrfHeaders(),
+        headers,
       });
-      if (!isCurrent() || !result.ok) return false;
+      if (!isCurrent('restore') || !result.ok) return false;
       update({ revision: result.revision, deleted: false, undo: undefined, deleteStarted: null });
       return true;
     } finally {
-      if (isCurrent()) busy.current = null;
+      if (isCurrent('restore')) busy.current = null;
     }
   }
 
@@ -162,9 +221,10 @@ export function PublishedLogPageView({
     return (
       <article className="max-w-4xl space-y-4 text-foreground">
         <UndoNotice
+          key={page.restoreGeneration}
           message={m.library_logs_deleted()}
           deadline={(deleteStarted ?? 0) + 30_000}
-          available={Boolean(undo)}
+          available={Boolean(undo) && (!originating || originating.restore.isCurrent())}
           operation="published_log.create"
           failure={m.library_logs_write_failed()}
           restore={restore}
@@ -213,11 +273,17 @@ export function PublishedLogPageView({
           {error}
         </p>
       ) : null}
-      {isOwner && revision !== undefined ? (
+      {isOwner && revision !== undefined && (!originating || originating.remove.isCurrent()) ? (
         <Exposure operation="published_log.delete">
           <div className="flex flex-wrap gap-3">
             {!confirming ? (
-              <button type="button" className={buttonClass} onClick={() => update({ confirming: true })}>
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => {
+                  if (isCurrent('remove')) update({ confirming: true });
+                }}
+              >
                 {m.library_logs_delete()}
               </button>
             ) : (
@@ -229,7 +295,9 @@ export function PublishedLogPageView({
                   type="button"
                   className={buttonClass}
                   disabled={pending}
-                  onClick={() => update({ confirming: false })}
+                  onClick={() => {
+                    if (isCurrent('remove')) update({ confirming: false });
+                  }}
                 >
                   {m.library_logs_cancel()}
                 </button>

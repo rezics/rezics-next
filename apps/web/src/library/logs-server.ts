@@ -11,6 +11,7 @@ import {
   restorePublishedLog as restoreLog,
   loadMyPublishedLogs,
   loadPublishedLog,
+  loadPublishedLogCurrent,
   publishProgressLog as publishLog,
   type PublishedLogPage,
   type PublishedLogWriteResult,
@@ -93,6 +94,15 @@ export const readPublishedLog = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const result = await loadPublishedLog(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    await nameSubjectTypes([result.log.subject]);
+    return result;
+  });
+
+export const readPublishedLogCurrent = createServerFn({ method: 'GET' })
+  .validator(validateLogId)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const result = await loadPublishedLogCurrent(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     await nameSubjectTypes([result.log.subject]);
     return result;
   });
