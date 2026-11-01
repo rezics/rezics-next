@@ -121,14 +121,23 @@ export function CurrentLabelShelf({
     seed.current = false;
     if (matches(initial, value.subject, source, locale)) payload.current.value = initial;
   }
-  if (!hydrated) return <LabelShelfPage page={initial} locale={locale} display={display} />;
+  if (!hydrated) {
+    const serverPage: LabelShelfPageData =
+      initial.state !== 'loaded' ||
+      (initial.provenance.subject &&
+        routeId.test(source.labelId) &&
+        matches(initial, initial.provenance.subject, source, locale))
+        ? initial
+        : { state: 'preparing' };
+    return <LabelShelfPage page={serverPage} locale={locale} display={display} />;
+  }
   const current = origin.capture(...readGroups);
   if (!value.subject || !routeId.test(source.labelId) || !current()) {
     const page: LabelShelfPageData = {
       state:
         value.state === 'signed-out'
           ? 'signed-out'
-          : !value.subject && value.state !== 'unknown'
+          : value.unavailable || (!value.subject && value.state !== 'unknown')
             ? 'unavailable'
             : value.authority
               ? 'closed'

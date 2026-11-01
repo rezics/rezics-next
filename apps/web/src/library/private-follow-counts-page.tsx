@@ -175,20 +175,26 @@ export function PrivateFollowCountsPage({
   const capturePayload = usePrivateReportPayload(client, options.queryKey);
   const sameRead = capturePayload(query.data);
   const sameReload = capturePayload(query.data, false);
-  const busy = !hydrated || value.state === 'unknown' || (current() && (query.isPending || query.isFetching));
+  const busy =
+    !hydrated ||
+    (!value.unavailable && value.state !== 'signed-out' && !value.authority) ||
+    (current() && (query.isPending || query.isFetching));
   const outcome: FollowCountState = {
-    state:
-      !hydrated || value.state === 'unknown'
-        ? 'loading'
-        : value.state === 'signed-out'
-          ? 'signed-out'
-          : !value.subject
-            ? 'unavailable'
-            : value.authority && !current()
-              ? 'closed'
-              : busy || !value.authority
-                ? 'loading'
-                : 'unavailable',
+    state: !hydrated
+      ? 'loading'
+      : value.state === 'signed-out'
+        ? 'signed-out'
+        : value.unavailable
+          ? 'unavailable'
+          : value.state === 'unknown'
+            ? 'loading'
+            : !value.subject
+              ? 'unavailable'
+              : value.authority && !current()
+                ? 'closed'
+                : busy || !value.authority
+                  ? 'loading'
+                  : 'unavailable',
   };
   const candidate = query.data;
   const actualContext = followCountsSearch(candidate?.context);

@@ -98,6 +98,7 @@ const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query
 const { createRootRoute, createRoute, createRouter, createMemoryHistory, Outlet, RouterProvider, useLocation } =
   await import('@tanstack/react-router');
 const { createRoot } = await import('react-dom/client');
+const { renderToStaticMarkup } = await import('react-dom/server');
 const { CurrentLabelShelf } = await import('../src/library/label-shelf-current');
 const { loadCurrentLabelShelfPage } = await import('../src/library/label-shelf-read');
 const { PrivateFollowCountsPage } = await import('../src/library/private-follow-counts-page');
@@ -161,7 +162,7 @@ async function mount(kind: 'shelf' | 'counts') {
     new Promise<CurrentLabelShelfData | FollowCountsPage>((resolve, reject) =>
       calls.push({ prepared, data, resolve, reject }),
     );
-  const initial: CurrentLabelShelfData = {
+  let initial: CurrentLabelShelfData = {
     state: 'unavailable',
     provenance: {
       subject: null,
@@ -276,6 +277,19 @@ async function mount(kind: 'shelf' | 'counts') {
   };
   return {
     client,
+    server: (payload: CurrentLabelShelfData) => {
+      const previous = initial;
+      initial = payload;
+      try {
+        return renderToStaticMarkup(
+          <QueryClientProvider client={client}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>,
+        );
+      } finally {
+        initial = previous;
+      }
+    },
     calls,
     host,
     fields,
@@ -338,7 +352,13 @@ test('Complete named-label shelf and private follow reports preserves current au
       const bFields = page.fields();
       await page.refresh();
       await until(() => page.calls.length === 5);
-      await page.release(2); // Late A must neither overwrite B nor unlock B's pending reload.
+      // Late A success/failure must neither overwrite B nor unlock B's pending reload.
+      if (kind === 'shelf') await page.release(2);
+      else
+        await act(async () => {
+          page.calls[2]!.reject(new Error('late A failed'));
+          await tick();
+        });
       if (kind === 'shelf') expect(page.fields()).toEqual(bFields);
       else {
         expect(page.scalars()).toEqual([]);
@@ -346,6 +366,7 @@ test('Complete named-label shelf and private follow reports preserves current au
       }
       await page.release(4);
       await until(() => page.visible('B'));
+      const lastFields = page.fields();
       const beforeError = page.retained();
       await act(async () => {
         page.client
@@ -356,9 +377,9 @@ test('Complete named-label shelf and private follow reports preserves current au
       });
       expect(page.visible('B')).toBe(false);
       await act(async () => page.client.setQueryData(sessionQuery.queryKey, session()));
-      await until(() => page.calls.length === 6);
-      await page.release(5);
       await until(() => page.visible('B'));
+      expect(page.calls).toHaveLength(5); // Authority recovery cannot replace an uncertain native intent.
+      if (kind === 'shelf') expect(page.fields()).toEqual(lastFields);
       const signedOut = page.retained();
       await act(async () => {
         page.client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
@@ -377,6 +398,15 @@ test('independent scoped admission, payload replacement, healthy rotation and na
     await until(() => page.calls.length === 1);
     await page.release(0);
     await until(() => page.visible('A'));
+    const actualServer = (await page.calls[0]!.prepared) as CurrentLabelShelfData;
+    expect(page.server(actualServer)).toContain('A private shelf');
+    for (const provenance of [
+      { ...actualServer.provenance, subject: null },
+      { ...actualServer.provenance, locale: 'ja' },
+      { ...actualServer.provenance, source: { ...actualServer.provenance.source, labelId: id(99) } },
+    ])
+      expect(page.server({ ...actualServer, provenance })).not.toContain('A private shelf');
+    expect(page.calls).toHaveLength(1);
     const fields = page.fields();
     expect(fields).toHaveLength(2);
     expect(fields.find((form) => form.intent === 'restore')).toEqual({
@@ -429,6 +459,16 @@ test('independent scoped admission, payload replacement, healthy rotation and na
       page.client.setQueryData(sessionQuery.queryKey, session());
       page.refuse(preRotation);
     });
+    await until(() => page.fields().length === 2);
+    expect(page.fields()).toEqual(fields);
+    expect(page.calls).toHaveLength(1);
+    const beforeMissingCredential = page.retained();
+    await act(async () => {
+      page.client.setQueryData(sessionQuery.queryKey, session('A', null));
+      page.refuse(beforeMissingCredential);
+    });
+    expect(page.fields()).toEqual([]);
+    await act(async () => page.client.setQueryData(sessionQuery.queryKey, session()));
     await until(() => page.fields().length === 2);
     expect(page.fields()).toEqual(fields);
     expect(page.calls).toHaveLength(1);

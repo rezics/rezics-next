@@ -33,10 +33,13 @@ export function usePrivateReportOrigin(address: string, locale: string, addressA
     let boundLocale = locale;
     let locate = addressAt;
     let ownerKey = '';
+    let retainedSubject: string | null = null;
     let signature = '';
     let mounted = 0;
     let value = {
       owner: 0,
+      mount: 0,
+      unavailable: false,
       subject: null as string | null,
       csrfToken: '',
       authority: false,
@@ -60,11 +63,33 @@ export function usePrivateReportOrigin(address: string, locale: string, addressA
         exposure?.status === 'success' &&
         exposure.data?.subject === subject;
       const admitted = groups.map((group) => authority && exposure!.data!.admitted.includes(group));
-      const nextOwner = JSON.stringify([subject, actual, boundLocale, getLocale(), mounted]);
-      const next = JSON.stringify([nextOwner, viewer?.state, viewer?.csrfToken, observation?.id, authority, admitted]);
+      // Uncertainty suspends authority without replacing an already prepared command. A known
+      // different viewer, sign-out or source change still permanently discards that payload.
+      if (viewer?.state === 'signed-out') retainedSubject = null;
+      else if (viewer?.state === 'signed-in' && viewer.subject?.trim()) retainedSubject = viewer.subject;
+      const unavailable =
+        session?.status === 'error' ||
+        (viewer?.state === 'signed-in' && !subject) ||
+        viewer?.state === 'unavailable' ||
+        exposure?.status === 'error' ||
+        (exposure?.status === 'success' && !authority);
+      const nextOwner = JSON.stringify([retainedSubject, actual, boundLocale, getLocale()]);
+      const next = JSON.stringify([
+        nextOwner,
+        mounted,
+        unavailable,
+        subject,
+        viewer?.state,
+        viewer?.csrfToken,
+        observation?.id,
+        authority,
+        admitted,
+      ]);
       if (next !== signature) {
         value = {
           owner: value.owner + (nextOwner === ownerKey ? 0 : 1),
+          mount: mounted,
+          unavailable,
           subject,
           authority,
           csrfToken: subject ? viewer!.csrfToken! : '',
@@ -96,6 +121,7 @@ export function usePrivateReportOrigin(address: string, locale: string, addressA
         return JSON.stringify([
           id,
           current.owner,
+          current.mount,
           current.observation?.id,
           required.map((group) => current.versions[groups.indexOf(group)]),
         ]);
