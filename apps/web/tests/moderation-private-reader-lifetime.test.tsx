@@ -582,6 +582,22 @@ for (const kind of kinds) {
       cache.setQueryData(['session'], seed());
     });
     hidden(kind);
+    // A copied server receipt in this already-observed browser cache must retain its original
+    // retirement. Neither a new response root nor a new mount creates a new browser observation.
+    const copied = JSON.parse(JSON.stringify(transferred!)) as Page;
+    const count = nativeReads.length;
+    await act(async () => {
+      root.unmount();
+      mounted = false;
+    });
+    root = createRoot(host);
+    mounted = true;
+    await paint(kind, copied);
+    hidden(kind);
+    expect(nativeReads).toHaveLength(count);
+    expect(credentials).toBe(1);
+    await paint(kind, await load(kind));
+    expect(host.textContent).toContain(evidence(kind));
     server.clear();
   });
 

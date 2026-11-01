@@ -24,6 +24,9 @@ another provider and borrow its observation. An old mounted owner cannot adopt a
 The local handoff registry correlates the immutable receipt through default cache structural sharing. Its entry holds
 the original observation and signal, is claimed by one mounted owner, and is released on abort or retirement. Neither
 its correlation ID nor a copied response object authorizes a read without the actual-origin comparison.
+An independently transferred server receipt also retains its first browser observation across copied metadata and
+remounts in that cache. Weak receipt retention preserves its retirement while the receipt is live; finalization removes
+the correlation entry when that observation is collected. No strong retired-page history or history scan is introduced.
 
 Each mounted owner checks its original input, provider, navigation, abort and connection. Retirement is monotonic and
 hides obsolete evidence; pending effects and late success, failure and finally callbacks cannot change a successor.

@@ -16,9 +16,17 @@ export type PrivateReaderRead = { readerOrigin?: PrivateReaderOrigin | null; rea
 
 const sources = new WeakMap<QueryClient, ReturnType<typeof observeSession>>();
 // The cache may structurally copy a receipt. Correlation retains the original observation and
-// abort signal; it never replaces the actual-origin comparison. Entries live only for a read owner.
-type Prepared = { capture: Capture; signal?: AbortSignal; owner?: symbol; release: () => void };
-const preparations = new WeakMap<QueryClient, Map<string, Prepared>>();
+// abort signal; it never replaces the actual-origin comparison. A live receipt retains one
+// observation, including its retirement, without accumulating a strongly retained page history.
+type Prepared = { capture: Capture; signal?: AbortSignal; owner?: symbol; retired: boolean; release: () => void };
+type PreparationIndex = Map<string, WeakRef<Prepared>>;
+const preparations = new WeakMap<QueryClient, PreparationIndex>();
+const receipts = new WeakMap<PrivateReaderBinding, Prepared>();
+const collected = new FinalizationRegistry<{ records: PreparationIndex; id: string; reference: WeakRef<Prepared> }>(
+  ({ records, id, reference }) => {
+    if (records.get(id) === reference) records.delete(id);
+  },
+);
 const consumed = new WeakSet<PrivateReaderBinding>();
 const tuple = (session: Session | undefined) =>
   JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
@@ -97,6 +105,34 @@ function captureSession(client: QueryClient) {
   };
 }
 
+function rememberPreparation(
+  client: QueryClient,
+  binding: PrivateReaderBinding,
+  capture: Capture,
+  signal?: AbortSignal,
+) {
+  let records = preparations.get(client);
+  if (!records) {
+    records = new Map();
+    preparations.set(client, records);
+  }
+  const record: Prepared = {
+    capture,
+    ...(signal ? { signal } : {}),
+    retired: false,
+    release() {
+      record.retired = true;
+      signal?.removeEventListener('abort', record.release);
+    },
+  };
+  const reference = new WeakRef(record);
+  records.set(binding.id, reference);
+  receipts.set(binding, record);
+  collected.register(record, { records, id: binding.id, reference });
+  signal?.addEventListener('abort', record.release, { once: true });
+  return record;
+}
+
 /** Capture before calling the production reader. No session fetch, expected-viewer stamping or second preparation. */
 export async function preparePrivateReaderRead<T extends PrivateReaderRead>(
   client: QueryClient,
@@ -119,19 +155,7 @@ export async function preparePrivateReaderRead<T extends PrivateReaderRead>(
     expected,
     retired: !capture.current() || (!!response.readerOrigin && !samePrivateReader(expected, response.readerOrigin)),
   };
-  let records = preparations.get(client);
-  if (!records) {
-    records = new Map();
-    preparations.set(client, records);
-  }
-  const release = () => {
-    records.delete(readerBinding.id);
-    signal?.removeEventListener('abort', release);
-  };
-  if (!readerBinding.retired) {
-    records.set(readerBinding.id, { capture, ...(signal ? { signal } : {}), release });
-    signal?.addEventListener('abort', release, { once: true });
-  }
+  if (!readerBinding.retired) rememberPreparation(client, readerBinding, capture, signal);
   return { ...response, readerBinding };
 }
 
@@ -143,20 +167,24 @@ export function createPrivateReaderLifetime(
   navigation?: PrivateReaderNavigation,
 ) {
   const binding = read.readerBinding;
-  const local = binding && preparations.get(client)?.get(binding.id);
+  let local = binding && preparations.get(client)?.get(binding.id)?.deref();
   const identity = Symbol();
   const capture = local?.capture ?? captureSession(client);
   const source = privateReaderSessionSource(client);
+  if (!local && binding?.placement === 'server') local = rememberPreparation(client, binding, capture);
+  if (local && binding) receipts.set(binding, local);
+  const independent = !!binding && binding.source !== capture.source.id;
   let retired =
     !binding ||
     binding.retired ||
     binding.key !== key ||
     consumed.has(binding) ||
+    !!local?.retired ||
     capture.client !== client ||
     (binding.placement === 'browser' && (!local || binding.source !== source.id)) ||
     !!local?.owner ||
     (binding.source === source.id && binding.revision !== source.snapshot());
-  let verified = !!local && samePrivateReader(binding?.expected, read.readerOrigin);
+  let verified = !!local && !independent && samePrivateReader(binding?.expected, read.readerOrigin);
   const release = () => {
     if (!local?.owner || local.owner === identity) local?.release();
   };
@@ -178,10 +206,10 @@ export function createPrivateReaderLifetime(
     publish();
   };
   const observe = () => {
-    if (!capture.current() || local?.signal?.aborted || navigation?.isCurrent() === false) retire();
+    if (!capture.current() || local?.retired || local?.signal?.aborted || navigation?.isCurrent() === false) retire();
     return !retired;
   };
-  if (!local && binding) {
+  if (independent && binding) {
     // Independent hydration has a separate observation, captured before this asynchronous comparison.
     void capture.expected
       .then((expected) => {
