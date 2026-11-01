@@ -55,7 +55,7 @@ function FollowControlState({
   const signedOut = initial.state === 'signed-out';
   // Callback identities may refresh without starting a new request lifetime.
   useLayoutEffect(() => {
-    committed.current = { ready: ready && !signedOut, canFollow, canRemove, write, onChange };
+    committed.current = { ready: ready && !signedOut, canFollow, canRemove, write, ...(onChange ? { onChange } : {}) };
     const running = inFlight.current;
     if (running && (!ready || signedOut || !(running.input.following ? canFollow : canRemove))) {
       // The dispatched intent remains uncertain; only its retired completion loses authority.
