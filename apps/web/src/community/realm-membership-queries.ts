@@ -1,18 +1,43 @@
 import { queryOptions } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
+import {
+  beginRealmMembershipRead,
+  recordRealmMembershipRead,
+  type RealmMembershipCaller,
+} from './realm-membership-lifetime';
 import type { loadRealmMembership } from './space';
 
 export type RealmViewer = Awaited<ReturnType<typeof loadRealmMembership>>;
 
 /** RealmMembership and BoardStartThread share standing only for the same known session subject. */
-export const realmMembershipQuery = (realmId: string, subject: string | null) =>
+export const realmMembershipQuery = (
+  realmId: string,
+  subject: string | null,
+  caller?: RealmMembershipCaller,
+) =>
   queryOptions({
     ...personalRead,
-    enabled: personalRead.enabled && !!subject,
+    enabled: personalRead.enabled && !!subject && (!caller || caller.isReady()),
     queryKey: ['realm-membership', realmId, subject],
-    queryFn: async () => {
-      const { readRealmMembership } = await import('./realm-membership-actions');
-      return readRealmMembership({ data: { realmId } });
+    queryFn: async (context) => {
+      if (!caller) {
+        const { readRealmMembership } = await import('./realm-membership-actions');
+        return readRealmMembership({ data: { realmId } });
+      }
+      if (caller.realmId !== realmId || caller.subject !== subject) throw new Error('Realm membership caller mismatch');
+      const operation = beginRealmMembershipRead(caller, context.signal, ['realm-membership', realmId, subject]);
+      try {
+        operation.assertCurrent();
+        const { readRealmMembership } = await import('./realm-membership-actions');
+        // This post-import guard is also immediately before the native standing read.
+        operation.assertCurrent();
+        const viewer = await readRealmMembership({ data: { realmId } });
+        operation.assertCurrent();
+        recordRealmMembershipRead(caller);
+        return viewer;
+      } finally {
+        operation.finish();
+      }
     },
     retry: false,
     refetchOnWindowFocus: false,
@@ -40,23 +65,26 @@ const refreshDelays = [0, 500, 1500, 3000] as const;
 export async function refreshRealmMembership(
   read: () => Promise<RealmViewer | null>,
   target: 'member' | 'none' | undefined,
-  options: { signal?: AbortSignal; pause?: (ms: number) => Promise<void> } = {},
+  options: { signal?: AbortSignal; pause?: (ms: number) => Promise<void>; guard?: () => boolean } = {},
 ): Promise<MembershipRefresh> {
   let last: 'pending' | 'unavailable' = 'pending';
   const pause = options.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const current = () => !options.signal?.aborted && (options.guard?.() ?? true);
   for (const delay of refreshDelays) {
-    if (options.signal?.aborted) return { kind: 'cancelled' };
+    if (!current()) return { kind: 'cancelled' };
     if (delay) await pause(delay);
-    if (options.signal?.aborted) return { kind: 'cancelled' };
+    if (!current()) return { kind: 'cancelled' };
     try {
+      if (!current()) return { kind: 'cancelled' };
       const viewer = await read();
-      if (options.signal?.aborted) return { kind: 'cancelled' };
+      if (!current()) return { kind: 'cancelled' };
       if (!viewer) last = 'unavailable';
       else if (viewer.state === 'banned') return { kind: 'denied', viewer };
       else if (viewer.state !== 'pending' && (target === undefined || viewer.state === target))
         return { kind: 'settled', viewer };
       else last = 'pending';
     } catch {
+      if (!current()) return { kind: 'cancelled' };
       last = 'unavailable';
     }
   }

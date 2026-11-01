@@ -18,7 +18,8 @@ export function RealmLeaveExample() {
 }
 
 /** Constructed native failure/acceptance envelopes around the real controller and recorded home.
- * No grant, transfer or successful leave is fabricated. These stories do not prove native guard binding.
+ * A same-subject retry keeps its original key and CSRF token after current standing is re-read. No grant, transfer or
+ * successful leave is fabricated. These stories do not prove native guard binding.
  */
 export function leaveRecoveryStory(scenario: Scenario): Pick<StoryObj, 'beforeEach' | 'play'> {
   const keys: (string | null)[] = [];

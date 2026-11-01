@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { MessageSquarePlusIcon } from 'lucide-react';
 import { RealmMembership } from '../community/realm-membership';
 import { realmMembershipQuery } from '../community/realm-membership-queries';
+import { hasCurrentRealmMembership, useRealmMembershipCaller } from '../community/realm-membership-lifetime';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
@@ -24,24 +25,41 @@ export function BoardStartThread({
   realm?: BoardRealm | undefined;
   returnTo: string;
 }) {
-  const { state: session, subject } = useSession();
+  const { state: session, subject, csrfToken } = useSession();
+  const client = useQueryClient();
+  const realmId = board.realmId ?? '';
+  const memberSubject = subject ?? '';
+  const caller = useRealmMembershipCaller(client, realmId, memberSubject, csrfToken);
   const available =
     board.availability === 'available' && board.visibility !== 'taken_down' && board.visibility !== 'draft';
   const membership = useQuery({
-    ...realmMembershipQuery(board.realmId ?? '', session === 'signed-in' ? (subject ?? null) : null),
+    ...realmMembershipQuery(board.realmId ?? '', session === 'signed-in' ? (subject ?? null) : null, caller),
     enabled:
-      personalRead.enabled && available && session === 'signed-in' && !!subject && !!realm && realm.state === 'active',
+      personalRead.enabled &&
+      available &&
+      session === 'signed-in' &&
+      !!subject &&
+      caller.isReady() &&
+      !!realm &&
+      realm.id === board.realmId &&
+      realm.state === 'active',
   });
   if (!available) return null;
   // A hidden/unavailable Realm never becomes a Global board.
-  if (board.realmId !== null && (!realm || realm.state !== 'active')) return null;
+  if (board.realmId !== null && (!realm || realm.id !== board.realmId || realm.state !== 'active')) return null;
   if (session === 'unavailable' || session === 'unknown') return null;
   if (session === 'signed-out') return <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />;
   if (!subject) return null;
   // A cached earlier success cannot override a failed refresh.
+  const standingIsCurrent =
+    board.realmId === null || hasCurrentRealmMembership(client, realmId, subject, caller);
   if (
     board.realmId !== null &&
-    (membership.isPending || membership.isFetching || membership.isError || !membership.data)
+    (membership.isPending ||
+      membership.isFetching ||
+      membership.isError ||
+      !standingIsCurrent ||
+      !membership.data)
   )
     return (
       <p role="status" className="text-sm text-muted-foreground">

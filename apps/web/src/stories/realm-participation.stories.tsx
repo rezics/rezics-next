@@ -16,7 +16,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The Space home reuses this membership region. Acceptance remains pending until current members/me and participation reads settle. Four reads exhaust into Check membership, which never resends a command. Protected self-join is unavailable; owners use direct add-member. Space following uses the shared Library control independently. These deterministic behavior fixtures are not native workflow proof. Review the same IDs at phone 390 and desktop 1280 using locale and theme globals.',
+          'The Space home reuses this membership region. Acceptance remains pending until current members/me and participation reads settle. Four reads exhaust into Check membership, which never resends a command. Browser membership and Board callers bind standing to the current session-cache revision; CSRF/readiness or account changes withhold old actions until a current standing read completes. A retry keeps its original action, key and CSRF token. Protected self-join is unavailable; owners use direct add-member. Space following uses the shared Library control independently. These deterministic behavior fixtures are not native workflow proof. Review the same IDs at phone 390 and desktop 1280 using locale and theme globals.',
       },
     },
   },
