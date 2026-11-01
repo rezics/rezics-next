@@ -299,7 +299,7 @@ export function ThreadReadingPost({
   const [removedMinHeight, setRemovedMinHeight] = useState<number>();
   const menuButton = useRef<HTMLButtonElement>(null);
   const itemElement = useRef<HTMLLIElement>(null);
-  const editOwner = useRef<{ lifetime: PostCommandLifetime; ticket: number; key: string }>();
+  const editOwner = useRef<{ lifetime: PostCommandLifetime; ticket: number; key: string } | undefined>(undefined);
   const queryClient = useContext(QueryClientContext);
   const sessionSource = useMemo(() => postCommandSessionSource(queryClient), [queryClient]);
   const sessionRevision = useSyncExternalStore(
@@ -308,9 +308,10 @@ export function ThreadReadingPost({
     sessionSource.serverSnapshot,
   );
   const sessionRecord = sessionSource.read();
-  const previousLifetime = useRef<PostCommandLifetime>();
+  const previousLifetime = useRef<PostCommandLifetime | undefined>(undefined);
   const originalDeleteContinuation = previousLifetime.current?.continuesAfterOwnWrite(post) ?? false;
   const authorId = 'authorId' in post ? post.authorId ?? undefined : undefined;
+  const postRevisionId = 'revisionId' in post ? post.revisionId : undefined;
   const binding: PostCommandBinding = {
     client: queryClient,
     source: sessionSource,
@@ -319,7 +320,7 @@ export function ThreadReadingPost({
     readAuthority,
     postId: post.id,
     threadId: post.threadId,
-    revisionId: originalDeleteContinuation ? previousLifetime.current!.revisionId : post.revisionId,
+    revisionId: originalDeleteContinuation ? previousLifetime.current!.revisionId : postRevisionId,
     authorId: authorId ?? (originalDeleteContinuation ? previousLifetime.current!.binding.authorId : undefined),
     availability: originalDeleteContinuation
       ? previousLifetime.current!.binding.availability
@@ -354,6 +355,10 @@ export function ThreadReadingPost({
       personalReady,
       viewerId,
     ],
+  );
+  const historyScope = useMemo(
+    () => ({}),
+    [readAuthority, signedIn, personalReady, viewerId, post.id, post.threadId, target.kind, target.id],
   );
   previousLifetime.current = lifetime;
   useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.serverSnapshot);
@@ -791,7 +796,7 @@ export function ThreadReadingPost({
               {post.revisionId ? (
                 <PostHistory
                   postId={post.id}
-                  readAuthority={scope}
+                  readAuthority={historyScope}
                   {...(viewerId ? { viewerId } : {})}
                   review={review}
                   className="contents"
