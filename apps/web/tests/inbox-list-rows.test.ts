@@ -196,6 +196,7 @@ test('linked notices announce their resolved content, actor, kind, current read 
           expect(await page.getByRole('link', { name: announcement, exact: true }).count()).toBe(1);
           expect(await page.getByRole('heading', { level: 2, name: item.text, exact: true }).count()).toBe(1);
           expect(rows[index]).toContain('data-notice-byline="true" aria-hidden="true"');
+          expect(rows[index]).toMatch(/<span aria-hidden="true"><time\b/);
           expect(rows[index]!.split(date)).toHaveLength(2);
         }
       }
