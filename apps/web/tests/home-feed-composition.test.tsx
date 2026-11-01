@@ -187,6 +187,12 @@ test('The default home route renders a bounded mixed discovery Following and Con
     state: 'auth',
   });
   expect(calls).toHaveLength(countBeforeMismatch);
+  const beforeInvalid = calls.length;
+  await expect(async () => readPublicHomePage({ data: { locale: 'en', kind: '' } })).rejects.toThrow();
+  await expect(async () =>
+    readPrivateHomePage({ data: { locale: 'en', viewer: 'viewer-a', stream: 'home', kind: '界'.repeat(86) } }),
+  ).rejects.toThrow();
+  expect(calls).toHaveLength(beforeInvalid);
   const personalReads = sessionReads;
   request = new Request('https://rezics.example/en');
   const anonymous = await readPublicHomePage({ data: { locale: 'en' } });
@@ -258,7 +264,8 @@ test('The default home route renders a bounded mixed discovery Following and Con
     await click(m.home_kinds_load());
     expect(calls.length).toBe(beforeChoices + 1);
     expect(host.querySelector('label')?.htmlFor).toBe(host.querySelector('select')?.id);
-    const nativeKind = homeKindStoryPage().values[0]!.id;
+    const nativeKind = host.querySelector<HTMLOptionElement>('option:not([value=""])')!.value;
+    expect(nativeKind).toBe(homeKindStoryPage().values[0]!.id);
     await choose(nativeKind);
     expect(query().get('kind')).toBe(nativeKind);
     expect(query().has('cursor')).toBe(false);
@@ -321,7 +328,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     await click(m.library_follow_retry());
     expect(query().get('kind')).toBe('account');
     await click(m.home_heading());
-    await choose(nativeKind);
+    await choose('');
     choicesUnavailable = true;
     // Remount on rotation keeps old private rows out and starts a fresh choices window.
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: 'rotated', subject: 'viewer-a' });
