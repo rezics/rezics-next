@@ -187,7 +187,11 @@ export function useRealmAppearanceCaller(
   session: { state: string; subject?: string | null; csrfToken: string | null },
 ) {
   const queryClient = useContext(QueryClientContext);
-  const hydrated = useSyncExternalStore(noHydrationSubscribe, () => true, () => false);
+  const hydrated = useSyncExternalStore(
+    noHydrationSubscribe,
+    () => true,
+    () => false,
+  );
   const client = queryClient ?? null;
   const source = client ? realmAppearanceCallerSessionSource(client) : null;
   const revision = useSyncExternalStore(
@@ -234,7 +238,18 @@ export function useRealmAppearanceCaller(
     dataUpdatedAt,
   ]);
   const renderIdentity = useMemo(
-    () => ({ realmId, client, source, revision, dataUpdateCount, dataUpdatedAt, subject: callerSession.subject ?? null, locale, ready, adapter }),
+    () => ({
+      realmId,
+      client,
+      source,
+      revision,
+      dataUpdateCount,
+      dataUpdatedAt,
+      subject: callerSession.subject ?? null,
+      locale,
+      ready,
+      adapter,
+    }),
     [realmId, client, source, revision, dataUpdateCount, dataUpdatedAt, callerSession.subject, locale, ready, adapter],
   );
   const currentIdentity = useRef(renderIdentity);
@@ -318,4 +333,3 @@ export function useRealmAppearanceCaller(
     cacheRevision: revision,
   };
 }
-

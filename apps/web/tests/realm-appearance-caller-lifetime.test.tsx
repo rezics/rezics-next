@@ -93,13 +93,7 @@ mock.module('../src/community/space-actions', () => ({
     calls.reads.push(data.realmId);
     return operations.read(data.realmId);
   },
-  changeRealmAppearanceSettings: async ({
-    data,
-    headers,
-  }: {
-    data: RealmAppearanceCommand;
-    headers: HeadersInit;
-  }) => {
+  changeRealmAppearanceSettings: async ({ data, headers }: { data: RealmAppearanceCommand; headers: HeadersInit }) => {
     const csrfToken = new Headers(headers).get('X-CSRF-Token');
     calls.changes.push({ command: structuredClone(data), csrfToken });
     return operations.change(data, csrfToken);
@@ -154,7 +148,9 @@ const explicitRules = (postId: string, revision = revisionId, title = `Rules ${p
   kind: 'rules',
   rules: { postId, revisionId: revision, title, summary: 'Explicit fixture summary.' },
 });
-const explicitImageReference = (choice: Extract<RealmAppearanceChoice, { kind: 'image' }>): RealmAppearanceSelection => ({
+const explicitImageReference = (
+  choice: Extract<RealmAppearanceChoice, { kind: 'image' }>,
+): RealmAppearanceSelection => ({
   kind: 'image-reference',
   mediaId: choice.mediaId,
   realmId: choice.realmId,
@@ -208,11 +204,7 @@ function SettingsHarness() {
 }
 
 function tree(node: ReactNode) {
-  return (
-    <StrictMode>
-      {client ? <QueryClientProvider client={client}>{node}</QueryClientProvider> : node}
-    </StrictMode>
-  );
+  return <StrictMode>{client ? <QueryClientProvider client={client}>{node}</QueryClientProvider> : node}</StrictMode>;
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -442,7 +434,10 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
   });
 
   test('the actual Settings selection fences changed input, closed/reopened selections and a newer head', async () => {
-    const requests: { choice: RealmAppearanceChoice; response: ReturnType<typeof deferred<RealmAppearanceSelection>> }[] = [];
+    const requests: {
+      choice: RealmAppearanceChoice;
+      response: ReturnType<typeof deferred<RealmAppearanceSelection>>;
+    }[] = [];
     const adapter: RealmAppearanceAdapter = {
       ...baseAdapter(),
       select: (choice) => {
@@ -501,7 +496,10 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
   });
 
   test('the current visit retains uncertain save identity and explicit conflict review uses the current head', async () => {
-    const requests: { command: RealmAppearanceCommand; response: ReturnType<typeof deferred<RealmAppearanceResult>> }[] = [];
+    const requests: {
+      command: RealmAppearanceCommand;
+      response: ReturnType<typeof deferred<RealmAppearanceResult>>;
+    }[] = [];
     let currentHead = configured.head;
     const adapter: RealmAppearanceAdapter = {
       ...baseAdapter(),
@@ -580,7 +578,13 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
       },
     };
     const queuedLifetime = callerLifetime(queuedAdapter);
-    const queuedControl = createRealmAppearance(configured.realmId, ready(), queuedAdapter, () => id(64), queuedLifetime);
+    const queuedControl = createRealmAppearance(
+      configured.realmId,
+      ready(),
+      queuedAdapter,
+      () => id(64),
+      queuedLifetime,
+    );
     const stopQueued = queuedControl.subscribe(() => {
       if (queuedControl.getSnapshot().busy) queuedLifetime.retire();
     });
@@ -658,7 +662,6 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     await pendingUpload;
     expect(uploadControl.getSnapshot().read).toEqual({ kind: 'hidden' });
     expect(selectCalls).toBe(0);
-
   });
 
   test('upload resume keeps a known pending media ID through effect replay and checks the current head before select', async () => {
@@ -694,9 +697,7 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     expect(control.getSnapshot().pendingUpload).toEqual({ slot: 'avatar', mediaId: imageId });
 
     await control.upload('avatar');
-    expect(selected).toEqual([
-      { kind: 'image', realmId: configured.realmId, mediaId: imageId, purpose: 'realm-icon' },
-    ]);
+    expect(selected).toEqual([{ kind: 'image', realmId: configured.realmId, mediaId: imageId, purpose: 'realm-icon' }]);
     expect(control.getSnapshot().draft?.presentation.avatarMediaId).toBe(imageId);
     reconnect();
   });

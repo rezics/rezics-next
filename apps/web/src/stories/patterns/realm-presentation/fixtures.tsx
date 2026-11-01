@@ -1,4 +1,8 @@
-import type { RealmAppearanceAdapter, RealmAppearanceSelection, RealmAppearanceChoice } from '../../../community/realm-presentation';
+import type {
+  RealmAppearanceAdapter,
+  RealmAppearanceSelection,
+  RealmAppearanceChoice,
+} from '../../../community/realm-presentation';
 import { createKernelClient } from '@rezics/client';
 import { readRealmAppearance } from '../../../community/realm-presentation-native';
 import {

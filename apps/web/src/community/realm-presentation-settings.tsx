@@ -102,9 +102,11 @@ export function RealmAppearanceSettings({
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   const [selectionState, setSelectionState] = useState<Selection | null>(null);
   const selectionRef = useRef<Selection | null>(null);
-  const [clearState, setClearState] = useState<{ slot: RealmImageSlot | 'rules'; owner: object; callerId: number } | null>(
-    null,
-  );
+  const [clearState, setClearState] = useState<{
+    slot: RealmImageSlot | 'rules';
+    owner: object;
+    callerId: number;
+  } | null>(null);
   const ids = useId();
   const callerId = lifetime?.id ?? 0;
   const incoming = useRef(initial);
@@ -280,11 +282,7 @@ export function RealmAppearanceSettings({
             />
             {snapshot.canManage ? (
               <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  disabled={!editable}
-                  onClick={() => openSelection(slot)}
-                >
+                <Button variant="outline" disabled={!editable} onClick={() => openSelection(slot)}>
                   {m.realm_appearance_choose()}
                 </Button>
                 <Field className="w-auto">
@@ -346,11 +344,7 @@ export function RealmAppearanceSettings({
           <>
             <p className="text-sm text-muted-foreground">{m.realm_appearance_rules_help()}</p>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                disabled={!editable}
-                onClick={() => openSelection('rules')}
-              >
+              <Button variant="outline" disabled={!editable} onClick={() => openSelection('rules')}>
                 {m.realm_appearance_select_rules()}
               </Button>
               <Button
@@ -437,7 +431,8 @@ export function RealmAppearanceSettings({
             <Button
               disabled={!selection.candidate}
               onClick={() => {
-                if (selection.candidate && currentSelection(selection)) control.choose(selection.slot, selection.candidate);
+                if (selection.candidate && currentSelection(selection))
+                  control.choose(selection.slot, selection.candidate);
                 setSelection(null);
               }}
             >

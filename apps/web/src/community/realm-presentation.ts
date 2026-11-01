@@ -183,13 +183,14 @@ export function createRealmAppearance(
     } satisfies Ticket;
   }
   function operationCurrent(ticket: Ticket) {
-    return active() &&
-      operationGeneration === ticket.operation &&
-      (!lifetime || lifetime.owns(ticket.caller));
+    return active() && operationGeneration === ticket.operation && (!lifetime || lifetime.owns(ticket.caller));
   }
   function owns(ticket: Ticket) {
-    return operationCurrent(ticket) && readVersion === ticket.readVersion &&
-      (ticket.head === null || (admitted(state.read) && state.read.snapshot.head === ticket.head));
+    return (
+      operationCurrent(ticket) &&
+      readVersion === ticket.readVersion &&
+      (ticket.head === null || (admitted(state.read) && state.read.snapshot.head === ticket.head))
+    );
   }
   function editable() {
     return (
