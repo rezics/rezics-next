@@ -166,7 +166,7 @@ test('worker --local with only host c returns unavailable without executing the 
       'GOAL_ATTEMPT',
       'GOAL_CHECK_WAIT_FILE',
       'GOAL_CHECK_REGISTRY',
-    ].map((key) => [key, process.env[key]),
+    ].map((key) => [key, process.env[key]]),
   );
   process.env.KERNEL_CHECK_REMOTE = config;
   process.env.KERNEL_CHECK_ON_REMOTE = '1';

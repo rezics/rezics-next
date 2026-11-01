@@ -42,7 +42,7 @@ import {
   clearDeclaredArtifacts,
   validateArtifactDeclarations,
 } from './check-artifacts.ts';
-import { environmentCommandIsSafe, PERFORMANCE_HOST_NAMES } from './check-placement.ts';
+import { environmentCommandIsSafe, PERFORMANCE_HOST_NAMES, performanceHosts } from './check-placement.ts';
 
 export type CheckRunArguments = {
   hosts: string;
