@@ -11,9 +11,7 @@ type AccountHit = Extract<DiscoveryPage['hits'][number], { summary: { kind: 'acc
 function mixedPage(): DiscoveryPage {
   return {
     ...discoveryExample,
-    hits: discoveryExample.hits.filter(
-      (hit) => hit.summary.kind === 'account' || hit.key.kind === 'schema:Book',
-    ),
+    hits: discoveryExample.hits.filter((hit) => hit.summary.kind === 'account' || hit.key.kind === 'schema:Book'),
   };
 }
 
@@ -26,9 +24,7 @@ function rowMarkup(html: string, accountId: string): string {
 }
 
 function rendered(page: DiscoveryPage): string {
-  return renderToStaticMarkup(
-    createElement(DiscoveryResults, { state: { status: 'ready', page }, locale: 'en' }),
-  );
+  return renderToStaticMarkup(createElement(DiscoveryResults, { state: { status: 'ready', page }, locale: 'en' }));
 }
 
 test('mixed discovery composes account ContentItems with catalogue rows and preserves native destinations', () => {

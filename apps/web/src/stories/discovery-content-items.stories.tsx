@@ -10,9 +10,7 @@ const mixedAccountAndCatalogue: DiscoveryState = {
   status: 'ready',
   page: {
     ...discoveryExample,
-    hits: discoveryExample.hits.filter(
-      (hit) => hit.summary.kind === 'account' || hit.key.kind === 'schema:Book',
-    ),
+    hits: discoveryExample.hits.filter((hit) => hit.summary.kind === 'account' || hit.key.kind === 'schema:Book'),
   },
 };
 
