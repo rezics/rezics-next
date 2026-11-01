@@ -3918,5 +3918,8 @@
   "library_types_first": "유형 첫 페이지",
   "library_type_clear": "유형 필터 해제",
   "library_type_filtered": "유형 필터: {type}",
-  "library_type_empty_title": "현재 보기에서 {type}에 해당하는 항목이 없습니다"
+  "library_type_empty_title": "현재 보기에서 {type}에 해당하는 항목이 없습니다",
+  "statement_consent_subject": "주체",
+  "statement_consent_relationship": "관계",
+  "statement_consent_target": "대상"
 }

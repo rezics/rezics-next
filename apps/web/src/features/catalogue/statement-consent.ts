@@ -39,19 +39,27 @@ export type ConsentTransport = {
 export function consentAssertion(read: Extract<ConsentRead, { ok: true }>, address: ConsentAddress, locale: string) {
   const candidate = read.candidate;
   const identity = candidate?.consentIdentity;
-  const subject = pickText(identity?.subject?.labels ?? {}, locale);
-  const relationship = pickText(read.field, locale);
-  const target = pickText(identity?.target?.labels ?? {}, locale);
-  const identified =
-    !!candidate &&
-    !read.terminal &&
-    identity?.subject?.id === address.id &&
+  const bound =
+    candidate?.id === address.candidate &&
+    candidate.statement.id === address.candidate &&
     candidate.statement.property.id === address.property &&
-    candidate.statement.value.type === 'value' &&
-    identity?.target?.id === candidate.statement.value.content &&
-    !!subject.text &&
-    !!relationship.text &&
-    !!target.text;
+    candidate.statement.property.data_type === 'wikibase-item' &&
+    candidate.retracted === null &&
+    !read.terminal;
+  // Blank labels cannot identify a consequential command. Keep authored text and locale fallback intact.
+  const name = (labels: Record<string, string>) =>
+    pickText(Object.fromEntries(Object.entries(labels).filter(([, text]) => text.trim())), locale);
+  const subject = name(bound && identity?.subject?.id === address.id ? identity.subject.labels : {});
+  const relationship = name(bound ? read.field : {});
+  const target = name(
+    bound &&
+      candidate.statement.value.type === 'value' &&
+      identity?.target?.id === candidate.statement.value.content &&
+      (!address.slot?.target || address.slot.target === identity.target.id)
+      ? identity.target.labels
+      : {},
+  );
+  const identified = bound && !!subject.text && !!relationship.text && !!target.text;
   return { subject, relationship, target, identified };
 }
 

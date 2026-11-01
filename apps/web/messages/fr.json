@@ -3918,5 +3918,8 @@
   "library_types_first": "Première page de types",
   "library_type_clear": "Effacer le filtre de type",
   "library_type_filtered": "Filtre de type : {type}",
-  "library_type_empty_title": "Aucune entrée ne correspond à {type} dans cette vue"
+  "library_type_empty_title": "Aucune entrée ne correspond à {type} dans cette vue",
+  "statement_consent_subject": "Sujet",
+  "statement_consent_relationship": "Relation",
+  "statement_consent_target": "Cible"
 }

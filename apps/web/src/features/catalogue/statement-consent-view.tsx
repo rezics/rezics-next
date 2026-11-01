@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -87,6 +87,11 @@ export function StatementConsentPage({
   initial?: ConsentRead;
 }) {
   const options = { locale: locale as never };
+  const confirmationId = useId();
+  const ownershipId = useId();
+  const actionButtons = useRef<Partial<Record<ConsentCommand['operation'], HTMLButtonElement | null>>>({});
+  const returnFocus = useRef<ConsentCommand['operation'] | undefined>(undefined);
+  const focusConfirmation = useCallback((node: HTMLHeadingElement | null) => node?.focus(), []);
   const [read, setRead] = useState(initial);
   const [result, setResult] = useState<Extract<ConsentResult, { ok: true }>>();
   const [failure, setFailure] = useState<ConsentFailure>();
@@ -105,20 +110,29 @@ export function StatementConsentPage({
   const uncertain = !!request.current;
   const assertion = current ? consentAssertion(current, address, locale) : undefined;
   const assertionView = (
-    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 break-words [overflow-wrap:anywhere]">
-      <span lang={assertion?.subject.lang ?? undefined}>
-        {assertion?.subject.text || m.statement_consent_identity_unavailable({}, options)}
-      </span>
-      <span aria-hidden="true">→</span>
-      <span lang={assertion?.relationship.lang ?? undefined}>
-        {assertion?.relationship.text || m.subject_value_unlabelled({}, options)}
-      </span>
-      <span aria-hidden="true">→</span>
-      <span lang={assertion?.target.lang ?? undefined}>
-        {assertion?.target.text || m.statement_consent_identity_unavailable({}, options)}
-      </span>
-    </p>
+    <dl className="grid min-w-0 gap-3 break-words [overflow-wrap:anywhere] sm:grid-cols-3">
+      {(
+        [
+          [m.statement_consent_subject({}, options), assertion?.subject],
+          [m.statement_consent_relationship({}, options), assertion?.relationship],
+          [m.statement_consent_target({}, options), assertion?.target],
+        ] as const
+      ).map(([label, value]) => (
+        <div key={label} className="min-w-0">
+          <dt className="text-sm text-muted-foreground">{label}</dt>
+          <dd lang={value?.lang ?? undefined}>
+            {value?.text || m.statement_consent_identity_unavailable({}, options)}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
+  useEffect(() => {
+    if (!confirmation && returnFocus.current) {
+      actionButtons.current[returnFocus.current]?.focus();
+      returnFocus.current = undefined;
+    }
+  }, [confirmation]);
   function openConfirmation(operation: ConsentCommand['operation']) {
     if (busy || reload || uncertain || !attempt || !assertion?.identified) return;
     setConfirmation(operation);
@@ -265,6 +279,10 @@ export function StatementConsentPage({
                     <div className="flex flex-wrap gap-2">
                       {result?.kind !== 'disclosed' && (
                         <Button
+                          className="min-h-11"
+                          ref={(node) => {
+                            actionButtons.current.disclose = node;
+                          }}
                           disabled={busy || reload || !assertion?.identified}
                           onClick={() => openConfirmation('disclose')}
                         >
@@ -273,6 +291,10 @@ export function StatementConsentPage({
                       )}
                       <Button
                         variant="outline"
+                        className="min-h-11"
+                        ref={(node) => {
+                          actionButtons.current.retract = node;
+                        }}
                         disabled={busy || reload || !assertion?.identified}
                         onClick={() => openConfirmation('retract')}
                       >
@@ -281,8 +303,11 @@ export function StatementConsentPage({
                     </div>
                   )}
                   {confirmation && (
-                    <div className="space-y-4 rounded-lg bg-muted/40 p-4">
-                      <h3 className="font-semibold">
+                    <section
+                      aria-labelledby={confirmationId}
+                      className="flex flex-col gap-4 rounded-lg bg-muted/40 p-4"
+                    >
+                      <h3 id={confirmationId} ref={focusConfirmation} tabIndex={-1} className="font-semibold">
                         {confirmation === 'disclose'
                           ? m.statement_consent_share({}, options)
                           : m.statement_consent_retract({}, options)}
@@ -295,22 +320,28 @@ export function StatementConsentPage({
                       {assertionView}
                       <Field orientation="horizontal">
                         <Checkbox
-                          id="consent-own"
+                          id={ownershipId}
                           checked={own}
                           disabled={busy || uncertain}
                           onCheckedChange={(checked) => setOwn(checked === true)}
                         />
-                        <FieldLabel htmlFor="consent-own">{m.statement_consent_own({}, options)}</FieldLabel>
+                        <FieldLabel htmlFor={ownershipId}>{m.statement_consent_own({}, options)}</FieldLabel>
                       </Field>
                       {!uncertain && (
                         <div className="flex flex-wrap gap-2">
-                          <Button disabled={busy || !own || !assertion?.identified} onClick={() => void change()}>
+                          <Button
+                            className="min-h-11"
+                            disabled={busy || !own || !assertion?.identified}
+                            onClick={() => void change()}
+                          >
                             {m.statement_consent_confirm({}, options)}
                           </Button>
                           <Button
                             variant="outline"
+                            className="min-h-11"
                             disabled={busy}
                             onClick={() => {
+                              returnFocus.current = confirmation;
                               setConfirmation(undefined);
                               setOwn(false);
                             }}
@@ -319,7 +350,7 @@ export function StatementConsentPage({
                           </Button>
                         </div>
                       )}
-                    </div>
+                    </section>
                   )}
                   {(reload || !assertion?.identified) && (
                     <Button variant="outline" disabled={busy} onClick={() => void load()}>

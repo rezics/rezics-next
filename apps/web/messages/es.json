@@ -3918,5 +3918,8 @@
   "library_types_first": "Primera página de tipos",
   "library_type_clear": "Quitar filtro de tipo",
   "library_type_filtered": "Filtro de tipo: {type}",
-  "library_type_empty_title": "No hay entradas que coincidan con {type} en esta vista"
+  "library_type_empty_title": "No hay entradas que coincidan con {type} en esta vista",
+  "statement_consent_subject": "Sujeto",
+  "statement_consent_relationship": "Relación",
+  "statement_consent_target": "Destino"
 }

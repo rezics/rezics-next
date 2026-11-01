@@ -3918,5 +3918,8 @@
   "library_types_first": "タイプの最初のページ",
   "library_type_clear": "タイプの絞り込みを解除",
   "library_type_filtered": "タイプの絞り込み：{type}",
-  "library_type_empty_title": "この表示に「{type}」に一致する項目はありません"
+  "library_type_empty_title": "この表示に「{type}」に一致する項目はありません",
+  "statement_consent_subject": "主語となる項目",
+  "statement_consent_relationship": "関係",
+  "statement_consent_target": "対象となる項目"
 }

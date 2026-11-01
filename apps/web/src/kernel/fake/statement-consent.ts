@@ -15,6 +15,8 @@ import definitions from '../recorded/definitions-release.json';
 export type ConsentScenario =
   | 'private'
   | 'identity-withheld'
+  | 'subject-unlabelled'
+  | 'read-denied'
   | 'public'
   | 'sourced'
   | 'empty'
@@ -42,7 +44,7 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
   const address: ConsentAddress = { id, property, candidate: candidateId, slot: { target } };
   subject.subject.context = candidateContext;
   subject.subject.type = 'schema:Person';
-  subject.subject.labels = { en: 'River Ink' };
+  subject.subject.labels = scenario === 'subject-unlabelled' ? {} : { en: 'River Ink' };
   subject.subject.statements = {};
   subject.subject.release = definitions.digest;
   subject.related = {};
@@ -140,11 +142,13 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
     }
     if (path === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`) return json(definitions);
     if (path === `/v1/subjects/${id}/candidates`) {
+      if (scenario === 'read-denied') return json({ code: 'forbidden' }, 403);
       if (scenario === 'empty') return json({ candidates: [], adoption: null, next: null });
       if (scenario === 'more' && !url.searchParams.has('cursor'))
         return json({ candidates: [], adoption: null, next: 'next-page' });
       if (scenario === 'missing') return json({ code: 'not_found' }, 404);
       if (!authorization) return json({ code: 'invalid_credentials' }, 401);
+      if (authorization !== 'Bearer target-owner') return json({ candidates: [], adoption: null, next: null });
       if (scenario === 'deleted' || scenario === 'lagging-deletion')
         return json({ candidates: [{ id: candidateId, deleted: true }], adoption: null, next: null });
       return json({

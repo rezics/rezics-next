@@ -3918,5 +3918,8 @@
   "library_types_first": "返回類型首頁",
   "library_type_clear": "清除類型篩選",
   "library_type_filtered": "類型篩選：{type}",
-  "library_type_empty_title": "目前檢視中沒有符合「{type}」的項目"
+  "library_type_empty_title": "目前檢視中沒有符合「{type}」的項目",
+  "statement_consent_subject": "主體",
+  "statement_consent_relationship": "關係",
+  "statement_consent_target": "目標"
 }

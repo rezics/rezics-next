@@ -198,3 +198,40 @@ export const IdentityWithheld: Story = {
     await expect(canvas.getByRole('button', { name: m.candidate_reload() })).toBeEnabled();
   },
 };
+
+export const SubjectUnlabelled: Story = {
+  args: { scenario: 'subject-unlabelled' },
+  play: async ({ canvasElement }) => {
+    const canvas = await open(canvasElement);
+    await expect(await canvas.findByText(m.statement_consent_identity_help())).toBeVisible();
+    await expect(canvas.queryByText('River Ink')).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: m.statement_consent_share() })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.statement_consent_retract() })).toBeDisabled();
+  },
+};
+
+export const PrivateReadDenied: Story = {
+  args: { scenario: 'read-denied' },
+  play: async ({ canvasElement }) => {
+    const canvas = await open(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.statement_consent_denied());
+    await expect(canvas.queryByText('River Ink')).not.toBeInTheDocument();
+    await expect(canvas.queryByText('The person behind the name')).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: m.statement_consent_share() })).not.toBeInTheDocument();
+  },
+};
+
+export const RetractionConfirmation: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = await open(canvasElement);
+    const retract = canvas.getByRole('button', { name: m.statement_consent_retract() });
+    await userEvent.click(retract);
+    const confirmation = canvas.getByRole('region', { name: m.statement_consent_retract() });
+    await expect(within(confirmation).getByText('River Ink')).toBeVisible();
+    await expect(within(confirmation).getByText('The person behind the name')).toBeVisible();
+    await expect(within(confirmation).getByRole('heading')).toHaveFocus();
+    await expect(within(confirmation).getByRole('button', { name: m.statement_consent_confirm() })).toBeDisabled();
+    await userEvent.click(within(confirmation).getByRole('button', { name: m.candidate_cancel() }));
+    await expect(canvas.getByRole('button', { name: m.statement_consent_retract() })).toHaveFocus();
+  },
+};

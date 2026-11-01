@@ -3919,5 +3919,8 @@
   "library_types_first": "返回类型首页",
   "library_type_clear": "清除类型筛选",
   "library_type_filtered": "类型筛选：{type}",
-  "library_type_empty_title": "当前视图中没有符合“{type}”的条目"
+  "library_type_empty_title": "当前视图中没有符合“{type}”的条目",
+  "statement_consent_subject": "主体",
+  "statement_consent_relationship": "关系",
+  "statement_consent_target": "目标"
 }

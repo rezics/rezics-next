@@ -3918,5 +3918,8 @@
   "library_types_first": "Erste Seite mit Typen",
   "library_type_clear": "Typfilter entfernen",
   "library_type_filtered": "Typfilter: {type}",
-  "library_type_empty_title": "Keine Einträge für {type} in dieser Ansicht"
+  "library_type_empty_title": "Keine Einträge für {type} in dieser Ansicht",
+  "statement_consent_subject": "Subjekt",
+  "statement_consent_relationship": "Beziehung",
+  "statement_consent_target": "Ziel"
 }

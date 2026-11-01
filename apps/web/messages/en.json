@@ -3921,5 +3921,8 @@
   "library_types_first": "First Types page",
   "library_type_clear": "Clear Type",
   "library_type_filtered": "Type filter: {type}",
-  "library_type_empty_title": "No entries match {type} in this view"
+  "library_type_empty_title": "No entries match {type} in this view",
+  "statement_consent_subject": "Subject",
+  "statement_consent_relationship": "Relationship",
+  "statement_consent_target": "Target"
 }
