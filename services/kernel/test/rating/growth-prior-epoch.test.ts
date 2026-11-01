@@ -66,7 +66,9 @@ test('counted population totals have constant rows and statements per vote as on
         [route, STANDARD_QUESTION_ID, totalPopulationId, targetId, '2026-10-28T10:00:00.000Z', previous, scale],
       );
       await db.admin.query(
-        `WITH counts AS (
+        `WITH writer AS MATERIALIZED (
+           SELECT set_config('rating.population_total_writer','population-home-v1',true)
+         ), counts AS (
            SELECT (n % 16)::smallint AS shard, count(*)::bigint AS count
            FROM generate_series($4::int + 1, $5::int) AS n
            GROUP BY (n % 16)::smallint
@@ -74,7 +76,7 @@ test('counted population totals have constant rows and statements per vote as on
          INSERT INTO rating.population_total_component
            (route, question_id, population_id, shard, count, sum, needs_epoch_check)
          SELECT $1, $2, $3, counts.shard, counts.count, counts.count * 10, false
-         FROM counts
+         FROM counts CROSS JOIN writer
          ON CONFLICT (route, question_id, population_id, shard) DO UPDATE
          SET count = rating.population_total_component.count + EXCLUDED.count,
              sum = rating.population_total_component.sum + EXCLUDED.sum`,
@@ -160,10 +162,13 @@ test('epoch republish has constant rows per bounded page as rated subjects grow'
         (_, shard) => Math.floor(scale / 16) + (shard < scale % 16 ? 1 : 0),
       );
       await db.admin.query(
-        `INSERT INTO rating.population_total_component
+        `WITH writer AS MATERIALIZED (
+           SELECT set_config('rating.population_total_writer','population-home-v1',true)
+         )
+         INSERT INTO rating.population_total_component
            (route, question_id, population_id, shard, count, sum, needs_epoch_check)
          SELECT $1, $2, $3, (ordinality - 1)::smallint, count, count * 10, false
-         FROM unnest($4::bigint[]) WITH ORDINALITY AS totals(count, ordinality)
+         FROM unnest($4::bigint[]) WITH ORDINALITY AS totals(count, ordinality) CROSS JOIN writer
          ON CONFLICT (route, question_id, population_id, shard) DO UPDATE
          SET count = EXCLUDED.count, sum = EXCLUDED.sum`,
         [republishPopulationRoute, STANDARD_QUESTION_ID, republishPopulationId, shardCounts],

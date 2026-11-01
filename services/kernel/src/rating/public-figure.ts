@@ -29,6 +29,7 @@ import deletePriorRepublish from './population-prior-republish-delete.sql';
 import readPendingEpochPopulations from './population-total-epoch-pending.sql';
 import publicFigurePosition from './public-figure-next-position.sql';
 import markPriorRepublishPage from './public-figure-republish-mark-page.sql';
+import { flushPopulationTotalDeliveries, readPopulationTotalClock } from './population-total.ts';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 
 const readPublicFiguresStatement = defineQuery<
@@ -405,21 +406,29 @@ async function drainFigurePage(
   limit: number,
   filter?: { questionId: string; populationId: string; subjectIds: readonly string[] },
 ): Promise<number> {
-  const keys = await withReadTransaction(pool, async (tx) => {
+  const prepared = await withReadTransaction(pool, async (tx) => {
     const home = await readPartition(tx, partition);
     if (!home || home.writeState === 'moved') throw new Error('Rating figure partition is unavailable');
-    return (await readFigureInputPage.run(tx, {
+    const clock = await readPopulationTotalClock(tx, partition);
+    if (clock.pending !== '0') return { clock, keys: [] as FigureInputKey[] };
+    const keys = (await readFigureInputPage.run(tx, {
       partition_no: partition,
       limit,
       subject_ids: filter ? [...filter.subjectIds] : null,
       question_id: filter?.questionId ?? null,
       population_id: filter?.populationId ?? null,
     })) as FigureInputKey[];
+    return { clock, keys };
   });
+  const { keys, clock } = prepared;
   if (keys.length === 0) return 0;
+  // Checks occur after the no-outstanding-delivery observation, before foreign prior capture.
+  await drainPendingPriorEpochChecks(pool);
   const priorInputs = await capturePublicFigurePriorInputs(pool, keys);
   try {
     const outcome = await runCommand(pool, { partition }, async (tx) => {
+      const current = await readPopulationTotalClock(tx, partition);
+      if (current.pending !== '0' || current.generation !== clock.generation) throw new NoPendingFigures();
       await writeSubjectPriorInputs.run(tx, { partition_no: partition, inputs: priorInputs });
       const rows = (await drainPublicFiguresSql.run(tx, {
         partition_no: partition,
@@ -608,6 +617,7 @@ export async function drainPublicFigures(pool: Pool, partition: number, limit = 
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_DRAIN_LIMIT)
     throw new TypeError('Public figure drain limit must be from 1 to 500');
 
+  await flushPopulationTotalDeliveries(pool, partition);
   await drainPendingPriorEpochChecks(pool);
   let priorFigures = await drainPriorEpochPendingFigures(pool, limit, { partition });
   if (priorFigures === 0) {
@@ -643,6 +653,7 @@ export function createPublicFigureDrainEffect(pool: Pool): Effect {
     types: [AGGREGATE_APPLIED, PRIOR_EPOCH_WORK],
     async run(event) {
       const partition = eventPartition(event);
+      await flushPopulationTotalDeliveries(pool, partition);
       if (event.type === PRIOR_EPOCH_WORK) {
         if (!Value.Check(RATING_EVENTS[PRIOR_EPOCH_WORK], event.data))
           throw new TypeError('Invalid rating prior epoch work event');

@@ -277,6 +277,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.rating.aggregate.applied.v1': nonPersonal,
   'com.rezics.rating.eligibility.changed.v1': personal('voter'),
   'com.rezics.rating.population.pending.v1': nonPersonal,
+  'com.rezics.rating.population-total.delivery.v1': nonPersonal,
   'com.rezics.rating.prior_epoch.work.v1': nonPersonal,
   'com.rezics.rating.public_figure.changed.v1': nonPersonal,
   'com.rezics.rating.segment.page.v1': personal('voter'),

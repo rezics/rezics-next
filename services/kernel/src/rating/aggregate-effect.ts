@@ -15,7 +15,9 @@ import deletePopulationVote from './population-vote-delete.sql';
 import upsertPopulationVote from './population-vote-upsert.sql';
 import readPopulationVoteForRekey from './population-vote-rekey-read.sql';
 import rekeyPopulationVote from './population-vote-rekey-upsert.sql';
-import applyPopulationTotal from './population-total-component-apply.sql';
+import { PopulationTotalCapture, flushPopulationTotalDeliveries } from './population-total.ts';
+import { partitionReadClient } from '../database/read-snapshot.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import readQuestionScale from './question-scale-read.sql';
 import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
@@ -183,38 +185,12 @@ async function applyComponentDelta(
   return delta;
 }
 
-async function applyTotalDeltas(
-  tx: Queryable,
-  change: RatingChange,
-  entries: readonly { countingKey: string; delta: ReturnType<typeof deltaFor> }[],
+async function applyPartition(
+  pool: Pool, changes: readonly RatingChange[], partition: number, scales: ReadonlyMap<string, QuestionScale>,
 ): Promise<void> {
-  const shards = new Map<number, { count: bigint; sum: bigint }>();
-  for (const { countingKey, delta } of entries) {
-    const shard = Number.parseInt(countingKey.slice(0, 2), 16) % 16;
-    const current = shards.get(shard) ?? { count: 0n, sum: 0n };
-    current.count += delta.count;
-    current.sum += delta.sum;
-    shards.set(shard, current);
-  }
-  for (const [shard, delta] of [...shards].sort(([left], [right]) => left - right)) {
-    if (delta.count === 0n && delta.sum === 0n) continue;
-    const rows = await applyPopulationTotal.run(tx, {
-      population_route: routeOf(change.populationId)!,
-      question_id: change.questionId,
-      population_id: change.populationId,
-      shard,
-      count_delta: delta.count.toString(),
-      sum_delta: delta.sum.toString(),
-      check_epoch: change.questionId === STANDARD_QUESTION_ID,
-    });
-    if (!returnedRows(rows)) throw new Error('Rating population total would be negative or incompatible');
-  }
-}
-
-async function applyPartition(pool: Pool, changes: readonly RatingChange[], partition: number): Promise<void> {
   try {
     await runCommand(pool, { partition }, async (tx, command) => {
-      const scales = new Map<string, QuestionScale>();
+      const totals = new PopulationTotalCapture();
       let applied = 0;
       let figurePosition: string | undefined;
       const markFigurePending = async (change: RatingChange, route: number): Promise<void> => {
@@ -236,12 +212,8 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
       };
       for (const change of changes) {
         const { route, at, appliedAt, shard } = validateChange(change);
-        let scale = scales.get(change.questionId);
-        if (!scale) {
-          scale = (await readQuestionScale.run(tx, { question_id: change.questionId })) ?? undefined;
-          if (!scale) throw new Error('Rating question unavailable');
-          scales.set(change.questionId, scale);
-        }
+        const scale = scales.get(change.questionId);
+        if (!scale) throw new Error('Rating question unavailable');
         const parameters = {
           route,
           question_id: change.questionId,
@@ -289,7 +261,7 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
             scale,
             appliedAt,
           );
-          await applyTotalDeltas(tx, change, [
+          totals.add(change, [
             ...(oldKey !== change.countingKey && oldTotalDelta ? [{ countingKey: oldKey, delta: oldTotalDelta }] : []),
             { countingKey: change.countingKey, delta: newTotalDelta },
           ]);
@@ -327,14 +299,14 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
           at: appliedAt,
         });
         if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
-        await applyTotalDeltas(tx, change, [{ countingKey: change.countingKey, delta }]);
+        totals.add(change, [{ countingKey: change.countingKey, delta }]);
         await markFigurePending(change, route);
         applied += 1;
       }
       if (applied === 0) throw new NoAggregateChange();
       return {
         value: undefined,
-        events: [{ type: AGGREGATE_APPLIED, data: { applied } }],
+        events: [{ type: AGGREGATE_APPLIED, data: { applied } }, ...await totals.commit(tx)],
       };
     });
   } catch (error) {
@@ -353,7 +325,24 @@ export async function applyRatingChanges(pool: Pool, input: readonly RatingChang
     changes.push(change);
     grouped.set(partition, changes);
   }
-  await Promise.all([...grouped].map(([partition, changes]) => applyPartition(pool, changes, partition)));
+  // Question revisions/scales are immutable. Finish every anchored preparation before target checkout.
+  const scales = new Map<string, QuestionScale>();
+  for (const questionId of new Set(input.map((change) => change.questionId))) {
+    const scale = await withReadTransaction(pool, async (client) => {
+      const bound = await partitionReadClient(client, partitionOf(routeOf(questionId)!));
+      return readQuestionScale.run(bound, { question_id: questionId });
+    });
+    if (!scale) throw new Error('Rating question unavailable');
+    histogramSize(scale);
+    scales.set(questionId, scale);
+  }
+  // A page has <=100 changes, <=100 destinations and <=200 counted shard deltas per destination.
+  // Its aggregate event plus deliveries stays below the native 1000-event command cap.
+  for (const [partition, changes] of grouped)
+    for (let offset = 0; offset < changes.length; offset += 100)
+      await applyPartition(pool, changes.slice(offset, offset + 100), partition, scales);
+  // Also recover committed obligations on a vote replay: its old delta cannot be reconstructed.
+  for (const partition of grouped.keys()) await flushPopulationTotalDeliveries(pool, partition);
 }
 
 /** Resolve the private counting key at the event T, then apply that vote to every listed population. */

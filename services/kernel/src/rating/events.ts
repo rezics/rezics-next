@@ -1,9 +1,34 @@
-import { Type } from 'typebox';
+import { Type, type Static } from 'typebox';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const units = Type.Union([Type.Integer({ minimum: 0, maximum: 20 }), Type.Null()]);
 
+export const POPULATION_TOTAL_DELIVERY = 'com.rezics.rating.population-total.delivery.v1';
+const serial = Type.String({ pattern: '^[1-9][0-9]{0,18}$' });
+const signed = Type.String({ pattern: '^-?(0|[1-9][0-9]{0,18})$' });
+const deliveryAddress = {
+  sourcePartition: Type.Integer({ minimum: 0, maximum: 4095 }),
+  populationId: Type.String({ pattern: UUID }),
+  serial,
+};
+const populationTotalDelivery = Type.Union([
+  Type.Object({
+    ...deliveryAddress,
+    action: Type.Literal('deliver'),
+    deltas: Type.Array(Type.Object({
+      questionId: Type.String({ pattern: UUID }),
+      shard: Type.Integer({ minimum: 0, maximum: 15 }),
+      count: signed,
+      sum: signed,
+    }, { additionalProperties: false }), { minItems: 1, maxItems: 200 }),
+  }, { additionalProperties: false }),
+  Type.Object({ ...deliveryAddress, action: Type.Literal('received') }, { additionalProperties: false }),
+]);
+export type PopulationTotalEvent = Static<typeof populationTotalDelivery>;
+export type PopulationTotalDelivery = Extract<PopulationTotalEvent, { action: 'deliver' }>;
+
 export const RATING_EVENTS = {
+  [POPULATION_TOTAL_DELIVERY]: populationTotalDelivery,
   'com.rezics.rating.voter-realm.changed.v1': Type.Object(
     { voterId: Type.String({ pattern: UUID }), realmId: Type.String({ pattern: UUID }) },
     { additionalProperties: false },
