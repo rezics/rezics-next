@@ -17,10 +17,7 @@ import { canSubmitThread } from '../../threads/review-policy';
 import { DiscussionSubjects } from '../../threads/discussion-subjects';
 import { contentSubjectPreset } from '../../threads/content-subject-search';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
-import {
-  ThreadCreationLifetimeProvider,
-  useThreadCreationLifetime,
-} from '../../threads/thread-creation-lifetime';
+import { ThreadCreationLifetimeProvider, useThreadCreationLifetime } from '../../threads/thread-creation-lifetime';
 
 type NewThreadSearch = { subject?: string; subjectTitle?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -97,28 +94,32 @@ export function NewThreadComposition({
   });
   const renderedSubmissionContext = useRef<ThreadSubmissionContext | undefined>(undefined);
   const editable = lifetime.isEditable(ticket);
-  const searchScope = JSON.stringify([
-    visit.scopeKey,
-    lifetime.accountId,
-    lifetime.csrfToken,
-    visit.sessionRevision,
-  ]);
+  const searchScope = JSON.stringify([visit.scopeKey, lifetime.accountId, lifetime.csrfToken, visit.sessionRevision]);
 
-  const handleIntentLockChange = useCallback((locked: boolean) => {
-    if (!lifetime.isCurrent(ticket)) return;
-    lockedSubmissionContext.current = locked
-      ? { active: true, value: cloneSubmissionContext(renderedSubmissionContext.current) }
-      : { active: false, value: undefined };
-    lifetime.setIntentLocked(ticket, locked);
-  }, [lifetime, ticket]);
-  const handleSubjectChange = useCallback((next: string | null) => {
-    if (!lifetime.isEditable(ticket)) return;
-    setSubjectId(next);
-    setVoteCitation(undefined);
-  }, [lifetime, ticket]);
-  const handleVoteCitationChange = useCallback((next: VoteCitation | undefined) => {
-    if (lifetime.isEditable(ticket)) setVoteCitation(next);
-  }, [lifetime, ticket]);
+  const handleIntentLockChange = useCallback(
+    (locked: boolean) => {
+      if (!lifetime.isCurrent(ticket)) return;
+      lockedSubmissionContext.current = locked
+        ? { active: true, value: cloneSubmissionContext(renderedSubmissionContext.current) }
+        : { active: false, value: undefined };
+      lifetime.setIntentLocked(ticket, locked);
+    },
+    [lifetime, ticket],
+  );
+  const handleSubjectChange = useCallback(
+    (next: string | null) => {
+      if (!lifetime.isEditable(ticket)) return;
+      setSubjectId(next);
+      setVoteCitation(undefined);
+    },
+    [lifetime, ticket],
+  );
+  const handleVoteCitationChange = useCallback(
+    (next: VoteCitation | undefined) => {
+      if (lifetime.isEditable(ticket)) setVoteCitation(next);
+    },
+    [lifetime, ticket],
+  );
   const liveSubmissionContext: ThreadSubmissionContext | undefined = bound
     ? review
       ? { kind: 'review', subjectId: subjectId ?? '', ...(voteCitation ? { voteCitation } : {}) }

@@ -42,9 +42,7 @@ test('discussion selection snapshots keep the complete ordered 128-reference lim
   expect(command.submissionContext).toEqual({ subjectIds: [...subjects].reverse() });
   expect(command.submissionContext?.subjectIds).toHaveLength(128);
   expect(command.submissionContext).not.toHaveProperty('voteCitation');
-  expect(discussionSubjectIds({ subjectIds: command.submissionContext!.subjectIds })).toEqual([
-    ...subjects,
-  ].reverse());
+  expect(discussionSubjectIds({ subjectIds: command.submissionContext!.subjectIds })).toEqual([...subjects].reverse());
 });
 
 test('a multi-reference discussion keeps the exact body, media, ordered selection and key through a lost response', async () => {

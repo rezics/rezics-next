@@ -50,10 +50,7 @@ export function threadCreationSessionSource(client: QueryClient | undefined): Th
   const listeners = new Set<() => void>();
   client.getQueryCache().subscribe((event) => {
     const { query, type } = event;
-    if (
-      JSON.stringify(query.queryKey) !== JSON.stringify(sessionQuery.queryKey)
-    )
-      return;
+    if (JSON.stringify(query.queryKey) !== JSON.stringify(sessionQuery.queryKey)) return;
     const next = identity();
     // Every update to this exact cache entry changes the observed session authority, including equal replacements.
     const replaced = type === 'added' || type === 'removed' || type === 'updated';
@@ -90,7 +87,12 @@ function ready(session: ThreadCreationSession | undefined): session is ThreadCre
 }
 
 function sessionIdentity(session: ThreadCreationSession | undefined) {
-  return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null, ready(session)]);
+  return JSON.stringify([
+    session?.state ?? 'unknown',
+    session?.subject ?? null,
+    session?.csrfToken ?? null,
+    ready(session),
+  ]);
 }
 
 type Binding = { client: QueryClient | undefined; source: ThreadCreationSessionSource; scope: string };
@@ -233,9 +235,7 @@ export function useThreadCreationLifetime(scope: ThreadCreationScope) {
   ]);
   const bindingRef = useRef<Binding>({ client, source, scope: scopeKey });
   bindingRef.current = { client, source, scope: scopeKey };
-  const [lifetime] = useState(
-    () => new ThreadCreationLifetime(client, source, () => bindingRef.current, scopeKey),
-  );
+  const [lifetime] = useState(() => new ThreadCreationLifetime(client, source, () => bindingRef.current, scopeKey));
 
   const sessionRevision = useSyncExternalStore(source.subscribe, source.snapshot, source.serverSnapshot);
   useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.serverSnapshot);

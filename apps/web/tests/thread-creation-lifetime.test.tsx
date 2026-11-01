@@ -61,7 +61,9 @@ async function mountPage(initial: PageConfig) {
     createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
-  const previous = new Map([...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const previous = new Map(
+    [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
@@ -129,7 +131,11 @@ async function mountPage(initial: PageConfig) {
   }
   const rootRoute = createRootRoute({ component: Outlet });
   const composeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/compose', component: ComposePage });
-  const boardRoute = createRoute({ getParentRoute: () => rootRoute, path: '/boards/$id', component: () => <p>Board</p> });
+  const boardRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/boards/$id',
+    component: () => <p>Board</p>,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([composeRoute, boardRoute]),
     history: createMemoryHistory({ initialEntries: ['/compose'] }),
@@ -259,7 +265,9 @@ test('real new-thread composition preserves a selected review citation and retri
     await act(async () => page.writes[0]!.work.reject(new Error('Response lost after commit')));
     await page.settle(() => page.host.textContent?.includes(page.m.thread_write_unavailable()) === true);
     await act(async () => {
-      const retry = [...page.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === page.m.thread_write_retry());
+      const retry = [...page.host.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === page.m.thread_write_retry(),
+      );
       expect(retry).toBeDefined();
       await page.user.click(retry!);
     });
@@ -377,7 +385,9 @@ test('ordinary discussion submission keeps its ordered preset and current succes
   });
   try {
     await page.render();
-    await page.settle(() => !!page.editor() && page.host.textContent?.includes('Ordered discussion reference') === true);
+    await page.settle(
+      () => !!page.editor() && page.host.textContent?.includes('Ordered discussion reference') === true,
+    );
     await page.fill('An ordinary discussion', 'The selected reference stays ordered in the command.');
     await page.submit();
     await page.settle(() => page.writes.length === 1);
@@ -458,7 +468,8 @@ test('locale changes retire metadata monotonically while benign rerenders keep t
 test('caller revisions reject retained callbacks after same-value cache replacement and same-turn readiness loss', async () => {
   const { QueryClient } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
-  const { ThreadCreationLifetime, threadCreationSessionSource } = await import('../src/threads/thread-creation-lifetime');
+  const { ThreadCreationLifetime, threadCreationSessionSource } =
+    await import('../src/threads/thread-creation-lifetime');
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, owner);
   const source = threadCreationSessionSource(client);
