@@ -5,7 +5,7 @@ import type { originalAccountIdentitySource } from '../access/agent-verification
 import { type AgentIdentitySourceKey } from './agent-identity-source.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 import { type AgentIdentityRetirementStage } from './agent-identity-retirement.ts';
-import { type HistoryReceivingContext, type HistoryReceivingDependencies } from './receiving.ts';
+import { type HistoryReceivingContext, type HistoryReceivingDependencies, type HistoryReceivingReceipt } from './receiving.ts';
 /** First owner declaration: exact original Accounts key and native tuple, never an erasure Source authority.
  * Native receipt/outbox closure and SDK future-writer closure are independent branches. */
 export declare const AGENT_IDENTITY_INVENTORY: Readonly<{
@@ -52,8 +52,51 @@ export type AgentIdentityInventoryVerification = Readonly<{
     native: 'verified';
     gap: null;
 }>;
+declare const recoveryInventoryProof: unique symbol;
+export type AgentIdentityRecoveryInventoryProof = Readonly<{
+    key: AgentIdentitySourceKey;
+    partition: number;
+    epoch: number;
+    position: bigint;
+    transactionId: string;
+    digest: string;
+    generation: string;
+    domainGeneration: string;
+    receiverEpoch: number;
+    cutDigest: string;
+    artifacts: readonly HistoryArtifact[];
+    readonly [recoveryInventoryProof]: true;
+}>;
+export type AgentIdentityRecoveryInventory = Readonly<{
+    state: 'absent';
+    gap: null;
+    native: 'absent';
+    proof: null;
+    receipts: readonly [];
+}> | Readonly<{
+    state: 'pending';
+    gap: string;
+    native: 'pending' | 'sealed';
+    proof: null;
+    receipts: readonly [];
+}> | Readonly<{
+    state: 'sealed';
+    gap: null;
+    native: 'sealed';
+    proof: AgentIdentityRecoveryInventoryProof;
+    receipts: readonly HistoryReceivingReceipt[];
+}>;
+export type AgentIdentityRecoveryInventoryVerification = Readonly<{
+    state: 'pending';
+    native: 'pending' | 'verified';
+    gap: string;
+}> | Readonly<{
+    state: 'verified';
+    native: 'verified';
+    gap: null;
+}>;
 /** Only the original native writer issues this binding, before any nested serializer. */
-export declare function declareAgentIdentityInventory(tx: CommandTransaction, original: ReturnType<typeof originalAccountIdentitySource>): Promise<void>;
+export declare function declareAgentIdentityInventory(tx: CommandTransaction, original: ReturnType<typeof originalAccountIdentitySource>, accounts: readonly import('./locator.ts').AccountReference[]): Promise<void>;
 /** Executor calls before JSON.stringify of any event data or response. Types and slots are copied
  * synchronously; getters/toJSON cannot reduce the expected work while serialization is running. */
 export declare function captureAgentIdentityInventory(tx: CommandTransaction, kind: string | undefined, events: readonly {
@@ -66,6 +109,31 @@ export declare function releaseAgentIdentityInventory(tx: CommandTransaction): v
 /** At most three exact original associations and 64 roles each; no historical scans, inferred
  * empty sources, transaction-wide attachments, JSON source parsing or caller conversion flag. */
 export declare function readAgentIdentityInventoryInTransaction(tx: CommandTransaction, key: AgentIdentitySourceKey): Promise<AgentIdentityNativeInventory>;
+/** Exact native cut for the NEW recovery command only. The original finite cut and SDK seam
+ * remain independent, including for a source whose original cut was lost. */
+export declare function readAgentIdentityRecoveryInventoryInTransaction(tx: CommandTransaction, key: AgentIdentitySourceKey): Promise<AgentIdentityRecoveryInventory>;
+export type AgentIdentityRecoveryArtifactInspection = Readonly<{
+    state: 'absent';
+    gap: null;
+    proof: null;
+}> | Readonly<{
+    state: 'pending';
+    gap: string;
+    proof: null;
+}> | Readonly<{
+    state: 'sealed';
+    gap: null;
+    proof: AgentIdentityRecoveryInventoryProof;
+    artifact: HistoryArtifact;
+    recoveryEvent: HistoryArtifact;
+}>;
+/** Resolve one artifact-leading recovery association and re-read its exact two-slot cut.
+ * No source JSON, account-prefix, or history population scan participates. */
+export declare function readAgentIdentityRecoveryArtifactInTransaction(tx: CommandTransaction, artifact: HistoryArtifact, pool?: Pool): Promise<AgentIdentityRecoveryArtifactInspection>;
+/** Released exact recovery cut plus the ordinary History receiving API; no SDK mapping is read. */
+export declare function readAgentIdentityRecoveryInventory(deps: HistoryReceivingDependencies, barrier: HistoryBarrier, key: AgentIdentitySourceKey, context: HistoryReceivingContext): Promise<AgentIdentityRecoveryInventory>;
+/** Same source-home final command: recheck the recovery discriminator and every real receiver receipt. */
+export declare function verifyAgentIdentityRecoveryInventory(tx: CommandTransaction, barrier: HistoryBarrier, key: AgentIdentitySourceKey, proof: AgentIdentityRecoveryInventoryProof, receipts: readonly HistoryReceivingReceipt[]): Promise<AgentIdentityRecoveryInventoryVerification>;
 export declare function readAgentIdentityNativeInventory(pool: Pool, key: AgentIdentitySourceKey, context: HistoryReceivingContext): Promise<AgentIdentityNativeInventory>;
 /** Every foreign receiving probe runs AFTER releasing the read home. A missing receipt is
  * precise pending. Native seal never asserts SDK enrollment, Account root or Semantic custody. */

@@ -6,6 +6,7 @@ import { WORK_QUEUES } from './queues.ts';
 import { HistoryRegistry } from '../history/registry.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type WorkerAuthorization } from './authorization.ts';
+import type { KindConsentParticipant } from '@rezics/auth-contract';
 export type WorkService = {
     stop(): Promise<void>;
 };
@@ -17,6 +18,7 @@ export type WorkContext = {
     readonly clock: KernelClock;
     readonly history?: HistoryRegistry;
     getAuthorization(): WorkerAuthorization;
+    getKindConsentParticipant?(deadline: number): KindConsentParticipant | undefined;
     addEffects(effects: Effect[]): void;
     addNativeEffects?(effects: NativeEffect[]): void;
     addService(start: () => WorkService | Promise<WorkService>): void;

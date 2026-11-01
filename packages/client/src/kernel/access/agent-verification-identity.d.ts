@@ -41,6 +41,8 @@ export type AccountIdentitySource = Readonly<{
     roles: readonly import('../semantic/erasure-producer.ts').SemanticCopyRole[];
 }>;
 type OriginalIdentity = Readonly<{
+    /** Identifies the actual serializer whose finite cut History owns. */
+    writerKind: 'original' | 'recovery';
     key: AgentIdentitySourceKey;
     digest: string;
     partition: number;
