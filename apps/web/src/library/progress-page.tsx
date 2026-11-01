@@ -13,7 +13,7 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import {
@@ -70,6 +70,7 @@ export function CurrentViewerProgressIndexPage({
 }) {
   const renderedSession = useSession();
   const client = useQueryClient();
+  const instance = useId();
   const session = progressIndexSession(client, renderedSession);
   const admitted = useOperation('progress_session.list');
   const hydrated = useSyncExternalStore(
@@ -121,6 +122,7 @@ export function CurrentViewerProgressIndexPage({
     cursor,
     locale,
     origin.generation,
+    instance,
   ] as const;
   const query = useQuery({
     ...personalRead,
