@@ -494,7 +494,9 @@ function validateFinalCustody(value: unknown): CheckRunFinalCustody {
     sourceSha256:
       identityValue.sourceSha256 === null ? null : boundedHash(identityValue.sourceSha256, 'final source digest'),
     snapshotSha256:
-      identityValue.snapshotSha256 === null ? null : boundedHash(identityValue.snapshotSha256, 'snapshot identity digest'),
+      identityValue.snapshotSha256 === null
+        ? null
+        : boundedHash(identityValue.snapshotSha256, 'snapshot identity digest'),
     candidateWorkspaceSha256:
       identityValue.candidateWorkspaceSha256 === null
         ? null
@@ -1239,13 +1241,7 @@ function writeRecord(directory: string, record: CheckRunInvocationRecord): void 
 function finalCustodyIdentity(
   record: Pick<
     CheckRunInvocationRecord,
-    | 'binding'
-    | 'snapshot'
-    | 'candidateWorkspace'
-    | 'returns'
-    | 'preparedExecution'
-    | 'descriptor'
-    | 'preparationIntent'
+    'binding' | 'snapshot' | 'candidateWorkspace' | 'returns' | 'preparedExecution' | 'descriptor' | 'preparationIntent'
   >,
   physical: CheckRunPhysicalIdentity,
 ): CheckRunFinalCustody['identity'] {
@@ -1322,8 +1318,7 @@ function validateFinalCustodyIdentity(record: CheckRunInvocationRecord, custody:
     descriptorReferenceSha256: identity.descriptorReferenceSha256,
     preparationIntentReferenceSha256: identity.preparationIntentReferenceSha256,
   };
-  if (identity.sha256 !== jsonSha256(core))
-    return 'retained snapshot, declarations, or private-file identity changed';
+  if (identity.sha256 !== jsonSha256(core)) return 'retained snapshot, declarations, or private-file identity changed';
   if (
     record.final.physical.host !== record.physical.host ||
     record.final.physical.run !== record.physical.run ||
@@ -1361,8 +1356,7 @@ function validateReconciliationCandidate(
     return 'reconciliation returned a changed eleven-field binding';
   if (observed.physical.host !== physical.host || observed.physical.run !== physical.run)
     return 'reconciliation returned a replacement physical host or run';
-  if (transportIdentity !== 'gone-or-replaced')
-    return 'original local transport child is not affirmatively absent';
+  if (transportIdentity !== 'gone-or-replaced') return 'original local transport child is not affirmatively absent';
   if (
     JSON.stringify(observed.native) !== JSON.stringify(original.native) ||
     (record.native !== null &&
@@ -1404,7 +1398,11 @@ function validateFreshReconciliationCandidate(
     return 'reconciliation returned a foreign invocation settlement';
   if (checkRunBindingHash(observed.binding) !== checkRunBindingHash(record.binding))
     return 'reconciliation returned a changed eleven-field binding';
-  if (!record.physical || observed.physical.host !== record.physical.host || observed.physical.run !== record.physical.run)
+  if (
+    !record.physical ||
+    observed.physical.host !== record.physical.host ||
+    observed.physical.run !== record.physical.run
+  )
     return 'reconciliation returned a replacement physical host or run';
   if (transportIdentity !== 'gone-or-replaced') return 'original local transport child is not affirmatively absent';
   if (
@@ -1628,7 +1626,8 @@ async function cleanupPrivateReferencesUnderLock(
           intent.invocationId !== record.invocationId ||
           intent.candidateWorkspace !== record.candidateWorkspace ||
           (record.snapshot &&
-            (intent.snapshot.workspace !== record.snapshot.workspace || intent.snapshot.scratch !== record.snapshot.scratch))
+            (intent.snapshot.workspace !== record.snapshot.workspace ||
+              intent.snapshot.scratch !== record.snapshot.scratch))
         )
           throw new Error('check-run-settlement: preparation intent differs from its durable invocation');
         removeCheckRunPreparationIntentFile(reference, intent.candidateWorkspace, options);
@@ -2313,8 +2312,7 @@ export async function reconcileCheckRunInvocation(
             cleaned.record.finalCustody?.reconciliation === 'settled')
             ? 'settled'
             : 'unknown';
-        if (cleaned.record.phase !== nextPhase)
-          return updateRecord(directory, cleaned.record, { phase: nextPhase });
+        if (cleaned.record.phase !== nextPhase) return updateRecord(directory, cleaned.record, { phase: nextPhase });
         return cleaned.record;
       });
     }
@@ -2354,7 +2352,12 @@ export async function reconcileCheckRunInvocation(
       if (observed.disposition === 'settled') observedFinal = validateCheckRunFinalSettlement(observed.final);
       else reconciliationFailure = boundedText(observed.reason, 'reconciliation failure');
       if (observedFinal)
-        reconciliationFailure = validateReconciliationCandidate(before, custody, observedFinal, observedTransportIdentity);
+        reconciliationFailure = validateReconciliationCandidate(
+          before,
+          custody,
+          observedFinal,
+          observedTransportIdentity,
+        );
     } catch (error) {
       reconciliationFailure = `reconciliation failed for the original physical run: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`;
     }
@@ -2395,8 +2398,7 @@ export async function reconcileCheckRunInvocation(
         final: observedFinal,
         reason,
       });
-      const phase =
-        disposition === 'settled' && updatedCustody.privateFiles === 'settled' ? 'settled' : 'unknown';
+      const phase = disposition === 'settled' && updatedCustody.privateFiles === 'settled' ? 'settled' : 'unknown';
       const snapshotCustody: CheckRunInvocationRecord['snapshotCustody'] = observedFinal
         ? observedFinal.cleanup.localWorktree === 'removed'
           ? 'removed'
@@ -2521,7 +2523,8 @@ export async function discardCheckRunPreparationIntent(
       intent.invocationId !== record.invocationId ||
       intent.candidateWorkspace !== record.candidateWorkspace ||
       (record.snapshot &&
-        (intent.snapshot.workspace !== record.snapshot.workspace || intent.snapshot.scratch !== record.snapshot.scratch))
+        (intent.snapshot.workspace !== record.snapshot.workspace ||
+          intent.snapshot.scratch !== record.snapshot.scratch))
     )
       throw new Error('check-run-settlement: preparation intent differs from its durable invocation');
     removeCheckRunPreparationIntentFile(record.preparationIntent, intent.candidateWorkspace, options);

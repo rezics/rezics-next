@@ -484,7 +484,9 @@ export async function prepareCandidateSnapshot(
   const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', head]);
   const scratchBase = scratchParent ?? join(root, '.temp');
   mkdirSync(scratchBase, { recursive: true, mode: 0o700 });
-  const scratch = allocation ? resolve(allocation.scratch) : mkdtempSync(join(scratchBase, `check-run-${randomUUID()}-`));
+  const scratch = allocation
+    ? resolve(allocation.scratch)
+    : mkdtempSync(join(scratchBase, `check-run-${randomUUID()}-`));
   if (allocation) {
     if (
       scratch !== allocation.scratch ||
@@ -2605,13 +2607,16 @@ export async function reconcileCheckRunPreparationIntent(
   descriptorFile: string,
   hostsFile?: string,
   stateOptions: CheckRunStateOptions = {},
-): Promise<CheckRunInvocationRecord | {
-  schema: 1;
-  type: 'check-run-preparation-reconciliation';
-  invocationId: string;
-  snapshotCustody: 'removed';
-  preparationIntent: 'removed';
-}> {
+): Promise<
+  | CheckRunInvocationRecord
+  | {
+      schema: 1;
+      type: 'check-run-preparation-reconciliation';
+      invocationId: string;
+      snapshotCustody: 'removed';
+      preparationIntent: 'removed';
+    }
+> {
   if (!isAbsolute(descriptorFile)) throw new Error('--descriptor must be an absolute private JSON path');
   const absoluteDescriptor = resolve(descriptorFile);
   let descriptorExists = false;
@@ -2669,7 +2674,10 @@ export async function reconcileCheckRunPreparationIntent(
       throw new CheckRunUnavailable('check-run: snapshot intent parent is not a real directory');
   }
   const scratchInside = relative(candidateRoot, intent.snapshot.scratch);
-  if (scratchInside === '' || (!scratchInside.startsWith(`..${sep}`) && scratchInside !== '..' && !isAbsolute(scratchInside)))
+  if (
+    scratchInside === '' ||
+    (!scratchInside.startsWith(`..${sep}`) && scratchInside !== '..' && !isAbsolute(scratchInside))
+  )
     throw new CheckRunUnavailable('check-run: snapshot intent is inside its candidate workspace');
   if (existsSync(intent.snapshot.scratch)) {
     const scratchStats = lstatSync(intent.snapshot.scratch);
@@ -2724,7 +2732,8 @@ export async function reapRetainedTransportChild(
   const pollIntervalMs = Math.max(1, Math.min(dependencies.pollIntervalMs ?? 50, 1000));
   const termTimeoutMs = Math.max(0, Math.min(dependencies.termTimeoutMs ?? 10_000, 10_000));
   const killTimeoutMs = Math.max(0, Math.min(dependencies.killTimeoutMs ?? 10_000, 10_000));
-  const sleep = dependencies.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const sleep =
+    dependencies.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
 
   const observe = (): 'live-same' | 'gone-or-replaced' | 'unknown' => {
     let bootId: string | null = null;
@@ -2745,7 +2754,13 @@ export async function reapRetainedTransportChild(
     }
     const commandEnd = stat.lastIndexOf(')');
     const prefix = stat.slice(0, commandEnd + 1);
-    const fields = commandEnd >= 0 ? stat.slice(commandEnd + 1).trim().split(/\s+/) : [];
+    const fields =
+      commandEnd >= 0
+        ? stat
+            .slice(commandEnd + 1)
+            .trim()
+            .split(/\s+/)
+        : [];
     if (
       !new RegExp(`^${identity.pid} \\(.+\\)$`).test(prefix) ||
       fields.length < 20 ||
@@ -2770,9 +2785,7 @@ export async function reapRetainedTransportChild(
     }
   };
 
-  const waitForExit = async (
-    milliseconds: number,
-  ): Promise<'live-same' | 'gone-or-replaced' | 'unknown'> => {
+  const waitForExit = async (milliseconds: number): Promise<'live-same' | 'gone-or-replaced' | 'unknown'> => {
     const deadline = now() + milliseconds;
     const maxPolls = Math.ceil(milliseconds / pollIntervalMs) + 1;
     for (let poll = 0; poll < maxPolls; poll += 1) {

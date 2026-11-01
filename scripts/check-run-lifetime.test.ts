@@ -171,8 +171,7 @@ function finalFor(
     nonce: registration.nonce,
     binding: changes.binding ?? registration.binding,
     physical: changes.physical ?? { host: 'a', run: 'original-run-1' },
-    native:
-      changes.native ?? { exitCode: 0, lifetimeFailure: false, receiptSha256: '6'.repeat(64) },
+    native: changes.native ?? { exitCode: 0, lifetimeFailure: false, receiptSha256: '6'.repeat(64) },
     preparedInputs: {
       status: 'verified',
       sourceSha256: registration.binding.sourceSha256,
@@ -226,47 +225,44 @@ afterAll(() => {
   for (const fixture of fixtures) rmSync(fixture, { recursive: true, force: true });
 });
 
-test(
-  'Original prepared invocation retains durable input and cleanup custody across cancellation process loss unreadable child identity and unknown final reconciliation without replay replacement allocation lost cleanup reference or false settlement',
-  async () => {
-    const fixture = await preparedInvocation();
-    await queueAndStart(fixture);
-    const original = finalFor(fixture, 'unknown');
-    const originalRecord = await acceptFinal(fixture, original);
-    expect(originalRecord.final).toEqual(original);
-    expect(originalRecord.finalCustody?.reconciliation).toBe('unknown');
+test('Original prepared invocation retains durable input and cleanup custody across cancellation process loss unreadable child identity and unknown final reconciliation without replay replacement allocation lost cleanup reference or false settlement', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const original = finalFor(fixture, 'unknown');
+  const originalRecord = await acceptFinal(fixture, original);
+  expect(originalRecord.final).toEqual(original);
+  expect(originalRecord.finalCustody?.reconciliation).toBe('unknown');
 
-    let observedPhysical: { host: 'a' | 'b'; run: string } | undefined;
-    const later = finalFor(fixture, 'settled');
-    const reconciled = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
-      stateDirectory: fixture.state,
-      reconcilePhysical: async (physical, record) => {
-        observedPhysical = physical;
-        expect(record.invocationId).toBe(fixture.registration.invocationId);
-        return { disposition: 'settled', final: later, transportIdentity: 'gone-or-replaced' };
-      },
-    });
+  let observedPhysical: { host: 'a' | 'b'; run: string } | undefined;
+  const later = finalFor(fixture, 'settled');
+  const reconciled = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+    stateDirectory: fixture.state,
+    reconcilePhysical: async (physical, record) => {
+      observedPhysical = physical;
+      expect(record.invocationId).toBe(fixture.registration.invocationId);
+      return { disposition: 'settled', final: later, transportIdentity: 'gone-or-replaced' };
+    },
+  });
 
-    expect(observedPhysical).toEqual({ host: 'a', run: 'original-run-1' });
-    expect(reconciled.final).toEqual(original);
-    expect(reconciled.phase).toBe('settled');
-    expect(reconciled.finalCustody?.observations.at(-1)?.final).toEqual(later);
-    expect(reconciled.finalCustody?.observations.at(-1)?.transportIdentity).toBe('gone-or-replaced');
-    const throughProducer = await reconcileRegisteredCheckRun(fixture.registration.invocationId, undefined, {
-      stateDirectory: fixture.state,
-    });
-    expect(throughProducer.final).toEqual(original);
-    expect(throughProducer.finalCustody?.reconciliation).toBe('settled');
-    const throughCli = spawnSync(
-      process.execPath,
-      [settlementCli, 'reconcile', '--descriptor', fixture.descriptor, '--state-dir', fixture.state],
-      { encoding: 'utf8', timeout: 10_000 },
-    );
-    expect(throughCli.status).toBe(0);
-    expect(JSON.parse(throughCli.stdout).final).toEqual(original);
-    await expect(acceptFinal(fixture, later)).rejects.toThrow(/duplicate|replay/i);
-  },
-);
+  expect(observedPhysical).toEqual({ host: 'a', run: 'original-run-1' });
+  expect(reconciled.final).toEqual(original);
+  expect(reconciled.phase).toBe('settled');
+  expect(reconciled.finalCustody?.observations.at(-1)?.final).toEqual(later);
+  expect(reconciled.finalCustody?.observations.at(-1)?.transportIdentity).toBe('gone-or-replaced');
+  const throughProducer = await reconcileRegisteredCheckRun(fixture.registration.invocationId, undefined, {
+    stateDirectory: fixture.state,
+  });
+  expect(throughProducer.final).toEqual(original);
+  expect(throughProducer.finalCustody?.reconciliation).toBe('settled');
+  const throughCli = spawnSync(
+    process.execPath,
+    [settlementCli, 'reconcile', '--descriptor', fixture.descriptor, '--state-dir', fixture.state],
+    { encoding: 'utf8', timeout: 10_000 },
+  );
+  expect(throughCli.status).toBe(0);
+  expect(JSON.parse(throughCli.stdout).final).toEqual(original);
+  await expect(acceptFinal(fixture, later)).rejects.toThrow(/duplicate|replay/i);
+});
 
 test('reconciliation rejects changed native, eleven-field binding, and physical host evidence', async () => {
   const fixture = await preparedInvocation();
@@ -329,12 +325,9 @@ test('native final admission, cancellation, and reconciliation races preserve im
     },
   });
   await entered;
-  const cancellation = cancelCheckRunInvocation(
-    fixture.registration.invocationId,
-    fixture.registration.nonce,
-    2,
-    { stateDirectory: fixture.state },
-  );
+  const cancellation = cancelCheckRunInvocation(fixture.registration.invocationId, fixture.registration.nonce, 2, {
+    stateDirectory: fixture.state,
+  });
   const duplicate = acceptCheckRunFinalSettlement(raw, { stateDirectory: fixture.state });
   releaseReconcile();
   await cancellation;
@@ -347,9 +340,11 @@ test('native final admission, cancellation, and reconciliation races preserve im
 test('a failed private execution unlink keeps its exact reference for process-loss cleanup', async () => {
   const fixture = await preparedInvocation();
   await queueAndStart(fixture);
-  const executionReference = (await getCheckRunStatus(fixture.registration.invocationId, {
-    stateDirectory: fixture.state,
-  })).preparedExecution;
+  const executionReference = (
+    await getCheckRunStatus(fixture.registration.invocationId, {
+      stateDirectory: fixture.state,
+    })
+  ).preparedExecution;
   expect(executionReference).not.toBeNull();
   const final = finalFor(fixture, 'settled');
   const failedCleanup = await acceptFinal(fixture, final, {
@@ -390,9 +385,11 @@ test('FD 3 delivery failure is recorded after pinning and cannot admit a contrad
     { stateDirectory: fixture.state },
   );
   expect(deliveryUnknown.finalCustody?.delivery).toBe('unknown');
-  await expect(stageCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(finalFor(fixture, 'settled'))}\n`, {
-    stateDirectory: fixture.state,
-  })).rejects.toThrow(/duplicate|replay/i);
+  await expect(
+    stageCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(finalFor(fixture, 'settled'))}\n`, {
+      stateDirectory: fixture.state,
+    }),
+  ).rejects.toThrow(/duplicate|replay/i);
   expect((await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state })).final).toEqual(
     original,
   );
