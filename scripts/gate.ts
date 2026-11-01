@@ -1,7 +1,18 @@
 #!/usr/bin/env bun
 // The repository's landing gate runs every workspace check and the control plane's own gate. When a readable
 // KERNEL_CHECK_REMOTE hosts file is configured, the root gate splits the work between two check-host runs.
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  closeSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { readHosts } from './remote-check.ts';
 import { hostsLocation, onCheckHost } from './stack-run.ts';
@@ -45,10 +56,236 @@ type WorkspaceResult = {
   output: string;
   workspace: Workspace;
 };
-type GateResultFile = {
+export type GateControlPlaneOutcome = { passed: boolean; durationSeconds: number; host: string };
+export type GateResultFile = {
   workspaces: WorkspaceOutcome[];
-  controlPlane?: { passed: boolean; durationSeconds: number; host: string };
+  controlPlane?: GateControlPlaneOutcome;
 };
+
+export const MAX_GATE_REPORT_BYTES = 1024 * 1024;
+
+export type GateReportDecode =
+  | { kind: 'missing' }
+  | { kind: 'invalid'; reason: string }
+  | { kind: 'decoded'; value: unknown };
+
+export type RemoteGateGroupReport = {
+  groupIndex: number;
+  workspaces: Workspace[];
+  controlPlane: boolean;
+  exitCode: number;
+  report: GateReportDecode;
+  launched: boolean;
+};
+
+export type RemoteGateReportSummary = {
+  exitCode: number;
+  result: GateResultFile;
+  errors: string[];
+};
+
+/** Decode a report body only after bounding its UTF-8 representation. */
+export function decodeGateReport(text: string | null): GateReportDecode {
+  if (text === null) return { kind: 'missing' };
+  if (Buffer.byteLength(text, 'utf8') > MAX_GATE_REPORT_BYTES) {
+    return { kind: 'invalid', reason: `report exceeds ${MAX_GATE_REPORT_BYTES} bytes` };
+  }
+  try {
+    return { kind: 'decoded', value: JSON.parse(text) as unknown };
+  } catch {
+    return { kind: 'invalid', reason: 'report is not valid JSON' };
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validateWorkspaceOutcome(value: unknown): WorkspaceOutcome | null {
+  if (!isRecord(value)) return null;
+  if (
+    !validText(value.name) ||
+    !validText(value.directory) ||
+    !validText(value.host) ||
+    typeof value.passed !== 'boolean' ||
+    typeof value.durationSeconds !== 'number' ||
+    !Number.isFinite(value.durationSeconds) ||
+    value.durationSeconds < 0 ||
+    !Array.isArray(value.failingFiles) ||
+    !value.failingFiles.every((entry) => typeof entry === 'string') ||
+    !Array.isArray(value.loadSensitiveTests) ||
+    !value.loadSensitiveTests.every((entry) => typeof entry === 'string')
+  ) {
+    return null;
+  }
+  return {
+    name: value.name,
+    directory: value.directory,
+    host: value.host,
+    passed: value.passed,
+    durationSeconds: value.durationSeconds,
+    failingFiles: value.failingFiles,
+    loadSensitiveTests: value.loadSensitiveTests,
+  };
+}
+
+function validateControlPlaneOutcome(value: unknown): GateControlPlaneOutcome | null {
+  if (!isRecord(value)) return null;
+  if (
+    typeof value.passed !== 'boolean' ||
+    typeof value.durationSeconds !== 'number' ||
+    !Number.isFinite(value.durationSeconds) ||
+    value.durationSeconds < 0 ||
+    !validText(value.host)
+  ) {
+    return null;
+  }
+  return { passed: value.passed, durationSeconds: value.durationSeconds, host: value.host };
+}
+
+function unknownWorkspaceOutcome(workspace: Workspace): WorkspaceOutcome {
+  return {
+    name: workspace.name,
+    directory: workspace.directory,
+    host: 'unknown',
+    passed: false,
+    durationSeconds: 0,
+    failingFiles: [],
+    loadSensitiveTests: [],
+  };
+}
+
+function unknownControlPlaneOutcome(): GateControlPlaneOutcome {
+  return { passed: false, durationSeconds: 0, host: 'unknown' };
+}
+
+/** Reconcile each launched remote report against only the work dispatched to that group. */
+export function aggregateRemoteGateReports(groups: RemoteGateGroupReport[]): RemoteGateReportSummary {
+  const outcomes: WorkspaceOutcome[] = [];
+  const errors: string[] = [];
+  let controlPlane: GateControlPlaneOutcome | undefined;
+
+  for (const group of groups) {
+    const label = `group ${group.groupIndex + 1}`;
+    if (!group.launched) {
+      if (group.workspaces.length > 0 || group.controlPlane) {
+        errors.push(`${label}: expected work was not launched`);
+        outcomes.push(...group.workspaces.map(unknownWorkspaceOutcome));
+        if (group.controlPlane && !controlPlane) controlPlane = unknownControlPlaneOutcome();
+      }
+      continue;
+    }
+
+    if (group.report.kind === 'missing') {
+      errors.push(`${label}: result report is missing`);
+      outcomes.push(...group.workspaces.map(unknownWorkspaceOutcome));
+      if (group.controlPlane) controlPlane ??= unknownControlPlaneOutcome();
+      continue;
+    }
+    if (group.report.kind === 'invalid') {
+      errors.push(`${label}: ${group.report.reason}`);
+      outcomes.push(...group.workspaces.map(unknownWorkspaceOutcome));
+      if (group.controlPlane) controlPlane ??= unknownControlPlaneOutcome();
+      continue;
+    }
+
+    const value = group.report.value;
+    if (!isRecord(value) || !Array.isArray(value.workspaces)) {
+      errors.push(`${label}: result must contain a workspace outcomes array`);
+      outcomes.push(...group.workspaces.map(unknownWorkspaceOutcome));
+      if (group.controlPlane) controlPlane ??= unknownControlPlaneOutcome();
+      continue;
+    }
+
+    const expectedByDirectory = new Map(group.workspaces.map((workspace) => [workspace.directory, workspace]));
+    const seen = new Set<string>();
+    const groupOutcomes: WorkspaceOutcome[] = [];
+    let invalidReason: string | undefined;
+    for (const entry of value.workspaces) {
+      const outcome = validateWorkspaceOutcome(entry);
+      if (!outcome) {
+        invalidReason = 'workspace outcome has invalid fields';
+        break;
+      }
+      if (seen.has(outcome.directory)) {
+        invalidReason = `duplicate workspace outcome for ${outcome.directory}`;
+        break;
+      }
+      if (!expectedByDirectory.has(outcome.directory)) {
+        invalidReason = `workspace outcome does not belong to this group: ${outcome.directory}`;
+        break;
+      }
+      seen.add(outcome.directory);
+      groupOutcomes.push(outcome);
+    }
+
+    const hasControlPlane = Object.hasOwn(value, 'controlPlane');
+    let reportedControl: GateControlPlaneOutcome | undefined;
+    if (!invalidReason && group.controlPlane && hasControlPlane) {
+      reportedControl = validateControlPlaneOutcome(value.controlPlane) ?? undefined;
+      if (!reportedControl) invalidReason = 'control-plane outcome has invalid fields';
+    } else if (!invalidReason && !group.controlPlane && hasControlPlane) {
+      invalidReason = 'control-plane outcome was not requested for this group';
+    }
+
+    if (invalidReason) {
+      errors.push(`${label}: ${invalidReason}`);
+      outcomes.push(...group.workspaces.map(unknownWorkspaceOutcome));
+      if (group.controlPlane) controlPlane ??= unknownControlPlaneOutcome();
+      continue;
+    }
+
+    const missingWorkspaces = group.workspaces.filter((workspace) => !seen.has(workspace.directory));
+    const missingControlPlane = group.controlPlane && !reportedControl;
+    if (group.exitCode === 0 && (missingWorkspaces.length > 0 || missingControlPlane)) {
+      const missing = [
+        ...missingWorkspaces.map((workspace) => workspace.directory),
+        ...(missingControlPlane ? [CONTROL_GATE] : []),
+      ];
+      errors.push(`${label}: result is incomplete; missing ${missing.join(', ')}`);
+      outcomes.push(...group.workspaces.map(unknownWorkspaceOutcome));
+      if (group.controlPlane) controlPlane ??= unknownControlPlaneOutcome();
+      continue;
+    }
+
+    outcomes.push(...groupOutcomes);
+    if (missingWorkspaces.length > 0) {
+      errors.push(
+        `${label}: result is incomplete; missing ${missingWorkspaces.map((workspace) => workspace.directory).join(', ')}`,
+      );
+      outcomes.push(...missingWorkspaces.map(unknownWorkspaceOutcome));
+    }
+    if (group.controlPlane) {
+      if (reportedControl) {
+        if (controlPlane) {
+          errors.push(`${label}: control-plane outcome was reported by more than one group`);
+          controlPlane = unknownControlPlaneOutcome();
+        } else {
+          controlPlane = reportedControl;
+        }
+      } else {
+        errors.push(`${label}: requested control-plane outcome is missing`);
+        controlPlane ??= unknownControlPlaneOutcome();
+      }
+    }
+  }
+
+  const result: GateResultFile = {
+    workspaces: outcomes.sort((left, right) => left.directory.localeCompare(right.directory)),
+    ...(controlPlane ? { controlPlane } : {}),
+  };
+  const nativeExitCode = groups.find((group) => group.exitCode !== 0)?.exitCode;
+  const outcomeFailed = outcomes.some((outcome) => !outcome.passed) || Boolean(controlPlane && !controlPlane.passed);
+  return {
+    exitCode: nativeExitCode ?? (errors.length > 0 || outcomeFailed ? 1 : 0),
+    result,
+    errors,
+  };
+}
 
 function writeOutput(
   text: string,
@@ -291,45 +528,27 @@ async function runRemoteGroups(
     }),
   );
 
-  const groupReports = partPaths.map((path) => readResultFile(resolve(root, path)));
-  const outcomes = groupReports.flatMap((report) => report?.workspaces ?? []);
-  const reportedDirectories = new Set(outcomes.map((outcome) => outcome.directory));
-  let unreportedControlFailure = false;
-  for (let index = 0; index < results.length; index += 1) {
-    if (results[index] === 0) continue;
-    for (const workspace of groups[index]!) {
-      if (reportedDirectories.has(workspace.directory)) continue;
-      outcomes.push({
-        name: workspace.name,
-        directory: workspace.directory,
-        host: 'unknown',
-        passed: false,
-        durationSeconds: 0,
-        failingFiles: [],
-        loadSensitiveTests: [],
-      });
-      reportedDirectories.add(workspace.directory);
-    }
-    if (!groupReports[index] && index === controlGroup) unreportedControlFailure = true;
-  }
-  const controls = groupReports
-    .map((report) => report?.controlPlane)
-    .filter((control): control is NonNullable<GateResultFile['controlPlane']> => Boolean(control));
+  const summary = aggregateRemoteGateReports(
+    groups.map((group, index) => ({
+      groupIndex: index,
+      workspaces: group,
+      controlPlane: index === controlGroup,
+      exitCode: results[index]!,
+      report: readResultFile(resolve(root, partPaths[index]!)),
+      launched: group.length > 0 || index === controlGroup,
+    })),
+  );
+  for (const error of summary.errors) writeOutput(`Invalid remote gate result: ${error}\n`, 'stderr');
+  const outcomes = summary.result.workspaces;
+  const controlPlane = summary.result.controlPlane;
   const failedDirectories = outcomes.filter((outcome) => !outcome.passed).map((outcome) => outcome.directory);
-  const controlPlane =
-    controls[0] ?? (unreportedControlFailure ? { passed: false, durationSeconds: 0, host: 'unknown' } : undefined);
   if (controlPlane && !controlPlane.passed) failedDirectories.push(CONTROL_GATE);
-  const merged: GateResultFile = {
-    workspaces: outcomes.sort((left, right) => left.directory.localeCompare(right.directory)),
-    ...(controlPlane ? { controlPlane } : {}),
-  };
-  const failedCode = results.find((code) => code !== 0);
-  if (failedCode !== undefined || failedDirectories.length > 0) {
+  if (summary.exitCode !== 0 || failedDirectories.length > 0) {
     writeOutput(`Failed workspaces: ${failedDirectories.join(' ')}\n`);
-    writeResultFile(process.env.GATE_RESULT_FILE ?? '.temp/gate/result.json', merged);
-    return failedCode ?? 1;
+    writeResultFile(process.env.GATE_RESULT_FILE ?? '.temp/gate/result.json', summary.result);
+    return summary.exitCode;
   }
-  writeResultFile(process.env.GATE_RESULT_FILE ?? '.temp/gate/result.json', merged);
+  writeResultFile(process.env.GATE_RESULT_FILE ?? '.temp/gate/result.json', summary.result);
   return 0;
 }
 
@@ -473,11 +692,33 @@ function writeResultFile(
   writeOutput(`Gate result: ${path}\n`, 'stdout', env);
 }
 
-function readResultFile(path: string): GateResultFile | null {
+function readResultFile(path: string): GateReportDecode {
+  let descriptor: number | undefined;
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as GateResultFile;
-  } catch {
-    return null;
+    descriptor = openSync(path, 'r');
+    const bytes = Buffer.allocUnsafe(MAX_GATE_REPORT_BYTES + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(descriptor, bytes, length, bytes.length - length, length);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length > MAX_GATE_REPORT_BYTES) {
+      return { kind: 'invalid', reason: `report exceeds ${MAX_GATE_REPORT_BYTES} bytes` };
+    }
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length));
+    } catch {
+      return { kind: 'invalid', reason: 'report is not valid UTF-8' };
+    }
+    return decodeGateReport(text);
+  } catch (error) {
+    const code = isRecord(error) ? error.code : undefined;
+    if (code === 'ENOENT') return { kind: 'missing' };
+    return { kind: 'invalid', reason: `unable to read report: ${error instanceof Error ? error.message : String(error)}` };
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
 }
 

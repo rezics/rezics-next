@@ -103,17 +103,23 @@ if (script.includes('REMOTE_CHECK_RETURNS')) {
     log({ kind: 'finished', group, runId, code });
     const resultPath = script.match(/GATE_RESULT_FILE=([^\\s'\"]+)/)?.[1];
     if (resultPath) {
+      const invocation = 'bun scripts/gate.ts --workspaces ';
+      const invocationIndex = script.lastIndexOf(invocation);
+      const requested = invocationIndex < 0
+        ? []
+        : script.slice(invocationIndex + invocation.length).split(/\\s+/).filter(Boolean).map((path) => path.replace(/^'|'$/g, ''));
+      const requestedWorkspaces = requested.filter((path) => /^(apps|services|packages)\\//.test(path));
       const result = {
-        workspaces: script.includes('apps/') ? [{
+        workspaces: requestedWorkspaces.map((directory) => ({
           name: '@fixture/remote-' + group,
-          directory: process.env.FAKE_RESULT_WORKSPACE ?? 'apps/remote-' + group,
+          directory: process.env.FAKE_RESULT_WORKSPACE ?? directory,
           host: address.includes('@b.') ? 'b' : 'c',
           passed: code === 0,
           durationSeconds: 1.25,
           failingFiles: code === 0 ? [] : ['test/remote-' + group + '.test.ts'],
           loadSensitiveTests: [],
-        }] : [],
-        ...(script.includes('tools/goal/scripts/gate.ts')
+        })),
+        ...(requested.includes('tools/goal/scripts/gate.ts')
           ? { controlPlane: { passed: code === 0, durationSeconds: 0.5, host: address.includes('@b.') ? 'b' : 'c' } }
           : {}),
       };
@@ -283,6 +289,17 @@ function fixtureWorkspace(cwd: string, directory: string, name: string, check = 
   writeFileSync(join(target, 'package.json'), JSON.stringify({ name, scripts: { check } }));
 }
 
+function selectedWorkspaceDirectories(script: string): string[] {
+  const invocation = 'bun scripts/gate.ts --workspaces ';
+  const invocationIndex = script.lastIndexOf(invocation);
+  if (invocationIndex < 0) return [];
+  return script
+    .slice(invocationIndex + invocation.length)
+    .split(/\s+/)
+    .map((path) => path.replace(/^'|'$/g, ''))
+    .filter((path) => /^(apps|services|packages)\//.test(path));
+}
+
 test('with KERNEL_CHECK_REMOTE the gate runs two workspace groups on check hosts in parallel and fails if either fails', async () => {
   const { env, events } = scenario();
   const result = await runGate({
@@ -294,7 +311,6 @@ test('with KERNEL_CHECK_REMOTE the gate runs two workspace groups on check hosts
   });
   expect(result.code).toBe(7);
   expect(result.stdout).toContain('Failed workspaces:');
-  expect(result.stdout).toContain('Failed workspaces: apps/remote-1');
   expect(result.stdout).toContain('b: remote gate output');
   expect(result.stdout).toContain('c: remote gate output');
   expect(result.stdout).toContain('Gate result:');
@@ -313,6 +329,10 @@ test('with KERNEL_CHECK_REMOTE the gate runs two workspace groups on check hosts
   expect(seen.filter((event) => event.kind === 'slot').every((event) => event.slotLimit === 7)).toBe(true);
   expect(seen.filter((event) => event.kind === 'rsync')).toHaveLength(4);
   const scripts = runs.map((event) => event.script as string);
+  const failedGroupScript = scripts.find((script) => script.includes('GATE_GROUP_INDEX=1'))!;
+  const failedGroupWorkspaces = selectedWorkspaceDirectories(failedGroupScript).sort();
+  expect(failedGroupWorkspaces.length).toBeGreaterThan(0);
+  expect(result.stdout).toContain(`Failed workspaces: ${failedGroupWorkspaces.join(' ')}`);
   expect(scripts.every((script) => script.includes('KERNEL_CHECK_ON_REMOTE=1'))).toBe(true);
   expect(scripts.every((script) => script.includes('GATE_CONCURRENCY=3'))).toBe(true);
   expect(scripts.every((script) => script.includes('--workspaces'))).toBe(true);
@@ -322,26 +342,11 @@ test('with KERNEL_CHECK_REMOTE the gate runs two workspace groups on check hosts
     workspaces: Array<{ directory: string; host: string; passed: boolean }>;
     controlPlane: { passed: boolean; host: string };
   };
-  expect(merged.workspaces.filter((workspace) => workspace.directory.startsWith('apps/remote-'))).toEqual([
-    {
-      name: '@fixture/remote-0',
-      directory: 'apps/remote-0',
-      host: 'b',
-      passed: true,
-      durationSeconds: 1.25,
-      failingFiles: [],
-      loadSensitiveTests: [],
-    },
-    {
-      name: '@fixture/remote-1',
-      directory: 'apps/remote-1',
-      host: 'c',
-      passed: false,
-      durationSeconds: 1.25,
-      failingFiles: ['test/remote-1.test.ts'],
-      loadSensitiveTests: [],
-    },
-  ]);
+  const expectedWorkspaces = scripts.flatMap(selectedWorkspaceDirectories).sort();
+  expect(merged.workspaces.map((workspace) => workspace.directory)).toEqual(expectedWorkspaces);
+  const failedOutcomes = merged.workspaces.filter((workspace) => failedGroupWorkspaces.includes(workspace.directory));
+  expect(failedOutcomes.map((workspace) => workspace.directory)).toEqual(failedGroupWorkspaces);
+  expect(failedOutcomes.every((workspace) => !workspace.passed)).toBe(true);
   expect(merged.controlPlane).toEqual({ passed: true, durationSeconds: 0.5, host: 'b' });
 });
 
