@@ -248,12 +248,12 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
       if (!current) return;
       if (/\/\*\s*semantic\.privacy-start\s*\*\//.test(text) && current.afterStart) {
         const change = current.afterStart;
-        current.afterStart = undefined;
+        delete current.afterStart;
         await change();
       }
       if (/statement_timestamp\(\)/.test(text) && /core\.consumer_checkpoint/.test(text) && current.afterProjection) {
         const change = current.afterProjection;
-        current.afterProjection = undefined;
+        delete current.afterProjection;
         await change();
       }
     };
