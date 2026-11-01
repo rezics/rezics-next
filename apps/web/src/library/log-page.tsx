@@ -1,6 +1,6 @@
 import { Exposure } from '../kernel/exposure';
 import { RelativeTime } from './logs-progress';
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
@@ -29,6 +29,38 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
   );
 }
 
+type PublicationPage = {
+  id: string;
+  isOwner: boolean;
+  loadedRevision: number | undefined;
+  lifetime: symbol;
+  revision: number | undefined;
+  undo: DeletionEvidence | undefined;
+  deleteStarted: number | null;
+  confirming: boolean;
+  deleted: boolean;
+  pending: boolean;
+  error: string | null;
+  idempotencyKey: string;
+};
+
+function publicationPage(id: string, isOwner: boolean, loadedRevision: number | undefined): PublicationPage {
+  return {
+    id,
+    isOwner,
+    loadedRevision,
+    lifetime: Symbol(),
+    revision: loadedRevision,
+    undo: undefined,
+    deleteStarted: null,
+    confirming: false,
+    deleted: false,
+    pending: false,
+    error: null,
+    idempotencyKey: crypto.randomUUID(),
+  };
+}
+
 export function PublishedLogPageView({
   log,
   isOwner,
@@ -38,40 +70,91 @@ export function PublishedLogPageView({
   isOwner: boolean;
   revision?: number;
 }) {
-  const [revision, setRevision] = useState(loadedRevision);
-  const [undo, setUndo] = useState<DeletionEvidence | undefined>();
-  const deleteStarted = useRef<number | null>(null);
-  const busy = useRef(false);
-  const [confirming, setConfirming] = useState(false);
-  const [deleted, setDeleted] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [page, setPage] = useState(() => publicationPage(log.id, isOwner, loadedRevision));
+  const committed = useRef<{
+    lifetime: symbol;
+    revision: number | undefined;
+    deleted: boolean;
+    deletionId: string | undefined;
+    deletionRevision: number | undefined;
+  } | null>(null);
+  const busy = useRef<symbol | null>(null);
+  const { lifetime, revision, undo, deleteStarted, confirming, deleted, pending, error, idempotencyKey } = page;
+  const deletionId = undo?.deletionId;
+  const deletionRevision = undo?.revision;
+
+  useLayoutEffect(() => {
+    committed.current = { lifetime, revision, deleted, deletionId, deletionRevision };
+    return () => {
+      committed.current = null;
+    };
+  }, [lifetime, revision, deleted, deletionId, deletionRevision]);
+
+  // Compare loader primitives, not object identity or the locally restored revision.
+  // Reset before committing children so an old UndoNotice cannot survive a new page.
+  if (page.id !== log.id || page.isOwner !== isOwner || page.loadedRevision !== loadedRevision) {
+    setPage(publicationPage(log.id, isOwner, loadedRevision));
+  }
+
+  const isCurrent = () => committed.current?.lifetime === lifetime && page.isOwner;
+  function update(change: Partial<PublicationPage>) {
+    setPage((current) => (current.lifetime === lifetime ? { ...current, ...change } : current));
+  }
 
   async function remove() {
-    if (busy.current || revision === undefined) return;
-    busy.current = true;
-    deleteStarted.current ??= Date.now();
-    setPending(true);
-    setError(null);
+    if (
+      !isCurrent() ||
+      busy.current === lifetime ||
+      committed.current?.deleted ||
+      committed.current?.revision !== revision ||
+      revision === undefined
+    )
+      return;
+    busy.current = lifetime;
+    update({ deleteStarted: deleteStarted ?? Date.now(), pending: true, error: null });
     try {
       const result = await removePublishedLog({
-        data: { id: log.id, revision, idempotencyKey },
+        data: { id: page.id, revision, idempotencyKey },
         headers: csrfHeaders(),
       });
+      if (!isCurrent()) return;
       if (!result.ok) {
-        setError(result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed());
+        update({ error: result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed() });
         return;
       }
-      setIdempotencyKey(crypto.randomUUID());
-      setConfirming(false);
-      setUndo(result.undo);
-      setDeleted(true);
+      update({ idempotencyKey: crypto.randomUUID(), confirming: false, undo: result.undo, deleted: true });
     } catch {
-      setError(m.library_logs_write_failed());
+      if (isCurrent()) update({ error: m.library_logs_write_failed() });
     } finally {
-      busy.current = false;
-      setPending(false);
+      if (isCurrent()) {
+        busy.current = null;
+        update({ pending: false });
+      }
+    }
+  }
+
+  async function restore(idempotencyKey: string) {
+    if (
+      !isCurrent() ||
+      busy.current === lifetime ||
+      !committed.current?.deleted ||
+      !undo ||
+      committed.current.deletionId !== undo.deletionId ||
+      committed.current.deletionRevision !== undo.revision ||
+      Date.now() >= (deleteStarted ?? 0) + 30_000
+    )
+      return false;
+    busy.current = lifetime;
+    try {
+      const result = await restorePublishedLog({
+        data: { id: page.id, ...undo, idempotencyKey },
+        headers: csrfHeaders(),
+      });
+      if (!isCurrent() || !result.ok) return false;
+      update({ revision: result.revision, deleted: false, undo: undefined, deleteStarted: null });
+      return true;
+    } finally {
+      if (isCurrent()) busy.current = null;
     }
   }
 
@@ -80,23 +163,11 @@ export function PublishedLogPageView({
       <article className="max-w-4xl space-y-4 text-foreground">
         <UndoNotice
           message={m.library_logs_deleted()}
-          deadline={(deleteStarted.current ?? 0) + 30_000}
+          deadline={(deleteStarted ?? 0) + 30_000}
           available={Boolean(undo)}
           operation="published_log.create"
           failure={m.library_logs_write_failed()}
-          restore={async (idempotencyKey) => {
-            if (!undo) return false;
-            const result = await restorePublishedLog({
-              data: { id: log.id, ...undo, idempotencyKey },
-              headers: csrfHeaders(),
-            });
-            if (!result.ok) return false;
-            setRevision(result.revision);
-            setDeleted(false);
-            setUndo(undefined);
-            deleteStarted.current = null;
-            return true;
-          }}
+          restore={restore}
         />
       </article>
     );
@@ -146,7 +217,7 @@ export function PublishedLogPageView({
         <Exposure operation="published_log.delete">
           <div className="flex flex-wrap gap-3">
             {!confirming ? (
-              <button type="button" className={buttonClass} onClick={() => setConfirming(true)}>
+              <button type="button" className={buttonClass} onClick={() => update({ confirming: true })}>
                 {m.library_logs_delete()}
               </button>
             ) : (
@@ -154,7 +225,12 @@ export function PublishedLogPageView({
                 <button type="button" className={buttonClass} disabled={pending} onClick={() => void remove()}>
                   {m.library_logs_confirm_delete()}
                 </button>
-                <button type="button" className={buttonClass} disabled={pending} onClick={() => setConfirming(false)}>
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={pending}
+                  onClick={() => update({ confirming: false })}
+                >
                   {m.library_logs_cancel()}
                 </button>
               </>
