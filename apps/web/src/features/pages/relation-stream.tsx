@@ -23,18 +23,20 @@ let nextSectionIncarnation = 0;
 let nextQueryClientIncarnation = 0;
 const sectionIncarnations = new WeakMap<object, number>();
 const queryClientIncarnations = new WeakMap<QueryClient, number>();
-const retiredPrivateSections = new WeakMap<object, { permanent: boolean; suspensions: number }>();
-const retiredPrivateReadingObjects = new WeakSet<object>();
+// Closing blocks new owners. Existing owners keep their weakly recorded lease, including StrictMode resumption.
+const privateReadingOwners = new WeakMap<object, WeakSet<object>>();
+const closedPrivateReadingObjects = new WeakSet<object>();
 
 type OwnedQuery = { client: QueryClient; key: QueryKey };
 type StreamOwner = {
   queryClient: QueryClient;
   expectedReader: string | null;
   sessionQuery: object | null;
+  suspendedSessionState: object | null;
+  readingObjects: object[];
   generation: number;
   mounted: boolean;
   suspended: boolean;
-  cleanupMarked: boolean;
   retired: boolean;
   queries: Map<string, OwnedQuery>;
   stopObserving: (() => void) | undefined;
@@ -58,6 +60,7 @@ function sessionReading(client: QueryClient, expectedReader: string) {
   const session = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : undefined;
   return {
     query: query ?? null,
+    state: query?.state ?? null,
     admitted: query?.state.status === 'success' && session?.state === 'signed-in' && session.subject === expectedReader,
   };
 }
@@ -67,10 +70,6 @@ function sameSessionKey(key: QueryKey): boolean {
     key.length === sessionQuery.queryKey.length &&
     key.every((part: unknown, index: number) => part === sessionQuery.queryKey[index])
   );
-}
-
-function privateSectionState(section: Section) {
-  return retiredPrivateSections.get(section);
 }
 
 function privateReadingObjects(section: Section): object[] {
@@ -93,31 +92,31 @@ function privateReadingObjects(section: Section): object[] {
   return objects;
 }
 
-function isRetiredPrivateReading(section: Section): boolean {
-  return privateReadingObjects(section).some((object) => retiredPrivateReadingObjects.has(object));
+function ownerHasPrivateReading(owner: object, readingObject: object): boolean {
+  return privateReadingOwners.get(readingObject)?.has(owner) ?? false;
 }
 
-function permanentlyRetirePrivateSection(section: Section): void {
-  const state = privateSectionState(section) ?? { permanent: false, suspensions: 0 };
-  state.permanent = true;
-  retiredPrivateSections.set(section, state);
-  for (const object of privateReadingObjects(section)) retiredPrivateReadingObjects.add(object);
+function canOwnPrivateReading(readingObjects: object[], owner: object): boolean {
+  return readingObjects.every(
+    (readingObject) => !closedPrivateReadingObjects.has(readingObject) || ownerHasPrivateReading(owner, readingObject),
+  );
 }
 
-function suspendPrivateSection(section: Section): boolean {
-  const state = privateSectionState(section) ?? { permanent: false, suspensions: 0 };
-  if (state.permanent) return false;
-  state.suspensions += 1;
-  retiredPrivateSections.set(section, state);
+function claimPrivateReading(readingObjects: object[], owner: object): boolean {
+  if (!canOwnPrivateReading(readingObjects, owner)) return false;
+  for (const readingObject of readingObjects) {
+    let owners = privateReadingOwners.get(readingObject);
+    if (!owners) {
+      owners = new WeakSet();
+      privateReadingOwners.set(readingObject, owners);
+    }
+    owners.add(owner);
+  }
   return true;
 }
 
-function resumePrivateSection(section: Section, marked: boolean): void {
-  if (!marked) return;
-  const state = privateSectionState(section);
-  if (!state || state.permanent) return;
-  state.suspensions = Math.max(0, state.suspensions - 1);
-  if (state.suspensions === 0) retiredPrivateSections.delete(section);
+function closePrivateReading(readingObjects: object[]): void {
+  for (const readingObject of readingObjects) closedPrivateReadingObjects.add(readingObject);
 }
 
 function clearOwnedQueries(owner: StreamOwner): void {
@@ -248,27 +247,27 @@ function StreamState({
   if (ownerRef.current === null) {
     const expectedReader = value.cacheReader ?? null;
     const reading = expectedReader === null ? undefined : sessionReading(queryClient, expectedReader);
-    const sectionState = expectedReader === null ? undefined : privateSectionState(section);
-    const unavailable =
-      expectedReader !== null &&
-      (sectionState?.permanent === true ||
-        isRetiredPrivateReading(section) ||
-        (sectionState?.suspensions ?? 0) > 0 ||
-        !reading?.admitted ||
-        reading?.query == null);
+    const readingObjects = expectedReader === null ? [] : privateReadingObjects(section);
     const owner = {
       queryClient,
       expectedReader,
       sessionQuery: reading?.query ?? null,
+      suspendedSessionState: null,
+      readingObjects,
       generation: 0,
       mounted: false,
       suspended: false,
-      cleanupMarked: false,
-      retired: unavailable,
+      retired: false,
       queries: new Map<string, OwnedQuery>(),
       stopObserving: undefined,
     } as StreamOwner;
-    if (unavailable && expectedReader !== null && !sectionState?.suspensions) permanentlyRetirePrivateSection(section);
+    const unavailable =
+      expectedReader !== null &&
+      (!canOwnPrivateReading(readingObjects, owner) || !reading?.admitted || reading?.query == null);
+    if (unavailable && expectedReader !== null) {
+      owner.retired = true;
+      closePrivateReading(readingObjects);
+    }
     owner.matches = (generation) =>
       !owner.retired && !owner.suspended && owner.mounted && owner.generation === generation;
     owner.current = (generation) => {
@@ -287,7 +286,7 @@ function StreamState({
       owner.retired = true;
       owner.generation += 1;
       active.current = false;
-      if (owner.expectedReader !== null) permanentlyRetirePrivateSection(section);
+      if (owner.expectedReader !== null) closePrivateReading(owner.readingObjects);
       owner.stopObserving?.();
       owner.stopObserving = undefined;
       clearOwnedQueries(owner);
@@ -325,22 +324,27 @@ function StreamState({
     if (owner.suspended) {
       const current =
         owner.expectedReader === null ? undefined : sessionReading(owner.queryClient, owner.expectedReader);
-      const sectionState = owner.expectedReader === null ? undefined : privateSectionState(section);
       if (
         owner.expectedReader !== null &&
         (current?.query !== owner.sessionQuery ||
           current?.admitted !== true ||
-          sectionState?.permanent === true ||
-          (sectionState?.suspensions ?? 0) > (owner.cleanupMarked ? 1 : 0))
+          current?.state !== owner.suspendedSessionState ||
+          !canOwnPrivateReading(owner.readingObjects, owner))
       ) {
         owner.retire();
         return;
       }
-      resumePrivateSection(section, owner.cleanupMarked);
-      owner.cleanupMarked = false;
+      if (owner.expectedReader !== null && !claimPrivateReading(owner.readingObjects, owner)) {
+        owner.retire();
+        return;
+      }
+      owner.suspendedSessionState = null;
       owner.suspended = false;
       owner.generation += 1;
       refreshOwner((version) => version + 1);
+    } else if (owner.expectedReader !== null && !claimPrivateReading(owner.readingObjects, owner)) {
+      owner.retire();
+      return;
     }
     owner.mounted = true;
     const unsubscribe =
@@ -374,7 +378,10 @@ function StreamState({
       owner.generation += 1;
       active.current = false;
       clearOwnedQueries(owner);
-      if (owner.expectedReader !== null) owner.cleanupMarked = suspendPrivateSection(section);
+      if (owner.expectedReader !== null) {
+        owner.suspendedSessionState = sessionReading(owner.queryClient, owner.expectedReader).state;
+        closePrivateReading(owner.readingObjects);
+      }
     };
   }, [identity, owner, registerOwner, section]);
 

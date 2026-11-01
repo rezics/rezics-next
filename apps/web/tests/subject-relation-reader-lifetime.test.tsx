@@ -263,7 +263,7 @@ async function settle() {
 }
 
 // Authored UNRUN: one mounted campaign for actual reader-cache health, transition, request ownership and recovery.
-test('composed relation streams retire unhealthy reader visits and admit only fresh current readings', async () => {
+test('private unmount cannot bless borrowed relation rows after unobserved session recovery', async () => {
   heldRelations = [];
   mock.module('@tanstack/react-start', () => ({ ...start, createServerFn }));
   mock.module('@tanstack/react-start/server', () => ({ ...start, createServerFn }));
@@ -350,10 +350,21 @@ test('composed relation streams retire unhealthy reader visits and admit only fr
     };
     const first = makeReading(baseSpec, h);
     const second = makeReading(secondSpec, h);
+    const sharedBase = makeReading({ ...baseSpec, node: 'shared-links', label: 'Shared stream' }, h);
+    const shared: Reading = {
+      ...sharedBase,
+      section:
+        first.section.ok && sharedBase.section.ok
+          ? { ...sharedBase.section, body: first.section.body }
+          : sharedBase.section,
+    };
     const publicReading = makeReading(publicSpec, h);
     let replacePrimary: (reading: Reading) => void = () => {};
     let replaceSecondary: (reading: Reading) => void = () => {};
     let replaceClient: (client: InstanceType<typeof QueryClient>) => void = () => {};
+    let setPrimaryMounted: (mounted: boolean) => void = () => {};
+    let setSecondaryMounted: (mounted: boolean) => void = () => {};
+    let setSharedMounted: (mounted: boolean) => void = () => {};
     let currentPrimary = first;
     let currentSecondary = second;
     let invalidations = 0;
@@ -361,16 +372,23 @@ test('composed relation streams retire unhealthy reader visits and admit only fr
     function Screen() {
       const [primary, setPrimary] = reactUseState(first);
       const [secondary, setSecondary] = reactUseState(second);
+      const [primaryMounted, updatePrimaryMounted] = reactUseState(true);
+      const [secondaryMounted, updateSecondaryMounted] = reactUseState(true);
+      const [sharedMounted, updateSharedMounted] = reactUseState(true);
       replacePrimary = setPrimary;
       replaceSecondary = setSecondary;
+      setPrimaryMounted = updatePrimaryMounted;
+      setSecondaryMounted = updateSecondaryMounted;
+      setSharedMounted = updateSharedMounted;
       currentPrimary = primary;
       currentSecondary = secondary;
       return h(
         'main',
         null,
-        h(RelationStream, primary),
-        h(RelationStream, secondary),
+        primaryMounted ? h(RelationStream, primary) : null,
+        secondaryMounted ? h(RelationStream, secondary) : null,
         h(RelationStream, publicReading),
+        sharedMounted ? h(RelationStream, shared) : null,
         h('button', { id: 'outside-reading' }, 'Outside reading'),
       );
     }
@@ -416,6 +434,25 @@ test('composed relation streams retire unhealthy reader visits and admit only fr
       await act(async () => replacePrimary(reading));
       await settle();
     };
+    const replaceWithMounted = async (reading: Reading) => {
+      await act(async () => {
+        replacePrimary(reading);
+        setPrimaryMounted(true);
+      });
+      await settle();
+    };
+    const mountPrimary = async (mounted: boolean) => {
+      await act(async () => setPrimaryMounted(mounted));
+      await settle();
+    };
+    const mountSecondary = async (mounted: boolean) => {
+      await act(async () => setSecondaryMounted(mounted));
+      await settle();
+    };
+    const mountShared = async (mounted: boolean) => {
+      await act(async () => setSharedMounted(mounted));
+      await settle();
+    };
     const assertPendingKey = (client: InstanceType<typeof QueryClient>, held: HeldRelation) => {
       const key = cacheKeyFor(client, held.request);
       expect(key).toBeDefined();
@@ -435,7 +472,180 @@ test('composed relation streams retire unhealthy reader visits and admit only fr
       expect(stream('adaptations').textContent).toContain('First adaptations');
       expect(stream('adaptations').textContent).toContain('Illustrator');
       expect(stream('public-links').textContent).toContain('Public first row');
+      expect(shared.section).not.toBe(first.section);
+      expect(first.section.ok).toBe(true);
+      expect(shared.section.ok).toBe(true);
+      if (first.section.ok && shared.section.ok) expect(shared.section.body).toBe(first.section.body);
       clientB.setQueryData(['subject-relation-group', 'another-owner'], { sentinel: true });
+
+      // Distinct live nodes can share the exact prepared body. Releasing one owner closes new borrowing
+      // without taking rows, its pending query, completion, or focus from the other live owner.
+      const originalAction = await startMore('side-stories');
+      const originalRequest = heldRelations.at(-1)!;
+      const originalKey = assertPendingKey(clientB, originalRequest);
+      const sharedAction = await startMore('shared-links');
+      const sharedRequest = heldRelations.at(-1)!;
+      const sharedKey = assertPendingKey(clientB, sharedRequest);
+      expect(originalKey).not.toEqual(sharedKey);
+      await mountPrimary(false);
+      expect(clientB.getQueryCache().find({ queryKey: originalKey, exact: true })).toBeUndefined();
+      expect(clientB.getQueryCache().find({ queryKey: sharedKey, exact: true })).toBeDefined();
+
+      const borrowedBase = makeReading({ ...baseSpec, label: 'Borrowed after actual unmount' }, h);
+      const borrowedAfterUnmount: Reading = {
+        ...borrowedBase,
+        section:
+          first.section.ok && borrowedBase.section.ok
+            ? { ...borrowedBase.section, body: first.section.body }
+            : borrowedBase.section,
+      };
+      await replaceWithMounted(borrowedAfterUnmount);
+      expectRetired('side-stories');
+      expect(stream('side-stories').textContent).not.toContain('First A');
+      expect(stream('side-stories').querySelector('[role="alert"]')).not.toBeNull();
+      expect(stream('side-stories').querySelector('[href*="node=side-stories"]')).not.toBeNull();
+      expect(stream('shared-links').textContent).toContain('First A');
+      expect(clientB.getQueryCache().find({ queryKey: sharedKey, exact: true })).toBeDefined();
+      expect(window.document.activeElement).toBe(sharedAction);
+      sharedRequest.response.resolve(continuation(sharedRequest.request, 'Shared stream continuation', 'shared-next'));
+      await settle();
+      expect(stream('shared-links').textContent).toContain('Shared stream continuation');
+      expect(status('shared-links').textContent).toContain(': 1. You can load more.');
+      expect(trigger('shared-links').getAttribute('href')).toContain('cursor=shared-next');
+      expect(window.document.activeElement).toBe(sharedAction);
+      expect(clientB.getQueryCache().find({ queryKey: sharedKey, exact: true })).toBeUndefined();
+      expect(invalidations).toBe(0);
+
+      const afterBorrowedRecovery = makeReading({ ...baseSpec, label: 'Fresh after borrowed remount' }, h);
+      await replaceWithMounted(afterBorrowedRecovery);
+      const freshAction = await startMore('side-stories');
+      const freshRequest = heldRelations.at(-1)!;
+      const freshKey = assertPendingKey(clientB, freshRequest);
+      expect(freshKey).not.toEqual(originalKey);
+      expect(clientB.getQueryCache().find({ queryKey: freshKey, exact: true })).toBeDefined();
+      originalRequest.response.resolve(continuation(originalRequest.request, 'Retired continuation row', null));
+      await settle();
+      expect(stream('side-stories').textContent).toContain('Fresh after borrowed remount');
+      expect(stream('side-stories').textContent).not.toContain('Retired continuation row');
+      expect(status('side-stories').textContent).toContain('Loading more');
+      expect(clientB.getQueryCache().find({ queryKey: originalKey, exact: true })).toBeUndefined();
+      expect(clientB.getQueryCache().find({ queryKey: freshKey, exact: true })).toBeDefined();
+      expect(window.document.activeElement).toBe(freshAction);
+      freshRequest.response.resolve(continuation(freshRequest.request, 'Fresh continuation after old cleanup', 'fresh-next'));
+      await settle();
+      expect(stream('side-stories').textContent).toContain('Fresh continuation after old cleanup');
+      expect(clientB.getQueryCache().find({ queryKey: freshKey, exact: true })).toBeUndefined();
+      expect(window.document.activeElement).toBe(freshAction);
+      expect(invalidations).toBe(0);
+      void originalAction;
+
+      // With every private owner unmounted, A/B/A and retained-data error/equal recovery cannot
+      // make an old reading current again. Rebuilt containers still borrow the retired row objects.
+      await mountPrimary(false);
+      await mountSecondary(false);
+      await mountShared(false);
+      await act(async () => {
+        clientB.setQueryData(sessionQuery.queryKey, sessionB);
+        clientB.setQueryData(sessionQuery.queryKey, sessionA);
+      });
+      await settle();
+      const borrowedRowsBase = makeReading({ ...baseSpec, label: 'Copied containers after unobserved ABA' }, h);
+      const initialLinks = first.section.ok ? first.section.body.links : undefined;
+      const borrowedRowsSection: Section =
+        first.section.ok && borrowedRowsBase.section.ok && Array.isArray(initialLinks)
+          ? { ...borrowedRowsBase.section, body: { ...first.section.body, links: [...initialLinks] } }
+          : borrowedRowsBase.section;
+      await replaceWithMounted({ ...borrowedRowsBase, section: borrowedRowsSection });
+      expectRetired('side-stories');
+      expect(stream('side-stories').textContent).not.toContain('First A');
+      expect(stream('side-stories').querySelector('[role="alert"]')).not.toBeNull();
+      expect(stream('side-stories').querySelector('[href*="node=side-stories"]')).not.toBeNull();
+
+      const afterUnobservedAba = makeReading({ ...baseSpec, label: 'Fresh A after unobserved ABA' }, h);
+      await replaceWithMounted(afterUnobservedAba);
+      expect(stream('side-stories').textContent).toContain('Fresh A after unobserved ABA');
+      const afterUnobservedAbaSecondary = makeReading(
+        { ...secondSpec, label: 'Fresh adaptations after unobserved ABA' },
+        h,
+      );
+      await act(async () => {
+        replaceSecondary(afterUnobservedAbaSecondary);
+        setSecondaryMounted(true);
+      });
+      await settle();
+
+      const unobservedErrorAction = await startMore('side-stories');
+      const unobservedErrorRequest = heldRelations.at(-1)!;
+      const unobservedErrorKey = assertPendingKey(clientB, unobservedErrorRequest);
+      outside().focus();
+      await mountPrimary(false);
+      await mountSecondary(false);
+      expect(clientB.getQueryCache().find({ queryKey: unobservedErrorKey, exact: true })).toBeUndefined();
+      const unobservedSessionError = clientB.fetchQuery({
+        queryKey: sessionQuery.queryKey,
+        staleTime: 0,
+        retry: false,
+        queryFn: async () => {
+          throw new Error('Session query failed while its private relation owner was unmounted');
+        },
+      });
+      await act(async () => {
+        await unobservedSessionError.catch(() => undefined);
+      });
+      expect(clientB.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
+      expect(clientB.getQueryData(sessionQuery.queryKey)).toEqual(sessionA);
+      clientB.setQueryData(sessionQuery.queryKey, sessionA);
+      await settle();
+
+      const copiedAfterError = makeReading({ ...baseSpec, label: 'Copied rows after retained error' }, h);
+      const afterAbaLinks = afterUnobservedAba.section.ok ? afterUnobservedAba.section.body.links : undefined;
+      const copiedAfterErrorSection: Section =
+        afterUnobservedAba.section.ok &&
+        copiedAfterError.section.ok &&
+        Array.isArray(afterAbaLinks)
+          ? {
+              ...copiedAfterError.section,
+              body: {
+                ...afterUnobservedAba.section.body,
+                links: [...afterAbaLinks],
+              },
+            }
+          : copiedAfterError.section;
+      await replaceWithMounted({ ...copiedAfterError, section: copiedAfterErrorSection });
+      expectRetired('side-stories');
+      expect(stream('side-stories').textContent).not.toContain('Fresh A after unobserved ABA');
+      expect(stream('side-stories').querySelector('[role="alert"]')).not.toBeNull();
+      unobservedErrorRequest.response.reject(new Error('Late rejection after borrowed remount'));
+      await settle();
+      expectRetired('side-stories');
+      expect(clientB.getQueryCache().find({ queryKey: unobservedErrorKey, exact: true })).toBeUndefined();
+      expect(window.document.activeElement).toBe(outside());
+      expect(invalidations).toBe(0);
+      void unobservedErrorAction;
+
+      const afterUnobservedError = makeReading({ ...baseSpec, label: 'Fresh A after retained error' }, h);
+      await replaceWithMounted(afterUnobservedError);
+      const recoveredAction = await startMore('side-stories');
+      const recoveredRequest = heldRelations.at(-1)!;
+      const recoveredKey = assertPendingKey(clientB, recoveredRequest);
+      recoveredRequest.response.resolve(
+        continuation(recoveredRequest.request, 'Recovered continuation', 'recovered-next'),
+      );
+      await settle();
+      expect(stream('side-stories').textContent).toContain('Fresh A after retained error');
+      expect(stream('side-stories').textContent).toContain('Recovered continuation');
+      expect(status('side-stories').textContent).toContain(': 1. You can load more.');
+      expect(trigger('side-stories').getAttribute('href')).toContain('cursor=recovered-next');
+      expect(clientB.getQueryCache().find({ queryKey: recoveredKey, exact: true })).toBeUndefined();
+      expect(window.document.activeElement).toBe(recoveredAction);
+      expect(invalidations).toBe(0);
+      const recoveredSecondary = makeReading({ ...secondSpec, label: 'Fresh adaptations after error' }, h);
+      await act(async () => {
+        replaceSecondary(recoveredSecondary);
+        setSecondaryMounted(true);
+      });
+      await settle();
+      heldRelations = [];
 
       // A normal session refetch keeps the successful cached reader and must not retire the stream.
       const sameSession = deferred<typeof sessionA>();
@@ -492,7 +702,7 @@ test('composed relation streams retire unhealthy reader visits and admit only fr
       errorRequest.response.resolve(continuation(errorRequest.request, 'Retired continuation row', null));
       await settle();
       expectRetired('side-stories');
-      expect(window.document.activeElement).toBe(outside());
+      expect(window.document.activeElement).toBe(publicAction);
       expect(invalidations).toBe(0);
 
       // Equal recovery alone cannot bless the retired section; a new section object starts a new visit.
