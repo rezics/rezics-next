@@ -23,8 +23,6 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-type StoryRouter = ReturnType<typeof createRouter>;
-type StoryRouterHost = HTMLDivElement & { storyRouter?: StoryRouter };
 
 function ChangeStoryViewer() {
   const client = useQueryClient();
@@ -92,6 +90,24 @@ function SettingsEditor() {
   );
 }
 
+function createSettingsNavigationRouter() {
+  const root = createRootRoute({ component: Outlet });
+  const settings = createRoute({ getParentRoute: () => root, path: '/settings', component: SettingsEditor });
+  const home = createRoute({ getParentRoute: () => root, path: '/', component: HomeDestination });
+  const alternate = createRoute({
+    getParentRoute: () => root,
+    path: '/accounts',
+    component: AlternateDestination,
+  });
+  return createRouter({
+    routeTree: root.addChildren([settings, home, alternate]),
+    history: createMemoryHistory({ initialEntries: ['/settings'] }),
+  });
+}
+
+type StoryRouter = ReturnType<typeof createSettingsNavigationRouter>;
+type StoryRouterHost = HTMLDivElement & { storyRouter?: StoryRouter };
+
 function SettingsNavigationPhoneExample() {
   const [client] = useState(() => {
     const queryClient = new QueryClient();
@@ -102,20 +118,7 @@ function SettingsNavigationPhoneExample() {
     });
     return queryClient;
   });
-  const router = useMemo(() => {
-    const root = createRootRoute({ component: Outlet });
-    const settings = createRoute({ getParentRoute: () => root, path: '/settings', component: SettingsEditor });
-    const home = createRoute({ getParentRoute: () => root, path: '/', component: HomeDestination });
-    const alternate = createRoute({
-      getParentRoute: () => root,
-      path: '/accounts',
-      component: AlternateDestination,
-    });
-    return createRouter({
-      routeTree: root.addChildren([settings, home, alternate]),
-      history: createMemoryHistory({ initialEntries: ['/settings'] }),
-    });
-  }, []);
+  const router = useMemo(createSettingsNavigationRouter, []);
   const routerHost = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = routerHost.current as StoryRouterHost | null;
