@@ -10,6 +10,7 @@ import {
   peopleCreatedId,
   peoplePersonId,
   peopleOrganizationId,
+  peopleWorkId,
   selectPeopleProfileStory,
   type PeopleScenario,
   type PeopleMode,
