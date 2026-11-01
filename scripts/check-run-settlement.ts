@@ -152,6 +152,7 @@ export type CheckRunMessageExpectation = {
   binding: CheckRunInvocationBinding;
   physical?: CheckRunPhysicalIdentity;
   nativeTerminalSeen: boolean;
+  nativeTerminal?: CheckRunNativeDisposition;
 };
 
 export type CheckRunReconciliation =
@@ -557,6 +558,22 @@ export function decodeCheckRunSettlement(raw: string, expected: CheckRunMessageE
   if (message.nonce !== expected.nonce) throw new Error('check-run-settlement: wrong invocation nonce');
   if (checkRunBindingHash(message.binding) !== checkRunBindingHash(expected.binding))
     throw new Error('check-run-settlement: candidate, argv, environment, producer, host, preparation or return binding mismatch');
+  if (message.returns.declarationsSha256 !== expected.binding.returnsSha256)
+    throw new Error('check-run-settlement: returned artifacts do not match the declared return binding');
+  if (
+    message.preparedInputs.status === 'verified' &&
+    message.preparedInputs.sourceSha256 !== expected.binding.sourceSha256
+  )
+    throw new Error('check-run-settlement: prepared source does not match the candidate binding');
+  if (expected.nativeTerminal) {
+    if (
+      !message.native ||
+      message.native.exitCode !== expected.nativeTerminal.exitCode ||
+      message.native.lifetimeFailure !== expected.nativeTerminal.lifetimeFailure ||
+      message.native.receiptSha256 !== expected.nativeTerminal.receiptSha256
+    )
+      throw new Error('check-run-settlement: final result differs from the intermediate native terminal event');
+  }
   if (
     expected.physical &&
     (message.physical.host !== expected.physical.host || message.physical.run !== expected.physical.run)
@@ -957,6 +974,20 @@ export async function markCheckRunQueued(
     if (record.phase !== 'registered' && record.phase !== 'queued')
       throw new Error(`check-run-settlement: cannot queue from ${record.phase}`);
     if (options.candidateWorkspace) assertOutsideCandidate(directory, options.candidateWorkspace);
+    const selectedReturns = options.returns
+      ? validatePathList([...options.returns], 'declared return path', true)
+      : record.returns;
+    if (
+      options.returns &&
+      createHash('sha256').update(JSON.stringify(selectedReturns)).digest('hex') !== record.binding.returnsSha256
+    )
+      throw new Error('check-run-settlement: declared returns do not match the registered binding');
+    if (
+      options.snapshot &&
+      (!options.returns ||
+        boundedHash(options.snapshot.sourceSha256, 'snapshot source hash') !== record.binding.sourceSha256)
+    )
+      throw new Error('check-run-settlement: frozen snapshot or return declarations do not match the registered binding');
     if (record.phase === 'queued') {
       const candidateWorkspace = options.candidateWorkspace ? resolve(options.candidateWorkspace) : record.candidateWorkspace;
       const paths = options.returns ? validatePathList([...options.returns], 'declared return path', true) : record.returns;
@@ -1110,12 +1141,15 @@ async function acceptFinalUnderLock(
     binding: record.binding,
     ...(record.physical ? { physical: record.physical } : {}),
     nativeTerminalSeen: record.native !== null,
+    ...(record.native ? { nativeTerminal: record.native } : {}),
   });
   if (record.phase !== 'native-terminal')
     throw new Error(`check-run-settlement: final authority is out of order from ${record.phase}`);
   if (
     !record.native ||
-    message.native?.exitCode !== record.native.exitCode ||
+    !message.native ||
+    message.native.exitCode !== record.native.exitCode ||
+    message.native.lifetimeFailure !== record.native.lifetimeFailure ||
     message.native.receiptSha256 !== record.native.receiptSha256
   )
     throw new Error('check-run-settlement: final native outcome differs from the retained terminal event');
@@ -1266,6 +1300,20 @@ export async function setCheckRunUnknown(
 
 export function checkRunBindingHash(bindingValue: CheckRunInvocationBinding): string {
   return createHash('sha256').update(JSON.stringify(validateCheckRunInvocationBinding(bindingValue))).digest('hex');
+}
+
+export function checkRunNativeReceiptDigest(receipt: RemotePhysicalRunReceipt): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        schema: receipt.schema,
+        host: receipt.host,
+        run: receipt.run,
+        exitCode: receipt.exitCode,
+        lifetimeFailure: receipt.lifetimeFailure,
+      }),
+    )
+    .digest('hex');
 }
 
 function usage(): string {

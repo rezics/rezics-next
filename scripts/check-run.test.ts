@@ -625,3 +625,59 @@ test('local frozen-worktree cleanup failure keeps final settlement unknown and r
     if (retained) removeRetainedSnapshot(fixture, retained);
   }
 });
+
+test('native FD 3 write failure remains unknown on terminal replay without another spawn', async () => {
+  const fixture = candidate();
+  const finals: string[] = [];
+  let retained: CandidateSnapshot | undefined;
+  let replacementCommands = 0;
+  try {
+    const result = await runCheck(argsFor(fixture, ['bun', 'run', 'check']), {
+      settlementWriter: (line) => finals.push(line),
+      receiptWriter: () => {
+        throw new Error('mock FD 3 native receipt write failure');
+      },
+      stateDirectory: fixture.parent,
+      onRetainSnapshot: (snapshot) => (retained = snapshot),
+      transport: async (options) => {
+        const native = receipt('a', 0);
+        await options.allocated?.({ host: 'a', run: native.run });
+        await options.completed?.(native);
+        await options.settled?.(remoteSettlement(options, native));
+        return 0;
+      },
+    });
+    const final = JSON.parse(finals[0]!) as {
+      invocationId: string;
+      nonce: string;
+      cleanup: { disposition: string; failures: string[] };
+    };
+    expect(result).toBe(75);
+    expect(final.cleanup.disposition).toBe('unknown');
+    expect(final.cleanup.failures.join(' ')).toContain('native terminal FD 3 write failed');
+    expect(retained).toBeDefined();
+    expect(existsSync(retained!.workspace)).toBe(true);
+
+    const replay = await runCheck(
+      argsFor(fixture, ['bun', 'run', 'check']),
+      {
+        settlementWriter: () => undefined,
+        stateDirectory: fixture.parent,
+        transport: async () => {
+          replacementCommands += 1;
+          return 0;
+        },
+      },
+      new AbortController().signal,
+      {
+        REMOTE_CHECK_RECEIPT_FD: '3',
+        REMOTE_CHECK_RECEIPT_NONCE: final.nonce,
+        REMOTE_CHECK_INVOCATION_ID: final.invocationId,
+      },
+    );
+    expect(replay).toBe(75);
+    expect(replacementCommands).toBe(0);
+  } finally {
+    if (retained) removeRetainedSnapshot(fixture, retained);
+  }
+});

@@ -59,8 +59,8 @@ import {
   createCheckRunNativeTerminalMessage,
   encodeCheckRunFinalSettlement,
   getCheckRunStatus,
+  checkRunNativeReceiptDigest,
   markCheckRunNativeTerminal,
-  markCheckRunQueued,
   readCheckRunCancellation,
   reconcileCheckRunInvocation,
   registerCheckRunInvocation,
@@ -640,7 +640,13 @@ function parseReceiptChannel(
     ...(invocationId === undefined ? {} : { invocationId }),
     nonce,
     write: (line) => {
-      writeSync(3, line);
+      const bytes = Buffer.from(line);
+      let offset = 0;
+      while (offset < bytes.byteLength) {
+        const written = writeSync(3, bytes, offset, bytes.byteLength - offset);
+        if (written <= 0) throw new Error('check-run: FD 3 settlement write made no progress');
+        offset += written;
+      }
     },
   };
 }
@@ -824,6 +830,37 @@ function identifyTransportChild(pid: number): CheckRunTransportChildIdentity | n
   }
 }
 
+function waitForTransportChildExit(child: ReturnType<typeof Bun.spawn>, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(false), timeoutMs);
+    void child.exited.then(
+      () => {
+        clearTimeout(timeout);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timeout);
+        resolve(false);
+      },
+    );
+  });
+}
+
+async function stopUnretainedTransportChild(child: ReturnType<typeof Bun.spawn>): Promise<void> {
+  try {
+    child.kill('SIGTERM');
+  } catch {
+    // It may have exited while its identity was being persisted.
+  }
+  if (await waitForTransportChildExit(child, 15_000)) return;
+  try {
+    child.kill('SIGKILL');
+  } catch {
+    // Preserve the original custody error; the invocation remains unknown.
+  }
+  await waitForTransportChildExit(child, 5_000);
+}
+
 function isDeclaredOutput(file: string, returns: readonly string[]): boolean {
   return returns.some((path) => file === path || file.startsWith(`${path}/`));
 }
@@ -942,20 +979,6 @@ async function trustedProducerClosureHash(trustedRoot: string): Promise<string> 
   return hash.digest('hex');
 }
 
-function nativeReceiptDigest(receipt: RemotePhysicalRunReceipt): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        schema: receipt.schema,
-        host: receipt.host,
-        run: receipt.run,
-        exitCode: receipt.exitCode,
-        lifetimeFailure: receipt.lifetimeFailure,
-      }),
-    )
-    .digest('hex');
-}
-
 function finalPreparedInputs(evidence: RemotePreparedInputsEvidence | null): CheckRunPreparedInputs {
   if (!evidence) return { status: 'unavailable', sourceSha256: null, manifestSha256: null, fileCount: 0, totalBytes: 0 };
   return {
@@ -1014,7 +1037,11 @@ function finalCleanup(
   prepared: CheckRunPreparedInputs,
   returns: CheckRunReturnDisposition,
 ): CheckRunCleanupDisposition {
-  const remoteStatus = remoteCleanupIsVerified(remote) ? 'verified' : 'unknown';
+  const remoteStatus: CheckRunCleanupDisposition['remote'] = remoteCleanupIsVerified(remote)
+    ? 'verified'
+    : remote?.cleanup.status === 'failed'
+      ? 'failed'
+      : 'unknown';
   const child = remote?.transportChildReaped ? 'reaped' : 'unknown';
   const complete =
     remoteStatus === 'verified' &&
@@ -1398,7 +1425,9 @@ async function runCheckWithFinalSettlement(
       if (record.final) {
         cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
         snapshotBound = true;
-        return record.final.native?.exitCode ?? REMOTE_TRANSPORT_FAILURE;
+        const nativeExitCode = record.final.native?.exitCode;
+        if (nativeExitCode !== undefined && nativeExitCode !== 0) return nativeExitCode;
+        return record.final.cleanup.disposition === 'settled' ? 0 : REMOTE_TRANSPORT_FAILURE;
       }
       if (record.phase !== 'registered') {
         cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
@@ -1461,16 +1490,27 @@ async function runCheckWithFinalSettlement(
         allocatedPhysical = { host, run };
         await allocateCheckRunPhysical(registration!.invocationId, registration!.nonce, host, run, stateOptions);
       },
-      spawnWithCustody: (physical, spawn) =>
-        withCheckRunSpawnPermit(
-          registration!.invocationId,
-          registration!.nonce,
-          physical.host,
-          physical.run,
-          spawn,
-          stateOptions,
-          (child) => identifyTransportChild(child.pid),
-        ),
+      spawnWithCustody: async (physical, spawn) => {
+        let child: ReturnType<typeof Bun.spawn> | undefined;
+        try {
+          return await withCheckRunSpawnPermit(
+            registration!.invocationId,
+            registration!.nonce,
+            physical.host,
+            physical.run,
+            () => {
+              const spawned = spawn();
+              child = spawned;
+              return spawned;
+            },
+            stateOptions,
+            (spawned) => identifyTransportChild(spawned.pid),
+          );
+        } catch (error) {
+          if (child) await stopUnretainedTransportChild(child);
+          throw error;
+        }
+      },
       started: (host) => {
         if (signal.aborted) throw new Aborted('check-run: cancelled command cannot start');
         if (host !== 'a' && host !== 'b')
@@ -1488,7 +1528,7 @@ async function runCheckWithFinalSettlement(
           )
             throw new CheckRunUnavailable('check-run: native receipt does not match the admitted physical identity');
           receivedReceipt = parsed;
-          const digest = nativeReceiptDigest(parsed);
+          const digest = checkRunNativeReceiptDigest(parsed);
           await markCheckRunNativeTerminal(
             registration!.invocationId,
             registration!.nonce,
@@ -1714,6 +1754,9 @@ async function runCheckWithFinalSettlement(
 
   const cleanupFailures = [
     ...(cleanupFailure ? [cleanupFailure instanceof Error ? cleanupFailure.message : String(cleanupFailure)] : []),
+    ...(receiptForwardFailure
+      ? [`native terminal FD 3 write failed: ${receiptForwardFailure instanceof Error ? receiptForwardFailure.message : String(receiptForwardFailure)}`]
+      : []),
     ...(remoteSettlement.cleanup.failures ?? []),
   ].map((failure) => failure.slice(0, 512));
   if (!remoteCleanupComplete && cleanupFailures.length === 0) cleanupFailures.push('remote cleanup or transport child terminality is unknown');
@@ -1732,7 +1775,7 @@ async function runCheckWithFinalSettlement(
       native: {
         exitCode: receivedReceipt.exitCode,
         lifetimeFailure: receivedReceipt.lifetimeFailure !== null,
-        receiptSha256: nativeReceiptDigest(receivedReceipt),
+        receiptSha256: checkRunNativeReceiptDigest(receivedReceipt),
       },
       preparedInputs,
       returns: returnDisposition,
@@ -1848,7 +1891,7 @@ export async function reconcileRegisteredCheckRun(
       };
       if (!remote.native)
         return unknown('original physical run has no retained native terminal receipt; no replacement was started');
-      const remoteNativeDigest = nativeReceiptDigest(remote.native);
+      const remoteNativeDigest = checkRunNativeReceiptDigest(remote.native);
       if (
         record.native &&
         (record.native.exitCode !== remote.native.exitCode || record.native.receiptSha256 !== remoteNativeDigest)
