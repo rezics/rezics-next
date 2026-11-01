@@ -1,7 +1,8 @@
 import { queryOptions, useQuery, QueryClient, QueryClientContext } from '@tanstack/react-query';
 import { createIsomorphicFn, createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { Fragment, createElement, useContext, useSyncExternalStore, type ReactNode } from 'react';
-import { exposureQuery, useSession } from '../session/query';
+import { useSession } from '../session/query';
+import { viewerExposureLifetime, viewerExposureQuery } from './viewer-exposure';
 
 /** The site's gated operations. Controls name an operation; OpenAPI owns its group. */
 export const operationGroups = {
@@ -138,11 +139,30 @@ export function useOperation(operation: ExposureOperation): boolean {
     () => true,
     () => false,
   );
-  const { state } = useSession();
-  const { data: publicGroups } = useQuery({ ...anonymousQuery, enabled: hydrated && state === 'signed-out' }, client);
-  const { data: viewerGroups } = useQuery({ ...exposureQuery, enabled: hydrated && state === 'signed-in' }, client);
+  // Keep the established session observer and its imperative CSRF transport initialization.
+  useSession();
+  const lifetime = viewerExposureLifetime(client);
+  const admission = useSyncExternalStore(
+    lifetime.subscribe,
+    lifetime.getSnapshot,
+    lifetime.getServerSnapshot,
+  );
+  const { data: publicGroups } = useQuery(
+    { ...anonymousQuery, enabled: hydrated && admission.state === 'signed-out' },
+    client,
+  );
+  const observation = admission.state === 'signed-in' ? admission.observation : undefined;
+  const { data: viewerExposure } = useQuery(
+    { ...viewerExposureQuery(observation), enabled: hydrated && observation !== undefined },
+    client,
+  );
+  const viewerGroups = viewerExposure?.subject === observation?.subject ? viewerExposure.admitted : undefined;
   const admitted =
-    !hydrated || state === 'signed-out' ? publicGroups : state === 'signed-in' ? viewerGroups : undefined;
+    !hydrated || admission.state === 'signed-out'
+      ? publicGroups
+      : admission.state === 'signed-in'
+        ? viewerGroups
+        : undefined;
   return operationIsAdmitted(operation, admitted);
 }
 
