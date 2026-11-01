@@ -37,7 +37,7 @@ function hold(mode: Mode, token?: string) {
 let serverReader = readerA;
 let currentRequest: Request;
 let preparing: ReturnType<typeof deferred<void>> | undefined;
-const envelopes: { mode: Mode; data: unknown; headers: Headers }[] = [];
+const envelopes: { mode: Mode; method: string; data: unknown; headers: Headers }[] = [];
 const searchNativeCalls: { headers: Record<string, string>; query: { q: string } }[] = [];
 const { contextFixture, fixtureId } = await import('../src/features/contexts/fixtures');
 let fixture = contextFixture();
@@ -74,18 +74,17 @@ mock.module('@tanstack/react-start', () => ({
       },
       handler(handler: (input: { data: unknown }) => Promise<unknown>) {
         return async (input: { data?: Record<string, unknown>; headers?: HeadersInit } = {}) => {
-          const mode: Mode =
-            options.method === 'POST'
-              ? 'mutation'
-              : input.data?.text
-                ? 'search'
-                : input.data?.id
-                  ? 'detail'
-                  : input.data
-                    ? 'directory'
-                    : 'create';
+          const mode: Mode = input.data?.operation
+            ? 'mutation'
+            : input.data?.text
+              ? 'search'
+              : input.data?.id
+                ? 'detail'
+                : input.data
+                  ? 'directory'
+                  : 'create';
           const headers = new Headers(input.headers);
-          envelopes.push({ mode, data: structuredClone(input.data), headers });
+          envelopes.push({ mode, method: options.method, data: structuredClone(input.data), headers });
           headers.set('cookie', `__Host-rezics_session=${'a'.repeat(43)}`);
           headers.set('origin', 'https://site.test');
           currentRequest = new Request('https://site.test/_server/context', { method: options.method, headers });
@@ -426,6 +425,7 @@ test('a cancelled detail read cannot overwrite the continuation used by the foll
   await act(async () => button(mounted.host, m.ctxw_reread({}, o)).click());
   await flush();
   const latest = envelopes.filter((call) => call.mode === 'detail').at(-1)!;
+  expect(latest.method).toBe('POST');
   expect(latest.data).toMatchObject({ session: 'current-context-session' });
   expect(JSON.stringify(latest.data)).not.toContain('cancelled-read-token');
   await act(async () => button(mounted.host, m.ctxw_delete({}, o)).click());

@@ -42,7 +42,8 @@ export const readContextCreation = createServerFn({ method: 'GET', strict: false
   const authorization = await viewer();
   return typeof authorization === 'string' ? createContextApi(kernelClient(), authorization).creation() : authorization;
 });
-export const readContextWorkspace = createServerFn({ method: 'GET', strict: false })
+// Native read continuations are private: server-function data must travel in a body, never a URL.
+export const readContextWorkspace = createServerFn({ method: 'POST', strict: false })
   .validator(parseAddress)
   .handler(async ({ data }) => {
     const authorization = await viewer();
