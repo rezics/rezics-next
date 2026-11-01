@@ -68,6 +68,9 @@ BEGIN
     RAISE EXCEPTION 'Account discovery source keys are immutable';
   END IF;
   p := CASE WHEN TG_OP = 'DELETE' THEN OLD.route >> 4 ELSE NEW.route >> 4 END;
+  -- Retain the original native owner while the same-home Source obligation commits.
+  PERFORM 1 FROM core.partition WHERE partition_no=p AND write_state='active' FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter owner is unavailable'; END IF;
   -- Serialize allocation with the native head; a late commit must advance it too.
   PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
@@ -119,6 +122,9 @@ BEGIN
     RAISE EXCEPTION 'Account discovery claim keys are immutable';
   END IF;
   p := CASE WHEN TG_OP = 'DELETE' THEN OLD.route >> 4 ELSE NEW.route >> 4 END;
+  -- Retain the original native owner while the same-home Source obligation commits.
+  PERFORM 1 FROM core.partition WHERE partition_no=p AND write_state='active' FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter owner is unavailable'; END IF;
   PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
   -- Same local lock order as retained enrollment: Account head, then Source head.
