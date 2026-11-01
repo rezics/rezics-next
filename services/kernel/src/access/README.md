@@ -3756,7 +3756,8 @@ After reading the actual committed readiness, the bounded original SDK owner mak
 It revokes the original owner token and retains permanent fences. A fresh Source command obtains current Source
 and exact SDK generation-2/domain authority before recording `sdk_closure` and the technical receipt. Technical
 receipt metadata remains compatible with old callers, immutable and insufficient for any History transition;
-legacy generation-2 rows without genuine recorded generation-1 readiness stay pending.
+legacy generation-2 rows without genuine recorded generation-1 readiness stay pending. The original readiness
+SDK restore UUID must also survive retirement and closure; rotating the domain cannot make an old association eligible.
 
 Later commands independently obtain current Source and SDK closure before sealing and retiring History work,
 clearing request/scope, verifying absence and minimizing the locator. A real SDK fence observation precedes the
@@ -3839,8 +3840,14 @@ the three commands inside the accepted-original lookup; the latter's controls ar
 staging and its Library/current checks retain the producer's own separate reservations. Account settlement read
 64/64/20/65536 and EACH current verify64/64/15/65536 remain in that owner composition; they are never replaced by a
 fixed assumption of two checks. Each additional invocation of a receiving read or verification reserves again.
-The released `readHistoryReceivingReceipt` reserves 76/75/17/123136 + G + A; its same-command verifier reserves
-76/75/13/123136 + G + A, excluding its caller's already funded controls.
+The released `readHistoryReceivingReceipt` reserves 76/75/17/132000 + G + A; its same-command verifier reserves
+76/75/13/131872 + G + A, excluding its caller's already funded controls. The released receiving byte bound
+is M16384 + authority/readiness/closure106496 + roles8192 + barrier128 + partition64 + digest32 + physical64
+
+- two outer native void results512 + settings128 = 132000; the same-command verifier excludes settings128.
+  Inventory's released mapping-only snapshot reserves 6/5/8/16640, and its complete saved SDK receipt/work/mapping
+  snapshot reserves 7/6/8/33024 whenever either enters this existing frame; subsequent fence and receiving calls
+  reserve separately as above. Outside a Source callback their independent inventory admission remains unchanged.
 
 The SDK single-attempt dispatch table is in [Work's owner contract](../work/README.md#bounded-selected-identity-maintenance).
 It funds every nested lock/retirement/deletion dispatch, including failed attempts and a rollback slot before BEGIN.

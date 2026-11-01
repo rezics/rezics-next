@@ -170,11 +170,11 @@ async function receivingGap(
   partition: number,
   locator: HistoryArtifact['locator'],
 ): Promise<string | null> {
+  let mapping: Awaited<ReturnType<typeof import('./agent-identity-work.ts').resolveAgentIdentitySDKWork>> = null;
   if (locator.artifactType === 'durable-work/v1') {
     const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
-    const mapping = await resolveAgentIdentitySDKWork(tx, locator.workId);
-    if (mapping) {
-      if (mapping.gap) return mapping.gap;
+    mapping = await resolveAgentIdentitySDKWork(tx, locator.workId);
+    if (mapping && !mapping.gap) {
       const m = (
         await tx.query(
           `SELECT history_authority,sdk_readiness,sdk_closure FROM core.agent_identity_work
@@ -203,10 +203,7 @@ async function receivingGap(
     Buffer.from(encodeLocator(locator)),
   );
   if (identityGap) return identityGap;
-  if (locator.artifactType === 'durable-work/v1') {
-    const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
-    return (await resolveAgentIdentitySDKWork(tx, locator.workId))?.gap ?? null;
-  }
+  if (locator.artifactType === 'durable-work/v1') return mapping?.gap ?? null;
   if (locator.artifactType !== 'outbox-event/v1') return null;
   const consumers = await tx.query(
     `SELECT consumer FROM core.history_event_consumer
@@ -340,7 +337,7 @@ export async function readHistoryReceivingReceipt(
     await reserveIdentityHistoryWork(
       deps.pool,
       addNativeWork(
-        nativeWork(76, 75, 17, 123136),
+        nativeWork(76, 75, 17, 132000),
         AGENT_IDENTITY_HISTORY_GUARD_COST,
         AGENT_IDENTITY_HISTORY_ABSENCE_COST,
       ),
@@ -395,7 +392,7 @@ export async function verifyHistoryReceivingReceipt(
       await reserveIdentityHistoryWork(
         pool,
         addNativeWork(
-          nativeWork(76, 75, 13, 123136),
+          nativeWork(76, 75, 13, 131872),
           AGENT_IDENTITY_HISTORY_GUARD_COST,
           AGENT_IDENTITY_HISTORY_ABSENCE_COST,
         ),

@@ -424,6 +424,9 @@ export async function readAgentIdentitySDKRetirementGap(
     );
     return result.state === 'pending' ? result.gap : null;
   }
+  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+  if (maintenance.currentIdentitySourceConsumerMaintenance(pool, context.deadline))
+    await reserveIdentityHistoryWork(pool, nativeWork(6, 5, 8, 16640));
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -470,6 +473,9 @@ export async function readAgentIdentitySDKRetirement(
   const receipt = { kind: fixed.key.direction, account: fixed.key.accountId, receipt: fixed.key.receiptId };
   const sourceKey = agentIdentityWorkSourceKey(receipt);
   historyDeadline(context, 0);
+  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+  if (maintenance.currentIdentitySourceConsumerMaintenance(pool, context.deadline))
+    await reserveIdentityHistoryWork(pool, nativeWork(7, 6, 8, 33024));
   const saved = await withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
