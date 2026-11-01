@@ -69,9 +69,7 @@ test('Provider comparison keeps complete evidence and current Context values rea
   const fixture = providerReviewFixture('ready', 'en');
   const page = structuredClone(fixture.page);
   for (const row of page.rows) {
-    const qualifier = row.reading?.ok
-      ? row.reading.current.subject.statements['schema:author']?.[0]
-      : undefined;
+    const qualifier = row.reading?.ok ? row.reading.current.subject.statements['schema:author']?.[0] : undefined;
     if (qualifier) row.candidate.statement.qualifiers = [structuredClone(qualifier)];
   }
   const html = render(page, fixture.transport);

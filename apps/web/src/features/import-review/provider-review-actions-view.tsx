@@ -169,10 +169,7 @@ function ProviderComparison({ row, locale }: { row: ProviderDecisionRow; locale:
           <p>{m.context_no_values({}, o)}</p>
         )}
       </section>
-      <section
-        className="min-w-0 space-y-2"
-        aria-label={m.candidate_proposed({}, o)}
-      >
+      <section className="min-w-0 space-y-2" aria-label={m.candidate_proposed({}, o)}>
         <ContentItemHeading level={3} className="text-sm font-semibold">
           {m.candidate_proposed({}, o)}
         </ContentItemHeading>
@@ -259,9 +256,7 @@ export function ProviderReviewActions({
   const locked = disabled || busy || !!batch || !!confirmation;
 
   function destination(row: ProviderDecisionRow) {
-    return row.href.startsWith('/') && !row.href.startsWith('//') && !row.href.includes('\\')
-      ? row.href
-      : undefined;
+    return row.href.startsWith('/') && !row.href.startsWith('//') && !row.href.includes('\\') ? row.href : undefined;
   }
 
   function review(operation: ProviderDecision['operation']) {
@@ -342,8 +337,7 @@ export function ProviderReviewActions({
                   {m.provider_clear({}, o)}
                 </Button>
                 <p className="w-full text-sm text-muted-foreground">
-                  {m.provider_visible_only({ limit: providerSelectionLimit }, o)}{' '}
-                  {m.prq_selection_help({}, o)}
+                  {m.provider_visible_only({ limit: providerSelectionLimit }, o)} {m.prq_selection_help({}, o)}
                 </p>
               </ContentItemFrame>
             </>
@@ -409,10 +403,7 @@ export function ProviderReviewActions({
       >
         <AlertDialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle
-              render={<ContentItemHeading level={2} />}
-              className="text-lg font-medium"
-            >
+            <AlertDialogTitle render={<ContentItemHeading level={2} />} className="text-lg font-medium">
               {m.provider_confirm_title({}, o)}
             </AlertDialogTitle>
             <AlertDialogDescription>
@@ -455,12 +446,7 @@ export function ProviderReviewActions({
         </AlertDialogContent>
       </AlertDialog>
       {batch && (
-        <ContentItemFrame
-          as="div"
-          className="space-y-3 p-4"
-          aria-label={m.provider_results({}, o)}
-          aria-busy={busy}
-        >
+        <ContentItemFrame as="div" className="space-y-3 p-4" aria-label={m.provider_results({}, o)} aria-busy={busy}>
           <ContentItemHeading level={2} className="text-lg font-semibold">
             {m.provider_results({}, o)}
           </ContentItemHeading>
