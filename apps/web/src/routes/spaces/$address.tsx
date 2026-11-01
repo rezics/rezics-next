@@ -58,7 +58,7 @@ export const Route = createFileRoute('/spaces/$address')({
     throw new ObsoleteSpacePageReadError();
   },
   head: ({ loaderData, params }) =>
-    spacePageHead(loaderData.page, getLocale(), `/spaces/${encodeURIComponent(params.address)}`),
+    spacePageHead(loaderData!.page, getLocale(), `/spaces/${encodeURIComponent(params.address)}`),
   errorComponent: ClosedErrorPage,
   component: SpaceRoute,
 });

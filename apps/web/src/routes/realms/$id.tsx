@@ -57,7 +57,7 @@ export const Route = createFileRoute('/realms/$id')({
     throw new ObsoleteSpacePageReadError();
   },
   head: ({ loaderData, params }) =>
-    spacePageHead(loaderData.page, getLocale(), `/realms/${encodeURIComponent(params.id)}`),
+    spacePageHead(loaderData!.page, getLocale(), `/realms/${encodeURIComponent(params.id)}`),
   errorComponent: ClosedErrorPage,
   component: RealmRoute,
 });

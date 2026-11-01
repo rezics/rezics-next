@@ -107,7 +107,7 @@ function observeSession(client: QueryClient): SpacePageSessionSource {
   const listeners = new Set<() => void>();
   client.getQueryCache().subscribe(({ query }) => {
     if (query.queryKey.length !== sessionQuery.queryKey.length) return;
-    if (query.queryKey.some((part, index) => part !== sessionQuery.queryKey[index])) return;
+    if (query.queryKey.some((part: unknown, index: number) => part !== sessionQuery.queryKey[index])) return;
     const next = identity();
     if (next === previous) return;
     previous = next;

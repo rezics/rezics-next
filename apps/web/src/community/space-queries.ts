@@ -81,9 +81,11 @@ export function useShelfList<T extends { id: string }>(
     if (!canPublish()) return;
     generation.current += 1;
     const ticket = lifetime?.ticket();
-    setPage((previous) =>
-      mounted.current && (!lifetime || (ticket !== undefined && lifetime.owns(ticket)) ? change(previous) : previous),
-    );
+    setPage((previous) => {
+      if (!mounted.current) return previous;
+      if (lifetime && (ticket === undefined || !lifetime.owns(ticket))) return previous;
+      return change(previous);
+    });
   }
   return { ...page, failure, busy, load, update };
 }
