@@ -374,6 +374,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
       const accountRepairs = await pool.query<{
         id: string; owner: string; original: boolean; settled: boolean;
         revision: string; claim: string; currentRevision: string; currentClaim: string;
+        claimEpoch: number; currentClaimEpoch: number; claimHead: string; currentClaimHead: string;
       }>(
         `SELECT w.repair_account::jsonb->>'id' AS id,w.repair_receipt::jsonb->>'owner' AS owner,
            w.repair_receipt::jsonb->'account'=w.repair_account::jsonb AS original,
@@ -381,8 +382,15 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
              AND w.visible_position=w.settled_position AND w.visible_transaction_id=w.settled_transaction_id) AS settled,
            w.repair_account::jsonb->'head'->'revision'->>'nativeBigint' AS revision,
            w.repair_account::jsonb->'head'->'claimRevision'->>'nativeBigint' AS claim,
-           p.revision::text AS "currentRevision",p.claim_revision::text AS "currentClaim"
+           p.revision::text AS "currentRevision",p.claim_revision::text AS "currentClaim",
+           (w.repair_account::jsonb->'claimHead'->>'epoch')::integer AS "claimEpoch",
+           cp.epoch AS "currentClaimEpoch",
+           w.repair_account::jsonb->'claimHead'->'claimRevision'->>'nativeBigint' AS "claimHead",
+           c.claim_revision::text AS "currentClaimHead"
          FROM search.identity_writer w JOIN access.account_discovery_population p USING(partition_no)
+         LEFT JOIN access.account_discovery_population c
+           ON c.partition_no=(w.repair_account::jsonb->'claimHead'->>'partition')::integer
+         LEFT JOIN core.partition cp ON cp.partition_no=c.partition_no
          WHERE w.original_id=$1 AND w.physical_target LIKE $2`, [account.accountId,`${prefix}%`],
       );
       expect(accountRepairs.rows.length).toBeGreaterThan(0);
@@ -393,6 +401,9 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(row.settled).toBe(true);
         expect(row.revision).toBe(row.currentRevision);
         expect(row.claim).toBe(row.currentClaim);
+        expect(row.claimEpoch).toBeGreaterThan(0);
+        expect(row.claimEpoch).toBe(row.currentClaimEpoch);
+        expect(row.claimHead).toBe(row.currentClaimHead);
       }
       const route = routeOf(account.accountId)!;
       const accountHome = partitionOf(route);
