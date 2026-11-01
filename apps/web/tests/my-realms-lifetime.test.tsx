@@ -105,9 +105,11 @@ async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: stri
     queryClient: QueryClient;
     credentialMode: 'anonymous' | 'session';
   }>()({ component: Outlet });
-  const actualRoute = (MyRealmsRoute as unknown as {
-    update(options: { getParentRoute: () => typeof rootRoute }): unknown;
-  }).update({ getParentRoute: () => rootRoute });
+  const actualRoute = (
+    MyRealmsRoute as unknown as {
+      update(options: { getParentRoute: () => typeof rootRoute }): unknown;
+    }
+  ).update({ getParentRoute: () => rootRoute });
   const routeTree = rootRoute.addChildren([actualRoute as never]);
   const cursorSearch = options.cursor ? `?cursor=${encodeURIComponent(options.cursor)}` : '';
   const router = createRouter({
@@ -123,11 +125,7 @@ async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: stri
 
   const tree = (strict = false) => {
     const routed = createElement(RouterProvider, { router: router as never });
-    return createElement(
-      QueryClientProvider,
-      { client },
-      strict ? createElement(StrictMode, null, routed) : routed,
-    );
+    return createElement(QueryClientProvider, { client }, strict ? createElement(StrictMode, null, routed) : routed);
   };
 
   async function mount(strict = false) {
@@ -196,7 +194,9 @@ function visiblePrivateNames(surface: Surface) {
   return surface.host.textContent ?? '';
 }
 
-function resetReader(implementation: (input: ReadInput) => Promise<MyRealmsPage> = async () => page('Current account realm')) {
+function resetReader(
+  implementation: (input: ReadInput) => Promise<MyRealmsPage> = async () => page('Current account realm'),
+) {
   readCalls.length = 0;
   hydrationErrors.length = 0;
   readPage = implementation;

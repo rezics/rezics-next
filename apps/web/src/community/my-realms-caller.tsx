@@ -87,9 +87,9 @@ function isReady(session: SessionSnapshot | null): session is SessionSnapshot & 
 
 function fingerprint(token: string | null): Promise<string> {
   const value = token === null ? 'null\u0000' : `token\u0000${token}`;
-  return globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)).then((digest) =>
-    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
-  );
+  return globalThis.crypto.subtle
+    .digest('SHA-256', new TextEncoder().encode(value))
+    .then((digest) => [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''));
 }
 
 function sameVisit(left: MyRealmsVisit, right: MyRealmsVisit): boolean {
@@ -113,10 +113,7 @@ function sameVisit(left: MyRealmsVisit, right: MyRealmsVisit): boolean {
 
 function sameRealmCacheRevision(left: RealmCacheRevision | undefined, right: RealmCacheRevision | undefined) {
   return (
-    !!left &&
-    !!right &&
-    left.dataUpdateCount === right.dataUpdateCount &&
-    left.dataUpdatedAt === right.dataUpdatedAt
+    !!left && !!right && left.dataUpdateCount === right.dataUpdateCount && left.dataUpdatedAt === right.dataUpdatedAt
   );
 }
 
@@ -297,7 +294,9 @@ export class MyRealmsCaller {
       sourceRevision: captured.sourceRevision,
       sourceCacheRevision: cache,
     };
-    const caller = new MyRealmsCaller(source, visit, captured.session, { localSourceRevision: captured.sourceRevision });
+    const caller = new MyRealmsCaller(source, visit, captured.session, {
+      localSourceRevision: captured.sourceRevision,
+    });
     source.activate(caller, options.preserveQuery);
     caller.assertCurrent();
     return caller;
@@ -309,10 +308,11 @@ export class MyRealmsCaller {
       adopted: true,
       localSourceRevision: source.getRevision(),
     });
-    caller.ownedQuery = (client.getQueryCache().find({
-      queryKey: ['my-realms', visit.cursor ?? ''],
-      exact: true,
-    }) as CacheQuery | undefined) ?? null;
+    caller.ownedQuery =
+      (client.getQueryCache().find({
+        queryKey: ['my-realms', visit.cursor ?? ''],
+        exact: true,
+      }) as CacheQuery | undefined) ?? null;
     source.adopt(caller);
     return caller;
   }
@@ -355,9 +355,12 @@ export class MyRealmsCaller {
     );
   }
 
-  isCurrentAddress(
-    address: { target: string; cursor?: string | undefined; locale: string; credentialMode: ReadCredentialMode },
-  ) {
+  isCurrentAddress(address: {
+    target: string;
+    cursor?: string | undefined;
+    locale: string;
+    credentialMode: ReadCredentialMode;
+  }) {
     return (
       address.target.replace(/\/$/u, '') === this.visit.target &&
       (address.cursor || null) === this.visit.cursor &&
@@ -373,7 +376,12 @@ export class MyRealmsCaller {
       this.hydrationPending &&
       sameVisit(this.visit, visit) &&
       page.signedIn &&
-      this.isCurrentAddress({ target: this.visit.target, cursor: this.visit.cursor ?? undefined, locale: this.visit.locale, credentialMode: this.visit.credentialMode })
+      this.isCurrentAddress({
+        target: this.visit.target,
+        cursor: this.visit.cursor ?? undefined,
+        locale: this.visit.locale,
+        credentialMode: this.visit.credentialMode,
+      })
     );
   }
 
@@ -393,7 +401,9 @@ export class MyRealmsCaller {
     if (!page || !this.isCurrent()) return false;
     const tag = taggedPages.get(page);
     if (!tag || tag.callerId !== this.visit.id || tag.sourceRevision !== this.visit.sourceRevision) return false;
-    const query = this.source.client.getQueryCache().find({ queryKey: ['my-realms', this.visit.cursor ?? ''], exact: true });
+    const query = this.source.client
+      .getQueryCache()
+      .find({ queryKey: ['my-realms', this.visit.cursor ?? ''], exact: true });
     const state = this.source.client.getQueryState<MyRealmsPage>(['my-realms', this.visit.cursor ?? '']);
     const expectedRevision = this.publishedCacheRevision ?? this.visit.resultCacheRevision;
     return (
@@ -408,10 +418,8 @@ export class MyRealmsCaller {
   bindRead(query: CacheQuery) {
     this.assertCurrent();
     this.ownedQuery = query;
-    this.readDataUpdateCount = this.source.client.getQueryState<MyRealmsPage>([
-      'my-realms',
-      this.visit.cursor ?? '',
-    ])?.dataUpdateCount ?? 0;
+    this.readDataUpdateCount =
+      this.source.client.getQueryState<MyRealmsPage>(['my-realms', this.visit.cursor ?? ''])?.dataUpdateCount ?? 0;
   }
 
   assertCurrent() {
@@ -430,7 +438,8 @@ export class MyRealmsCaller {
     this.assertCurrent();
     if (!this.acceptsQueryData(page)) throw new Error('My Realms cache publication was not owned by its caller');
     const state = this.source.client.getQueryState<MyRealmsPage>(['my-realms', this.visit.cursor ?? '']);
-    if (!state || state.dataUpdateCount <= this.readDataUpdateCount) throw new Error('My Realms cache revision did not advance');
+    if (!state || state.dataUpdateCount <= this.readDataUpdateCount)
+      throw new Error('My Realms cache revision did not advance');
     this.publishedCacheRevision = { dataUpdateCount: state.dataUpdateCount, dataUpdatedAt: state.dataUpdatedAt };
     this.resultVisit = { ...this.visit, resultCacheRevision: this.publishedCacheRevision };
     return this.resultVisit;
