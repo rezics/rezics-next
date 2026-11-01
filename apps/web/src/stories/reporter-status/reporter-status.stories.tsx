@@ -215,13 +215,27 @@ function SessionRetirementExample() {
   if (!retired && session !== original) setRetired(true);
   return (
     <QueryClientProvider client={cache}>
-      <button type="button" onClick={() => cache.setQueryData(['session'], {
-        state: 'signed-in', subject: 'reporter', csrfToken: 'replacement-fixture-session',
-      })}>Replace browser session</button>
+      <button
+        type="button"
+        onClick={() =>
+          cache.setQueryData(['session'], {
+            state: 'signed-in',
+            subject: 'reporter',
+            csrfToken: 'replacement-fixture-session',
+          })
+        }
+      >
+        Replace browser session
+      </button>
       <ReporterStatusResultPage
-        result={retired ? { state: 'concealed' } : {
-          state: 'loaded', report: { ...submittedReport, targetAvailability: 'unavailable' },
-        }}
+        result={
+          retired
+            ? { state: 'concealed' }
+            : {
+                state: 'loaded',
+                report: { ...submittedReport, targetAvailability: 'unavailable' },
+              }
+        }
         onRetry={() => {}}
       />
     </QueryClientProvider>

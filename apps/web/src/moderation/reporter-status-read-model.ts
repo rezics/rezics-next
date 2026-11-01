@@ -1,7 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { ReporterStatus } from './reporter-status-model';
 import type { PrivateReaderOrigin } from './private-reader-origin';
-import { createPrivateReaderLifetime, preparePrivateReaderRead, type PrivateReaderRead, type PrivateReaderNavigation } from './private-reader-lifetime';
+import {
+  createPrivateReaderLifetime,
+  preparePrivateReaderRead,
+  type PrivateReaderRead,
+  type PrivateReaderNavigation,
+} from './private-reader-lifetime';
 
 export type ReporterStatusViewer = PrivateReaderOrigin;
 export type ReporterStatusResult =
@@ -27,18 +32,26 @@ export async function prepareReporterStatusRead(
   signal?: AbortSignal,
 ): Promise<ReporterStatusRead> {
   const generation = crypto.randomUUID();
-  const response = await preparePrivateReaderRead(cache, reporterStatusReadKey(id), async () => {
-    try {
-      const response = await read({ id, generation });
-      if (response.id !== id || response.generation !== generation)
-        return { id, generation, viewer: null, readerOrigin: null, result: concealed };
-      return response;
-    } catch {
-      return { id, generation, viewer: null, readerOrigin: null, result: unavailable };
-    }
-  }, signal);
-  return response.readerBinding.retired ? { ...response, viewer: null, result: concealed } :
-    !response.readerOrigin && response.result.state === 'loaded' ? { ...response, viewer: null, result: unavailable } : response;
+  const response = await preparePrivateReaderRead(
+    cache,
+    reporterStatusReadKey(id),
+    async () => {
+      try {
+        const response = await read({ id, generation });
+        if (response.id !== id || response.generation !== generation)
+          return { id, generation, viewer: null, readerOrigin: null, result: concealed };
+        return response;
+      } catch {
+        return { id, generation, viewer: null, readerOrigin: null, result: unavailable };
+      }
+    },
+    signal,
+  );
+  return response.readerBinding.retired
+    ? { ...response, viewer: null, result: concealed }
+    : !response.readerOrigin && response.result.state === 'loaded'
+      ? { ...response, viewer: null, result: unavailable }
+      : response;
 }
 
 /** One mounted journey; no page mutation, successor cleanup, expected-viewer stamping or automatic read. */
@@ -58,12 +71,17 @@ export function createReporterStatusJourney(
     result = next;
     for (const listener of listeners) listener();
   };
-  const own = (next: ReporterStatusRead) => next.result.state !== 'loaded' ||
+  const own = (next: ReporterStatusRead) =>
+    next.result.state !== 'loaded' ||
     (next.result.report.id === initial.id && next.result.report.reporterId === next.readerOrigin?.subject);
   const snapshot = (): ReporterStatusResult => {
     if (!owner.healthy()) return concealed;
     if (result.state === 'loaded' && !owner.available()) return unavailable;
-    if (result.state === 'loaded' && (result.report.id !== initial.id || result.report.reporterId !== resultOrigin?.subject)) return concealed;
+    if (
+      result.state === 'loaded' &&
+      (result.report.id !== initial.id || result.report.reporterId !== resultOrigin?.subject)
+    )
+      return concealed;
     return result;
   };
   if (initial.readerOrigin && !own(initial)) owner.retire();
@@ -71,11 +89,17 @@ export function createReporterStatusJourney(
     retire: owner.retire,
     snapshot,
     // Existing prepared SSR presentation is retained; this is not a private first-paint proof.
-    serverSnapshot: () => initial.viewer && own(initial) ? initial.result : concealed,
+    serverSnapshot: () => (initial.viewer && own(initial) ? initial.result : concealed),
     subscribe(listener: () => void) {
       listeners.add(listener);
-      const stop = owner.subscribe(() => { for (const listener of listeners) listener(); });
-      return () => { listeners.delete(listener); generation++; stop(); };
+      const stop = owner.subscribe(() => {
+        for (const listener of listeners) listener();
+      });
+      return () => {
+        listeners.delete(listener);
+        generation++;
+        stop();
+      };
     },
     isConnected: owner.isCurrent,
     isCurrent: () => owner.isCurrent() && owner.available() && snapshot().state === 'loaded',
@@ -92,7 +116,10 @@ export function createReporterStatusJourney(
         if (next.id !== initial.id || next.generation !== requestGeneration || !own(next)) return owner.retire();
         if (!next.readerOrigin && next.result.state === 'unavailable') publish(unavailable);
         else if (await owner.accepts(next)) {
-          if (owner.owns(ticket) && attempt === generation) { resultOrigin = next.readerOrigin; publish(next.result); }
+          if (owner.owns(ticket) && attempt === generation) {
+            resultOrigin = next.readerOrigin;
+            publish(next.result);
+          }
         } else owner.retire();
       } catch {
         if (owner.owns(ticket) && attempt === generation) publish(unavailable);

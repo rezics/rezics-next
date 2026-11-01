@@ -354,16 +354,32 @@ test('The default private Appeals route recovers bounded reads and retires priva
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   cache.setQueryData(['session'], { state: 'signed-in', subject: id(900), csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' });
   const environment = {
-    AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
-    WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
-    SESSIONS: { idFromName: (name: string) => name, get: () => ({ credential: async () => ({
-      status: 'active', subject: id(900), accessToken: 'reviewer', csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
-    }) }) },
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: '{}',
+    SESSIONS: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject: id(900),
+          accessToken: 'reviewer',
+          csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+        }),
+      }),
+    },
   } as unknown as import('../src/session/client').SessionEnv;
-  const read = (input: typeof first) => loadModerationAppealsRequest(
-    new Request('https://site.test/boards/moderation', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } }),
-    environment, input, () => client,
-  );
+  const read = (input: typeof first) =>
+    loadModerationAppealsRequest(
+      new Request('https://site.test/boards/moderation', {
+        headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+      }),
+      environment,
+      input,
+      () => client,
+    );
   const preparedRead = (input: typeof first) => prepareModerationAppealRead(cache, input, read);
   const ready = await preparedRead(first);
   expect(ready.state).toBe('ready');
@@ -450,7 +466,11 @@ test('The default private Appeals route recovers bounded reads and retires priva
   let key = 'later';
   const render = async (patch: Partial<Props> = {}) => {
     props = { ...props, ...patch };
-    await act(async () => root.render(createElement(QueryClientProvider, { client: cache }, createElement(ModerationAppealsPage, { ...props, key }))));
+    await act(async () =>
+      root.render(
+        createElement(QueryClientProvider, { client: cache }, createElement(ModerationAppealsPage, { ...props, key })),
+      ),
+    );
   };
   const click = async (name: string) => {
     const button = [...host.querySelectorAll('button')].find((item) => item.textContent === name);

@@ -25,10 +25,14 @@ export async function decisionSessionMatches(
   page: DecisionPage,
   session: { state: string; subject?: string | null; csrfToken: string | null },
 ): Promise<boolean> {
-  return session.state === 'signed-in' && !!session.subject && samePrivateReader(page.readerOrigin, {
-    subject: session.subject,
-    csrfFingerprint: await privateReaderFingerprint(session.csrfToken),
-  });
+  return (
+    session.state === 'signed-in' &&
+    !!session.subject &&
+    samePrivateReader(page.readerOrigin, {
+      subject: session.subject,
+      csrfFingerprint: await privateReaderFingerprint(session.csrfToken),
+    })
+  );
 }
 
 export async function prepareDecisionRead(

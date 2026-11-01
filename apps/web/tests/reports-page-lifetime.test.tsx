@@ -194,16 +194,32 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 // Accepted 924 provenance replaces the former subject-only fixture admission. The only
 // deferred authentication surface is the platform credential transport on this same Request.
 const environment = {
-  AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
-  WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
-  SESSIONS: { idFromName: (name: string) => name, get: () => ({ credential: async () => ({
-    status: 'active', subject: viewer().subject, accessToken: 'original-reader', csrfToken: viewer().csrfToken,
-  }) }) },
+  AUTH_ISSUER: 'https://auth.test',
+  API_RESOURCE: 'https://kernel.test',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'web',
+  WEBSITE_CLIENT_KEY: '{}',
+  SESSIONS: {
+    idFromName: (name: string) => name,
+    get: () => ({
+      credential: async () => ({
+        status: 'active',
+        subject: viewer().subject,
+        accessToken: 'original-reader',
+        csrfToken: viewer().csrfToken,
+      }),
+    }),
+  },
 } as unknown as import('../src/session/client').SessionEnv;
-const actualRead = (data: ReportReadInput) => loadModerationReportsRequest(
-  new Request('https://site.test/boards/moderation', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } }),
-  environment, data, () => native,
-);
+const actualRead = (data: ReportReadInput) =>
+  loadModerationReportsRequest(
+    new Request('https://site.test/boards/moderation', {
+      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+    }),
+    environment,
+    data,
+    () => native,
+  );
 const fresh = (scope = input) => prepareModerationReportRead(client, scope, actualRead, new AbortController().signal);
 async function paint(patch: Partial<Props> = {}) {
   props = { ...props, ...patch };
@@ -468,12 +484,7 @@ test('loader read keeps original scope, selection, post precedence and session t
   const abort = new AbortController();
   const deferredRead = deferred<Response>();
   readGate = deferredRead;
-  const aborted = prepareModerationReportRead(
-    client,
-    input,
-    actualRead,
-    abort.signal,
-  );
+  const aborted = prepareModerationReportRead(client, input, actualRead, abort.signal);
   abort.abort();
   deferredRead.resolve(Response.json({ reports: [], next: null }));
   await expect(aborted).rejects.toThrow();

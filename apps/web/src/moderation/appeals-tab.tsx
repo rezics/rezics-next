@@ -42,17 +42,25 @@ export function ModerationAppealsPage(props: AppealsPageProps) {
 function AppealsVisit(props: AppealsPageProps) {
   const client = useContext(QueryClientContext);
   const [original] = useState(() => ({ ...props, input: Object.freeze({ ...props.input }) }));
-  const [owner] = useState(() => client && typeof window !== 'undefined'
-    ? createPrivateReaderLifetime(client, original.page, appealReadKey(original.input), original.navigation)
-    : null);
+  const [owner] = useState(() =>
+    client && typeof window !== 'undefined'
+      ? createPrivateReaderLifetime(client, original.page, appealReadKey(original.input), original.navigation)
+      : null,
+  );
   const [data, setData] = useState(original.page);
   const retrying = useRef(false);
   const originalClient = useRef(client).current;
-  if (props.active === false || client !== originalClient ||
-    props.navigation !== original.navigation || props.read !== original.read ||
-    !appealPageIsCurrent(props.page, props.input) || appealReadKey(props.input) !== appealReadKey(original.input)) owner?.retire();
+  if (
+    props.active === false ||
+    client !== originalClient ||
+    props.navigation !== original.navigation ||
+    props.read !== original.read ||
+    !appealPageIsCurrent(props.page, props.input) ||
+    appealReadKey(props.input) !== appealReadKey(original.input)
+  )
+    owner?.retire();
   useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
-  const current = () => owner ? owner.isCurrent() : typeof window === 'undefined';
+  const current = () => (owner ? owner.isCurrent() : typeof window === 'undefined');
   async function retry() {
     if (!current() || retrying.current || data.state !== 'unavailable') return;
     retrying.current = true;
@@ -64,7 +72,7 @@ function AppealsVisit(props: AppealsPageProps) {
       if (!appealPageIsCurrent(result, original.input)) return owner?.retire();
       if (result.state === 'unavailable' && !result.readerOrigin) {
         setData({ ...result, appeals: [], targets: [], next: null });
-      } else if (!owner || await owner.accepts(result)) {
+      } else if (!owner || (await owner.accepts(result))) {
         if (current() && (!owner || owner.owns(ticket!))) setData(result);
       } else {
         owner.retire();
@@ -82,12 +90,18 @@ function AppealsVisit(props: AppealsPageProps) {
     action?.();
   };
   const commandCurrent = owner?.canCommand;
-  const state = (typeof window !== 'undefined' && !owner) || (owner && !owner.healthy()) ? 'closed' : owner && !owner.available() && data.state === 'ready'
-    ? 'unavailable' : data.state;
+  const state =
+    (typeof window !== 'undefined' && !owner) || (owner && !owner.healthy())
+      ? 'closed'
+      : owner && !owner.available() && data.state === 'ready'
+        ? 'unavailable'
+        : data.state;
   return (
-    <div onClickCapture={(event) => {
-      if ((event.target as Element).closest('a') && !current()) event.preventDefault();
-    }}>
+    <div
+      onClickCapture={(event) => {
+        if ((event.target as Element).closest('a') && !current()) event.preventDefault();
+      }}
+    >
       <ModerationAppealsView
         key={data.generation}
         appeals={data.appeals}
@@ -211,7 +225,15 @@ export function ModerationAppealsView({
               (appeal.canResolve === true || (appeal.canResolve === undefined && canResolve?.(appeal) === true)) &&
               (!viewerId || viewerId !== appeal.decision.deciderId) &&
               (canResolve?.(appeal) ?? true);
-            return <AppealCard key={appeal.id} appeal={appeal} target={target} mayResolve={mayResolve} {...(isCurrent ? { isCurrent } : {})} />;
+            return (
+              <AppealCard
+                key={appeal.id}
+                appeal={appeal}
+                target={target}
+                mayResolve={mayResolve}
+                {...(isCurrent ? { isCurrent } : {})}
+              />
+            );
           })}
         </ol>
       ) : (
@@ -292,7 +314,12 @@ function AppealCard({
               <time dateTime={appeal.decision.appeal.resolvedAt}>{date(appeal.decision.appeal.resolvedAt)}</time>
             </p>
           ) : null}
-          <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal ?? null} {...(isCurrent ? { isCurrent } : {})} />
+          <AppealResolution
+            appealId={appeal.id}
+            mayResolve={mayResolve}
+            resolution={appeal.decision.appeal ?? null}
+            {...(isCurrent ? { isCurrent } : {})}
+          />
         </div>
       </ContentItemFrame>
     </li>

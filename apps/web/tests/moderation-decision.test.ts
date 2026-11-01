@@ -513,9 +513,14 @@ test('The default private Decision page retires statements, appeal drafts and la
     await session('author-1', 'AAAAAAAAAAAAAAAAAAAAAA');
     page = await load(decision.id);
     // Accepted non-secret prepared provenance replaces the old raw-CSRF serialization oracle.
-    expect(page).toMatchObject({ target: null, viewerId: 'author-1', readerOrigin: {
-      subject: 'author-1', csrfFingerprint: await privateReaderFingerprint('AAAAAAAAAAAAAAAAAAAAAA'),
-    } });
+    expect(page).toMatchObject({
+      target: null,
+      viewerId: 'author-1',
+      readerOrigin: {
+        subject: 'author-1',
+        csrfFingerprint: await privateReaderFingerprint('AAAAAAAAAAAAAAAAAAAAAA'),
+      },
+    });
     expect(JSON.stringify(page)).not.toContain('AAAAAAAAAAAAAAAAAAAAAA');
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
     expect(calls.map((request) => new URL(request.url).pathname)).toEqual([

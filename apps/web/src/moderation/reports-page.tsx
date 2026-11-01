@@ -55,7 +55,9 @@ export function ModerationReportsPage(props: {
   function createVisit() {
     const original = props;
     const page = original.page;
-    const owner = browserClient ? createPrivateReaderLifetime(browserClient, page, reportReadKey(page.input), original.navigation) : undefined;
+    const owner = browserClient
+      ? createPrivateReaderLifetime(browserClient, page, reportReadKey(page.input), original.navigation)
+      : undefined;
     let retired = retiredReads.has(page.input);
     let connected = true;
     let serial = 0;
@@ -150,7 +152,11 @@ export function ModerationReportsPage(props: {
     !reportPageIsCurrent(props.page, props.input)
   )
     current.retire();
-  useSyncExternalStore(current.subscribe, () => current.owner?.snapshot() ?? Number(current.observe()), () => 0);
+  useSyncExternalStore(
+    current.subscribe,
+    () => current.owner?.snapshot() ?? Number(current.observe()),
+    () => 0,
+  );
   const retired = current.observe();
   // The browser cache is authoritative even before a session hook has hydrated. Standalone SSR
   // fixtures have no browser source; they retain only their explicit prepared native admission.
@@ -168,29 +174,33 @@ export function ModerationReportsPage(props: {
   const { page } = current;
   const input = page.input;
   return (
-    <div onClickCapture={(event) => {
-      if ((event.target as Element).closest('a') && !current.isCurrent()) event.preventDefault();
-    }}><ModerationReportsView
-      key={page.generation}
-      boardId={input.boardId}
-      {...(input.threadId ? { threadId: input.threadId } : {})}
-      {...(input.postId ? { postId: input.postId } : {})}
-      selection={reportSelection(input)}
-      viewerId={page.viewerId}
-      reports={page.reports}
-      targets={page.targets}
-      revisions={page.revisions}
-      next={page.next}
-      state={page.state}
-      queueIdentity={page.generation}
-      isCurrent={current.isCurrent}
-      onAction={current.submit}
-      {...(props.onNext ? { onNext: current.next } : {})}
-      {...(props.onSelection ? { onSelection: current.select } : {})}
-      {...(props.onRestart ? { onRestart: current.restart } : {})}
-      {...(props.onRetry ? { onRetry: current.retry } : {})}
-      {...(props.onRefresh ? { onRefresh: current.refresh } : {})}
-    /></div>
+    <div
+      onClickCapture={(event) => {
+        if ((event.target as Element).closest('a') && !current.isCurrent()) event.preventDefault();
+      }}
+    >
+      <ModerationReportsView
+        key={page.generation}
+        boardId={input.boardId}
+        {...(input.threadId ? { threadId: input.threadId } : {})}
+        {...(input.postId ? { postId: input.postId } : {})}
+        selection={reportSelection(input)}
+        viewerId={page.viewerId}
+        reports={page.reports}
+        targets={page.targets}
+        revisions={page.revisions}
+        next={page.next}
+        state={page.state}
+        queueIdentity={page.generation}
+        isCurrent={current.isCurrent}
+        onAction={current.submit}
+        {...(props.onNext ? { onNext: current.next } : {})}
+        {...(props.onSelection ? { onSelection: current.select } : {})}
+        {...(props.onRestart ? { onRestart: current.restart } : {})}
+        {...(props.onRetry ? { onRetry: current.retry } : {})}
+        {...(props.onRefresh ? { onRefresh: current.refresh } : {})}
+      />
+    </div>
   );
 }
 

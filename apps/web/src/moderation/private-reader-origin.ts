@@ -19,6 +19,9 @@ export async function preparedPrivateReaderOrigin(
   return { subject, csrfFingerprint: await privateReaderFingerprint(requestCsrfToken(request)) };
 }
 
-export function samePrivateReader(a: PrivateReaderOrigin | null | undefined, b: PrivateReaderOrigin | null | undefined) {
+export function samePrivateReader(
+  a: PrivateReaderOrigin | null | undefined,
+  b: PrivateReaderOrigin | null | undefined,
+) {
   return !!a && !!b && a.subject === b.subject && a.csrfFingerprint === b.csrfFingerprint;
 }

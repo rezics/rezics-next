@@ -5,13 +5,14 @@ import type { ModerationTarget } from './target-content';
 
 export type AppealReadInput = { boardId: string; threadId?: string; postId?: string; cursor?: string };
 export type AppealReadState = 'ready' | 'loading' | 'unavailable' | 'stale' | 'closed';
-export type PrivateAppealPage = AppealPage & PrivateReaderRead & {
-  targets: ModerationTarget[];
-  viewerId: string | null;
-  readKey: string;
-  generation: string;
-  state: AppealReadState;
-};
+export type PrivateAppealPage = AppealPage &
+  PrivateReaderRead & {
+    targets: ModerationTarget[];
+    viewerId: string | null;
+    readKey: string;
+    generation: string;
+    state: AppealReadState;
+  };
 
 /** Post identity is return context; native Appeals reads only board or thread scope. */
 export function moderationAppealInput(boardId: string, search: Record<string, unknown>): AppealReadInput {
@@ -94,6 +95,12 @@ export async function prepareModerationAppealRead(
   const original = Object.freeze({ ...input });
   const page = await preparePrivateReaderRead(client, appealReadKey(original), () => read(original), signal);
   return page.readerBinding.retired || (!page.readerOrigin && page.state === 'ready')
-    ? { ...page, appeals: [], targets: [], next: null, state: page.readerBinding.retired ? 'closed' as const : 'unavailable' as const }
+    ? {
+        ...page,
+        appeals: [],
+        targets: [],
+        next: null,
+        state: page.readerBinding.retired ? ('closed' as const) : ('unavailable' as const),
+      }
     : page;
 }

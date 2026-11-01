@@ -134,38 +134,65 @@ function DecisionBoundPage(props: DecisionPageProps) {
   const client = useContext(QueryClientContext);
   const [original] = useState(props);
   const [page, setPage] = useState(props.page);
-  const [owner, setOwner] = useState(() => client && typeof window !== 'undefined'
-    ? createPrivateReaderLifetime(client, page, decisionReadKey(page.decision.id), props.navigation) : null);
+  const [owner, setOwner] = useState(() =>
+    client && typeof window !== 'undefined'
+      ? createPrivateReaderLifetime(client, page, decisionReadKey(page.decision.id), props.navigation)
+      : null,
+  );
   const originalClient = useRef(client).current;
-  if (client !== originalClient || props.navigation !== original.navigation || props.onRefresh !== original.onRefresh ||
-    props.onAppeal !== original.onAppeal || !sameDecision(props.page.decision, original.page.decision)) owner?.retire();
+  if (
+    client !== originalClient ||
+    props.navigation !== original.navigation ||
+    props.onRefresh !== original.onRefresh ||
+    props.onAppeal !== original.onAppeal ||
+    !sameDecision(props.page.decision, original.page.decision)
+  )
+    owner?.retire();
   useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
   if (typeof window !== 'undefined' && !client) return <DecisionReadStatus state="closed" />;
   if (owner && (!owner.healthy() || !owner.available())) {
-    return <DecisionFreshRecovery
-      key={page.readGeneration ?? page.decision.id}
-      state={owner.healthy() ? 'unavailable' : 'closed'}
-      original={page}
-      read={original.onRefresh ?? refreshDecision}
-      allowed={() => client === originalClient && owner.canRecover()}
-      prepare={(id, read) => prepareDecisionRead(client!, id, read)}
-      onAdmit={(next) => {
-        owner.retire();
-        setOwner(createPrivateReaderLifetime(client!, next, decisionReadKey(next.decision.id), original.navigation));
-        setPage(next);
-      }}
-    />;
+    return (
+      <DecisionFreshRecovery
+        key={page.readGeneration ?? page.decision.id}
+        state={owner.healthy() ? 'unavailable' : 'closed'}
+        original={page}
+        read={original.onRefresh ?? refreshDecision}
+        allowed={() => client === originalClient && owner.canRecover()}
+        prepare={(id, read) => prepareDecisionRead(client!, id, read)}
+        onAdmit={(next) => {
+          owner.retire();
+          setOwner(createPrivateReaderLifetime(client!, next, decisionReadKey(next.decision.id), original.navigation));
+          setPage(next);
+        }}
+      />
+    );
   }
-  return <div onClickCapture={(event) => {
-    if ((event.target as Element).closest('a') && owner && (!owner.isCurrent() || !owner.available())) event.preventDefault();
-  }}>
-    <DecisionVisit key={page.readGeneration ?? 'presenter'} {...original} page={page}
-      {...(owner ? { isCurrent: owner.isCurrent, canCommand: owner.canCommand, accepts: owner.accepts } : {})} />
-  </div>;
+  return (
+    <div
+      onClickCapture={(event) => {
+        if ((event.target as Element).closest('a') && owner && (!owner.isCurrent() || !owner.available()))
+          event.preventDefault();
+      }}
+    >
+      <DecisionVisit
+        key={page.readGeneration ?? 'presenter'}
+        {...original}
+        page={page}
+        {...(owner ? { isCurrent: owner.isCurrent, canCommand: owner.canCommand, accepts: owner.accepts } : {})}
+      />
+    </div>
+  );
 }
 
 /** Explicit fresh read creates a new observation; the retired owner never borrows it. */
-function DecisionFreshRecovery({ state: initial, original, read, prepare, allowed, onAdmit }: {
+function DecisionFreshRecovery({
+  state: initial,
+  original,
+  read,
+  prepare,
+  allowed,
+  onAdmit,
+}: {
   state: DecisionReadState;
   original: DecisionPage;
   read: (id: string) => Promise<DecisionPage>;
@@ -178,7 +205,10 @@ function DecisionFreshRecovery({ state: initial, original, read, prepare, allowe
   const pending = useRef(false);
   useEffect(() => {
     connection.current.active = true;
-    return () => { connection.current.active = false; connection.current.serial++; };
+    return () => {
+      connection.current.active = false;
+      connection.current.serial++;
+    };
   }, []);
   async function retry() {
     if (pending.current || !connection.current.active || !allowed()) return;
@@ -259,7 +289,13 @@ function DecisionVisit({
             : m.decision_appeal_refused();
 
   async function submit(retry = false) {
-    if (!isCurrent() || !canCommand() || pending.current || (!retry && (locked || !allowed || count < 1 || count > 2000))) return;
+    if (
+      !isCurrent() ||
+      !canCommand() ||
+      pending.current ||
+      (!retry && (locked || !allowed || count < 1 || count > 2000))
+    )
+      return;
     if (retry && (feedback !== 'uncertain' || !lastCommand.current)) return;
     const token = ++lifetime.current.serial;
     const intent = { id: decision.id, statement: text };

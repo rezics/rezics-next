@@ -33,7 +33,10 @@ export async function loadPrivateReporterStatus(
   authorization: string,
   viewer: ReporterStatusViewer | { subject: string; csrfToken: string | null },
 ): Promise<ReporterStatusRead> {
-  const readerOrigin = 'csrfFingerprint' in viewer ? viewer : { subject: viewer.subject, csrfFingerprint: await privateReaderFingerprint(viewer.csrfToken) };
+  const readerOrigin =
+    'csrfFingerprint' in viewer
+      ? viewer
+      : { subject: viewer.subject, csrfFingerprint: await privateReaderFingerprint(viewer.csrfToken) };
   const base = { id, generation, viewer: readerOrigin, readerOrigin };
   try {
     const result = await client.reports({ id }).get({ headers: { authorization }, fetch: { cache: 'no-store' } });
@@ -44,7 +47,13 @@ export async function loadPrivateReporterStatus(
       return { ...base, result: { state: 'unavailable' } };
     }
     const report = reporterStatusResponse(result.data);
-    return { ...base, result: report.id === id && report.reporterId === readerOrigin.subject ? { state: 'loaded', report } : { state: 'concealed' } };
+    return {
+      ...base,
+      result:
+        report.id === id && report.reporterId === readerOrigin.subject
+          ? { state: 'loaded', report }
+          : { state: 'concealed' },
+    };
   } catch (error) {
     return { ...base, result: { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' } };
   }

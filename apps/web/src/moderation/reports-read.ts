@@ -9,7 +9,11 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from './private-reader-origin';
-import { preparePrivateReaderRead, privateReaderSessionSource, type PrivateReaderRead } from './private-reader-lifetime';
+import {
+  preparePrivateReaderRead,
+  privateReaderSessionSource,
+  type PrivateReaderRead,
+} from './private-reader-lifetime';
 
 import { enrichModerationTargets, type ModerationEvidence } from './target-context';
 
@@ -306,9 +310,10 @@ export async function readModerationReportPage(
   }
 }
 
-export type PrivateReportPage = Awaited<ReturnType<typeof readModerationReportPage>> & PrivateReaderRead & {
-  browserRevision?: number;
-};
+export type PrivateReportPage = Awaited<ReturnType<typeof readModerationReportPage>> &
+  PrivateReaderRead & {
+    browserRevision?: number;
+  };
 type ReportSession = { state: string; subject?: string | null; csrfToken?: string | null };
 
 /** Compatibility facade for callers observing the original Reports cache. */
@@ -326,6 +331,13 @@ export async function prepareModerationReportRead(
   const original = Object.freeze({ ...input, ...reportSelection(input) });
   const page = await preparePrivateReaderRead(client, reportReadKey(original), () => read(original), signal);
   return page.readerBinding.retired || !page.readerOrigin
-    ? { ...page, reports: [], targets: [], revisions: [], next: null, state: page.readerBinding.retired ? 'denied' : 'error' }
+    ? {
+        ...page,
+        reports: [],
+        targets: [],
+        revisions: [],
+        next: null,
+        state: page.readerBinding.retired ? 'denied' : 'error',
+      }
     : page;
 }

@@ -65,13 +65,23 @@ function ReporterStatusVisit({
     () => createReporterStatusJourney(original.cache, original.initial, readCurrent, original.navigation),
     [original],
   );
-  if (cache !== original.cache || navigation !== original.navigation || initial.id !== original.initial.id ||
-    initial.generation !== original.initial.generation)
+  if (
+    cache !== original.cache ||
+    navigation !== original.navigation ||
+    initial.id !== original.initial.id ||
+    initial.generation !== original.initial.generation
+  )
     journey.retire();
   const result = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.serverSnapshot);
-  return <div onClickCapture={(event) => {
-    if ((event.target as Element).closest('a') && !journey.isConnected()) event.preventDefault();
-  }}><ReporterStatusResultPage result={result} onRetry={() => journey.retry()} isCurrent={journey.isCurrent} /></div>;
+  return (
+    <div
+      onClickCapture={(event) => {
+        if ((event.target as Element).closest('a') && !journey.isConnected()) event.preventDefault();
+      }}
+    >
+      <ReporterStatusResultPage result={result} onRetry={() => journey.retry()} isCurrent={journey.isCurrent} />
+    </div>
+  );
 }
 
 export function ReporterStatusResultPage({

@@ -34,7 +34,9 @@ function observeSession(client: QueryClient) {
     if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
     const nextQuery = query();
     const next = tuple(read());
-    const replacement = event.type === 'added' || event.type === 'removed' ||
+    const replacement =
+      event.type === 'added' ||
+      event.type === 'removed' ||
       (event.type === 'updated' && ['success', 'error', 'setState'].includes(event.action.type));
     if (replacement || nextQuery !== previousQuery || next !== previous) {
       revision++;
@@ -51,14 +53,19 @@ function observeSession(client: QueryClient) {
     snapshot: () => revision,
     subscribe(listener: () => void) {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }
 
 export function privateReaderSessionSource(client: QueryClient) {
   let source = sources.get(client);
-  if (!source) { source = observeSession(client); sources.set(client, source); }
+  if (!source) {
+    source = observeSession(client);
+    sources.set(client, source);
+  }
   return source;
 }
 type Capture = ReturnType<typeof captureSession>;
@@ -75,9 +82,17 @@ function captureSession(client: QueryClient) {
     ? privateReaderFingerprint(token).then((csrfFingerprint) => ({ subject: subject!, csrfFingerprint }))
     : Promise.resolve(null);
   return {
-    client, source, query, revision, expected,
-    current: () => healthy && source.query() === query && source.snapshot() === revision &&
-      query?.state.status === 'success' && tuple(source.read()) === original,
+    client,
+    source,
+    query,
+    revision,
+    expected,
+    current: () =>
+      healthy &&
+      source.query() === query &&
+      source.snapshot() === revision &&
+      query?.state.status === 'success' &&
+      tuple(source.read()) === original,
     canCommand: () => !!token,
   };
 }
@@ -97,12 +112,18 @@ export async function preparePrivateReaderRead<T extends PrivateReaderRead>(
   signal?.throwIfAborted();
   const readerBinding: PrivateReaderBinding = {
     id: crypto.randomUUID(),
-    source: capture.source.id, revision: capture.revision, key,
+    source: capture.source.id,
+    revision: capture.revision,
+    key,
     placement: typeof window === 'undefined' ? 'server' : 'browser',
-    expected, retired: !capture.current() || (!!response.readerOrigin && !samePrivateReader(expected, response.readerOrigin)),
+    expected,
+    retired: !capture.current() || (!!response.readerOrigin && !samePrivateReader(expected, response.readerOrigin)),
   };
   let records = preparations.get(client);
-  if (!records) { records = new Map(); preparations.set(client, records); }
+  if (!records) {
+    records = new Map();
+    preparations.set(client, records);
+  }
   const release = () => {
     records.delete(readerBinding.id);
     signal?.removeEventListener('abort', release);
@@ -126,18 +147,28 @@ export function createPrivateReaderLifetime(
   const identity = Symbol();
   const capture = local?.capture ?? captureSession(client);
   const source = privateReaderSessionSource(client);
-  let retired = !binding || binding.retired || binding.key !== key || consumed.has(binding) ||
-    capture.client !== client || (binding.placement === 'browser' && (!local || binding.source !== source.id)) ||
+  let retired =
+    !binding ||
+    binding.retired ||
+    binding.key !== key ||
+    consumed.has(binding) ||
+    capture.client !== client ||
+    (binding.placement === 'browser' && (!local || binding.source !== source.id)) ||
     !!local?.owner ||
     (binding.source === source.id && binding.revision !== source.snapshot());
   let verified = !!local && samePrivateReader(binding?.expected, read.readerOrigin);
-  const release = () => { if (!local?.owner || local.owner === identity) local?.release(); };
+  const release = () => {
+    if (!local?.owner || local.owner === identity) local?.release();
+  };
   if (retired) release();
   let connected = false;
   let serial = 0;
   let version = 0;
   const listeners = new Set<() => void>();
-  const publish = () => { version++; for (const listener of listeners) listener(); };
+  const publish = () => {
+    version++;
+    for (const listener of listeners) listener();
+  };
   const retire = () => {
     if (retired) return;
     retired = true;
@@ -152,16 +183,25 @@ export function createPrivateReaderLifetime(
   };
   if (!local && binding) {
     // Independent hydration has a separate observation, captured before this asynchronous comparison.
-    void capture.expected.then((expected) => {
-      if (!observe()) return;
-      if (!samePrivateReader(expected, binding.expected) || (read.readerOrigin && !samePrivateReader(expected, read.readerOrigin))) return retire();
-      verified = samePrivateReader(expected, read.readerOrigin);
-      publish();
-    }).catch(retire);
+    void capture.expected
+      .then((expected) => {
+        if (!observe()) return;
+        if (
+          !samePrivateReader(expected, binding.expected) ||
+          (read.readerOrigin && !samePrivateReader(expected, read.readerOrigin))
+        )
+          return retire();
+        verified = samePrivateReader(expected, read.readerOrigin);
+        publish();
+      })
+      .catch(retire);
   }
   return {
     retire,
-    snapshot: () => { observe(); return version; },
+    snapshot: () => {
+      observe();
+      return version;
+    },
     serverSnapshot: () => 0,
     available: () => observe() && verified,
     healthy: observe,
@@ -192,10 +232,13 @@ export function createPrivateReaderLifetime(
         serial++;
         if (binding) consumed.add(binding);
         listeners.delete(listener);
-        stopSession(); stopNavigation?.();
+        stopSession();
+        stopNavigation?.();
         local?.signal?.removeEventListener('abort', abort);
         // Synchronous StrictMode replay reconnects only this same owner. Queued effects are already fenced.
-        queueMicrotask(() => { if (!connected) retire(); });
+        queueMicrotask(() => {
+          if (!connected) retire();
+        });
       };
     },
   };

@@ -43,7 +43,11 @@ export type AppealTargetReads = {
 function parseAppealPage(value: unknown): AppealPage {
   if (!value || typeof value !== 'object') throw new Error('Invalid appeals page');
   const page = value as Record<string, unknown>;
-  if (!Array.isArray(page.appeals) || page.appeals.length > MODERATION_APPEALS_PAGE_SIZE || (page.next !== null && typeof page.next !== 'string'))
+  if (
+    !Array.isArray(page.appeals) ||
+    page.appeals.length > MODERATION_APPEALS_PAGE_SIZE ||
+    (page.next !== null && typeof page.next !== 'string')
+  )
     throw new Error('Invalid appeals page');
   const appeals = page.appeals.map((item): Appeal => {
     if (!item || typeof item !== 'object') throw new Error('Invalid appeals page');
@@ -146,7 +150,12 @@ export async function loadModerationAppealsRequest(
   data: AppealReadInput,
   client: () => KernelClient = kernelClient,
 ): Promise<PrivateAppealPage> {
-  const identity = { readKey: appealReadKey(data), viewerId: null, readerOrigin: null, generation: crypto.randomUUID() };
+  const identity = {
+    readKey: appealReadKey(data),
+    viewerId: null,
+    readerOrigin: null,
+    generation: crypto.randomUUID(),
+  };
   try {
     await prepareSession(request, sessionEnv);
   } catch {
@@ -186,7 +195,12 @@ export async function readModerationAppealPage(
   viewerId: string,
   readerOrigin?: PrivateReaderOrigin | null,
 ): Promise<PrivateAppealPage> {
-  const identity = { readKey: appealReadKey(input), viewerId, readerOrigin: readerOrigin ?? null, generation: crypto.randomUUID() };
+  const identity = {
+    readKey: appealReadKey(input),
+    viewerId,
+    readerOrigin: readerOrigin ?? null,
+    generation: crypto.randomUUID(),
+  };
   try {
     const headers = auth(authorization);
     const page = await readModerationAppeals(

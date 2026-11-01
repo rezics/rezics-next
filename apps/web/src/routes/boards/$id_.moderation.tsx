@@ -41,8 +41,10 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
   loader: async ({ params, deps, location, abortController, context }) => {
     if (deps.tab === 'appeals') {
       const page = await prepareModerationAppealRead(
-        context.queryClient, moderationAppealInput(params.id, deps),
-        (data) => loadModerationAppeals({ data }), abortController.signal,
+        context.queryClient,
+        moderationAppealInput(params.id, deps),
+        (data) => loadModerationAppeals({ data }),
+        abortController.signal,
       );
       return { ...page, navigationKey: location.state.__TSR_key ?? location.href };
     }
@@ -204,15 +206,25 @@ function ModerationReportsError({ reset, error }: ErrorComponentProps) {
   const pending = useRef(false);
   useEffect(() => {
     original.current.active = true;
-    return () => { original.current.active = false; };
+    return () => {
+      original.current.active = false;
+    };
   }, []);
   const current = () => original.current.active && router.state.location === original.current.location;
   const retry = () => {
     if (!current() || pending.current) return;
     pending.current = true;
-    void router.invalidate({ sync: true }).then(() => {
-      if (current()) reset();
-    }).catch(() => { /* The loader owns the current safe error result. */ }).finally(() => { if (current()) pending.current = false; });
+    void router
+      .invalidate({ sync: true })
+      .then(() => {
+        if (current()) reset();
+      })
+      .catch(() => {
+        /* The loader owns the current safe error result. */
+      })
+      .finally(() => {
+        if (current()) pending.current = false;
+      });
   };
   if (tab === 'appeals') {
     return (
