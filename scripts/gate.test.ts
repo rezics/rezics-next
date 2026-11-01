@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { DEFAULT_DURATIONS, loadDurationTable, splitWorkspaces, type Workspace } from './gate.ts';
+import {
+  DEFAULT_DURATIONS,
+  loadDurationTable,
+  runLocalGate,
+  splitWorkspaces,
+  type Workspace,
+} from './gate.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const gate = join(repository, 'scripts/gate.ts');
@@ -104,15 +110,15 @@ if (script.includes('REMOTE_CHECK_RETURNS')) {
     const resultPath = script.match(/GATE_RESULT_FILE=([^\\s'\"]+)/)?.[1];
     if (resultPath) {
       const result = {
-        workspaces: [{
+        workspaces: script.includes('apps/') ? [{
           name: '@fixture/remote-' + group,
-          directory: 'apps/remote-' + group,
+          directory: process.env.FAKE_RESULT_WORKSPACE ?? 'apps/remote-' + group,
           host: address.includes('@b.') ? 'b' : 'c',
           passed: code === 0,
           durationSeconds: 1.25,
           failingFiles: code === 0 ? [] : ['test/remote-' + group + '.test.ts'],
           loadSensitiveTests: [],
-        }],
+        }] : [],
         ...(script.includes('tools/goal/scripts/gate.ts')
           ? { controlPlane: { passed: code === 0, durationSeconds: 0.5, host: address.includes('@b.') ? 'b' : 'c' } }
           : {}),
@@ -399,9 +405,8 @@ test("the gate writes a JSON result with each workspace's outcome, failing files
   fixtureWorkspace(fixture, 'services/b-lane', '@fixture/lane', 'bun scripts/check.ts');
   delete env.GATE_RESULT_FILE;
 
-  const result = await runGate(env, fixture);
-  expect(result.code).toBe(1);
-  expect(result.stdout.trimEnd()).toEndWith('check-fixture: Gate result: .temp/gate/result.json');
+  const code = await runLocalGate([], fixture, env);
+  expect(code).toBe(1);
   const file = JSON.parse(readFileSync(join(fixture, '.temp/gate/result.json'), 'utf8')) as {
     workspaces: Array<{
       name: string;
@@ -432,29 +437,24 @@ test("the gate writes a JSON result with each workspace's outcome, failing files
   });
 });
 
-test("a group's transport failure is retried once and a load-induced workspace is rerun within its group", async () => {
+test("a transport failure is not replayed, and local load-induced reruns keep their reports", async () => {
   const { env, events } = scenario();
   const result = await runGate({ ...env, FAKE_DROP_FIRST_RUN: '1', FAKE_DROP_GROUP: '0', GATE_REMOTE_SLOTS: '4' });
-  expect(result.code).toBe(0);
-  expect(result.stderr).toContain('transport failure; retrying once');
+  expect(result.code).toBe(75);
+  expect(result.stderr).not.toContain('retrying once');
   const runs = events().filter((event) => event.kind === 'run');
-  expect(runs.filter((event) => event.group === 0)).toHaveLength(2);
+  expect(runs.filter((event) => event.group === 0)).toHaveLength(1);
   expect(runs.filter((event) => event.group === 1)).toHaveLength(1);
 
   const local = scenario();
-  delete local.env.KERNEL_CHECK_REMOTE;
   local.env.PATH = `${join(root, 'gate-bin')}:${process.env.PATH}`;
   local.env.GATE_CONCURRENCY = '1';
   const fixture = join(local.dir, 'checkout');
   mkdirSync(fixture);
   fixtureWorkspace(fixture, 'apps/a-plain', '@fixture/plain', 'bun test && bun run after-tests');
   fixtureWorkspace(fixture, 'packages/b-runner', '@fixture/runner', 'bun scripts/check.ts && bun test');
-  const selected = await runGate({ ...local.env, KERNEL_CHECK_ON_REMOTE: '1', REMOTE_CHECK_HOST: 'group-b' }, fixture, [
-    '--workspaces',
-    'apps/a-plain',
-  ]);
-  expect(selected.code).toBe(0);
-  expect(selected.stdout).toContain('Load-sensitive workspaces (passed on retry): 1');
+  const selected = await runLocalGate(['--workspaces', 'apps/a-plain'], fixture, local.env);
+  expect(selected).toBe(0);
   expect(
     local
       .events()
@@ -465,7 +465,89 @@ test("a group's transport failure is retried once and a load-induced workspace i
     workspaces: Array<{ directory: string; host: string }>;
   };
   expect(resultFile.workspaces).toHaveLength(1);
-  expect(resultFile.workspaces[0]).toMatchObject({ directory: 'apps/a-plain', host: 'group-b' });
+  expect(resultFile.workspaces[0]).toMatchObject({ directory: 'apps/a-plain', host: 'local' });
+});
+
+test('selected workspaces and control-plane inclusion are preserved on remote handoff despite local markers', async () => {
+  const { env, events, dir } = scenario();
+  const fixture = join(dir, 'checkout');
+  mkdirSync(fixture);
+  fixtureWorkspace(fixture, 'apps/a-plain', '@fixture/plain');
+  fixtureWorkspace(fixture, 'packages/b-runner', '@fixture/runner');
+
+  const result = await runGate(
+    {
+      ...env,
+      FAKE_RESULT_WORKSPACE: 'apps/a-plain',
+      GATE_REMOTE_SLOTS: '4',
+      KERNEL_CHECK_ON_REMOTE: '1',
+      REZICS_STACK_REMOTE: 'off',
+      REZICS_CHECK_LOCAL_ONLY: '1',
+      REZICS_CHECK_MEMORY_LEASE: 'already-held',
+      REZICS_STACK_SLOT: 'already-held',
+    },
+    fixture,
+    ['--workspaces', 'apps/a-plain', 'tools/goal/scripts/gate.ts'],
+  );
+
+  expect(result.code).toBe(0);
+  expect(result.stdout).not.toContain('$ bun install');
+  expect(events().filter((event) => event.kind === 'install' || event.kind === 'check')).toEqual([]);
+  const scripts = events()
+    .filter((event) => event.kind === 'run')
+    .map((event) => event.script as string);
+  expect(scripts).toHaveLength(2);
+  const selectedScript = scripts.find((script) => script.includes('apps/a-plain'))!;
+  const controlScript = scripts.find((script) => script.includes('tools/goal/scripts/gate.ts'))!;
+  expect(selectedScript).toContain('--workspaces');
+  expect(selectedScript).not.toContain('packages/b-runner');
+  expect(selectedScript).not.toContain('tools/goal/scripts/gate.ts');
+  expect(controlScript).toContain('tools/goal/scripts/gate.ts');
+  expect(controlScript).not.toContain('packages/b-runner');
+  const resultFile = JSON.parse(readFileSync(env.GATE_RESULT_FILE!, 'utf8')) as {
+    workspaces: Array<{ directory: string }>;
+    controlPlane?: { passed: boolean };
+  };
+  expect(resultFile.workspaces).toEqual([
+    {
+      name: '@fixture/remote-0',
+      directory: 'apps/a-plain',
+      host: 'b',
+      passed: true,
+      durationSeconds: 1.25,
+      failingFiles: [],
+      loadSensitiveTests: [],
+    },
+  ]);
+  expect(resultFile.controlPlane).toMatchObject({ passed: true });
+});
+
+test('a selected remote workspace does not gain the full gate or control plane', async () => {
+  const { env, events, dir } = scenario();
+  const fixture = join(dir, 'checkout');
+  mkdirSync(fixture);
+  fixtureWorkspace(fixture, 'apps/a-plain', '@fixture/plain');
+  fixtureWorkspace(fixture, 'packages/b-runner', '@fixture/runner');
+
+  const result = await runGate({ ...env, FAKE_RESULT_WORKSPACE: 'apps/a-plain' }, fixture, [
+    '--workspaces',
+    'apps/a-plain',
+  ]);
+
+  expect(result.code).toBe(0);
+  const scripts = events()
+    .filter((event) => event.kind === 'run')
+    .map((event) => event.script as string);
+  expect(scripts).toHaveLength(1);
+  expect(scripts[0]).toContain('apps/a-plain');
+  expect(scripts[0]).not.toContain('packages/b-runner');
+  expect(scripts[0]).not.toContain('tools/goal/scripts/gate.ts');
+  const resultFile = JSON.parse(readFileSync(env.GATE_RESULT_FILE!, 'utf8')) as {
+    workspaces: Array<{ directory: string }>;
+    controlPlane?: { passed: boolean };
+  };
+  expect(resultFile.workspaces.map((workspace) => workspace.directory)).toEqual(['apps/a-plain']);
+  expect(resultFile).not.toHaveProperty('controlPlane');
 });
 
 test('the gate asks for four slots per group and forwards concurrency only when set', async () => {
@@ -512,27 +594,46 @@ test('a signal sent to the gate reaches the remote runs, which are cleaned up be
   expect(events().some((event) => event.kind === 'cleanup')).toBe(true);
 });
 
-test('without KERNEL_CHECK_REMOTE, or on the check host, the gate runs locally as before', async () => {
+test('missing, unreadable and empty host configuration fail closed before local installation', async () => {
   const localPath = (env: Record<string, string>) => ({ ...env, PATH: `${join(root, 'local')}:${env.PATH}` });
 
   const unset = scenario();
   const withoutRemote = { ...unset.env };
   delete withoutRemote.KERNEL_CHECK_REMOTE;
-  const first = await runGate(localPath(withoutRemote));
-  expect(first.code).toBe(3);
-  expect(first.stdout).toContain('$ bun install --frozen-lockfile');
-  expect(unset.local()).toBe('bun install --frozen-lockfile\n');
+  const emptyCheckout = join(unset.dir, 'empty-checkout');
+  mkdirSync(emptyCheckout);
+  const first = await runGate(localPath(withoutRemote), emptyCheckout);
+  expect(first.code).toBe(1);
+  expect(first.stderr).toContain('no check host is configured');
+  expect(unset.local()).toBe('');
   expect(unset.events()).toEqual([]);
 
-  const onHost = scenario();
-  const second = await runGate(localPath({ ...onHost.env, KERNEL_CHECK_ON_REMOTE: '1' }));
-  expect(second.code).toBe(3);
-  expect(onHost.local()).toBe('bun install --frozen-lockfile\n');
-  expect(onHost.events()).toEqual([]);
+  const forged = scenario();
+  delete forged.env.KERNEL_CHECK_REMOTE;
+  const forgedCheckout = join(forged.dir, 'empty-checkout');
+  mkdirSync(forgedCheckout);
+  const selected = await runGate(
+    localPath({ ...forged.env, KERNEL_CHECK_ON_REMOTE: '1', REZICS_STACK_REMOTE: 'off' }),
+    forgedCheckout,
+    ['--workspaces', 'apps/web'],
+  );
+  expect(selected.code).toBe(1);
+  expect(selected.stderr).toContain('no check host is configured');
+  expect(forged.local()).toBe('');
+  expect(forged.events()).toEqual([]);
 
   const unreadable = scenario();
   const third = await runGate(localPath({ ...unreadable.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') }));
-  expect(third.code).toBe(3);
-  expect(unreadable.local()).toBe('bun install --frozen-lockfile\n');
+  expect(third.code).toBe(1);
+  expect(third.stderr).toContain('is not readable');
+  expect(unreadable.local()).toBe('');
   expect(unreadable.events()).toEqual([]);
+
+  const empty = scenario();
+  writeFileSync(empty.env.KERNEL_CHECK_REMOTE, JSON.stringify({ hosts: [] }));
+  const fourth = await runGate(localPath(empty.env));
+  expect(fourth.code).toBe(1);
+  expect(fourth.stderr).toContain('lists no hosts');
+  expect(empty.local()).toBe('');
+  expect(empty.events()).toEqual([]);
 });

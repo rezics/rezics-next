@@ -4,6 +4,7 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { readHosts } from './remote-check.ts';
+import { hostsLocation, onCheckHost } from './stack-run.ts';
 import { classifyLoadInducedOutput } from './test-lanes.ts';
 
 const root = process.cwd();
@@ -49,9 +50,13 @@ type GateResultFile = {
   controlPlane?: { passed: boolean; durationSeconds: number; host: string };
 };
 
-function writeOutput(text: string, stream: 'stdout' | 'stderr' = 'stdout'): void {
+function writeOutput(
+  text: string,
+  stream: 'stdout' | 'stderr' = 'stdout',
+  env: Record<string, string | undefined> = process.env,
+): void {
   const output = process[stream];
-  const host = process.env.REMOTE_CHECK_HOST;
+  const host = env.REMOTE_CHECK_HOST;
   if (!host) {
     output.write(text);
     return;
@@ -64,29 +69,26 @@ function writeOutput(text: string, stream: 'stdout' | 'stderr' = 'stdout'): void
   );
 }
 
-/** The hosts file when this gate should run on check hosts: named, readable and not already on one. */
-function remoteHostsFile(): string | null {
-  const file = process.env.KERNEL_CHECK_REMOTE;
-  const promotionRoute =
-    process.env.GATE_REMOTE_SLOTS === '3' &&
-    process.env.KERNEL_CHECK_CONCURRENCY === '5' &&
-    !process.env.KERNEL_CHECK_ON_REMOTE;
-  if (promotionRoute) {
-    if (!file) throw new Error('KERNEL_CHECK_REMOTE is required for promotion; refusing to run the gate locally');
-    try {
-      accessSync(file, constants.R_OK);
-    } catch {
-      throw new Error(`KERNEL_CHECK_REMOTE ${file} is not readable; refusing to run the gate locally`);
-    }
-  }
-  if (!file || process.env.KERNEL_CHECK_ON_REMOTE) return null;
+export type GatePlacement =
+  | { kind: 'local'; reason: 'already on a check host' }
+  | { kind: 'remote'; hostsFile: string }
+  | { kind: 'unavailable'; reason: string };
+
+/** Resolve placement from the physical checkout path and supported hosts-file location only. */
+export function gatePlacement(
+  cwd = process.cwd(),
+  env: Record<string, string | undefined> = process.env,
+): GatePlacement {
+  if (onCheckHost(cwd)) return { kind: 'local', reason: 'already on a check host' };
+
+  const located = hostsLocation(cwd, env);
+  if ('reason' in located) return { kind: 'unavailable', reason: located.reason };
   try {
-    accessSync(file, constants.R_OK);
-    return file;
-  } catch {
-    writeOutput(`KERNEL_CHECK_REMOTE ${file} is not readable; running the gate locally\n`, 'stderr');
-    return null;
+    readHosts(located.file);
+  } catch (error) {
+    return { kind: 'unavailable', reason: error instanceof Error ? error.message : String(error) };
   }
+  return { kind: 'remote', hostsFile: located.file };
 }
 
 function positiveInteger(name: string, value: string): number {
@@ -97,21 +99,21 @@ function positiveInteger(name: string, value: string): number {
   return number;
 }
 
-function workspaceManifestPaths(): string[] {
-  return [...new Bun.Glob('{apps,services,packages}/*/package.json').scanSync({ cwd: root })].sort();
+function workspaceManifestPaths(gateRoot = root): string[] {
+  return [...new Bun.Glob('{apps,services,packages}/*/package.json').scanSync({ cwd: gateRoot })].sort();
 }
 
-async function readWorkspaces(): Promise<Workspace[]> {
+async function readWorkspaces(gateRoot = root): Promise<Workspace[]> {
   const workspaces: Workspace[] = [];
-  for (const manifest of workspaceManifestPaths()) {
-    const { name, scripts } = (await Bun.file(join(root, manifest)).json()) as {
+  for (const manifest of workspaceManifestPaths(gateRoot)) {
+    const { name, scripts } = (await Bun.file(join(gateRoot, manifest)).json()) as {
       name?: string;
       scripts?: Record<string, string>;
     };
     if (!scripts?.check) throw new Error(`${manifest} has no check script`);
     workspaces.push({
       name: name ?? dirname(manifest),
-      directory: join(root, dirname(manifest)).slice(root.length + 1),
+      directory: join(gateRoot, dirname(manifest)).slice(gateRoot.length + 1),
       checkScript: scripts.check,
     });
   }
@@ -242,9 +244,6 @@ async function runRemoteGroup(
   partPath: string,
   hostsFile: string,
 ): Promise<number> {
-  const code = await runRemoteAttempt(groupIndex, workspaces, controlPlane, slots, concurrency, partPath, hostsFile);
-  if (code !== 75) return code;
-  writeOutput(`gate: group ${groupIndex + 1} had a transport failure; retrying once\n`, 'stderr');
   return await runRemoteAttempt(groupIndex, workspaces, controlPlane, slots, concurrency, partPath, hostsFile);
 }
 
@@ -270,20 +269,26 @@ function hostsForGroups(hostsFile: string, slots: number): [string, string] {
   }) as [string, string];
 }
 
-async function runRemoteGroups(workspaces: Workspace[], hostsFile: string): Promise<number> {
+async function runRemoteGroups(
+  workspaces: Workspace[],
+  includeControlPlane: boolean,
+  hostsFile: string,
+): Promise<number> {
   const durations = loadDurationTable(workspaces);
   const groups = splitWorkspaces(workspaces, durations);
   const totals = groupTotals(groups, durations);
-  const controlGroup = totals[0] <= totals[1] ? 0 : 1;
+  const controlGroup = includeControlPlane ? (totals[0] <= totals[1] ? 0 : 1) : -1;
   const slots = positiveInteger('GATE_REMOTE_SLOTS', process.env.GATE_REMOTE_SLOTS ?? '4');
   const concurrency = process.env.GATE_CONCURRENCY;
   const partPaths = ['.temp/gate/parts/group-1.json', '.temp/gate/parts/group-2.json'] as const;
   const hostPaths = hostsForGroups(hostsFile, slots);
   for (const path of partPaths) rmSync(resolve(root, path), { force: true });
   const results = await Promise.all(
-    groups.map((group, index) =>
-      runRemoteGroup(index, group, index === controlGroup, slots, concurrency, partPaths[index]!, hostPaths[index]!),
-    ),
+    groups.map((group, index) => {
+      const controlPlane = index === controlGroup;
+      if (group.length === 0 && !controlPlane) return Promise.resolve(0);
+      return runRemoteGroup(index, group, controlPlane, slots, concurrency, partPaths[index]!, hostPaths[index]!);
+    }),
   );
 
   const groupReports = partPaths.map((path) => readResultFile(resolve(root, path)));
@@ -319,10 +324,10 @@ async function runRemoteGroups(workspaces: Workspace[], hostsFile: string): Prom
     ...(controlPlane ? { controlPlane } : {}),
   };
   const failedCode = results.find((code) => code !== 0);
-  if (failedCode !== undefined) {
+  if (failedCode !== undefined || failedDirectories.length > 0) {
     writeOutput(`Failed workspaces: ${failedDirectories.join(' ')}\n`);
     writeResultFile(process.env.GATE_RESULT_FILE ?? '.temp/gate/result.json', merged);
-    return failedCode;
+    return failedCode ?? 1;
   }
   writeResultFile(process.env.GATE_RESULT_FILE ?? '.temp/gate/result.json', merged);
   return 0;
@@ -334,9 +339,20 @@ export function resolveBunCommand(command: string[], directory = root): string[]
   return command[0] === 'bun' && existsSync(pinned) ? [pinned, ...command.slice(1)] : command;
 }
 
-async function run(command: string[], cwd: string): Promise<number> {
-  writeOutput(`$ ${command.join(' ')}  (${cwd === root ? '.' : cwd.slice(root.length + 1)})\n`);
-  const child = Bun.spawn(resolveBunCommand(command), { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+async function run(
+  command: string[],
+  cwd: string,
+  gateRoot = root,
+  env: Record<string, string | undefined> = process.env,
+): Promise<number> {
+  writeOutput(`$ ${command.join(' ')}  (${cwd === gateRoot ? '.' : cwd.slice(gateRoot.length + 1)})\n`, 'stdout', env);
+  const child = Bun.spawn(resolveBunCommand(command, gateRoot), {
+    cwd,
+    env,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const forward = async (source: ReadableStream<Uint8Array>, stream: 'stdout' | 'stderr'): Promise<void> => {
     const reader = source.getReader();
     const decoder = new TextDecoder();
@@ -346,20 +362,25 @@ async function run(command: string[], cwd: string): Promise<number> {
       pending += decoder.decode(value, { stream: !done });
       const lines = pending.split(/(?<=\n)/);
       pending = lines.pop() ?? '';
-      if (lines.length > 0) writeOutput(lines.join(''), stream);
+      if (lines.length > 0) writeOutput(lines.join(''), stream, env);
       if (done) break;
     }
-    if (pending) writeOutput(pending, stream);
+    if (pending) writeOutput(pending, stream, env);
   };
   const [code] = await Promise.all([child.exited, forward(child.stdout, 'stdout'), forward(child.stderr, 'stderr')]);
   return code;
 }
 
-async function checkWorkspace(workspace: Workspace): Promise<WorkspaceResult> {
+async function checkWorkspace(
+  workspace: Workspace,
+  gateRoot = root,
+  env: Record<string, string | undefined> = process.env,
+): Promise<WorkspaceResult> {
   const command = ['bun', 'run', 'check'];
   const startedAt = performance.now();
-  const child = Bun.spawn(resolveBunCommand(command), {
-    cwd: join(root, workspace.directory),
+  const child = Bun.spawn(resolveBunCommand(command, gateRoot), {
+    cwd: join(gateRoot, workspace.directory),
+    env,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -418,12 +439,17 @@ function extractLoadSensitiveTests(output: string): string[] {
   return [...tests].sort();
 }
 
-function outcomeFrom(result: WorkspaceResult, extraDurationMs = 0, extraOutput = ''): WorkspaceOutcome {
+function outcomeFrom(
+  result: WorkspaceResult,
+  extraDurationMs = 0,
+  extraOutput = '',
+  env: Record<string, string | undefined> = process.env,
+): WorkspaceOutcome {
   const combinedOutput = [result.output, extraOutput].filter(Boolean).join('\n');
   return {
     name: result.workspace.name,
     directory: result.directory,
-    host: process.env.REMOTE_CHECK_HOST ?? 'local',
+    host: env.REMOTE_CHECK_HOST ?? 'local',
     passed: result.code === 0,
     durationSeconds: Number(((result.durationMs + extraDurationMs) / 1000).toFixed(3)),
     failingFiles: extractFailingFiles(combinedOutput),
@@ -431,15 +457,20 @@ function outcomeFrom(result: WorkspaceResult, extraDurationMs = 0, extraOutput =
   };
 }
 
-function resultPath(path: string): string {
-  return resolve(root, path);
+function resultPath(path: string, gateRoot = root): string {
+  return resolve(gateRoot, path);
 }
 
-function writeResultFile(path: string, result: GateResultFile): void {
-  const target = resultPath(path);
+function writeResultFile(
+  path: string,
+  result: GateResultFile,
+  gateRoot = root,
+  env: Record<string, string | undefined> = process.env,
+): void {
+  const target = resultPath(path, gateRoot);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, `${JSON.stringify(result, null, 2)}\n`);
-  writeOutput(`Gate result: ${path}\n`);
+  writeOutput(`Gate result: ${path}\n`, 'stdout', env);
 }
 
 function readResultFile(path: string): GateResultFile | null {
@@ -450,9 +481,13 @@ function readResultFile(path: string): GateResultFile | null {
   }
 }
 
-async function runLocalGate(args: string[]): Promise<number> {
+export async function runLocalGate(
+  args: string[],
+  gateRoot = root,
+  env: Record<string, string | undefined> = process.env,
+): Promise<number> {
   const selection = readWorkspaceSelection(args);
-  const allWorkspaces = await readWorkspaces();
+  const allWorkspaces = await readWorkspaces(gateRoot);
   const workspaces = selection.directories
     ? allWorkspaces.filter((workspace) => selection.directories!.has(workspace.directory))
     : allWorkspaces;
@@ -462,13 +497,18 @@ async function runLocalGate(args: string[]): Promise<number> {
     if (unknown.length > 0) throw new Error(`Unknown workspace directory: ${unknown.join(', ')}`);
   }
 
-  let code = await run(['bun', 'install', '--frozen-lockfile'], root);
+  let code = await run(['bun', 'install', '--frozen-lockfile'], gateRoot, gateRoot, env);
   // Install supplies the exact canary; hosts and the caller may use an older Bun to bootstrap it.
-  process.env.PATH = `${join(root, 'node_modules/.bin')}:${process.env.PATH ?? ''}`;
-  if (code === 0 && existsSync(join(root, 'scripts/toolchain.test.ts'))) {
-    code = await run(['bun', 'test', 'scripts/toolchain.test.ts', 'scripts/toolchain-workspaces.test.ts'], root);
+  env.PATH = `${join(gateRoot, 'node_modules/.bin')}:${env.PATH ?? ''}`;
+  if (code === 0 && existsSync(join(gateRoot, 'scripts/toolchain.test.ts'))) {
+    code = await run(
+      ['bun', 'test', 'scripts/toolchain.test.ts', 'scripts/toolchain-workspaces.test.ts'],
+      gateRoot,
+      gateRoot,
+      env,
+    );
   }
-  const configuredConcurrency = process.env.GATE_CONCURRENCY;
+  const configuredConcurrency = env.GATE_CONCURRENCY;
   const concurrency = configuredConcurrency === undefined ? workspaces.length : Number(configuredConcurrency);
   if (workspaces.length > 0 && (!Number.isSafeInteger(concurrency) || concurrency < 1)) {
     throw new Error(`GATE_CONCURRENCY must be a positive integer, received ${JSON.stringify(configuredConcurrency)}`);
@@ -480,9 +520,9 @@ async function runLocalGate(args: string[]): Promise<number> {
   const worker = async (): Promise<void> => {
     while (nextWorkspace < workspaces.length) {
       const index = nextWorkspace++;
-      const result = await checkWorkspace(workspaces[index]!);
-      outcomes.push(outcomeFrom(result));
-      if (result.code === 0) writeOutput(result.block);
+      const result = await checkWorkspace(workspaces[index]!, gateRoot, env);
+      outcomes.push(outcomeFrom(result, 0, '', env));
+      if (result.code === 0) writeOutput(result.block, 'stdout', env);
       else failures.push(result);
     }
   };
@@ -502,14 +542,14 @@ async function runLocalGate(args: string[]): Promise<number> {
       continue;
     }
 
-    const again = await checkWorkspace(workspace);
+    const again = await checkWorkspace(workspace, gateRoot, env);
     const existing = outcomes.find((outcome) => outcome.directory === workspace.directory)!;
-    const aggregate = outcomeFrom(failure, again.durationMs, again.output);
+    const aggregate = outcomeFrom(failure, again.durationMs, again.output, env);
     aggregate.passed = again.code === 0;
     Object.assign(existing, aggregate);
     if (again.code === 0) {
-      writeOutput(failure.block);
-      writeOutput(again.block);
+      writeOutput(failure.block, 'stdout', env);
+      writeOutput(again.block, 'stdout', env);
       gateLoadSensitive.push(`${workspace.name} (${failure.directory})`);
     } else {
       remainingFailures.push({
@@ -522,25 +562,27 @@ async function runLocalGate(args: string[]): Promise<number> {
   if (gateLoadSensitive.length > 0) {
     writeOutput(
       `Load-sensitive workspaces (passed on retry): ${gateLoadSensitive.length}\n${gateLoadSensitive.join('\n')}\n`,
+      'stdout',
+      env,
     );
   }
 
-  for (const failure of remainingFailures) writeOutput(failure.block);
+  for (const failure of remainingFailures) writeOutput(failure.block, 'stdout', env);
   if (remainingFailures.length > 0)
-    writeOutput(`Failed workspaces: ${remainingFailures.map((failure) => failure.directory).join(' ')}\n`);
+    writeOutput(`Failed workspaces: ${remainingFailures.map((failure) => failure.directory).join(' ')}\n`, 'stdout', env);
 
   let controlPlane: GateResultFile['controlPlane'];
   if (code === 0 && remainingFailures.length === 0 && selection.controlPlane) {
     const started = performance.now();
-    const controlCode = await run(['bun', CONTROL_GATE], root);
+    const controlCode = await run(['bun', CONTROL_GATE], gateRoot, gateRoot, env);
     controlPlane = {
       passed: controlCode === 0,
       durationSeconds: Number(((performance.now() - started) / 1000).toFixed(3)),
-      host: process.env.REMOTE_CHECK_HOST ?? 'local',
+      host: env.REMOTE_CHECK_HOST ?? 'local',
     };
     if (controlCode !== 0) {
       code = controlCode;
-      writeOutput(`Failed workspaces: ${CONTROL_GATE}\n`);
+      writeOutput(`Failed workspaces: ${CONTROL_GATE}\n`, 'stdout', env);
     }
   }
 
@@ -548,7 +590,7 @@ async function runLocalGate(args: string[]): Promise<number> {
     workspaces: outcomes.sort((left, right) => left.directory.localeCompare(right.directory)),
   };
   if (controlPlane) resultFile.controlPlane = controlPlane;
-  writeResultFile(process.env.GATE_RESULT_FILE ?? '.temp/gate/result.json', resultFile);
+  writeResultFile(env.GATE_RESULT_FILE ?? '.temp/gate/result.json', resultFile, gateRoot, env);
 
   if (code !== 0) return code;
   return remainingFailures.length > 0 ? 1 : 0;
@@ -557,9 +599,21 @@ async function runLocalGate(args: string[]): Promise<number> {
 async function main(): Promise<number> {
   const args = process.argv.slice(2);
   const selection = readWorkspaceSelection(args);
-  const hosts = remoteHostsFile();
-  if (hosts && selection.directories === null) return await runRemoteGroups(await readWorkspaces(), hosts);
-  return await runLocalGate(args);
+  const placement = gatePlacement(root, process.env);
+  if (placement.kind === 'local') return await runLocalGate(args);
+  if (placement.kind === 'unavailable')
+    throw new Error(`gate: ${placement.reason}; refusing to run the gate locally`);
+
+  const allWorkspaces = await readWorkspaces();
+  const workspaces = selection.directories
+    ? allWorkspaces.filter((workspace) => selection.directories!.has(workspace.directory))
+    : allWorkspaces;
+  if (selection.directories) {
+    const known = new Set([...allWorkspaces.map((workspace) => workspace.directory), CONTROL_GATE]);
+    const unknown = [...selection.directories].filter((directory) => !known.has(directory));
+    if (unknown.length > 0) throw new Error(`Unknown workspace directory: ${unknown.join(', ')}`);
+  }
+  return await runRemoteGroups(workspaces, selection.controlPlane, placement.hostsFile);
 }
 
 if (import.meta.main) process.exitCode = await main();
