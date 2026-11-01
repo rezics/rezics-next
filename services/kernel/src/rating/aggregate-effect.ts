@@ -8,7 +8,7 @@ import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { RATING_EVENTS } from './events.ts';
 import applyComponent from './aggregate-component-apply.sql';
-import readAggregateSql from './aggregate-read.sql';
+import { readRatingAggregate } from './aggregate-read-components.ts';
 import readCountedVote from './population-vote-counted-read.sql';
 import readPopulationVotersSql from './population-voters-page.sql';
 import deletePopulationVote from './population-vote-delete.sql';
@@ -517,34 +517,7 @@ export async function readAggregate(
   client: Queryable,
   input: { questionId: string; populationId: string; targetId: string },
 ): Promise<RatingAggregate | null> {
-  const route = routeOf(input.targetId);
-  if (route === null || !validId(input.questionId) || !validId(input.populationId))
-    throw new TypeError('Invalid rating aggregate address');
-  const rows = await readAggregateSql.run(client, {
-    route,
-    population_route: routeOf(input.populationId)!,
-    question_id: input.questionId,
-    population_id: input.populationId,
-    target_id: input.targetId,
-  });
-  if (rows.length === 0) return null;
-  const first = rows[0]!;
-  const size = histogramSize(first);
-  const histogram = Array<bigint>(size).fill(0n);
-  let count = 0n;
-  let sum = 0n;
-  let appliedAt: string | null = null;
-  for (const row of rows) {
-    if (row.count === null) continue;
-    count += BigInt(row.count);
-    sum += BigInt(row.sum!);
-    const shardHistogram = JSON.parse(row.histogram!) as string[];
-    if (shardHistogram.length !== size) throw new Error('Rating aggregate histogram scale mismatch');
-    for (let index = 0; index < size; index++) histogram[index]! += BigInt(shardHistogram[index]!);
-    if (row.appliedAt !== null && (appliedAt === null || Date.parse(row.appliedAt) > Date.parse(appliedAt)))
-      appliedAt = row.appliedAt;
-  }
-  return { count, sum, histogram, appliedAt, updating: first.updating };
+  return readRatingAggregate(client, input);
 }
 
 /** Page population votes by voter id, with all their questions and no counting keys. */
