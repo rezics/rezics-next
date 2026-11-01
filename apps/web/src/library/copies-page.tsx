@@ -1,7 +1,7 @@
 import type { CoverRatio } from '@rezics/ui/cover';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { MetaLine } from '@rezics/ui/meta-line';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Calendar } from '@rezics/ui/shadcn/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
@@ -17,7 +17,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
 import { coverSubject, rowRatio, SubjectCover } from './subject-row';
-import { displayLibraryTitle, LibraryTitle } from './title';
+import { displayLibraryTitle } from './title';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy, readCopySubject, readCopyDetail } from './copies-actions';
@@ -663,69 +663,74 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
       ?.replace(/^./u, (letter) => letter.toLocaleUpperCase(locale())) ??
     '';
   return (
-    <ListRow className="flex items-center gap-3 py-4 sm:gap-4">
-      <ListRowLink href={href?.href} aria-hidden={copy.subject ? undefined : true} className="z-[2]">
-        {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
-      </ListRowLink>
-      <div className="w-[72px] shrink-0 sm:w-24">
-        <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p aria-hidden={copy.subject ? true : undefined} className="font-medium break-words">
-          {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          <MetaLine
-            items={[
-              kind,
-              copy.kindLabel ? <span lang={copy.kindLabelLanguage}>{copy.kindLabel}</span> : null,
-              copy.statusLabel ? <span lang={copy.statusLabelLanguage}>{copy.statusLabel}</span> : null,
-            ]}
-          />
-        </p>
-        {copy.acquiredOn ? (
+    <ContentItem
+      title={title}
+      {...(localizedTitle?.lang === undefined ? {} : { titleLang: localizedTitle.lang })}
+      {...(href ? { href: href.href } : {})}
+      headingLevel={2}
+      className="py-4"
+      visual={
+        <div className="w-[72px] shrink-0 sm:w-24">
+          <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
+        </div>
+      }
+      metadata={
+        <div className="min-w-0">
           <p className="text-sm text-muted-foreground">
-            <span>{m.library_copy_acquired()}: </span>
-            <span className="whitespace-nowrap">{dateText(copy.acquiredOn)}</span>
+            <MetaLine
+              items={[
+                kind,
+                copy.kindLabel ? <span lang={copy.kindLabelLanguage}>{copy.kindLabel}</span> : null,
+                copy.statusLabel ? <span lang={copy.statusLabelLanguage}>{copy.statusLabel}</span> : null,
+              ]}
+            />
           </p>
-        ) : null}
-        {copy.location ? <p className="text-sm text-muted-foreground">{copy.location}</p> : null}
-        {copy.source ? <p className="text-sm text-muted-foreground">{copy.source}</p> : null}
-        {copy.disposedOn ? (
-          <p className="text-sm text-muted-foreground">
-            <span>{m.library_copy_disposed()}: </span>
-            <span className="whitespace-nowrap">{dateText(copy.disposedOn)}</span>
-          </p>
-        ) : null}
-        {copy.note ? <p className="line-clamp-2 text-sm text-muted-foreground">{copy.note}</p> : null}
-        {hasUnresolvedHistory(copy) ? (
-          <ListRowControl className="mt-2">
-            <details className="text-sm">
-              <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                {m.library_copy_history_details()}
-              </summary>
-              <div className="space-y-2 pt-2 text-muted-foreground">
-                <p>{copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}</p>
-                <dl className="space-y-2">
-                  <div>
-                    <dt>{m.library_copy_kind()}</dt>
-                    <dd className="break-all text-foreground">
-                      <code>{copy.kind ?? 'null'}</code>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{m.library_copy_status()}</dt>
-                    <dd className="break-all text-foreground">
-                      <code>{copy.status}</code>
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </details>
-          </ListRowControl>
-        ) : null}
-      </div>
-      <ListRowControl className="shrink-0">
+          {copy.acquiredOn ? (
+            <p className="text-sm text-muted-foreground">
+              <span>{m.library_copy_acquired()}: </span>
+              <span className="whitespace-nowrap">{dateText(copy.acquiredOn)}</span>
+            </p>
+          ) : null}
+          {copy.location ? <p className="text-sm text-muted-foreground">{copy.location}</p> : null}
+          {copy.source ? <p className="text-sm text-muted-foreground">{copy.source}</p> : null}
+          {copy.disposedOn ? (
+            <p className="text-sm text-muted-foreground">
+              <span>{m.library_copy_disposed()}: </span>
+              <span className="whitespace-nowrap">{dateText(copy.disposedOn)}</span>
+            </p>
+          ) : null}
+          {copy.note ? <p className="line-clamp-2 text-sm text-muted-foreground">{copy.note}</p> : null}
+          {hasUnresolvedHistory(copy) ? (
+            <div className="mt-2">
+              <details className="text-sm">
+                <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  {m.library_copy_history_details()}
+                </summary>
+                <div className="space-y-2 pt-2 text-muted-foreground">
+                  <p>
+                    {copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}
+                  </p>
+                  <dl className="space-y-2">
+                    <div>
+                      <dt>{m.library_copy_kind()}</dt>
+                      <dd className="break-all text-foreground">
+                        <code>{copy.kind ?? 'null'}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{m.library_copy_status()}</dt>
+                      <dd className="break-all text-foreground">
+                        <code>{copy.status}</code>
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </details>
+            </div>
+          ) : null}
+        </div>
+      }
+      trailing={
         <Menu
           title={m.library_copy_more_actions()}
           trigger={
@@ -745,8 +750,8 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
             },
           ]}
         />
-      </ListRowControl>
-    </ListRow>
+      }
+    />
   );
 }
 
