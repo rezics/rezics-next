@@ -177,12 +177,13 @@ async function mounted(kind: 'page' | 'occurrence' = 'page') {
   });
   await router.load();
   const invalidate = spyOn(router, 'invalidate').mockResolvedValue(undefined);
+  const refresh = mock(async (): Promise<EditableCollectionPage> => props.page);
   let props: ComponentProps<typeof CollectionPage> = {
     page: page(),
     queryKey: ['collection-page', 'owned', 'alpha'],
     cursor: undefined,
     readEditorPage: mock(async () => props.page),
-    refreshPage: mock(async () => props.page),
+    refreshPage: refresh,
   };
   const onAdded = mock(async () => {});
   const onClose = mock(() => {});
@@ -214,6 +215,7 @@ async function mounted(kind: 'page' | 'occurrence' = 'page') {
     onAdded,
     onClose,
     invalidate,
+    refresh,
     key,
     expose,
     props: () => props,
@@ -420,13 +422,20 @@ describe('Actual scoped Collection authority enables owning editor and occurrenc
   });
 
   test('an occurrence retains its exact subject/note/key through scoped renewal and missing credentials; accepted add retries only reload', async () => {
-    const ui = await mounted('occurrence');
+    const ui = await mounted();
     const pending = deferred<CollectionWriteResult>();
     const add = spyOn(edits, 'addCollectionMember')
       .mockImplementationOnce(() => pending.promise)
       .mockResolvedValue({ ok: true, id: 'new-occurrence' });
     try {
       await ui.expose();
+      await settle(() => {
+        const addButton = [...ui.host.querySelectorAll('button')].find(
+          (button) => button.textContent?.trim() === m.library_collection_add_items(),
+        );
+        expect(addButton).toBeDefined();
+        addButton!.click();
+      });
       await selectOccurrence(ui);
       await submit(ui, true);
       const exact = structuredClone(add.mock.calls[0]![0]!.data);
@@ -437,21 +446,23 @@ describe('Actual scoped Collection authority enables owning editor and occurrenc
       });
       await ui.renew();
       await ui.expose();
+      await ui.show({ page: { ...page(), viewerActions: { state: 'unavailable' } } });
       await ui.renew('alice', '');
       await settle(() => pending.resolve({ ok: false, reason: 'unavailable' }));
       await submit(ui, true);
       expect(add).toHaveBeenCalledTimes(1);
+      await ui.show({ page: page() });
       await ui.renew('alice', 'csrf-three');
       await ui.expose();
-      ui.onAdded.mockRejectedValueOnce(new Error('reload unavailable'));
+      ui.refresh.mockRejectedValueOnce(new Error('reload unavailable'));
       await submit(ui, true);
       expect(add.mock.calls[1]![0]!.data).toEqual(exact);
       expect(new Headers(add.mock.calls[1]![0]!.headers).get('X-CSRF-Token')).toBe('csrf-three');
-      expect(ui.onClose).not.toHaveBeenCalled();
+      expect(ui.host.querySelector('form')).not.toBeNull();
       await submit(ui, true);
       expect(add).toHaveBeenCalledTimes(2);
-      expect(ui.onAdded).toHaveBeenCalledTimes(2);
-      expect(ui.onClose).toHaveBeenCalledTimes(1);
+      expect(ui.refresh).toHaveBeenCalledTimes(2);
+      expect(ui.host.querySelector('form')).toBeNull();
     } finally {
       add.mockRestore();
       await ui.close();

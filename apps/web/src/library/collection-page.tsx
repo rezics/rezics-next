@@ -271,7 +271,7 @@ export function CollectionPage(props: CollectionPageProps) {
   ]);
   const admission = useCollectionCurrentAdmission(
     address,
-    JSON.stringify([page.visibility, page.viewerActions]),
+    JSON.stringify([page.visibility !== null, page.viewerActions]),
     props.queryKey,
   );
   function current(operation: CollectionOperation = 'collection.get') {
@@ -1360,7 +1360,8 @@ function CollectionPageLifetime({
                     !isCurrent('collection_member.transfer') ||
                     inFlight.current ||
                     saveIntent.current !== null ||
-                    !destination
+                    !destination ||
+                    destinationEpisode !== destinationVersion.current
                   )
                     return;
                   const memberIds = members.filter((member) => selectedIds.has(member.id)).map((member) => member.id);

@@ -38,7 +38,7 @@ export function useCollectionCurrentAdmission(address: string, evidence = '', qu
     const sourceSignature = () => {
       const state = sourceKey ? client?.getQueryState(sourceKey) : undefined;
       const page = state?.data as { visibility?: unknown; viewerActions?: unknown } | undefined;
-      return JSON.stringify([state?.status, page?.visibility, page?.viewerActions]);
+      return JSON.stringify([state?.status, page?.visibility !== null, page?.viewerActions]);
     };
     let source = sourceSignature();
     let subject: string | null = null;
@@ -75,7 +75,8 @@ export function useCollectionCurrentAdmission(address: string, evidence = '', qu
       const page = pageState?.data as { visibility?: unknown; viewerActions?: unknown } | undefined;
       const sameSource =
         !pageState ||
-        (pageState.status === 'success' && JSON.stringify([page?.visibility, page?.viewerActions]) === nativeEvidence);
+        (pageState.status === 'success' &&
+          JSON.stringify([page?.visibility !== null, page?.viewerActions]) === nativeEvidence);
       const csrfToken =
         sameSource &&
         session?.status === 'success' &&
