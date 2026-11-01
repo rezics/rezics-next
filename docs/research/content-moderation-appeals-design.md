@@ -85,9 +85,13 @@ Every private response binds the prepared session's viewer, board/thread/post re
 generation. Session preparation and credential reads remain private/no-store; a missing prepared viewer closes the
 read without anonymous fallback. The route also binds the response to the navigation that requested it and discards
 aborted loaders. The mounted page retires its private statements, target evidence and resolution forms immediately
-on viewer loss/change, unknown session after a known session, scope/cursor navigation or departure. Retirement is
-irreversible for that mounted generation, even if the same viewer or URL returns. Late retry responses cannot revive
-it. Fixtures without page identity remain compatible with presentation stories and never supply production authority.
+on viewer loss/change, browser-session replacement (including a new CSRF token for the same signed-in account),
+unknown session after a known session, scope/cursor navigation or departure. Initial unknown browser state preserves
+prepared SSR until the first known session establishes the browser identity. Session identity is compared only in
+the mounted lifetime's memory; it is never logged, persisted or added to read/cache keys. Retirement is independent
+of target readability and irreversible for that mounted generation, even if the former session, viewer or URL
+returns. Late retry success or failure cannot revive it. Fixtures without page identity remain compatible with
+presentation stories and never supply production authority.
 
 Loading, terminal empty, sparse empty with a native next cursor, recoverable unavailable, stale-cursor restart and
 closed access are distinct. Only an explicit retry repeats the current read; it clears old private content first and

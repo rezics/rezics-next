@@ -35,6 +35,8 @@ export function createAppealReadLifetime() {
   let serial = 0;
   let viewerSeen = false;
   let sessionViewer: string | null = null;
+  // Browser-session identity stays in this mounted lifetime, never in page data or cache keys.
+  let sessionCsrfToken: string | null = null;
   let viewerRetired = false;
   return {
     retire() {
@@ -47,10 +49,14 @@ export function createAppealReadLifetime() {
     get viewerRetired() {
       return viewerRetired;
     },
-    observeViewer(viewerId: string | null, session: { state: string; subject?: string | null }) {
+    observeViewer(
+      viewerId: string | null,
+      session: { state: string; subject?: string | null; csrfToken?: string | null },
+    ) {
       const currentViewer = session.state === 'signed-in' ? (session.subject ?? null) : null;
+      const currentCsrfToken = session.csrfToken ?? null;
       if (
-        (viewerSeen && currentViewer !== sessionViewer) ||
+        (viewerSeen && (currentViewer !== sessionViewer || currentCsrfToken !== sessionCsrfToken)) ||
         ((session.state !== 'unknown' || viewerSeen) &&
           (session.state !== 'signed-in' || (viewerId !== null && session.subject !== viewerId)))
       ) {
@@ -61,6 +67,7 @@ export function createAppealReadLifetime() {
       if (session.state !== 'unknown') {
         viewerSeen = true;
         sessionViewer = currentViewer;
+        sessionCsrfToken = currentCsrfToken;
       }
     },
     begin() {
