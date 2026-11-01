@@ -56,8 +56,17 @@ const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 function FramedIdentity() {
   return null;
 }
-const pageComponents = { ...layoutComponents, ...dataComponents };
-const framedComponents = { ...pageComponents, SubjectHeader: FramedIdentity, AccountIdentity: FramedIdentity };
+function createPageComponents() {
+  // Candidate value readers can enter through data -> overview -> community -> subject.
+  // Resolve the registries on first render, after that import cycle has initialized.
+  const page = { ...layoutComponents, ...dataComponents };
+  return { page, framed: { ...page, SubjectHeader: FramedIdentity, AccountIdentity: FramedIdentity } };
+}
+let componentSets: ReturnType<typeof createPageComponents> | undefined;
+function pageComponents(framed: boolean) {
+  componentSets ??= createPageComponents();
+  return framed ? componentSets.framed : componentSets.page;
+}
 
 export type SubjectPageData = {
   /** The subject the page is for; an agent page always has one, a route page none. */
@@ -624,7 +633,7 @@ export function SubjectPage({
               <CompositionRender
                 document={page.document}
                 definitions={pageDefinitions}
-                components={framed ? framedComponents : pageComponents}
+                components={pageComponents(framed)}
                 root={PageRoot}
               />
             </SubjectCommunityContext.Provider>
