@@ -55,9 +55,7 @@ function bounded(value: unknown, max = MAX_TEXT): string | null {
 }
 
 function briefHash(markdown: string): string {
-  return createHash('sha256')
-    .update(markdown.replace(/\r\n?/g, '\n').trimEnd())
-    .digest('hex');
+  return createHash('sha256').update(markdown.replace(/\r\n?/g, '\n').trimEnd()).digest('hex');
 }
 
 type GitValue = { value?: string; reason?: string };
@@ -98,9 +96,10 @@ function dependencyReceipt(
     };
 
   const state = bounded(dependency.state, 80) ?? 'unknown';
-  const commit = typeof dependency.task_commit === 'string' && OBJECT_ID.test(dependency.task_commit)
-    ? dependency.task_commit
-    : null;
+  const commit =
+    typeof dependency.task_commit === 'string' && OBJECT_ID.test(dependency.task_commit)
+      ? dependency.task_commit
+      : null;
   const complete = state === 'integrated' || state === 'merged';
   if (!complete)
     return {
@@ -207,11 +206,32 @@ function sourceFacts(task: Task) {
         reason: 'Git root does not match the stored worktree identity',
       };
     if (!head.value || !OBJECT_ID.test(head.value) || !isCommit(task.worktree, head.value))
-      return { worktree, base, head: null, branch: branch.value ?? null, verified: false, reason: head.reason ?? 'current source HEAD is unavailable' };
+      return {
+        worktree,
+        base,
+        head: null,
+        branch: branch.value ?? null,
+        verified: false,
+        reason: head.reason ?? 'current source HEAD is unavailable',
+      };
     if (branch.value !== task.branch)
-      return { worktree, base, head: head.value, branch: branch.value ?? null, verified: false, reason: 'current Git branch does not match the stored task branch' };
+      return {
+        worktree,
+        base,
+        head: head.value,
+        branch: branch.value ?? null,
+        verified: false,
+        reason: 'current Git branch does not match the stored task branch',
+      };
     if (!base || !isCommit(task.worktree, base))
-      return { worktree, base, head: head.value, branch: branch.value, verified: false, reason: 'stored task base is unavailable in the current checkout' };
+      return {
+        worktree,
+        base,
+        head: head.value,
+        branch: branch.value,
+        verified: false,
+        reason: 'stored task base is unavailable in the current checkout',
+      };
     return { worktree, base, head: head.value, branch: branch.value, verified: true };
   } catch (error) {
     return {
@@ -235,7 +255,12 @@ export function captureLaunchContext(
   store.assertCurrent(ref);
   const task = store.task(ref.taskId);
   const attempt = store.attempt(ref);
-  if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt || attempt.taskId !== ref.taskId || attempt.attempt !== ref.attempt)
+  if (
+    task.id !== ref.taskId ||
+    task.currentAttempt !== ref.attempt ||
+    attempt.taskId !== ref.taskId ||
+    attempt.attempt !== ref.attempt
+  )
     throw new StaleAttemptError(ref, task.currentAttempt);
 
   const markdown = typeof task.brief?.markdown === 'string' ? task.brief.markdown : null;
@@ -315,7 +340,10 @@ export function renderLaunchContext(context: LaunchContext | undefined): string 
     dependencies: {
       required: context.dependencies.required,
       included: receipts.length,
-      omitted: Math.max(context.dependencies.omitted, (context.dependencies.required ?? receipts.length) - receipts.length),
+      omitted: Math.max(
+        context.dependencies.omitted,
+        (context.dependencies.required ?? receipts.length) - receipts.length,
+      ),
       completeness:
         context.dependencies.completeness === 'unknown'
           ? 'unknown'
@@ -336,7 +364,11 @@ export function renderLaunchContext(context: LaunchContext | undefined): string 
     `This is a fresh bounded snapshot for the current ${context.boundary} boundary. It supersedes future-tense or stale instructions in saved prompts, old retry manifests and earlier attempt results.`,
     'Lifecycle completion and source-code presence are separate facts. Treat code as installed only when a dependency receipt says `sourcePresence: "present"` and `precondition: "satisfied"`. Unknown, absent, cancelled, missing or truncated receipts are not completed installed code.',
     'If a current dependency precondition is unmet or unknown, preserve that exact cause in your result; the controller retains its existing safe hold or quarantine behavior. Do not wait for the same dependency because older prose says it is still pending.',
-    ...(incomplete ? ['The dependency list is incomplete or absent in this historical record; omitted or undeclared receipts remain unknown and must not be treated as satisfied.'] : []),
+    ...(incomplete
+      ? [
+          'The dependency list is incomplete or absent in this historical record; omitted or undeclared receipts remain unknown and must not be treated as satisfied.',
+        ]
+      : []),
     '```json',
     json,
     '```',

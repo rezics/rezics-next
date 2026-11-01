@@ -871,7 +871,9 @@ export class ManagerSessions {
           await client.request('turn/interrupt', { threadId: state.threadId, turnId: state.activeTurnId });
         } catch {
           const resumed = await client.request('thread/resume', {
-            ...FULL_ACCESS, threadId: state.threadId, config: codexThreadConfig(state),
+            ...FULL_ACCESS,
+            threadId: state.threadId,
+            config: codexThreadConfig(state),
           });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
           if (active) await client.request('turn/interrupt', { threadId: state.threadId, turnId: active.id });
@@ -914,7 +916,9 @@ export class ManagerSessions {
         } catch (error) {
           // A completion can race the steer precondition. Rejoin to learn the live turn, then start/steer.
           const resumed = await client.request('thread/resume', {
-            ...FULL_ACCESS, threadId: state.threadId, config: codexThreadConfig(state),
+            ...FULL_ACCESS,
+            threadId: state.threadId,
+            config: codexThreadConfig(state),
           });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
           state.activeTurnId = active?.id ?? null;
@@ -1044,7 +1048,9 @@ export class ManagerSessions {
           if (current.engine === 'codex' && current.threadId) {
             const client = await this.client(current.pool);
             const resume = client.request('thread/resume', {
-              ...FULL_ACCESS, threadId: current.threadId, config: codexThreadConfig(current),
+              ...FULL_ACCESS,
+              threadId: current.threadId,
+              config: codexThreadConfig(current),
             });
             reportProgress();
             const resumed = await resume;

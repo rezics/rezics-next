@@ -1413,8 +1413,13 @@ export class WorkerTasks {
           return false;
         }
       });
-      const boundary =
-        heldRelease ? 'held-release' : old?.escalation === 'import' ? 'adopted-legacy' : old ? 'retry' : 'fresh';
+      const boundary = heldRelease
+        ? 'held-release'
+        : old?.escalation === 'import'
+          ? 'adopted-legacy'
+          : old
+            ? 'retry'
+            : 'fresh';
       const origin = old?.escalation === 'import' ? 'adopted-legacy' : 'managed';
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
@@ -1492,8 +1497,7 @@ export class WorkerTasks {
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
-      const continuingCheckWait =
-        old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
+      const continuingCheckWait = old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
       const resumeSession =
         !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&

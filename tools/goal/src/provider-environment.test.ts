@@ -102,7 +102,10 @@ function writeCodex(directory: string): string {
 
 function captured(path: string): Record<string, any>[] {
   try {
-    return readFileSync(path, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    return readFileSync(path, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
   } catch {
     return [];
   }
@@ -132,11 +135,7 @@ function hostileEnvironment(capture: string, codexHome: string, claudeConfig: st
   };
 }
 
-function expectCleanCodexProcess(
-  env: NodeJS.ProcessEnv,
-  codexHome: string,
-  expectedManager?: string,
-): void {
+function expectCleanCodexProcess(env: NodeJS.ProcessEnv, codexHome: string, expectedManager?: string): void {
   expect(env.CODEX_HOME).toBe(codexHome);
   expect(env.CODEX_SESSION_ID).toBeUndefined();
   expect(env.CODEX_THREAD_ID).toBeUndefined();
@@ -158,8 +157,13 @@ function expectCleanCodexProcess(
 
 async function withEnvironment<T>(overrides: NodeJS.ProcessEnv, run: () => Promise<T>): Promise<T> {
   const owned = new Set([
-    ...Object.keys(process.env).filter((key) => key.startsWith('CLAUDE_') || key.startsWith('CODEX_') || key === 'CLAUDECODE'),
-    'GOAL_MANAGER', 'GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_CHECK_WAIT_FILE',
+    ...Object.keys(process.env).filter(
+      (key) => key.startsWith('CLAUDE_') || key.startsWith('CODEX_') || key === 'CLAUDECODE',
+    ),
+    'GOAL_MANAGER',
+    'GOAL_TASK_ID',
+    'GOAL_ATTEMPT',
+    'GOAL_CHECK_WAIT_FILE',
     ...Object.keys(overrides),
   ]);
   const before = new Map([...owned].map((key) => [key, process.env[key]]));
@@ -293,7 +297,9 @@ function stoppedAttempt(h: ReturnType<typeof harness>, taskId: string) {
     approaches: [],
   }));
   const ref = { taskId, attempt: attempt.attempt };
-  h.store.updateTask(ref, (task) => { task.state = 'stopped'; });
+  h.store.updateTask(ref, (task) => {
+    task.state = 'stopped';
+  });
   return ref;
 }
 
@@ -320,7 +326,10 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
     connect: (pool: { id: string; codexHome: string }, onStart?: (identity: any) => void) =>
       connectPool({ ...pool, executable }, onStart, parent),
     windows: {
-      register(_id: string, argv: string[], cwd: string) { executeWindow(argv, cwd); return '@provider'; },
+      register(_id: string, argv: string[], cwd: string) {
+        executeWindow(argv, cwd);
+        return '@provider';
+      },
       unregister() {},
     },
     checkCompletion: async () => ({ passed: false, evidencePath: 'unused', summary: 'not complete' }),
@@ -366,7 +375,11 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
       h.store.db.query('UPDATE manager_sessions SET state=? WHERE id=?').run(JSON.stringify(persisted), ownerName);
       const rootSession = randomUUID();
       await first.registerResidentSupermanager('root', rootSession);
-      expect(first.get('root')).toMatchObject({ kind: 'resident-supermanager', threadId: rootSession, status: 'running' });
+      expect(first.get('root')).toMatchObject({
+        kind: 'resident-supermanager',
+        threadId: rootSession,
+        status: 'running',
+      });
       await first.close();
       first = undefined;
 
@@ -392,11 +405,17 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
       const viewers = records.filter((value) => value.kind === 'codex-viewer');
       expect(viewers).toHaveLength(2);
       for (const viewer of viewers) expectCleanCodexProcess(viewer.env, codexHome, ownerName);
-      const toolEnvironment = records.filter((value) => value.kind === 'codex-tool').at(-1)?.env as NodeJS.ProcessEnv | undefined;
+      const toolEnvironment = records.filter((value) => value.kind === 'codex-tool').at(-1)?.env as
+        | NodeJS.ProcessEnv
+        | undefined;
       expect(toolEnvironment?.CODEX_THREAD_ID).toBe(originalThread);
       expect(toolEnvironment?.CLAUDE_CODE_SESSION_ID).toBeUndefined();
       expect(authenticatedManager(h.store.db, toolEnvironment!)).toEqual({ id: ownerName, sessionId: originalThread });
-      expect(records.some((value) => value.kind === 'codex-rpc' && value.method === 'thread/start' && value.params?.manager === 'root')).toBe(false);
+      expect(
+        records.some(
+          (value) => value.kind === 'codex-rpc' && value.method === 'thread/start' && value.params?.manager === 'root',
+        ),
+      ).toBe(false);
       expect(calls).toHaveLength(2);
 
       const task = h.tasks.dispatch(h.briefFile);
@@ -408,11 +427,17 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
       });
       const ownerEnvironment = { CODEX_THREAD_ID: originalThread, GOAL_MANAGER: ownerName };
       await runWorkerCommand('priority', [task.id, 'critical'], {
-        runtime: runtimeFor(h), env: ownerEnvironment, print() {},
+        runtime: runtimeFor(h),
+        env: ownerEnvironment,
+        print() {},
       });
       const critical = h.store.task(task.id);
       const amendmentPath = join(h.settings.stateDirectory, 'critical-amendment.md');
-      writeFileSync(amendmentPath, markdown.replace('criticalPath: false', 'criticalPath: true') + '\nUse the currently authenticated manager session.\n');
+      writeFileSync(
+        amendmentPath,
+        markdown.replace('criticalPath: false', 'criticalPath: true') +
+          '\nUse the currently authenticated manager session.\n',
+      );
       const briefFilesBefore = readdirSyncSafe(join(h.settings.stateDirectory, 'briefs'));
       const rejected = [
         { ...ownerEnvironment, CLAUDE_CODE_SESSION_ID: rootSession },
@@ -421,16 +446,22 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
         { GOAL_MANAGER: ownerName },
       ];
       for (const env of rejected) {
-        await expect(runWorkerCommand('retry', [task.id, '--brief', amendmentPath], {
-          runtime: runtimeFor(h), env, print() {},
-        })).rejects.toThrow('priority changes require an authenticated manager session');
+        await expect(
+          runWorkerCommand('retry', [task.id, '--brief', amendmentPath], {
+            runtime: runtimeFor(h),
+            env,
+            print() {},
+          }),
+        ).rejects.toThrow('priority changes require an authenticated manager session');
         expect(h.store.task(task.id)).toEqual(critical);
         expect(h.store.retryIntent(ref)).toBeUndefined();
       }
       expect(readdirSyncSafe(join(h.settings.stateDirectory, 'briefs'))).toEqual(briefFilesBefore);
 
       await runWorkerCommand('retry', [task.id, '--brief', amendmentPath], {
-        runtime: runtimeFor(h), env: ownerEnvironment, print() {},
+        runtime: runtimeFor(h),
+        env: ownerEnvironment,
+        print() {},
       });
       const retried = h.store.task(task.id);
       expect(retried.priorityGrants).toEqual(critical.priorityGrants);
@@ -507,7 +538,9 @@ test('Claude fresh and resumed provider processes receive the configured account
         if (result.status !== 0) throw new Error(result.stderr || result.error?.message || 'fake Claude resume failed');
       },
       unregister() {},
-      alive() { return alive; },
+      alive() {
+        return alive;
+      },
     },
     checkCompletion: async () => ({ passed: false, evidencePath: 'unused', summary: 'not complete' }),
   };
@@ -558,7 +591,9 @@ test('Claude fresh and resumed provider processes receive the configured account
       expect(all[1]?.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
       expect(all[1]?.env.CLAUDE_CUSTOM_RUNTIME_HINT).toBeUndefined();
       expect(all[1]?.env.CODEX_THREAD_ID).toBeUndefined();
-      const resumedTool = captured(capturePath).filter((value) => value.kind === 'claude-tool').at(-1)?.env as NodeJS.ProcessEnv;
+      const resumedTool = captured(capturePath)
+        .filter((value) => value.kind === 'claude-tool')
+        .at(-1)?.env as NodeJS.ProcessEnv;
       expect(resumedTool.CLAUDE_CODE_SESSION_ID).toBe(session);
       expect(authenticatedManager(db, resumedTool)).toEqual({ id: spec.id, sessionId: session });
       expect(managers.get(spec.id)).toMatchObject({ threadId: session, goal: spec.goal, budget: spec.budget });
@@ -576,10 +611,10 @@ test('manager recovery, wake races and interruption races forward the configured
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
-  const client = new StdioAppServer(
-    [process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')],
-    { ...process.env, FAKE_RPC_LOG: log },
-  );
+  const client = new StdioAppServer([process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')], {
+    ...process.env,
+    FAKE_RPC_LOG: log,
+  });
   let failNext: string | undefined;
   const connection: AppServer = {
     request<T>(method: string, params: unknown): Promise<T> {
@@ -629,7 +664,10 @@ test('manager recovery, wake races and interruption races forward the configured
     const config = { model_reasoning_effort: 'high', model_auto_compact_token_limit: 200000 };
     for (const resume of resumes)
       expect(resume.params).toEqual({
-        threadId: started.threadId, approvalPolicy: 'never', sandbox: 'danger-full-access', config,
+        threadId: started.threadId,
+        approvalPolicy: 'never',
+        sandbox: 'danger-full-access',
+        config,
       });
     const starts = requests.filter((record) => record.method === 'thread/start');
     expect(starts).toHaveLength(1);

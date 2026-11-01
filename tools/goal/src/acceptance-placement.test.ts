@@ -189,8 +189,7 @@ test('the audited timeout, focused-runner, and environment forms survive public 
         return { exited: Promise.resolve({ code: 0, signal: null }), attempt };
       },
     );
-    const shellCommand =
-      'bun run --cwd apps/web typecheck && bun test apps/web/tests/subject-story-fake.test.ts';
+    const shellCommand = 'bun run --cwd apps/web typecheck && bun test apps/web/tests/subject-story-fake.test.ts';
     const freshCommand = ['timeout', '590', 'sh', '-c', shellCommand];
     const freshPath = join(h.settings.stateDirectory, 'audited-timeout.md');
     writeFileSync(freshPath, briefText(freshCommand));
@@ -200,8 +199,7 @@ test('the audited timeout, focused-runner, and environment forms survive public 
     const first = await tasks.retry(task.id);
     await first.exited;
     const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-    const expected = (command: string[]) =>
-      `bun scripts/worker-check.ts --local -- ${command.map(quote).join(' ')}`;
+    const expected = (command: string[]) => `bun scripts/worker-check.ts --local -- ${command.map(quote).join(' ')}`;
     expect(prompts[0]!).toContain(expected(freshCommand));
     expect(prompts[0]!.match(/bun scripts\/worker-check\.ts --local --/g)).toHaveLength(1);
 
@@ -258,14 +256,51 @@ test('the audited timeout, focused-runner, and environment forms survive public 
 
     const unsafeCommands = [
       ['timeout', '600', 'sh', '-c', shellCommand],
-      ['env', '-u', 'PATH', 'bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/subject.test.ts'],
-      ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/../native/kernel.test.ts'],
+      [
+        'env',
+        '-u',
+        'PATH',
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/subject.test.ts',
+      ],
+      [
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/../native/kernel.test.ts',
+      ],
       ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/subject.browser.test.ts'],
-      ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/subject.test.ts', '--preload', './setup.ts'],
+      [
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/subject.test.ts',
+        '--preload',
+        './setup.ts',
+      ],
       ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/sql-compiler.test.ts'],
       ['bun', 'apps/kernel/tests/subject.test.ts'],
       ['bun', 'apps/auth/tests/subject.test.ts'],
-      ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/database/subject.test.ts'],
+      [
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/database/subject.test.ts',
+      ],
       ['sh', '-c', 'bun test apps/web/tests/subject.test.ts; bun run build'],
       ['sh', '-c', 'bun test apps/web/tests/subject.test.ts && bun test $(printf extra)'],
     ];

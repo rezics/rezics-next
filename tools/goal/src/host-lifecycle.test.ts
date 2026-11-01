@@ -114,10 +114,16 @@ async function cleanHosted(
   for (const child of childrenBeforeExit) signal(child, 'SIGKILL');
 }
 
-async function waitForHostEnvironments(path: string, count: number): Promise<{ pid: number; env: NodeJS.ProcessEnv }[]> {
+async function waitForHostEnvironments(
+  path: string,
+  count: number,
+): Promise<{ pid: number; env: NodeJS.ProcessEnv }[]> {
   for (let n = 0; n < 300; n++) {
     try {
-      const records = readFileSync(path, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
+      const records = readFileSync(path, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
       if (records.length >= count) return records;
     } catch {}
     await Bun.sleep(10);
@@ -126,11 +132,18 @@ async function waitForHostEnvironments(path: string, count: number): Promise<{ p
 }
 
 function expectNeutralHostEnvironment(env: NodeJS.ProcessEnv, expectedPath: string | undefined): void {
-  expect(Object.keys(env).filter(key => key.startsWith('CLAUDE_'))).toEqual([]);
+  expect(Object.keys(env).filter((key) => key.startsWith('CLAUDE_'))).toEqual([]);
   for (const key of [
-    'CLAUDECODE', 'CODEX_HOME', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'GOAL_MANAGER', 'GOAL_TASK_ID',
-    'GOAL_ATTEMPT', 'GOAL_CHECK_WAIT_FILE',
-  ]) expect(env[key]).toBeUndefined();
+    'CLAUDECODE',
+    'CODEX_HOME',
+    'CODEX_SESSION_ID',
+    'CODEX_THREAD_ID',
+    'GOAL_MANAGER',
+    'GOAL_TASK_ID',
+    'GOAL_ATTEMPT',
+    'GOAL_CHECK_WAIT_FILE',
+  ])
+    expect(env[key]).toBeUndefined();
   expect(env.PATH).toBe(process.env.PATH);
   expect(env.GOAL_LOCAL_CONFIG).toBe('/configured/local.json');
   expect(env.GOAL_STATE_DIRECTORY).toBe('/configured/state');
@@ -432,8 +445,13 @@ test('neutral host spawn and self-handoff remove inherited provider and task ide
     expect(owner?.pid).toBe(records[1]!.pid);
     expect(owner && sameProcess(owner)).toBe(true);
 
-    const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
-    expect(rpc.some(message => message.method === 'thread/resume' && message.params.threadId === 'thread-1')).toBe(true);
+    const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    expect(rpc.some((message) => message.method === 'thread/resume' && message.params.threadId === 'thread-1')).toBe(
+      true,
+    );
   } finally {
     await cleanHosted(f.path);
     rmSync(capture, { force: true });

@@ -87,13 +87,14 @@ const CHECK_LOG_PATH_PREFIX = '.temp/goal/checks/worker-check-';
 const CHECK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function singleLine(value: unknown, limit: number): string {
-  return String(value).replace(/[\r\n\0]+/g, ' ').slice(0, limit);
+  return String(value)
+    .replace(/[\r\n\0]+/g, ' ')
+    .slice(0, limit);
 }
 
 function checkCommand(value: Record<string, unknown>): string {
   const argv = value.argv;
-  if (Array.isArray(argv) && argv.every((part) => typeof part === 'string'))
-    return JSON.stringify(argv).slice(0, 1200);
+  if (Array.isArray(argv) && argv.every((part) => typeof part === 'string')) return JSON.stringify(argv).slice(0, 1200);
   if (typeof value.command === 'string') return singleLine(value.command, 1200);
   return 'unknown (terminal record did not include argv)';
 }
@@ -104,15 +105,12 @@ function ownedTerminalLogPath(
   value: Record<string, unknown>,
 ): { path: string; original: string } | { path: null; original: string; reason: string } {
   const raw = value.log ?? value.logPath ?? value.log_path;
-  const original = typeof raw === 'string' ? singleLine(raw, 1000) : 'unknown (terminal record did not include a log path)';
+  const original =
+    typeof raw === 'string' ? singleLine(raw, 1000) : 'unknown (terminal record did not include a log path)';
   const unknown = (reason: string) => ({ path: null, original, reason });
   if (!CHECK_UUID.test(id)) return unknown('check id is not a bare UUID');
   if (value.id !== id) return unknown('terminal record identity does not match the owned check UUID');
-  if (
-    typeof value.cwd !== 'string' ||
-    !isAbsolute(value.cwd) ||
-    resolve(value.cwd) !== resolve(task.worktree)
-  )
+  if (typeof value.cwd !== 'string' || !isAbsolute(value.cwd) || resolve(value.cwd) !== resolve(task.worktree))
     return unknown('terminal record cwd does not match this task worktree');
   if (
     String(value.status ?? '').toLowerCase() !== 'finished' ||
@@ -137,11 +135,7 @@ function ownedTerminalLogPath(
   const path = resolve(task.worktree, raw);
   const checksDirectory = resolve(task.worktree, '.temp/goal/checks');
   const relativePath = relative(resolve(task.worktree), path).replaceAll('\\', '/');
-  if (
-    dirname(path) !== checksDirectory ||
-    relativePath !== normalized ||
-    basename(path) !== `worker-check-${id}.log`
-  )
+  if (dirname(path) !== checksDirectory || relativePath !== normalized || basename(path) !== `worker-check-${id}.log`)
     return unknown('log path is nested or does not match this check UUID');
 
   try {
@@ -166,14 +160,14 @@ function ownedTerminalLogPath(
 
 function terminalCheckFailureEvidence(task: Task, id: string, value: Record<string, unknown>, status: unknown): string {
   const command = checkCommand(value);
-  const exitValue = value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit ?? value.code;
+  const exitValue =
+    value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit ?? value.code;
   const exitCode = Number(exitValue);
   const log = ownedTerminalLogPath(task, id, value);
   const header = `check ${id} failure evidence: command ${command}; exit status ${singleLine(status, 80)}; evidence path ${log.original}`;
   if (!Number.isSafeInteger(exitCode) || exitCode === 0 || exitCode !== Number(status))
     return `${header}; excerpt unknown (terminal record exit status is missing or inconsistent).`;
-  if (log.path === null)
-    return `${header}; excerpt unknown (${log.reason}); original path ${log.original}.`;
+  if (log.path === null) return `${header}; excerpt unknown (${log.reason}); original path ${log.original}.`;
 
   let descriptor: number | undefined;
   try {
@@ -591,9 +585,8 @@ export class WorkerJob implements GateOutcomeSink {
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
     const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
     const failureCount = () =>
-      this.tasks.store
-        .events(ref.taskId, ref.attempt)
-        .filter((event) => event.kind === 'waiting-resume-launch-failed').length;
+      this.tasks.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed')
+        .length;
     const lastFailure = () => {
       const event = this.tasks.store
         .events(ref.taskId, ref.attempt)

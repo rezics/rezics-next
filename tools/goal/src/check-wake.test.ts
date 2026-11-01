@@ -245,10 +245,7 @@ test('a same-session wake preserves the focused Web command argv under the manag
     ];
     writeFileSync(
       h.briefFile,
-      markdown.replace(
-        '  command: [bun, test]',
-        `  command: ${JSON.stringify(command)}\n  placement: local`,
-      ),
+      markdown.replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`),
     );
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
@@ -383,8 +380,12 @@ test('same-session wake includes bounded evidence from only the exact terminal c
     expect(args).toContain('resume');
     expect(args).toContain('wake-session');
     const prompt = args.at(-1)!;
-    expect(prompt).toContain(`check ${assertionId}: exit status 1; 1 failed, 396 assertions passed; log path ${assertionLog}`);
-    expect(prompt).toContain(`check ${assertionId} failure evidence: command ${JSON.stringify(command)}; exit status 1; evidence path ${assertionLog}`);
+    expect(prompt).toContain(
+      `check ${assertionId}: exit status 1; 1 failed, 396 assertions passed; log path ${assertionLog}`,
+    );
+    expect(prompt).toContain(
+      `check ${assertionId} failure evidence: command ${JSON.stringify(command)}; exit status 1; evidence path ${assertionLog}`,
+    );
     expect(prompt).toContain('progress-pages-layout.test.ts:824: Subject picker is absent after unknown subjectId');
     expect(prompt).toContain('expected Subject picker to remain available after unknown subjectId');
 
@@ -392,7 +393,9 @@ test('same-session wake includes bounded evidence from only the exact terminal c
     const excerptEnd = prompt.indexOf(`\nEND OWNED CHECK LOG EXCERPT ${longId}`, excerptStart);
     expect(excerptStart).toBeGreaterThanOrEqual(0);
     expect(excerptEnd).toBeGreaterThan(excerptStart);
-    expect(Buffer.byteLength(prompt.slice(excerptStart + `BEGIN OWNED CHECK LOG EXCERPT ${longId}\n`.length, excerptEnd))).toBeLessThanOrEqual(4096);
+    expect(
+      Buffer.byteLength(prompt.slice(excerptStart + `BEGIN OWNED CHECK LOG EXCERPT ${longId}\n`.length, excerptEnd)),
+    ).toBeLessThanOrEqual(4096);
     expect(prompt).toContain('truncated; the complete failure detail is unknown');
     expect(prompt).not.toContain(largeLogPrefix);
 
@@ -400,7 +403,9 @@ test('same-session wake includes bounded evidence from only the exact terminal c
     expect(nestedDetail).toContain('excerpt unknown');
     expect(nestedDetail).toContain('original path ' + nestedLog);
     const misroutedLog = '.temp/goal/checks/worker-check-' + assertionId + '.log';
-    const misroutedDetail = prompt.split('\n').find((line) => line.startsWith(`check ${misroutedId} failure evidence:`));
+    const misroutedDetail = prompt
+      .split('\n')
+      .find((line) => line.startsWith(`check ${misroutedId} failure evidence:`));
     expect(misroutedDetail).toContain('excerpt unknown');
     expect(misroutedDetail).toContain('original path ' + misroutedLog);
     const missingDetail = prompt.split('\n').find((line) => line.startsWith(`check ${missingId} failure evidence:`));
@@ -438,8 +443,15 @@ test('same-session wake delivers a short recorded runtime cause even when the wr
     writeFileSync(join(task.worktree, log), output);
     const argv = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
     const original = JSON.stringify({
-      id, cwd: task.worktree, argv, status: 'finished', exitCode: 1, log,
-      runnerPid: process.pid, runnerHost: hostname(), failureSummary: 'Check failed (exit 1).',
+      id,
+      cwd: task.worktree,
+      argv,
+      status: 'finished',
+      exitCode: 1,
+      log,
+      runnerPid: process.pid,
+      runnerHost: hostname(),
+      failureSummary: 'Check failed (exit 1).',
     });
     writeFileSync(join(results, `${id}.json`), original);
     writeFileSync(join(runs, `${id}.json`), original);
@@ -449,9 +461,13 @@ test('same-session wake delivers a short recorded runtime cause even when the wr
     expect(args).toContain('resume');
     expect(args).toContain('wake-session');
     const prompt = args.at(-1)!;
-    expect(prompt).toContain(`check ${id} failure evidence: command ${JSON.stringify(argv)}; exit status 1; evidence path ${log}`);
+    expect(prompt).toContain(
+      `check ${id} failure evidence: command ${JSON.stringify(argv)}; exit status 1; evidence path ${log}`,
+    );
     expect(prompt).toContain(`excerpt status complete (${Buffer.byteLength(output)} bytes)`);
-    expect(prompt).toContain(`BEGIN OWNED CHECK LOG EXCERPT ${id}\n${output.trim()}\nEND OWNED CHECK LOG EXCERPT ${id}`);
+    expect(prompt).toContain(
+      `BEGIN OWNED CHECK LOG EXCERPT ${id}\n${output.trim()}\nEND OWNED CHECK LOG EXCERPT ${id}`,
+    );
     expect(prompt).toContain(cause);
     expect(h.store.task(task.id).currentAttempt).toBe(ref.attempt);
     expect(h.store.attempt(ref).session).toBe('wake-session');

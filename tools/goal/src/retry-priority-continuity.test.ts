@@ -125,7 +125,8 @@ async function startOwnerProvider(h: ReturnType<typeof harness>, task: Task) {
           encoding: 'utf8',
           timeout: 10_000,
         });
-        if (result.status !== 0) throw new Error(result.stderr || result.error?.message || 'controlled Codex launch failed');
+        if (result.status !== 0)
+          throw new Error(result.stderr || result.error?.message || 'controlled Codex launch failed');
         return '@controlled-provider';
       },
       unregister() {},
@@ -152,7 +153,11 @@ async function startOwnerProvider(h: ReturnType<typeof harness>, task: Task) {
     throw new Error('controlled Codex manager did not establish a provider session');
   }
   const sessionId = started.threadId;
-  const tool = readFileSync(capture, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)).at(-1);
+  const tool = readFileSync(capture, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .at(-1);
   if (
     !tool ||
     tool.kind !== 'tool' ||
@@ -299,7 +304,11 @@ test('a held stopped retry reshapes its one pending intent while retaining criti
 
     const after = h.store.task(task.id);
     const intent = h.store.retryIntent(ref);
-    expect(after).toMatchObject({ state: 'held', currentAttempt: ref.attempt, brief: { criticalPath: true, markdown: correctedText } });
+    expect(after).toMatchObject({
+      state: 'held',
+      currentAttempt: ref.attempt,
+      brief: { criticalPath: true, markdown: correctedText },
+    });
     expect(after.priorityGrants).toEqual(before.priorityGrants);
     expect(after.priorityGrants?.[0]).toMatchObject({ id: grant.id, consumedBy: task.brief.manager });
     expect(after.priorityHistory).toEqual(before.priorityHistory);
@@ -427,12 +436,13 @@ test('an unchanged-critical amended retry still requires the current unambiguous
       expect(h.store.retryIntent(ref)).toBeUndefined();
     }
 
-    const ownerRow = h.store.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(managerId) as { state: string };
+    const ownerRow = h.store.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(managerId) as {
+      state: string;
+    };
     const liveOwner = JSON.parse(ownerRow.state) as Record<string, unknown>;
-    h.store.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(
-      JSON.stringify({ ...liveOwner, status: 'stopped' }),
-      managerId,
-    );
+    h.store.db
+      .query('UPDATE manager_sessions SET state = ? WHERE id = ?')
+      .run(JSON.stringify({ ...liveOwner, status: 'stopped' }), managerId);
     await expect(retryCommand(h, task.id, amendment, owner.environment)).rejects.toThrow(
       'priority changes require an authenticated manager session',
     );
@@ -453,7 +463,9 @@ test('unauthenticated substantive retries cannot escalate or demote priority and
     const escalate = writeAmendment(h, 'unauthorized-escalation', markdown, true, 'Escalation must be authorized.');
     const normalBefore = h.store.task(normal.id);
     const briefFilesBefore = readdirSync(join(h.settings.stateDirectory, 'briefs'));
-    await expect(retryCommand(h, normal.id, escalate)).rejects.toThrow('priority changes require an authenticated manager session');
+    await expect(retryCommand(h, normal.id, escalate)).rejects.toThrow(
+      'priority changes require an authenticated manager session',
+    );
     expect(h.store.task(normal.id)).toEqual(normalBefore);
     expect(h.store.retryIntent(normalRef)).toBeUndefined();
     expect(readdirSync(join(h.settings.stateDirectory, 'briefs'))).toEqual(briefFilesBefore);
@@ -465,7 +477,9 @@ test('unauthenticated substantive retries cannot escalate or demote priority and
     const priorityBytes = readFileSync(priorityPath(critical));
     const demote = writeAmendment(h, 'unauthorized-demotion', markdown, false, 'Demotion must be authorized.');
     const beforeDemotionFiles = readdirSync(join(h.settings.stateDirectory, 'briefs'));
-    await expect(retryCommand(h, critical.id, demote)).rejects.toThrow('priority changes require an authenticated manager session');
+    await expect(retryCommand(h, critical.id, demote)).rejects.toThrow(
+      'priority changes require an authenticated manager session',
+    );
     expect(h.store.task(critical.id)).toEqual(criticalBefore);
     expect(h.store.retryIntent(criticalRef)).toBeUndefined();
     expect(readFileSync(priorityPath(critical))).toEqual(priorityBytes);
@@ -482,7 +496,13 @@ test('retry brief identity, stale generations and concurrent intent submission r
     const task = h.tasks.dispatch(h.briefFile);
     const ref = seedStoppedAttempt(h, task);
     const base = markdown;
-    const wrongGoal = writeAmendment(h, 'wrong-goal', base.replace('goal: fixture', 'goal: another-goal'), false, 'Wrong goal.');
+    const wrongGoal = writeAmendment(
+      h,
+      'wrong-goal',
+      base.replace('goal: fixture', 'goal: another-goal'),
+      false,
+      'Wrong goal.',
+    );
     const wrongManager = writeAmendment(
       h,
       'wrong-manager',
@@ -491,15 +511,19 @@ test('retry brief identity, stale generations and concurrent intent submission r
       'Wrong manager.',
     );
     const before = h.store.task(task.id);
-    await expect(retryCommand(h, task.id, wrongGoal)).rejects.toThrow('a reshaped brief must keep the same goal and manager');
-    await expect(retryCommand(h, task.id, wrongManager)).rejects.toThrow('a reshaped brief must keep the same goal and manager');
+    await expect(retryCommand(h, task.id, wrongGoal)).rejects.toThrow(
+      'a reshaped brief must keep the same goal and manager',
+    );
+    await expect(retryCommand(h, task.id, wrongManager)).rejects.toThrow(
+      'a reshaped brief must keep the same goal and manager',
+    );
     expect(h.store.task(task.id)).toEqual(before);
     expect(h.store.retryIntent(ref)).toBeUndefined();
 
     const correction = writeAmendment(h, 'fenced-correction', base, false, 'Current generation correction.');
-    await expect(
-      retryCommand(h, task.id, correction, { GOAL_TASK_ID: task.id, GOAL_ATTEMPT: '0' }),
-    ).rejects.toThrow(' is stale; the current attempt is 1');
+    await expect(retryCommand(h, task.id, correction, { GOAL_TASK_ID: task.id, GOAL_ATTEMPT: '0' })).rejects.toThrow(
+      ' is stale; the current attempt is 1',
+    );
     expect(h.store.task(task.id)).toEqual(before);
     expect(h.store.retryIntent(ref)).toBeUndefined();
 

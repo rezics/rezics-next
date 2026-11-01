@@ -17,10 +17,10 @@ async function startOwner(h: ReturnType<typeof harness>, manager: string) {
   const sessions = new ManagerSessions(h.store.db, inbox, {
     command: ['goal'],
     connect: async () => {
-      const client = new StdioAppServer(
-        [process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')],
-        { ...process.env, FAKE_RPC_LOG: join(h.settings.stateDirectory, 'owner-rpc.jsonl') },
-      );
+      const client = new StdioAppServer([process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')], {
+        ...process.env,
+        FAKE_RPC_LOG: join(h.settings.stateDirectory, 'owner-rpc.jsonl'),
+      });
       await client.initialize();
       return client;
     },

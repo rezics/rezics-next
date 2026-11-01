@@ -68,7 +68,8 @@ function contextFromPrompt(prompt: string): Record<string, any> {
   const title = prompt.indexOf('## Current controller launch context');
   const start = prompt.indexOf('```json\n', title);
   const end = prompt.indexOf('\n```', start + 8);
-  if (title < 0 || start < 0 || end < 0) throw new Error('current launch-context JSON is missing from the provider argv');
+  if (title < 0 || start < 0 || end < 0)
+    throw new Error('current launch-context JSON is missing from the provider argv');
   return JSON.parse(prompt.slice(start + 8, end)) as Record<string, any>;
 }
 
@@ -606,12 +607,7 @@ function integratedDependency(h: ReturnType<typeof harness>, filename: string): 
   return { id: dependency.id, commit };
 }
 
-function replaceTaskContract(
-  h: ReturnType<typeof harness>,
-  taskId: string,
-  attempt: number,
-  text: string,
-): void {
+function replaceTaskContract(h: ReturnType<typeof harness>, taskId: string, attempt: number, text: string): void {
   const path = join(h.settings.stateDirectory, 'briefs', `launch-context-${randomUUID()}.md`);
   writeFileSync(path, text);
   const brief = parseBrief(text, readRiskOwnership(h.settings.riskAreasFile));
@@ -713,7 +709,10 @@ test('fresh and normal retry argv carry current contract identity and supersede 
     mkdirSync(evidence, { recursive: true });
     writeFileSync(
       join(evidence, 'failure.json'),
-      JSON.stringify({ manifest: 'Historical future-tense retry manifest: cleanup must merge before work; return waiting with checks [].' }),
+      JSON.stringify({
+        manifest:
+          'Historical future-tense retry manifest: cleanup must merge before work; return waiting with checks [].',
+      }),
     );
     const amendmentOne = amendedBrief(h.root, 'retry-one', dependency.id, 'Use contract amendment one.');
     await job.start(task.id, { brief: amendmentOne, evidence });
@@ -799,7 +798,12 @@ test('held release resumes old sessions once with actual dependency source recei
     }
 
     const firstRevision = amendedBrief(h.root, 'held-first-v1', dependency.id, 'Use the first contract amendment.');
-    const latestRevision = amendedBrief(h.root, 'held-first-v2', dependency.id, 'Use the latest contract after cleanup.');
+    const latestRevision = amendedBrief(
+      h.root,
+      'held-first-v2',
+      dependency.id,
+      'Use the latest contract after cleanup.',
+    );
     const secondRevision = amendedBrief(h.root, 'held-second-v1', dependency.id, 'Use the released task contract.');
     h.tasks.queueRetry(first.id, { brief: firstRevision });
     h.tasks.queueRetry(first.id, { brief: latestRevision });
@@ -947,7 +951,8 @@ test('a same-session wake replaces stale remote policy with the complete amended
     expect(initial.prompt).toContain('The native marker timestamp unit is epoch milliseconds.');
     const originalBriefPath = h.store.task(activeTask.id).briefPath;
 
-    const currentCommand = 'bun scripts/performance/admission-local.ts && bun scripts/performance/native-marker-local.ts';
+    const currentCommand =
+      'bun scripts/performance/admission-local.ts && bun scripts/performance/native-marker-local.ts';
     const currentText = contractRevision(
       [
         'BEGIN_WAITING_SESSION',
@@ -977,7 +982,9 @@ test('a same-session wake replaces stale remote policy with the complete amended
     expect(resumed.prompt).not.toContain(initialText);
     expect(resumed.prompt).toContain('The full canonical contract below');
     expect(resumed.prompt).toContain('supersedes conflicting saved-session instructions');
-    expect(resumed.prompt).toContain('Native marker timestamp unit correction: marker timestamps are epoch microseconds');
+    expect(resumed.prompt).toContain(
+      'Native marker timestamp unit correction: marker timestamps are epoch microseconds',
+    );
     expect(resumed.prompt).toContain('Run the acceptance command in the foreground from the worktree root');
     expect(resumed.prompt).not.toContain(remoteCommand);
     expect(resumed.prompt).not.toContain('The native marker timestamp unit is epoch milliseconds.');
@@ -1014,7 +1021,10 @@ test('a capacity waiter launches from the latest canonical contract snapshot', a
   const capacityPath = join(h.settings.stateDirectory, 'capacity.json');
   let launch: Promise<void> | undefined;
   try {
-    const initialText = contractRevision('Initial contract before capacity admission.', 'bun scripts/initial-local-check.ts');
+    const initialText = contractRevision(
+      'Initial contract before capacity admission.',
+      'bun scripts/initial-local-check.ts',
+    );
     const initialPath = fullBrief(h.root, 'capacity-canonical-old', initialText);
     const task = h.tasks.dispatch(initialPath);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
@@ -1116,7 +1126,9 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
     const afterDependency = amendedBrief(h.root, 'source-proof', dependency.id, 'Inspect current source proof.');
     replaceTaskContract(h, task.id, 1, readFileSync(afterDependency, 'utf8'));
 
-    const absent = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    const absent = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
     expect(absent.dependencies.receipts[0]).toMatchObject({
       state: 'integrated',
       completion: 'integrated',
@@ -1129,7 +1141,9 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
     h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
       current.state = 'cancelled';
     });
-    const cancelled = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    const cancelled = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
     expect(cancelled.dependencies.receipts[0]).toMatchObject({
       state: 'cancelled',
       completion: 'not-integrated',
@@ -1163,7 +1177,9 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
 
     const missingContract = amendedBrief(h.root, 'missing-source-proof', 'missing-task', 'Unknown dependency.');
     replaceTaskContract(h, task.id, 1, readFileSync(missingContract, 'utf8'));
-    const missing = underLease(h, task.id, () => captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'));
+    const missing = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
     expect(missing.dependencies.receipts[0]).toMatchObject({
       id: 'missing-task',
       state: 'missing',
@@ -1222,7 +1238,10 @@ test('adopting an imported legacy attempt emits current metadata in the actual r
       logPath,
       [
         JSON.stringify({ type: 'thread.started', thread_id: 'legacy-session' }),
-        JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: historical completion' } }),
+        JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: 'RESULT: historical completion' },
+        }),
         JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 4, output_tokens: 1 } }),
       ].join('\n') + '\n',
     );

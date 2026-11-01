@@ -231,9 +231,7 @@ export function validateLocalAcceptanceCommand(command: readonly string[]): void
     else outer = outer.slice(2);
   }
   const commands =
-    outer.length === 3 && outer[0] === 'sh' && outer[1] === '-c'
-      ? localShellCommands(outer[2]!)
-      : [outer];
+    outer.length === 3 && outer[0] === 'sh' && outer[1] === '-c' ? localShellCommands(outer[2]!) : [outer];
   if (commands?.length && commands.every(localBunCommand)) return;
   const text = command.join(' ');
   if (
