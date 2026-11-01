@@ -155,6 +155,19 @@ export async function loadCreatorOffers(
     if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
     const authorization = viewerCredential(request);
     if (!authorization) return { kind: 'denied' };
+    return await loadPreparedCreatorOffers(caller, authorization, query);
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+/** Share the composed viewer's preparation instead of refreshing or capturing a second credential. */
+async function loadPreparedCreatorOffers(
+  caller: CreatorOffersCaller,
+  authorization: string,
+  query: CreatorOffersSearch,
+): Promise<CreatorOffersData> {
+  try {
     const result = await caller.get({
       query: { limit: CREATOR_OFFERS_PAGE_SIZE, ...query },
       headers: { authorization },
@@ -378,10 +391,15 @@ function privatePage() {
 }
 async function viewer() {
   const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
+  const denied = { authorization: null, csrfToken: '', selling: false };
+  if (await prepareSession(request, env as Partial<SessionEnv>)) return denied;
   const authorization = viewerCredential(request);
+  if (!authorization) return denied;
   const identity = await readSessionIdentity(request, env as Partial<SessionEnv>);
-  const result = authorization ? await kernelClient().platform.exposure.get({ headers: { authorization } }) : null;
+  const result = await kernelClient().platform.exposure.get({
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
   if (result && (result.error || !result.data)) throw new Error('Platform exposure unavailable');
   return { authorization, csrfToken: identity.csrfToken ?? '', selling: !!result?.data?.admitted.includes('selling') };
 }
@@ -416,10 +434,9 @@ export const readCreatorOffers = createServerFn({ method: 'GET' })
     try {
       const current = await viewer();
       if (!current.authorization) return { ...empty, page: { kind: 'denied' } };
-      const page = await loadCreatorOffers(
+      const page = await loadPreparedCreatorOffers(
         createNativeCreatorOffersCaller(kernelClient()),
-        getRequest(),
-        env as Partial<SessionEnv>,
+        current.authorization,
         data,
       );
       const money = await createNativeMoneySchemaApi(kernelClient()).read(current.authorization);
