@@ -261,6 +261,7 @@ export async function readAccountDiscoveryBindings(
 export type AccountDiscoveryRepairObservation = Readonly<{
   id: string;
   head: AccountDiscoveryReductionHead;
+  claimHead: AccountDiscoveryReductionHead | null;
   position: bigint;
   account: Awaited<ReturnType<AccountDiscoverySource['read']>>['accounts'][number] | null;
   binding: Awaited<ReturnType<typeof readAccountDiscoveryBindings>> extends Map<string, infer B> ? B | null : never;
@@ -281,16 +282,24 @@ export async function readAccountDiscoveryRepairObservation(
     const before = (await readAccountDiscoveryReductionBinding(pool, [partition], context)).heads[0]!;
     const snapshot = await accountDiscoverySource(pool).read(partition, [id]);
     const binding = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id) ?? null;
+    // The handle is routed independently. Its native epoch cannot be inferred
+    // from the Account home or from the consumed claim revision alone.
+    const claimPartition = binding?.claim ? partitionOf(binding.claim.route) : null;
+    const claimBefore = claimPartition === null ? null
+      : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
     const current = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id) ?? null;
+    const claimAfter = claimPartition === null ? null
+      : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
     const after = (await readAccountDiscoveryReductionBinding(pool, [partition], context)).heads[0]!;
     const account = snapshot.accounts[0] ?? null;
     requireAccessDeadline(context.deadline);
     if (!isDeepStrictEqual(before, after) || !isDeepStrictEqual(binding, current) ||
+      !isDeepStrictEqual(claimBefore, claimAfter) ||
       (account === null ? binding !== null : binding === null || binding.revision !== account.revision ||
         binding.handle !== account.handle ||
         (binding.claim !== null && binding.consumedClaimRevision < binding.claim.revision)))
       throw new CommandUnavailableError('contention', partition);
-    return Object.freeze({ id, head: before, position: snapshot.position, account, binding });
+    return Object.freeze({ id, head: before, claimHead: claimBefore, position: snapshot.position, account, binding });
   });
 }
 
