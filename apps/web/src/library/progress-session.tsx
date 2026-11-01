@@ -6,7 +6,7 @@ import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { isNotFound, Link } from '@tanstack/react-router';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Menu } from '@rezics/ui/menu';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -26,6 +26,10 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
+
+type LoadedPage = Extract<ProgressSessionPage, { signedIn: true }>;
+type EditorLifetime = { page: LoadedPage; pending: boolean; history: symbol | null };
+const editorLifetime = (page: LoadedPage): EditorLifetime => ({ page, pending: false, history: null });
 
 function stateLabel(state: ProgressState): string {
   if (state === 'completed') return m.library_progress_state_completed();
@@ -55,7 +59,7 @@ function SessionEditor({
   children,
   logsCursor,
 }: {
-  page: Extract<ProgressSessionPage, { signedIn: true }>;
+  page: LoadedPage;
   children?: ReactNode;
   logsCursor?: string | undefined;
 }) {
@@ -74,7 +78,7 @@ function SessionEditor({
   const [readDenied, setReadDenied] = useState(false);
   const offered = !unsupported && session.meaning === 'known' && session.recordingState === 'supported';
   const [phone, setPhone] = useState(false);
-  const pending = useRef(false);
+  const lifetime = useRef<EditorLifetime | null>(editorLifetime(page));
   const addId = useId();
   const removeId = useId();
   const addHint = useId();
@@ -82,6 +86,14 @@ function SessionEditor({
   const changesHeading = useId();
   const unitsHeading = useId();
   const amountHint = useId();
+
+  useLayoutEffect(() => {
+    // Restore an identity after React's development effect cleanup/setup cycle.
+    const origin = (lifetime.current ??= editorLifetime(page));
+    return () => {
+      if (lifetime.current === origin) lifetime.current = null;
+    };
+  }, [page]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px), (pointer: coarse)');
@@ -99,6 +111,8 @@ function SessionEditor({
   }
 
   if (page !== seenPage) {
+    // Retire old work during replacement, before the new page can accept an operation.
+    lifetime.current = editorLifetime(page);
     setSeenPage(page);
     setUnsupported(false);
     setReadDenied(false);
@@ -114,6 +128,10 @@ function SessionEditor({
     setConfirming(null);
   }
 
+  function isCurrent(origin: EditorLifetime | null): origin is EditorLifetime {
+    return origin !== null && lifetime.current === origin && origin.page === page;
+  }
+
   function explain(reason: ProgressFailure['reason'], recording = false) {
     setAlert(progressFailureMessage(reason));
     if (reason === 'forbidden' || reason === 'closed') {
@@ -126,7 +144,11 @@ function SessionEditor({
     }
   }
 
-  async function refreshHistory() {
+  async function refreshHistory(origin = lifetime.current) {
+    if (!isCurrent(origin)) return;
+    const request = Symbol();
+    origin.history = request;
+    const isLatest = () => isCurrent(origin) && origin.history === request;
     try {
       const fresh = await readProgressSession({
         data: {
@@ -135,6 +157,7 @@ function SessionEditor({
           ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
         },
       });
+      if (!isLatest()) return;
       if (fresh.signedIn) {
         setSession(fresh.session);
         setReadDenied(false);
@@ -144,6 +167,7 @@ function SessionEditor({
         setAlert(m.library_progress_refused());
       }
     } catch (error) {
+      if (!isLatest()) return;
       if (isNotFound(error) || isPlatformClosedError(error)) {
         setReadDenied(true);
         setAlert(m.library_progress_refused());
@@ -156,16 +180,20 @@ function SessionEditor({
   }
 
   async function onRecord() {
-    if (pending.current || session.state !== 'active' || !offered) return;
+    const origin = lifetime.current;
+    if (!isCurrent(origin) || origin.pending || session.state !== 'active' || !offered) return;
     setAlert(null);
     const intent =
       session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
-    pending.current = true;
+    origin.pending = true;
+    origin.history = null;
     try {
       const result = await recordProgressSession({
         data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent },
         headers: csrfHeaders(),
       });
+      // Dispatched native work may have committed; retirement only ignores its UI completion.
+      if (!isCurrent(origin)) return;
       if (!result.ok) {
         explain(result.reason, true);
         return;
@@ -175,24 +203,28 @@ function SessionEditor({
       setLocator('');
       setPosition('');
       setSession((current) => ({ ...current, ...result.session }));
-      await refreshHistory();
+      await refreshHistory(origin);
+      if (!isCurrent(origin)) return;
       setEditing(false);
     } catch {
+      if (!isCurrent(origin)) return;
       setAlert(m.library_progress_unavailable());
     } finally {
-      pending.current = false;
+      if (isCurrent(origin)) origin.pending = false;
     }
   }
 
   async function onUnits(kind: 'add' | 'remove') {
-    if (pending.current || session.state !== 'active' || !offered) return;
+    const origin = lifetime.current;
+    if (!isCurrent(origin) || origin.pending || session.state !== 'active' || !offered) return;
     const parsed = parseUnitBatch(kind === 'add' ? addText : removeText);
     if (!parsed.ok) {
       setAlert(parsed.reason === 'limit' ? m.library_progress_batch_limit() : m.library_progress_invalid());
       return;
     }
     setAlert(null);
-    pending.current = true;
+    origin.pending = true;
+    origin.history = null;
     try {
       const result = await recordProgressSession({
         data: {
@@ -203,6 +235,7 @@ function SessionEditor({
         },
         headers: csrfHeaders(),
       });
+      if (!isCurrent(origin)) return;
       if (!result.ok) {
         explain(result.reason, true);
         return;
@@ -211,24 +244,29 @@ function SessionEditor({
       if (kind === 'add') setAddText('');
       else setRemoveText('');
       setSession((current) => ({ ...current, ...result.session }));
-      await refreshHistory();
+      await refreshHistory(origin);
+      if (!isCurrent(origin)) return;
       setEditing(false);
     } catch {
+      if (!isCurrent(origin)) return;
       setAlert(m.library_progress_unavailable());
     } finally {
-      pending.current = false;
+      if (isCurrent(origin)) origin.pending = false;
     }
   }
 
   async function onFinish(action: 'complete' | 'abandon') {
-    if (pending.current || session.state !== 'active') return;
+    const origin = lifetime.current;
+    if (!isCurrent(origin) || origin.pending || session.state !== 'active') return;
     setAlert(null);
-    pending.current = true;
+    origin.pending = true;
+    origin.history = null;
     try {
       const result = await finishProgressSession({
         data: { sessionId: session.id, action, revision: session.revision, idempotencyKey: key },
         headers: csrfHeaders(),
       });
+      if (!isCurrent(origin)) return;
       if (!result.ok) {
         explain(result.reason);
         return;
@@ -236,11 +274,13 @@ function SessionEditor({
       setKey(crypto.randomUUID());
       setConfirming(null);
       setSession((current) => ({ ...current, ...result.session }));
-      await refreshHistory();
+      await refreshHistory(origin);
+      if (!isCurrent(origin)) return;
     } catch {
+      if (!isCurrent(origin)) return;
       setAlert(m.library_progress_unavailable());
     } finally {
-      pending.current = false;
+      if (isCurrent(origin)) origin.pending = false;
     }
   }
 
