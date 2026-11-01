@@ -3,7 +3,7 @@ import {
   CHECK_HOST_RUNS_ROOT,
   CHECK_HOST_SUPERVISOR_MARKER,
   checkHostScopeUnitName,
-  checkHostSliceUnitName,
+  checkHostRunSliceUnitName,
   classifyCheck,
   recognizeCheckHostRun,
   type CheckHostPathEvidence,
@@ -38,7 +38,7 @@ function producerFixture(host: 'a' | 'b', cwdRealPath = compilerDirectory) {
     'ordinary',
     180_000,
   );
-  const slice = checkHostSliceUnitName(runId);
+  const slice = checkHostRunSliceUnitName(runId);
   const scope = checkHostScopeUnitName(runId);
   expect(producer).toContain(`--slice=${slice}`);
   expect(producer).toContain(`--unit=${scope.slice(0, -'.scope'.length)}`);

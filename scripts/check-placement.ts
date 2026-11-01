@@ -38,7 +38,7 @@ export function checkHostScopeUnitStem(runId: string): string {
   return `rezics-check-${runId}`;
 }
 
-export function checkHostSliceUnitName(runId: string): string {
+export function checkHostRunSliceUnitName(runId: string): string {
   return `rezics-check-${runId.replaceAll('-', '_')}.slice`;
 }
 
