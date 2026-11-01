@@ -300,9 +300,8 @@ const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 const { Route: spaceRoute } = await import('../src/routes/spaces/$address');
 const { Route: realmRoute } = await import('../src/routes/realms/$id');
-const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } = await import(
-  '@tanstack/react-router'
-);
+const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 
 type RouteContext = { queryClient: QueryClient; credentialMode: 'anonymous' | 'session' };
 function fileRouteTree(route: unknown, path: string) {
@@ -749,9 +748,9 @@ test('healthy repeated Space and Realm loaders own one exact default-shared Quer
         expect(spacePageAdmissionIsCurrent(second.admission, client)).toBe(true);
         expect(nativeCalls.filter((call) => call.path === `/v1/spaceAddresses/${address}`)).toHaveLength(2);
         expect(nativeCalls.filter((call) => call.path === `/v1/spaces/${spaceId}`)).toHaveLength(2);
-        expect(nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === null)).toBe(
-          true,
-        );
+        expect(
+          nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === null),
+        ).toBe(true);
       } else if (route === 'realm-page') {
         const first = await loadRealm(client, 'session');
         const firstCache = client.getQueryData<RealmPageQueryResult>(queryKey);
@@ -770,7 +769,9 @@ test('healthy repeated Space and Realm loaders own one exact default-shared Quer
         expect(spacePageAdmissionIsCurrent(second.admission, client)).toBe(true);
         expect(nativeCalls.filter((call) => call.path === `/v1/realms/${realmId}`)).toHaveLength(2);
         expect(
-          nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === `Bearer ${accessToken}`),
+          nativeCalls
+            .filter((call) => call.path.startsWith('/v1/'))
+            .every((call) => call.authorization === `Bearer ${accessToken}`),
         ).toBe(true);
       } else {
         const readRedirect = async () => {
