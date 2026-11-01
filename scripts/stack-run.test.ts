@@ -528,20 +528,27 @@ process.stdout.write(JSON.stringify({ outcome, settlement }) + '\\n');
     stdout: 'pipe',
     stderr: 'pipe',
   });
+  let exited = false;
+  const childExit = child.exited.then((code) => {
+    exited = true;
+    return code;
+  });
   const result = Promise.all([
-    child.exited,
+    childExit,
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
   ]);
   const deadline = Date.now() + 2000;
-  while (Date.now() < deadline && !events().some((event) => event.kind === 'run')) await Bun.sleep(10);
-  if (!events().some((event) => event.kind === 'run')) {
+  while (Date.now() < deadline && !exited && !events().some((event) => event.kind === 'run')) await Bun.sleep(10);
+  if (!exited && !events().some((event) => event.kind === 'run')) {
     child.kill('SIGTERM');
-    const [, , stderr] = await result;
-    throw new Error(`mock did not reach its native run; events=${JSON.stringify(events())}; stderr=${stderr}`);
   }
   const [code, stdout, stderr] = await result;
-  expect(code, stderr).toBe(0);
+  const eventSummary = events().map(({ kind, address, granted, reason }) => ({ kind, address, granted, reason }));
+  expect(code, `${stderr} events=${JSON.stringify(eventSummary)}`).toBe(0);
+  if (!events().some((event) => event.kind === 'run')) {
+    throw new Error(`mock exited without reaching its native run; stdout=${stdout}; events=${JSON.stringify(eventSummary)}`);
+  }
   return {
     ...(JSON.parse(stdout.trim()) as {
       outcome: { kind: string; code?: number; message?: string };
