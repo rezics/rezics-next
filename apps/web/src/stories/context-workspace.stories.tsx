@@ -10,21 +10,49 @@ import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-function WorkspaceStory({ scenario = 'directory' }: { scenario?: Scenario | 'loading' | 'search-empty' }) {
+const longContextTitle = '旅の読者たちと物語を読み続けるための、とても長い多言語の編集コミュニティ';
+type WorkspaceScenario = Scenario | 'loading' | 'search-empty' | 'directory-deleted' | 'directory-multilingual';
+
+function WorkspaceStory({ scenario = 'directory' }: { scenario?: WorkspaceScenario }) {
   const fixture = useMemo(
-    () => contextFixture(scenario === 'loading' || scenario === 'search-empty' ? 'directory' : scenario),
+    () =>
+      contextFixture(
+        scenario === 'directory-deleted'
+          ? 'deleted'
+          : scenario === 'loading' || scenario === 'search-empty' || scenario === 'directory-multilingual'
+            ? 'directory'
+            : scenario,
+      ),
     [scenario],
   );
   const locale = getLocale();
   const input = directoryInput({
-    deleted: scenario === 'deleted',
+    deleted: scenario === 'deleted' || scenario === 'directory-deleted',
     query: scenario === 'search-empty' ? 'No matches' : '',
   });
-  const [directory, setDirectory] = useState(() => fixture.initialDirectory(input));
+  const [directory, setDirectory] = useState(() => {
+    const supplied = fixture.initialDirectory(input);
+    if (scenario === 'directory-multilingual' && supplied.page.kind === 'ready') {
+      supplied.page.value.contexts = supplied.page.value.contexts.flatMap((entry) => [
+        { ...entry, labels: { ja: longContextTitle } },
+        { ...entry, id: '018f1234-5678-7000-8000-000000000023', labels: { 'zh-Hant': '一起閱讀的讀者' } },
+      ]);
+    }
+    return supplied;
+  });
   const [detail, setDetail] = useState<Result<Workspace>>(() => fixture.initialDetail());
   const [creation, setCreation] = useState(() => fixture.initialCreation());
   const create = scenario === 'create' || scenario === 'create-denied';
-  const list = ['directory', 'empty', 'search-empty', 'loading', 'unavailable', 'stale'].includes(scenario);
+  const list = [
+    'directory',
+    'empty',
+    'search-empty',
+    'loading',
+    'unavailable',
+    'stale',
+    'directory-deleted',
+    'directory-multilingual',
+  ].includes(scenario);
   const readDetail = async () => setDetail(await fixture.api.detail(fixture.id));
   return (
     <PatternStory
@@ -89,7 +117,41 @@ const meta = {
 } satisfies Meta<typeof WorkspaceStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Directory: Story = {};
+export const Directory: Story = {
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByRole('list', { name: m.ctxw_title() });
+    const heading = within(list).getByRole('heading', { level: 2 });
+    const link = within(list).getByRole('link', { name: heading.textContent! });
+    await expect(link).toHaveAttribute('aria-labelledby', heading.id);
+    link.focus();
+    await expect(link).toHaveFocus();
+    await userEvent.tab();
+    await expect(within(canvasElement).getByRole('link', { name: m.ctxw_next() })).toHaveFocus();
+  },
+};
+export const MultilingualDirectory: Story = {
+  args: { scenario: 'directory-multilingual' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByRole('list', { name: m.ctxw_title() });
+    const heading = within(list).getByRole('heading', { name: longContextTitle, level: 2 });
+    await expect(heading).toHaveAttribute('lang', 'ja');
+    const primary = within(list).getByRole('link', { name: longContextTitle });
+    primary.focus();
+    await expect(primary).toHaveFocus();
+    await userEvent.tab();
+    await expect(within(list).getByRole('link', { name: '一起閱讀的讀者' })).toHaveFocus();
+    await expect(within(list).getByRole('heading', { name: '一起閱讀的讀者' })).toHaveAttribute('lang', 'zh-Hant');
+  },
+};
+export const DeletedDirectory: Story = {
+  args: { scenario: 'directory-deleted' },
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByRole('list', { name: m.ctxw_title() });
+    await expect(within(list).getByRole('heading', { level: 2 })).toBeVisible();
+    await expect(within(list).getByText(m.ctxw_community() + ' · ' + m.ctxw_deleted())).toBeVisible();
+  },
+};
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const SearchEmpty: Story = { args: { scenario: 'search-empty' } };
 export const Loading: Story = { args: { scenario: 'loading' } };

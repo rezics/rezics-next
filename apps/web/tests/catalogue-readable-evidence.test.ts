@@ -304,3 +304,118 @@ test('A contributor reads the selected value and composition evidence before tec
     }
   }
 });
+
+test('Work Parts summary headings preserve supplied language, unresolved authority and independent evidence focus', async () => {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en' });
+  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'IS_REACT_ACT_ENVIRONMENT'];
+  const saved = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of globals) {
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
+  }
+  const { act, createElement: h } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { ConnectedStory } = await import('../src/stories/connected-story');
+  const { WorkPartsPage } = await import('../src/features/catalogue/work-parts-page');
+  const { workPartsFixture } = await import('../src/kernel/fake/work-parts');
+  const { subjectHref } = await import('../src/subject/subject-href');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  setLocale('en', { reload: false });
+  const container = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(container);
+  const root = createRoot(container);
+  try {
+    const fixture = workPartsFixture('partial');
+    const supplied = await fixture.transport.read();
+    if (!supplied.ok || !supplied.rows[0]?.summary) throw new Error('Expected a resolved Work Part');
+    const title = '旅人の物語 第二巻 — 長い道のりを越えて、ふたたび出会う人々と終わらない読書の記録';
+    const first = supplied.rows[0];
+    const summary = { ...first.summary!, label: { value: title, language: 'ja' } };
+    const row = { ...first, summary };
+    const initial = { ...supplied, rows: [row] };
+    const before = structuredClone(initial);
+    const calls = fixture.calls.length;
+    const render = async (key: string, rows: typeof supplied.rows = initial.rows) => {
+      await act(async () =>
+        root.render(
+          h(
+            ConnectedStory,
+            { key, storyId: key },
+            h(WorkPartsPage, {
+              id: fixture.id,
+              locale: 'en',
+              transport: fixture.transport,
+              search: fixture.search,
+              initial: { ...initial, rows },
+            }),
+          ),
+        ),
+      );
+      return container.querySelector('ul > li')!;
+    };
+    const item = await render('semantic-parts-resolved');
+    expect(item.querySelector('li')).toBeNull();
+    const heading = item.querySelector('h2')!;
+    expect(heading.textContent).toBe(title);
+    expect(heading.getAttribute('lang')).toBe('ja');
+    const primary = item.querySelector<HTMLAnchorElement>('a')!;
+    const href = subjectHref({ id: summary.id, label: title }, 'en').href;
+    expect(primary.getAttribute('href')).toBe(href);
+    expect(primary.getAttribute('aria-labelledby')).toBe(heading.id);
+    const citation = item.querySelector<HTMLAnchorElement>('a[href="https://example.org/contents"]')!;
+    const correction = [...item.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.work_parts_correct(),
+    )!;
+    const disclosure = item.querySelector('details')!;
+    const toggle = disclosure.querySelector('summary')!;
+    expect(disclosure.open).toBe(false);
+    expect(JSON.parse(disclosure.querySelector('pre')!.textContent!)).toEqual(first.statement);
+    expect(item.querySelector('a a, a button, a details')).toBeNull();
+    for (const control of [primary, citation, correction, toggle]) {
+      control.focus();
+      expect(window.document.activeElement).toBe(control);
+    }
+    expect(fixture.calls).toHaveLength(calls);
+    await act(async () => correction.click());
+    expect([...container.querySelectorAll('button')].some((button) => button.textContent === m.relation_open())).toBe(
+      true,
+    );
+    expect(disclosure.open).toBe(false);
+    expect(fixture.calls).toHaveLength(calls);
+    expect(initial).toEqual(before);
+
+    const unresolved = await render('semantic-parts-unresolved', [{ ...row, summary: null }]);
+    expect(unresolved.querySelector('h2')?.textContent).toBe(m.work_parts_unresolved());
+    expect([...unresolved.querySelectorAll('a')].some((link) => link.getAttribute('href') === href)).toBe(false);
+    expect(unresolved.querySelector('a[href="https://example.org/contents"]')).not.toBeNull();
+    expect(
+      [...unresolved.querySelectorAll('button')].some((button) => button.textContent === m.work_parts_correct()),
+    ).toBe(true);
+    expect(JSON.parse(unresolved.querySelector('pre')!.textContent!)).toEqual(first.statement);
+
+    const { statement: _statement, ...withoutAssertion } = row;
+    const missing = await render('semantic-parts-missing', [withoutAssertion]);
+    expect(missing.querySelector('h2')?.textContent).toBe(title);
+    expect(missing.querySelector('a')?.getAttribute('href')).toBe(href);
+    expect(missing.textContent).toContain(m.work_parts_assertion_unavailable());
+    expect(
+      [...missing.querySelectorAll('button')].some((button) => button.textContent === m.work_parts_correct()),
+    ).toBe(false);
+    expect(missing.querySelector('details')?.open).toBe(false);
+    expect(missing.querySelector('pre')).toBeNull();
+    expect(fixture.calls).toHaveLength(calls);
+  } finally {
+    await act(async () => root.unmount());
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});

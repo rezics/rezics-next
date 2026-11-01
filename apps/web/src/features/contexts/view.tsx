@@ -16,7 +16,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { PageHeading } from '../../shell/page-heading';
@@ -193,21 +193,23 @@ export function ContextDirectoryView({
         </Empty>
       ) : (
         <ul aria-label={m.ctxw_title({}, o)}>
-          {page.value.contexts.map((entry) => (
-            <li key={entry.id}>
-              <ListRow>
-                <div className="min-w-0 flex-1 space-y-1 py-3">
-                  <ListRowLink className="break-words font-semibold" href={detailHref(locale, entry.id)}>
-                    {pickText(entry.labels, locale).text || m.context_unnamed({}, o)}
-                  </ListRowLink>
-                  <p className="text-sm text-muted-foreground">
+          {page.value.contexts.map((entry) => {
+            const title = pickText(entry.labels, locale);
+            return (
+              <ContentItem
+                key={entry.id}
+                title={title.text || m.context_unnamed({}, o)}
+                titleLang={title.lang ?? undefined}
+                href={detailHref(locale, entry.id)}
+                metadata={
+                  <>
                     {entry.kind === 'global' ? m.ctxw_global({}, o) : m.ctxw_community({}, o)} ·{' '}
                     {entry.state === 'deleted' ? m.ctxw_deleted({}, o) : m.ctxw_active({}, o)}
-                  </p>
-                </div>
-              </ListRow>
-            </li>
-          ))}
+                  </>
+                }
+              />
+            );
+          })}
         </ul>
       )}
       {page?.kind === 'ready' && page.value.next ? (

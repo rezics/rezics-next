@@ -282,3 +282,69 @@ describe('An editor finds current readable Contexts creates one and follows nati
     );
   });
 });
+
+test('Context summaries expose supplied multilingual headings and exact navigation without adding a second item frame', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://context.invalid/en' });
+  const { m } = await import('../src/paraglide/messages.js');
+  const o = { locale: 'en' as const };
+  try {
+    const input = directoryInput({ deleted: true, query: '旅', cursor: 'previous+/==' });
+    const supplied = contextFixture('deleted').initialDirectory(input);
+    if (supplied.page.kind !== 'ready') throw new Error('Expected a supplied Context page');
+    const entry = contextFixture('deleted').initialDirectory(directoryInput({ deleted: true })).page;
+    if (entry.kind !== 'ready' || !entry.value.contexts[0]) throw new Error('Expected a deleted Context');
+    const title = '旅の読者たちと物語を読み続けるための、とても長い多言語の編集コミュニティ';
+    supplied.page.value = {
+      contexts: [{ ...entry.value.contexts[0], labels: { ja: title } }],
+      next: 'next+/==',
+    };
+    const before = structuredClone(supplied);
+    const render = (data: typeof supplied | null, query = input) => {
+      window.document.body.innerHTML = renderToStaticMarkup(
+        createElement(ContextDirectoryView, { locale: 'en', input: query, data, reload }),
+      );
+    };
+    render(supplied);
+    const document = window.document;
+    const list = document.querySelector(`ul[aria-label="${m.ctxw_title({}, o)}"]`)!;
+    expect(list.children).toHaveLength(1);
+    const item = list.firstElementChild!;
+    expect(item.tagName).toBe('LI');
+    expect(item.querySelector('li')).toBeNull();
+    const heading = item.querySelector('h2')!;
+    expect(heading.textContent).toBe(title);
+    expect(heading.lang).toBe('ja');
+    const link = item.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe(detailHref('en', fixtureId));
+    expect(link.getAttribute('aria-labelledby')).toBe(heading.id);
+    expect(item.textContent).toContain(m.ctxw_community({}, o));
+    expect(item.textContent).toContain(m.ctxw_deleted({}, o));
+    const destinations = [...document.querySelectorAll('a')].map((anchor) => anchor.getAttribute('href'));
+    expect(destinations).toContain(directoryHref('en', { ...input, cursor: 'next+/==' }));
+    expect(destinations).toContain(directoryHref('en', { ...input, cursor: undefined }));
+    expect(item.querySelector('a a, a button, a details')).toBeNull();
+    expect(supplied).toEqual(before);
+
+    for (const kind of ['denied', 'unavailable', 'stale'] as const) {
+      render({ ...supplied, page: { kind } });
+      expect(document.querySelector('ul')).toBeNull();
+      expect(document.querySelector('[role="alert"]')).not.toBeNull();
+      expect(document.body.textContent).not.toContain(title);
+    }
+    render(null);
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(m.ctxw_loading({}, o));
+    expect(document.querySelector('ul')).toBeNull();
+    const empty = { ...supplied, page: { kind: 'ready' as const, value: { contexts: [], next: null } } };
+    render(empty, directoryInput({}));
+    expect(document.body.textContent).toContain(m.ctxw_empty({}, o));
+    expect(document.querySelector('ul')).toBeNull();
+    render(empty, directoryInput({ query: '旅' }));
+    expect(document.body.textContent).toContain(m.ctxw_no_matches({}, o));
+    expect(document.querySelector('ul')).toBeNull();
+  } finally {
+    await window.happyDOM.abort();
+  }
+});

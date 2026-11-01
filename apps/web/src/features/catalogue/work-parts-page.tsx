@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItem } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
@@ -194,100 +196,105 @@ export function WorkPartsPage({
                   <p className="text-sm text-muted-foreground">{m.work_parts_order_readonly({}, o)}</p>
                 )}
                 {!read.rows.length && <p>{m.work_parts_empty({}, o)}</p>}
-                <ul className="divide-y divide-border">
+                <ul>
                   {read.rows.map((row) => (
-                    <li key={`${row.holder}:${row.statementId}`} className="min-w-0 space-y-3 py-4">
-                      {row.summary ? (
-                        <a
-                          lang={row.summary.label?.language}
-                          href={subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}
-                          className={`${linkClassName} text-lg`}
-                        >
-                          {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
-                        </a>
-                      ) : (
-                        <p>{m.work_parts_unresolved({}, o)}</p>
-                      )}
-                      {row.statement ? (
-                        <div className="space-y-3 text-sm">
-                          <div>
-                            <p
-                              lang={read.labels[row.statement.property.id]?.lang ?? undefined}
-                              className="text-muted-foreground"
-                            >
-                              {read.labels[row.statement.property.id]?.text || m.subject_value_unlabelled({}, o)}
-                            </p>
-                            <CandidateValue snak={row.statement} related={row.related} locale={locale} />
-                          </div>
-                          {row.statement.qualifiers.map((snak, index) => (
-                            <div key={index}>
-                              <p
-                                lang={read.labels[snak.property.id]?.lang ?? undefined}
-                                className="text-muted-foreground"
-                              >
-                                {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
-                              </p>
-                              <CandidateValue snak={snak} related={row.related} locale={locale} />
-                            </div>
-                          ))}
-                          <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
-                            <h3 className="font-medium">{m.sources_citations({}, o)}</h3>
-                            {row.statement.references.length ? (
-                              row.statement.references.map((reference, index) => (
-                                <div key={index} className="space-y-2">
-                                  {reference.parts.length ? (
-                                    reference.parts.map((snak, at) => (
-                                      <div key={at}>
-                                        <p
-                                          lang={read.labels[snak.property.id]?.lang ?? undefined}
-                                          className="text-muted-foreground"
-                                        >
-                                          {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
-                                        </p>
-                                        <CandidateValue snak={snak} related={row.related} locale={locale} />
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <p>{m.value_reference_unavailable({}, o)}</p>
-                                  )}
+                    <ContentItem
+                      key={`${row.holder}:${row.statementId}`}
+                      title={
+                        row.summary
+                          ? row.summary.label?.value || m.subject_value_unlabelled({}, o)
+                          : m.work_parts_unresolved({}, o)
+                      }
+                      titleLang={row.summary?.label?.language}
+                      href={
+                        row.summary
+                          ? subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href
+                          : undefined
+                      }
+                      preview={
+                        <ListRowControl className="space-y-3">
+                          {row.statement ? (
+                            <div className="space-y-3 text-sm">
+                              <div>
+                                <p
+                                  lang={read.labels[row.statement.property.id]?.lang ?? undefined}
+                                  className="text-muted-foreground"
+                                >
+                                  {read.labels[row.statement.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                                </p>
+                                <CandidateValue snak={row.statement} related={row.related} locale={locale} />
+                              </div>
+                              {row.statement.qualifiers.map((snak, index) => (
+                                <div key={index}>
+                                  <p
+                                    lang={read.labels[snak.property.id]?.lang ?? undefined}
+                                    className="text-muted-foreground"
+                                  >
+                                    {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                                  </p>
+                                  <CandidateValue snak={snak} related={row.related} locale={locale} />
                                 </div>
-                              ))
-                            ) : (
-                              <p>{m.sources_no_citations({}, o)}</p>
-                            )}
-                          </section>
-                          {partCorrection(row, stream) && (
-                            <Button className={actionClassName} variant="outline" onClick={() => open(row, stream)}>
-                              {m.work_parts_correct({}, o)}
-                            </Button>
+                              ))}
+                              <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
+                                <h3 className="font-medium">{m.sources_citations({}, o)}</h3>
+                                {row.statement.references.length ? (
+                                  row.statement.references.map((reference, index) => (
+                                    <div key={index} className="space-y-2">
+                                      {reference.parts.length ? (
+                                        reference.parts.map((snak, at) => (
+                                          <div key={at}>
+                                            <p
+                                              lang={read.labels[snak.property.id]?.lang ?? undefined}
+                                              className="text-muted-foreground"
+                                            >
+                                              {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                                            </p>
+                                            <CandidateValue snak={snak} related={row.related} locale={locale} />
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p>{m.value_reference_unavailable({}, o)}</p>
+                                      )}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p>{m.sources_no_citations({}, o)}</p>
+                                )}
+                              </section>
+                              {partCorrection(row, stream) && (
+                                <Button className={actionClassName} variant="outline" onClick={() => open(row, stream)}>
+                                  {m.work_parts_correct({}, o)}
+                                </Button>
+                              )}
+                            </div>
+                          ) : (
+                            <p>{m.work_parts_assertion_unavailable({}, o)}</p>
                           )}
-                        </div>
-                      ) : (
-                        <p>{m.work_parts_assertion_unavailable({}, o)}</p>
-                      )}
-                      <details className="rounded-lg border border-border p-3 text-sm">
-                        <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
-                        <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
-                          <div>
-                            <dt>{m.work_parts_holder({}, o)}</dt>
-                            <dd>{row.holder}</dd>
-                          </div>
-                          <div>
-                            <dt>{m.work_parts_relation({}, o)}</dt>
-                            <dd>{stream.property}</dd>
-                          </div>
-                          <div>
-                            <dt>{m.catalogue_statement_id({}, o)}</dt>
-                            <dd>{row.statementId}</dd>
-                          </div>
-                        </dl>
-                        {row.statement && (
-                          <pre className="mt-3 whitespace-pre-wrap break-all text-xs">
-                            {JSON.stringify(row.statement, null, 2)}
-                          </pre>
-                        )}
-                      </details>
-                    </li>
+                          <details className="rounded-lg border border-border p-3 text-sm">
+                            <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
+                            <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
+                              <div>
+                                <dt>{m.work_parts_holder({}, o)}</dt>
+                                <dd>{row.holder}</dd>
+                              </div>
+                              <div>
+                                <dt>{m.work_parts_relation({}, o)}</dt>
+                                <dd>{stream.property}</dd>
+                              </div>
+                              <div>
+                                <dt>{m.catalogue_statement_id({}, o)}</dt>
+                                <dd>{row.statementId}</dd>
+                              </div>
+                            </dl>
+                            {row.statement && (
+                              <pre className="mt-3 whitespace-pre-wrap break-all text-xs">
+                                {JSON.stringify(row.statement, null, 2)}
+                              </pre>
+                            )}
+                          </details>
+                        </ListRowControl>
+                      }
+                    />
                   ))}
                 </ul>
                 <div className="flex flex-wrap gap-2">
