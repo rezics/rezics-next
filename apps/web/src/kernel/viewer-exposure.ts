@@ -68,7 +68,7 @@ type SessionData = { state?: unknown; subject?: unknown; csrfToken?: unknown };
 class ViewerExposureLifetime {
   private snapshot: ViewerExposureSnapshot = closedSnapshot;
   private listeners = new Set<() => void>();
-  private stopQueryCache?: () => void;
+  private stopQueryCache: (() => void) | undefined;
   private nextId = 0;
   private lastData?: unknown;
   private lastUpdatedAt = 0;

@@ -156,7 +156,8 @@ export function useOperation(operation: ExposureOperation): boolean {
     { ...viewerExposureQuery(observation), enabled: hydrated && observation !== undefined },
     client,
   );
-  const viewerGroups = viewerExposure?.subject === observation?.subject ? viewerExposure.admitted : undefined;
+  const viewerGroups =
+    viewerExposure && viewerExposure.subject === observation?.subject ? viewerExposure.admitted : undefined;
   const admitted =
     !hydrated || admission.state === 'signed-out'
       ? publicGroups
