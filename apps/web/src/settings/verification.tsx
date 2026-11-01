@@ -421,7 +421,9 @@ export function VerificationCard({
                 </details>
               ) : boundedDiagnosticId(state.attempt.requestId) ? (
                 <details>
-                  <summary className={verificationSummaryClassName}>{m.settings_verification_withdraw_details()}</summary>
+                  <summary className={verificationSummaryClassName}>
+                    {m.settings_verification_withdraw_details()}
+                  </summary>
                   <p className="break-all">{state.attempt.requestId}</p>
                 </details>
               ) : null}

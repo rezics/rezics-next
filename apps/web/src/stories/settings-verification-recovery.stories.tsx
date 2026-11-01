@@ -476,9 +476,9 @@ export const DefaultReadRecovery: StoryObj = {
     await expect(group.scrollWidth).toBeLessThanOrEqual(group.clientWidth + 1);
     const confirmBounds = confirm.getBoundingClientRect();
     const cancelBounds = cancel.getBoundingClientRect();
-    await expect(
-      confirmBounds.bottom + 7 <= cancelBounds.top || confirmBounds.right + 7 <= cancelBounds.left,
-    ).toBe(true);
+    await expect(confirmBounds.bottom + 7 <= cancelBounds.top || confirmBounds.right + 7 <= cancelBounds.left).toBe(
+      true,
+    );
     confirm.focus();
     await userEvent.keyboard('{Tab}');
     await expect(cancel).toHaveFocus();
