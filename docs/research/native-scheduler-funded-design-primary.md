@@ -147,6 +147,9 @@ All non-ENQUEUED states are excluded from queue selection. DELAYED activation,
 SUSPENDED/resume, recovery, cancellation, terminal completion, and administrative
 version/application changes maintain the structure when their actual native
 transition occurs. A stored queue name on a non-ENQUEUED row is not eligibility.
+The original partitioned selector also requires a non-null partition key;
+preserve that exclusion. Null application/version eligibility does not authorize
+claiming a null-partition-key row through the partitioned path.
 
 For partition concurrency one, **any PENDING row for `(queue, Session)` vetoes a
 claim**, across applications and versions. Do not put application/version filters
@@ -198,6 +201,29 @@ returns a contention boolean. The selectors return ID arrays. Both interfaces
 must carry additional result information; an independent new wrapper that the
 actual runner never calls would not implement the contract.
 
+For unbounded native queue-catalog population, replace `Array.from(states)` and
+the due-queue sort with a persistent due directory indexed by
+`(next_poll_at,qid)`. One control admission peeks one due key, locks that fixed
+control row with NOWAIT, and conditionally assigns a finite dispatch lease.
+After settling that control call, `runQueuePoll` performs its distinct ordinary
+admission for the leased queue. Its completion conditionally updates the due
+time and releases that lease through a separately priced control transition.
+An expired lease is reclaimed by another bounded control transition with exact
+generation recheck. Neither control call re-admits an exhausted discovery body.
+
+Queue registration/deletion/configuration maintains that directory at the real
+SDK writer. Reconciliation visits one catalog key per committed paid step;
+new registrations behind its keyset frontier maintain their own entry through
+that hook. Initial coverage uses the same hook/barrier rule as status coverage.
+An unknown queue configuration refuses before its selector I/O. Changing a
+queue between partitioned and nonpartitioned invalidates its projection layout
+and requires bounded repair before trust; it cannot reinterpret existing Session
+aliases silently. Keep only active leased lanes in the runner's working set.
+At most the existing lane limit runs concurrently, but issued admissions and
+control/catalog row work still require their own complete prices. This is the
+concrete change needed at `schedulerLoop`/`scheduleDueQueues`, rather than hiding
+a catalog-sized sort or `listQueues` read outside the funded invocation.
+
 Supported placement is the existing unsharded kernel/native schema on the same
 physical database and actual Pool. Sharded `dequeueScopes` cannot be called and
 then treated as a constant one-element scope. This report grants no sharded or
@@ -233,7 +259,7 @@ class WorkDiscoveryIssuer {
   spend(call: NativeCall, actualPool: Pool, dispatch: string): void {
     const f = this.live.get(call.invocation);
     require(f?.active && f.pool === actualPool && actualPool === call.pool);
-    require(f.deadline === call.deadline && monotonicNow() < f.deadline);
+    require(f.deadline === call.deadline && Date.now() < f.deadline);
     const price = completeInclusivePrice(f.manifest, dispatch);
     require(price !== undefined && componentwiseLE(price, f.remaining));
     f.remaining = subtract(f.remaining, price); // debit BEFORE affected I/O
@@ -247,9 +273,10 @@ class WorkDiscoveryIssuer {
 }
 ```
 
-Use the process's operation-deadline clock consistently; the illustrative
-`monotonicNow` must compare with a deadline from the same clock, not with a Date
-epoch. Existing Source APIs keep their existing epoch-millisecond clock checks.
+Use the existing epoch-millisecond operation-deadline convention consistently,
+including native maintenance and Source APIs. A monotonic duration can bound a
+wait, but cannot be compared directly with that absolute deadline or used to
+renew it.
 Do not reinterpret a trusted domain `KernelClock` as an operation deadline.
 
 Default production admission is a mandatory branch in `runQueuePoll` and the
@@ -397,6 +424,7 @@ queueStep(call, domain):
   read at most ONE next directory entry before the captured tail
   if segment exhausted: persist one segment transition; COMMIT; incomplete
   if epoch exhausted: run the closing proof below; COMMIT; return its result
+  read the two native own/null latest-version probes for the initial predicates
   probe at most four exact compatible heads for this Session; merge <=4 scalars
   probe global PENDING(queue,Session) if partitionConcurrency=1
   if no head or veto: advance cursor; COMMIT; incomplete
@@ -861,6 +889,7 @@ metadata kernel from the unpriced native write/hook remainder.
 | Read queue revision row | 1 | 1 | 1 |
 | Lock exact domain frontier | 1 | 1 | 1 |
 | Next directory membership, limit one | 1 | 1 | 1 |
+| Initial latest-version own/null ordered probes | 2 | 2 | 2 |
 | Initial four exact head probes | 4 | 4 | 4 |
 | Initial exact global PENDING existence | 1 | 1 | 1 |
 | Native partition try-lock scalar result | 1 | 0 | 1 |
@@ -870,7 +899,7 @@ metadata kernel from the unpriced native write/hook remainder.
 | Global PENDING recheck | 1 | 1 | 1 |
 | Conditional fixed-ID claim, outer row only | 1 | 1 | 1 |
 | Conditional frontier advance | 1 | 1 | 1 |
-| Kernel total | **21** | **19** | **24** |
+| Kernel total | **23** | **21** | **26** |
 
 This table is not the inclusive claim price: native owner/version serialization,
 existing guard work, projection maintenance, alias lookup/copy bytes, and any
@@ -886,7 +915,7 @@ and frontier write; closing proof needs queue/version serialization, current
 coverage/generation reads and tail/membership proof. Each is a separate finite
 body, not free control around the table. They remain incomplete prices until
 their actual native SQL/byte encoding and owner hooks are fixed. In particular,
-**21/19/24 is not an operational default allowance**.
+**23/21/26 is not an operational default allowance**.
 
 The following fixed-slot transition makes the writer side concrete. Add a
 `discovery_projection_state(workflow_uuid PRIMARY KEY, source_revision, state,
@@ -979,7 +1008,7 @@ These maxima follow the shown branches, not a guessed maintenance allowance.
 For an actual same-queue E→P claim, the one queue lock/revision pair reduces
 that component to **9 rows, 14 index starts, 11 statements**. Adding it and an
 explicit final four-head-plus-veto recheck to the queue table gives a counted
-kernel of **35 rows, 38 starts, 40 statements**, before original native guards,
+kernel of **37 rows, 40 starts, 42 statements**, before original native guards,
 owner/version serialization, aliases, inventory hooks and bytes. Thus even the
 concrete counted kernel does not supply an inclusive admission vector.
 
@@ -990,7 +1019,7 @@ Epoch/control bodies can likewise be fixed rather than hidden in a loop:
 | Epoch start: domain read, allocator lock/tail read, two latest probes, frontier read/write | 7 | 6 | 10 |
 | Segment move: domain/queue/frontier, two version probes, one segment read, frontier write | 8 | 7 | 11 |
 | Epoch close: domain/queue/frontier, two version probes, post-tail membership proof, frontier write | 8 | 7 | 11 |
-| No compatible head or authoritative PENDING veto: domain/queue/frontier/directory, four heads, veto, frontier write | 11 | 10 | 14 |
+| No compatible head or authoritative PENDING veto: domain/queue/frontier/directory, two latest probes, four heads, veto, frontier write | 13 | 12 | 16 |
 
 These rows assume already-resolved exact numeric identities and covered metadata.
 The close must acquire its queue/version proof locks in these named reads; no
