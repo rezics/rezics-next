@@ -388,6 +388,12 @@ test('The default private Appeals route recovers bounded reads and retires priva
     expect(closed).not.toContain('PRIVATE');
     expect(closed).not.toContain('<textarea');
   }
+  // Even a failed session preparation with no private rows binds the next retry to its browser viewer.
+  const preparing = createAppealReadLifetime();
+  preparing.observeViewer(null, { state: 'signed-in', subject: id(900) });
+  const preparationRetry = preparing.begin();
+  preparing.observeViewer(null, { state: 'signed-in', subject: id(901) });
+  expect(preparing.accepts(preparationRetry, ready, first, id(900))).toBe(false);
   for (const changed of [
     { ...later },
     { ...first, threadId: id(4) },

@@ -195,6 +195,20 @@ function ModerationReportsError({ reset, error }: ErrorComponentProps) {
           state: isPlatformClosedError(error) ? 'closed' : 'unavailable',
         }}
         input={input}
+        onNext={(cursor) =>
+          void navigate({
+            to: '/boards/$id/moderation',
+            params: { id },
+            search: { ...selection, tab: 'appeals', ...(thread ? { thread } : {}), ...(post ? { post } : {}), cursor },
+          })
+        }
+        onRestart={() =>
+          void navigate({
+            to: '/boards/$id/moderation',
+            params: { id },
+            search: { ...selection, tab: 'appeals', ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
+          })
+        }
         reportsSearch={`?${new URLSearchParams({ ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) })}`}
       />
     );

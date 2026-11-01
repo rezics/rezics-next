@@ -34,6 +34,7 @@ export function createAppealReadLifetime() {
   let retired = false;
   let serial = 0;
   let viewerSeen = false;
+  let sessionViewer: string | null = null;
   let viewerRetired = false;
   return {
     retire() {
@@ -47,15 +48,20 @@ export function createAppealReadLifetime() {
       return viewerRetired;
     },
     observeViewer(viewerId: string | null, session: { state: string; subject?: string | null }) {
+      const currentViewer = session.state === 'signed-in' ? (session.subject ?? null) : null;
       if (
-        (session.state !== 'unknown' || viewerSeen) &&
-        (session.state !== 'signed-in' || (viewerId !== null && session.subject !== viewerId))
+        (viewerSeen && currentViewer !== sessionViewer) ||
+        ((session.state !== 'unknown' || viewerSeen) &&
+          (session.state !== 'signed-in' || (viewerId !== null && session.subject !== viewerId)))
       ) {
         retired = true;
         viewerRetired = true;
         serial++;
       }
-      if (session.state !== 'unknown') viewerSeen = true;
+      if (session.state !== 'unknown') {
+        viewerSeen = true;
+        sessionViewer = currentViewer;
+      }
     },
     begin() {
       return ++serial;
