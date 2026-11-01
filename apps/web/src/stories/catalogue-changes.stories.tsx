@@ -103,14 +103,59 @@ const select = async (canvasElement: HTMLElement, revision: number) => {
 };
 export const Revisions: Story = {};
 export const ContinueAndExplain: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: actual Changes continuation, revision selection and current-reading link target/text geometry at phone390. Browser, visual and native verification are deferred. The same story supports desktop1280 through the viewport global.',
+      },
+    },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const revisions = within(await canvas.findByRole('region', { name: m.changes_revisions() }));
+    const document = canvasElement.ownerDocument;
+    const page = canvas.getByRole('article');
+    const minimum = document.defaultView!.matchMedia('(max-width: 767px), (pointer: coarse)').matches ? 44 : 32;
+    const contained = (element: HTMLElement) => {
+      const bounds = element.getBoundingClientRect();
+      const pageBounds = page.getBoundingClientRect();
+      expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+      expect(bounds.left).toBeGreaterThanOrEqual(Math.max(0, pageBounds.left) - 1);
+      expect(bounds.right).toBeLessThanOrEqual(Math.min(document.documentElement.clientWidth, pageBounds.right) + 1);
+    };
+    const targets = () => {
+      contained(page);
+      for (const target of [
+        ...revisions.getAllByRole('button'),
+        canvas.getByRole('link', { name: m.changes_current() }),
+      ]) {
+        contained(target);
+        const bounds = target.getBoundingClientRect();
+        expect(bounds.height).toBeGreaterThanOrEqual(minimum);
+        expect(bounds.width).toBeGreaterThanOrEqual(44);
+        const text = document.createTreeWalker(target, 4 /* SHOW_TEXT */);
+        while (text.nextNode()) {
+          if (!text.currentNode.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(text.currentNode);
+          for (const line of range.getClientRects()) {
+            expect(line.left).toBeGreaterThanOrEqual(bounds.left - 1);
+            expect(line.right).toBeLessThanOrEqual(bounds.right + 1);
+            expect(line.top).toBeGreaterThanOrEqual(bounds.top - 1);
+            expect(line.bottom).toBeLessThanOrEqual(bounds.bottom + 1);
+          }
+        }
+      }
+    };
+    targets();
     await userEvent.click(await revisions.findByRole('button', { name: m.changes_more() }));
     await waitFor(() => expect(revisions.getByRole('button', { name: m.changes_more() })).toBeEnabled());
     expect(revisions.getAllByRole('listitem')).toHaveLength(2);
     expect(revisions.getByText(m.changes_proposal())).toBeTruthy();
     expect(revisions.getByText(m.changes_acceptance())).toBeTruthy();
+    targets();
     await userEvent.click(await revisions.findByRole('button', { name: m.changes_more() }));
     const revision = await revisions.findByRole('button', {
       name: new RegExp(m.changes_revision({ revision: '2' })),
@@ -119,6 +164,7 @@ export const ContinueAndExplain: Story = {
     expect(within(revision).queryByText(m.changes_adoption())).toBeNull();
     expect(revisions.getAllByRole('listitem')).toHaveLength(3);
     expect(revisions.queryByRole('button', { name: m.changes_more() })).toBeNull();
+    targets();
     await userEvent.click(revision);
     const detail = within(await canvas.findByRole('region', { name: m.changes_revision({ revision: '2' }) }));
     expect(await detail.findByText(m.changes_terms())).toBeTruthy();
@@ -132,6 +178,8 @@ export const ContinueAndExplain: Story = {
     );
     expect(detail.getByText(m.changes_current_notice())).toBeTruthy();
     expect(canvas.getByRole('link', { name: m.changes_current() }).getAttribute('href')).toContain('/subjects/');
+    contained(canvas.getByRole('region', { name: m.changes_revision({ revision: '2' }) }));
+    targets();
   },
 };
 export const Proposal: Story = {

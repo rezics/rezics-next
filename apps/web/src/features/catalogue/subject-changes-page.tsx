@@ -23,6 +23,11 @@ type Props = {
   onRetry?: () => void;
   onDetailRetry?: () => void;
 };
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const currentLinkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+
 function Failure({ failure, locale }: { failure: ChangesFailure; locale: string }) {
   const o = { locale: locale as never };
   return (
@@ -159,7 +164,11 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
   const busy = !!state.loading;
   const page = state.page;
   return (
-    <article data-slot="subject-changes" className="flex min-w-0 flex-col gap-8" aria-busy={busy}>
+    <article
+      data-slot="subject-changes"
+      className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]"
+      aria-busy={busy}
+    >
       {page && (
         <SubjectFrame
           frame={{ id: page.id, title: page.title, type: '', summary: null }}
@@ -170,8 +179,11 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
           tabLabels={viewTabLabels()}
           view="details"
           navigation={
-            <nav aria-label={m.changes_title({}, o)} className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-              <a className="underline underline-offset-4" href={page.href}>
+            <nav
+              aria-label={m.changes_title({}, o)}
+              className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 text-sm"
+            >
+              <a className={currentLinkClassName} href={page.href}>
                 {m.changes_current({}, o)}
               </a>
               <span aria-current="page" className="font-medium">
@@ -186,7 +198,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
         <p className="max-w-prose text-sm text-muted-foreground">{m.changes_intro({}, o)}</p>
       </header>
       {!page && currentHref && (
-        <a className="text-sm text-primary underline underline-offset-4" href={currentHref}>
+        <a className={`${currentLinkClassName} text-sm text-primary`} href={currentHref}>
           {m.changes_current({}, o)}
         </a>
       )}
@@ -195,7 +207,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
         <div className="space-y-3">
           <Failure failure={state.failure} locale={locale} />
           {state.failure.kind !== 'missing' && onRetry && (
-            <Button variant="outline" disabled={busy} onClick={onRetry}>
+            <Button variant="outline" className={actionClassName} disabled={busy} onClick={onRetry}>
               {m.changes_retry({}, o)}
             </Button>
           )}
@@ -215,7 +227,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
                 <li key={row.revision}>
                   <Button
                     variant={state.selected === row.revision ? 'secondary' : 'ghost'}
-                    className="h-auto w-full min-w-0 justify-start whitespace-normal py-3 text-start"
+                    className="h-auto min-h-11 w-full min-w-11 justify-start whitespace-normal py-3 text-start [overflow-wrap:anywhere]"
                     aria-pressed={state.selected === row.revision}
                     disabled={busy || !onSelect}
                     onClick={() => onSelect?.(row.revision)}
@@ -231,7 +243,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
               ))}
             </ol>
             {page.next !== null && onMore && (
-              <Button variant="outline" disabled={busy} onClick={onMore}>
+              <Button variant="outline" className={actionClassName} disabled={busy} onClick={onMore}>
                 {m.changes_more({}, o)}
               </Button>
             )}
@@ -254,7 +266,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
                 <div className="space-y-3">
                   <Failure failure={state.detail} locale={locale} />
                   {onDetailRetry && (
-                    <Button variant="outline" disabled={busy} onClick={onDetailRetry}>
+                    <Button variant="outline" className={actionClassName} disabled={busy} onClick={onDetailRetry}>
                       {m.changes_retry_detail({}, o)}
                     </Button>
                   )}
