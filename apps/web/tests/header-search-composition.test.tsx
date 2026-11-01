@@ -263,6 +263,15 @@ async function keyboardJourney(page: Page, locale: string) {
     expect(await owner.getAttribute('data-expanded')).toBe('false');
     expect(await input.inputValue()).toBe('Keyboard draft');
     expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+    if (width === 390) {
+      const trigger = owner.getByRole('button', { name: 'Keyboard draft Ctrl/⌘ K', exact: true });
+      expect(await trigger.isVisible()).toBe(true);
+      expect((await trigger.innerText()).replace(/\s+/gu, ' ').trim()).toBe('Keyboard draft Ctrl/⌘ K');
+      expect(await trigger.locator('kbd').isVisible()).toBe(true);
+      expect(await trigger.locator('kbd').innerText()).toBe('Ctrl/⌘ K');
+      expect(await trigger.getAttribute('aria-keyshortcuts')).toBe('Control+k Meta+k');
+      expect(await trigger.getAttribute('aria-describedby')).toBe(await input.getAttribute('aria-describedby'));
+    }
   }
 
   // A removed initiator falls back to the compact trigger, rather than focusing a detached node.

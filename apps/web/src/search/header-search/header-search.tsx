@@ -159,7 +159,7 @@ export function HeaderSearchView({
         ref={triggerRef}
         type="button"
         onClick={onOpen}
-        aria-labelledby={`${id}-trigger-label`}
+        aria-labelledby={`${id}-trigger-label${keyboardShortcut ? ` ${id}-trigger-shortcut` : ''}`}
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
         aria-keyshortcuts={keyboardShortcut ? 'Control+k Meta+k' : undefined}
@@ -176,7 +176,7 @@ export function HeaderSearchView({
           {query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global())}
         </span>
         {keyboardShortcut && (
-          <Kbd aria-hidden="true" className="ms-auto shrink-0">
+          <Kbd id={`${id}-trigger-shortcut`} className="ms-auto shrink-0">
             Ctrl/⌘ K
           </Kbd>
         )}
