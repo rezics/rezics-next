@@ -221,10 +221,9 @@ test('late native identity results are withheld after revocation, proof changes,
       await database.query('UPDATE session SET "clientId"=$2 WHERE "userId"=$1', [person, otherClientId]);
     },
     async () => {
-      await database.query(
-        'UPDATE session SET "expiresAt"=CURRENT_TIMESTAMP-interval \'1 second\' WHERE "userId"=$1',
-        [person],
-      );
+      await database.query('UPDATE session SET "expiresAt"=CURRENT_TIMESTAMP-interval \'1 second\' WHERE "userId"=$1', [
+        person,
+      ]);
     },
     async () => {
       accounts.get(person)!.authnEpoch = 2;
