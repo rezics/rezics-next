@@ -214,17 +214,24 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
         <AlertDialogContent
           initialFocus={stay}
           finalFocus={returnFocus}
-          className="max-h-[calc(100dvh-2rem)] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+          className="min-w-0 w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-w-sm overflow-y-auto overscroll-contain pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:max-w-lg"
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{title}</AlertDialogTitle>
             <AlertDialogDescription>{description}</AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel ref={stay} className="min-h-11" onClick={navigation.stay}>
+          <AlertDialogFooter className="min-w-0 flex-col-reverse sm:flex-row sm:flex-wrap">
+            <AlertDialogCancel
+              ref={stay}
+              className="h-auto min-h-11 min-w-0 w-full max-w-full py-2 whitespace-normal wrap-anywhere sm:w-auto"
+              onClick={navigation.stay}
+            >
               {m.settings_profile_stay()}
             </AlertDialogCancel>
-            <AlertDialogAction className="min-h-11" onClick={navigation.leave}>
+            <AlertDialogAction
+              className="h-auto min-h-11 min-w-0 w-full max-w-full py-2 whitespace-normal wrap-anywhere sm:w-auto"
+              onClick={navigation.leave}
+            >
               {m.settings_profile_leave()}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -261,10 +268,15 @@ export function ReadingNavigation({ csrfToken, children }: { csrfToken: string |
   }, [client, csrfToken]);
   if ((owner.current && !isCurrent()) || session.state === 'signed-out') retired.current = true;
   return retired.current ? (
-    <div className="space-y-3">
+    <div className="min-w-0 max-w-full space-y-3">
       <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
       <p role="status">{m.settings_reading_session_changed()}</p>
-      <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-auto min-h-11 min-w-11 w-full max-w-sm py-2 whitespace-normal wrap-anywhere"
+        onClick={() => window.location.reload()}
+      >
         {m.settings_reload()}
       </Button>
     </div>
