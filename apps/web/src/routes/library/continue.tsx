@@ -1,12 +1,11 @@
 import { useCallback } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
 import { prepareExposure } from '../../kernel/exposure';
 import { requireSignedIn } from '../../session/guard';
 import { ContinueSection, useContinueRefresh } from '../../library/continue';
 import { readContinueEntries } from '../../library/continue-read';
 import { LibraryNavigation } from '../../library/library-nav';
-import { libraryNavigationQuery } from '../../library/pins-read';
+import { useCurrentLibraryNavigation } from '../../library/pins-current';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { pageHead } from '../../shell/head';
@@ -34,7 +33,7 @@ function ContinuePage() {
   const initial = Route.useLoaderData();
   const read = useCallback(() => readContinueEntries({ data: { ...(cursor ? { cursor } : {}) } }), [cursor]);
   const resume = useContinueRefresh(initial, read, `${locale}:${cursor ?? ''}`);
-  const navigation = useQuery(libraryNavigationQuery(locale));
+  const navigation = useCurrentLibraryNavigation(locale, 8, `${locale}:${cursor ?? ''}`);
   return (
     <div className="container mx-auto max-w-7xl space-y-8 px-4 py-8">
       <PageHeading>{m.library_continue()}</PageHeading>

@@ -14,7 +14,8 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { LibraryNavigation } from './library-nav';
 import { PinControl } from './pin-control';
-import type { LibraryPinsRead } from './pins-read';
+import { matchesPinsOrigin, type LibraryPinsRead } from './pins-read';
+import { useLibraryReadOrigin, type AcceptedPinsOrigin } from './pins-current';
 import type { MineCollection, MineCollectionsPage } from './mine-collections';
 import {
   readMineCollectionsViewerPage,
@@ -61,11 +62,12 @@ export function MineCollectionsCurrentViewer({
   const pinsAdmitted = !hydrated || canListPins;
   const address: MineCollectionsAddress = { cursor: cursor || null, layout };
   const locale = getLocale();
-  const key = JSON.stringify([subject, admitted, pinsAdmitted, address.cursor, layout, locale]);
+  const origin = useLibraryReadOrigin(JSON.stringify([address, locale]), initial.sessionSubject);
+  const key = JSON.stringify([subject, admitted, pinsAdmitted, address.cursor, layout, locale, origin.lifetime]);
   const [lifetime, setLifetime] = useState({ key, generation: 0, seed: true });
   if (lifetime.key !== key) setLifetime({ key, generation: lifetime.generation + 1, seed: false });
 
-  if (!subject || !admitted) {
+  if (!subject || (!admitted && !pinsAdmitted)) {
     const page: MineCollectionsPage = {
       signedIn: hydrated ? session.state !== 'signed-out' : initial.page.signedIn,
       state: session.state === 'unknown' ? 'preparing' : subject && !admitted ? 'denied' : 'unavailable',
@@ -84,6 +86,8 @@ export function MineCollectionsCurrentViewer({
       locale={locale}
       hydrated={hydrated}
       pinsAdmitted={pinsAdmitted}
+      collectionsAdmitted={admitted}
+      origin={origin}
       initial={initial}
       seed={lifetime.seed}
     />
@@ -96,6 +100,8 @@ function MineCollectionsViewerRead({
   locale,
   hydrated,
   pinsAdmitted,
+  collectionsAdmitted,
+  origin,
   initial,
   seed,
 }: {
@@ -104,6 +110,8 @@ function MineCollectionsViewerRead({
   locale: string;
   hydrated: boolean;
   pinsAdmitted: boolean;
+  collectionsAdmitted: boolean;
+  origin: ReturnType<typeof useLibraryReadOrigin>;
   initial: MineCollectionsViewerPage;
   seed: boolean;
 }) {
@@ -115,8 +123,12 @@ function MineCollectionsViewerRead({
     ...personalRead,
     queryKey,
     enabled: hydrated && personalRead.enabled,
-    queryFn: () =>
-      readMineCollectionsViewerPage({ data: { cursor: address.cursor ?? undefined, layout: address.layout } }),
+    queryFn: async () => {
+      if (!origin.isCurrent()) throw new Error('Retired My Collections read');
+      const result = await readMineCollectionsViewerPage({ data: { cursor: address.cursor ?? undefined, layout: address.layout } });
+      if (!origin.isCurrent() || !matchesViewer(result, subject, address)) throw new Error('Unaccepted My Collections read');
+      return result;
+    },
     initialData,
     gcTime: 0,
     retry: false,
@@ -131,18 +143,30 @@ function MineCollectionsViewerRead({
     previousLoader.current = initial;
     void query.refetch();
   }, [initial, query.refetch]);
-  const accepted = !query.isError && matchesViewer(query.data, subject, address) ? query.data : undefined;
+  const accepted = !query.isError && origin.isCurrent() && matchesViewer(query.data, subject, address) ? query.data : undefined;
+  // The initial envelope is itself the parent's same-prepared viewer/address authority.
+  // Older pure fixtures omit nested provenance; a supplied conflicting provenance always fails closed.
+  const pins = accepted && pinsAdmitted && origin.pinsCurrent() &&
+    (!accepted.pins.origin || matchesPinsOrigin(accepted.pins.origin, subject, 100)) ? accepted.pins : { state: 'closed' as const };
+  const current = useRef(false);
+  current.current = !!accepted && pins.state === 'loaded';
+  const pinsOrigin: AcceptedPinsOrigin = {
+    lifetime: origin.pins,
+    isCurrent: () => current.current && origin.pinsCurrent(),
+    queryKey,
+  };
   return (
     <MineCollectionsPageView
       page={
-        accepted?.page ?? {
+        accepted && collectionsAdmitted && origin.collectionsCurrent() ? accepted.page : {
           signedIn: true,
-          state: query.isError || query.data ? 'unavailable' : 'preparing',
+          state: !collectionsAdmitted ? 'denied' : query.isError || query.data ? 'unavailable' : 'preparing',
           collections: [],
           next: null,
         }
       }
-      pins={accepted && pinsAdmitted ? accepted.pins : { state: 'closed' }}
+      pins={pins}
+      pinsOrigin={pinsOrigin}
       layout={address.layout}
       {...(address.cursor ? { cursor: address.cursor } : {})}
     />
@@ -156,11 +180,13 @@ function browseRecords(collections: readonly MineCollection[]): CollectionBrowse
 export function MineCollectionsPageView({
   page,
   pins,
+  pinsOrigin,
   layout = 'rows',
   cursor,
 }: {
   page: MineCollectionsPage;
   pins: LibraryPinsRead;
+  pinsOrigin?: AcceptedPinsOrigin;
   layout?: CollectionBrowseLayout;
   cursor?: string;
 }) {
@@ -257,7 +283,7 @@ export function MineCollectionsPageView({
             collections={collections}
             layout={layout}
             menuFor={(collection: CollectionBrowseRecord) => (
-              <PinControl collectionId={collection.id} pins={pins} mode="collection" />
+              <PinControl collectionId={collection.id} pins={pins} mode="collection" origin={pinsOrigin} />
             )}
           />
         ) : (
@@ -303,7 +329,7 @@ export function MineCollectionsPageView({
                     {...(pin.target
                       ? { href: `/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}` }
                       : {})}
-                    actions={<PinControl collectionId={pin.collectionId} pins={pins} mode="list" />}
+                    actions={<PinControl collectionId={pin.collectionId} pins={pins} mode="list" origin={pinsOrigin} />}
                   />
                 ))}
               </ul>

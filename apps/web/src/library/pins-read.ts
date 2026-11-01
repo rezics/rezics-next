@@ -19,11 +19,18 @@ export type LibraryPinTarget = {
 
 export type LibraryPin = { collectionId: string; target: LibraryPinTarget | null };
 export type LibraryPinsPage = { pins: LibraryPin[]; revision: number; next: string | null };
-export type LibraryPinsRead =
+/** Public provenance of one actual prepared read; credentials never leave the server. */
+export type LibraryPinsOrigin = {
+  sessionSubject: string | null;
+  credentialAgrees: boolean;
+  requestedLimit: 8 | 100;
+};
+export type LibraryPinsRead = (
   | { state: 'closed' }
   | { state: 'preparing' }
   | { state: 'unavailable' }
-  | ({ state: 'loaded'; canUpdate?: boolean; canRemove?: boolean } & LibraryPinsPage);
+  | ({ state: 'loaded'; canUpdate?: boolean; canRemove?: boolean } & LibraryPinsPage)
+) & { origin?: LibraryPinsOrigin };
 
 type Result<T> = {
   data?: T | null;
@@ -68,17 +75,45 @@ function pinOperationExposed(document: unknown, method: 'put' | 'delete'): boole
   });
 }
 
+/** Use only after the owning reader has prepared this exact Request. */
+export function preparedPinsOrigin(request: Request, limit: 8 | 100): LibraryPinsOrigin {
+  const subject = sessionSubject(request);
+  return {
+    sessionSubject: subject ?? null,
+    // An explicit bearer is not evidence that it belongs to a cached session subject.
+    credentialAgrees: !!subject && !!viewerCredential(request) && !request.headers.has('authorization'),
+    requestedLimit: limit,
+  };
+}
+
+/** Reads pins under the owner's existing preparation, without preparing another session. */
+export async function readPreparedLibraryPins(
+  client: KernelClient,
+  request: Request,
+  limit: 8 | 100,
+): Promise<LibraryPinsRead> {
+  const origin = preparedPinsOrigin(request, limit);
+  const authorization = viewerCredential(request);
+  if (!origin.credentialAgrees || !authorization) return { state: 'closed', origin };
+  const current = () => sessionSubject(request) === origin.sessionSubject && viewerCredential(request) === authorization;
+  const pins = await readLibraryPins(client, authorization, limit, current);
+  return current() ? { ...pins, origin } : { state: 'closed', origin: preparedPinsOrigin(request, limit) };
+}
+
 /** Reads one bounded pins page only when this viewer's OpenAPI view exposes the list operation. */
 export async function readLibraryPins(
   client: KernelClient,
   authorization: string,
   limit: 8 | 100,
+  isCurrent: () => boolean = () => true,
 ): Promise<LibraryPinsRead> {
   try {
+    if (!isCurrent()) return { state: 'closed' };
     const exposed = await client['openapi.json'].get({
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(2_000) },
     });
+    if (!isCurrent()) return { state: 'closed' };
     if (exposed.error || !exposed.data) return { state: 'unavailable' };
     if (!libraryPinsListExposed(exposed.data)) return { state: 'closed' };
 
@@ -102,6 +137,7 @@ export async function readLibraryPins(
 }
 
 export type LibraryNavigationRead = {
+  origin?: LibraryPinsOrigin;
   pins: LibraryPinsRead;
   collections: MineCollection[];
   collectionsState?: 'loaded' | 'unavailable' | 'preparing';
@@ -112,37 +148,67 @@ export async function loadLibraryNavigation(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   limit: 8 | 100 = 8,
+  reads = { pins: true, collections: true },
 ): Promise<LibraryNavigationRead> {
-  if (await prepareSession(request, sessionEnv))
-    return { pins: { state: 'closed' }, collections: [], collectionsState: 'loaded' };
+  const refused = await prepareSession(request, sessionEnv);
+  const prepared = preparedPinsOrigin(request, limit);
+  const origin = refused ? { ...prepared, sessionSubject: null, credentialAgrees: false } : prepared;
+  const closed: LibraryNavigationRead = { origin, pins: { state: 'closed', origin }, collections: [], collectionsState: 'loaded' };
   const authorization = viewerCredential(request);
-  const accountId = sessionSubject(request);
-  if (!authorization || !accountId) return { pins: { state: 'closed' }, collections: [], collectionsState: 'loaded' };
+  const accountId = origin.sessionSubject;
+  if (!origin.credentialAgrees || !authorization || !accountId) return closed;
   const [pins, owner] = await Promise.all([
-    readLibraryPins(client, authorization, limit),
-    loadMineCollectionsForOwner(client, accountId, authorization).catch(() => undefined),
+    reads.pins ? readPreparedLibraryPins(client, request, limit) : { state: 'closed' as const, origin },
+    reads.collections ? loadMineCollectionsForOwner(client, accountId, authorization).catch(() => undefined) : undefined,
   ]);
+  if (sessionSubject(request) !== accountId || viewerCredential(request) !== authorization) return closed;
   return {
+    origin,
     pins,
     collections: owner?.collections ?? [],
-    collectionsState: owner && (!owner.state || owner.state === 'loaded') ? 'loaded' : 'unavailable',
+    collectionsState: !reads.collections || (owner && (!owner.state || owner.state === 'loaded'))
+      ? 'loaded' : owner?.state === 'preparing' ? 'preparing' : 'unavailable',
   };
 }
 
+type NavigationInput = { limit: 8 | 100; pins: boolean; collections: boolean };
+function navigationInput(input: unknown): NavigationInput {
+  if (input && typeof input === 'object') {
+    const value = input as Partial<NavigationInput>;
+    return { limit: value.limit === 100 ? 100 : 8, pins: value.pins !== false, collections: value.collections !== false };
+  }
+  return { limit: input === 100 ? 100 : 8, pins: true, collections: true };
+}
+
 export const readLibraryNavigationPage = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => (input === 100 ? 100 : 8))
+  .validator(navigationInput)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadLibraryNavigation(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return loadLibraryNavigation(kernelClient(), getRequest(), env as Partial<SessionEnv>, data.limit, data);
   });
 
 /** Personal navigation reads start in the browser, after hydration. */
-export function libraryNavigationQuery(locale: string, limit: 8 | 100 = 8) {
+export type LibraryNavigationAdmission = {
+  subject: string;
+  lifetime: string;
+  pins: boolean;
+  collections: boolean;
+  isCurrent: () => boolean;
+};
+export function libraryNavigationQuery(locale: string, limit: 8 | 100 = 8, admission?: LibraryNavigationAdmission) {
   return queryOptions({
     ...personalRead,
-    enabled: personalRead.enabled,
-    queryKey: readQueryKey(['library-navigation', locale, limit], 'session'),
-    queryFn: () => readLibraryNavigationPage({ data: limit }),
+    enabled: personalRead.enabled && (!admission || (admission.pins || admission.collections)),
+    queryKey: readQueryKey(['library-navigation', locale, limit, ...(admission ? [admission.subject, admission.lifetime] : [])], 'session'),
+    queryFn: async () => {
+      if (admission && !admission.isCurrent()) throw new Error('Retired Library navigation');
+      const value = await readLibraryNavigationPage({ data: admission ? { limit, pins: admission.pins, collections: admission.collections } : limit });
+      if (admission && (!admission.isCurrent() || !matchesPinsOrigin(value.origin, admission.subject, limit) ||
+        (admission.pins && !matchesPinsOrigin(value.pins.origin, admission.subject, limit))))
+        throw new Error('Unaccepted Library navigation origin');
+      return value;
+    },
+    ...(admission ? { gcTime: 0, retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}),
   });
 }
 
@@ -151,8 +217,11 @@ export const readLibraryPinsPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'closed' } as const;
-    const authorization = viewerCredential(request);
-    if (!authorization) return { state: 'closed' } as const;
-    return readLibraryPins(kernelClient(), authorization, data);
+    if (await prepareSession(request, env as Partial<SessionEnv>))
+      return { state: 'closed', origin: { sessionSubject: null, credentialAgrees: false, requestedLimit: data } } as const;
+    return readPreparedLibraryPins(kernelClient(), request, data);
   });
+
+export function matchesPinsOrigin(origin: LibraryPinsOrigin | undefined, subject: string, limit: 8 | 100): boolean {
+  return origin?.sessionSubject === subject && origin.credentialAgrees && origin.requestedLimit === limit;
+}

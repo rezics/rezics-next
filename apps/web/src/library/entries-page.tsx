@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -8,7 +7,8 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { ContinueSection, useContinueRefresh } from './continue';
 import { LibraryNavigation } from './library-nav';
-import { libraryNavigationQuery, type LibraryNavigationRead } from './pins-read';
+import type { LibraryNavigationRead } from './pins-read';
+import { useCurrentLibraryNavigation } from './pins-current';
 import { readContinueEntries, type ContinueEntry, type ContinueView } from './continue-read';
 import type {
   LibraryEntryStateWrite,
@@ -254,10 +254,9 @@ export function PersonalLibraryPage({
   // Keep the write lease while a predicate replaces rows or temporarily shows no matches.
   const [fallbackLease] = useState(shelfMutationLease);
   const mutationLease = originatingLease ?? fallbackLease;
-  const navigation = useQuery({
-    ...libraryNavigationQuery(locale),
-    enabled: acceptedNavigation === undefined && (libraryNavigationQuery(locale).enabled ?? false),
-  });
+  const navigation = useCurrentLibraryNavigation(
+    locale, 8, JSON.stringify([page.type, page.state, cursor, page.sort]), acceptedNavigation === undefined,
+  );
   const currentNavigation = acceptedNavigation ?? navigation.data;
   const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);
   const resume = useContinueRefresh(continueState, continueRead ?? readContinue, locale);

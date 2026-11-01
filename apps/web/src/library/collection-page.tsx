@@ -56,7 +56,7 @@ import { admitsCollectionOperation, type CollectionMemberUndo } from './collecti
 import type { CollectionMember, CollectionVisibility } from './reads';
 import { pageHead, type HeadContext } from '../shell/head';
 import { LibraryNavigationNotice, libraryNavigationMenuEntries } from './library-nav';
-import { libraryNavigationQuery } from './pins-read';
+import { useCurrentLibraryNavigation } from './pins-current';
 import { PinControlNotice, usePinControlActions } from './pin-control';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import { createIsomorphicFn } from '@tanstack/react-start';
@@ -317,10 +317,10 @@ function CollectionPageLifetime({
     page.visibility !== null &&
     admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection_member.create');
   const deleteAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:delete', 'collection.delete');
-  const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
+  const navigation = useCurrentLibraryNavigation(getLocale(), 100, JSON.stringify([page.id, cursor, search, queryKey]));
   const pins = navigation.data?.pins ?? { state: 'closed' as const };
   const navigationCollections = navigation.data?.collections ?? [];
-  const pinActions = usePinControlActions({ collectionId: page.id, pins, mode: 'collection' });
+  const pinActions = usePinControlActions({ collectionId: page.id, pins, mode: 'collection', origin: navigation.pinsOrigin });
   const [hydrated, setHydrated] = useState(false);
   const [members, setMembers] = useState(page.members);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());

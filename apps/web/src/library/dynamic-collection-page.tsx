@@ -9,8 +9,7 @@ import type { DynamicMembersResult } from './collection-load';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 import { PinControl } from './pin-control';
 import { LibraryNavigation } from './library-nav';
-import { libraryNavigationQuery } from './pins-read';
-import { useQuery } from '@tanstack/react-query';
+import { useCurrentLibraryNavigation, type AcceptedPinsOrigin } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
 import { collectionPageAddress } from './collection-presentation';
@@ -24,15 +23,18 @@ type DynamicCollectionPageProps = {
 
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
   const [source, setSource] = useState({ page: props.page, lifetime: 0 });
-  const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
+  const navigation = useCurrentLibraryNavigation(getLocale(), 100, JSON.stringify([props.page.id, props.page.cursor, props.search]), true, props.page.pins ? {
+    origin: props.page.pins.origin, pins: props.page.pins, collections: props.page.navigationCollections ?? [],
+  } : undefined);
   // A newly observed loader object starts a page before any of its children render, even at the same URL.
   if (source.page !== props.page) setSource({ page: props.page, lifetime: source.lifetime + 1 });
   return (
     <DynamicCollectionPageLifetime
       key={source.lifetime}
       {...props}
-      pins={props.page.pins ?? navigation.data?.pins ?? { state: 'closed' }}
-      collections={props.page.navigationCollections ?? navigation.data?.collections ?? []}
+      pins={navigation.data.pins}
+      pinsOrigin={navigation.pinsOrigin}
+      collections={navigation.data.collections}
     />
   );
 }
@@ -42,9 +44,11 @@ function DynamicCollectionPageLifetime({
   readMembers,
   search,
   pins,
+  pinsOrigin,
   collections,
 }: DynamicCollectionPageProps & {
   pins: NonNullable<DynamicCollectionPageData['pins']>;
+  pinsOrigin: AcceptedPinsOrigin;
   collections: NonNullable<DynamicCollectionPageData['navigationCollections']>;
 }) {
   const [current, setCurrent] = useState(page);
@@ -108,7 +112,7 @@ function DynamicCollectionPageLifetime({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <PageHeading>{current.title}</PageHeading>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <PinControl collectionId={current.id} pins={pins} mode="collection" />
+              <PinControl collectionId={current.id} pins={pins} mode="collection" origin={pinsOrigin} />
               <CollectionReadActions
                 onShare={() => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`)}
               />

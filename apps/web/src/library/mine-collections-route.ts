@@ -5,7 +5,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { loadMineCollectionsPage, type MineCollectionsPage } from './mine-collections';
-import { readLibraryPins, type LibraryPinsRead } from './pins-read';
+import { preparedPinsOrigin, readPreparedLibraryPins, type LibraryPinsRead } from './pins-read';
 
 export type MineCollectionsAddress = { cursor: string | null; layout: 'rows' | 'previews' };
 export type MineCollectionsViewerPage = {
@@ -48,19 +48,20 @@ export const readMineCollectionsViewerPage = createServerFn({ method: 'GET' })
       sessionSubject: null,
       requested,
       page: { signedIn: false, collections: [], next: null },
-      pins: { state: 'closed' },
+      pins: { state: 'closed', origin: { sessionSubject: null, credentialAgrees: false, requestedLimit: 100 } },
     };
     const request = getRequest();
     if (await prepareSession(request, env as Partial<SessionEnv>)) return closed;
     const subject = sessionSubject(request);
     const authorization = viewerCredential(request);
-    if (!subject || !authorization) return closed;
+    if (!subject || !authorization || !preparedPinsOrigin(request, 100).credentialAgrees) return closed;
     const client = kernelClient();
     const [page, pins] = await Promise.all([
       // This GET is already prepared. An unconfigured environment keeps the reader on the
       // same Request's captured credentials instead of authenticating a second session.
       loadMineCollectionsPage(client, request, {}, data),
-      readLibraryPins(client, authorization, 100),
+      readPreparedLibraryPins(client, request, 100),
     ]);
+    if (sessionSubject(request) !== subject || viewerCredential(request) !== authorization) return closed;
     return { sessionSubject: subject, requested, page, pins };
   });
