@@ -131,11 +131,11 @@ async function bodyOf(
     if (!/^\d+$/.test(contentLength)) throw new Error('Denied');
     if (Number(contentLength) > maxBytes) throw new ResourceLimitError();
   }
+  const duration = deadline - Date.now();
+  if (duration <= 0 || signal?.aborted) throw new EnrollmentDeadlineError();
   const reader = request.body?.getReader();
   if (!reader) throw new Error('Denied');
   let expired = false;
-  const duration = deadline - Date.now();
-  if (duration <= 0 || signal?.aborted) throw new EnrollmentDeadlineError();
   const cancel = () => void reader.cancel().catch(() => {});
   signal?.addEventListener('abort', cancel, { once: true });
   const timer = setTimeout(() => {
@@ -196,7 +196,8 @@ async function withinDeadline<T>(promise: Promise<T>, deadline: number, signal?:
   const cancelled = signal
     ? new Promise<never>((_resolve, reject) => {
         onAbort = () => reject(new EnrollmentDeadlineError());
-        signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
       })
     : undefined;
   try {
@@ -253,6 +254,7 @@ async function boundedJwksFetch(
     }
     if (!response.body) throw new ResourceLimitError();
     reader = response.body.getReader();
+    if (controller.signal.aborted) cancel();
     const chunks: Uint8Array[] = [];
     let size = 0;
     while (true) {

@@ -261,6 +261,7 @@ test('short original deadline cancels verification and body work before native e
   const body = new ReadableStream<Uint8Array>({
     pull() {
       bodyRead = true;
+      return new Promise<void>(() => {});
     },
   }, { highWaterMark: 0 });
   const verificationDeadline = Date.now() + 100;
@@ -295,6 +296,7 @@ test('short original deadline cancels verification and body work before native e
           bodyChunkSent = true;
           controller.enqueue(new TextEncoder().encode('{"input":'));
         }
+        return new Promise<void>(() => {});
       },
       cancel() {
         bodyCancelled = true;
