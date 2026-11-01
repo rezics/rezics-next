@@ -395,7 +395,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
            count(*) FILTER (WHERE complete)::integer AS complete,
            count(*) FILTER (WHERE verified_next IS NULL)::integer AS tips,
            bool_and(verified_root IS NOT NULL AND verified_binding IS NOT NULL) AS bound,
-           bool_and((state::jsonb->'input'->>'claimInputs')::boolean IS TRUE) AS "claimInputs",
+           bool_and(position('["claimInputs",["value",true]]' IN state)>0) AS "claimInputs",
            bool_and(verified_ordinal=ordinal AND verified_next IS NOT DISTINCT FROM successor
              AND (NOT complete OR successor IS NULL)) AS contiguous
          FROM originals GROUP BY bootstrap,execution`, [`%${prefix}%`],
