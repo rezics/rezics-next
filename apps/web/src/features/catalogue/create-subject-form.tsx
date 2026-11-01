@@ -20,6 +20,7 @@ import { ScreenProfileEntry } from './screen-profile-entry';
 import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
+import { createSubjectGuidance } from './create-subject-guidance';
 import {
   initialTerms,
   type CreateFailure,
@@ -105,6 +106,19 @@ export function CreateSubjectForm({
     return `create-${field}-${index}`;
   }
   const invalid = (id: string) => errors.some((error) => control(error.pointer) === id);
+  function guidance(id: string, field: keyof TermDraft | 'type', index?: number) {
+    return [
+      ...new Set(
+        errors
+          .filter((error) => control(error.pointer) === id)
+          .map((error) =>
+            profile?.control?.(error.pointer)
+              ? m.catalogue_create_invalid_field({}, options)
+              : createSubjectGuidance(error, field, { type, rows, index: index ?? 0 }, locale),
+          ),
+      ),
+    ].join(' ');
+  }
 
   function update(index: number, field: keyof TermDraft, value: string) {
     setRows((current) => current.map((row, at) => (at === index ? { ...row, [field]: value } : row)));
@@ -249,6 +263,10 @@ export function CreateSubjectForm({
                   <legend className="px-1 text-sm font-semibold">{m.catalogue_create_terms({}, options)}</legend>
                   {(['label', 'language', 'description', 'aliases'] as const).map((field) => {
                     const id = `create-${field}-${index}`;
+                    const describedBy =
+                      [field !== 'description' ? `${id}-help` : undefined, invalid(id) ? `${id}-error` : undefined]
+                        .filter(Boolean)
+                        .join(' ') || undefined;
                     const label =
                       field === 'language'
                         ? m.catalogue_create_language({}, options)
@@ -266,7 +284,7 @@ export function CreateSubjectForm({
                             value={row[field]}
                             rows={3}
                             aria-invalid={invalid(id)}
-                            aria-describedby={`${id}-help`}
+                            aria-describedby={describedBy}
                             onChange={(event) => update(index, field, event.target.value)}
                           />
                         ) : (
@@ -276,7 +294,7 @@ export function CreateSubjectForm({
                             maxLength={field === 'language' ? 64 : 250}
                             required={field === 'language' || field === 'label'}
                             aria-invalid={invalid(id)}
-                            aria-describedby={field === 'language' || field === 'label' ? `${id}-help` : undefined}
+                            aria-describedby={describedBy}
                             onChange={(event) => update(index, field, event.target.value)}
                           />
                         )}
@@ -304,7 +322,7 @@ export function CreateSubjectForm({
                             {m.catalogue_create_aliases_help({}, options)}
                           </FieldDescription>
                         )}
-                        {invalid(id) && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
+                        {invalid(id) && <FieldError id={`${id}-error`}>{guidance(id, field, index)}</FieldError>}
                       </Field>
                     );
                   })}
@@ -335,7 +353,11 @@ export function CreateSubjectForm({
                 data-invalid={invalid('create-type') || undefined}
               >
                 {readOnlyType ? (
-                  <div id="create-type" tabIndex={-1} aria-describedby="create-type-help">
+                  <div
+                    id="create-type"
+                    tabIndex={-1}
+                    aria-describedby={`create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
+                  >
                     <p className="text-sm font-medium">{m.catalogue_create_type({}, options)}</p>
                     <p lang={profile?.labelLanguage?.(type)}>
                       {types.find((entry) => entry.id === type)?.label} <code>{type}</code>
@@ -349,7 +371,7 @@ export function CreateSubjectForm({
                       value={type}
                       disabled={disabled}
                       aria-invalid={invalid('create-type')}
-                      aria-describedby="create-grain create-type-help"
+                      aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                       onChange={(event) => {
                         setType(event.target.value);
                         setFailure(undefined);
@@ -380,7 +402,9 @@ export function CreateSubjectForm({
                   )}
                 </FieldDescription>
                 <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
-                {invalid('create-type') && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
+                {invalid('create-type') && (
+                  <FieldError id="create-type-error">{guidance('create-type', 'type')}</FieldError>
+                )}
               </Field>
               {profile?.fields(type, disabled)}
               {failure && (

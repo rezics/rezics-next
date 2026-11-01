@@ -103,12 +103,110 @@ export const Denied: Story = {
   },
 };
 export const InvalidFields: Story = {
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, step }) => {
     const canvas = within(canvasElement);
-    await canvas.findByRole('combobox', { name: m.catalogue_create_type() });
-    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
-    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_invalid());
-    expect(canvas.getByRole('combobox', { name: m.catalogue_create_type() })).toHaveAttribute('aria-invalid', 'true');
+    const type = await canvas.findByRole('combobox', { name: m.catalogue_create_type() });
+    const name = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
+    const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
+    const create = canvas.getByRole('button', { name: m.catalogue_create_submit() });
+    await step('Generic Subject creation explains and associates actual invalid fields', async () => {
+      await userEvent.clear(language);
+      await userEvent.type(language, 'en');
+      await userEvent.type(name, '   ');
+      await userEvent.click(create);
+      expect(await canvas.findByText(m.catalogue_create_invalid())).toBeVisible();
+      expect(canvas.getByText(m.catalogue_create_validation_type_required())).toHaveAttribute(
+        'id',
+        'create-type-error',
+      );
+      expect(canvas.getByText(m.catalogue_create_validation_name_required())).toHaveAttribute(
+        'id',
+        'create-label-0-error',
+      );
+      expect(type).toHaveAttribute('aria-invalid', 'true');
+      expect(type).toHaveAttribute('aria-describedby', 'create-grain create-type-help create-type-error');
+      expect(name).toHaveAttribute('aria-invalid', 'true');
+      expect(name).toHaveAttribute('aria-describedby', 'create-label-0-help create-label-0-error');
+
+      await userEvent.clear(name);
+      await userEvent.type(name, ' A new film ');
+      expect(canvas.queryByText(m.catalogue_create_validation_name_required())).toBeNull();
+      expect(name).toHaveAttribute('aria-invalid', 'false');
+      expect(name).toHaveAttribute('aria-describedby', 'create-label-0-help');
+      expect(type).toHaveAttribute('aria-describedby', 'create-grain create-type-help');
+
+      await userEvent.clear(language);
+      await userEvent.type(language, 'en_US');
+      await userEvent.click(create);
+      expect(await canvas.findByText(m.catalogue_create_validation_language())).toHaveAttribute(
+        'id',
+        'create-language-0-error',
+      );
+      expect(language).toHaveAttribute('aria-invalid', 'true');
+      expect(language).toHaveAttribute('aria-describedby', 'create-language-0-help create-language-0-error');
+      expect(name).toHaveAttribute('aria-invalid', 'false');
+      await userEvent.clear(language);
+      await userEvent.type(language, ' en ');
+      expect(canvas.queryByText(m.catalogue_create_validation_language())).toBeNull();
+      expect(language).toHaveAttribute('aria-invalid', 'false');
+      expect(language).toHaveAttribute('aria-describedby', 'create-language-0-help');
+
+      await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
+      const secondLanguage = canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!;
+      const secondName = canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!;
+      await userEvent.type(secondLanguage, 'en');
+      await userEvent.type(secondName, 'Another name');
+      await userEvent.click(create);
+      expect(await canvas.findByText(m.catalogue_create_validation_language_unique())).toHaveAttribute(
+        'id',
+        'create-language-1-error',
+      );
+      expect(secondLanguage).toHaveAttribute('aria-invalid', 'true');
+      expect(secondLanguage).toHaveAttribute('aria-describedby', 'create-language-1-help create-language-1-error');
+      expect(secondName).toHaveAttribute('aria-invalid', 'false');
+      await userEvent.clear(secondLanguage);
+      await userEvent.type(secondLanguage, 'ja');
+      expect(canvas.queryByText(m.catalogue_create_validation_language_unique())).toBeNull();
+      expect(secondLanguage).toHaveAttribute('aria-invalid', 'false');
+      expect(secondLanguage).toHaveAttribute('aria-describedby', 'create-language-1-help');
+
+      const aliases = canvas.getAllByRole('textbox', { name: m.catalogue_create_aliases() })[0]!;
+      await userEvent.type(aliases, 'x'.repeat(251));
+      await userEvent.click(create);
+      expect(await canvas.findByText(m.catalogue_create_validation_alias_length())).toHaveAttribute(
+        'id',
+        'create-aliases-0-error',
+      );
+      expect(aliases).toHaveAttribute('aria-describedby', 'create-aliases-0-help create-aliases-0-error');
+      await userEvent.clear(aliases);
+      await userEvent.type(aliases, Array.from({ length: 33 }, (_, index) => `Alias ${index}`).join('\n'));
+      await userEvent.click(create);
+      expect(await canvas.findByText(m.catalogue_create_validation_alias_count())).toBeVisible();
+      await userEvent.clear(aliases);
+      await userEvent.type(aliases, 'Working title\n Working title ');
+      await userEvent.click(create);
+      expect(await canvas.findByText(m.catalogue_create_validation_alias_unique())).toBeVisible();
+      await userEvent.clear(aliases);
+      await userEvent.type(aliases, ' Working title \n\n');
+      expect(canvas.queryByText(m.catalogue_create_validation_alias_unique())).toBeNull();
+      expect(aliases).toHaveAttribute('aria-describedby', 'create-aliases-0-help');
+      await userEvent.click(create);
+      expect(canvas.getByText(m.catalogue_create_validation_type_required())).toBeVisible();
+      expect(name).toHaveAttribute('aria-invalid', 'false');
+      expect(language).toHaveAttribute('aria-invalid', 'false');
+      expect(secondLanguage).toHaveAttribute('aria-invalid', 'false');
+      expect(aliases).toHaveAttribute('aria-invalid', 'false');
+      expect(canvas.queryByText(m.catalogue_create_created())).toBeNull();
+      expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
+
+      // Leave the canonical story invalid, with both distinct required-field corrections visible.
+      await userEvent.click(canvas.getAllByRole('button', { name: m.catalogue_create_remove_language() })[1]!);
+      await userEvent.clear(name);
+      await userEvent.click(create);
+      expect(canvas.getByText(m.catalogue_create_validation_name_required())).toBeVisible();
+      expect(canvas.getByText(m.catalogue_create_validation_type_required())).toBeVisible();
+      expect(create).toBeEnabled();
+    });
   },
 };
 export const RejectedValuesRefreshTypes: Story = {
