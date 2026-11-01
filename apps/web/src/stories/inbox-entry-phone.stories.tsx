@@ -40,7 +40,7 @@ function InboxPageComposition() {
     const journey = activeJourney;
     if (!journey) return;
     journey.enterUnavailable = () =>
-      client.setQueryData(sessionQuery.queryKey, { state: 'unavailable', csrfToken: null });
+      client.setQueryData(sessionQuery.queryKey, { state: 'unavailable', csrfToken: null, subject: null });
     journey.privateInboxQueries = () =>
       client.getQueryCache().findAll({ queryKey: ['notifications', 'inbox', 'session'] }).length;
     return () => {
@@ -179,7 +179,7 @@ export const SignedOutAndSessionRecovery: Story = {
 
     await userEvent.click(retry);
     const list = await main.findByRole('list', { name: m.inbox_heading() });
-    await expect(list.getAllByRole('link')).not.toHaveLength(0);
+    await expect(within(list).getAllByRole('link')).not.toHaveLength(0);
     await expect(main.queryByText(m.inbox_session_unavailable())).toBeNull();
     await expect(journey.sessionReads).toBe(3);
     await waitFor(() => expect(journey.privateInboxQueries()).toBeGreaterThan(0));
