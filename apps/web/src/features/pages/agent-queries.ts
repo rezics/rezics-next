@@ -1,7 +1,32 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { AccountView } from '../../accounts/public-profile/page-read';
 import { personalRead, publicRead } from '../../kernel/query';
+import { defaultReader } from '../../subject/reader';
 import { readAgentPage, readAgentReader } from './agent-actions';
+
+export type AgentReaderQueryKey = readonly [
+  'agent-reader',
+  string,
+  string,
+  string,
+  string | null,
+  number,
+  number,
+  number,
+];
+
+/** One private observer owns one mounted route and one observed credential admission. */
+export type AgentReaderQueryScope = {
+  reader: string | null;
+  route: string;
+  revision: number;
+  mount: number;
+  generation: number;
+  enabled: boolean;
+  queryKey: AgentReaderQueryKey;
+  current: () => boolean;
+  retire: () => void;
+};
 
 /** The public profile and overview document, shared by the server loader and hydrated page. */
 export const agentPageQuery = (handle: string, locale: string, search?: string) =>
@@ -19,11 +44,31 @@ export const agentViewQuery = (handle: string, locale: string, view: AccountView
     queryFn: () => readAgentPage({ data: { handle, locale, view, cursor, search } }),
   });
 
-/** Reader preferences are personal state: this factory cannot run during server rendering. */
-export const agentReaderQuery = (handle: string, locale: string) =>
+/** Reader preferences are personal state: each admitted mounted route owns its exact private cache entry. */
+export const agentReaderQuery = (handle: string, locale: string, scope: AgentReaderQueryScope) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['agent-reader', handle, locale],
-    queryFn: () => readAgentReader({ data: { handle, locale } }),
+    queryKey: scope.queryKey,
+    enabled: typeof window !== 'undefined' && personalRead.enabled && scope.enabled && scope.current(),
+    queryFn: async () => {
+      const expectedReader = scope.reader;
+      const unavailable = { kind: 'default' as const, accountId: null, reader: defaultReader };
+      if (!expectedReader || !scope.current()) return unavailable;
+      try {
+        const result = await readAgentReader({ data: { handle, locale, expectedReader } });
+        if (!scope.current()) return unavailable;
+        if (result.kind !== 'ready' || result.accountId !== expectedReader) {
+          scope.retire();
+          return { kind: 'default' as const, accountId: result.accountId, reader: defaultReader };
+        }
+        return result;
+      } catch (error) {
+        if (!scope.current()) return unavailable;
+        throw error;
+      }
+    },
+    staleTime: Infinity,
     retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });

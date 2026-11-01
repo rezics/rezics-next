@@ -7,11 +7,10 @@ import { agentPageHead, agentPagePaths, agentPathView, agentViewAvailable } from
 import { canonicalRedirect, keepSearch } from '../subject/subject-href';
 import { agentPath } from '../features/pages/agent';
 import { agentReaderQuery, agentViewQuery } from '../features/pages/agent-queries';
+import { useAgentReaderResult, useAgentReaderScope } from '../features/pages/agent-reader';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { PublicProfilePage } from '../accounts/public-profile/page';
-import { personalRead } from '../kernel/query';
 import { useSession } from '../session/query';
-import { defaultReader } from '../subject/reader';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
@@ -106,11 +105,16 @@ function AgentViewRoute() {
   const router = useRouter();
   const { searchStr } = useLocation();
   const { data } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor, searchStr));
-  const { state: session } = useSession();
-  const { data: reader } = useQuery({
-    ...agentReaderQuery(handle, locale),
-    enabled: data.kind === 'page' && personalRead.enabled && session === 'signed-in',
+  const session = useSession();
+  const readerScope = useAgentReaderScope({
+    handle,
+    locale,
+    path: { kind: 'view', view: rawView },
+    enabled: data.kind === 'page' && view !== 'realms',
+    session,
   });
+  const readerQuery = useQuery(agentReaderQuery(handle, locale, readerScope));
+  const reader = useAgentReaderResult(readerScope, readerQuery.data, readerQuery.status);
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
   }
@@ -131,7 +135,7 @@ function AgentViewRoute() {
       page={data.page}
       locale={locale}
       messages={subjectPageMessages()}
-      reader={reader ?? defaultReader}
+      reader={reader}
       relations={data.relations}
       {...(data.operator ? { operator: data.operator } : {})}
       link={SubjectLink}
