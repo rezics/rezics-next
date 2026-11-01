@@ -179,7 +179,8 @@ export function decisionReadAdapters(client: KernelClient, authorization: string
       if (!result || result.error) return null;
       const record = result.data?.post;
       if (!record) return null;
-      if (record.id !== id || record.availability !== 'available' || record.removed === true) return null;
+      if (record.id !== id || record.availability !== 'available' || ('removed' in record && record.removed === true))
+        return null;
       if (typeof record.threadId !== 'string') return null;
       return {
         id,
@@ -201,7 +202,8 @@ export function decisionReadAdapters(client: KernelClient, authorization: string
       if (!result || result.error) return null;
       const record = result.data?.thread;
       if (!record) return null;
-      if (record.id !== id || record.availability !== 'available' || record.removed === true) return null;
+      if (record.id !== id || record.availability !== 'available' || ('removed' in record && record.removed === true))
+        return null;
       return {
         id,
         ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
