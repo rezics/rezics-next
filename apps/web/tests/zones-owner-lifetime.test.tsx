@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import type { Loaded, Mutation, Preview, Result, Transport, ZoneOwned } from '../src/features/zones/editor/model';
 import type { OwnerReadObservation } from '../src/features/zones/editor/owner-lifetime';
+import type { CommandOutcome, ListOutcome } from '../src/features/zones/manage/model';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -177,7 +178,6 @@ const { ZonesOwnerWorkspace } = await import('../src/features/zones/manage/works
 const { CreateZone } = await import('../src/features/zones/manage/create');
 const { readOwnedZones, changeOwnedZone, createOwnedZone } = await import('../src/features/zones/manage/request');
 const { fixtureZone, fixtureZoneId, zonesFixture } = await import('../src/features/zones/manage/fixtures');
-const { type ListOutcome, type CommandOutcome } = await import('../src/features/zones/manage/model');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 
