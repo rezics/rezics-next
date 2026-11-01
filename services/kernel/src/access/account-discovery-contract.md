@@ -416,3 +416,14 @@ receipts stay unknown. Each adopted baseline records its own outstanding repair
 obligation on the existing home summary. Enrollment never copies an older
 baseline's ACK or changes an immutable covered cut. These bodies do not implement
 the remaining mixed receiver repair, contiguous ACK or bounded population reader.
+
+The internal `advanceNativePublicFilterPreparation` handoff locates the actual
+Source factory body without changing public Source method/result signatures. It
+returns the original persisted bootstrap with incomplete preparation, allowing
+Search to persist its ordinary registration repair job. Each job step resumes
+that exact bootstrap and one retained home/key frontier. It cannot substitute a
+new bootstrap, grant an ACK or open a PIT before the original complete seal.
+Recovery distinguishes a sealed, genuinely begun bootstrap with no PIT yet from
+an uncertain physical adoption; an adopted observation is always recovered by its
+original native custody. Independent bindings without the native factory body
+retain their existing public behavior.
