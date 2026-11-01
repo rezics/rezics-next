@@ -41,13 +41,14 @@ function Fixture({
 }: {
   children: ReactNode;
   attempt?: TransferAttempt;
-  mode?: 'unavailable' | 'denied' | 'conflict' | 'uncertain';
+  mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain';
 }) {
   useLayoutEffect(() => {
     const saved = sessionStorage.getItem('rezics.operator-transfer.attempt');
     const original = globalThis.fetch;
     sessionStorage.removeItem('rezics.operator-transfer.attempt');
     if (attempt) storeTransferAttempt(structuredClone(attempt));
+    let transferred = false;
     globalThis.fetch = (async (input, init) => {
       const path = String(input);
       if (path === '/session')
@@ -55,12 +56,35 @@ function Fixture({
       if (path === OPERATOR_RELATION_PATH)
         return mode === 'unavailable'
           ? new Response(null, { status: 404 })
-          : Response.json({ previous: source.request.previous, expectedVersion: source.request.expectedVersion });
+          : Response.json(
+              transferred
+                ? {
+                    previous: {
+                      ...source.request.previous,
+                      operatorAccountId: source.request.operatorAccountId,
+                      reservationId: 'new-reservation',
+                    },
+                    expectedVersion: '13',
+                  }
+                : { previous: source.request.previous, expectedVersion: source.request.expectedVersion },
+            );
       if (path === '/account-operations/approve')
-        return mode === 'uncertain'
-          ? Response.json({ reference: 'opaque-source-approval', expiresAt: '2030-01-01T00:00:00Z' })
+        return mode === 'uncertain' || mode === 'ready'
+          ? Response.json({
+              reference:
+                JSON.parse(String(init?.body)).operation.kind === 'transfer-acceptance'
+                  ? 'opaque-destination-acceptance'
+                  : 'opaque-source-approval',
+              expiresAt: '2030-01-01T00:00:00Z',
+            })
           : Response.json({ error: 'account_operation_denied' }, { status: mode === 'conflict' ? 409 : 403 });
-      if (path === '/account-operations/execute') throw new TypeError('Story: response lost');
+      if (path === '/account-operations/execute') {
+        if (mode === 'uncertain') throw new TypeError('Story: response lost');
+        if (mode === 'ready') {
+          transferred = true;
+          return Response.json({ accountId: source.request.previous.subjectAccountId });
+        }
+      }
       return original(input, init);
     }) as typeof fetch;
     return () => {
@@ -71,7 +95,7 @@ function Fixture({
   }, [attempt, mode]);
   return <AuthShell>{children}</AuthShell>;
 }
-const page = (attempt?: TransferAttempt, mode?: 'unavailable' | 'denied' | 'conflict' | 'uncertain') => (
+const page = (attempt?: TransferAttempt, mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain') => (
   <Fixture {...(attempt ? { attempt } : {})} {...(mode ? { mode } : {})}>
     <OperatorTransferPage initial={session} />
   </Fixture>
@@ -82,9 +106,9 @@ async function submit(canvas: HTMLElement) {
   await waitFor(() => !button(canvas, m.auth_transfer_submit())?.disabled);
   button(canvas, m.auth_transfer_submit())!.click();
 }
-export const IndependentForms = { render: () => page() };
-export const SourceRequest = { render: () => page(source) };
-export const DestinationReview = { render: () => page({ ...source, side: 'destination' }) };
+export const IndependentForms = { render: () => page(undefined, 'ready') };
+export const SourceRequest = { render: () => page(source, 'ready') };
+export const DestinationReview = { render: () => page({ ...source, side: 'destination' }, 'ready') };
 export const DestinationAccepted = {
   render: () => page({ ...source, side: 'destination', phase: 'accepted', reference: 'opaque-destination-acceptance' }),
 };

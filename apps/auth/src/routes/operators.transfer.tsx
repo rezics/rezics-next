@@ -10,6 +10,12 @@ import { PasswordInput } from '../password-input';
 import { loadAccountSession, type AccountSessionResult } from '../account-operations';
 import { m } from '../paraglide/messages.js';
 import {
+  downloadTransferHandoff,
+  readTransferHandoff,
+  type HandoffError,
+  type HandoffKind,
+} from '../operator-transfer-handoff';
+import {
   managementSession,
   parseTransferRequest,
   prepareTransfer,
@@ -49,6 +55,21 @@ function errorMessage(result: TransferFailure): string {
   }
 }
 
+function fileError(reason: HandoffError): string {
+  switch (reason) {
+    case 'one-file':
+      return m.auth_transfer_handoff_one_file();
+    case 'too-large':
+      return m.auth_transfer_handoff_too_large();
+    case 'unreadable':
+      return m.auth_transfer_handoff_unreadable();
+    case 'invalid-request':
+      return m.auth_transfer_handoff_invalid_request();
+    case 'invalid-acceptance':
+      return m.auth_transfer_handoff_invalid_acceptance();
+  }
+}
+
 export function OperatorTransferPage({ initial }: { initial?: AccountSessionResult } = {}) {
   const [session, setSession] = useState<AccountSessionResult | null>(null);
   const [attempt, setAttempt] = useState<TransferAttempt | null>(null);
@@ -65,9 +86,44 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   const [invalidContinuation, setInvalidContinuation] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fileFeedback, setFileFeedback] = useState<{ error: boolean; text: string } | null>(null);
+  const [uncertain, setUncertain] = useState(false);
+  const view = useRef(0);
+  const fileRead = useRef(0);
+  const liveAttempt = useRef<TransferAttempt | null>(null);
   const busy = useRef(false);
   const notice = useRef<HTMLDivElement>(null);
 
+  function clearImported() {
+    fileRead.current++;
+    setRequestText('');
+    setAcceptance(liveAttempt.current?.acceptance ?? '');
+    setFileFeedback(null);
+    setConfirmed(false);
+  }
+  // Invalidate pending local reads before another session view can be installed.
+  useLayoutEffect(() => {
+    view.current++;
+    busy.current = false;
+    liveAttempt.current = null;
+    clearImported();
+    setSession(null);
+    setAttempt(null);
+    setResult(null);
+    setCurrent(null);
+    setReconfirmed(false);
+    setInvalidContinuation(false);
+    setUncertain(false);
+    setPending(false);
+    setPassword('');
+    setEmail('');
+    setSubject('');
+    setDestination('');
+    return () => {
+      view.current++;
+      fileRead.current++;
+    };
+  }, [initial]);
   useEffect(() => {
     let active = true;
     void (initial ? Promise.resolve(initial) : loadAccountSession()).then((value) => {
@@ -79,11 +135,15 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         setInvalidContinuation(true);
         setResult({ kind: 'failure', reason: 'account-changed' });
       } else if (saved) {
+        liveAttempt.current = saved;
         setAttempt(saved);
         setAcceptance(saved.acceptance ?? '');
         setReconfirmed(true);
         // A previous submit may have reached native even if its response was lost.
-        if (saved.phase === 'execute') setResult({ kind: 'failure', reason: 'uncertain' });
+        if (saved.phase === 'execute') {
+          setUncertain(true);
+          setResult({ kind: 'failure', reason: 'uncertain' });
+        }
         if (saved.phase === 'accepted') setResult({ kind: 'accepted', reference: saved.reference! });
       }
     });
@@ -92,22 +152,28 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     };
   }, [initial]);
   useLayoutEffect(() => {
-    if (result || reconfirmed) notice.current?.focus();
-  }, [result, reconfirmed]);
+    if (result || reconfirmed || fileFeedback) notice.current?.focus();
+  }, [result, reconfirmed, fileFeedback]);
 
   async function perform(action: () => Promise<void>) {
     if (busy.current) return;
     busy.current = true;
+    const started = view.current;
+    fileRead.current++;
     setPending(true);
     try {
       await action();
     } finally {
-      busy.current = false;
-      setPending(false);
+      if (started === view.current) {
+        busy.current = false;
+        setPending(false);
+      }
     }
   }
   function showFailure(value: TransferFailure) {
     setResult(value);
+    if (value.reason === 'uncertain') setUncertain(true);
+    if (['account-changed', 'step-up', 'denied'].includes(value.reason)) clearImported();
     if (value.reason === 'step-up') {
       setNeedsProof(true);
       setConfirmed(false);
@@ -115,10 +181,16 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (value.reason === 'account-changed') setInvalidContinuation(true);
   }
   function install(value: TransferAttempt) {
+    if (JSON.stringify(restoreTransferAttempt()) !== JSON.stringify(liveAttempt.current)) {
+      setFileFeedback({ error: true, text: m.auth_transfer_handoff_preserved() });
+      return;
+    }
     if (!storeTransferAttempt(value)) {
       showFailure({ kind: 'failure', reason: 'unavailable' });
       return;
     }
+    liveAttempt.current = value;
+    clearImported();
     setAttempt(value);
     setResult(null);
     setCurrent(null);
@@ -126,23 +198,33 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   }
   function prepare(event: FormEvent) {
     event.preventDefault();
-    if (session?.kind !== 'ready') return;
+    if (session?.kind !== 'ready' || needsProof || invalidContinuation || attempt || restoreTransferAttempt() !== null)
+      return;
+    const started = view.current;
     void perform(async () => {
       const value = await prepareTransfer(subject.trim(), destination.trim(), session.accountId);
+      if (started !== view.current) return;
       if ('kind' in value) showFailure(value);
       else install({ accountId: session.accountId, request: value, side: 'source', phase: 'approve' });
     });
   }
   function review(event: FormEvent) {
     event.preventDefault();
-    if (session?.kind !== 'ready') return;
+    if (session?.kind !== 'ready' || needsProof || invalidContinuation || attempt || restoreTransferAttempt() !== null)
+      return;
     const request = parseTransferRequest(requestText);
     if (!request) {
       showFailure({ kind: 'failure', reason: 'invalid' });
       return;
     }
+    reviewRequest(request);
+  }
+  function reviewRequest(request: TransferAttempt['request']) {
+    if (session?.kind !== 'ready' || needsProof || invalidContinuation || uncertain) return;
+    const started = view.current;
     void perform(async () => {
       const relation = await readOperatorRelation(request.previous.subjectAccountId, session.accountId);
+      if (started !== view.current) return;
       if (relation.kind !== 'ready') {
         showFailure(relation);
         return;
@@ -158,15 +240,20 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!attempt || !confirmed || needsProof || invalidContinuation) return;
+    const started = view.current;
     void perform(async () => {
       const value = { ...attempt, ...(attempt.side === 'source' ? { acceptance } : {}) };
       const outcome = await submitTransferAttempt(value, (next) => {
-        setAttempt({ ...next });
+        if (started !== view.current) return false;
+        liveAttempt.current = { ...next };
+        setAttempt(liveAttempt.current);
         return storeTransferAttempt(next);
       });
+      if (started !== view.current) return;
       setConfirmed(false);
       if (outcome.kind === 'failure') showFailure(outcome);
       else {
+        setUncertain(false);
         setResult(outcome);
         if (outcome.kind === 'current') setCurrent(outcome.relation);
       }
@@ -175,23 +262,105 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   function authenticate(event: FormEvent) {
     event.preventDefault();
     if (session?.kind !== 'ready') return;
+    const started = view.current;
     void perform(async () => {
       const outcome = await reauthenticateTransfer(session.accountId, email, password);
+      if (started !== view.current) return;
       setPassword('');
       if (outcome) showFailure(outcome);
       else {
         setNeedsProof(false);
         setReconfirmed(true);
         setConfirmed(false);
-        setResult(null);
+        clearImported();
+        if (attempt?.phase === 'accepted') setResult({ kind: 'accepted', reference: attempt.reference! });
+        else if (!uncertain) setResult(null);
       }
     });
   }
 
+  const locked = pending || needsProof || invalidContinuation;
+  const acceptanceEditable =
+    attempt?.side === 'source' &&
+    attempt.phase === 'approve' &&
+    !attempt.acceptance &&
+    !attempt.reference &&
+    !uncertain;
+  async function importFile(files: File[], kind: HandoffKind) {
+    if (locked || busy.current || session?.kind !== 'ready') return;
+    if ((kind === 'request' && attempt) || (kind === 'acceptance' && !acceptanceEditable)) {
+      setFileFeedback({ error: true, text: m.auth_transfer_handoff_preserved() });
+      return;
+    }
+    const started = view.current;
+    const reading = ++fileRead.current;
+    const saved = JSON.stringify(restoreTransferAttempt());
+    if (saved !== JSON.stringify(liveAttempt.current)) {
+      setFileFeedback({ error: true, text: m.auth_transfer_handoff_preserved() });
+      return;
+    }
+    const imported = await readTransferHandoff(files, kind);
+    if (started !== view.current || reading !== fileRead.current) return;
+    if (saved !== JSON.stringify(restoreTransferAttempt()) || (kind === 'request' && saved !== 'null')) {
+      setFileFeedback({ error: true, text: m.auth_transfer_handoff_preserved() });
+      return;
+    }
+    if (imported.kind === 'failure') {
+      setFileFeedback({ error: true, text: fileError(imported.reason) });
+      return;
+    }
+    setConfirmed(false);
+    if (imported.kind === 'request') setRequestText(imported.text);
+    else setAcceptance(imported.text);
+    setFileFeedback({
+      error: false,
+      text: kind === 'request' ? m.auth_transfer_handoff_request_loaded() : m.auth_transfer_handoff_acceptance_loaded(),
+    });
+  }
+  function download(kind: HandoffKind) {
+    if (locked || !attempt) return;
+    const text = kind === 'request' ? JSON.stringify(attempt.request) : attempt.reference;
+    if (!text || (kind === 'acceptance' && attempt.phase !== 'accepted')) return;
+    const ok = downloadTransferHandoff(kind, text);
+    setFileFeedback({
+      error: !ok,
+      text: ok ? m.auth_transfer_handoff_downloaded() : m.auth_transfer_handoff_download_failed(),
+    });
+  }
+  function fileField(kind: HandoffKind) {
+    const id = `transfer-${kind}-file`;
+    return (
+      <Field>
+        <FieldLabel htmlFor={id}>
+          {kind === 'request' ? m.auth_transfer_handoff_select_request() : m.auth_transfer_handoff_select_acceptance()}
+        </FieldLabel>
+        <Input
+          id={id}
+          type="file"
+          className="h-auto min-h-11 w-full file:min-h-11"
+          disabled={locked || (kind === 'acceptance' && !acceptanceEditable)}
+          aria-describedby="transfer-file-help transfer-file-feedback"
+          onChange={(event) => {
+            const files = Array.from(event.currentTarget.files ?? []);
+            event.currentTarget.value = '';
+            void importFile(files, kind);
+          }}
+        />
+      </Field>
+    );
+  }
+
   return (
     <AuthPage returnToSecurity heading={m.auth_transfer_heading()}>
-      <div className="auth-login-form">
-        <p>{m.auth_transfer_explanation()}</p>
+      <div className="auth-login-form text-start">
+        <p>{m.auth_transfer_handoff_explanation()}</p>
+        <ol className="list-decimal space-y-3 ps-6">
+          <li>{m.auth_transfer_handoff_step_request()}</li>
+          <li>{m.auth_transfer_handoff_step_accept()}</li>
+          <li>{m.auth_transfer_handoff_step_submit()}</li>
+          <li>{m.auth_transfer_handoff_step_readback()}</li>
+        </ol>
+        <p id="transfer-file-help">{m.auth_transfer_handoff_file_help()}</p>
         {!session ? <p role="status">{m.auth_inventory_loading()}</p> : null}
         {session?.kind === 'signed-out' ? (
           <p>
@@ -201,25 +370,35 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         {session?.kind === 'failure' ? <ErrorAlert>{m.auth_transfer_unavailable()}</ErrorAlert> : null}
         {session?.kind === 'ready' ? <p>{m.auth_transfer_acting_as({ account: session.accountId })}</p> : null}
         <div ref={notice} tabIndex={-1} aria-live="polite">
+          <div id="transfer-file-feedback" role={fileFeedback?.error ? 'alert' : 'status'}>
+            {fileFeedback ? <p>{fileFeedback.text}</p> : null}
+          </div>
           {reconfirmed ? <p>{m.auth_transfer_reconfirm()}</p> : null}
           {result?.kind === 'failure' ? (
             <ErrorAlert>
               {errorMessage(result)}
               {result.status ? (
-                <p>
+                <details>
+                  <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_diagnostics()}</summary>
                   {result.status}
                   {result.code && /^[a-z][a-z0-9_]{0,79}$/.test(result.code) ? ` · ${result.code}` : ''}
-                </p>
+                </details>
               ) : null}
             </ErrorAlert>
           ) : null}
-          {result?.kind === 'accepted' ? (
+          {attempt?.side === 'destination' && attempt.phase === 'accepted' && attempt.reference ? (
             <>
               <p>{m.auth_transfer_accepted()}</p>
-              <Field>
-                <FieldLabel htmlFor="transfer-accepted">{m.auth_transfer_acceptance()}</FieldLabel>
-                <Textarea id="transfer-accepted" value={result.reference} readOnly />
-              </Field>
+              <Button disabled={locked} onClick={() => download('acceptance')}>
+                {m.auth_transfer_handoff_download_acceptance()}
+              </Button>
+              <details>
+                <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+                <Field>
+                  <FieldLabel htmlFor="transfer-accepted">{m.auth_transfer_acceptance()}</FieldLabel>
+                  <Textarea id="transfer-accepted" value={attempt.reference} readOnly />
+                </Field>
+              </details>
             </>
           ) : null}
           {result?.kind === 'current' ? <p>{m.auth_transfer_observed()}</p> : null}
@@ -263,9 +442,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               action="/account-management/operators/relation"
               onSubmit={prepare}
             >
-              <h2>{m.auth_transfer_source_heading()}</h2>
+              <h2>{m.auth_transfer_handoff_prepare_heading()}</h2>
               <Field>
-                <FieldLabel htmlFor="transfer-subject">{m.auth_transfer_subject()}</FieldLabel>
+                <FieldLabel htmlFor="transfer-subject">{m.auth_transfer_handoff_subject()}</FieldLabel>
                 <Input
                   id="transfer-subject"
                   value={subject}
@@ -275,7 +454,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="transfer-destination">{m.auth_transfer_destination()}</FieldLabel>
+                <FieldLabel htmlFor="transfer-destination">{m.auth_transfer_handoff_destination()}</FieldLabel>
                 <Input
                   id="transfer-destination"
                   value={destination}
@@ -294,19 +473,27 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               action="/account-management/operators/relation"
               onSubmit={review}
             >
-              <h2>{m.auth_transfer_destination_heading()}</h2>
-              <Field>
-                <FieldLabel htmlFor="transfer-request-input">{m.auth_transfer_request()}</FieldLabel>
-                <Textarea
-                  id="transfer-request-input"
-                  value={requestText}
-                  onChange={(event) => setRequestText(event.target.value)}
-                  required
-                  maxLength={4096}
-                  readOnly={pending}
-                />
-              </Field>
-              <Button type="submit" disabled={pending} aria-busy={pending}>
+              <h2>{m.auth_transfer_handoff_review_heading()}</h2>
+              {fileField('request')}
+              <details>
+                <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_manual_request()}</summary>
+                <Field>
+                  <FieldLabel htmlFor="transfer-request-input">{m.auth_transfer_request()}</FieldLabel>
+                  <Textarea
+                    id="transfer-request-input"
+                    value={requestText}
+                    onChange={(event) => {
+                      fileRead.current++;
+                      setFileFeedback(null);
+                      setRequestText(event.target.value);
+                      setConfirmed(false);
+                    }}
+                    maxLength={4096}
+                    readOnly={pending}
+                  />
+                </Field>
+              </details>
+              <Button type="submit" disabled={pending || !requestText} aria-busy={pending}>
                 {m.auth_transfer_review()}
               </Button>
             </form>
@@ -315,34 +502,51 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         {attempt ? (
           <>
             <h2>
-              {attempt.side === 'source' ? m.auth_transfer_source_heading() : m.auth_transfer_destination_heading()}
+              {attempt.side === 'source'
+                ? m.auth_transfer_handoff_send_heading()
+                : m.auth_transfer_handoff_accept_heading()}
             </h2>
             <dl>
-              <dt>{m.auth_transfer_subject()}</dt>
+              <dt>{m.auth_transfer_handoff_subject()}</dt>
               <dd>{attempt.request.previous.subjectAccountId}</dd>
               <dt>{m.auth_transfer_source()}</dt>
               <dd>{attempt.request.previous.operatorAccountId}</dd>
-              <dt>{m.auth_transfer_destination()}</dt>
+              <dt>{m.auth_transfer_handoff_destination()}</dt>
               <dd>{attempt.request.operatorAccountId}</dd>
-              <dt>{m.auth_transfer_version()}</dt>
-              <dd>{attempt.request.expectedVersion}</dd>
             </dl>
-            <Field>
-              <FieldLabel htmlFor="transfer-request">{m.auth_transfer_request()}</FieldLabel>
-              <Textarea id="transfer-request" value={JSON.stringify(attempt.request)} readOnly />
-            </Field>
+            <p>{m.auth_transfer_handoff_consequences()}</p>
+            {attempt.side === 'source' ? (
+              <>
+                <p>
+                  {uncertain || attempt.phase !== 'approve'
+                    ? m.auth_transfer_handoff_preserved()
+                    : m.auth_transfer_handoff_send_request()}
+                </p>
+                <Button disabled={locked} onClick={() => download('request')}>
+                  {m.auth_transfer_handoff_download_request()}
+                </Button>
+              </>
+            ) : null}
+            <details>
+              <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+              <dl>
+                <dt>{m.auth_transfer_version()}</dt>
+                <dd>{attempt.request.expectedVersion}</dd>
+                <dt>{m.auth_transfer_handoff_reservation()}</dt>
+                <dd>{attempt.request.previous.reservationId}</dd>
+                <dt>{m.auth_transfer_handoff_key()}</dt>
+                <dd>{attempt.request.sourceOperationKey}</dd>
+              </dl>
+              <Field>
+                <FieldLabel htmlFor="transfer-request">{m.auth_transfer_request()}</FieldLabel>
+                <Textarea id="transfer-request" value={JSON.stringify(attempt.request)} readOnly />
+              </Field>
+            </details>
             {attempt.side === 'source' && attempt.phase === 'approve' && !attempt.acceptance ? (
               <Button
                 variant="outline"
-                disabled={pending || needsProof || invalidContinuation}
-                onClick={() => {
-                  install({
-                    accountId: attempt.accountId,
-                    request: attempt.request,
-                    side: 'destination',
-                    phase: 'approve',
-                  });
-                }}
+                disabled={locked || uncertain || Boolean(attempt.reference)}
+                onClick={() => reviewRequest(attempt.request)}
               >
                 {m.auth_transfer_review_same_person()}
               </Button>
@@ -350,10 +554,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             {attempt.side === 'destination' ? (
               <Button
                 variant="outline"
-                disabled={pending || needsProof || invalidContinuation}
+                disabled={locked || uncertain}
                 onClick={() => {
-                  const reference = result?.kind === 'accepted' ? result.reference : undefined;
-                  setAcceptance(reference ?? '');
+                  const reference = attempt.phase === 'accepted' ? attempt.reference : undefined;
                   install({
                     accountId: attempt.accountId,
                     request: attempt.request,
@@ -369,20 +572,34 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             {attempt.phase !== 'accepted' && result?.kind !== 'current' ? (
               <form className="auth-login-form" method="post" action="/account-operations/approve" onSubmit={submit}>
                 {attempt.side === 'source' ? (
-                  <Field>
-                    <FieldLabel htmlFor="transfer-acceptance">{m.auth_transfer_acceptance()}</FieldLabel>
-                    <Textarea
-                      id="transfer-acceptance"
-                      value={acceptance}
-                      onChange={(event) => {
-                        setAcceptance(event.target.value);
-                        setConfirmed(false);
-                      }}
-                      required
-                      maxLength={4096}
-                      readOnly={pending || Boolean(attempt.acceptance)}
-                    />
-                  </Field>
+                  <>
+                    <p>
+                      {acceptanceEditable
+                        ? m.auth_transfer_handoff_import_response()
+                        : m.auth_transfer_handoff_preserved()}
+                    </p>
+                    {fileField('acceptance')}
+                    <details>
+                      <summary className="min-h-11 cursor-pointer py-3">
+                        {m.auth_transfer_handoff_manual_acceptance()}
+                      </summary>
+                      <Field>
+                        <FieldLabel htmlFor="transfer-acceptance">{m.auth_transfer_acceptance()}</FieldLabel>
+                        <Textarea
+                          id="transfer-acceptance"
+                          value={acceptance}
+                          onChange={(event) => {
+                            fileRead.current++;
+                            setFileFeedback(null);
+                            setAcceptance(event.target.value);
+                            setConfirmed(false);
+                          }}
+                          maxLength={4096}
+                          readOnly={locked || !acceptanceEditable}
+                        />
+                      </Field>
+                    </details>
+                  </>
                 ) : null}
                 <Field>
                   <FieldLabel htmlFor="transfer-confirm">
@@ -421,16 +638,18 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             <Button
               variant="outline"
               disabled={pending || needsProof || invalidContinuation}
-              onClick={() =>
+              onClick={() => {
+                const started = view.current;
                 void perform(async () => {
                   const value = await readOperatorRelation(
                     attempt.request.previous.subjectAccountId,
                     attempt.accountId,
                   );
+                  if (started !== view.current) return;
                   if (value.kind === 'ready') setCurrent(value.relation);
                   else showFailure(value);
-                })
-              }
+                });
+              }}
             >
               {m.auth_transfer_readback()}
             </Button>
@@ -442,9 +661,16 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             <dl>
               <dt>{m.auth_transfer_source()}</dt>
               <dd>{current.previous.operatorAccountId}</dd>
-              <dt>{m.auth_transfer_version()}</dt>
-              <dd>{current.expectedVersion}</dd>
             </dl>
+            <details>
+              <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+              <dl>
+                <dt>{m.auth_transfer_version()}</dt>
+                <dd>{current.expectedVersion}</dd>
+                <dt>{m.auth_transfer_handoff_reservation()}</dt>
+                <dd>{current.previous.reservationId}</dd>
+              </dl>
+            </details>
           </div>
         ) : null}
       </div>
