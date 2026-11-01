@@ -146,7 +146,7 @@ function hostReadEvidence(path: string, maxBytes: number): CheckHostReadEvidence
 const hostRecognitionReader: CheckHostRecognitionReader = {
   inspect: hostPathEvidence,
   read: hostReadEvidence,
-  uid: () => process.getuid(),
+  uid: () => process.getuid?.() ?? Number.NaN,
 };
 
 type EnvironmentCommand = { prefix: string[]; command: string[] };
