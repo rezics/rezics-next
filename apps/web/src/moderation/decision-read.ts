@@ -154,7 +154,14 @@ export const readDecisionPage = createServerFn({ method: 'GET' })
     const viewerId = sessionSubject(request);
     const sessionEpoch = requestCsrfToken(request);
     if (!authorization || !viewerId || !sessionEpoch) throw notFound();
-    const page = await loadCurrentDecisionPage(data.id, decisionReadAdapters(kernelClient(), authorization));
+    let page: DecisionPage | null;
+    try {
+      page = await loadCurrentDecisionPage(data.id, decisionReadAdapters(kernelClient(), authorization));
+    } catch (error) {
+      // Preserve the native outcome without transporting its raw problem body or dependency details.
+      if (isPlatformClosedError(error)) throw new PlatformClosedError(403, null);
+      throw new Error('Decision read unavailable');
+    }
     if (!page) throw notFound();
     return { ...page, viewerId, sessionEpoch, readGeneration: crypto.randomUUID() };
   });
@@ -172,10 +179,7 @@ export function decisionReadAdapters(client: KernelClient, authorization: string
       const result = await client
         .posts({ id })
         .get(readOptions(authorization))
-        .catch((error: unknown) => {
-          if (isPlatformClosedError(error)) throw error;
-          return null;
-        });
+        .catch(() => null);
       if (!result || result.error) return null;
       const record = result.data?.post;
       if (!record) return null;
@@ -195,10 +199,7 @@ export function decisionReadAdapters(client: KernelClient, authorization: string
       const result = await client
         .threads({ id })
         .get(readOptions(authorization))
-        .catch((error: unknown) => {
-          if (isPlatformClosedError(error)) throw error;
-          return null;
-        });
+        .catch(() => null);
       if (!result || result.error) return null;
       const record = result.data?.thread;
       if (!record) return null;

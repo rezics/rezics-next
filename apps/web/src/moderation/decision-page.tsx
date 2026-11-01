@@ -180,7 +180,7 @@ function DecisionSessionRecovery() {
     pending.current = true;
     setBusy(true);
     try {
-      await client.fetchQuery(sessionQuery);
+      await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
     } catch {
       /* Current session state owns recovery. */
     } finally {
