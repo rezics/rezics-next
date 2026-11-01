@@ -342,7 +342,13 @@ export async function advanceSharedHistory(
         return result('more', gap);
       }
       if (!gap)
-        gap = await recordHistoryReceivingProof(tx, proof, job.scan_partition, decodeLocator('durable-work/v1', work), deps.pool);
+        gap = await recordHistoryReceivingProof(
+          tx,
+          proof,
+          job.scan_partition,
+          decodeLocator('durable-work/v1', work),
+          deps.pool,
+        );
       await scannedArtifact(tx, job, 'durable-work/v1', work, gap);
       await tx.query('COMMIT');
       return result('more');

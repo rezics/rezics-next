@@ -3163,10 +3163,12 @@ test('The real default selected identity unit records guarded readiness retires 
 test('Native identity source roles retain original proof until exact real consumer custody is discharged or transferred and minimize under current native erasure barrier with receiving-copy closure without deleting live surviving obligations', async () => {
   const { minimizeDiscoveredAgentIdentitySources } = await import('../../src/access/erasure-progress.ts');
   const { account } = await verified();
-  const before = (await pool.query(
-    'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
-    [accountRoute, account.id],
-  )).rows;
+  const before = (
+    await pool.query(
+      'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
+      [accountRoute, account.id],
+    )
+  ).rows;
   expect(before.length).toBeGreaterThan(0);
   const keys = before.map((row) => [String(row.route), row.account_id, row.direction, row.receipt_id] as string[]);
 
@@ -3176,16 +3178,25 @@ test('Native identity source roles retain original proof until exact real consum
      VALUES($1,$2,$2,'account:delete','(,)',$2)`,
     [accountRoute, account.id],
   );
-  const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 10_000 }, {
-    accountId: account.id, clientId: 'identity-retention-test', scopes: ['account:delete'],
-  });
-  await createLifecycleCommands({ pool, access, clock }).tombstone(
-    { actor, deadline: Date.now() + 10_000 }, { accountId: account.id, key: key() },
+  const actor = await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 10_000 },
+    {
+      accountId: account.id,
+      clientId: 'identity-retention-test',
+      scopes: ['account:delete'],
+    },
   );
-  const root = (await pool.query<{ version: number; at: string }>(
-    'SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2',
-    [accountRoute, account.id],
-  )).rows[0]!;
+  await createLifecycleCommands({ pool, access, clock }).tombstone(
+    { actor, deadline: Date.now() + 10_000 },
+    { accountId: account.id, key: key() },
+  );
+  const root = (
+    await pool.query<{ version: number; at: string }>(
+      'SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2',
+      [accountRoute, account.id],
+    )
+  ).rows[0]!;
   const barrier = { accountId: account.id, accountRoute, ...root };
   const pending = await minimizeDiscoveredAgentIdentitySources(pool, { barrier, role: 'account_id', keys });
   expect(pending).toHaveLength(before.length);
@@ -3196,75 +3207,114 @@ test('Native identity source roles retain original proof until exact real consum
       'agent-identity-sdk-recording-port-unavailable',
     ]);
   }
-  expect((await pool.query(
-    'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
-    [accountRoute, account.id],
-  )).rows).toEqual(before);
+  expect(
+    (
+      await pool.query(
+        'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
+        [accountRoute, account.id],
+      )
+    ).rows,
+  ).toEqual(before);
 
   // A subject root cannot erase the living decider's role or certify an absent source as consumed.
   const foreign = await minimizeDiscoveredAgentIdentitySources(pool, { barrier, role: 'decided_by', keys });
   expect(foreign.every((item) => item.gap === 'native-source-role-unavailable')).toBe(true);
   const missing = await minimizeDiscoveredAgentIdentitySources(pool, {
-    barrier, role: 'account_id', keys: [[String(accountRoute), account.id, 'account-agent.verify', randomUUID()]],
+    barrier,
+    role: 'account_id',
+    keys: [[String(accountRoute), account.id, 'account-agent.verify', randomUUID()]],
   });
   expect(missing[0]?.gap).toBe('native-source-missing');
   const stale = await minimizeDiscoveredAgentIdentitySources(pool, {
-    barrier: { ...barrier, version: barrier.version + 1 }, role: 'account_id', keys,
+    barrier: { ...barrier, version: barrier.version + 1 },
+    role: 'account_id',
+    keys,
   });
   expect(stale.every((item) => item.gap === 'native-erasure-root-unavailable')).toBe(true);
-  const survivingDecider = (await pool.query('SELECT state FROM access.account WHERE route=$1 AND account_id=$2',
-    [accountRoute, staff.id])).rows[0];
+  const survivingDecider = (
+    await pool.query('SELECT state FROM access.account WHERE route=$1 AND account_id=$2', [accountRoute, staff.id])
+  ).rows[0];
   expect(survivingDecider.state).toBe('active');
-  expect(() => minimizeDiscoveredAgentIdentitySources(pool, {
-    barrier, role: 'account_id', keys: Array.from({ length: 9 }, () => keys[0]!),
-  })).toThrow();
+  expect(() =>
+    minimizeDiscoveredAgentIdentitySources(pool, {
+      barrier,
+      role: 'account_id',
+      keys: Array.from({ length: 9 }, () => keys[0]!),
+    }),
+  ).toThrow();
 });
 
 test('native identity retention reads actual original copy associations and preserves their unsealed boundary', async () => {
   const { prepareAgentIdentityCopyRetention, agentIdentityCopyRetention } =
     await import('../../src/access/shared-history-agent-identity.ts');
   const { account } = await verified();
-  const source = (await pool.query(
-    `SELECT route,account_id,direction,receipt_id FROM access.agent_identity_intent
+  const source = (
+    await pool.query(
+      `SELECT route,account_id,direction,receipt_id FROM access.agent_identity_intent
      WHERE route=$1 AND account_id=$2 AND direction='account-agent.verify'`,
-    [accountRoute, account.id],
-  )).rows[0]!;
+      [accountRoute, account.id],
+    )
+  ).rows[0]!;
   // No committed erasure exists: actual associated bytes are observable but cannot have a receipt.
-  const copy = await prepareAgentIdentityCopyRetention(pool, {
-    accountId: account.id, accountRoute, version: 1, at: new Date().toISOString(),
-  }, { route: source.route, accountId: source.account_id, direction: source.direction, receiptId: source.receipt_id },
-  Date.now() + 5000);
+  const copy = await prepareAgentIdentityCopyRetention(
+    pool,
+    {
+      accountId: account.id,
+      accountRoute,
+      version: 1,
+      at: new Date().toISOString(),
+    },
+    { route: source.route, accountId: source.account_id, direction: source.direction, receiptId: source.receipt_id },
+    Date.now() + 5000,
+  );
   expect(copy.artifact?.locator.artifactType).toBe('command-receipt/v1');
   expect(copy.artifact?.accounts.some((role) => role.accountId === account.id)).toBe(true);
   expect(copy.receipt).toBeNull();
   expect(copy.gap).toBe('agent-identity-original-inventory-unsealed');
   expect(agentIdentityCopyRetention().gaps).toEqual([
-    'agent-identity-original-inventory-unsealed', 'agent-identity-sdk-recording-port-unavailable',
+    'agent-identity-original-inventory-unsealed',
+    'agent-identity-sdk-recording-port-unavailable',
   ]);
 });
 
 test('native identity retention refuses a foreign root on a source-home command before source or root disclosure', async () => {
   const { prepareAgentIdentityRetention } = await import('../../src/access/agent-verification-identity-retention.ts');
   const { account } = await verified();
-  const before = (await pool.query(
-    'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
-    [accountRoute, account.id],
-  )).rows;
+  const before = (
+    await pool.query(
+      'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
+      [accountRoute, account.id],
+    )
+  ).rows;
   const otherRoute = 0x5274 ^ 0x10;
-  const answer = (await runCommand(pool, { partition: accountRoute >>> 4 }, async (tx) => noEffect(
-    await prepareAgentIdentityRetention(tx, {
-      barrier: { accountId: newId(otherRoute), accountRoute: otherRoute, version: 1, at: new Date().toISOString() },
-      role: 'requested_by',
-      keys: [{ route: accountRoute, accountId: account.id, direction: before[0]!.direction,
-        receiptId: before[0]!.receipt_id }],
-    }),
-  ))).value;
+  const answer = (
+    await runCommand(pool, { partition: accountRoute >>> 4 }, async (tx) =>
+      noEffect(
+        await prepareAgentIdentityRetention(tx, {
+          barrier: { accountId: newId(otherRoute), accountRoute: otherRoute, version: 1, at: new Date().toISOString() },
+          role: 'requested_by',
+          keys: [
+            {
+              route: accountRoute,
+              accountId: account.id,
+              direction: before[0]!.direction,
+              receiptId: before[0]!.receipt_id,
+            },
+          ],
+        }),
+      ),
+    )
+  ).value;
   expect(answer).toHaveLength(1);
   expect(answer[0]?.gap).toBe('native-erasure-source-home-root-custody-unavailable');
-  expect((await pool.query(
-    'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
-    [accountRoute, account.id],
-  )).rows).toEqual(before);
+  expect(
+    (
+      await pool.query(
+        'SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 ORDER BY direction,receipt_id',
+        [accountRoute, account.id],
+      )
+    ).rows,
+  ).toEqual(before);
 });
 
 test('default native identity cleanup refuses incomplete copies then minimizes the exact original source under real receiving closure while preserving surviving attribution and technical undo', async () => {
