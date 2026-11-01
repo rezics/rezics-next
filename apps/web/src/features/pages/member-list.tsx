@@ -157,6 +157,7 @@ function MemberReader({
   representation: ReturnType<typeof pageRepresentation>;
 }) {
   const incarnation = admission.incarnation;
+  const viewerRecovery = isRecord(props.source) && !initial.ok && initial.status === 404;
   // The public shell can conceal self sources or a private curated source. Recheck only for an observed viewer.
   const needsViewer =
     isRecord(props.source) &&

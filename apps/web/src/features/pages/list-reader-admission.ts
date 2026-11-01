@@ -272,10 +272,11 @@ export function useListReaderAdmission(
     const cache = queryClient.getQueryCache();
     const wasSuspended = owner.suspended;
     const unsubscribe = cache.subscribe((event) => {
+      const eventKey: QueryKey = event.query.queryKey;
       if (
         ownerRef.current !== owner ||
-        event.query.queryKey.length !== sessionQuery.queryKey.length ||
-        event.query.queryKey.some((part, index) => part !== sessionQuery.queryKey[index])
+        eventKey.length !== sessionQuery.queryKey.length ||
+        eventKey.some((part: unknown, index: number) => part !== sessionQuery.queryKey[index])
       )
         return;
       let next: SessionSnapshot;
@@ -298,9 +299,10 @@ export function useListReaderAdmission(
       } else if (event.type === 'updated') {
         const observed = readSessionSnapshot(queryClient);
         const action = event.action.type;
-        if (action === 'error' || action === 'invalidate' || action === 'fetch')
-          next = { ...observed, phase: action === 'error' ? 'error' : 'pending', session: undefined };
-        else if (action === 'success' || action === 'setState') next = observed;
+        if (action === 'error' || action === 'invalidate' || action === 'fetch') {
+          const { session: _session, ...withoutSession } = observed;
+          next = { ...withoutSession, phase: action === 'error' ? 'error' : 'pending' };
+        } else if (action === 'success' || action === 'setState') next = observed;
         else return;
       } else return;
       retire(owner, next);

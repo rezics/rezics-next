@@ -92,13 +92,20 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     initialData?.admission.request.mode === mode &&
     (!selectedRealm || reader.initialAllowed(expectedReader))
       ? selectedRealm
-        ? {
-            ...initialData,
-            admission: {
-              ...initialData.admission,
-              request: { ...initialData.admission.request, incarnation },
-            },
-          }
+        ? initialData.kind === 'ready'
+          ? {
+              ...initialData,
+              admission: {
+                ...initialData.admission,
+                request: { ...initialData.admission.request, incarnation },
+              },
+            }
+          : {
+              ...initialData,
+              admission: {
+                request: { ...initialData.admission.request, incarnation },
+              },
+            }
         : initialData
       : undefined;
   const queryKey = options.queryKey;
