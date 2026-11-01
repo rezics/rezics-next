@@ -1,9 +1,10 @@
 import { afterAll, expect, mock, test } from 'bun:test';
-import { createElement } from 'react';
+import { Children, createElement, isValidElement, type ComponentProps, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser } from 'playwright';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 
@@ -47,6 +48,13 @@ function markup(items: Item[]) {
   return renderToStaticMarkup(createElement(InboxRows, { page: { items, next: null } }));
 }
 
+function continuationButton(tree: ReactNode) {
+  if (!isValidElement<{ children: ReactNode }>(tree)) return undefined;
+  const continuation = Children.toArray(tree.props.children)[1];
+  if (!isValidElement<ComponentProps<typeof Button>>(continuation) || continuation.type !== Button) return undefined;
+  return continuation;
+}
+
 test('Inbox stories enter the inbox route through the shared page story shell', async () => {
   const source = await readFile(new URL('../src/stories/inbox.stories.tsx', import.meta.url), 'utf8');
   expect(source).toContain("import { PageStory } from './page'");
@@ -74,7 +82,10 @@ test('a linked notification stretches its link across the row and a plain notifi
   expect(rows).toHaveLength(2);
   expect(rows[0]).toContain('href="/threads/one"');
   expect(rows[0]).toContain('absolute inset-1');
-  expect(rows[0]).toContain('sr-only');
+  expect(rows[0]).toContain('<h2');
+  expect(rows[0]).toContain('aria-label="A reply from Momo. Community member. Reply. Unread notification.');
+  expect(rows[0]).not.toContain('aria-labelledby=');
+  expect(rows[0]).toContain('data-notice-byline="true" aria-hidden="true"');
   expect(rows[1]).not.toContain('<a');
   expect(rows[1]).not.toMatch(/cursor-pointer/);
 });
@@ -89,7 +100,6 @@ test('unavailable notices stay plain and every row retains an accessible full da
     expect(row).toMatch(/<time[^>]*dateTime="2026-10-29T10:00:00.000Z"/);
     expect(row).toMatch(/<time[^>]*title="[^"]+"/);
     expect(row).toContain('sr-only');
-    expect(row).not.toContain('Oct 29, 2026, 10:00 AM');
   }
 });
 
@@ -101,6 +111,31 @@ test('notification links wrap their content and mixed timestamps render differen
   expect(rows[0]).toContain('Momo');
   const times = [...html.matchAll(/<time[^>]*>(.*?)<\/time>/g)].map((match) => match[1]);
   expect(times[0]).not.toBe(times[1]);
+});
+
+test('a sparse continuation preserves its callback and loading disables only the supplied next-page action', () => {
+  let calls = 0;
+  const onLoadMore = () => {
+    calls += 1;
+  };
+  const page = { items: [], next: 'opaque-sparse-next' };
+  const available = InboxRows({ page, onLoadMore });
+  const loading = InboxRows({ page, onLoadMore, loading: true });
+  const withoutCallback = InboxRows({ page });
+  const exhausted = InboxRows({ page: { items: [], next: null }, onLoadMore });
+  const availableButton = continuationButton(available);
+  const loadingButton = continuationButton(loading);
+
+  expect(availableButton).toBeDefined();
+  expect(availableButton?.props.onClick).toBe(onLoadMore);
+  expect(availableButton?.props.disabled).toBe(false);
+  expect(availableButton?.props.className).toContain('min-h-11');
+  expect(renderToStaticMarkup(available)).toContain(m.inbox_load_more());
+  expect(loadingButton?.props.onClick).toBe(onLoadMore);
+  expect(loadingButton?.props.disabled).toBe(true);
+  expect(continuationButton(withoutCallback)).toBeUndefined();
+  expect(continuationButton(exhausted)).toBeUndefined();
+  expect(calls).toBe(0);
 });
 
 let browser: Browser | undefined;
@@ -123,6 +158,8 @@ test('linked notices announce their resolved content, actor, kind, current read 
     { ...linked, actorName: '桃子' },
     { ...linked, id: 'read-mention', kind: 'mention', unread: false, actorName: 'あおい', text: 'A mention' },
   ];
+  browser ??= await chromium.launch();
+  const page = await browser.newPage();
   try {
     for (const locale of locales) {
       setLocale(locale, { reload: false });
@@ -141,22 +178,28 @@ test('linked notices announce their resolved content, actor, kind, current read 
       // Reverse the order too: read state belongs to the notice, never its position.
       for (const ordered of [items, items.toReversed()]) {
         const html = markup(ordered);
-        const links = [...html.matchAll(/<a\b[^>]*data-slot="list-row-link"[^>]*>([\s\S]*?)<\/a>/g)];
-        expect(links).toHaveLength(2);
+        const rows = [...html.matchAll(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/g)].map(
+          (match) => match[0]!,
+        );
+        await page.setContent(`<html lang="${locale}"><body>${html}</body></html>`);
+        const links = page.locator('a[data-slot="list-row-link"]');
+        expect(await links.count()).toBe(2);
         for (const [index, item] of ordered.entries()) {
           const state = item.unread ? catalog.inbox_notice_unread : catalog.inbox_notice_read;
           const kind = item.kind === 'mention' ? catalog.inbox_kind_mention : catalog.inbox_kind_reply;
           const announcement = [item.text, item.actorName, kind, state, date].join('. ');
-          expect(links[index]![1]).toBe(
-            renderToStaticMarkup(createElement('span', { className: 'sr-only' }, announcement)),
-          );
-          expect(html.split(state)).toHaveLength(2);
+          const link = links.nth(index);
+          expect(await link.getAttribute('aria-label')).toBe(announcement);
+          expect(await link.getAttribute('aria-labelledby')).toBeNull();
+          expect(await page.getByRole('link', { name: announcement, exact: true }).count()).toBe(1);
+          expect(await page.getByRole('heading', { level: 2, name: item.text, exact: true }).count()).toBe(1);
+          expect(rows[index]).toContain('data-notice-byline="true" aria-hidden="true"');
+          expect(rows[index]!.split(date)).toHaveLength(2);
         }
-        expect(html.match(/<div aria-hidden="true" class="min-w-0 flex-1">/g)).toHaveLength(2);
-        expect(html.match(/<span aria-hidden="true"><time/g)).toHaveLength(2);
       }
     }
   } finally {
+    await page.close();
     setLocale(previousLocale, { reload: false });
   }
 });
@@ -195,8 +238,7 @@ test('plain and unavailable notices retain localized announcements without resto
       for (const row of rows) {
         expect(row).toContain(m.inbox_kind_moderation());
         expect(row.split(date)).toHaveLength(2);
-        expect(row).toContain('<span aria-hidden="true"><time');
-        expect(row).not.toContain('<div aria-hidden="true"');
+        expect(row).toContain('<time class="sr-only"');
         expect(row).not.toMatch(/cursor-pointer/);
       }
     }

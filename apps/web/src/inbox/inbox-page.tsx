@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
@@ -61,7 +61,7 @@ export function InboxRows({
     <>
       <ol aria-label={m.inbox_heading()} className="mt-6 space-y-1">
         {page.items.map((item) => {
-          const href = item.unavailable ? undefined : item.href;
+          const href = item.unavailable ? undefined : item.href || undefined;
           const actorId = item.unavailable ? null : item.actorId;
           const actor =
             (!item.unavailable && item.actorName) ||
@@ -70,53 +70,58 @@ export function InboxRows({
           const text = item.unavailable ? m.inbox_unavailable_item() : item.text;
           const readState = item.unread ? m.inbox_notice_unread() : m.inbox_notice_read();
           const date = exactDate.format(new Date(item.createdAt));
-          return (
-            <ListRow
-              key={item.id}
-              data-notice-id={item.id}
-              data-unread={item.unread}
-              data-kind={item.reportId ? 'report_outcome' : item.kind}
-              data-actor-id={actorId ?? undefined}
-              className={`flex items-start gap-3 py-4 ${item.unread ? 'bg-muted/50' : ''}`}
+          const visual = actorId ? (
+            <Avatar aria-hidden="true" size="sm" className="mt-0.5 shrink-0">
+              <AvatarFallback>{initials(actorId)}</AvatarFallback>
+            </Avatar>
+          ) : (
+            <span
+              data-icon-kind={item.reportId ? 'report_outcome' : item.kind}
+              aria-hidden="true"
+              className="mt-1 shrink-0 text-muted-foreground"
             >
-              {actorId ? (
-                <Avatar aria-hidden="true" size="sm" className="mt-0.5 shrink-0">
-                  <AvatarFallback>{initials(actorId)}</AvatarFallback>
-                </Avatar>
+              {item.reportId ? (
+                <Flag aria-hidden="true" size={18} />
+              ) : item.kind === 'moderation_decision' ? (
+                <Gavel aria-hidden="true" size={18} />
               ) : (
-                <span
-                  data-icon-kind={item.reportId ? 'report_outcome' : item.kind}
-                  aria-hidden="true"
-                  className="mt-1 shrink-0 text-muted-foreground"
-                >
-                  {item.reportId ? (
-                    <Flag aria-hidden="true" size={18} />
-                  ) : item.kind === 'moderation_decision' ? (
-                    <Gavel aria-hidden="true" size={18} />
-                  ) : (
-                    <MessageCircleReply aria-hidden="true" size={18} />
-                  )}
-                </span>
+                <MessageCircleReply aria-hidden="true" size={18} />
               )}
-              {href ? <ListRowLink href={href}>{[text, actor, kind, readState, date].join('. ')}</ListRowLink> : null}
-              {/* Linked rows announce the same content once through the stretched primary link. */}
-              <div aria-hidden={href ? true : undefined} className="min-w-0 flex-1 wrap-anywhere">
-                <p className={item.unavailable ? 'text-sm text-muted-foreground' : 'text-sm leading-6'}>{text}</p>
-                {!href ? <span className="sr-only">{readState}</span> : null}
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  <span data-notice-byline="true">
+            </span>
+          );
+          return (
+            <ContentItem
+              key={item.id}
+              title={text}
+              href={href}
+              {...(href
+                ? { primaryLinkLabel: [text, actor, kind, readState, date].join('. ') }
+                : {})}
+              headingLevel={2}
+              visual={visual}
+              metadata={
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span data-notice-byline="true" aria-hidden={href ? true : undefined}>
                     {actor}
                     <span aria-hidden="true"> · </span>
                     {kind}
                   </span>
                   <span aria-hidden="true"> · </span>
-                  <span aria-hidden="true">
-                    <RelativeTime value={item.createdAt} locale={locale} timeZone="UTC" />
-                  </span>
-                  {!href ? <span className="sr-only">{date}</span> : null}
-                </span>
-              </div>
-            </ListRow>
+                  <RelativeTime value={item.createdAt} locale={locale} timeZone="UTC" />
+                  {!href ? (
+                    <time className="sr-only" dateTime={new Date(item.createdAt).toISOString()}>
+                      {date}
+                    </time>
+                  ) : null}
+                </div>
+              }
+              state={<span aria-hidden={href ? true : undefined}>{readState}</span>}
+              data-notice-id={item.id}
+              data-unread={item.unread}
+              data-kind={item.reportId ? 'report_outcome' : item.kind}
+              data-actor-id={actorId ?? undefined}
+              className={`py-4 ${item.unread ? 'bg-muted/50' : ''}`}
+            />
           );
         })}
       </ol>
