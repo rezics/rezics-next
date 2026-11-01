@@ -135,7 +135,12 @@ function AuthoredFieldLive({
     setErrors([]);
   };
 
-  async function refresh(nextProperty = property, reviewDraft = false, readingOnly = false, origin: CandidateWork = work) {
+  async function refresh(
+    nextProperty = property,
+    reviewDraft = false,
+    readingOnly = false,
+    origin: CandidateWork = work,
+  ) {
     if (!work.live() || !origin.live() || running.current || (command && !reviewDraft)) return;
     requestedProperty.current = nextProperty;
     running.current = true;
@@ -203,7 +208,16 @@ function AuthoredFieldLive({
   }
 
   async function submit() {
-    if (!work.live() || running.current || proposed || !current || !draft || failure === 'stale' || failure === 'denied') return;
+    if (
+      !work.live() ||
+      running.current ||
+      proposed ||
+      !current ||
+      !draft ||
+      failure === 'stale' ||
+      failure === 'denied'
+    )
+      return;
     let request = command;
     if (!request) {
       const statement = authoredStatement(property, draft.document, draft.language, draft.licence, draft.citation);
@@ -264,7 +278,13 @@ function AuthoredFieldLive({
       if (!work.live() || !origin.live()) return { ok: false, reason: 'denied' };
       if (!proposed || !id || field !== property) return { ok: false, reason: 'invalid' };
       setProposalBody(undefined);
-      const result = await transport.review(property, proposed.candidate, cursor, continuity ?? session.current, origin);
+      const result = await transport.review(
+        property,
+        proposed.candidate,
+        cursor,
+        continuity ?? session.current,
+        origin,
+      );
       if (!work.live() || !origin.live()) return { ok: false, reason: 'denied' };
       if (result.comparison.ok) session.current = result.comparison.session ?? session.current;
       if (result.current) setCurrent(result.current);

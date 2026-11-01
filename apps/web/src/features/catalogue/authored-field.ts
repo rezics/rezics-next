@@ -50,7 +50,13 @@ export type AuthoredTransport = {
   reader?: string;
   read: (property?: string, session?: string) => Promise<AuthoredRead>;
   propose: (command: AuthoredCommand) => Promise<ProposalResult>;
-  review: (property: string, candidate: string, cursor?: string, session?: string, work?: CandidateWork) => Promise<AuthoredReview>;
+  review: (
+    property: string,
+    candidate: string,
+    cursor?: string,
+    session?: string,
+    work?: CandidateWork,
+  ) => Promise<AuthoredReview>;
 };
 
 export function authoredProperties(release: Release, type: string): string[] {

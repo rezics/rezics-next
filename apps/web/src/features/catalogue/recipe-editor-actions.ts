@@ -26,7 +26,14 @@ import {
   type CandidateSlot,
 } from '../../subject/candidates';
 
-type ReviewAddress = { expectedReader?: string; id: string; property: string; slot?: CandidateSlot; cursor?: string; session?: string };
+type ReviewAddress = {
+  expectedReader?: string;
+  id: string;
+  property: string;
+  slot?: CandidateSlot;
+  cursor?: string;
+  session?: string;
+};
 function reviewAddress(input: ReviewAddress): ReviewAddress {
   if (
     !input ||

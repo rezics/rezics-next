@@ -77,7 +77,7 @@ function AuthoredRoute() {
     loadAuthoredField({ data: { id, property: field, session }, headers: csrfHeaders() });
   const query = useQuery({
     queryKey: ['authored-field', id, property, locale, candidateWork.generation],
-    queryFn: () => read(),
+    queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
     enabled: state === 'signed-in',
     staleTime: 0,
     gcTime: 0,
@@ -95,7 +95,7 @@ function AuthoredRoute() {
     return (
       <div className="space-y-3 p-6">
         <EditorFailure reason="unavailable" locale={locale} />
-        <Button variant="outline" onClick={() => void query.refetch()}>
+        <Button variant="outline" onClick={() => candidateWork.live() && void query.refetch()}>
           {m.correction_reload()}
         </Button>
       </div>
@@ -115,9 +115,18 @@ function AuthoredRoute() {
         read,
         propose: (data) => submitAuthoredField({ data, headers: csrfHeaders() }),
         review: (field, candidate, cursor, session, work) =>
-          !work?.live() ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null }) : loadAuthoredReview({ data: { id, property: field, candidate, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
+          !work?.live()
+            ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
+            : loadAuthoredReview({
+                data: { id, property: field, candidate, cursor, session, expectedReader: work.reader },
+                headers: csrfHeaders(),
+              }),
       }}
-      confirm={(data, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmAuthoredField({ data, headers: csrfHeaders() })}
+      confirm={(data, work) =>
+        !work?.live()
+          ? Promise.resolve({ ok: false, reason: 'denied' })
+          : confirmAuthoredField({ data, headers: csrfHeaders() })
+      }
     />
   );
 }

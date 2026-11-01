@@ -52,9 +52,9 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
                 propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
               },
               review: (_property, initialSession) => {
-                        return {
+                return {
                   read: async (property, cursor, session = initialSession, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+                    if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await readSubjectCandidates({
                       data: { expectedReader: work.reader, id, property, cursor, session },
                       headers: csrfHeaders(),
@@ -62,7 +62,7 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
                     return result;
                   },
                   confirm: async (data, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+                    if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await confirmSubjectCandidate({
                       data,
                       headers: csrfHeaders(),
@@ -88,7 +88,7 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
     loadAuthoredField({ data: { id, property, session }, headers: csrfHeaders() });
   const query = useQuery({
     queryKey: ['manga-authored', id, locale, candidateWork.generation],
-    queryFn: () => read(),
+    queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
     enabled: open,
     retry: false,
     refetchOnWindowFocus: false,
@@ -98,14 +98,14 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
   });
   return (
     <div className="space-y-4">
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={() => candidateWork.live() && setOpen(true)}>
         {m.authored_title({}, o)}
       </Button>
       {open && query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
       {open && query.isError && (
         <>
           <EditorFailure locale={locale} reason="unavailable" />
-          <Button onClick={() => void query.refetch()}>{m.correction_reload({}, o)}</Button>
+          <Button onClick={() => candidateWork.live() && void query.refetch()}>{m.correction_reload({}, o)}</Button>
         </>
       )}
       {open && query.data && (
@@ -116,9 +116,18 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
             read,
             propose: (data) => submitAuthoredField({ data, headers: csrfHeaders() }),
             review: (property, candidate, cursor, session, work) =>
-              !work?.live() ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null }) : loadAuthoredReview({ data: { id, property, candidate, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
+              !work?.live()
+                ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
+                : loadAuthoredReview({
+                    data: { id, property, candidate, cursor, session, expectedReader: work.reader },
+                    headers: csrfHeaders(),
+                  }),
           }}
-          confirm={(data, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmAuthoredField({ data, headers: csrfHeaders() })}
+          confirm={(data, work) =>
+            !work?.live()
+              ? Promise.resolve({ ok: false, reason: 'denied' })
+              : confirmAuthoredField({ data, headers: csrfHeaders() })
+          }
         />
       )}
     </div>

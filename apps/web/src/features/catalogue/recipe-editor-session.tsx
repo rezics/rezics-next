@@ -36,7 +36,8 @@ function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }
           read: async (_property, cursor, session = initialSession, work) => {
             if (!work?.live()) return { ok: false, reason: 'denied' };
             const result = await loadRecipeReview({
-              data: { expectedReader: work.reader,
+              data: {
+                expectedReader: work.reader,
                 id: id!,
                 property,
                 ...(slot ? { slot } : {}),

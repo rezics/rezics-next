@@ -4,9 +4,13 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 
 export function expectedCandidateReader(input: unknown): string {
-  if (!input || typeof input !== 'object' || !('expectedReader' in input) ||
-      typeof input.expectedReader !== 'string' ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/i.test(input.expectedReader))
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('expectedReader' in input) ||
+    typeof input.expectedReader !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/i.test(input.expectedReader)
+  )
     throw new Error('Invalid candidate reader');
   return input.expectedReader;
 }

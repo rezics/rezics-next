@@ -35,9 +35,9 @@ function ScreenProfileSessionLive({ id, locale }: { id?: string; locale: string 
                 propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
               },
               review: (_property, initialSession) => {
-                        return {
+                return {
                   read: async (property, cursor, session = initialSession, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+                    if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await readSubjectCandidates({
                       data: { expectedReader: work.reader, id, property, cursor, session },
                       headers: csrfHeaders(),
@@ -45,7 +45,7 @@ function ScreenProfileSessionLive({ id, locale }: { id?: string; locale: string 
                     return result;
                   },
                   confirm: async (command, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+                    if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await confirmSubjectCandidate({
                       data: command,
                       headers: csrfHeaders(),

@@ -31,8 +31,16 @@ function SubjectCandidateCurationLive({ id, locale }: { id: string; locale: stri
       locale={locale}
       transport={{
         read: (property, cursor, session, work) =>
-          !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : readSubjectCandidates({ data: { id, property, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
-        confirm: (data, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmSubjectCandidate({ data, headers: csrfHeaders() }),
+          !work?.live()
+            ? Promise.resolve({ ok: false, reason: 'denied' })
+            : readSubjectCandidates({
+                data: { id, property, cursor, session, expectedReader: work.reader },
+                headers: csrfHeaders(),
+              }),
+        confirm: (data, work) =>
+          !work?.live()
+            ? Promise.resolve({ ok: false, reason: 'denied' })
+            : confirmSubjectCandidate({ data, headers: csrfHeaders() }),
       }}
     />
   );

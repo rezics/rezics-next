@@ -31,7 +31,10 @@ export type CandidateTransport = {
 /** A session-only region: the owning subject route mounts it only after sign-in hydration. */
 export function CandidateReview(props: Omit<ComponentProps<typeof CandidateReviewLive>, 'work'>) {
   const { id, locale, initialProperty, exactCandidate, context, slot } = props;
-  const work = useCandidateWork(JSON.stringify([id, locale, initialProperty, exactCandidate, context, slot?.target, slot?.sameAs, slot?.key]), props.transport.reader);
+  const work = useCandidateWork(
+    JSON.stringify([id, locale, initialProperty, exactCandidate, context, slot?.target, slot?.sameAs, slot?.key]),
+    props.transport.reader,
+  );
   if (!work.live()) return null;
   return <CandidateReviewLive key={work.generation} {...props} work={work} />;
 }
@@ -470,7 +473,7 @@ function CandidateReviewLive({
                   value={property}
                   disabled={locked || !!exactCandidate || !!slot}
                   onChange={(event) => {
-                  if (!work.live()) return;
+                    if (!work.live()) return;
                     setProperty(event.target.value);
                     void load(event.target.value);
                   }}
@@ -635,7 +638,8 @@ function CandidateReviewLive({
                             value={mode}
                             disabled={locked || requiresReload}
                             onChange={(event) =>
-                              work.live() && setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
+                              work.live() &&
+                              setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
                             }
                           >
                             <NativeSelectOption value="replace">{m.context_replace({}, options)}</NativeSelectOption>

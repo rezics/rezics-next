@@ -44,7 +44,8 @@ export function contextAddress(input: unknown): ContextAddress & { expectedReade
       throw new Error('Invalid exact slot');
     slot = raw as ContextAddress['slot'];
   }
-  return { expectedReader: expectedCandidateReader(input),
+  return {
+    expectedReader: expectedCandidateReader(input),
     id: value.id,
     context: value.context,
     ...(typeof value.property === 'string' ? { property: value.property } : {}),

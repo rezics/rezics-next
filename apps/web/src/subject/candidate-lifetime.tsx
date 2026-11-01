@@ -1,5 +1,14 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useLayoutEffect, useRef, useMemo, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useMemo,
+  useSyncExternalStore,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { useSession } from '../session/query';
 
 export type CandidateWork = { reader: string; live: () => boolean };
@@ -18,30 +27,49 @@ function useLifetime(identity: string, reader: string, parent?: CandidateWork | 
     const value: Lifetime = {
       reader,
       generation,
-      retire: () => { retired = true; },
+      retire: () => {
+        retired = true;
+      },
       live: () => !retired && mounted.current && !!reader && (!parent || parent.live()),
     };
     previous.current = { identity, parent, value };
   }
   useLayoutEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
   return previous.current.value;
 }
 
-export function CandidateReaderBoundary({ observed, address, children, admission }: {
+export function CandidateReaderBoundary({
+  observed,
+  address,
+  children,
+  admission,
+}: {
   observed: ReturnType<typeof useSession>;
   address: string;
   children: ReactNode;
   admission?: CandidateWork;
 }) {
-  const reader = observed.state === 'signed-in' ? observed.subject ?? '' : '';
-  const lifetime = useLifetime(JSON.stringify([observed.state, reader, observed.csrfToken, address]), reader, admission);
-  return <Reader.Provider value={lifetime}><CandidateMount key={lifetime.generation}>{children}</CandidateMount></Reader.Provider>;
+  const reader = observed.state === 'signed-in' ? (observed.subject ?? '') : '';
+  const lifetime = useLifetime(
+    JSON.stringify([observed.state, reader, observed.csrfToken, address]),
+    reader,
+    admission,
+  );
+  return (
+    <Reader.Provider value={lifetime}>
+      <CandidateMount key={lifetime.generation}>{children}</CandidateMount>
+    </Reader.Provider>
+  );
 }
 
-function CandidateMount({ children }: { children: ReactNode }) { return children; }
+function CandidateMount({ children }: { children: ReactNode }) {
+  return children;
+}
 
 /** Install the existing session observation once above every production candidate caller. */
 export function candidateSession<Props extends object>(Component: ComponentType<Props>) {
@@ -50,15 +78,33 @@ export function candidateSession<Props extends object>(Component: ComponentType<
     const client = useQueryClient();
     const store = sessionChanges(client);
     const revision = useSyncExternalStore(store.subscribe, store.revision, store.revision);
-    const admission = useMemo(() => ({ reader: observed.subject ?? '', live: () => store.revision() === revision }), [store, revision, observed.subject]);
-    return <CandidateReaderBoundary admission={admission} observed={observed} address={JSON.stringify([Reflect.get(props, 'id'), Reflect.get(props, 'work'), Reflect.get(props, 'locale'), Reflect.get(props, 'realm'), Reflect.get(props, 'context')])}><Component {...props} /></CandidateReaderBoundary>;
+    const admission = useMemo(
+      () => ({ reader: observed.subject ?? '', live: () => store.revision() === revision }),
+      [store, revision, observed.subject],
+    );
+    return (
+      <CandidateReaderBoundary
+        admission={admission}
+        observed={observed}
+        address={JSON.stringify([
+          Reflect.get(props, 'id'),
+          Reflect.get(props, 'work'),
+          Reflect.get(props, 'locale'),
+          Reflect.get(props, 'realm'),
+          Reflect.get(props, 'context'),
+        ])}
+      >
+        <Component {...props} />
+      </CandidateReaderBoundary>
+    );
   };
 }
 
 /** Fixtures may name their reader explicitly; missing production admission always refuses. */
 export function useCandidateWork(address: string, fixtureReader?: string) {
   const parent = useContext(Reader);
-  return useLifetime(address, parent?.reader ?? fixtureReader ?? '', parent);
+  const reader = parent?.reader ?? fixtureReader ?? '';
+  return useLifetime(JSON.stringify([address, reader]), reader, parent);
 }
 
 // Observe the existing session Query at notification time. A batched A-B-A still increments
@@ -81,11 +127,19 @@ function observeSession(client: QueryClient) {
   });
   return {
     revision: () => revision,
-    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
   };
 }
 function sessionChanges(client: QueryClient) {
   let store = sessionObservers.get(client);
-  if (!store) { store = observeSession(client); sessionObservers.set(client, store); }
+  if (!store) {
+    store = observeSession(client);
+    sessionObservers.set(client, store);
+  }
   return store;
 }

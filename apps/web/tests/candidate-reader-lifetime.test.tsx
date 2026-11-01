@@ -23,7 +23,10 @@ const envelopes: { data: Record<string, unknown>; request: Request }[] = [];
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error?: unknown) => void;
-  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
   return { promise, resolve, reject };
 }
 type Gate = {
@@ -32,30 +35,51 @@ type Gate = {
   delivery: ReturnType<typeof deferred<'success' | 'failure' | 'throw'>>;
 };
 let gate: Gate | undefined;
+let preparing: { entered: ReturnType<typeof deferred<void>>; resume: ReturnType<typeof deferred<void>> } | undefined;
 function delay(operation: Gate['operation']) {
   gate = { operation, entered: deferred<void>(), delivery: deferred<'success' | 'failure' | 'throw'>() };
   return gate;
 }
 const env = {
-  AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://api.test', WEBSITE_SCOPES: 'openid',
-  WEBSITE_CLIENT_ID: 'website', WEBSITE_CLIENT_KEY: '{}', SITE_ORIGINS: 'https://site.test',
+  AUTH_ISSUER: 'https://auth.test',
+  API_RESOURCE: 'https://api.test',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'website',
+  WEBSITE_CLIENT_KEY: '{}',
+  SITE_ORIGINS: 'https://site.test',
   SESSIONS: {
     idFromName: (name: string) => name,
-    get: () => ({ credential: async () => ({ status: 'active', subject: serverReader, accessToken: `access-${serverReader}`, csrfToken: csrf }) }),
+    get: () => ({
+      credential: async () => {
+        const reader = serverReader;
+        const held = preparing;
+        if (held) {
+          preparing = undefined;
+          held.entered.resolve();
+          await held.resume.promise;
+        }
+        return { status: 'active', subject: reader, accessToken: `access-${reader}`, csrfToken: csrf };
+      },
+    }),
   },
 };
 mock.module('cloudflare:workers', () => ({ env }));
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
   getRequest: () => currentRequest,
-  setResponseHeader: (name: string, value: string) => { if (name.toLowerCase() === 'cache-control') cacheHeaders.push(value); },
+  setResponseHeader: (name: string, value: string) => {
+    if (name.toLowerCase() === 'cache-control') cacheHeaders.push(value);
+  },
 }));
 mock.module('@tanstack/react-start', () => ({
   ...start,
   createServerFn: (_options: unknown) => {
     let validate: ((value: unknown) => unknown) | undefined;
     const chain = {
-      validator(next: typeof validate) { validate = next; return chain; },
+      validator(next: typeof validate) {
+        validate = next;
+        return chain;
+      },
       handler(handler: (input: { data: unknown }) => Promise<unknown>) {
         return async (input: { data?: unknown; headers?: HeadersInit } = {}) => {
           const data = validate ? validate(input.data) : input.data;
@@ -96,13 +120,15 @@ mock.module('../src/features/catalogue/editorial-context-session', () => ({
 
 const { candidateFixture, candidateProperty } = await import('../src/kernel/fake/subject-candidates');
 const { contextFixture } = await import('../src/kernel/fake/context-curation');
-const { identifiersProfileFixture, identifiersCandidate } = await import('../src/kernel/fake/catalogue-identifiers-profile');
+const { identifiersProfileFixture, identifiersCandidate } =
+  await import('../src/kernel/fake/catalogue-identifiers-profile');
 const { candidateSession } = await import('../src/subject/candidate-lifetime');
 const { SubjectCandidateCuration } = await import('../src/features/pages/curate-view');
 const { ContextCurationSession } = await import('../src/features/catalogue/context-curation-session');
 const { IdentifiersProfileSession } = await import('../src/features/catalogue/identifiers-profile-session');
 const { readSubjectCandidates, confirmSubjectCandidate } = await import('../src/features/pages/curate-actions');
-const { readSubjectContext, confirmSubjectContext } = await import('../src/features/catalogue/context-curation-actions');
+const { readSubjectContext, confirmSubjectContext } =
+  await import('../src/features/catalogue/context-curation-actions');
 const { readCorrectionReview, confirmCorrection } = await import('../src/features/catalogue/statement-editor-actions');
 const { loadAuthoredReview, confirmAuthoredField } = await import('../src/features/catalogue/authored-field-actions');
 const { loadGameClassificationReview } = await import('../src/features/catalogue/game-profile-actions');
@@ -118,26 +144,50 @@ type NativeCall = Fixture['calls'][number];
 // Also mount the actual reviewer through the catalogue ExactReview handoff. The real
 // IdentifiersProfileSession below exercises its retained factory/continuity closure.
 const { ExactReview } = await import('../src/features/catalogue/subject-facts-view');
-const ExactCatalogue = candidateSession(function ExactCatalogue({ fixture, target, locale }: { fixture: Fixture; target: string; locale: string }) {
+const ExactCatalogue = candidateSession(function ExactCatalogue({
+  fixture,
+  target,
+  locale,
+}: {
+  fixture: Fixture;
+  target: string;
+  locale: string;
+}) {
   return createElement(ExactReview, {
-    id: fixture.id, locale, address: { property: fixture.property, candidate: target, session: 'origin-continuity' },
+    id: fixture.id,
+    locale,
+    address: { property: fixture.property, candidate: target, session: 'origin-continuity' },
     review: () => ({
-      read: (property, cursor, session, work) => readSubjectCandidates({ data: { id: fixture.id, property, cursor, session, expectedReader: work?.reader }, headers }),
-      confirm: (data, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmSubjectCandidate({ data, headers }),
+      read: (property, cursor, session, work) =>
+        readSubjectCandidates({
+          data: { id: fixture.id, property, cursor, session, expectedReader: work?.reader },
+          headers,
+        }),
+      confirm: (data, work) =>
+        !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmSubjectCandidate({ data, headers }),
     }),
   });
 });
 
 async function mounted() {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/subjects/book/title' });
   const globals = {
-    window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    Element: window.Element, Node: window.Node, MutationObserver: window.MutationObserver,
-    getComputedStyle: window.getComputedStyle.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, signedIn());
   let changeContent!: (node: ReactNode) => void;
@@ -153,16 +203,33 @@ async function mounted() {
   window.document.body.append(host);
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(host as unknown as HTMLElement);
-  await act(async () => { root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))); });
-  const render = async (node: ReactNode) => { await act(async () => changeContent(node)); };
-  const settle = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+  });
+  const render = async (node: ReactNode) => {
+    await act(async () => changeContent(node));
+  };
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
   const until = async (predicate: () => boolean) => {
     for (let count = 0; count < 100 && !predicate(); count++) await settle();
     expect(predicate()).toBe(true);
   };
-  const buttons = (label: string) => [...host.querySelectorAll('button')].filter((button) => button.textContent?.trim() === label);
-  const button = (label: string) => { const found = buttons(label); expect(found.length).toBeGreaterThan(0); return found[found.length - 1]!; };
-  const click = async (label: string) => { await act(async () => { button(label).click(); }); };
+  const buttons = (label: string) =>
+    [...host.querySelectorAll('button')].filter((button) => button.textContent?.trim() === label);
+  const button = (label: string) => {
+    const found = buttons(label);
+    expect(found.length).toBeGreaterThan(0);
+    return found[found.length - 1]!;
+  };
+  const click = async (label: string) => {
+    await act(async () => {
+      button(label).click();
+    });
+  };
   const field = async (property: string) => {
     await act(async () => {
       const select = host.querySelector('#candidate-field')! as InstanceType<typeof window.HTMLSelectElement>;
@@ -171,9 +238,13 @@ async function mounted() {
       select.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
   };
-  const update = async (observed: ReturnType<typeof signedIn> | { state: 'signed-out' | 'unavailable'; subject: null; csrfToken: null }) => {
+  const update = async (
+    observed: ReturnType<typeof signedIn> | { state: 'signed-out' | 'unavailable'; subject: null; csrfToken: null },
+  ) => {
     if (observed.subject) serverReader = observed.subject;
-    await act(async () => { client.setQueryData(sessionQuery.queryKey, observed); });
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, observed);
+    });
     await settle();
   };
   const queued = (element: object) => {
@@ -182,11 +253,28 @@ async function mounted() {
     return () => props.onClick({ currentTarget: element });
   };
   const outside = window.document.createElement('button');
-  outside.textContent = 'Fresh reader focus'; window.document.body.append(outside);
-  return { window, host, client, render, settle, until, button, buttons, click, field, update, queued, outside,
+  outside.textContent = 'Fresh reader focus';
+  window.document.body.append(outside);
+  return {
+    window,
+    host,
+    client,
+    render,
+    settle,
+    until,
+    button,
+    buttons,
+    click,
+    field,
+    update,
+    queued,
+    outside,
     async close() {
-      await act(async () => root.unmount()); client.clear(); window.close();
-      for (const [key, descriptor] of previous) descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
+      await act(async () => root.unmount());
+      client.clear();
+      window.close();
+      for (const [key, descriptor] of previous)
+        descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
     },
   };
 }
@@ -197,7 +285,9 @@ test('original-reader candidate admission, late replies, queued ABA, exact retri
   const ui = await mounted();
   const fresh = () => {
     const fixture = candidateFixture();
-    nativeClient = fixture.client; release = recorded.release; serverReader = original;
+    nativeClient = fixture.client;
+    release = recorded.release;
+    serverReader = original;
     return fixture;
   };
   const openSubject = async (fixture: Fixture) => {
@@ -207,8 +297,15 @@ test('original-reader candidate admission, late replies, queued ABA, exact retri
     await ui.field(fixture.property);
     await ui.until(() => ui.buttons(m.candidate_review()).length > 0);
   };
-  const compare = async () => { await ui.click(m.candidate_review()); await ui.until(() => ui.buttons(m.candidate_accept()).length > 0 || ui.buttons(m.candidate_reject()).length > 0); };
-  const confirm = async () => { const label = ui.buttons(m.candidate_accept()).length ? m.candidate_accept() : m.candidate_reject(); await ui.click(label); await ui.click(label); };
+  const compare = async () => {
+    await ui.click(m.candidate_review());
+    await ui.until(() => ui.buttons(m.candidate_accept()).length > 0 || ui.buttons(m.candidate_reject()).length > 0);
+  };
+  const confirm = async () => {
+    const label = ui.buttons(m.candidate_accept()).length ? m.candidate_accept() : m.candidate_reject();
+    await ui.click(label);
+    await ui.click(label);
+  };
   try {
     // Both private-read and confirmation deliveries are held AFTER real BFF admission/native
     // processing, so retirement tests success, returned failure and thrown failure paths.
@@ -217,8 +314,10 @@ test('original-reader candidate admission, late replies, queued ABA, exact retri
         await ui.render(null);
         await ui.update(signedIn());
         const fixture = fresh();
-        if (operation === 'confirm') { await openSubject(fixture); await compare(); }
-        else {
+        if (operation === 'confirm') {
+          await openSubject(fixture);
+          await compare();
+        } else {
           await ui.render(createElement(SubjectCandidateCuration, { id: fixture.id, locale: 'en' }));
           await ui.click(m.candidate_entry());
           await ui.until(() => !!ui.host.querySelector('#candidate-field'));
@@ -249,23 +348,64 @@ test('original-reader candidate admission, late replies, queued ABA, exact retri
         await ui.update(signedIn(replacement));
         await ui.click(m.candidate_entry());
         await ui.until(() => !!ui.host.querySelector('#candidate-field'));
-        await ui.field(candidateProperty); await compare(); await confirm();
+        await ui.field(candidateProperty);
+        await compare();
+        await confirm();
         await ui.until(() => ui.buttons(m.candidate_reload()).length > 0);
         const current = envelopes.slice(before).filter((entry) => entry.data.expectedReader === replacement);
-        expect(current.some((entry) => entry.data.operation === 'accept' || entry.data.operation === 'reject')).toBe(true);
+        expect(current.some((entry) => entry.data.operation === 'accept' || entry.data.operation === 'reject')).toBe(
+          true,
+        );
         expect(current.find((entry) => !entry.data.operation)?.data.session).toBeUndefined();
-        expect(fixture.calls.some((call) => call.method === 'POST' && call.authorization === `Bearer access-${replacement}`)).toBe(true);
+        expect(
+          fixture.calls.some((call) => call.method === 'POST' && call.authorization === `Bearer access-${replacement}`),
+        ).toBe(true);
       }
     }
+
+    // A retired finally must not clear a replacement's outstanding private read or focus it.
+    await ui.render(null);
+    await ui.update(signedIn());
+    const busyFixture = fresh();
+    await ui.render(createElement(SubjectCandidateCuration, { id: busyFixture.id, locale: 'en' }));
+    await ui.click(m.candidate_entry());
+    await ui.until(() => !!ui.host.querySelector('#candidate-field'));
+    const oldBusy = delay('read');
+    await ui.field(busyFixture.property);
+    await oldBusy.entered.promise;
+    await ui.update(signedIn(replacement));
+    await ui.click(m.candidate_entry());
+    await ui.until(() => !!ui.host.querySelector('#candidate-field'));
+    const freshBusy = delay('read');
+    await ui.field(busyFixture.property);
+    await freshBusy.entered.promise;
+    const freshPendingText = ui.host.textContent;
+    expect(freshPendingText).toContain(m.candidate_loading());
+    ui.outside.focus();
+    oldBusy.delivery.resolve('success');
+    await ui.settle();
+    expect(ui.host.textContent).toBe(freshPendingText);
+    expect(ui.host.querySelector('#candidate-field')?.hasAttribute('disabled')).toBe(true);
+    expect(ui.window.document.activeElement).toBe(ui.outside);
+    freshBusy.delivery.resolve('success');
+    await ui.until(() => ui.buttons(m.candidate_review()).length > 0);
+    await compare();
+    await confirm();
+    await ui.until(() => ui.buttons(m.candidate_reload()).length > 0);
 
     // Admission loss retires a private page before it arrives. Returning the same account
     // starts closed and cannot revive old pages, drafts, outcomes or continuity.
     for (const state of ['signed-out', 'unavailable'] as const) {
-      await ui.render(null); await ui.update(signedIn()); const fixture = fresh();
+      await ui.render(null);
+      await ui.update(signedIn());
+      const fixture = fresh();
       await ui.render(createElement(SubjectCandidateCuration, { id: fixture.id, locale: 'en' }));
-      const held = delay('read'); await ui.click(m.candidate_entry()); await held.entered.promise;
+      const held = delay('read');
+      await ui.click(m.candidate_entry());
+      await held.entered.promise;
       await ui.update({ state, subject: null, csrfToken: null });
-      held.delivery.resolve('success'); await ui.settle();
+      held.delivery.resolve('success');
+      await ui.settle();
       expect(ui.host.querySelector('#candidate-review')).toBeNull();
       await ui.update(signedIn());
       expect(ui.host.querySelector('#candidate-field')).toBeNull();
@@ -276,26 +416,37 @@ test('original-reader candidate admission, late replies, queued ABA, exact retri
     for (const changed of ['target', 'address', 'locale', 'unmount', 'admission'] as const) {
       for (const operation of ['read', 'confirm'] as const) {
         for (const delivery of ['success', 'failure', 'throw'] as const) {
-          await ui.render(null); await ui.update(signedIn()); const fixture = fresh();
+          await ui.render(null);
+          await ui.update(signedIn());
+          const fixture = fresh();
           const held = operation === 'read' ? delay('read') : undefined;
           await ui.render(createElement(ExactCatalogue, { fixture, target: fixture.candidate.id, locale: 'en' }));
           let pending = held;
           if (operation === 'confirm') {
             await ui.until(() => ui.buttons(m.candidate_accept()).length > 0);
-            pending = delay('confirm'); await confirm();
+            pending = delay('confirm');
+            await confirm();
           }
           await pending!.entered.promise;
           const nextTarget = `${fixture.candidate.id.slice(0, -3)}999`;
           const nextFixture = changed === 'address' ? { ...fixture, id: `${fixture.id.slice(0, -3)}777` } : fixture;
           if (changed === 'admission') await ui.update({ state: 'unavailable', subject: null, csrfToken: null });
-          else await ui.render(changed === 'unmount' ? null : createElement(ExactCatalogue, {
-            fixture: nextFixture, target: changed === 'target' ? nextTarget : fixture.candidate.id,
-            locale: changed === 'locale' ? 'ja' : 'en',
-          }));
+          else
+            await ui.render(
+              changed === 'unmount'
+                ? null
+                : createElement(ExactCatalogue, {
+                    fixture: nextFixture,
+                    target: changed === 'target' ? nextTarget : fixture.candidate.id,
+                    locale: changed === 'locale' ? 'ja' : 'en',
+                  }),
+            );
           await ui.settle();
           const before = envelopes.length;
           const visible = ui.host.textContent;
-          ui.outside.focus(); pending!.delivery.resolve(delivery); await ui.settle();
+          ui.outside.focus();
+          pending!.delivery.resolve(delivery);
+          await ui.settle();
           expect(envelopes.length).toBe(before);
           expect(ui.window.document.activeElement).toBe(ui.outside);
           expect(ui.host.textContent).toBe(visible);
@@ -304,105 +455,225 @@ test('original-reader candidate admission, late replies, queued ABA, exact retri
     }
 
     // Same-live-reader uncertain retries retain every native field, original continuity and key.
-    await ui.render(null); await ui.update(signedIn()); const uncertain = candidateFixture('multiple'); nativeClient = uncertain.client; release = recorded.release;
+    await ui.render(null);
+    await ui.update(signedIn());
+    const uncertain = candidateFixture('multiple');
+    nativeClient = uncertain.client;
+    release = recorded.release;
     await openSubject(uncertain);
-    const choice = ui.host.querySelector(`[id="include-${uncertain.candidate.id}"]`)! as InstanceType<typeof ui.window.HTMLElement>;
+    const choice = ui.host.querySelector(`[id="include-${uncertain.candidate.id}"]`)! as InstanceType<
+      typeof ui.window.HTMLElement
+    >;
     await act(async () => choice.click());
     expect(choice.getAttribute('aria-checked')).toBe('true');
     // An ordinary parent render preserves the healthy multivalue draft and off-page public choice.
     await ui.render(createElement(SubjectCandidateCuration, { id: uncertain.id, locale: 'en' }));
-    expect(ui.host.querySelector(`[id="include-${uncertain.candidate.id}"]`)?.getAttribute('aria-checked')).toBe('true');
+    expect(ui.host.querySelector(`[id="include-${uncertain.candidate.id}"]`)?.getAttribute('aria-checked')).toBe(
+      'true',
+    );
     expect(ui.host.querySelector(`[id="include-${uncertain.candidates[2]!.id}"]`)).not.toBeNull();
     await ui.click(m.candidate_adopt());
-    const held = delay('confirm'); await ui.click(m.candidate_adopt()); await held.entered.promise;
-    held.delivery.resolve('failure'); await ui.settle();
+    const held = delay('confirm');
+    await ui.click(m.candidate_adopt());
+    await held.entered.promise;
+    held.delivery.resolve('failure');
+    await ui.settle();
     const first = envelopes.filter((entry) => entry.data.operation).at(-1)!.data;
     await ui.click(m.candidate_retry());
     await ui.until(() => envelopes.filter((entry) => entry.data.operation).at(-1)!.data !== first);
     const second = envelopes.filter((entry) => entry.data.operation).at(-1)!.data;
     expect(second).toEqual(first);
-    expect(first).toMatchObject({ operation: 'adopt', expectedReader: original, session: 'candidate-session', head: 1 });
+    expect(first).toMatchObject({
+      operation: 'adopt',
+      expectedReader: original,
+      session: 'candidate-session',
+      head: 1,
+    });
     expect((first.selection as unknown[]).length).toBe(3);
-    expect(uncertain.calls.filter((call) => call.path.endsWith('/candidates')).length).toBe(2);
+    expect(uncertain.calls.filter((call) => call.path.endsWith('/candidates')).length).toBe(1);
     const native = uncertain.calls.filter((call) => call.method === 'POST');
     expect(native.length).toBe(2);
     expect(native[1]).toEqual(native[0]);
     // Another uncertain attempt is retired permanently, including a retained queued Retry callback.
-    await ui.render(null); const retired = fresh(); await openSubject(retired); await compare();
-    const lost = delay('confirm'); await confirm(); await lost.entered.promise;
-    lost.delivery.resolve('failure'); await ui.settle();
+    await ui.render(null);
+    const retired = fresh();
+    await openSubject(retired);
+    await compare();
+    const lost = delay('confirm');
+    await confirm();
+    await lost.entered.promise;
+    lost.delivery.resolve('failure');
+    await ui.settle();
     const retry = ui.queued(ui.button(m.candidate_retry()));
     const count = envelopes.length;
     await ui.update(signedIn(replacement));
     await act(async () => retry());
-    await ui.update(signedIn()); await act(async () => retry());
+    await ui.update(signedIn());
+    await act(async () => retry());
     expect(envelopes.length).toBe(count);
     expect(ui.host.querySelector('#candidate-field')).toBeNull();
 
     // Context wiring retains inherit/replace/suppress and its exact slot/mode on a live retry.
-    await ui.render(null); await ui.update(signedIn());
-    const context = contextFixture(); nativeClient = context.client; release = context.release;
-    await ui.render(createElement(ContextCurationSession, { id: context.id, context: context.context.id, property: context.property, locale: 'en' }));
-    await ui.click(m.candidate_entry()); await ui.until(() => !!ui.host.querySelector('#context-mode'));
+    await ui.render(null);
+    await ui.update(signedIn());
+    const context = contextFixture();
+    nativeClient = context.client;
+    release = context.release;
+    await ui.render(
+      createElement(ContextCurationSession, {
+        id: context.id,
+        context: context.context.id,
+        property: context.property,
+        locale: 'en',
+      }),
+    );
+    await ui.click(m.candidate_entry());
+    await ui.until(() => !!ui.host.querySelector('#context-mode'));
     await act(async () => {
       const mode = ui.host.querySelector('#context-mode')! as InstanceType<typeof ui.window.HTMLSelectElement>;
-      mode.value = 'suppress'; mode.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+      mode.value = 'suppress';
+      mode.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
     });
     await ui.click(m.context_adopt());
-    const contextLost = delay('confirm'); await ui.click(m.context_adopt()); await contextLost.entered.promise;
-    contextLost.delivery.resolve('failure'); await ui.settle();
+    const contextLost = delay('confirm');
+    await ui.click(m.context_adopt());
+    await contextLost.entered.promise;
+    contextLost.delivery.resolve('failure');
+    await ui.settle();
     const contextCommand = envelopes.filter((entry) => entry.data.context).at(-1)!.data;
-    await ui.click(m.candidate_retry()); await ui.settle();
+    await ui.click(m.candidate_retry());
+    await ui.settle();
     expect(envelopes.filter((entry) => entry.data.context).at(-1)!.data).toEqual(contextCommand);
-    expect(contextCommand).toMatchObject({ context: context.context.id, mode: 'suppress', selection: [], expectedReader: original });
+    expect(contextCommand).toMatchObject({
+      context: context.context.id,
+      mode: 'suppress',
+      selection: [],
+      expectedReader: original,
+    });
     expect(context.calls.filter((call) => call.method === 'POST').length).toBe(2);
 
     // Actual profile-session factory: no late private read may overwrite its next reader's
     // continuity, and the replacement can confirm via the same installed shared reviewer.
-    await ui.render(null); await ui.update(signedIn());
-    const catalogue = identifiersProfileFixture(); nativeClient = catalogue.client; release = catalogue.release;
+    await ui.render(null);
+    await ui.update(signedIn());
+    const catalogue = identifiersProfileFixture();
+    nativeClient = catalogue.client;
+    release = catalogue.release;
     const proposed = await catalogue.transport.propose({
-      id: catalogue.publicRead.subject.id, key: crypto.randomUUID(),
-      statement: { property: { id: 'schema:isbn' }, value: { type: 'value', content: '978-4-00-000001-7' }, qualifiers: [], references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://catalogue.example/record' } }] }] },
+      id: catalogue.publicRead.subject.id,
+      key: crypto.randomUUID(),
+      statement: {
+        property: { id: 'schema:isbn' },
+        value: { type: 'value', content: '978-4-00-000001-7' },
+        qualifiers: [],
+        references: [
+          {
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://catalogue.example/record' } },
+            ],
+          },
+        ],
+      },
     });
     expect(proposed.ok).toBe(true);
-    const profile = () => createElement(IdentifiersProfileSession, { id: catalogue.publicRead.subject.id, locale: 'en', initialReview: { property: 'schema:isbn', candidate: identifiersCandidate } });
-    const catalogueRead = delay('read'); await ui.render(profile()); await catalogueRead.entered.promise;
+    const profile = () =>
+      createElement(IdentifiersProfileSession, {
+        id: catalogue.publicRead.subject.id,
+        locale: 'en',
+        initialReview: { property: 'schema:isbn', candidate: identifiersCandidate },
+      });
+    const catalogueRead = delay('read');
+    await ui.render(profile());
+    await catalogueRead.entered.promise;
     await ui.update(signedIn(replacement));
     await ui.until(() => ui.buttons(m.candidate_accept()).length > 0);
-    const nextRead = envelopes.filter((entry) => entry.data.expectedReader === replacement && !entry.data.operation).at(-1)!;
+    const nextRead = envelopes
+      .filter((entry) => entry.data.expectedReader === replacement && !entry.data.operation)
+      .at(-1)!;
     expect(nextRead.data.session).toBeUndefined();
-    ui.outside.focus(); catalogueRead.delivery.resolve('success'); await ui.settle();
+    ui.outside.focus();
+    catalogueRead.delivery.resolve('success');
+    await ui.settle();
     expect(ui.window.document.activeElement).toBe(ui.outside);
-    await confirm(); await ui.settle();
+    await confirm();
+    await ui.settle();
     expect(envelopes.filter((entry) => entry.data.operation).at(-1)!.data.expectedReader).toBe(replacement);
 
     // Every real candidate BFF refuses a mismatched expected reader BEFORE any native I/O.
     // POST, CSRF and private/no-store are retained, and no caller stamp supplies authorization.
-    await ui.render(null); const bff = fresh(); serverReader = replacement;
+    await ui.render(null);
+    const bff = fresh();
+    serverReader = replacement;
     const address = { id: bff.id, property: candidateProperty, expectedReader: original };
-    const command: CandidateCommand = { ...address, candidate: bff.candidate.id, operation: 'accept', head: null, key: crypto.randomUUID() };
+    const command: CandidateCommand = {
+      ...address,
+      candidate: bff.candidate.id,
+      operation: 'accept',
+      head: null,
+      key: crypto.randomUUID(),
+    };
     const callsBefore = bff.calls.length;
     const refused = await Promise.all([
-      readSubjectCandidates({ data: address, headers }), confirmSubjectCandidate({ data: command, headers }),
+      readSubjectCandidates({ data: address, headers }),
+      confirmSubjectCandidate({ data: command, headers }),
       readSubjectContext({ data: { ...address, context: context.context.id }, headers }),
       confirmSubjectContext({ data: { ...command, context: context.context.id }, headers }),
-      readCorrectionReview({ data: address, headers }), confirmCorrection({ data: command, headers }),
-      loadAuthoredReview({ data: { ...address, candidate: command.candidate }, headers }), confirmAuthoredField({ data: command, headers }),
-      loadGameClassificationReview({ data: address, headers }), loadRecipeReview({ data: address, headers }), confirmRecipeReview({ data: command, headers }),
+      readCorrectionReview({ data: address, headers }),
+      confirmCorrection({ data: command, headers }),
+      loadAuthoredReview({ data: { ...address, candidate: command.candidate }, headers }),
+      confirmAuthoredField({ data: command, headers }),
+      loadGameClassificationReview({ data: address, headers }),
+      loadRecipeReview({ data: address, headers }),
+      confirmRecipeReview({ data: command, headers }),
     ]);
     expect(bff.calls.length).toBe(callsBefore);
-    for (const result of refused) expect('comparison' in result ? result.comparison : result).toEqual({ ok: false, reason: 'denied' });
+    for (const result of refused)
+      expect('comparison' in result ? result.comparison : result).toEqual({ ok: false, reason: 'denied' });
     expect(cacheHeaders.length).toBeGreaterThan(0);
     expect(cacheHeaders.every((value) => value === 'private, no-store')).toBe(true);
     expect(envelopes.every((entry) => entry.request.method === 'POST')).toBe(true);
-    await expect(readSubjectCandidates({ data: { ...address, expectedReader: replacement }, headers: { 'X-CSRF-Token': 'invalid' } })).rejects.toBeDefined();
+    await expect(
+      readSubjectCandidates({
+        data: { ...address, expectedReader: replacement },
+        headers: { 'X-CSRF-Token': 'invalid' },
+      }),
+    ).rejects.toBeDefined();
     expect(bff.calls.length).toBe(callsBefore);
-    await expect(readSubjectCandidates({ data: { ...address, expectedReader: `${replacement}\n` }, headers })).rejects.toBeDefined();
-    const admitted: CandidateRead = await readSubjectCandidates({ data: { ...address, expectedReader: replacement }, headers });
+    await expect(
+      readSubjectCandidates({ data: { ...address, expectedReader: `${replacement}\n` }, headers }),
+    ).rejects.toBeDefined();
+    // Pause preparation, replace the ambient request, and then finish preparation. Reader and
+    // credential must both come from the saved original Request, never two getRequest calls.
+    serverReader = original;
+    const preparation = { entered: deferred<void>(), resume: deferred<void>() };
+    preparing = preparation;
+    const preparingRead = readSubjectCandidates({ data: address, headers });
+    await preparation.entered.promise;
+    const preparedRequest = currentRequest;
+    serverReader = replacement;
+    const mismatchWhilePreparing = await readSubjectCandidates({ data: address, headers });
+    expect(mismatchWhilePreparing).toEqual({ ok: false, reason: 'denied' });
+    expect(currentRequest).not.toBe(preparedRequest);
+    expect(bff.calls.length).toBe(callsBefore);
+    preparation.resume.resolve();
+    expect((await preparingRead).ok).toBe(true);
+    expect(bff.calls.filter((call: NativeCall) => call.path.endsWith('/candidates')).at(-1)?.authorization).toBe(
+      `Bearer access-${original}`,
+    );
+    const admitted: CandidateRead = await readSubjectCandidates({
+      data: { ...address, expectedReader: replacement },
+      headers,
+    });
     expect(admitted.ok).toBe(true);
-    expect(bff.calls.filter((call: NativeCall) => call.path.endsWith('/candidates')).at(-1)?.authorization).toBe(`Bearer access-${replacement}`);
-    const accepted: CandidateResult = await confirmSubjectCandidate({ data: { ...command, expectedReader: replacement }, headers });
+    expect(bff.calls.filter((call: NativeCall) => call.path.endsWith('/candidates')).at(-1)?.authorization).toBe(
+      `Bearer access-${replacement}`,
+    );
+    const accepted: CandidateResult = await confirmSubjectCandidate({
+      data: { ...command, expectedReader: replacement },
+      headers,
+    });
     expect(accepted.ok).toBe(true);
-  } finally { await ui.close(); }
-});
+  } finally {
+    await ui.close();
+  }
+}, 60_000);

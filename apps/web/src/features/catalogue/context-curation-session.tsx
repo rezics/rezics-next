@@ -31,8 +31,16 @@ function ContextCurationSessionLive({
           slot={slot}
           transport={{
             read: (property, cursor, session, work) =>
-              !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : readSubjectContext({ data: { id, context, property, slot, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
-            confirm: (command, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmSubjectContext({ data: command, headers: csrfHeaders() }),
+              !work?.live()
+                ? Promise.resolve({ ok: false, reason: 'denied' })
+                : readSubjectContext({
+                    data: { id, context, property, slot, cursor, session, expectedReader: work.reader },
+                    headers: csrfHeaders(),
+                  }),
+            confirm: (command, work) =>
+              !work?.live()
+                ? Promise.resolve({ ok: false, reason: 'denied' })
+                : confirmSubjectContext({ data: command, headers: csrfHeaders() }),
           }}
         />
       )}

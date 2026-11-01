@@ -49,17 +49,23 @@ function GameProfileSessionLive({ id, locale }: { id?: string; locale: string })
           confirm: (data) => confirmSubjectRelation({ data, headers: csrfHeaders() }),
         },
         review: (property, initialSession) => {
-            return {
+          return {
             read: async (_property, cursor, session = initialSession, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+              if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await readCorrectionReview({
-                data: { expectedReader: work.reader, id: id!, property, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) },
+                data: {
+                  expectedReader: work.reader,
+                  id: id!,
+                  property,
+                  ...(cursor ? { cursor } : {}),
+                  ...(session ? { session } : {}),
+                },
                 headers: csrfHeaders(),
               });
               return result;
             },
             confirm: async (command, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+              if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await confirmCorrection({
                 data: command,
                 headers: csrfHeaders(),
@@ -69,17 +75,23 @@ function GameProfileSessionLive({ id, locale }: { id?: string; locale: string })
           };
         },
         classificationReview: (property, initialSession) => {
-            return {
+          return {
             read: async (_property, cursor, session = initialSession, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+              if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await loadGameClassificationReview({
-                data: { expectedReader: work.reader, id: id!, property, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) },
+                data: {
+                  expectedReader: work.reader,
+                  id: id!,
+                  property,
+                  ...(cursor ? { cursor } : {}),
+                  ...(session ? { session } : {}),
+                },
                 headers: csrfHeaders(),
               });
               return result;
             },
             confirm: async (command, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+              if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await confirmCorrection({
                 data: command,
                 headers: csrfHeaders(),

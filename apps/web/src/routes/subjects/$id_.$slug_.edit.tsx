@@ -84,7 +84,7 @@ function CorrectionRoute() {
   const read = () => readCorrection({ data: { id, property, statement }, headers: csrfHeaders() });
   const query = useQuery({
     queryKey: ['statement-editor', id, property, statement, locale, candidateWork.generation],
-    queryFn: read,
+    queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
     enabled: state === 'signed-in',
     staleTime: 0,
     gcTime: 0,
@@ -102,7 +102,7 @@ function CorrectionRoute() {
     return (
       <div className="space-y-3 p-6">
         <EditorFailure reason="unavailable" locale={locale} />
-        <button type="button" onClick={() => void query.refetch()}>
+        <button type="button" onClick={() => candidateWork.live() && void query.refetch()}>
           {m.correction_reload()}
         </button>
       </div>
@@ -122,9 +122,9 @@ function CorrectionRoute() {
         transport={{ read, propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }) }}
         initialReview={reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
         review={(_property, initialSession) => {
-            return {
+          return {
             read: async (field, cursor, session = initialSession, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+              if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await readSubjectCandidates({
                 data: { expectedReader: work.reader, id, property: field, cursor, session },
                 headers: csrfHeaders(),
@@ -132,7 +132,7 @@ function CorrectionRoute() {
               return result;
             },
             confirm: async (command, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
+              if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await confirmSubjectCandidate({ data: command, headers: csrfHeaders() });
               return result;
             },
