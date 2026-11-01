@@ -152,7 +152,9 @@ export function RecipeEditor({
           ) : (
             <EditorFailure locale={locale} reason="unavailable" />
           )}
-          <Button type="button" onClick={() => void query.refetch()}>{m.correction_retry({}, o)}</Button>
+          <Button type="button" onClick={() => void query.refetch()}>
+            {m.correction_retry({}, o)}
+          </Button>
         </div>
       )}
       {read && read.fields.length === 0 && <p role="status">{m.recipe_empty({}, o)}</p>}
@@ -197,10 +199,11 @@ export function RecipeEditor({
         read.fields.length > 0 && (
           <Workspace
             className="flex min-w-0 flex-col gap-6"
-            noValidate
+            noValidate={!id}
             onSubmit={(event) => {
+              if (id) return;
               event.preventDefault();
-              if (!id) void create();
+              void create();
             }}
           >
             {currentHref && (
@@ -257,11 +260,7 @@ export function RecipeEditor({
                       <CreateSubjectLanguageRemove
                         locale={locale}
                         rowId={`${termsId}-${term.id}`}
-                        focusId={
-                          terms[index + 1]
-                            ? `${termsId}-language-${terms[index + 1]!.id}`
-                            : `${termsId}-add`
-                        }
+                        focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
                         disabled={locked || session !== 'signed-in'}
                         onRemove={() => {
                           if (locked || running.current || pending.current || session !== 'signed-in') return;
@@ -640,7 +639,11 @@ function RecipeField({
       {result?.ok ? (
         <div className="space-y-3">
           <p role="status">{m.correction_proposed({}, o)}</p>
-          {review && <Button type="button" onClick={() => setReviewing(true)}>{m.correction_review({}, o)}</Button>}
+          {review && (
+            <Button type="button" onClick={() => setReviewing(true)}>
+              {m.correction_review({}, o)}
+            </Button>
+          )}
           {reviewing && review && read.public && (
             <CandidateReview
               id={read.public.subject.id}

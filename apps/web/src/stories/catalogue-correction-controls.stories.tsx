@@ -13,7 +13,7 @@ import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 
 type Flow = 'facts' | 'identifiers' | 'recipe-correction' | 'album' | 'character' | 'recipe';
-function Example({ flow, onCreate }: { flow: Flow; onCreate: ObserveCreate }) {
+function Example({ flow, onCreate = () => {} }: { flow: Flow; onCreate?: ObserveCreate }) {
   switch (flow) {
     case 'facts':
       return <facts.component />;
@@ -199,7 +199,9 @@ function languageRecovery(flow: 'album' | 'character' | 'recipe', viewport: 'pho
       await userEvent.type(name, primaryName);
       await userEvent.keyboard('{Enter}');
       await waitFor(() => expect(observed).toHaveBeenCalledTimes(1));
-      const writes = observed.mock.calls[0]![0].filter((call) => call.method === 'POST' && call.path === '/v1/subjects');
+      const writes = observed.mock.calls[0]![0].filter(
+        (call) => call.method === 'POST' && call.path === '/v1/subjects',
+      );
       await expect(writes).toHaveLength(1);
       await expect(writes[0]!.body).toEqual({
         type: { album: 'schema:MusicAlbum', character: 'wd:Q95074', recipe: 'schema:Recipe' }[flow],

@@ -128,11 +128,7 @@ export function CharacterProfileCreate({
               <CreateSubjectLanguageRemove
                 locale={locale}
                 rowId={`${termsId}-${term.id}`}
-                focusId={
-                  terms[index + 1]
-                    ? `${termsId}-language-${terms[index + 1]!.id}`
-                    : `${termsId}-add`
-                }
+                focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
                 disabled={locked}
                 onRemove={() => {
                   if (locked || running.current || pending.current) return;
