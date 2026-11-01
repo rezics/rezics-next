@@ -218,7 +218,9 @@ function useConnectionLifetime(
   });
   const prior = bindingRef.current;
   const inputRevision =
-    prior.targetKey === key && prior.locale === locale && prior.adapter === adapter ? prior.inputRevision : prior.inputRevision + 1;
+    prior.targetKey === key && prior.locale === locale && prior.adapter === adapter
+      ? prior.inputRevision
+      : prior.inputRevision + 1;
   bindingRef.current = {
     targetKey: key,
     locale,
@@ -294,7 +296,11 @@ export function useDefaultContainerLifecycleCaller(target: ContainerTarget) {
   const contextClient = useContext(QueryClientContext);
   const client = contextClient ?? null;
   const session = useSession();
-  const hydrated = useSyncExternalStore(noHydrationSubscribe, () => true, () => false);
+  const hydrated = useSyncExternalStore(
+    noHydrationSubscribe,
+    () => true,
+    () => false,
+  );
   const locale = getLocale();
   const source = client ? containerLifecycleSessionSource(client) : null;
   const revision = useSyncExternalStore(
@@ -335,7 +341,13 @@ export function useDefaultContainerLifecycleCaller(target: ContainerTarget) {
     dataUpdateCount,
     dataUpdatedAt,
   );
-  return { lifetime, connectionRevision, ready: ready && lifetime.current(), csrfToken: ready ? csrfToken : null, locale };
+  return {
+    lifetime,
+    connectionRevision,
+    ready: ready && lifetime.current(),
+    csrfToken: ready ? csrfToken : null,
+    locale,
+  };
 }
 
 /** Injected adapters remain independent of the browser session and keep a target/locale/mount lifetime. */

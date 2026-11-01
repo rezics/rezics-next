@@ -119,12 +119,7 @@ export function createContainerLifecycle(
   let operationTicket: number | null = null;
 
   function normalizeStaleBusy() {
-    if (
-      state.busy &&
-      operationTicket !== null &&
-      ownership.current() &&
-      !ownership.owns(operationTicket)
-    ) {
+    if (state.busy && operationTicket !== null && ownership.current() && !ownership.owns(operationTicket)) {
       state = { ...state, busy: false };
       operationTicket = null;
     }
@@ -164,14 +159,17 @@ export function createContainerLifecycle(
     if (!update({ busy: true, destination: null }, ticket)) return;
     const result = await read(ticket);
     if (!ownership.owns(ticket)) return;
-    const destination = state.outcome === 'confirmed' && state.intent
-      ? await destinationFor(state.intent, result, ticket)
-      : null;
+    const destination =
+      state.outcome === 'confirmed' && state.intent ? await destinationFor(state.intent, result, ticket) : null;
     if (!ownership.owns(ticket)) return;
     operationTicket = null;
     update({ read: result, destination, busy: false, reviewed: result.kind === 'ready' }, ticket);
   }
-  async function destinationFor(intent: LifecycleIntent, current: LifecycleRead, ticket: number): Promise<string | null> {
+  async function destinationFor(
+    intent: LifecycleIntent,
+    current: LifecycleRead,
+    ticket: number,
+  ): Promise<string | null> {
     if (
       !ownership.owns(ticket) ||
       intent.action !== 'restore' ||

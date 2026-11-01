@@ -35,9 +35,13 @@ const head = '0192f3a0-6c1e-7b2a-9d4e-000000000004';
 
 const reads: Array<Deferred<LifecycleRead> & { data: { target: ContainerTarget; contextId?: string | null } }> = [];
 const changes: Array<Deferred<LifecycleResult> & { data: LifecycleIntent; headers: Headers }> = [];
-const destinations: Array<Deferred<{ kind: 'available'; target: ContainerTarget; contextId: string | null; href: string } | { kind: 'unavailable' }> & {
-  data: { target: ContainerTarget; contextId: string | null };
-}> = [];
+const destinations: Array<
+  Deferred<
+    { kind: 'available'; target: ContainerTarget; contextId: string | null; href: string } | { kind: 'unavailable' }
+  > & {
+    data: { target: ContainerTarget; contextId: string | null };
+  }
+> = [];
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -55,8 +59,7 @@ mock.module('../src/community/space-actions', () => ({
   },
   readContainerLifecycleDestination: ({ data }: { data: { target: ContainerTarget; contextId: string | null } }) => {
     const call = deferred<
-      | { kind: 'available'; target: ContainerTarget; contextId: string | null; href: string }
-      | { kind: 'unavailable' }
+      { kind: 'available'; target: ContainerTarget; contextId: string | null; href: string } | { kind: 'unavailable' }
     >();
     destinations.push({ ...call, data });
     return call.promise;
@@ -93,9 +96,8 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
 const { ContainerLifecyclePanel } = await import('../src/community/container-lifecycle-controls');
-const { containerLifecycleSessionSource, createContainerLifecycleCallerLifetime } = await import(
-  '../src/community/container-lifecycle-caller-lifetime'
-);
+const { containerLifecycleSessionSource, createContainerLifecycleCallerLifetime } =
+  await import('../src/community/container-lifecycle-caller-lifetime');
 const { createContainerLifecycle } = await import('../src/community/container-lifecycle');
 const { m } = await import('../src/paraglide/messages.js');
 
