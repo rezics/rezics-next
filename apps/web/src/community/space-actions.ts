@@ -8,7 +8,14 @@ import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import * as v from 'valibot';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
+import {
+  preparedReviewReader,
+  sameReviewReader,
+  validateReviewReaderExpectation,
+  type ReviewReaderExpectation,
+  type ReviewReaderProvenance,
+} from '../subject/write-review-lifetime';
 import {
   commandSetup,
   readSetup,
@@ -95,6 +102,12 @@ function validateCursor(input: unknown): { cursor?: string } {
   return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
 }
 
+function validateReviewMyRealmsRead(input: unknown): { expected: ReviewReaderExpectation } {
+  if (!input || typeof input !== 'object' || !('expected' in input))
+    throw new Error('Invalid review reader');
+  return { expected: validateReviewReaderExpectation(input.expected) };
+}
+
 function validateChange(input: unknown): { realmId: string; action: 'join' | 'leave'; idempotencyKey: string } {
   if (
     !input ||
@@ -138,6 +151,22 @@ export const readMyRealmsPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<MyRealmsPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadMyRealms(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export type ReviewMyRealmsRead =
+  | { kind: 'ready'; page: MyRealmsPage; provenance: ReviewReaderProvenance }
+  | { kind: 'mismatch' };
+
+/** Adds same-request reader provenance while retaining the original bounded My Realms read. */
+export const readMyRealmsPageForReview = createServerFn({ method: 'GET' })
+  .validator(validateReviewMyRealmsRead)
+  .handler(async ({ data }): Promise<ReviewMyRealmsRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    const page = await loadMyRealms(kernelClient(), request, env as Partial<SessionEnv>, {});
+    const provenance = await preparedReviewReader(sessionSubject(request), requestCsrfToken(request));
+    if (!page.signedIn || !sameReviewReader(data.expected, provenance)) return { kind: 'mismatch' };
+    return { kind: 'ready', page, provenance };
   });
 
 export const changeRealmMembership = createServerFn({ method: 'POST' })
