@@ -102,6 +102,7 @@ test('a steer racing a completed turn rejoins and starts a turn without losing t
     const manager = await s.managers.start(s.spec); await s.managers.flush();
     // The server finishes just before delivery, while the persisted manager still names that turn.
     await s.client.request('turn/interrupt', { threadId: manager.threadId, turnId: manager.activeTurnId });
+    await s.managers.flush();
     // Force an old active-turn observation, as with an event arriving before its completion notification.
     s.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(JSON.stringify(manager), manager.id);
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake after the race' });
