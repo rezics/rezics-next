@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore, useMemo } from 'react';
+import { useEffect, useId, useSyncExternalStore, useMemo } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Separator } from '@rezics/ui/shadcn/separator';
@@ -9,6 +9,12 @@ import { accountSafetyLinks } from './account-safety-links';
 import { AccountRenameLink } from './account-rename-link';
 import type { AccountRenameNavigation, AccountRenameResult } from './account-rename-actions';
 import type { AccountRenameFailure } from './account-rename-data';
+import {
+  managedNavigationGuard,
+  useManagedReaderLifetime,
+  useManagedSessionReader,
+  type ManagedReaderCurrent,
+} from './managed-session-reader';
 import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
 
 export type AccountSafetyProps =
@@ -19,7 +25,13 @@ export type AccountSafetyProps =
       csrfToken: string | null;
       onReload: () => void;
       renameAccount?: AccountRenameNavigation | null;
-      renameRead?: { loading: boolean; reload: () => void; failures?: AccountRenameFailure[]; retryAt?: number };
+      renameRead?: {
+        loading: boolean;
+        reload: () => void;
+        failures?: AccountRenameFailure[];
+        retryAt?: number;
+        isCurrent?: ManagedReaderCurrent;
+      };
     }
   | { state: 'signed-out'; returnTo: string };
 
@@ -39,12 +51,28 @@ export class AccountRenameRegion {
   private value: RenameSnapshot = { loading: true, context: null, retryAt: 0 };
   private pending: Promise<void> | null = null;
   private active = false;
+  private retired = false;
   private listeners = new Set<() => void>();
   constructor(
     private readonly read: () => Promise<AccountRenameResult>,
     private readonly accountId?: string | null,
+    private readonly current: ManagedReaderCurrent = () => true,
   ) {}
-  snapshot = () => this.value;
+  snapshot = () => {
+    this.live();
+    return this.value;
+  };
+  dispose = () => {
+    if (this.retired) return;
+    this.retired = true;
+    this.active = false;
+    this.publish({ loading: false, context: null, retryAt: 0 });
+  };
+  isCurrent = () => this.live() && this.active;
+  private live() {
+    if (!this.retired && !this.current()) this.dispose();
+    return !this.retired;
+  }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -56,25 +84,33 @@ export class AccountRenameRegion {
     for (const listener of this.listeners) listener();
   }
   mount = () => {
+    if (!this.live()) return () => {};
     this.active = true;
     if (this.value.loading) void this.request();
     return () => {
       this.active = false;
+      queueMicrotask(() => {
+        if (!this.active) this.dispose();
+      });
     };
   };
   reload = (): Promise<void> => {
-    if (!this.active || this.value.loading || Date.now() < this.value.retryAt) return this.pending ?? Promise.resolve();
+    if (!this.live() || !this.active || this.value.loading || Date.now() < this.value.retryAt)
+      return this.pending ?? Promise.resolve();
     return this.request();
   };
   private request(): Promise<void> {
+    if (!this.live() || !this.active) return Promise.resolve();
     if (this.pending) return this.pending;
     // Clear all old identity, links and failure metadata before awaiting a fresh read.
     this.publish({ loading: true, context: null, retryAt: 0 });
     this.pending = Promise.resolve()
-      .then(this.read)
+      .then((): Promise<AccountRenameResult> | AccountRenameResult =>
+        this.live() && this.active ? this.read() : { context: null },
+      )
       .catch((): AccountRenameResult => ({ context: null, failures: [{ kind: 'failed', status: null }] }))
       .then((result) => {
-        if (!this.active) return;
+        if (!this.live() || !this.active) return;
         if (this.accountId && result.context && result.context.accountId !== this.accountId) result = { context: null };
         const now = Date.now();
         const retryAt = Math.max(
@@ -90,20 +126,36 @@ export class AccountRenameRegion {
   }
 }
 
+/** Check both sides of module loading; the original explicit token never comes from a newer session. */
+export async function readCurrentAccountRename(
+  csrfToken: string,
+  current: ManagedReaderCurrent,
+  load = () => import('./account-rename-actions'),
+): Promise<AccountRenameResult> {
+  if (!csrfToken || !current()) return { context: null };
+  const { readAccountRename } = await load();
+  if (!current()) return { context: null };
+  const result = await readAccountRename({ headers: { 'X-CSRF-Token': csrfToken } });
+  return current() ? result : { context: null };
+}
+
 function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {
-  const [region] = useState(
+  const owner = useManagedSessionReader(props.accountId, props.accountId, props.csrfToken);
+  const region = useMemo(
     () =>
       new AccountRenameRegion(
         () =>
           props.csrfToken
-            ? import('./account-rename-actions').then(({ readAccountRename }) =>
-                readAccountRename({ headers: { 'X-CSRF-Token': props.csrfToken! } }),
-              )
+            ? readCurrentAccountRename(props.csrfToken, owner.isCurrent)
             : Promise.resolve({ context: null }),
         props.accountId,
+        owner.isCurrent,
       ),
+    [props.accountId, props.csrfToken, owner],
   );
-  const result = useSyncExternalStore(region.subscribe, region.snapshot, region.snapshot);
+  useManagedReaderLifetime(region.dispose, owner);
+  const snapshot = useSyncExternalStore(region.subscribe, region.snapshot, region.snapshot);
+  const result: RenameSnapshot = owner.isCurrent() ? snapshot : { context: null, loading: true, retryAt: 0 };
   useEffect(region.mount, [region]);
   return (
     <AccountSafetyCard
@@ -112,6 +164,7 @@ function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signe
       renameRead={{
         loading: result.loading,
         reload: region.reload,
+        isCurrent: region.isCurrent,
         ...(result.failures ? { failures: result.failures } : {}),
         retryAt: result.retryAt,
       }}
@@ -147,11 +200,17 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           </div>
         ) : (
           <>
-            <AccountRenameLink
-              context={props.renameAccount ?? null}
-              loading={read?.loading ?? false}
-              failure={failure}
-            />
+            <div
+              className="contents"
+              onClickCapture={managedNavigationGuard(read?.isCurrent ?? alwaysCurrent)}
+              onAuxClickCapture={managedNavigationGuard(read?.isCurrent ?? alwaysCurrent)}
+            >
+              <AccountRenameLink
+                context={props.renameAccount ?? null}
+                loading={read?.loading ?? false}
+                failure={failure}
+              />
+            </div>
             {props.renameRead ? (
               <div aria-busy={props.renameRead.loading} className="space-y-2">
                 <Button
@@ -242,3 +301,5 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
     </Card>
   );
 }
+
+const alwaysCurrent = () => true;

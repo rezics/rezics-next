@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { expect, within } from 'storybook/test';
+import { Button } from '@rezics/ui/shadcn/button';
+import { expect, within, userEvent } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { sessionQuery } from '../../session/query';
 import { SettingsPageView } from '../../settings/settings-page';
@@ -9,7 +10,7 @@ import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
 import { managedAccountsIO, managedViewer } from '../patterns/managed-accounts.fixtures';
 
-function SettingsExample() {
+function SettingsExample({ recovery = false }: { recovery?: boolean }) {
   const client = useQueryClient();
   const [io] = useState(() => {
     // This page's illustrative inventory and browser session share one immutable viewer.
@@ -22,6 +23,31 @@ function SettingsExample() {
   });
   return (
     <AppShell>
+      {recovery ? (
+        <div className="flex gap-2">
+          <Button
+            onClick={() =>
+              client
+                .getQueryCache()
+                .find({ queryKey: sessionQuery.queryKey, exact: true })
+                ?.setState({ status: 'error', error: new Error('Session unavailable') })
+            }
+          >
+            Session unavailable
+          </Button>
+          <Button
+            onClick={() =>
+              client.setQueryData(sessionQuery.queryKey, {
+                state: 'signed-in',
+                csrfToken: 'story-csrf-token',
+                subject: managedViewer,
+              })
+            }
+          >
+            Restore session
+          </Button>
+        </div>
+      ) : null}
       <SettingsPageView
         page={{
           signedIn: true,
@@ -68,5 +94,22 @@ export const Default: Story = {
     );
     await expect(account.getByText(m.managed_member())).toBeVisible();
     await expect(account.getByText(m.managed_reconciling())).toBeVisible();
+  },
+};
+
+/** Recovery from a retained-data session error uses the actual connected inventory with illustrative IO. UNRUN. */
+export const SessionRecovery: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
+      <SettingsExample recovery />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('link', { name: 'Independent Reading Group' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Session unavailable' }));
+    await expect(canvas.queryByRole('link', { name: 'Independent Reading Group' })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Restore session' }));
+    await canvas.findByRole('link', { name: 'Independent Reading Group' });
   },
 };

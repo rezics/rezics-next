@@ -93,3 +93,17 @@ export const DeploymentUnavailablePhone: Story = {
     await expect(canvas.getByRole('link', { name: m.account_security_settings() })).toBeVisible();
   },
 };
+
+/** The retired context is absent while a fresh owner prepares its original read. UNRUN. */
+export const SessionRecovery: Story = {
+  args: { renameAccount: null, renameRead: { loading: true, reload() {} } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText('@alice')).toBeNull();
+    await expect(canvas.queryByRole('link', { name: m.settings_account_rename_continue() })).toBeNull();
+    await expect(
+      canvas.getByRole('button', { name: `${m.settings_reload()}: ${m.settings_account_rename_heading()}` }),
+    ).toBeDisabled();
+    await expect(canvas.getByRole('link', { name: m.account_security_settings() })).toBeVisible();
+  },
+};

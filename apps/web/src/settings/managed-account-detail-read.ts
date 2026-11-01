@@ -1,3 +1,4 @@
+import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import * as v from 'valibot';
@@ -202,6 +203,7 @@ const empty = (): DetailSnapshot => ({
 export class ManagedAccountReader {
   private state = empty();
   private generation = 0;
+  private disposed = false;
   private actionObservation = 0;
   private listeners = new Set<() => void>();
   constructor(
@@ -209,8 +211,12 @@ export class ManagedAccountReader {
     readonly accountId: string,
     private read: DetailRead,
     readonly csrfToken: string | null = null,
+    private readonly current: ManagedReaderCurrent = () => true,
   ) {}
-  snapshot = () => this.state;
+  snapshot = () => {
+    this.live();
+    return this.state;
+  };
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -222,11 +228,18 @@ export class ManagedAccountReader {
     for (const listener of this.listeners) listener();
   }
   clear = () => {
+    if (this.disposed) return;
+    this.disposed = true;
     this.generation++;
     this.actionObservation++;
     this.publish(empty());
   };
+  private live() {
+    if (!this.disposed && !this.current()) this.clear();
+    return !this.disposed;
+  }
   async load(section?: DetailSection, cursor?: string) {
+    if (!this.live()) return;
     if (this.state.pending || (section && this.state[section].pending)) return;
     if (!section && (this.state.members.pending || this.state.responsibilities.pending)) return;
     const generation = this.generation;
@@ -242,6 +255,7 @@ export class ManagedAccountReader {
     );
     let result: DetailResult;
     try {
+      if (!this.live()) return;
       result = await this.read({
         viewerId: this.viewerId,
         accountId: this.accountId,
@@ -251,7 +265,7 @@ export class ManagedAccountReader {
     } catch {
       result = { ok: false, failure: detailFailure(null) };
     }
-    if (generation !== this.generation) return;
+    if (!this.live() || generation !== this.generation) return;
     if (
       result.ok &&
       (result.viewerId !== this.viewerId || result.value.account.id.toLowerCase() !== this.accountId.toLowerCase())

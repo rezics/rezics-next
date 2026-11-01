@@ -1,3 +1,4 @@
+import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { isPlatformClosedError } from '../kernel/platform-closed';
@@ -153,13 +154,18 @@ function append<T>(before: T[], after: T[], key: (item: T) => string): T[] {
 export class ManagedAccountsInventory {
   private value = empty();
   private epoch = 0;
+  private disposed = false;
   private loadingEpoch = -1;
   private listeners = new Set<() => void>();
   constructor(
     private readonly viewerId: string,
     private readonly read: ManagedAccountsIO,
+    private readonly current: ManagedReaderCurrent = () => true,
   ) {}
-  snapshot = () => this.value;
+  snapshot = () => {
+    this.live();
+    return this.value;
+  };
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -170,11 +176,19 @@ export class ManagedAccountsInventory {
     this.value = value;
     for (const listener of this.listeners) listener();
   }
-  dispose() {
+  dispose = () => {
+    if (this.disposed) return;
+    this.disposed = true;
     this.epoch++;
+    this.publish(empty());
+  };
+  private live() {
+    if (!this.disposed && !this.current()) this.dispose();
+    return !this.disposed;
   }
   private async request(cursors: ManagedAccountsCursors): Promise<ManagedAccountsResult> {
     try {
+      if (!this.live()) return managedAccountsFailure(null);
       const result = await this.read(cursors);
       if (result.ok && (result.page.account.id !== this.viewerId || result.page.account.kind !== 'actor'))
         return { ok: false, kind: 'denied', status: null, code: null };
@@ -188,12 +202,13 @@ export class ManagedAccountsInventory {
     this.publish({ ...empty(), failure });
   }
   async load() {
+    if (!this.live()) return;
     if (this.value.loading && this.loadingEpoch === this.epoch) return;
     const epoch = ++this.epoch;
     this.loadingEpoch = epoch;
     this.publish({ ...empty(), loading: true });
     const result = await this.request({});
-    if (epoch !== this.epoch) return;
+    if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
       this.deny(result);
       return;
@@ -220,6 +235,7 @@ export class ManagedAccountsInventory {
     return this.readFeed(feed, true);
   }
   private async readFeed(feed: ManagedFeed, firstPage: boolean) {
+    if (!this.live()) return;
     const before = this.value;
     if (!before.account || before.loading || before[feed].busy) return;
     const preparing = feed === 'organizations' && before.organizations.state === 'preparing';
@@ -235,7 +251,7 @@ export class ManagedAccountsInventory {
           ? { organizationsCursor: cursor }
           : { operatorsCursor: cursor },
     );
-    if (epoch !== this.epoch) return;
+    if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
       if (result.kind === 'denied') this.deny(result);
       else

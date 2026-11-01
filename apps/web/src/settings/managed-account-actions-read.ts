@@ -1,3 +1,4 @@
+import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -283,12 +284,28 @@ export class ManagedAccountActionsRead {
   private current?: Promise<ManagedAccountActionsResult>;
   private value: ActionsSnapshot = { result: null, pending: false };
   private retryAt = 0;
+  private disposed = false;
   private listeners = new Set<() => void>();
   constructor(
     private readonly target: ManagedAccountActionsSelection,
     private readonly io: ManagedAccountActionsIO,
+    private readonly currentOwner: ManagedReaderCurrent = () => true,
   ) {}
-  snapshot = () => this.value;
+  snapshot = () => {
+    this.live();
+    return this.value;
+  };
+  dispose = () => {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.retryAt = 0;
+    this.publish({ result: null, pending: false });
+  };
+  isCurrent = () => this.live();
+  private live() {
+    if (!this.disposed && !this.currentOwner()) this.dispose();
+    return !this.disposed;
+  }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -300,16 +317,18 @@ export class ManagedAccountActionsRead {
     for (const listener of this.listeners) listener();
   }
   load(): Promise<ManagedAccountActionsResult> {
+    if (!this.live()) return Promise.resolve(failure(null));
     return this.current ?? this.request();
   }
   retry(): Promise<ManagedAccountActionsResult> {
+    if (!this.live()) return Promise.resolve(failure(null));
     if (this.value.pending || this.value.result?.state !== 'unavailable' || Date.now() < this.retryAt)
       return this.load();
     return this.request();
   }
   private request(): Promise<ManagedAccountActionsResult> {
     this.current = Promise.resolve()
-      .then(() => this.io(this.target))
+      .then(() => (this.live() ? this.io(this.target) : failure(null)))
       .then((result) =>
         result.state === 'ready' &&
         (result.accountId !== this.target.accountId || result.viewerId !== this.target.viewerId)
@@ -318,6 +337,7 @@ export class ManagedAccountActionsRead {
       )
       .catch(exception)
       .then((result) => {
+        if (!this.live()) return failure(null);
         this.retryAt = result.state === 'unavailable' ? preferenceRetryDeadline(result.retryAfter) : 0;
         this.publish({ result, pending: false });
         return result;

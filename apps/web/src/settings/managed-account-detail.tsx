@@ -5,6 +5,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
+import { useManagedReaderLifetime, useManagedSessionReader } from './managed-session-reader';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { ManagedAccountActions } from './managed-account-actions';
 import {
@@ -337,18 +338,26 @@ const unavailable = () => invalidState;
 
 export function ManagedAccountDetail({ accountId, backHref }: { accountId: string | null; backHref: string }) {
   const session = useSession();
-  // A new/unknown identity never renders a previous reader, even before effect cleanup runs.
   const viewerId = session.state === 'signed-in' ? session.subject : null;
+  const owner = useManagedSessionReader(viewerId, accountId, session.csrfToken);
   const reader = useMemo(
     () =>
       viewerId && accountId
-        ? new ManagedAccountReader(viewerId, accountId, (data) => readManagedAccountDetail({ data }), session.csrfToken)
+        ? new ManagedAccountReader(
+            viewerId,
+            accountId,
+            (data) => readManagedAccountDetail({ data }),
+            session.csrfToken,
+            owner.isCurrent,
+          )
         : null,
-    [viewerId, accountId, session.csrfToken],
+    [viewerId, accountId, session.csrfToken, owner],
   );
+  useManagedReaderLifetime(reader?.clear ?? noDispose, owner);
   useEffect(() => {
     if (reader) void reader.load();
-    return () => reader?.clear();
   }, [reader]);
-  return <ManagedAccountDetailCard reader={reader} backHref={backHref} />;
+  return <ManagedAccountDetailCard reader={owner.isCurrent() ? reader : null} backHref={backHref} />;
 }
+
+const noDispose = () => {};

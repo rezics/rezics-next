@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Button } from '@rezics/ui/shadcn/button';
+import { ManagedAccountDetail } from '../../settings/managed-account-detail';
+import { sessionQuery } from '../../session/query';
+import { AppShell } from '../../shell/shell';
+import { expect, within, userEvent } from 'storybook/test';
 import { automation, human, organization, selectManagementStory } from '../../accounts/management/story-api';
 import { m } from '../../paraglide/messages.js';
-import { PageStory, pageReady } from '../page';
+import { PageStory, PatternStory, pageReady } from '../page';
 
 const meta = {
   title: 'Pages/Account/Settings managed account detail',
@@ -46,5 +52,53 @@ export const MemberRestricted: Story = {
     await expect(canvas.getByText(m.settings_managed_responsibilities_unavailable())).toBeVisible();
     await expect(canvas.queryByText(m.managed_no_responsibilities())).toBeNull();
     await expect(canvas.queryByRole('heading', { level: 4 })).toBeNull();
+  },
+};
+
+function RecoveringDetail() {
+  const client = useQueryClient();
+  const [original] = useState(() => {
+    selectManagementStory('populated');
+    const session = { state: 'signed-in' as const, subject: human.id, csrfToken: 'story-csrf-token' };
+    client.setQueryData(sessionQuery.queryKey, session);
+    return session;
+  });
+  return (
+    <AppShell>
+      <div className="flex gap-2">
+        <Button
+          onClick={() =>
+            client
+              .getQueryCache()
+              .find({ queryKey: sessionQuery.queryKey, exact: true })
+              ?.setState({ status: 'error', error: new Error('Session unavailable') })
+          }
+        >
+          Session unavailable
+        </Button>
+        <Button onClick={() => client.setQueryData(sessionQuery.queryKey, original)}>Restore session</Button>
+      </div>
+      <ManagedAccountDetail accountId={organization.id} backHref="/settings#account" />
+    </AppShell>
+  );
+}
+
+/** The current management GET and action catalogue are reread after recovery; no old feed is reused. UNRUN. */
+export const SessionRecovery: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path={`/settings?managedAccount=${organization.id}#account`}>
+      <RecoveringDetail />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(organization.displayName);
+    await canvas.findByText(m.managed_current());
+    await userEvent.click(canvas.getByRole('button', { name: 'Session unavailable' }));
+    await expect(canvas.queryByText(organization.displayName)).toBeNull();
+    await expect(canvas.queryByText(m.managed_current())).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Restore session' }));
+    await canvas.findByText(organization.displayName);
+    await canvas.findByText(m.managed_current());
   },
 };

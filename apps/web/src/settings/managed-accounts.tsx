@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
@@ -10,6 +10,12 @@ import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
+import {
+  managedNavigationGuard,
+  useManagedReaderLifetime,
+  useManagedSessionReader,
+  type ManagedSessionReader,
+} from './managed-session-reader';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   ManagedAccountsInventory,
@@ -144,7 +150,9 @@ export function ManagedAccountsView({
   more,
   firstPage,
   retry,
+  current = () => true,
 }: {
+  current?: () => boolean;
   snapshot: ManagedAccountsSnapshot;
   settingsHref: string;
   more: (feed: ManagedFeed) => void;
@@ -153,7 +161,12 @@ export function ManagedAccountsView({
 }) {
   const { account, organizations, responsibilities } = snapshot;
   return (
-    <div className="space-y-6" data-slot="managed-accounts">
+    <div
+      className="space-y-6"
+      data-slot="managed-accounts"
+      onClickCapture={managedNavigationGuard(current)}
+      onAuxClickCapture={managedNavigationGuard(current)}
+    >
       {snapshot.loading || (!account && !snapshot.failure) ? <p role="status">{m.settings_managed_loading()}</p> : null}
       {snapshot.failure ? (
         <Failure failure={snapshot.failure} retry={retry} busy={snapshot.loading} scope="inventory" />
@@ -262,20 +275,23 @@ function ViewerInventory({
   viewerId,
   settingsHref,
   io = nativeIO,
+  owner,
 }: {
   viewerId: string;
   settingsHref: string;
   io?: ManagedAccountsIO | undefined;
+  owner?: ManagedSessionReader | undefined;
 }) {
-  const [inventory] = useState(() => new ManagedAccountsInventory(viewerId, io));
+  const inventory = useMemo(() => new ManagedAccountsInventory(viewerId, io, owner?.isCurrent), [viewerId, io, owner]);
   const snapshot = useSyncExternalStore(inventory.subscribe, inventory.snapshot, inventory.snapshot);
+  useManagedReaderLifetime(inventory.dispose, owner);
   useEffect(() => {
     void inventory.load();
-    return () => inventory.dispose();
   }, [inventory]);
   return (
     <ManagedAccountsView
       snapshot={snapshot}
+      current={() => (!owner || owner.isCurrent()) && inventory.snapshot().account !== null}
       settingsHref={settingsHref}
       more={(feed) => void inventory.more(feed)}
       firstPage={(feed) => void inventory.firstPage(feed)}
@@ -285,7 +301,12 @@ function ViewerInventory({
 }
 
 /** Viewer changes synchronously remove old pages, even before effect cleanup discards their pending reads. */
-export function ManagedAccounts(props: { viewerId: string; settingsHref: string; io?: ManagedAccountsIO | undefined }) {
+export function ManagedAccounts(props: {
+  viewerId: string;
+  settingsHref: string;
+  io?: ManagedAccountsIO | undefined;
+  owner?: ManagedSessionReader | undefined;
+}) {
   return <ViewerInventory key={props.viewerId} {...props} />;
 }
 
@@ -293,8 +314,16 @@ export function ManagedAccounts(props: { viewerId: string; settingsHref: string;
 export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
   const session = useSession();
   const location = useLocation();
+  const owner = useManagedSessionReader(session.subject, session.subject);
+  if (!owner.isCurrent()) return null;
   if (session.state !== 'signed-in' || !session.subject) return null;
   return (
-    <ManagedAccounts key={session.subject} viewerId={session.subject} settingsHref={location.publicHref} io={io} />
+    <ViewerInventory
+      key={session.subject}
+      viewerId={session.subject}
+      settingsHref={location.publicHref}
+      io={io}
+      owner={owner}
+    />
   );
 }
