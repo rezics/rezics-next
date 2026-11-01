@@ -74,7 +74,7 @@ export function ZoneShell({
     <div data-zone-shell className="flex min-w-0 flex-col gap-6">
       <header className="flex min-w-0 flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-end sm:justify-between">
         {label ? (
-          <p lang={label.lang} className="min-w-0 break-words font-serif text-xl font-semibold tracking-tight">
+          <p lang={label.lang} className="min-w-0 break-words font-sans text-xl font-semibold tracking-tight">
             {label.text}
           </p>
         ) : (

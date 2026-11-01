@@ -305,7 +305,7 @@ export function LiteraryProfile({
       >
         <h2 className="text-xl font-semibold">{m.literary_identity({}, o)}</h2>
         <p>
-          <a lang={title.lang ?? undefined} href={href} className="font-serif text-xl underline">
+          <a lang={title.lang ?? undefined} href={href} className="font-sans text-xl underline">
             {title.text || m.subject_value_unlabelled({}, o)}
           </a>{' '}
           · <span lang={typeName.lang ?? undefined}>{typeName.text}</span>

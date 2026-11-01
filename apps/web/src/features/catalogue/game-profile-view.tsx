@@ -164,7 +164,7 @@ function GameCorrection({
     <article className="mx-auto w-full max-w-4xl space-y-8">
       <header className="space-y-4">
         <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
-        <a className="font-serif text-xl underline" lang={title.lang ?? undefined} href={href}>
+        <a className="font-sans text-xl underline" lang={title.lang ?? undefined} href={href}>
           {title.text || m.subject_value_unlabelled({}, o)}
         </a>
         <p lang={type.lang ?? undefined}>{type.text}</p>

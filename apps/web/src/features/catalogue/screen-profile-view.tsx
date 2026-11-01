@@ -154,7 +154,7 @@ export function ScreenProfile({
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
       <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
       <header className="space-y-3">
-        <a href={href} lang={label.lang ?? undefined} className="font-serif text-2xl font-semibold underline">
+        <a href={href} lang={label.lang ?? undefined} className="font-sans text-2xl font-semibold underline">
           {label.text || m.subject_value_unlabelled({}, o)}
         </a>
         <p lang={pickText(read.release.types[subject.type]?.labels ?? {}, locale).lang ?? undefined}>
