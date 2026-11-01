@@ -23,18 +23,26 @@ export class ReplyParentReader {
   private listeners = new Map<string, Set<() => void>>();
   private generation = 0;
   private active = true;
+  private retired = false;
+  private managed = false;
   constructor(
     readonly threadId: string,
     private read: (parentId: string) => Promise<ReplyParentResult>,
+    private scopeCurrent: () => boolean = () => true,
   ) {}
-  get = (parentId: string): ParentView => this.views.get(parentId) ?? idle;
+  /** A failed scope comparison is permanent, including an observed away/back transition. */
+  current = () => {
+    if (!this.retired && !this.scopeCurrent()) this.dispose();
+    return this.active && !this.retired;
+  };
+  get = (parentId: string): ParentView => (this.current() ? (this.views.get(parentId) ?? idle) : idle);
   subscribe = (parentId: string, listener: () => void) => {
     const listeners = this.listeners.get(parentId) ?? new Set<() => void>();
     this.listeners.set(parentId, listeners);
     listeners.add(listener);
     return () => {
       listeners.delete(listener);
-      if (!listeners.size) {
+      if (!listeners.size && this.listeners.get(parentId) === listeners) {
         this.listeners.delete(parentId);
         this.views.delete(parentId);
         this.pending.delete(parentId);
@@ -46,31 +54,46 @@ export class ReplyParentReader {
     for (const listener of this.listeners.get(parentId) ?? []) listener();
   }
   activate() {
-    this.active = true;
+    if (!this.retired && !this.managed) this.active = true;
+    this.current();
   }
-  dispose() {
+  private disconnect() {
     this.active = false;
     this.generation++;
     this.views.clear();
     this.pending.clear();
+    for (const listeners of this.listeners.values()) for (const listener of listeners) listener();
+  }
+  /** Effect replay may reconnect, but never lends the previous connection's work to it. */
+  connect() {
+    this.managed = true;
+    if (!this.retired) this.active = true;
+    this.current();
+    return () => this.disconnect();
+  }
+  dispose() {
+    if (this.retired) return;
+    this.retired = true;
+    this.disconnect();
   }
   toggle(parentId: string) {
-    if (!this.active) return;
+    if (!this.current()) return;
     const view = this.get(parentId);
     this.set(parentId, { ...view, open: !view.open });
     if (!view.open && view.result.state === 'idle') void this.load(parentId);
   }
   load(parentId: string): Promise<void> {
-    if (!this.active) return Promise.resolve();
+    if (!this.current()) return Promise.resolve();
     const pending = this.pending.get(parentId);
     if (pending) return pending;
     const generation = this.generation;
-    this.set(parentId, { open: true, result: { state: 'loading' } });
-    const request = Promise.resolve()
-      .then(() => this.read(parentId))
+    const ownsRequest = (): boolean =>
+      this.current() && generation === this.generation && this.pending.get(parentId) === request;
+    const request: Promise<void> = Promise.resolve()
+      .then(() => (ownsRequest() ? this.read(parentId) : undefined))
       .then(
         (result) => {
-          if (!this.active || generation !== this.generation || this.pending.get(parentId) !== request) return;
+          if (!ownsRequest() || !result) return;
           // Keep the selected address exact even if a reader returns an unrelated response.
           const admitted =
             result.state === 'available' && (result.id !== parentId || result.threadId !== this.threadId)
@@ -79,14 +102,14 @@ export class ReplyParentReader {
           this.set(parentId, { open: this.get(parentId).open, result: admitted });
         },
         () => {
-          if (this.active && generation === this.generation && this.pending.get(parentId) === request)
-            this.set(parentId, { open: this.get(parentId).open, result: { state: 'unavailable' } });
+          if (ownsRequest()) this.set(parentId, { open: this.get(parentId).open, result: { state: 'unavailable' } });
         },
       )
       .finally(() => {
         if (this.pending.get(parentId) === request) this.pending.delete(parentId);
       });
     this.pending.set(parentId, request);
+    this.set(parentId, { open: true, result: { state: 'loading' } });
     return request;
   }
 }
