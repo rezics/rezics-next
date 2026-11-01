@@ -22,6 +22,7 @@ class ManagementCurrentOrigin {
   private read?: { key: QueryKey; matches: (value: unknown) => boolean };
   private accepted = { retired: false };
   private rejectedAt = -1;
+  private rejectedQuery: unknown;
   private operations = new Map<GatedOperation, { retired: boolean }>();
   private captured: ManagementGuard | undefined;
   constructor(
@@ -58,6 +59,9 @@ class ManagementCurrentOrigin {
   rejectRead = () => {
     if (this.accepted.retired) return;
     this.accepted.retired = true;
+    this.rejectedQuery = this.read
+      ? this.client.getQueryCache().find({ queryKey: this.read.key, exact: true })
+      : undefined;
     this.rejectedAt = this.read ? (this.client.getQueryState(this.read.key)?.dataUpdateCount ?? 0) : 0;
     this.changed();
   };
@@ -75,8 +79,7 @@ class ManagementCurrentOrigin {
     }
     if (this.read) {
       const query = this.client.getQueryState(this.read.key);
-      if (!query || query.status === 'error' || (query.data !== undefined && !this.read.matches(query.data)))
-        this.rejectRead();
+      if (!query || query.status !== 'success' || !this.read.matches(query.data)) this.rejectRead();
     }
   };
   hasAuthority = () => this.browser && !!this.credential() && this.admitted(this.operation);
@@ -115,7 +118,9 @@ class ManagementCurrentOrigin {
     if (
       query?.status !== 'success' ||
       !matches(query.data) ||
-      (this.accepted.retired && query.dataUpdateCount <= this.rejectedAt)
+      (this.accepted.retired &&
+        this.client.getQueryCache().find({ queryKey: key, exact: true }) === this.rejectedQuery &&
+        query.dataUpdateCount <= this.rejectedAt)
     )
       return null;
     if (this.accepted.retired) this.accepted = { retired: false };

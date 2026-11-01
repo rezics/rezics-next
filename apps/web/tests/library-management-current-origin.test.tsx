@@ -224,14 +224,12 @@ test('Copies retains no A read/editor/Undo authority across pre-commit cache ABA
     const lateSubject = a.readSubject(id(10));
     await click(host, m.library_copy_edit());
     await act(async () =>
-      details
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'A',
-          requested: initial.requested,
-          id: id(1),
-          result: { ok: true, copy: initial.page.copies[0]! },
-        }),
+      details.at(-1)!.resolve({
+        sessionSubject: 'A',
+        requested: initial.requested,
+        id: id(1),
+        result: { ok: true, copy: initial.page.copies[0]! },
+      }),
     );
     await click(host, m.library_copy_delete());
     await click(host, m.library_copy_delete_confirm());
@@ -279,14 +277,12 @@ test('Copies retains no A read/editor/Undo authority across pre-commit cache ABA
     expect(host.textContent).not.toContain('Private A');
     await click(host, m.library_copy_edit());
     await act(async () =>
-      details
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'B',
-          requested: initial.requested,
-          id: id(1),
-          result: { ok: true, copy: copyResponse('B').page.copies[0]! },
-        }),
+      details.at(-1)!.resolve({
+        sessionSubject: 'B',
+        requested: initial.requested,
+        id: id(1),
+        result: { ok: true, copy: copyResponse('B').page.copies[0]! },
+      }),
     );
     const form = host.querySelector<HTMLFormElement>('[role="dialog"] form')!;
     const submit = props<{ onSubmit: (event: { preventDefault(): void }) => Promise<void> }>(form).onSubmit;
@@ -325,9 +321,12 @@ test('Copies retains no A read/editor/Undo authority across pre-commit cache ABA
     const retained = page.originating!;
     await act(async () => {
       const query = client.getQueryCache().find({ queryKey: ['copies-current'], type: 'active' })!;
+      const retainedData = query.state.data;
+      query.setState({ status: 'pending', data: undefined });
+      expect(retained.isCurrent()).toBe(false);
       query.setState({ status: 'error', error: new Error('Retained data error') });
       expect(retained.headers()).toBeNull();
-      query.setState({ status: 'success', error: null });
+      query.setState({ status: 'success', error: null, data: retainedData });
       expect(retained.isCurrent()).toBe(false);
     });
     expect(host.textContent).not.toContain('Private B');
