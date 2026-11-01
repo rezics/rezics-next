@@ -31,8 +31,9 @@ export const KeyboardEntry: Story = {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(origin).toHaveFocus());
     if (window.matchMedia('(max-width: 1023px)').matches) {
-      const trigger = canvas.getByRole('button', { name: 'A retained draft Ctrl/⌘ K', exact: true });
+      const trigger = canvas.getByRole('button', { name: 'A retained draft Ctrl/⌘ K' });
       await expect(trigger).toBeVisible();
+      await expect(trigger).toHaveAccessibleName('A retained draft Ctrl/⌘ K');
       await expect(trigger).toHaveAccessibleDescription(m.header_search_keyboard_help());
     }
     await userEvent.keyboard('{Meta>}k{/Meta}');
