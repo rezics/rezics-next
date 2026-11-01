@@ -161,9 +161,19 @@ export type CheckRunFinalCustodyObservation = {
   reason: string | null;
 };
 
+export type CheckRunFinalCustodyContinuation = {
+  count: number;
+  sha256: string;
+  first: CheckRunFinalCustodyObservation;
+  latest: CheckRunFinalCustodyObservation;
+};
+
+export type CheckRunFinalCustodyAggregate = 'pending' | 'settled' | 'unknown';
+
 /** Versioned status metadata; the authenticated final settlement itself remains immutable. */
 export type CheckRunFinalCustody = {
   schema: 1;
+  aggregate: CheckRunFinalCustodyAggregate;
   delivery: 'not-required' | 'pending' | 'delivered' | 'unknown' | 'received' | 'reconciled';
   deliverySha256: string;
   privateFiles: 'pending' | 'settled' | 'unknown';
@@ -182,6 +192,7 @@ export type CheckRunFinalCustody = {
     preparationIntentReferenceSha256: string | null;
   };
   observations: CheckRunFinalCustodyObservation[];
+  continuation: CheckRunFinalCustodyContinuation | null;
 };
 
 export type CheckRunRegistration = {
@@ -448,8 +459,57 @@ function privateReferenceSha256(reference: { file: string; sha256: string } | nu
   return reference ? jsonSha256(reference) : null;
 }
 
+function aggregateFinalCustodyStatus(
+  custody: Pick<CheckRunFinalCustody, 'delivery' | 'privateFiles' | 'reconciliation'>,
+): CheckRunFinalCustodyAggregate {
+  if (
+    custody.delivery === 'unknown' ||
+    custody.privateFiles === 'unknown' ||
+    custody.reconciliation === 'unknown'
+  )
+    return 'unknown';
+  if (custody.delivery === 'pending' || custody.privateFiles === 'pending') return 'pending';
+  return 'settled';
+}
+
+function validateFinalCustodyObservation(value: unknown): CheckRunFinalCustodyObservation {
+  const observation = closedObject(
+    value,
+    ['observedAt', 'disposition', 'transportIdentity', 'final', 'reason'],
+    'custody observation',
+  );
+  if (!['unknown', 'settled', 'rejected'].includes(String(observation.disposition)))
+    throw new Error('check-run-settlement: invalid custody observation disposition');
+  if (
+    observation.transportIdentity !== null &&
+    !['live-same', 'gone-or-replaced', 'unknown'].includes(String(observation.transportIdentity))
+  )
+    throw new Error('check-run-settlement: invalid transport identity observation');
+  const final = observation.final === null ? null : validateCheckRunFinalSettlement(observation.final);
+  const reason = observation.reason === null ? null : boundedText(observation.reason, 'custody observation reason');
+  return {
+    observedAt: boundedText(observation.observedAt, 'custody observation time', 64),
+    disposition: observation.disposition as CheckRunFinalCustodyObservation['disposition'],
+    transportIdentity: observation.transportIdentity as CheckRunTransportIdentityState | null,
+    final,
+    reason,
+  };
+}
+
+function custodyObservationChainHash(
+  previousSha256: string | null,
+  observation: CheckRunFinalCustodyObservation,
+): string {
+  return createHash('sha256')
+    .update('check-run-final-custody-observations-v1\0')
+    .update(previousSha256 ?? '')
+    .update('\0')
+    .update(JSON.stringify(observation))
+    .digest('hex');
+}
+
 function validateFinalCustody(value: unknown): CheckRunFinalCustody {
-  const item = closedObject(
+  const item = closedObjectWithOptional(
     value,
     [
       'schema',
@@ -461,9 +521,12 @@ function validateFinalCustody(value: unknown): CheckRunFinalCustody {
       'identity',
       'observations',
     ],
+    ['aggregate', 'continuation'],
     'final custody state',
   );
   if (item.schema !== 1) throw new Error('check-run-settlement: unsupported final custody schema');
+  if (item.aggregate !== undefined && !['pending', 'settled', 'unknown'].includes(String(item.aggregate)))
+    throw new Error('check-run-settlement: invalid aggregate custody state');
   if (!['not-required', 'pending', 'delivered', 'unknown', 'received', 'reconciled'].includes(String(item.delivery)))
     throw new Error('check-run-settlement: invalid final delivery state');
   if (!['pending', 'settled', 'unknown'].includes(String(item.privateFiles)))
@@ -520,31 +583,30 @@ function validateFinalCustody(value: unknown): CheckRunFinalCustody {
     throw new Error('check-run-settlement: final custody identity digest is inconsistent');
   if (!Array.isArray(item.observations) || item.observations.length > CHECK_RUN_CUSTODY_OBSERVATION_MAX)
     throw new Error('check-run-settlement: final custody observation bound exceeded');
-  const observations = item.observations.map((value): CheckRunFinalCustodyObservation => {
-    const observation = closedObject(
-      value,
-      ['observedAt', 'disposition', 'transportIdentity', 'final', 'reason'],
-      'custody observation',
+  const observations = item.observations.map(validateFinalCustodyObservation);
+  let continuation: CheckRunFinalCustodyContinuation | null = null;
+  if (item.continuation !== undefined && item.continuation !== null) {
+    const rawContinuation = closedObject(
+      item.continuation,
+      ['count', 'sha256', 'first', 'latest'],
+      'custody observation continuation',
     );
-    if (!['unknown', 'settled', 'rejected'].includes(String(observation.disposition)))
-      throw new Error('check-run-settlement: invalid custody observation disposition');
+    const count = boundedCount(rawContinuation.count, 'custody continuation count');
+    if (count < 1) throw new Error('check-run-settlement: invalid custody continuation count');
+    const sha256 = boundedHash(rawContinuation.sha256, 'custody continuation digest');
+    const first = validateFinalCustodyObservation(rawContinuation.first);
+    const latest = validateFinalCustodyObservation(rawContinuation.latest);
+    if (observations.length !== CHECK_RUN_CUSTODY_OBSERVATION_MAX)
+      throw new Error('check-run-settlement: custody continuation needs a full observation prefix');
     if (
-      observation.transportIdentity !== null &&
-      !['live-same', 'gone-or-replaced', 'unknown'].includes(String(observation.transportIdentity))
+      count === 1 &&
+      (JSON.stringify(first) !== JSON.stringify(latest) || sha256 !== custodyObservationChainHash(null, first))
     )
-      throw new Error('check-run-settlement: invalid transport identity observation');
-    const final = observation.final === null ? null : validateCheckRunFinalSettlement(observation.final);
-    const reason = observation.reason === null ? null : boundedText(observation.reason, 'custody observation reason');
-    return {
-      observedAt: boundedText(observation.observedAt, 'custody observation time', 64),
-      disposition: observation.disposition as CheckRunFinalCustodyObservation['disposition'],
-      transportIdentity: observation.transportIdentity as CheckRunTransportIdentityState | null,
-      final,
-      reason,
-    };
-  });
-  return {
-    schema: 1,
+      throw new Error('check-run-settlement: invalid initial custody continuation');
+    continuation = { count, sha256, first, latest };
+  }
+  const custody: Omit<CheckRunFinalCustody, 'aggregate'> = {
+    schema: 1 as const,
     delivery: item.delivery as CheckRunFinalCustody['delivery'],
     deliverySha256,
     privateFiles: item.privateFiles as CheckRunFinalCustody['privateFiles'],
@@ -552,6 +614,11 @@ function validateFinalCustody(value: unknown): CheckRunFinalCustody {
     originalFinalSha256,
     identity: { sha256: identitySha, ...identityCore },
     observations,
+    continuation,
+  };
+  return {
+    ...custody,
+    aggregate: aggregateFinalCustodyStatus(custody),
   };
 }
 
@@ -1270,8 +1337,8 @@ function makeFinalCustody(
     throw new Error('check-run-settlement: final custody binding differs from its invocation');
   const encoded = encodeCheckRunFinalSettlement(final);
   const settled = final.cleanup.disposition === 'settled';
-  return {
-    schema: 1,
+  const custody: Omit<CheckRunFinalCustody, 'aggregate'> = {
+    schema: 1 as const,
     delivery,
     deliverySha256: createHash('sha256').update(encoded).digest('hex'),
     privateFiles: record.preparedExecution || record.preparationIntent ? 'pending' : 'settled',
@@ -1287,19 +1354,34 @@ function makeFinalCustody(
         reason: settled ? null : 'original final settlement reported unknown cleanup',
       },
     ],
+    continuation: null,
   };
+  return { ...custody, aggregate: aggregateFinalCustodyStatus(custody) };
 }
 
 function appendFinalCustodyObservation(
   custody: CheckRunFinalCustody,
   observation: CheckRunFinalCustodyObservation,
 ): CheckRunFinalCustody {
-  if (custody.observations.length >= CHECK_RUN_CUSTODY_OBSERVATION_MAX)
-    throw new Error('check-run-settlement: final custody observation bound reached');
+  const prior = validateFinalCustody(custody);
+  let observations = prior.observations;
+  let continuation = prior.continuation;
+  if (observations.length < CHECK_RUN_CUSTODY_OBSERVATION_MAX) {
+    observations = [...observations, observation];
+  } else {
+    const count = continuation?.count ?? 0;
+    continuation = {
+      count: Math.min(Number.MAX_SAFE_INTEGER, count + 1),
+      sha256: custodyObservationChainHash(continuation?.sha256 ?? null, observation),
+      first: continuation?.first ?? observation,
+      latest: observation,
+    };
+  }
   return validateFinalCustody({
-    ...custody,
-    reconciliation: observation.disposition === 'settled' ? 'settled' : 'unknown',
-    observations: [...custody.observations, observation],
+    ...prior,
+    reconciliation: observation.disposition === 'settled' ? 'settled' : prior.reconciliation,
+    observations,
+    continuation,
   });
 }
 
@@ -1525,13 +1607,19 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     throw new Error('check-run-settlement: invalid declared returns');
   const returns = validatePathList(item.returns, 'declared return path', true);
   const failure = item.failure === null ? null : boundedText(item.failure, 'failure detail');
+  const final = item.final === null ? null : validateCheckRunFinalSettlement(item.final);
+  const finalCustody = item.finalCustody == null ? null : validateFinalCustody(item.finalCustody);
+  const phase =
+    item.phase === 'settled' && finalCustody?.aggregate !== 'settled'
+      ? 'unknown'
+      : (item.phase as CheckRunInvocationPhase);
   return {
     schema: 1,
     invocationId: item.invocationId,
     nonce,
     createdAt: boundedText(item.createdAt, 'creation time', 64),
     updatedAt: boundedText(item.updatedAt, 'update time', 64),
-    phase: item.phase as CheckRunInvocationPhase,
+    phase,
     binding: validateCheckRunInvocationBinding(item.binding),
     physical: item.physical === null ? null : validatePhysical(item.physical),
     transportChild: item.transportChild === null ? null : validateTransportChild(item.transportChild),
@@ -1547,8 +1635,8 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
       requested: cancellation.requested,
       signal: cancellation.signal as 1 | 2 | 15 | null,
     },
-    final: item.final === null ? null : validateCheckRunFinalSettlement(item.final),
-    finalCustody: item.finalCustody == null ? null : validateFinalCustody(item.finalCustody),
+    final,
+    finalCustody,
     failure,
   };
 }
@@ -1602,6 +1690,80 @@ function removePrivateFileReference(
   }
 }
 
+function retainedPreparationIntentDescriptor(
+  record: CheckRunInvocationRecord,
+  reference: { file: string; sha256: string },
+): string {
+  const suffix = '.intent.json';
+  if (
+    !record.candidateWorkspace ||
+    !reference.file.endsWith(suffix) ||
+    resolve(reference.file) !== reference.file
+  )
+    throw new Error('check-run-settlement: preparation intent reference is not bound to a retained candidate');
+  const descriptorFile = reference.file.slice(0, -suffix.length);
+  if (
+    !descriptorFile ||
+    checkRunPreparationIntentFile(descriptorFile) !== reference.file ||
+    (record.descriptor &&
+      (record.descriptor.file !== descriptorFile || !isAbsolute(record.descriptor.file) ||
+        resolve(record.descriptor.file) !== record.descriptor.file))
+  )
+    throw new Error('check-run-settlement: preparation intent path differs from its durable descriptor identity');
+  assertCanonicalParent(reference.file, 'preparation intent');
+  const parent = resolve(reference.file, '..');
+  assertPrivateDirectory(parent, 'preparation intent directory');
+  assertOutsideCandidate(parent, record.candidateWorkspace);
+  return descriptorFile;
+}
+
+function validatePreparationIntentForRecord(
+  record: CheckRunInvocationRecord,
+  descriptorFile: string,
+  intent: CheckRunPreparationIntent,
+): void {
+  if (
+    intent.invocationId !== record.invocationId ||
+    intent.descriptor !== descriptorFile ||
+    intent.candidateWorkspace !== record.candidateWorkspace ||
+    (record.snapshot &&
+      (intent.snapshot.workspace !== record.snapshot.workspace ||
+        intent.snapshot.scratch !== record.snapshot.scratch ||
+        (intent.snapshot.sourceSha256 !== null && intent.snapshot.sourceSha256 !== record.snapshot.sourceSha256)))
+  )
+    throw new Error('check-run-settlement: preparation intent differs from its durable invocation');
+}
+
+function retainedPreparationIntentIsAbsent(file: string): boolean {
+  try {
+    lstatSync(file);
+    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return true;
+  }
+}
+
+function readRetainedPreparationIntent(
+  record: CheckRunInvocationRecord,
+  reference: { file: string; sha256: string },
+): CheckRunPreparationIntent | null {
+  const descriptorFile = retainedPreparationIntentDescriptor(record, reference);
+  if (retainedPreparationIntentIsAbsent(reference.file)) return null;
+  try {
+    const { intent, reference: actual } = readCheckRunPreparationIntentReference(reference.file);
+    if (actual.sha256 !== reference.sha256)
+      throw new Error('check-run-settlement: preparation intent state was substituted');
+    validatePreparationIntentForRecord(record, descriptorFile, intent);
+    return intent;
+  } catch (error) {
+    // An unlink may have completed before its durable reference clear was lost. Only a verified ENOENT
+    // under the already checked canonical private parent recovers that narrow crash boundary.
+    if (retainedPreparationIntentIsAbsent(reference.file)) return null;
+    throw error;
+  }
+}
+
 type PrivateCleanupResult = { record: CheckRunInvocationRecord; failure?: Error };
 
 async function cleanupPrivateReferencesUnderLock(
@@ -1621,16 +1783,13 @@ async function cleanupPrivateReferencesUnderLock(
         removePrivateFileReference(reference, CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES, 'prepared execution', options);
         record = await updateRecord(directory, record, { preparedExecution: null });
       } else {
-        const intent = readCheckRunPreparationIntent(reference.file);
-        if (
-          intent.invocationId !== record.invocationId ||
-          intent.candidateWorkspace !== record.candidateWorkspace ||
-          (record.snapshot &&
-            (intent.snapshot.workspace !== record.snapshot.workspace ||
-              intent.snapshot.scratch !== record.snapshot.scratch))
-        )
-          throw new Error('check-run-settlement: preparation intent differs from its durable invocation');
-        removeCheckRunPreparationIntentFile(reference, intent.candidateWorkspace, options);
+        const intent = readRetainedPreparationIntent(record, reference);
+        const candidateWorkspace = record.candidateWorkspace;
+        if (!candidateWorkspace)
+          throw new Error('check-run-settlement: preparation intent has no retained candidate identity');
+        if (intent)
+          validatePreparationIntentForRecord(record, retainedPreparationIntentDescriptor(record, reference), intent);
+        removeCheckRunPreparationIntentFile(reference, candidateWorkspace, options);
         record = await updateRecord(directory, record, { preparationIntent: null });
       }
     } catch (error) {
@@ -1648,14 +1807,14 @@ async function cleanupPrivateReferencesUnderLock(
       return { record, failure };
     }
   }
-  if (record.finalCustody && record.finalCustody.privateFiles !== 'settled') {
-    record = await updateRecord(directory, record, {
-      phase:
-        record.final.cleanup.disposition === 'settled' || record.finalCustody.reconciliation === 'settled'
-          ? 'settled'
-          : 'unknown',
-      finalCustody: { ...record.finalCustody, privateFiles: 'settled' },
-    });
+  if (record.finalCustody) {
+    const finalCustody =
+      record.finalCustody.privateFiles === 'settled'
+        ? record.finalCustody
+        : validateFinalCustody({ ...record.finalCustody, privateFiles: 'settled' });
+    const phase = finalCustody.aggregate === 'settled' ? 'settled' : 'unknown';
+    if (record.finalCustody.privateFiles !== 'settled' || record.phase !== phase)
+      record = await updateRecord(directory, record, { phase, finalCustody });
   }
   return { record };
 }
@@ -1831,6 +1990,28 @@ export async function persistCheckRunPreparedInvocation(
     if (record.nonce !== registration.nonce) throw new Error('check-run-settlement: wrong invocation nonce');
     if (record.phase !== 'registered' || cancellationWasRequested(directory, record))
       throw new Error('check-run-settlement: invocation is no longer available for preparation');
+    if (
+      checkRunBindingHash(record.binding) !== checkRunBindingHash(registration.binding) ||
+      record.candidateWorkspace !== candidateWorkspace ||
+      JSON.stringify(record.returns) !== JSON.stringify(returns) ||
+      (record.snapshot !== null && JSON.stringify(record.snapshot) !== JSON.stringify(snapshot))
+    )
+      throw new Error('check-run-settlement: registered preparation identity cannot be rebound');
+    if (record.preparationIntent) {
+      if (record.preparationIntent.file !== checkRunPreparationIntentFile(descriptorFile))
+        throw new Error('check-run-settlement: descriptor path differs from the registered preparation intent');
+      const { intent, reference } = readCheckRunPreparationIntentReference(record.preparationIntent.file);
+      if (
+        reference.sha256 !== record.preparationIntent.sha256 ||
+        intent.invocationId !== record.invocationId ||
+        intent.descriptor !== descriptorFile ||
+        intent.candidateWorkspace !== candidateWorkspace ||
+        intent.snapshot.workspace !== snapshot.workspace ||
+        intent.snapshot.scratch !== snapshot.scratch ||
+        (intent.snapshot.sourceSha256 !== null && intent.snapshot.sourceSha256 !== snapshot.sourceSha256)
+      )
+        throw new Error('check-run-settlement: preparation intent differs from registered snapshot custody');
+    }
     const recordedCustody = await updateRecord(directory, record, {
       candidateWorkspace,
       snapshot,
@@ -2186,8 +2367,10 @@ export async function markCheckRunFinalSettlementDelivery(
     if (record.finalCustody.delivery === disposition) return record;
     if (record.finalCustody.delivery !== 'pending')
       throw new Error('check-run-settlement: final delivery state is already terminal');
+    const finalCustody = validateFinalCustody({ ...record.finalCustody, delivery: disposition });
     return updateRecord(directory, record, {
-      finalCustody: { ...record.finalCustody, delivery: disposition },
+      phase: finalCustody.aggregate === 'settled' ? 'settled' : 'unknown',
+      finalCustody,
     });
   });
 }
@@ -2218,7 +2401,8 @@ async function acceptFinalUnderLock(
     message.native.receiptSha256 !== record.native.receiptSha256
   )
     throw new Error('check-run-settlement: final native outcome differs from the retained terminal event');
-  const phase = message.cleanup.disposition === 'settled' ? 'settled' : 'unknown';
+  const finalCustody = makeFinalCustody(record, message, delivery);
+  const phase = finalCustody.aggregate === 'settled' ? 'settled' : 'unknown';
   const snapshotCustody: CheckRunInvocationRecord['snapshotCustody'] =
     message.cleanup.localWorktree === 'removed'
       ? 'removed'
@@ -2228,7 +2412,7 @@ async function acceptFinalUnderLock(
   const next = await updateRecord(directory, record, {
     phase,
     final: message,
-    finalCustody: makeFinalCustody(record, message, delivery),
+    finalCustody,
     snapshotCustody,
   });
   return (await cleanupPrivateReferencesUnderLock(directory, next, options)).record;
@@ -2277,7 +2461,7 @@ export async function reconcileCheckRunInvocation(
         });
         return updateRecord(directory, record, {
           phase: 'unknown',
-          finalCustody: updated,
+          finalCustody: { ...updated, reconciliation: 'unknown' },
           failure: reason,
         });
       });
@@ -2297,7 +2481,7 @@ export async function reconcileCheckRunInvocation(
           });
           return updateRecord(directory, record, {
             phase: 'unknown',
-            finalCustody: updated,
+            finalCustody: { ...updated, reconciliation: 'unknown' },
             failure: currentIdentityFailure,
           });
         }
@@ -2306,13 +2490,6 @@ export async function reconcileCheckRunInvocation(
           record.finalCustody ? record : await updateRecord(directory, record, { finalCustody: currentCustody }),
           options,
         );
-        const nextPhase =
-          cleaned.record.finalCustody?.privateFiles === 'settled' &&
-          (cleaned.record.final?.cleanup.disposition === 'settled' ||
-            cleaned.record.finalCustody?.reconciliation === 'settled')
-            ? 'settled'
-            : 'unknown';
-        if (cleaned.record.phase !== nextPhase) return updateRecord(directory, cleaned.record, { phase: nextPhase });
         return cleaned.record;
       });
     }
@@ -2327,7 +2504,8 @@ export async function reconcileCheckRunInvocation(
           });
         }
         const custody = record.finalCustody;
-        if (custody.reconciliation === 'settled') return record;
+        if (custody.reconciliation === 'settled')
+          return (await cleanupPrivateReferencesUnderLock(directory, record, options)).record;
         const updated = appendFinalCustodyObservation(custody, {
           observedAt: new Date().toISOString(),
           disposition: 'unknown',
@@ -2375,11 +2553,12 @@ export async function reconcileCheckRunInvocation(
         });
         return updateRecord(directory, record, {
           phase: 'unknown',
-          finalCustody: updated,
+          finalCustody: { ...updated, reconciliation: 'unknown' },
           failure: currentIdentityFailure,
         });
       }
-      if (currentCustody.reconciliation === 'settled') return record;
+      if (currentCustody.reconciliation === 'settled')
+        return (await cleanupPrivateReferencesUnderLock(directory, record, options)).record;
       const currentCandidateFailure = observedFinal
         ? validateReconciliationCandidate(record, currentCustody, observedFinal, observedTransportIdentity)
         : '';
@@ -2398,20 +2577,22 @@ export async function reconcileCheckRunInvocation(
         final: observedFinal,
         reason,
       });
-      const phase = disposition === 'settled' && updatedCustody.privateFiles === 'settled' ? 'settled' : 'unknown';
-      const snapshotCustody: CheckRunInvocationRecord['snapshotCustody'] = observedFinal
-        ? observedFinal.cleanup.localWorktree === 'removed'
-          ? 'removed'
-          : observedFinal.cleanup.localWorktree === 'retained'
-            ? 'owned'
-            : 'unknown'
-        : record.snapshotCustody;
-      return updateRecord(directory, record, {
+      const phase = updatedCustody.aggregate === 'settled' ? 'settled' : 'unknown';
+      const snapshotCustody: CheckRunInvocationRecord['snapshotCustody'] =
+        disposition === 'settled' && observedFinal
+          ? observedFinal.cleanup.localWorktree === 'removed'
+            ? 'removed'
+            : observedFinal.cleanup.localWorktree === 'retained'
+              ? 'owned'
+              : 'unknown'
+          : record.snapshotCustody;
+      const next = await updateRecord(directory, record, {
         phase,
         snapshotCustody,
         finalCustody: updatedCustody,
         failure: reason ?? record.failure,
       });
+      return (await cleanupPrivateReferencesUnderLock(directory, next, options)).record;
     });
   }
   if (before.phase === 'unknown' && !options.force) return before;
@@ -2458,6 +2639,7 @@ export async function reconcileCheckRunInvocation(
       } else if (record.native && record.phase !== 'native-terminal') {
         if (
           record.native.exitCode !== message.native?.exitCode ||
+          record.native.lifetimeFailure !== message.native?.lifetimeFailure ||
           record.native.receiptSha256 !== message.native?.receiptSha256
         )
           throw new Error('reconciliation native result differs from the retained terminal event');
@@ -2518,16 +2700,14 @@ export async function discardCheckRunPreparationIntent(
   return mutateRecord(invocationId, options, async (directory, record) => {
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
     if (!record.preparationIntent) return record;
-    const intent = readCheckRunPreparationIntent(record.preparationIntent.file);
-    if (
-      intent.invocationId !== record.invocationId ||
-      intent.candidateWorkspace !== record.candidateWorkspace ||
-      (record.snapshot &&
-        (intent.snapshot.workspace !== record.snapshot.workspace ||
-          intent.snapshot.scratch !== record.snapshot.scratch))
-    )
-      throw new Error('check-run-settlement: preparation intent differs from its durable invocation');
-    removeCheckRunPreparationIntentFile(record.preparationIntent, intent.candidateWorkspace, options);
+    const reference = record.preparationIntent;
+    const intent = readRetainedPreparationIntent(record, reference);
+    const candidateWorkspace = record.candidateWorkspace;
+    if (!candidateWorkspace)
+      throw new Error('check-run-settlement: preparation intent has no retained candidate identity');
+    if (intent)
+      validatePreparationIntentForRecord(record, retainedPreparationIntentDescriptor(record, reference), intent);
+    removeCheckRunPreparationIntentFile(reference, candidateWorkspace, options);
     return updateRecord(directory, record, { preparationIntent: null });
   });
 }

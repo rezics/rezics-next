@@ -137,17 +137,28 @@ routes to its registered invocation and never prepares a replacement. The sideca
 never environment values or command secrets.
 
 After a final is recorded, `final` is immutable. The additive `finalCustody` status object has schema 1 and bounded
-fields: `delivery` (`pending`, `delivered`, `unknown`, `not-required`, `received` or `reconciled`),
+fields: `aggregate` (`pending`, `settled` or `unknown`), `delivery` (`pending`, `delivered`, `unknown`, `not-required`,
+`received` or `reconciled`),
 `deliverySha256` (SHA-256 of canonical compact final JSON without the wire newline), `privateFiles`
 (`pending`, `settled` or `unknown`), `reconciliation` (`unknown` or `settled`), `originalFinalSha256`, `identity`, and
-up to 16 `observations`. Delivery is `pending` after the final is durably pinned but before the writer result,
+up to 16 exact `observations` plus an optional bounded `continuation` (`count`, rolling `sha256`, `first` and `latest`)
+for later observations. The first 16 remain exact; the continuation commits each later observation without growing
+the invocation record and retains its first and most recent exact entries. Delivery is `pending` after the final is
+durably pinned but before the writer result,
 `delivered` when the writer returns, `unknown` when it throws, `not-required` when no writer is configured, `received`
 when FD 3 ingress accepts the original, and `reconciled` when recovery creates the first final for a missing original.
 `privateFiles` covers the execution payload and preparation-intent sidecar; it is `pending` while either reference is
 outstanding, `settled` after their verified disposal, and `unknown` if removal is not verified. The descriptor remains
 as the caller's private replay-resistant handle.
 
-`identity` is `{sha256,bindingSha256,physical,sourceSha256,snapshotSha256,candidateWorkspaceSha256,returnsSha256,preparedExecutionReferenceSha256,descriptorReferenceSha256,preparationIntentReferenceSha256}`. Hashes are SHA-256; `physical` is `{host,run}`; source, snapshot, candidate path and private-file reference digests can be null when no such identity exists. The identity digest covers every identity field except its own `sha256`. An `observations[]` entry is `{observedAt,disposition,transportIdentity,final,reason}` where disposition is `unknown`, `settled` or `rejected`, `transportIdentity` is `live-same`, `gone-or-replaced`, `unknown` or null, and `final` is an exact candidate final settlement or null. A later exact observation may settle custody while the original unknown `final` remains unchanged. Unknown evidence stays non-green. Failed removal keeps its exact reference for later cleanup. Secret environment values do not appear in status or settlement messages.
+`aggregate` is the authoritative producer-side custody result. It is `unknown` if any custody dimension is unknown;
+otherwise it is `pending` while delivery or private files are pending, and `settled` only when delivery has a completed
+outcome, private files are settled and reconciliation is settled. Pending or unknown FD 3 delivery remains non-green
+after physical cleanup. `delivered` records that the writer callback returned; it does not prove downstream
+persistence. A receiver records `received` only after accepting the original final. The invocation phase cannot be
+`settled` while aggregate custody is pending or unknown.
+
+`identity` is `{sha256,bindingSha256,physical,sourceSha256,snapshotSha256,candidateWorkspaceSha256,returnsSha256,preparedExecutionReferenceSha256,descriptorReferenceSha256,preparationIntentReferenceSha256}`. Hashes are SHA-256; `physical` is `{host,run}`; source, snapshot, candidate path and private-file reference digests can be null when no such identity exists. The identity digest covers every identity field except its own `sha256`. An `observations[]` entry is `{observedAt,disposition,transportIdentity,final,reason}` where disposition is `unknown`, `settled` or `rejected`, `transportIdentity` is `live-same`, `gone-or-replaced`, `unknown` or null, and `final` is an exact candidate final settlement or null. A later exact accepted observation may settle custody while the original unknown `final` remains unchanged. Unknown and rejected observations cannot change snapshot custody or prior cleanup authority. Failed removal keeps its exact reference for later cleanup. Secret environment values do not appear in status or settlement messages.
 `finalCustody` is additive versioned status metadata only. The prepared descriptor schema 1 and normal FD 3
 `native-terminal` and `final-settlement` messages keep their installed closed shapes. Consumers should handle this
 metadata at their ordinary result/status boundary; this producer change does not install a Web or control-plane bridge
@@ -256,7 +267,9 @@ The root gate has its own placement rule: it uses the explicit hosts file and su
 
 Auth's standalone typecheck reuses its check's compiler database preparation: one throwaway container receives
 both the kernel and Auth migrations, since Auth's imports also reach kernel SQL. It removes that database after
-tsc exits or fails to start. An existing `DATABASE_URL` bypasses placement and database preparation entirely.
+tsc exits or fails to start. An explicit `DATABASE_URL` does not bypass placement: it is accepted only inside an
+already admitted physical check-host run because credentials cannot be relocated. Outside that run, typecheck exits
+75 before placement. Inside an admitted run, the supplied URL is used and the throwaway database is not started.
 
 ### Controller-reserved proof binding
 

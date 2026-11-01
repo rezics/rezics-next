@@ -1561,7 +1561,7 @@ async function runCheckWithFinalSettlement(
         snapshotBound = true;
         const nativeExitCode = record.final.native?.exitCode;
         if (nativeExitCode !== undefined && nativeExitCode !== 0) return nativeExitCode;
-        return record.final.cleanup.disposition === 'settled' ? 0 : REMOTE_TRANSPORT_FAILURE;
+        return record.finalCustody?.aggregate === 'settled' ? 0 : REMOTE_TRANSPORT_FAILURE;
       }
       if (record.phase !== 'registered') {
         cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
@@ -2039,9 +2039,7 @@ async function runCheckWithFinalSettlement(
     !finalRecord?.final ||
     finalRecord.final.cleanup.disposition !== 'settled' ||
     !finalRecord.finalCustody ||
-    !['delivered', 'not-required'].includes(finalRecord.finalCustody.delivery) ||
-    finalRecord.finalCustody.privateFiles !== 'settled' ||
-    finalRecord.finalCustody.reconciliation !== 'settled'
+    finalRecord.finalCustody.aggregate !== 'settled'
   )
     return REMOTE_TRANSPORT_FAILURE;
   return 0;

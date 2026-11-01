@@ -1,10 +1,14 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { reconcileCheckRunPreparationIntent, reconcileRegisteredCheckRun } from './check-run.ts';
+import {
+  reapRetainedTransportChild,
+  reconcileCheckRunPreparationIntent,
+  reconcileRegisteredCheckRun,
+} from './check-run.ts';
 import {
   acceptCheckRunFinalSettlement,
   allocateCheckRunPhysical,
@@ -13,6 +17,7 @@ import {
   claimCheckRunPreparedInvocation,
   checkRunPreparationIntentFile,
   createCheckRunFinalSettlement,
+  discardCheckRunPreparationIntent,
   encodeCheckRunFinalSettlement,
   getCheckRunStatus,
   markCheckRunFinalSettlementDelivery,
@@ -21,7 +26,6 @@ import {
   persistCheckRunPreparedInvocation,
   reconcileCheckRunInvocation,
   registerCheckRunInvocation,
-  reapRetainedTransportChild,
   stageCheckRunFinalSettlement,
   withCheckRunSpawnPermit,
   writeCheckRunPreparationIntent,
@@ -78,7 +82,7 @@ type InvocationFixture = {
   transportChild: CheckRunTransportChildIdentity;
 };
 
-async function preparedInvocation(): Promise<InvocationFixture> {
+async function preparedInvocation(persist = true): Promise<InvocationFixture> {
   const root = fixtureRoot();
   const candidate = privateDirectory(root, 'candidate');
   const state = privateDirectory(root, 'state');
@@ -108,15 +112,17 @@ async function preparedInvocation(): Promise<InvocationFixture> {
     preparationIntent,
     descriptorFile: descriptor,
   });
-  const preparedDescriptor = await persistCheckRunPreparedInvocation(registration, {
-    stateDirectory: state,
-    candidateWorkspace: candidate,
-    snapshot,
-    returns: [],
-    descriptorFile: descriptor,
-    execution: { schema: 1, originalEnvironment: { SECRET_FIXTURE: 'never-in-status' } },
-  });
-  expect(preparedDescriptor.invocationId).toBe(registration.invocationId);
+  if (persist) {
+    const preparedDescriptor = await persistCheckRunPreparedInvocation(registration, {
+      stateDirectory: state,
+      candidateWorkspace: candidate,
+      snapshot,
+      returns: [],
+      descriptorFile: descriptor,
+      execution: { schema: 1, originalEnvironment: { SECRET_FIXTURE: 'never-in-status' } },
+    });
+    expect(preparedDescriptor.invocationId).toBe(registration.invocationId);
+  }
   return {
     root,
     candidate,
@@ -367,6 +373,400 @@ test('a failed private execution unlink keeps its exact reference for process-lo
   expect(recovered.descriptor?.file).toBe(fixture.descriptor);
   expect(existsSync(fixture.descriptor)).toBe(true);
   expect(existsSync(executionReference!.file)).toBe(false);
+});
+
+test('successful preparation-intent unlink with a lost durable reference clear is recovered by discard', async () => {
+  const fixture = await preparedInvocation();
+  const before = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  const reference = before.preparationIntent;
+  expect(reference).not.toBeNull();
+  await expect(
+    discardCheckRunPreparationIntent(fixture.registration.invocationId, fixture.registration.nonce, {
+      stateDirectory: fixture.state,
+      removePrivateFile: (path) => {
+        unlinkSync(path);
+        throw new Error('durable intent reference clear was interrupted');
+      },
+    }),
+  ).rejects.toThrow(/interrupted/);
+  expect(existsSync(reference!.file)).toBe(false);
+  expect((await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state })).preparationIntent).toEqual(
+    reference,
+  );
+
+  const recovered = await discardCheckRunPreparationIntent(
+    fixture.registration.invocationId,
+    fixture.registration.nonce,
+    { stateDirectory: fixture.state },
+  );
+  expect(recovered.preparationIntent).toBeNull();
+  expect(recovered.descriptor?.file).toBe(fixture.descriptor);
+  expect(existsSync(fixture.descriptor)).toBe(true);
+});
+
+test('prepared registration rejects snapshot custody rebinding before persisting execution', async () => {
+  const fixture = await preparedInvocation(false);
+  await expect(
+    persistCheckRunPreparedInvocation(fixture.registration, {
+      stateDirectory: fixture.state,
+      candidateWorkspace: fixture.candidate,
+      snapshot: {
+        workspace: `${fixture.workspace}-forged`,
+        scratch: fixture.scratch,
+        sourceSha256: fixture.registration.binding.sourceSha256,
+        inputFiles: [],
+      },
+      returns: [],
+      descriptorFile: fixture.descriptor,
+      execution: { schema: 1, originalEnvironment: { SECRET_FIXTURE: 'never-in-status' } },
+    }),
+  ).rejects.toThrow(/cannot be rebound/);
+
+  const retained = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  expect(retained.phase).toBe('registered');
+  expect(retained.snapshot).toEqual({
+    workspace: fixture.workspace,
+    scratch: fixture.scratch,
+    sourceSha256: fixture.registration.binding.sourceSha256,
+    inputFiles: [],
+  });
+  expect(retained.preparedExecution).toBeNull();
+  expect(retained.preparationIntent).not.toBeNull();
+  expect(existsSync(fixture.descriptor)).toBe(false);
+
+  const preparedDescriptor = await persistCheckRunPreparedInvocation(fixture.registration, {
+    stateDirectory: fixture.state,
+    candidateWorkspace: fixture.candidate,
+    snapshot: {
+      workspace: fixture.workspace,
+      scratch: fixture.scratch,
+      sourceSha256: fixture.registration.binding.sourceSha256,
+      inputFiles: [],
+    },
+    returns: [],
+    descriptorFile: fixture.descriptor,
+    execution: { schema: 1, originalEnvironment: { SECRET_FIXTURE: 'never-in-status' } },
+  });
+  expect(preparedDescriptor.invocationId).toBe(fixture.registration.invocationId);
+  expect(existsSync(fixture.descriptor)).toBe(true);
+});
+
+test('successful preparation-intent unlink with a lost durable clear recovers final private-file custody', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const before = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  const intentReference = before.preparationIntent;
+  expect(intentReference).not.toBeNull();
+  const final = finalFor(fixture, 'settled');
+  const interrupted = await acceptFinal(
+    fixture,
+    final,
+    {
+      stateDirectory: fixture.state,
+      removePrivateFile: (path) => {
+        unlinkSync(path);
+        if (path === intentReference!.file) throw new Error('durable intent reference clear was interrupted');
+      },
+    },
+  );
+  expect(interrupted.final).toEqual(final);
+  expect(interrupted.preparationIntent).toEqual(intentReference);
+  expect(interrupted.finalCustody?.privateFiles).toBe('unknown');
+  expect(interrupted.finalCustody?.aggregate).toBe('unknown');
+  expect(existsSync(intentReference!.file)).toBe(false);
+
+  const recovered = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+    stateDirectory: fixture.state,
+  });
+  expect(recovered.final).toEqual(final);
+  expect(recovered.finalCustody?.privateFiles).toBe('settled');
+  expect(recovered.finalCustody?.aggregate).toBe('settled');
+  expect(recovered.phase).toBe('settled');
+  expect(recovered.preparationIntent).toBeNull();
+  expect(recovered.descriptor?.file).toBe(fixture.descriptor);
+  expect(existsSync(fixture.descriptor)).toBe(true);
+});
+
+test('rejected reconciliation evidence cannot mutate snapshot custody before exact original-run recovery', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const original = finalFor(fixture, 'unknown');
+  await acceptFinal(fixture, original);
+  const forged = finalFor(fixture, 'settled', {
+    binding: { ...fixture.registration.binding, argvSha256: '8'.repeat(64) },
+  });
+  const rejected = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+    stateDirectory: fixture.state,
+    reconcilePhysical: async () => ({
+      disposition: 'settled',
+      final: forged,
+      transportIdentity: 'gone-or-replaced',
+    }),
+  });
+  expect(rejected.final).toEqual(original);
+  expect(rejected.finalCustody?.observations.at(-1)?.final).toEqual(forged);
+  expect(rejected.finalCustody?.observations.at(-1)?.disposition).toBe('rejected');
+  expect(rejected.snapshotCustody).toBe('owned');
+
+  const recovered = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+    stateDirectory: fixture.state,
+    reconcilePhysical: async () => ({
+      disposition: 'settled',
+      final: finalFor(fixture, 'settled'),
+      transportIdentity: 'gone-or-replaced',
+    }),
+  });
+  expect(recovered.final).toEqual(original);
+  expect(recovered.snapshotCustody).toBe('removed');
+  expect(recovered.finalCustody?.aggregate).toBe('settled');
+});
+
+test('bounded observation continuation keeps old evidence and admits later exact original-run recovery', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const original = finalFor(fixture, 'unknown');
+  const admitted = await acceptFinal(fixture, original);
+  const originalObservations = admitted.finalCustody!.observations;
+  const rejected = finalFor(fixture, 'settled', {
+    binding: { ...fixture.registration.binding, argvSha256: '8'.repeat(64) },
+  });
+  let retainedPrefix: NonNullable<Awaited<ReturnType<typeof getCheckRunStatus>>['finalCustody']>['observations'] = [];
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+      stateDirectory: fixture.state,
+      reconcilePhysical: async () => ({
+        disposition: 'settled',
+        final: rejected,
+        transportIdentity: 'gone-or-replaced',
+      }),
+    });
+    if (attempt === 14) {
+      retainedPrefix = (await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state }))
+        .finalCustody!.observations;
+    }
+  }
+  const saturated = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  expect(retainedPrefix).toHaveLength(16);
+  expect(retainedPrefix[0]).toEqual(originalObservations[0]);
+  expect(saturated.finalCustody?.observations).toEqual(retainedPrefix);
+  expect(saturated.finalCustody?.continuation?.count).toBeGreaterThan(0);
+  expect(saturated.finalCustody?.continuation?.latest.final).toEqual(rejected);
+  expect(saturated.final).toEqual(original);
+
+  const exact = finalFor(fixture, 'settled');
+  const recovered = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+    stateDirectory: fixture.state,
+    reconcilePhysical: async () => ({
+      disposition: 'settled',
+      final: exact,
+      transportIdentity: 'gone-or-replaced',
+    }),
+  });
+  expect(recovered.final).toEqual(original);
+  expect(recovered.finalCustody?.continuation?.latest.final).toEqual(exact);
+  expect(recovered.finalCustody?.aggregate).toBe('settled');
+  expect(recovered.phase).toBe('settled');
+  await expect(acceptFinal(fixture, exact)).rejects.toThrow(/duplicate|replay/i);
+});
+
+test('Original lifetime custody survives lost reference clear rejected evidence bounded observation saturation and interrupted final delivery without replay or false release', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const original = finalFor(fixture, 'unknown');
+  const intentReference = (await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state }))
+    .preparationIntent;
+  expect(intentReference).not.toBeNull();
+
+  const staged = await stageCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(original)}\n`, {
+    stateDirectory: fixture.state,
+    removePrivateFile: (path) => {
+      unlinkSync(path);
+      if (path === intentReference!.file) throw new Error('simulated lost durable intent reference clear');
+    },
+  });
+  expect(staged.final).toEqual(original);
+  expect(staged.finalCustody?.delivery).toBe('pending');
+  expect(staged.finalCustody?.privateFiles).toBe('unknown');
+  expect(staged.finalCustody?.aggregate).toBe('unknown');
+  expect(existsSync(intentReference!.file)).toBe(false);
+
+  const rejected = finalFor(fixture, 'settled', {
+    binding: { ...fixture.registration.binding, argvSha256: '8'.repeat(64) },
+  });
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const result = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+      stateDirectory: fixture.state,
+      reconcilePhysical: async () => ({
+        disposition: 'settled',
+        final: rejected,
+        transportIdentity: 'gone-or-replaced',
+      }),
+    });
+    expect(result.final).toEqual(original);
+    expect(result.snapshotCustody).toBe('owned');
+  }
+
+  const saturated = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  expect(saturated.preparationIntent).toBeNull();
+  expect(saturated.finalCustody?.privateFiles).toBe('settled');
+  expect(saturated.finalCustody?.delivery).toBe('pending');
+  expect(saturated.finalCustody?.aggregate).toBe('pending');
+  expect(saturated.finalCustody?.observations).toHaveLength(16);
+  expect(saturated.finalCustody?.continuation?.count).toBeGreaterThan(0);
+  expect(saturated.finalCustody?.continuation?.latest.disposition).toBe('rejected');
+  expect(saturated.phase).toBe('unknown');
+
+  const recovered = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+    stateDirectory: fixture.state,
+    reconcilePhysical: async () => ({
+      disposition: 'settled',
+      final: finalFor(fixture, 'settled'),
+      transportIdentity: 'gone-or-replaced',
+    }),
+  });
+  expect(recovered.final).toEqual(original);
+  expect(recovered.finalCustody?.reconciliation).toBe('settled');
+  expect(recovered.finalCustody?.delivery).toBe('pending');
+  expect(recovered.finalCustody?.aggregate).toBe('pending');
+  expect(recovered.snapshotCustody).toBe('removed');
+  expect(recovered.phase).toBe('unknown');
+
+  const interrupted = await markCheckRunFinalSettlementDelivery(
+    fixture.registration.invocationId,
+    recovered.finalCustody!.deliverySha256,
+    'unknown',
+    { stateDirectory: fixture.state },
+  );
+  expect(interrupted.final).toEqual(original);
+  expect(interrupted.finalCustody?.delivery).toBe('unknown');
+  expect(interrupted.finalCustody?.aggregate).toBe('unknown');
+  expect(interrupted.phase).toBe('unknown');
+  const observations = interrupted.finalCustody?.observations;
+  const continuation = interrupted.finalCustody?.continuation;
+  await expect(acceptFinal(fixture, finalFor(fixture, 'settled'))).rejects.toThrow(/duplicate|replay/i);
+  const afterReplay = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  expect(afterReplay.final).toEqual(original);
+  expect(afterReplay.finalCustody?.delivery).toBe('unknown');
+  expect(afterReplay.finalCustody?.aggregate).toBe('unknown');
+  expect(afterReplay.finalCustody?.observations).toEqual(observations);
+  expect(afterReplay.finalCustody?.continuation).toEqual(continuation);
+});
+
+test('pending or unknown FD 3 delivery stays unreleasable after cleanup through all reconciliation entrypoints', async () => {
+  for (const delivery of ['pending', 'unknown'] as const) {
+    for (const entrypoint of ['invocation-api', 'producer-api', 'descriptor-cli'] as const) {
+      const fixture = await preparedInvocation();
+      await queueAndStart(fixture);
+      const original = finalFor(fixture, 'settled');
+      const staged = await stageCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(original)}\n`, {
+        stateDirectory: fixture.state,
+      });
+      expect(staged.finalCustody?.delivery).toBe('pending');
+      if (delivery === 'unknown') {
+        await markCheckRunFinalSettlementDelivery(
+          fixture.registration.invocationId,
+          staged.finalCustody!.deliverySha256,
+          'unknown',
+          { stateDirectory: fixture.state },
+        );
+      }
+
+      let reconciled: Awaited<ReturnType<typeof getCheckRunStatus>>;
+      if (entrypoint === 'invocation-api') {
+        reconciled = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
+          stateDirectory: fixture.state,
+        });
+      } else if (entrypoint === 'producer-api') {
+        reconciled = await reconcileRegisteredCheckRun(fixture.registration.invocationId, undefined, {
+          stateDirectory: fixture.state,
+        });
+      } else {
+        const child = spawnSync(
+          process.execPath,
+          [settlementCli, 'reconcile', '--descriptor', fixture.descriptor, '--state-dir', fixture.state],
+          { encoding: 'utf8', timeout: 10_000 },
+        );
+        expect(child.status).toBe(0);
+        reconciled = JSON.parse(child.stdout) as Awaited<ReturnType<typeof getCheckRunStatus>>;
+      }
+
+      expect(reconciled.final).toEqual(original);
+      expect(reconciled.final?.cleanup.disposition).toBe('settled');
+      expect(reconciled.finalCustody?.privateFiles).toBe('settled');
+      expect(reconciled.finalCustody?.reconciliation).toBe('settled');
+      expect(reconciled.finalCustody?.delivery).toBe(delivery);
+      expect(reconciled.finalCustody?.aggregate).toBe(delivery === 'pending' ? 'pending' : 'unknown');
+      expect(reconciled.phase).toBe('unknown');
+    }
+  }
+});
+
+test('aggregate custody settles only after successful FD 3 delivery and verified private cleanup', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const original = finalFor(fixture, 'settled');
+  const staged = await stageCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(original)}\n`, {
+    stateDirectory: fixture.state,
+  });
+  expect(staged.finalCustody?.delivery).toBe('pending');
+  expect(staged.finalCustody?.privateFiles).toBe('settled');
+  expect(staged.finalCustody?.aggregate).toBe('pending');
+  expect(staged.phase).toBe('unknown');
+
+  const delivered = await markCheckRunFinalSettlementDelivery(
+    fixture.registration.invocationId,
+    staged.finalCustody!.deliverySha256,
+    'delivered',
+    { stateDirectory: fixture.state },
+  );
+  expect(delivered.final).toEqual(original);
+  expect(delivered.finalCustody?.delivery).toBe('delivered');
+  expect(delivered.finalCustody?.aggregate).toBe('settled');
+  expect(delivered.phase).toBe('settled');
+});
+
+test('cancellation racing a staged final cannot make pending FD 3 custody releasable', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const original = finalFor(fixture, 'settled');
+  const raw = `${encodeCheckRunFinalSettlement(original)}\n`;
+  const concurrent = await Promise.allSettled([
+    cancelCheckRunInvocation(fixture.registration.invocationId, fixture.registration.nonce, 15, {
+      stateDirectory: fixture.state,
+    }),
+    stageCheckRunFinalSettlement(raw, { stateDirectory: fixture.state }),
+  ]);
+  expect(concurrent.every((result) => result.status === 'fulfilled')).toBe(true);
+  const status = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  expect(status.final).toEqual(original);
+  expect(status.finalCustody?.delivery).toBe('pending');
+  expect(status.finalCustody?.aggregate).toBe('pending');
+  expect(status.phase).toBe('unknown');
+  await expect(acceptFinal(fixture, finalFor(fixture, 'unknown'))).rejects.toThrow(/duplicate|replay/i);
+});
+
+test('immutable final replay rejection preserves the original unknown FD 3 custody decision', async () => {
+  const fixture = await preparedInvocation();
+  await queueAndStart(fixture);
+  const original = finalFor(fixture, 'settled');
+  const staged = await stageCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(original)}\n`, {
+    stateDirectory: fixture.state,
+  });
+  await markCheckRunFinalSettlementDelivery(
+    fixture.registration.invocationId,
+    staged.finalCustody!.deliverySha256,
+    'unknown',
+    { stateDirectory: fixture.state },
+  );
+  const before = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  await expect(acceptFinal(fixture, finalFor(fixture, 'unknown'))).rejects.toThrow(/duplicate|replay/i);
+  const after = await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state });
+  expect(after.final).toEqual(original);
+  expect(after.finalCustody?.delivery).toBe('unknown');
+  expect(after.finalCustody?.aggregate).toBe('unknown');
+  expect(after.finalCustody?.observations).toEqual(before.finalCustody?.observations);
+  expect(after.phase).toBe('unknown');
 });
 
 test('FD 3 delivery failure is recorded after pinning and cannot admit a contradictory final', async () => {

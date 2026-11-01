@@ -121,10 +121,20 @@ remote cleanup, local frozen-worktree cleanup, and separate primary and cleanup 
 `settled` certifies a fully verified lifecycle; missing evidence or any unknown cleanup remains non-green and keeps
 consumer custody. The decoder rejects foreign, replayed, duplicate, partial, oversized and out-of-order messages.
 The additive status-only `finalCustody` schema 1 keeps the authenticated final immutable while tracking its canonical
-digest, delivery state, private-file cleanup state, exact invocation identity and up to 16 bounded observations.
-An unknown original final can settle only from a later exact observation for the same invocation, eleven-field binding,
-physical host/run, source and prepared inputs, returns and private-file references; that observation is appended to
-status and never replaces or re-emits the original final. Unknown evidence stays non-green.
+digest, delivery state, private-file cleanup state, exact invocation identity, aggregate custody, and bounded
+observations. It retains up to 16 exact observations, then uses a fixed-size continuation with a rolling digest and
+exact first/latest overflow entries. The continuation preserves the old observation chain without unbounded
+invocation-record growth. An unknown original final can settle only from a later exact observation for the same
+invocation, eleven-field binding, physical host/run, source and prepared inputs, returns and private-file references;
+that accepted observation is appended or committed in the continuation and never replaces or re-emits the original
+final. Rejected evidence cannot change snapshot custody or prior cleanup authority.
+
+Aggregate custody is the authoritative producer-side result: it is `unknown` if any custody dimension is unknown;
+otherwise it is `pending` while delivery or private files are pending, and `settled` only after delivery has a completed
+outcome, private files are settled and reconciliation is settled. Pending/unknown FD 3 delivery remains non-green even
+after successful physical cleanup. A returned FD 3 writer callback records `delivered`, not receiver persistence;
+durable receiver admission is recorded separately as `received`. The invocation phase is never `settled` while aggregate
+custody is pending or unknown.
 This metadata is status-only: the prepared descriptor and normal `native-terminal`/`final-settlement` FD 3 schemas
 remain unchanged. Consumer handling belongs at the ordinary result/status boundary; this producer work does not claim a
 Web or control-plane bridge.
