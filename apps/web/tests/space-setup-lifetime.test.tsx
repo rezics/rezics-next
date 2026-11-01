@@ -5,6 +5,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { SetupChoice, SetupCommand, SetupFailure, SetupResult, SetupSnapshot } from '../src/community/space-setup';
 import type { BoardChoiceSource } from '../src/community/setup-board-picker';
 import type { SetupTransport } from '../src/stories/patterns/space-setup/space-setup';
+import type { SpaceSetupInitialAdmission } from '../src/community/space-setup-lifetime';
 
 // Production page, form, session query and choice controls; only the server action boundary and
 // browser environment are supplied. Authored coverage; acceptance remains deferred to integration.
@@ -113,8 +114,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = a
 const { sessionQuery } = await import('../src/session/query');
 const { SpaceSetupEntry, SpaceSetupPage } = await import('../src/community/space-setup-page');
 const { SpaceSetupForm } = await import('../src/stories/patterns/space-setup/space-setup');
-const { captureSpaceSetupInitialAdmission, type SpaceSetupInitialAdmission } =
-  await import('../src/community/space-setup-lifetime');
+const { captureSpaceSetupInitialAdmission } = await import('../src/community/space-setup-lifetime');
 const { m } = await import('../src/paraglide/messages.js');
 const id = (number: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(number).padStart(12, '0')}`;
 const subject = id(1);
