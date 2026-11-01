@@ -296,6 +296,22 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
     ): ReturnType<PublicFilterSourceBinding['join']>;
   }>;
 
+/** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
+type NativePreparationInput = Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] | Readonly<{ bootstrap: string }>;
+export type NativePublicFilterPreparation = PublicSourceBootstrapResult | Readonly<{
+  status: 'preparing'; bootstrap: PublicSourceBootstrap; cost: PublicFilterCost;
+}>;
+const nativePreparations = new WeakMap<PublicFilterSourceBinding, (
+  input: NativePreparationInput, context: PublicFilterConsumerContext,
+) => Promise<NativePublicFilterPreparation>>();
+
+/** A private factory association locates the native body; it cannot grant coverage or open a PIT. */
+export async function advanceNativePublicFilterPreparation(
+  binding: PublicFilterSourceBinding, input: NativePreparationInput, context: PublicFilterConsumerContext,
+): Promise<NativePublicFilterPreparation | null> {
+  return nativePreparations.get(binding)?.(input, context) ?? null;
+}
+
 type BindingCost = { -readonly [K in keyof PublicFilterCost]: number } & {
   statements: number;
   rows: number;
@@ -1094,6 +1110,99 @@ export function createPublicFilterSourceBinding(
       });
     },
   };
+  async function beginRetained(
+    request: Parameters<PublicFilterSourceBootstrapBinding['begin']>[0],
+    context: PublicFilterConsumerContext,
+    retainedId?: string,
+  ): Promise<NativePublicFilterPreparation> {
+    const deadline = context.deadline;
+    let capture: PublicSourceCaptureInput, consumer: PublicFilterConsumer;
+    const snapshot = request.snapshot;
+    try {
+      capture = structuredClone(request.capture);
+      consumer = structuredClone(request.consumer);
+    } catch {
+      return fail('binding_mismatch');
+    }
+    if (snapshot !== 'pit' && snapshot !== 'prepared') return fail('binding_mismatch');
+    const resolved = await binding.resolve(
+      { source: request.source, meaning: request.meaning, capture },
+      { deadline },
+    );
+    if (resolved.status !== 'resolved') return resolved;
+    readers.set(resolved.definition.source.id, request.source);
+    return run({ deadline }, async (cost, db) => {
+      addCost(cost, resolved.cost);
+      // Validate the already registered physical consumer through its real owner, before making a cut.
+      const registration = await readGenerationPublicationCustody(pool, consumer, 0, { deadline });
+      addCost(cost, registration.cost);
+      if (!('definition' in registration)) return { ...registration, cost };
+      requireSameDefinition(resolved.definition, registration.definition);
+      if (
+        consumer.readDefinition !== resolved.definition.readDefinition ||
+        consumer.meaningDigest !== resolved.definition.meaning.digest
+      )
+        throw new BindingError('binding_mismatch');
+      const existing = retainedId === undefined ? null : await loadBootstrap(retainedId, db, resolved.definition);
+      if (existing && (
+        encode(existing.bootstrap.consumer) !== encode(consumer) || existing.bootstrap.snapshot !== snapshot ||
+        (existing.row.state !== 'capturing' && existing.row.state !== 'begun')
+      )) throw new BindingError('binding_mismatch');
+      const inserted = existing ? { bootstrap: existing.row.bootstrap } : (
+        await beginBootstrap.run(db, {
+          bootstrap: randomUUID(),
+          read_definition: resolved.definition.readDefinition,
+          request_key: hash(encode({ consumer, snapshot })),
+          consumer: encode(consumer),
+          snapshot_kind: snapshot,
+          mixed: 'representation' in capture,
+        })
+      )[0];
+      if (!inserted) throw new BindingError('configuration_changed');
+      const cut = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
+      if (cut.row.state === 'capturing') {
+        const baseline = {
+          bootstrap: inserted.bootstrap,
+          registration: registration.registration,
+          definition: resolved.definition.readDefinition,
+          consumer: encodePublicFilterNativeState(consumer),
+          accounts: 'representation' in capture,
+        };
+        await beginPublicFilterCoverageBaseline(db,baseline,deadline);
+        // One original native home per retained preparation step. Account and
+        // Source writers share the locks used by this enrollment. Its original
+        // tuple survives replay and is not replaced by a current read snapshot.
+        const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys);
+        const receipt = await enrollAccountDiscoveryHome(db, {
+          partition: cut.row.account_after,
+          bootstrap: inserted.bootstrap,
+          registration: registration.registration,
+          readDefinition: resolved.definition.readDefinition,
+          keys: 'representation' in capture ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys,
+          accounts: 'representation' in capture,
+        }, { deadline });
+        if (!receipt.complete)
+          return { status: 'preparing' as const, bootstrap: cut.bootstrap, cost };
+        const adopted = await adoptPublicFilterCoverageBaseline(db,baseline,receipt,deadline);
+        const advanced = (await accountPage.run(db, {
+          bootstrap: inserted.bootstrap,
+          after_partition: cut.row.account_after,
+          next_partition: cut.row.account_after + 1,
+          head_count: 1,
+          coverage_generation: String(adopted.generation),
+          coverage_root: adopted.root,
+          registration: registration.registration.id,
+          heads: [{ partition: receipt.partition, epoch: receipt.epoch,
+            revision: String(receipt.revision), claim_revision: String(receipt.claimRevision) }],
+        }))[0];
+        if (!advanced || cut.row.account_after + 1 !== 4096)
+          return { status: 'preparing' as const, bootstrap: cut.bootstrap, cost };
+      }
+      const begun = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
+      return { status: 'begun' as const, bootstrap: begun.bootstrap, cost };
+    });
+  }
+
   const bootstrapBinding: PublicFilterSourceBootstrapBinding = {
     ...binding,
     async readRepairStep(request, context) {
@@ -1311,87 +1420,8 @@ export function createPublicFilterSourceBinding(
       });
     },
     async begin(request, context) {
-      const deadline = context.deadline;
-      let capture: PublicSourceCaptureInput, consumer: PublicFilterConsumer;
-      const snapshot = request.snapshot;
-      try {
-        capture = structuredClone(request.capture);
-        consumer = structuredClone(request.consumer);
-      } catch {
-        return fail('binding_mismatch');
-      }
-      if (snapshot !== 'pit' && snapshot !== 'prepared') return fail('binding_mismatch');
-      const resolved = await binding.resolve(
-        { source: request.source, meaning: request.meaning, capture },
-        { deadline },
-      );
-      if (resolved.status !== 'resolved') return resolved;
-      readers.set(resolved.definition.source.id, request.source);
-      return run({ deadline }, async (cost, db) => {
-        addCost(cost, resolved.cost);
-        // Validate the already registered physical consumer through its real owner, before making a cut.
-        const registration = await readGenerationPublicationCustody(pool, consumer, 0, { deadline });
-        addCost(cost, registration.cost);
-        if (!('definition' in registration)) return { ...registration, cost };
-        requireSameDefinition(resolved.definition, registration.definition);
-        if (
-          consumer.readDefinition !== resolved.definition.readDefinition ||
-          consumer.meaningDigest !== resolved.definition.meaning.digest
-        )
-          throw new BindingError('binding_mismatch');
-        const inserted = (
-          await beginBootstrap.run(db, {
-            bootstrap: randomUUID(),
-            read_definition: resolved.definition.readDefinition,
-            request_key: hash(encode({ consumer, snapshot })),
-            consumer: encode(consumer),
-            snapshot_kind: snapshot,
-            mixed: 'representation' in capture,
-          })
-        )[0];
-        if (!inserted) throw new BindingError('configuration_changed');
-        const cut = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
-        if (cut.row.state === 'capturing') {
-          const baseline = {
-            bootstrap: inserted.bootstrap,
-            registration: registration.registration,
-            definition: resolved.definition.readDefinition,
-            consumer: encodePublicFilterNativeState(consumer),
-            accounts: 'representation' in capture,
-          };
-          await beginPublicFilterCoverageBaseline(db,baseline,deadline);
-          // One original native home per retained preparation step. Account and
-          // Source writers share the locks used by this enrollment. Its original
-          // tuple survives replay and is not replaced by a current read snapshot.
-          const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys);
-          const receipt = await enrollAccountDiscoveryHome(db, {
-            partition: cut.row.account_after,
-            bootstrap: inserted.bootstrap,
-            registration: registration.registration,
-            readDefinition: resolved.definition.readDefinition,
-            keys: 'representation' in capture ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys,
-            accounts: 'representation' in capture,
-          }, { deadline });
-          if (!receipt.complete)
-            return { status: 'unready' as const, reason: 'owner_unavailable' as const, cost };
-          const adopted = await adoptPublicFilterCoverageBaseline(db,baseline,receipt,deadline);
-          const advanced = (await accountPage.run(db, {
-            bootstrap: inserted.bootstrap,
-            after_partition: cut.row.account_after,
-            next_partition: cut.row.account_after + 1,
-            head_count: 1,
-            coverage_generation: String(adopted.generation),
-            coverage_root: adopted.root,
-            registration: registration.registration.id,
-            heads: [{ partition: receipt.partition, epoch: receipt.epoch,
-              revision: String(receipt.revision), claim_revision: String(receipt.claimRevision) }],
-          }))[0];
-          if (!advanced || cut.row.account_after + 1 !== 4096)
-            return { status: 'unready' as const, reason: 'owner_unavailable' as const, cost };
-        }
-        const begun = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
-        return { status: 'begun' as const, bootstrap: begun.bootstrap, cost };
-      });
+      const result = await beginRetained(request, context);
+      return result.status === 'preparing' ? fail('owner_unavailable', result.cost) : result;
     },
     async adopt(request, context) {
       const input = structuredClone(request),
@@ -1449,8 +1479,12 @@ export function createPublicFilterSourceBinding(
         );
         addCost(cost, native.cost);
         if (!('definition' in native)) return { ...native, cost };
-        if (native.queried === null) return { status: 'pending' as const, cost };
         requireSameDefinition(cut.definition, native.definition);
+        if (native.queried === null) {
+          if (cut.row.state !== 'begun' || cut.row.queried !== null || !cut.row.coverage_sealed)
+            return { status: 'pending' as const, cost };
+          return { status: 'begun' as const, bootstrap: cut.bootstrap, queried: null, cost };
+        }
         const joined = await binding.join({ queried: native.queried }, { deadline });
         addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
@@ -1526,5 +1560,26 @@ export function createPublicFilterSourceBinding(
       });
     },
   };
+  nativePreparations.set(bootstrapBinding, async (input, context) => {
+    if (!('bootstrap' in input)) return beginRetained(input, context);
+    const retained = await run(context, async (cost, db) => {
+      const cut = await loadBootstrap(input.bootstrap, db);
+      if (cut.row.state !== 'capturing' && cut.row.state !== 'begun')
+        throw new BindingError('observation_lost');
+      return { status: 'retained' as const, cut, cost };
+    });
+    if (retained.status !== 'retained') return retained;
+    if (retained.cut.row.state === 'begun')
+      return { status: 'begun', bootstrap: retained.cut.bootstrap, cost: retained.cost };
+    const result = await beginRetained({
+      source: sourceReader(retained.cut.definition), meaning: retained.cut.definition.meaning,
+      capture: retained.cut.definition.capture, consumer: retained.cut.bootstrap.consumer,
+      snapshot: retained.cut.bootstrap.snapshot,
+    }, context, input.bootstrap);
+    addCost(retained.cost, result.cost);
+    if (('bootstrap' in result) && result.bootstrap.id !== input.bootstrap)
+      return fail('observation_lost', retained.cost);
+    return { ...result, cost: retained.cost };
+  });
   return Object.freeze(bootstrapBinding);
 }

@@ -573,6 +573,7 @@ import type {
   PrivacyReductionStart,
   PublicFilterProjectionRecord,
 } from '../semantic/public-filter-source-contract.ts';
+import { advanceNativePublicFilterPreparation } from '../semantic/public-filter-source-binding.ts';
 import type {
   PublicFilterSourceBinding,
   PublicFilterSourceBootstrapBinding,
@@ -1141,15 +1142,33 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
-    const recovery = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
-    if (recovery.status !== 'begun' && recovery.status !== 'adopted') return m.unavailable('source_pending');
-    if (!isDeepStrictEqual(retainedBootstrap(recovery.bootstrap), work.bootstrap))
-      return m.unavailable('observation_lost');
+    let recovery = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
     const consumer = work.bootstrap.consumer;
-    let job: PublicFilterConsumerJob = {
+    const job: PublicFilterConsumerJob = {
       consumer,
       job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
     };
+    if (recovery.status === 'pending') {
+      const native = await advanceNativePublicFilterPreparation(binding, { bootstrap: work.bootstrap.id }, context);
+      if (native === null) return m.unavailable('source_pending');
+      const advanced = m.take(native);
+      if (advanced.status !== 'begun' && advanced.status !== 'preparing') return m.unavailable('source_pending');
+      if (!isDeepStrictEqual(retainedBootstrap(advanced.bootstrap), work.bootstrap))
+        return m.unavailable('observation_lost');
+      if (advanced.status === 'preparing') return { status: 'preparing', repair: job, cost: m.cost };
+      recovery = { ...advanced, queried: null };
+    }
+    if (recovery.status !== 'begun' && recovery.status !== 'adopted') return m.unavailable('source_pending');
+    if (!isDeepStrictEqual(retainedBootstrap(recovery.bootstrap), work.bootstrap))
+      return m.unavailable('observation_lost');
+    // Recover the original committed physical adoption, never open a replacement PIT.
+    if (recovery.status === 'adopted') {
+      if (work.queried !== null && !isDeepStrictEqual(work.queried, recovery.queried))
+        return m.unavailable('observation_lost');
+      work.queried = recovery.queried;
+      work.adopted = true;
+      encoded = await save(work, encoded, true, m);
+    }
     if (work.queried === null && work.materializing === null) {
       const retained = m.take(
         await custody.openPit(
@@ -1308,13 +1327,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (old?.consumer_work)
         return advanceCapture(decodeState<ConsumerWork>(old.consumer_work), old.consumer_work, m, context);
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
-      const begun = m.take(
-        await binding.begin(
-          { source: config.source, meaning, capture: canonical, consumer: registered.consumer, snapshot },
-          context,
-        ),
-      );
-      if (begun.status !== 'begun') return m.unavailable('source_pending');
+      const preparation = { source: config.source, meaning, capture: canonical, consumer: registered.consumer, snapshot };
+      const native = await advanceNativePublicFilterPreparation(binding, preparation, context);
+      const begun = m.take(native ?? await binding.begin(preparation, context));
+      if (begun.status !== 'begun' && begun.status !== 'preparing') return m.unavailable('source_pending');
       if (
         !isDeepStrictEqual(begun.bootstrap.definition, resolved.definition) ||
         !isDeepStrictEqual(begun.bootstrap.consumer, registered.consumer) ||
@@ -1341,6 +1357,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         adopted: false,
       };
       const encoded = await save(work, null, true, m);
+      if (begun.status === 'preparing') return {
+        status: 'preparing', repair: {
+          consumer: work.bootstrap.consumer,
+          job: `${registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
+        }, cost: m.cost,
+      };
       return await advanceCapture(work, encoded, m, context);
     } catch (error) {
       return failure(error, m);
@@ -1613,17 +1635,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const { work } = loaded;
       let encoded = loaded.encoded;
       if (loaded.registration) {
-        const recovered = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
-        if (recovered.status === 'pending') return m.unavailable('source_pending');
-        if (recovered.status !== 'begun' && recovered.status !== 'adopted') return m.unavailable('source_pending');
-        if (!isDeepStrictEqual(retainedBootstrap(recovered.bootstrap), work.bootstrap))
-          return m.unavailable('observation_lost');
-        // A recovered adoption points to existing physical custody, never a replacement cut.
-        if (recovered.status === 'adopted') {
-          work.queried = recovered.queried;
-          work.adopted = true;
-          encoded = await save(work, encoded, true, m);
-        }
         const result = await advanceCapture(work, encoded, m, context);
         return result.status === 'captured'
           ? { status: 'settled' as const, job: result.repair, cost: m.cost }
