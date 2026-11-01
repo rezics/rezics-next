@@ -7,6 +7,7 @@ import * as start from '../.storybook/react-start';
 import type { PublicationChange, PublicationOutcome } from '../src/community/publication-controls';
 import type { PublishedSubject, RealmHome } from '../src/community/space';
 import type { PublicationTarget } from '../src/community/publication-subject-picker';
+import type { SuggestionResult } from '../src/search/suggestions';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -118,6 +119,7 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
 const { usePublicationControls } = await import('../src/community/publication-controls-view');
+const { publicationSubjectSearch } = await import('../src/community/publication-subject-picker');
 const { RealmShelf } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
 
@@ -404,6 +406,13 @@ const realm: RealmHome = {
   publicationNext: null,
 };
 const hostWrites: (ReturnType<typeof deferred<PublicationOutcome>> & { input: Write['input'] })[] = [];
+const hostSearch = publicationSubjectSearch('en', async () =>
+  ({
+    subjects: [{ id: hostSubject.id, type: 'schema:Book', labels: { en: hostSubject.title }, summary: null }],
+    types: { 'schema:Book': { en: 'Book' } },
+    as_of: '2026-10-31T00:00:00Z',
+  }) satisfies SuggestionResult,
+);
 const hostTransport = {
   boards: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
   publications: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
@@ -414,7 +423,7 @@ const hostTransport = {
   },
 };
 function RealmShelfHost() {
-  return <RealmShelf realm={realm} transport={hostTransport} />;
+  return <RealmShelf realm={realm} transport={hostTransport} search={hostSearch} />;
 }
 
 async function paintShelf() {
@@ -448,6 +457,65 @@ async function shelfWithdraw() {
     await tick();
   });
 }
+
+async function shelfPublish() {
+  await act(async () => {
+    shelfButton(m.realm_publication_curate()).click();
+    await tick();
+  });
+  const input = [...host.querySelectorAll<HTMLInputElement>('input')].find(
+    (node) => node.getAttribute('aria-label') === m.realm_publication_choose(),
+  );
+  expect(input).toBeDefined();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, hostSubject.title);
+    input!.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  });
+  const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
+    node.textContent?.includes(hostSubject.title),
+  );
+  expect(option).toBeDefined();
+  await act(async () => {
+    option!.click();
+    await tick();
+  });
+  await act(async () => {
+    shelfButton(m.realm_publication_publish()).click();
+    await tick();
+  });
+}
+
+test('a successful republish replaces the existing Realm slot with its authoritative head once', async () => {
+  await mountHook();
+  hostWrites.length = 0;
+  await paintShelf();
+  await shelfPublish();
+  expect(hostWrites).toHaveLength(1);
+  expect(hostWrites[0]!.input).toMatchObject({
+    realmId,
+    subjectId: hostSubject.id,
+    action: 'publish',
+    expectedHead: head,
+  });
+  await act(async () => {
+    hostWrites[0]!.resolve({ kind: 'saved', head: nextHead });
+    await tick();
+  });
+  const subjectCards = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((node) =>
+    node.textContent?.includes(hostSubject.title),
+  );
+  expect(subjectCards).toHaveLength(1);
+
+  await shelfWithdraw();
+  expect(hostWrites).toHaveLength(2);
+  expect(hostWrites[1]!.input.expectedHead).toBe(nextHead);
+  await act(async () => {
+    hostWrites[1]!.resolve({ kind: 'saved', head: id(32) });
+    await tick();
+  });
+  expect(host.querySelectorAll('a').length).toBe(0);
+});
 
 test('RealmShelf saved callback reconciles one current slot and ignores a late retired response', async () => {
   await mountHook();
