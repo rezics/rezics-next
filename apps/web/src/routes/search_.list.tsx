@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useSuspenseQuery } from '@tanstack/react-query';
 import * as v from 'valibot';
-import { TypeListPage } from '../features/pages/type-list-page';
-import { typeListQuery } from '../features/pages/type-list-query';
+import { ConfiguredList } from '../features/pages/type-list-page';
+import { typeListQuery, type TypeListAdmissionInput } from '../features/pages/type-list-query';
+import { hasSelectedRealmTarget, typeListTargetFromPage } from '../features/pages/type-list-model';
+import { sessionQuery } from '../session/query';
 import { getLocale } from '../paraglide/runtime.js';
 
 export const Route = createFileRoute('/search_/list')({
@@ -13,15 +14,37 @@ export const Route = createFileRoute('/search_/list')({
     cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4864))),
   }),
   loaderDeps: ({ search }) => search,
-  loader: ({ deps, context }) =>
-    context.queryClient.fetchQuery(typeListQuery(getLocale(), deps.list, deps.page, deps.cursor)),
+  loader: async ({ deps, context }) => {
+    const selectedRealm = hasSelectedRealmTarget(typeListTargetFromPage(deps.page));
+    let admission: TypeListAdmissionInput;
+    if (!selectedRealm) {
+      admission = { state: 'public', incarnation: 'public', mode: 'public' };
+    } else if (typeof window === 'undefined') {
+      // The server read admits its own prepared credential; hydration carries that provenance until
+      // the browser has observed its current session.
+      admission = { state: 'unknown', incarnation: crypto.randomUUID(), mode: 'initial-hydration' };
+    } else {
+      const session = context.queryClient.getQueryData(sessionQuery.queryKey) as
+        | { state: 'signed-in' | 'signed-out' | 'unavailable'; subject?: string | null }
+        | undefined;
+      const state = session?.state ?? 'unknown';
+      admission = {
+        state,
+        ...(state === 'unknown' ? {} : { expectedReader: state === 'signed-in' ? (session?.subject ?? null) : null }),
+        incarnation: crypto.randomUUID(),
+        mode: 'current',
+      };
+    }
+    return context.queryClient.fetchQuery(
+      typeListQuery(getLocale(), deps.list, deps.page, deps.cursor, admission),
+    );
+  },
   head: () => ({ meta: [{ name: 'robots', content: 'noindex, follow' }] }),
-  component: ConfiguredList,
+  component: ConfiguredListRoute,
 });
 
-function ConfiguredList() {
+function ConfiguredListRoute() {
   const { list, page, cursor } = Route.useSearch();
-  const locale = getLocale();
-  const { data } = useSuspenseQuery(typeListQuery(locale, list, page, cursor));
-  return <TypeListPage {...data} locale={locale} />;
+  const initialData = Route.useLoaderData();
+  return <ConfiguredList list={list} page={page} cursor={cursor} locale={getLocale()} initialData={initialData} />;
 }

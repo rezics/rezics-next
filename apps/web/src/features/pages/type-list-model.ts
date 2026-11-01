@@ -20,6 +20,23 @@ export function typeListTarget(value: unknown): TypeListTarget {
   return target as TypeListTarget;
 }
 
+/** Invalid page addresses stay on the route's existing not-found path. */
+export function typeListTargetFromPage(page: string): TypeListTarget | undefined {
+  try {
+    return typeListTarget(JSON.parse(page));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Only a subject list selected inside a Realm uses a private reader admission. */
+export function hasSelectedRealmTarget(target: TypeListTarget | undefined): target is TypeListTarget & {
+  subject: string;
+  realm: string;
+} {
+  return !!target && 'subject' in target && typeof target.realm === 'string' && target.realm.length > 0;
+}
+
 export function typeListHref(locale: string, target: TypeListTarget, node: string, cursor?: string): string {
   const params = new URLSearchParams({ list: node, page: JSON.stringify(target) });
   if (cursor !== undefined) params.set('cursor', cursor);

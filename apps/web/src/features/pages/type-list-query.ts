@@ -2,11 +2,82 @@ import { queryOptions } from '@tanstack/react-query';
 import { notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import type { SessionState } from '../../session/state';
 import { requestLanguages } from '../../kernel/languages';
 import { kernelClient } from '../../kernel/client';
-import { findTypeList, typeListHref, typeListTarget, type TypeListTarget } from './type-list-model';
+import {
+  findTypeList,
+  hasSelectedRealmTarget,
+  typeListHref,
+  typeListTarget,
+  typeListTargetFromPage,
+  type TypeListTarget,
+} from './type-list-model';
 import { isRecord } from './shared';
 import type { SubjectPageData } from './subject';
+
+export type TypeListReaderState = 'unknown' | SessionState | 'public';
+export type TypeListAdmissionMode = 'initial-hydration' | 'current' | 'public';
+
+export type TypeListAdmissionInput = {
+  state: TypeListReaderState;
+  expectedReader?: string | null;
+  incarnation: string;
+  mode: TypeListAdmissionMode;
+};
+
+type TypeListReadRequest = {
+  locale: string;
+  node: string;
+  page: string;
+  cursor?: string;
+  state: TypeListReaderState;
+  expectedReader?: string | null;
+  incarnation: string;
+  mode: TypeListAdmissionMode;
+  target: TypeListTarget;
+  realm: string | null;
+};
+
+type TypeListReadAdmission = {
+  request: TypeListReadRequest;
+  reader: string | null;
+  context: string | null;
+};
+
+export type TypeListQueryResult =
+  | { kind: 'ready'; page: SubjectPageData; target: TypeListTarget; node: string; admission: TypeListReadAdmission }
+  | { kind: 'admission-mismatch'; node: string; admission: { request: TypeListReadRequest } };
+
+function selectedRealmReader(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || (typeof value === 'string' && value.length > 0 && value.length <= 128);
+}
+
+function readRequest(data: {
+  locale: string;
+  node: string;
+  page: string;
+  cursor?: string;
+  state: TypeListReaderState;
+  expectedReader?: string | null;
+  incarnation: string;
+  mode: TypeListAdmissionMode;
+  target: TypeListTarget;
+}): TypeListReadRequest {
+  const realm = hasSelectedRealmTarget(data.target) ? data.target.realm : null;
+  return {
+    locale: data.locale,
+    node: data.node,
+    page: data.page,
+    ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
+    state: data.state,
+    ...(data.expectedReader !== undefined ? { expectedReader: data.expectedReader } : {}),
+    incarnation: data.incarnation,
+    mode: data.mode,
+    target: data.target,
+    realm,
+  };
+}
 
 const readTypeList = createServerFn({ method: 'GET', strict: false })
   .validator((input: unknown) => {
@@ -19,36 +90,79 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
       !/^[A-Za-z0-9_-]{1,64}$/.test(value.node) ||
       typeof value.page !== 'string' ||
       value.page.length > 2048 ||
-      (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 4864))
+      (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 4864)) ||
+      (value.expectedReader !== undefined && !selectedRealmReader(value.expectedReader)) ||
+      !['unknown', 'signed-in', 'signed-out', 'unavailable', 'public'].includes(value.state as string) ||
+      typeof value.incarnation !== 'string' ||
+      !value.incarnation ||
+      value.incarnation.length > 128 ||
+      !['initial-hydration', 'current', 'public'].includes(value.mode as string)
     )
       throw notFound();
+    let target: TypeListTarget;
     try {
-      return {
-        locale: value.locale,
-        node: value.node,
-        target: typeListTarget(JSON.parse(value.page)),
-        cursor: value.cursor,
-      };
+      target = typeListTarget(JSON.parse(value.page));
     } catch {
       throw notFound();
     }
+    const selectedRealm = hasSelectedRealmTarget(target);
+    if (
+      (selectedRealm &&
+        (value.state === 'public' ||
+          value.mode === 'public' ||
+          (value.state === 'unknown' && value.expectedReader !== undefined) ||
+          (value.state !== 'unknown' && value.expectedReader === undefined) ||
+          (value.mode === 'initial-hydration' && value.state !== 'unknown'))) ||
+      (!selectedRealm &&
+        (value.state !== 'public' || value.mode !== 'public' || value.expectedReader !== undefined || value.incarnation !== 'public'))
+    )
+      throw notFound();
+    return {
+      locale: value.locale,
+      node: value.node,
+      page: value.page,
+      target,
+      cursor: value.cursor,
+      state: value.state as TypeListReaderState,
+      expectedReader: value.expectedReader as string | null | undefined,
+      incarnation: value.incarnation,
+      mode: value.mode as TypeListAdmissionMode,
+    };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<TypeListQueryResult> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    const admissionRequest = readRequest(data);
     let authorization: string | undefined;
-    if ('subject' in data.target && data.target.realm) {
+    let reader: string | null = null;
+
+    if (hasSelectedRealmTarget(data.target)) {
       const { env } = await import('cloudflare:workers');
-      const { prepareSession, viewerCredential } = await import('../../session/request');
-      await prepareSession(getRequest(), env as Partial<import('../../session/client').SessionEnv>);
-      authorization = viewerCredential(getRequest()) ?? undefined;
+      const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
+      await prepareSession(request, env as Partial<import('../../session/client').SessionEnv>);
+      authorization = viewerCredential(request) ?? undefined;
+      if (authorization) {
+        const subject = sessionSubject(request);
+        reader =
+          subject ??
+          `credential:${Array.from(
+            new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(authorization))),
+            (byte) => byte.toString(16).padStart(2, '0'),
+          ).join('')}`;
+      }
+      if (data.expectedReader !== undefined && reader !== data.expectedReader)
+        return { kind: 'admission-mismatch', node: data.node, admission: { request: admissionRequest } };
     }
+
     const result = await kernelClient(data.locale).pages.$read.post(
       {
         target: data.target,
         languages: requestLanguages(data.locale),
-        ...(data.cursor ? { continuation: { node: data.node, cursor: data.cursor } } : {}),
+        ...(data.cursor !== undefined ? { continuation: { node: data.node, cursor: data.cursor } } : {}),
       },
-      { fetch: { redirect: 'manual' }, ...(authorization ? { headers: { authorization } } : {}) },
+      authorization
+        ? { fetch: { redirect: 'manual' }, headers: { authorization } }
+        : { fetch: { redirect: 'manual' } },
     );
     if (result.status === 404) throw notFound();
     if (result.status === 308) {
@@ -80,13 +194,65 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
         : { account: undefined }),
     } as SubjectPageData;
     if (!findTypeList(page.document, data.node)) throw notFound();
-    return { page, target, node: data.node };
+    return {
+      kind: 'ready',
+      page,
+      target,
+      node: data.node,
+      admission: {
+        request: admissionRequest,
+        reader,
+        context: page.context?.id ?? null,
+      },
+    };
   });
 
-export const typeListQuery = (locale: string, node: string, page: string, cursor?: string) =>
-  queryOptions({
-    queryKey: ['configured-type-list', 'anonymous-or-selected-realm', locale, node, page, cursor],
+export const typeListQuery = (
+  locale: string,
+  node: string,
+  page: string,
+  cursor: string | undefined,
+  admission: TypeListAdmissionInput,
+) => {
+  const target = typeListTargetFromPage(page);
+  const selectedRealm = hasSelectedRealmTarget(target);
+  const state: TypeListReaderState = selectedRealm ? admission.state : 'public';
+  const expectedReader = selectedRealm ? admission.expectedReader : undefined;
+  const incarnation = selectedRealm ? admission.incarnation : 'public';
+  const mode: TypeListAdmissionMode = selectedRealm ? admission.mode : 'public';
+  const expectedReaderKey =
+    expectedReader === undefined ? ['unobserved'] : expectedReader === null ? ['anonymous'] : ['reader', expectedReader];
+  return queryOptions({
+    queryKey: [
+      'configured-type-list',
+      locale,
+      node,
+      page,
+      cursor ?? null,
+      state,
+      expectedReaderKey,
+      mode,
+      incarnation,
+    ],
     staleTime: 0,
     gcTime: 0,
-    queryFn: () => readTypeList({ data: { locale, node, page, ...(cursor !== undefined ? { cursor } : {}) } }),
+    retry: false,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    enabled: mode !== 'initial-hydration',
+    queryFn: () =>
+      readTypeList({
+        data: {
+          locale,
+          node,
+          page,
+          ...(cursor !== undefined ? { cursor } : {}),
+          state,
+          ...(expectedReader !== undefined ? { expectedReader } : {}),
+          incarnation,
+          mode,
+        },
+      }),
   });
+};
