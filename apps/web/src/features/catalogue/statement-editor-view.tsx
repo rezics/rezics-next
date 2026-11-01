@@ -773,6 +773,7 @@ function StatementEditorLive({
                     href={`#${error.target}`}
                     onClick={(event) => {
                       event.preventDefault();
+                      if (!lifetime.active()) return;
                       const target = event.currentTarget.ownerDocument.getElementById(error.target);
                       target?.focus();
                       target?.scrollIntoView?.({ block: 'center' });
@@ -793,7 +794,7 @@ function StatementEditorLive({
           {!cleared && <p role="status">{m.correction_proposed({}, o)}</p>}
           <div className="flex flex-wrap gap-3">
             {!cleared && (
-              <Button className={actionClassName} type="button" onClick={() => setReviewing(true)}>
+              <Button className={actionClassName} type="button" onClick={() => lifetime.active() && setReviewing(true)}>
                 {m.correction_review({}, o)}
               </Button>
             )}

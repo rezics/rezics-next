@@ -140,6 +140,9 @@ function RelationEditorLive({
         statement.id === candidate.id && statement.rank !== 'deprecated' && relationSlotMatches(statement, slot, field),
     );
 
+  function editable() {
+    return lifetime.active() && !running.current && !request.current && !frozen;
+  }
   function draftSlot(next = draft): RelationSlot | undefined {
     if (!field || !next.property.id) return;
     if (next.value.type === 'value' && typeof next.value.content === 'string') {
@@ -160,7 +163,7 @@ function RelationEditorLive({
       return { property: next.property.id, sameAs: external.value.content };
   }
   function edit(next: RelationDraft) {
-    if (!lifetime.active()) return;
+    if (!editable()) return;
     lifetime.retire();
     draftRevision.current++;
     running.current = false;
@@ -361,6 +364,7 @@ function RelationEditorLive({
                       disabled={!!composition}
                       value={draft.property.id}
                       onChange={(event) => {
+                        if (!editable()) return;
                         edit(blankDraft(event.target.value));
                         setCitation('');
                       }}
@@ -391,6 +395,7 @@ function RelationEditorLive({
                                   <Button
                                     variant="outline"
                                     onClick={() => {
+                                      if (!editable()) return;
                                       edit(relationDraft(statement));
                                       setCitation('');
                                     }}
@@ -413,6 +418,7 @@ function RelationEditorLive({
                           {...(composition ? { disabled: true } : {})}
                           value={draft.value.type === 'value' ? target(draft.value.content) : []}
                           onValueChange={(items) => {
+                            if (!editable()) return;
                             remember(items);
                             edit({
                               ...draft,
@@ -491,6 +497,7 @@ function RelationEditorLive({
                             }
                             value=""
                             onChange={(event) => {
+                              if (!editable()) return;
                               const definition = field.qualifiers.find((item) => item.id === event.target.value);
                               if (definition)
                                 edit({
@@ -544,7 +551,7 @@ function RelationEditorLive({
                           {...(composition ? { id: `${formId}-citation` } : {})}
                           type="url"
                           value={citation}
-                          onChange={(event) => setCitation(event.target.value)}
+                          onChange={(event) => editable() && setCitation(event.target.value)}
                         />
                       </Field>
                       {field.disclosure === 'sourceOrConsent' && !draft.references.length && (
@@ -555,7 +562,7 @@ function RelationEditorLive({
                               id="relation-own-consent"
                               {...(composition ? { id: `${formId}-own-consent` } : {})}
                               checked={ownConsent}
-                              onCheckedChange={(checked) => setOwnConsent(checked === true)}
+                              onCheckedChange={(checked) => editable() && setOwnConsent(checked === true)}
                             />
                             {composition ? (
                               <FieldLabel htmlFor={`${formId}-own-consent`}>
@@ -576,6 +583,7 @@ function RelationEditorLive({
                           variant="outline"
                           disabled={!/^https?:\/\/\S+$/.test(citation)}
                           onClick={() => {
+                            if (!editable()) return;
                             edit({
                               ...draft,
                               references: [
@@ -604,7 +612,7 @@ function RelationEditorLive({
                             (!draft.references.length && !(field.disclosure === 'sourceOrConsent' && ownConsent)) ||
                             proposed
                           }
-                          onClick={() => setConfirmation('propose')}
+                          onClick={() => editable() && setConfirmation('propose')}
                         >
                           {m.relation_propose({}, options)}
                         </Button>
@@ -668,6 +676,11 @@ function RelationEditorLive({
                             variant="outline"
                             disabled={frozen || item.retracted !== null || item.rank === 'deprecated'}
                             onClick={() => {
+                              if (!editable()) return;
+                              if (candidate?.id !== item.id || candidate?.head !== item.head) {
+                                lifetime.retire();
+                                draftRevision.current++;
+                              }
                               setCandidate(item);
                               setResult(undefined);
                               setFailure(undefined);
@@ -758,7 +771,9 @@ function RelationEditorLive({
                                     {...(composition ? { id: `${formId}-rank` } : {})}
                                     value={rank}
                                     disabled={frozen}
-                                    onChange={(event) => setRank(event.target.value as 'normal' | 'preferred')}
+                                    onChange={(event) =>
+                                      editable() && setRank(event.target.value as 'normal' | 'preferred')
+                                    }
                                   >
                                     <NativeSelectOption value="normal">
                                       {m.relation_normal({}, options)}
@@ -774,6 +789,7 @@ function RelationEditorLive({
                                   className="min-h-11"
                                   disabled={frozen || candidate.retracted !== null}
                                   onClick={() =>
+                                    editable() &&
                                     setConfirmation(candidate.decision === 'accepted' ? 'adopt' : 'accept')
                                   }
                                 >
@@ -786,7 +802,7 @@ function RelationEditorLive({
                                     className="min-h-11"
                                     variant="outline"
                                     disabled={frozen}
-                                    onClick={() => setConfirmation('reject')}
+                                    onClick={() => editable() && setConfirmation('reject')}
                                   >
                                     {m.relation_reject({}, options)}
                                   </Button>
@@ -849,7 +865,7 @@ function RelationEditorLive({
               className="min-h-11"
               variant="outline"
               disabled={busy || !!request.current}
-              onClick={() => setConfirmation(undefined)}
+              onClick={() => lifetime.active() && !running.current && !request.current && setConfirmation(undefined)}
             >
               {m.candidate_cancel({}, options)}
             </Button>

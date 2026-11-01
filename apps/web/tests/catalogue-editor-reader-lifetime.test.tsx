@@ -123,6 +123,7 @@ const { relationFixture } = await import('../src/kernel/fake/catalogue-relations
 const { workPartsFixture } = await import('../src/kernel/fake/work-parts');
 const { consentFixture } = await import('../src/kernel/fake/statement-consent');
 const { contributionFixture } = await import('../src/kernel/fake/contribution-lifecycle');
+const { editorialContextFixture } = await import('../src/kernel/fake/editorial-context');
 const { candidateSession, useCatalogueLifetime } = await import('../src/subject/candidate-lifetime');
 const { editorRequest } = await import('../src/features/catalogue/editor-request');
 const { SubjectTermsSession } = await import('../src/features/catalogue/subject-terms-session');
@@ -131,6 +132,7 @@ const { WorkPartsSession } = await import('../src/features/catalogue/work-parts-
 const { RelationEditor } = await import('../src/features/catalogue/relation-editor');
 const { StatementConsentPage } = await import('../src/features/catalogue/statement-consent-view');
 const { ContributionLifecycle } = await import('../src/features/catalogue/contribution-lifecycle-view');
+const { EditorialContextWorkspace } = await import('../src/features/catalogue/editorial-context-view');
 const { loadCatalogueTerms, saveCatalogueTerms } = await import('../src/features/catalogue/subject-terms-actions');
 const { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } =
   await import('../src/features/catalogue/relation-editor-actions');
@@ -139,6 +141,10 @@ const { readConsent, changeConsent, refreshConsentPublic } =
   await import('../src/features/catalogue/statement-consent-actions');
 const { changeOwnContribution, rereadOwnContribution } =
   await import('../src/features/catalogue/contribution-lifecycle-actions');
+const { changeEditorialWorkspace, readEditorialWorkspace } =
+  await import('../src/features/catalogue/editorial-context-actions');
+const { submitCorrection } = await import('../src/features/catalogue/statement-editor-actions');
+const { submitFactCorrection } = await import('../src/features/catalogue/subject-facts-actions');
 const { sessionQuery } = await import('../src/session/query');
 const { m } = await import('../src/paraglide/messages.js');
 const signedIn = (subject = original, csrfToken = csrf) => ({ state: 'signed-in' as const, subject, csrfToken });
@@ -178,6 +184,17 @@ const Lifecycle = candidateSession(function Lifecycle({
     transport: {
       change: (command) => changeOwnContribution({ data: editorRequest(command, work), headers }),
       read: (address) => rereadOwnContribution({ data: editorRequest(address, work), headers }),
+    },
+  });
+});
+const Editorial = candidateSession(function Editorial({ id, locale }: { id?: string; locale: string }) {
+  const work = useCatalogueLifetime('editorial');
+  return createElement(EditorialContextWorkspace, {
+    id,
+    locale,
+    transport: {
+      read: (address) => readEditorialWorkspace({ data: editorRequest(address, work), headers }),
+      submit: (command) => changeEditorialWorkspace({ data: editorRequest(command, work), headers }),
     },
   });
 });
@@ -442,6 +459,12 @@ test('catalogue editors retain only their original live reader, exact address an
         headers,
       }),
     ).toEqual({ ok: false, reason: 'denied' });
+    expect(
+      await submitCorrection({ data: { id: rf.id, statement: rf.draft, key, expectedReader: original }, headers }),
+    ).toEqual({ ok: false, reason: 'denied' });
+    expect(
+      await submitFactCorrection({ data: { id: rf.id, statement: rf.draft, key, expectedReader: original }, headers }),
+    ).toEqual({ ok: false, reason: 'denied' });
     expect(rf.calls).toHaveLength(0);
     const wf = workPartsFixture();
     nativeClient = wf.client;
@@ -477,6 +500,20 @@ test('catalogue editors retain only their original live reader, exact address an
       selected: null,
     });
     expect(lf.calls).toHaveLength(0);
+
+    const ef = editorialContextFixture();
+    nativeClient = ef.client;
+    expect(await readEditorialWorkspace({ data: { id: ef.id, expectedReader: original }, headers })).toEqual({
+      ok: false,
+      reason: 'denied',
+    });
+    expect(
+      await changeEditorialWorkspace({
+        data: { operation: 'delete', id: ef.id, key, expectedReader: original },
+        headers,
+      }),
+    ).toEqual({ ok: false, reason: 'denied' });
+    expect(ef.calls).toHaveLength(0);
 
     // The reader guard and authorization come from ONE prepared Request. Changing the
     // backing session while that preparation is in flight cannot splice a second credential.
@@ -678,6 +715,35 @@ test('catalogue editors retain only their original live reader, exact address an
     await ui.until(() => !!ui.host.querySelector('#relation-property'));
     expect(standalone.calls.some((call) => call.path.endsWith(standalone.id))).toBe(true);
 
+    // The replacement starts its own live proposal, exact review and native adoption.
+    const freshRelation = relationFixture();
+    await activate(freshRelation);
+    await ui.update(signedIn(replacement));
+    const freshStart = envelopes.length;
+    await relation(freshRelation);
+    await propose();
+    await ui.until(() => ui.host.textContent!.includes(m.relation_proposed()));
+    const freshProposal = freshRelation.calls.find(
+      (call) => call.method === 'POST' && call.path.endsWith('/candidates'),
+    )!;
+    expect(freshProposal.body).toMatchObject({
+      statement: { property: { id: freshRelation.slot.property }, value: freshRelation.draft.value },
+    });
+    expect(freshProposal.body).not.toHaveProperty('expectedReader');
+    const selectedBeforeFresh = selected;
+    await prepareAdoption();
+    await ui.click(m.candidate_adopt());
+    await ui.until(() => selected === selectedBeforeFresh + 1);
+    expect(freshRelation.adopted).toBe(true);
+    expect(envelopes.slice(freshStart).every(({ data }) => data.expectedReader === replacement)).toBe(true);
+    expect(freshRelation.calls.find((call) => call.path.endsWith(':adopt'))!.body).toMatchObject({
+      property: freshRelation.slot.property,
+      target: freshRelation.slot.target,
+      key: freshRelation.slot.key,
+      expected_head: 7,
+      selection: [{ candidate: freshRelation.candidates.at(-1)!.id, rank: 'normal' }],
+    });
+
     // Retired proposal delivery cannot start its second read or mutate selection.
     // A retired secondary-read delivery cannot populate private review or unlock finally.
     for (const stage of ['read', 'propose', 'secondary', 'confirm'] as const) {
@@ -808,32 +874,40 @@ test('catalogue editors retain only their original live reader, exact address an
       expect(fixture.calls).toHaveLength(count);
       expect(ui.buttons(m.work_parts_correct()).length).toBeGreaterThan(0);
     }
-    // An embedded confirmation onSelected must not reread the replacement's Work Parts.
-    const retiringParts = workPartsFixture();
-    await activate(retiringParts);
-    await ui.render(createElement(WorkPartsSession, { id: retiringParts.id, locale: 'en' }));
-    await ui.until(() => ui.buttons(m.work_parts_correct()).length > 0);
-    await ui.click(m.work_parts_correct());
-    await ui.click(m.relation_open());
-    await ui.until(() => ui.buttons(m.relation_propose()).length > 0);
-    await propose();
-    await ui.until(() => ui.buttons(m.candidate_accept()).length > 0);
-    await ui.click(m.candidate_accept());
-    await ui.click(m.candidate_accept());
-    // The accepted result is reread explicitly, preserving separate decision/adoption heads.
-    await ui.click(m.candidate_reload());
-    await ui.until(() => ui.buttons(m.candidate_review()).length > 0);
-    await ui.click(m.candidate_review());
-    await ui.until(() => ui.buttons(m.candidate_adopt()).length > 0);
-    await ui.click(m.candidate_adopt());
-    const selectedLate = delay((data) => data.operation === 'adopt');
-    await ui.click(m.candidate_adopt());
-    await selectedLate.entered.promise;
-    await ui.update(signedIn(replacement));
-    await ui.until(() => ui.buttons(m.work_parts_correct()).length > 0);
-    const partsCount = retiringParts.calls.length;
-    await deliver(selectedLate, 'success');
-    expect(retiringParts.calls).toHaveLength(partsCount);
+    // A live correction survives an unrelated slice change, but its old onSelected
+    // cannot reread that slice or the replacement reader's page.
+    for (const transition of ['reader', 'slice'] as const) {
+      const retiringParts = workPartsFixture('partial');
+      await activate(retiringParts);
+      await ui.render(createElement(WorkPartsSession, { id: retiringParts.id, locale: 'en' }));
+      await ui.until(() => ui.buttons(m.work_parts_correct()).length > 0);
+      await ui.click(m.work_parts_correct());
+      await ui.click(m.relation_open());
+      await ui.until(() => ui.buttons(m.relation_propose()).length > 0);
+      await propose();
+      await ui.until(() => ui.buttons(m.candidate_accept()).length > 0);
+      await ui.click(m.candidate_accept());
+      await ui.click(m.candidate_accept());
+      // The accepted result is reread explicitly, preserving separate decision/adoption heads.
+      await ui.click(m.candidate_reload());
+      await ui.until(() => ui.buttons(m.candidate_review()).length > 0);
+      await ui.click(m.candidate_review());
+      await ui.until(() => ui.buttons(m.candidate_adopt()).length > 0);
+      await ui.click(m.candidate_adopt());
+      const selectedLate = delay((data) => data.operation === 'adopt');
+      await ui.click(m.candidate_adopt());
+      await selectedLate.entered.promise;
+      if (transition === 'reader') {
+        await ui.update(signedIn(replacement));
+        await ui.until(() => ui.buttons(m.work_parts_correct()).length > 0);
+      } else {
+        await ui.click(m.work_parts_more());
+        await ui.until(() => ui.host.textContent!.includes('Volume Ten'));
+      }
+      const partsCount = retiringParts.calls.length;
+      await deliver(selectedLate, 'success');
+      expect(retiringParts.calls).toHaveLength(partsCount);
+    }
 
     // Consent private candidate, confirmation controls and focus never cross readers.
     for (const stage of ['read', 'change', 'public'] as const) {
@@ -909,6 +983,51 @@ test('catalogue editors retain only their original live reader, exact address an
     await ui.until(() => uncertainConsent.calls.filter((call) => call.path.endsWith('/disclose')).length === 2);
     expect(uncertainConsent.calls.filter((call) => call.path.endsWith('/disclose'))[1]).toEqual(disclosure);
     await ui.until(() => ui.buttons(m.statement_consent_retract()).length > 0);
+
+    // Editorial entry uses its real proposal/lifecycle adapter: an old creation result
+    // cannot begin its secondary private read; a fresh replacement can create normally.
+    const editorial = editorialContextFixture('create');
+    await activate(editorial);
+    await ui.render(createElement(Editorial, { locale: 'en' }));
+    await input('input[data-editorial-control]', 'Original private context');
+    const editorialDelivery = delay((data) => data.operation === 'create');
+    await ui.click(m.editorial_create());
+    await editorialDelivery.entered.promise;
+    await ui.update(signedIn(replacement));
+    const editorialCount = editorial.calls.length;
+    await deliver(editorialDelivery, 'success');
+    expect(editorial.calls).toHaveLength(editorialCount);
+    expect(ui.host.textContent).not.toContain(m.editorial_created());
+    await input('input[data-editorial-control]', 'Fresh private context');
+    await ui.click(m.editorial_create());
+    await ui.until(() => ui.host.textContent!.includes(m.editorial_created()));
+    const editorialCreates = editorial.calls.filter((call) => call.method === 'POST');
+    expect(editorialCreates).toHaveLength(2);
+    expect(editorialCreates[1]!.body).toEqual({ labels: { en: 'Fresh private context' } });
+    expect(editorialCreates[1]!.headers.get('idempotency-key')).not.toBe(
+      editorialCreates[0]!.headers.get('idempotency-key'),
+    );
+    expect(editorial.calls.at(-1)!.method).toBe('GET');
+
+    // Retiring an open lifecycle dialog must not restore old focus or run its controls.
+    const dialogLifecycle = contributionFixture();
+    await activate(dialogLifecycle);
+    await ui.render(createElement(Lifecycle, { address: dialogLifecycle.address, locale: 'en' }));
+    await ui.click(m.contribution_withdraw());
+    const oldDialogConfirm = ui.queued(ui.button(m.contribution_confirm()));
+    const oldDialogCancel = ui.queued(ui.button(m.candidate_cancel()));
+    const dialogCount = dialogLifecycle.calls.length;
+    ui.outside.focus();
+    await act(async () => {
+      ui.client.setQueryData(sessionQuery.queryKey, signedIn(replacement));
+      ui.client.setQueryData(sessionQuery.queryKey, signedIn());
+      void oldDialogCancel();
+      void oldDialogConfirm();
+    });
+    await ui.settle();
+    expect(dialogLifecycle.calls).toHaveLength(dialogCount);
+    expect(ui.window.document.activeElement).toBe(ui.outside);
+    expect(ui.buttons(m.contribution_confirm())).toHaveLength(0);
 
     // Lifecycle's onClear and finally belong to the exact candidate/admission. Neither
     // late success nor late denial/failure can clear a replacement editor's draft.

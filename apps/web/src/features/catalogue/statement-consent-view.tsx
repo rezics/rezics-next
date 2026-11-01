@@ -144,7 +144,7 @@ function StatementConsentPageLive({
   }, [confirmation, lifetime]);
   function openConfirmation(operation: ConsentCommand['operation']) {
     if (!lifetime.active()) return;
-    if (busy || reload || uncertain || !attempt || !assertion?.identified) return;
+    if (running.current || request.current || busy || reload || uncertain || !attempt || !assertion?.identified) return;
     setConfirmation(operation);
   }
 
@@ -345,7 +345,9 @@ function StatementConsentPageLive({
                           id={ownershipId}
                           checked={own}
                           disabled={busy || uncertain}
-                          onCheckedChange={(checked) => setOwn(checked === true)}
+                          onCheckedChange={(checked) =>
+                            lifetime.active() && !running.current && !request.current && setOwn(checked === true)
+                          }
                         />
                         <FieldLabel htmlFor={ownershipId}>{m.statement_consent_own({}, options)}</FieldLabel>
                       </Field>
@@ -363,6 +365,7 @@ function StatementConsentPageLive({
                             className="min-h-11"
                             disabled={busy}
                             onClick={() => {
+                              if (!lifetime.active() || running.current || request.current) return;
                               returnFocus.current = confirmation;
                               setConfirmation(undefined);
                               setOwn(false);

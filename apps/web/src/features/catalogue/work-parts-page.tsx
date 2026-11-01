@@ -1,4 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
@@ -77,10 +78,17 @@ function WorkPartsPageLive({
   const error = failure ?? (!page && query.data && !query.data.ok ? query.data : undefined);
   const concealed = !!error || (!page && query.isError);
   const stream = read?.stream;
+  const sliceRevision = useRef(0);
+  // Slice controls retire separately from independently opened corrections.
+  const slice = useCatalogueLifetime(JSON.stringify([stream?.key, cursor.current, sliceRevision.current]), lifetime);
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   async function load(key = stream?.key, next?: string) {
-    if (!lifetime.active()) return;
+    if (!slice.active()) return;
     if (running.current) return;
+    if (key !== stream?.key || next !== cursor.current) {
+      slice.retire();
+      sliceRevision.current++;
+    }
     running.current = true;
     setBusy(true);
     try {
@@ -109,7 +117,7 @@ function WorkPartsPageLive({
     }
   }
   function open(row: PartRow, selected: PartStream) {
-    if (!lifetime.active()) return;
+    if (!slice.active()) return;
     const correction = partCorrection(row, selected);
     if (!correction) return;
     const key = `${row.holder}:${row.statementId}`;
@@ -120,7 +128,7 @@ function WorkPartsPageLive({
     );
   }
   function add() {
-    if (!lifetime.active()) return;
+    if (!slice.active()) return;
     if (!stream || !part[0]) return;
     const holder = stream.direction === 'forward' ? id : part[0].id;
     const target = stream.direction === 'forward' ? part[0].id : id;
@@ -336,7 +344,7 @@ function WorkPartsPageLive({
                     search={search}
                     src={coverSrc}
                     value={part}
-                    onValueChange={setPart}
+                    onValueChange={(items) => slice.active() && setPart(items)}
                   />
                   <Button className={actionClassName} variant="outline" disabled={!part.length} onClick={add}>
                     {m.work_parts_draft({}, o)}

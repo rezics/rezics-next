@@ -39,8 +39,9 @@ export const readEditorialWorkspace = createServerFn({ method: 'POST', strict: f
 export const changeEditorialWorkspace = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(editorialCommand))
   .handler(async ({ data }): Promise<EditorialResult> => {
-    const authorization = await credential(data.expectedReader);
+    const { expectedReader, ...command } = data;
+    const authorization = await credential(expectedReader);
     return typeof authorization === 'string'
-      ? submitEditorialContext(kernelClient(), authorization, data)
+      ? submitEditorialContext(kernelClient(), authorization, command)
       : authorization;
   });

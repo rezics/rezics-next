@@ -212,7 +212,7 @@ function EditorialContextWorkspaceLive({
               data-editorial-control
               value={language}
               disabled={busy || !!pending}
-              onChange={(event) => setLanguage(event.target.value)}
+              onChange={(event) => lifetime.active() && !running.current && !pending && setLanguage(event.target.value)}
             >
               {locales.map((value) => (
                 <NativeSelectOption key={value} value={value}>
@@ -232,6 +232,7 @@ function EditorialContextWorkspaceLive({
               required
               disabled={busy || !!pending}
               onChange={(event) => {
+                if (!lifetime.active() || running.current || pending) return;
                 setName(event.target.value);
                 setFailure(undefined);
               }}
@@ -300,6 +301,7 @@ function EditorialContextWorkspaceLive({
                     data-editorial-control
                     disabled={busy}
                     onClick={() => {
+                      if (!lifetime.active() || running.current || uncertain) return;
                       setPending(undefined);
                       setFailure(undefined);
                       if (currentId) void refresh();
@@ -317,7 +319,11 @@ function EditorialContextWorkspaceLive({
                     className={actionControlClass}
                     data-editorial-control
                     disabled={busy}
-                    onClick={() => (confirmation ? void submit(action) : setConfirmation(action))}
+                    onClick={() =>
+                      lifetime.active() &&
+                      !running.current &&
+                      (confirmation ? void submit(action) : setConfirmation(action))
+                    }
                   >
                     {confirmation
                       ? m.contribution_confirm({}, o)
@@ -330,7 +336,7 @@ function EditorialContextWorkspaceLive({
                       variant="outline"
                       className={actionControlClass}
                       data-editorial-control
-                      onClick={() => setConfirmation(undefined)}
+                      onClick={() => lifetime.active() && !running.current && setConfirmation(undefined)}
                     >
                       {m.candidate_cancel({}, o)}
                     </Button>

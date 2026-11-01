@@ -1,5 +1,6 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { useEditorLifetime } from './editor-lifetime';
 
 /** Keep keyboard navigation in the terms editor when a removable row disappears. */
 export function CreateSubjectLanguageRemove({
@@ -15,6 +16,7 @@ export function CreateSubjectLanguageRemove({
   disabled: boolean;
   onRemove: () => void;
 }) {
+  const lifetime = useEditorLifetime();
   return (
     <Button
       type="button"
@@ -23,9 +25,9 @@ export function CreateSubjectLanguageRemove({
       aria-controls={rowId}
       disabled={disabled}
       onClick={() => {
-        if (disabled) return;
+        if (!lifetime.active() || disabled) return;
         onRemove();
-        document.getElementById(focusId)?.focus();
+        if (lifetime.active()) document.getElementById(focusId)?.focus();
       }}
     >
       {m.catalogue_create_remove_language({}, { locale: locale as never })}

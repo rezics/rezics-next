@@ -179,6 +179,7 @@ function ContributionLifecycleLive({
             variant={operation === 'delete' ? 'destructive' : 'default'}
             disabled={busy || needsRead}
             onClick={() => {
+              if (!lifetime.active() || running.current || needsRead) return;
               if (pending.current) void change();
               else {
                 setFailure(undefined);
@@ -195,8 +196,11 @@ function ContributionLifecycleLive({
           </Button>
         )}
       </div>
-      <AlertDialog open={confirmation !== null} onOpenChange={(open) => !open && setConfirmation(null)}>
-        <AlertDialogContent>
+      <AlertDialog
+        open={confirmation !== null}
+        onOpenChange={(open) => lifetime.active() && !open && setConfirmation(null)}
+      >
+        <AlertDialogContent initialFocus={() => lifetime.active()} finalFocus={() => lifetime.active()}>
           <AlertDialogHeader>
             <AlertDialogTitle>{action}</AlertDialogTitle>
             <AlertDialogDescription>
