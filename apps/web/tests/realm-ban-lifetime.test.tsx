@@ -428,6 +428,22 @@ test('Default Realm ban management retains original reader and command lifetime 
     expect([lists.length, lookups.length, writes.length]).toEqual(counts);
   }
 
+  for (const kind of ['refresh', 'unban'] as const) {
+    await mount();
+    await list();
+    if (kind === 'unban') await click(m.realm_bans_unban());
+    const counts = [lists.length, lookups.length, writes.length];
+    await act(async () => {
+      button(kind === 'refresh' ? m.realm_bans_refresh() : m.realm_bans_confirm()).click();
+      flushSync(() => root.unmount());
+      mounted = false;
+      await tick();
+    });
+    hidden();
+    expect([lists.length, lookups.length, writes.length]).toEqual(counts);
+    client.clear();
+  }
+
   // Realm, actual QueryClient source and unmount replacement retire original callbacks.
   for (const kind of ['realm', 'source', 'unmount'] as const) {
     await mount();
@@ -477,10 +493,17 @@ test('Default Realm ban management retains original reader and command lifetime 
   );
   expect(host.querySelectorAll('li')).toHaveLength(20);
 
+  // Editing a reason while exact lookup is pending does not strand that lookup.
   // Revalidation failure releases the current busy owner; identity changes never send.
   await mount();
   await list();
-  await review();
+  await edit('input', '@river');
+  await click(m.realm_bans_target_lookup());
+  await edit('textarea', 'Private command reason');
+  await lookup();
+  expect(host.textContent).toContain(account.displayName);
+  await click(m.realm_bans_target_select());
+  await click(m.realm_bans_ban());
   const count = writes.length;
   await click(m.realm_bans_confirm_ban());
   await lookup(lookups.at(-1), { ...account, displayName: 'Changed identity' });

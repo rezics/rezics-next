@@ -326,12 +326,10 @@ function RealmBansVisit({
     const controller = new AbortController();
     const ticket = gate.ticket();
     const readGeneration = generation.current;
-    const targetGeneration = intent.current;
     lookup.current = controller;
     const owns = () =>
       gate.owns(ticket) &&
       generation.current === readGeneration &&
-      intent.current === targetGeneration &&
       !controller.signal.aborted &&
       lookup.current === controller;
     setTarget({ state: 'pending' });
