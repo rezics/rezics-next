@@ -1,6 +1,6 @@
 import { RemovedPost } from '../../threads/post-removed';
 import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
-import { csrfHeaders, draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
+import { draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
 import { erasePost, restorePost as restorePostAction, revisePost, type WriteFailure } from '../../threads/actions';
 import type { ThreadSubject } from '../../threads/subjects';
 import type { VoteCitation } from '../../threads/post-writes';
@@ -25,8 +25,8 @@ import { documentImageForPost, type ThreadDocumentMedia } from '../../threads/do
 import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { QueryClientContext, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -45,6 +45,12 @@ import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
 import { PageHeading } from '../../shell/page-heading';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
+import {
+  postCommandSessionIdentity,
+  postCommandSessionSource,
+  PostCommandLifetime,
+  type PostCommandBinding,
+} from '../../threads/post-command-lifetime';
 
 function threadSearch(search: Record<string, unknown>): { cursor?: string } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
@@ -293,54 +299,85 @@ export function ThreadReadingPost({
   const [removedMinHeight, setRemovedMinHeight] = useState<number>();
   const menuButton = useRef<HTMLButtonElement>(null);
   const itemElement = useRef<HTMLLIElement>(null);
-  const deleteKey = useRef<string | undefined>(undefined);
-  const scope = useMemo(
-    () => ({}),
-    [readAuthority, signedIn, personalReady, viewerId, post.id, post.threadId, target.kind, target.id],
+  const editOwner = useRef<{ lifetime: PostCommandLifetime; ticket: number; key: string }>();
+  const queryClient = useContext(QueryClientContext);
+  const sessionSource = useMemo(() => postCommandSessionSource(queryClient), [queryClient]);
+  const sessionRevision = useSyncExternalStore(
+    sessionSource.subscribe,
+    sessionSource.snapshot,
+    sessionSource.serverSnapshot,
   );
-  const feedbackScope = useRef(scope);
-  const intent = useRef({
-    scope,
-    key: undefined as string | undefined,
-    pending: false,
-    applied: false,
-    uncertain: false,
-    deleted: false,
-    read: 0,
-  });
-  if (intent.current.scope !== scope) {
-    intent.current = {
-      scope,
-      key: undefined,
-      pending: false,
-      applied: false,
-      uncertain: false,
-      deleted: false,
-      read: 0,
-    };
-    deleteKey.current = undefined;
-  }
-  const restoreIntent = useRef<((expected: object) => Promise<void>) | undefined>(undefined);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      restoreIntent.current = undefined;
-      intent.current.key = undefined;
-      deleteKey.current = undefined;
-    };
-  }, []);
+  const sessionRecord = sessionSource.read();
+  const previousLifetime = useRef<PostCommandLifetime>();
+  const originalDeleteContinuation = previousLifetime.current?.continuesAfterOwnWrite(post) ?? false;
+  const authorId = 'authorId' in post ? post.authorId ?? undefined : undefined;
+  const binding: PostCommandBinding = {
+    client: queryClient,
+    source: sessionSource,
+    sourceRevision: sessionRevision,
+    session: sessionRecord,
+    readAuthority,
+    postId: post.id,
+    threadId: post.threadId,
+    revisionId: originalDeleteContinuation ? previousLifetime.current!.revisionId : post.revisionId,
+    authorId: authorId ?? (originalDeleteContinuation ? previousLifetime.current!.binding.authorId : undefined),
+    availability: originalDeleteContinuation
+      ? previousLifetime.current!.binding.availability
+      : post.availability,
+    restorableUntil: originalDeleteContinuation
+      ? previousLifetime.current!.binding.restorableUntil
+      : ('restorableUntil' in post ? post.restorableUntil : undefined),
+    target,
+    signedIn,
+    personalReady,
+    viewerId,
+  };
+  const bindingRef = useRef(binding);
+  bindingRef.current = binding;
+  const lifetime = useMemo(
+    () => new PostCommandLifetime(binding, () => bindingRef.current),
+    [
+      queryClient,
+      sessionSource,
+      sessionRevision,
+      postCommandSessionIdentity(sessionRecord),
+      readAuthority,
+      post.id,
+      post.threadId,
+      binding.revisionId,
+      binding.authorId,
+      binding.availability,
+      binding.restorableUntil,
+      target.kind,
+      target.id,
+      signedIn,
+      personalReady,
+      viewerId,
+    ],
+  );
+  previousLifetime.current = lifetime;
+  useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.serverSnapshot);
+  useLayoutEffect(() => lifetime.connect(), [lifetime]);
+  const ticket = lifetime.connectionTicket;
+  const intent = lifetime.intent;
+  const current = (owner = lifetime, ownerTicket = ticket) => owner.isCurrent(ownerTicket);
+  const commandReady = (owner = lifetime, ownerTicket = ticket) => owner.isCommandReady(ownerTicket);
+  const feedbackLifetime = useRef(lifetime);
   useEffect(() => {
     setRestoreError('');
     setExistingReviewId(undefined);
-    feedbackScope.current = scope;
-  }, [scope]);
+    feedbackLifetime.current = lifetime;
+  }, [lifetime]);
   const restoreMenuFocus = useRef(false);
   const restorePostFocus = useRef(false);
-  const ownsPost = viewerId !== undefined && post.availability === 'available' && post.authorId === viewerId;
+  const ownsPost = viewerId !== undefined && post.availability === 'available' && authorId === viewerId;
 
   useEffect(() => {
+    if (!current()) {
+      restoreMenuFocus.current = false;
+      restorePostFocus.current = false;
+      return;
+    }
     if (restoreMenuFocus.current && !editing) {
       restoreMenuFocus.current = false;
       menuButton.current?.focus();
@@ -349,7 +386,7 @@ export function ThreadReadingPost({
       restorePostFocus.current = false;
       itemElement.current?.focus();
     }
-  }, [editing, post.availability]);
+  }, [editing, post.availability, lifetime, ticket]);
 
   const labels = {
     moreActions: m.thread_content_more_actions(),
@@ -368,29 +405,32 @@ export function ThreadReadingPost({
   }
 
   function cancelEdit() {
-    restoreMenuFocus.current = true;
+    if (current()) restoreMenuFocus.current = true;
+    editOwner.current = undefined;
     setEditing(false);
   }
 
-  async function refreshCurrentPost() {
-    if (!mounted.current) return;
-    const command = intent.current;
+  async function refreshCurrentPost(owner = lifetime, ownerTicket = ticket) {
+    if (!current(owner, ownerTicket)) return;
+    const command = owner.intent;
     const read = ++command.read;
     try {
+      if (!current(owner, ownerTicket) || command.read !== read) return;
       const page = await onPageRefresh();
-      if (!mounted.current || intent.current !== command || command.read !== read) return;
-      if (!page || page.viewerId !== viewerId) throw new Error('Current thread page unavailable');
-      command.deleted = false;
-      const current = page.posts.posts.find((item) => item.id === post.id);
-      if (current?.availability === 'erased') command.applied = false;
+      if (!current(owner, ownerTicket) || command.read !== read) return;
+      if (!page || page.viewerId !== owner.binding.viewerId) throw new Error('Current thread page unavailable');
+      command.locallyDeleted = false;
+      const refreshedPost = page.posts.posts.find((item) => item.id === owner.binding.postId);
+      if (refreshedPost?.availability === 'erased') command.restoreApplied = false;
+      if (!current(owner, ownerTicket) || command.read !== read) return;
       setRestoreError('');
-      return current;
+      return refreshedPost;
     } catch {
-      if (mounted.current && intent.current === command && command.read === read) {
+      if (current(owner, ownerTicket) && command.read === read) {
         setRestoreError(
-          command.applied
+          command.restoreApplied
             ? m.thread_post_restore_read_failure()
-            : command.uncertain
+            : command.restoreUncertain
               ? m.thread_post_restore_unknown()
               : m.thread_post_delete_read_failure(),
         );
@@ -399,80 +439,150 @@ export function ThreadReadingPost({
     }
   }
 
-  async function restoreRemovedPost(expected = scope) {
-    const command = intent.current;
-    if (!mounted.current || command.scope !== expected || command.pending || !signedIn || !personalReady || !viewerId)
+  function hasRestoreEligibility(value: ThreadPost | undefined) {
+    if (!value || value.availability !== 'erased') return false;
+    if (!('restorableUntil' in value) || !value.restorableUntil) return false;
+    const deadline = new Date(value.restorableUntil).getTime();
+    return Number.isFinite(deadline) && Date.now() < deadline;
+  }
+
+  async function restoreRemovedPost(
+    owner = lifetime,
+    ownerTicket = ticket,
+    expectedEpisode = owner.intent.episode,
+  ) {
+    const command = owner.intent;
+    if (
+      !commandReady(owner, ownerTicket) ||
+      command.episode !== expectedEpisode ||
+      command.restorePending ||
+      !(command.locallyDeleted || hasRestoreEligibility(post) || command.restoreApplied)
+    )
       return;
-    command.pending = true;
-    setRestoreError('');
-    setExistingReviewId(undefined);
+    command.restorePending = true;
+    if (current(owner, ownerTicket)) {
+      setRestoreError('');
+      setExistingReviewId(undefined);
+    }
     try {
       // A confirmed write is never repeated because its subsequent read failed.
-      if (command.applied) {
-        await refreshCurrentPost();
+      if (command.restoreApplied) {
+        await refreshCurrentPost(owner, ownerTicket);
         return;
       }
-      if (command.uncertain) {
-        const current = await refreshCurrentPost();
-        if (!mounted.current || intent.current !== command || !current) return;
-        if (current.availability !== 'erased' || !current.restorableUntil) return;
+      if (command.restoreUncertain) {
+        const refreshedPost = await refreshCurrentPost(owner, ownerTicket);
+        if (
+          !current(owner, ownerTicket) ||
+          command.episode !== expectedEpisode ||
+          !hasRestoreEligibility(refreshedPost)
+        )
+          return;
       }
-      command.key ??= crypto.randomUUID();
+      if (!commandReady(owner, ownerTicket) || command.episode !== expectedEpisode) return;
+      command.restoreKey ??= crypto.randomUUID();
       const result = await restorePostAction({
-        data: { postId: post.id, idempotencyKey: command.key },
-        headers: csrfHeaders(),
+        data: { postId: owner.binding.postId, idempotencyKey: command.restoreKey },
+        headers: { 'X-CSRF-Token': owner.csrfToken },
       });
-      if (!mounted.current || intent.current !== command) return;
+      if (!current(owner, ownerTicket) || command.episode !== expectedEpisode) return;
       if (!result.ok) {
-        command.uncertain = result.reason === 'unavailable';
+        command.restoreUncertain = result.reason === 'unavailable';
         if (result.reason === 'conflict') {
-          command.key = undefined;
+          command.restoreKey = undefined;
           setExistingReviewId(result.existingReviewId);
           setRestoreError(m.thread_post_restore_conflict());
         } else {
-          setRestoreError(command.uncertain ? m.thread_post_restore_unknown() : m.thread_post_restore_failure());
+          setRestoreError(
+            command.restoreUncertain ? m.thread_post_restore_unknown() : m.thread_post_restore_failure(),
+          );
         }
         return;
       }
-      command.applied = true;
-      command.deleted = false;
-      command.uncertain = false;
-      command.key = undefined;
+      command.restoreApplied = true;
+      command.locallyDeleted = false;
+      command.restoreUncertain = false;
+      command.restoreKey = undefined;
+      if (!current(owner, ownerTicket)) return;
       restorePostFocus.current = true;
-      await refreshCurrentPost();
+      await refreshCurrentPost(owner, ownerTicket);
     } catch {
-      if (mounted.current && intent.current === command) {
-        command.uncertain = true;
+      if (current(owner, ownerTicket) && command.episode === expectedEpisode) {
+        command.restoreUncertain = true;
         setRestoreError(m.thread_post_restore_unknown());
       }
     } finally {
-      command.pending = false;
-      if (mounted.current && intent.current === command) updateIntent((value) => value + 1);
+      command.restorePending = false;
+      if (current(owner, ownerTicket) && command.episode === expectedEpisode)
+        updateIntent((value) => value + 1);
     }
   }
-  restoreIntent.current = restoreRemovedPost;
 
   async function deletePost() {
-    const command = intent.current;
-    deleteKey.current ??= crypto.randomUUID();
-    const result = await erasePost({
-      data: {
-        postId: post.id,
-        idempotencyKey: deleteKey.current,
-        ...(target.kind === 'thread' ? { openingThreadId: target.id } : {}),
-      },
-      headers: csrfHeaders(),
-    });
-    if (!result.ok) throw new Error(postDeleteFailureText(result));
-    if (!mounted.current || intent.current !== command) return;
+    const command = lifetime.intent;
+    if (!commandReady() || !ownsPost || command.erasePending) return;
+    if (command.eraseApplied && command.restoreApplied && post.availability === 'available') {
+      command.episode += 1;
+      command.eraseKey = undefined;
+      command.eraseApplied = false;
+      command.restoreKey = undefined;
+      command.restoreApplied = false;
+      command.restoreUncertain = false;
+      command.locallyDeleted = false;
+    } else if (command.eraseApplied) {
+      return;
+    } else {
+      command.episode += 1;
+    }
+    const episode = command.episode;
+    command.erasePending = true;
+    command.eraseKey ??= crypto.randomUUID();
+    const idempotencyKey = command.eraseKey;
+    let result: Awaited<ReturnType<typeof erasePost>>;
+    try {
+      if (!commandReady() || command.episode !== episode) {
+        command.erasePending = false;
+        return;
+      }
+      result = await erasePost({
+        data: {
+          postId: lifetime.binding.postId,
+          idempotencyKey,
+          ...(lifetime.binding.target.kind === 'thread'
+            ? { openingThreadId: lifetime.binding.target.id }
+            : {}),
+        },
+        headers: { 'X-CSRF-Token': lifetime.csrfToken },
+      });
+    } catch (error) {
+      command.erasePending = false;
+      if (current() && command.episode === episode) {
+        updateIntent((value) => value + 1);
+        throw error;
+      }
+      return;
+    }
+    command.erasePending = false;
+    if (!current() || command.episode !== episode) return;
+    if (!result.ok) {
+      updateIntent((value) => value + 1);
+      throw new Error(postDeleteFailureText(result));
+    }
+    command.eraseApplied = true;
+    command.locallyDeleted = true;
+    command.restoreApplied = false;
+    command.restoreUncertain = false;
+    if (!current()) return;
     if (removedMinHeight === undefined) setRemovedMinHeight(itemElement.current?.getBoundingClientRect().height);
-    command.deleted = true;
+    if (!current()) return;
     restoreMenuFocus.current = true;
     setRestoreError('');
+    setExistingReviewId(undefined);
+    updateIntent((value) => value + 1);
     // This byte-free placeholder records the applied deletion, not a native expiry or a read grant.
     onChange({
-      id: post.id,
-      threadId: post.threadId,
+      id: lifetime.binding.postId,
+      threadId: lifetime.binding.threadId,
       route: post.route,
       parentId: post.parentId,
       body: null,
@@ -480,21 +590,24 @@ export function ThreadReadingPost({
       availability: 'erased',
       removed: true,
     });
-    if (target.kind === 'thread') onOpeningPostChange(false);
-    const expected = scope;
-    const restore = restoreIntent;
-    undoToast(m.thread_post_deleted_toast(), () => void restore.current?.(expected), { undo: m.thread_post_undo() });
-    await refreshCurrentPost();
+    if (!current()) return;
+    if (lifetime.binding.target.kind === 'thread') onOpeningPostChange(false);
+    if (!current()) return;
+    undoToast(
+      m.thread_post_deleted_toast(),
+      () => void restoreRemovedPost(lifetime, ticket, episode),
+      { undo: m.thread_post_undo() },
+    );
+    if (!current()) return;
+    await refreshCurrentPost(lifetime, ticket);
   }
 
   if (post.availability !== 'available') {
     const canRestore =
       post.availability === 'erased' &&
-      signedIn &&
-      personalReady &&
-      viewerId !== undefined &&
-      !intent.current.applied &&
-      (intent.current.deleted || Boolean('restorableUntil' in post && post.restorableUntil));
+      commandReady() &&
+      !intent.restoreApplied &&
+      (intent.locallyDeleted || hasRestoreEligibility(post));
     return (
       <RemovedPost
         post={post}
@@ -505,20 +618,23 @@ export function ThreadReadingPost({
         itemRef={itemElement}
         menuButton={menuButton}
         {...(removedMinHeight !== undefined ? { minHeight: removedMinHeight } : {})}
-        restoreError={feedbackScope.current === scope ? restoreError : ''}
-        existingReviewId={feedbackScope.current === scope ? existingReviewId : undefined}
-        restored={intent.current.applied}
-        deadlineUnknown={intent.current.deleted && !('restorableUntil' in post && post.restorableUntil)}
-        {...(feedbackScope.current === scope && restoreError ? { onRefresh: () => void refreshCurrentPost() } : {})}
+        restoreError={feedbackLifetime.current === lifetime ? restoreError : ''}
+        existingReviewId={feedbackLifetime.current === lifetime ? existingReviewId : undefined}
+        restored={intent.restoreApplied}
+        deadlineUnknown={intent.locallyDeleted && !('restorableUntil' in post && post.restorableUntil)}
+        {...(feedbackLifetime.current === lifetime && restoreError
+          ? { onRefresh: () => void refreshCurrentPost(lifetime, ticket) }
+          : {})}
         onCopyLink={copyLink}
-        {...(canRestore ? { onRestore: () => void restoreRemovedPost() } : {})}
+        {...(canRestore
+          ? { onRestore: () => void restoreRemovedPost(lifetime, ticket, intent.episode) }
+          : {})}
       >
         <ReplyContext parentId={post.parentId} parents={replyParents} authors={authors} reader={replyParentReader} />
       </RemovedPost>
     );
   }
 
-  const authorId = 'authorId' in post ? post.authorId : undefined;
   return (
     <li id={anchorId} ref={itemElement} tabIndex={-1} className="min-w-0 scroll-mt-24 target:ring-2 target:ring-ring">
       <ContentItemFrame
@@ -553,11 +669,15 @@ export function ThreadReadingPost({
               />
               {editing ? null : ownsPost ? (
                 <ContentActions
+                  key={lifetime.id}
                   labels={labels}
                   onCopyLink={copyLink}
                   onDelete={deletePost}
                   onEdit={() => {
-                    setEditKey(crypto.randomUUID());
+                    if (!commandReady() || !ownsPost) return;
+                    const key = crypto.randomUUID();
+                    editOwner.current = { lifetime, ticket, key };
+                    setEditKey(key);
                     setEditing(true);
                   }}
                   ownsContent
@@ -583,17 +703,38 @@ export function ThreadReadingPost({
             containerId={post.threadId}
             onCancel={cancelEdit}
             onSubmit={async ({ body, revisionId, idempotencyKey, mediaIds }) => {
+              const owner = editOwner.current;
+              if (
+                !owner ||
+                !owner.lifetime.isCommandReady(owner.ticket) ||
+                owner.lifetime.binding.postId !== post.id ||
+                owner.lifetime.binding.threadId !== post.threadId
+              )
+                return { ok: false, reason: 'unavailable' };
+              const command = {
+                postId: owner.lifetime.binding.postId,
+                body,
+                revisionId,
+                idempotencyKey,
+                mediaIds: [...mediaIds],
+              };
+              if (!owner.lifetime.isCommandReady(owner.ticket)) return { ok: false, reason: 'unavailable' };
               const result = await revisePost({
-                data: { postId: post.id, body, revisionId, idempotencyKey, mediaIds },
-                headers: csrfHeaders(),
+                data: command,
+                headers: { 'X-CSRF-Token': owner.lifetime.csrfToken },
                 fetch: draftFetch(body),
               });
+              if (!owner.lifetime.isCurrent(owner.ticket)) return { ok: false, reason: 'unavailable' };
               return result;
             }}
             onSuccess={(updated) => {
-              onChange(updated);
+              const owner = editOwner.current;
+              if (!owner || !owner.lifetime.isCurrent(owner.ticket)) return;
+              editOwner.current = undefined;
               setEditing(false);
-              void onMutation();
+              if (!owner.lifetime.isCurrent(owner.ticket)) return;
+              onChange(updated);
+              if (owner.lifetime.isCurrent(owner.ticket)) void onMutation();
             }}
           />
         ) : (
