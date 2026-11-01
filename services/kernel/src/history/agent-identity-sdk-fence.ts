@@ -18,10 +18,6 @@ import {
   SDK_TRANSACTION_FENCE_COST,
   type SdkWriterState,
 } from '../work/sdk-retirement-fence.ts';
-import {
-  currentIdentitySourceConsumerMaintenance,
-  reserveIdentitySourceConsumerNativeWork,
-} from '../semantic/identity-source-consumer-maintenance.ts';
 import type { AgentIdentityWorkSource } from './agent-identity-source.ts';
 import type { AgentIdentityRetirementStage } from './agent-identity-retirement.ts';
 import { encodeLocator } from './locator.ts';
@@ -78,6 +74,10 @@ export async function readAgentIdentitySDKWriterState(
 ): Promise<AgentIdentitySDKWriterObservation> {
   historyDeadline(context, 0);
   if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
+  // The maintenance owner depends on HTTP/Library construction. Load it only at the
+  // actual operation boundary, as Source staging does, to avoid an eager kernel cycle.
+  const { currentIdentitySourceConsumerMaintenance, reserveIdentitySourceConsumerNativeWork } =
+    await import('../semantic/identity-source-consumer-maintenance.ts');
   const work = currentIdentitySourceConsumerMaintenance(pool, context.deadline);
   if (!work || !reserveIdentitySourceConsumerNativeWork(pool, work, AGENT_IDENTITY_SDK_OBSERVATION_COST))
     return pending('identity-sdk-current-fence-funding-unavailable');
@@ -103,6 +103,8 @@ export async function lockAgentIdentitySDKWriterState(
   if (expected.workflowID !== workflowId) return pending('identity-sdk-original-writer-changed');
   if (phase === 'closure' && expected.generation !== '2') return pending('identity-sdk-permanent-closure-pending');
   if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
+  const { currentIdentitySourceConsumerMaintenance, reserveIdentitySourceConsumerNativeWork } =
+    await import('../semantic/identity-source-consumer-maintenance.ts');
   const work = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
   if (
     !work ||
