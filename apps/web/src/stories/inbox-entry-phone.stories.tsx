@@ -85,8 +85,7 @@ function SessionTransportExample() {
             });
             throw new Error('Illustrative session dependency unavailable');
           }
-          if (read === 3)
-            return { signedIn: true, subject: 'story-viewer', csrfToken: 'story-csrf-token' };
+          if (read === 3) return { signedIn: true, subject: 'story-viewer', csrfToken: 'story-csrf-token' };
           return existing.signedIn();
         },
       };
