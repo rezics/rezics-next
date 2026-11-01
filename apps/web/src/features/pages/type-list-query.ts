@@ -122,9 +122,11 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
       node: value.node,
       page: value.page,
       target,
-      cursor: value.cursor,
+      ...(value.cursor !== undefined ? { cursor: value.cursor } : {}),
       state: value.state as TypeListReaderState,
-      expectedReader: value.expectedReader as string | null | undefined,
+      ...(value.expectedReader !== undefined
+        ? { expectedReader: value.expectedReader as string | null }
+        : {}),
       incarnation: value.incarnation,
       mode: value.mode as TypeListAdmissionMode,
     };

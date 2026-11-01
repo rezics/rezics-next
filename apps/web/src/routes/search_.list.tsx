@@ -46,5 +46,13 @@ export const Route = createFileRoute('/search_/list')({
 function ConfiguredListRoute() {
   const { list, page, cursor } = Route.useSearch();
   const initialData = Route.useLoaderData();
-  return <ConfiguredList list={list} page={page} cursor={cursor} locale={getLocale()} initialData={initialData} />;
+  return (
+    <ConfiguredList
+      list={list}
+      page={page}
+      {...(cursor !== undefined ? { cursor } : {})}
+      locale={getLocale()}
+      initialData={initialData}
+    />
+  );
 }

@@ -22,7 +22,7 @@ type ReaderRequest = TypeListQueryResult['admission']['request'];
 
 function sameReaderRequest(
   request: ReaderRequest | undefined,
-  input: Omit<TypeListAdmissionInput, 'incarnation' | 'mode'>,
+  input: { state: TypeListAdmissionInput['state']; expectedReader: string | null | undefined },
   locale: string,
   node: string,
   page: string,
