@@ -401,7 +401,8 @@ Access, locks, rollback, Core receipts/outbox and WorkClient SQL/bytes. No hidde
   observation inside them. Preparation keeps 1,000 input/result rows, one frontier, eight points/input,
   examined `64+16*input`, 16 statements/backend, four engine reads and 4 MiB response. One connection/backend remains
   shared throughout each admitted operation class; the applicable native raw-100 step limit is still stronger.
-  Manifest writes, nested controls, identity/foreign work, empty/failure/rollback work spend this same ledger.
+  Existing native Source/owner read and work allowances also remain binding. Manifest writes, nested controls,
+  identity/foreign work and empty/failure/rollback work spend this same ledger.
 - Growth check: deferred shared three-scale native captures, inclusive role attribution and engine iterator work;
   no free witness work, budget reset, private/public fallback or growth waiver follows from this adoption.
 
@@ -417,11 +418,13 @@ Access, locks, rollback, Core receipts/outbox and WorkClient SQL/bytes. No hidde
   `T * (admitted target + receipt/evidence bytes)`, transfer and replay, not merely the request body.
 - Growth check: existing `services/kernel/test/library/growth-bulk-outcome-page.test.ts`,
   `outcome pages have bounded rows and statements as operation targets grow`, covers first/deep/all-state/exact-state
-  pager branches as targets, nonmatches, other operations and owners grow, without planner settings. This is existing
-  test source, UNRUN here; it proves no full bulk journey. The original
-  `specs/library-bulk-outcomes.test.ts` titles `progress is bounded truthful and outcome pagination does not repeat or
-  expose the manifest on summary` and `growth axes retain indexed admission replay summary and fixed outcome pages
-  without manifest recounts` remain deferred obligations, not measured runtime results.
+  pager branches as targets, nonmatches, other operations and owners grow, without planner settings. Existing test
+  source proves no full bulk journey. The original `specs/library-bulk-outcomes.test.ts` titles
+  `progress is bounded truthful and outcome pagination does not repeat or expose the manifest on summary` and
+  `growth axes retain indexed admission replay summary and fixed outcome pages without manifest recounts`
+  remain deferred obligations, not measured runtime results. Native growth evidence must retain independent
+  256/1,024/4,096 scales, at least one warm-up per measured statement, shared catalogue classification and no planner
+  settings, including pending-target/manifest insert and exact receipt/transfer paths beyond this existing pager test.
 
 ### Retention, cancellation and erasure
 
@@ -466,6 +469,6 @@ receipt/evidence-only authority, agreed atomic intent delivery, rate/resource ad
 Default routes, worker registration and actual client/Web consumers must complete this one journey after that ABI.
 Existing receiving, stopped producer and native erasure obligations remain in force.
 
-Documentation adoption establishes this owning contract only. Acceptance/native/database/browser/typecheck/
-generation/gate execution is UNRUN; documentation alone changes no workspace typing. No feature/native/Goal
-completion, automatic admission, restart or custody release follows.
+Specification adoption and source presence do not establish native acceptance or full feature/Goal completion.
+The remaining producer agreements, implementation and native/regression evidence are required before delivery;
+no automatic admission, restart, source transplant or custody release follows from this contract.

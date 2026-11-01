@@ -1881,7 +1881,7 @@ Where a named test does not call the operation, or does not grow the rows that o
   `progress is bounded truthful and outcome pagination does not repeat or expose the manifest on summary` and
   `growth axes retain indexed admission replay summary and fixed outcome pages without manifest recounts` remain
   deferred acceptance obligations. Whole preview/confirmation, shared/native costs and custody acceptance are
-  deferred/unimplemented; all execution is UNRUN here. Existing test source is not measured full-product evidence.
+  deferred/unimplemented. Existing test source is not measured full-product evidence.
 
 ### Session start
 
