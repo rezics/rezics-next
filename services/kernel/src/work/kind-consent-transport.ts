@@ -112,7 +112,7 @@ export function createKindConsentParticipantTransport(
   const transport = options.fetch ?? globalThis.fetch;
   const invocations = new WeakMap<object, Invocation>();
 
-  const enroll: KindConsentParticipant['enroll'] = async (input) => {
+  const enroll = async (input: KindConsentEnrollmentInput): Promise<KindConsentEnrollmentResult> => {
     const bound = kindConsentTransportBound(input);
     if (!bound || !Number.isSafeInteger(deadline) || Date.now() >= deadline) return unavailable();
     let request: string;

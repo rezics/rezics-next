@@ -224,7 +224,8 @@ export function createInternalConsentHandler(config: {
       const body = await bodyOf(request, KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES, Date.now() + KIND_CONSENT_ENROLLMENT_MAX_DURATION_MS);
       if (!exactRecord(body.value, ['input', 'deadline'])) throw new Error('Denied');
       const rawDeadline = body.value.deadline;
-      if (!Number.isSafeInteger(rawDeadline) || rawDeadline <= Date.now()) throw new Error('Deadline');
+      if (typeof rawDeadline !== 'number' || !Number.isSafeInteger(rawDeadline) || rawDeadline <= Date.now())
+        throw new Error('Deadline');
       deadline = rawDeadline as number;
       const candidate = body.value.input;
       const bound = kindConsentOperationBound(candidate as KindConsentEnrollmentInput);
