@@ -26,6 +26,7 @@ import {
 import { lockRecordedAgentIdentityHistory } from '../history/agent-identity-sdk-fence.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { systemClock } from '../clock.ts';
 
 type Job = {
   job_id: string;
@@ -246,9 +247,10 @@ export async function advanceSharedHistory(
   const { job, work, proof } = deferred;
   if (deferred.identity) {
     if (!deps.env) return result('more', IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE);
+    const clock = deps.clock ?? systemClock;
     try {
       return await withAgentIdentityHistoryUnit(
-        { pool: deps.pool, client: deps.client, env: deps.env, clock: deps.clock },
+        { pool: deps.pool, client: deps.client, env: deps.env, clock },
         { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) },
         async (funded) => {
           const gap = await minimizeHistoryWork(
@@ -258,7 +260,7 @@ export async function advanceSharedHistory(
             work,
             deps.registry,
             proof,
-            { env: deps.env!, clock: deps.clock },
+            { env: deps.env!, clock },
           );
           if (gap) {
             await identityHistoryCommand(deps.pool, funded, async (tx) => {

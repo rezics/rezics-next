@@ -167,13 +167,16 @@ export async function withAgentIdentityHistoryUnit<T>(
     maintenanceCallbacks.add(funded);
     return withSingleCommandAttempt(() =>
       withRequestDeadline(funded.deadline, () =>
-        identityUnits.run({ context: funded, client: deps.client }, async () => {
-          try {
-            return await body(funded);
-          } finally {
-            maintenanceCallbacks.delete(funded);
-          }
-        }),
+        identityUnits.run(
+          { context: funded, ...(deps.client === undefined ? {} : { client: deps.client }) },
+          async () => {
+            try {
+              return await body(funded);
+            } finally {
+              maintenanceCallbacks.delete(funded);
+            }
+          },
+        ),
       ),
     );
   });

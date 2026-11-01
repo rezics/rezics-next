@@ -3008,6 +3008,7 @@ test('The real default selected identity unit records guarded readiness retires 
     expect(args[0]).toBe(pool);
     expect(args[1]).toBe(client);
     expect(args[2].workflowID).toBe(native.workflowId);
+    if (originalDeadline === undefined) throw new Error('Expected actual original Source callback');
     expect(args[4]).toBe(originalDeadline);
     actions.push(args[3]);
     if (args[3] === 'retire') {
