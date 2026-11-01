@@ -283,9 +283,21 @@ test('read admission ABA retires accepted data and old result/error/finally with
   });
   expect(button(m.library_follow()).disabled).toBe(false);
   expect(host.textContent).not.toContain(m.library_follow_unavailable());
+  await replace(() => {
+    admitted = ['follow.delete'];
+  });
+  await replace(() => {
+    admitted = ['follow.get', 'follow.put', 'follow.delete'];
+  });
+  await settle(reads[3]!, { subject: 'alice', targetId: firstTarget, edge: { state: 'unavailable' } });
+  await click(m.library_follow_retry(), true);
+  expect(reads).toHaveLength(5);
+  expect(host.textContent).toContain(m.library_follow_loading());
+  await settle(reads[4]!, page(firstTarget, false));
+  expect(button(m.library_follow()).disabled).toBe(false);
 });
 
-test('viewer and target ABA accept fresh data while old work is pending and conceal late prior responses', async () => {
+test('The complete target follow edge read and action workflow accepts only actual current viewer target and admission lifetimes without reviving retired private edge state', async () => {
   await paint();
   await replace(() => client.setQueryData(sessionQuery.queryKey, viewer('bob')));
   await settle(reads[1]!, page(firstTarget, false, 'bob'));

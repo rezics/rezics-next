@@ -18,6 +18,7 @@ export const followStateQuery = (subject: string | null, targetId: string, lifet
       signal.throwIfAborted();
       if (lifetime) {
         if (!subject || !lifetime.isCurrent()) return { state: 'unavailable' };
+        lifetime.accepted = false;
         const page = await readCurrentFollowState({ data: { targetId } });
         signal.throwIfAborted();
         if (!lifetime.isCurrent()) return { state: 'unavailable' };
@@ -84,7 +85,10 @@ export function FollowTargetControl({
   const canRemove = useOperation('follow.delete');
   const canRead = useOperation('follow.get');
   const identity = viewer ? JSON.stringify([viewer, targetId]) : null;
-  const readLifetime = useFollowLifetime(identity && canRead && following === undefined ? identity : null);
+  const [readGeneration, setReadGeneration] = useState(0);
+  const readLifetime = useFollowLifetime(
+    identity && canRead && following === undefined ? JSON.stringify([identity, readGeneration]) : null,
+  );
   const putLifetime = useFollowLifetime(identity && csrfToken && canFollow && !onRemoved ? identity : null);
   const deleteLifetime = useFollowLifetime(identity && csrfToken && canRemove ? identity : null);
   const removedCallback = useRef(onRemoved);
@@ -102,13 +106,13 @@ export function FollowTargetControl({
         : { state: 'ready', following }
       : !canRead
         ? { state: 'forbidden' }
-        : read.isPending
+        : read.isPending || read.isFetching
           ? { state: 'pending' }
           : read.isError
             ? { state: 'unavailable' }
             : (read.data ?? { state: 'unavailable' });
   const isCurrent = (next: boolean) => (next ? putLifetime : deleteLifetime)?.isCurrent() ?? false;
-  const acceptedOrigin = following !== undefined || readLifetime?.accepted === true;
+  const acceptedOrigin = following !== undefined || (!read.isFetching && readLifetime?.accepted === true);
   return (
     <FollowControl
       key={identity}
@@ -124,7 +128,7 @@ export function FollowTargetControl({
       {...(readLifetime
         ? {
             onRetry: () => {
-              if (readLifetime.isCurrent()) void read.refetch();
+              if (readLifetime.isCurrent()) setReadGeneration((generation) => generation + 1);
             },
           }
         : {})}
@@ -139,16 +143,15 @@ export function FollowTargetControl({
         const reconcile = acceptedOrigin && (following !== undefined || readLifetime?.isCurrent() === true);
         if (readLifetime?.isCurrent()) {
           void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
-          queryClient.setQueryData<FollowState>(
-            options.queryKey,
+          queryClient.setQueryData<FollowState>(options.queryKey, (): FollowState =>
             reconcile ? { state: 'ready', following: next } : { state: 'unavailable' },
           );
         }
         if (reconcile) {
-          queryClient.setQueryData<FollowState>(followStateQuery(viewer, targetId).queryKey, {
+          queryClient.setQueryData<FollowState>(followStateQuery(viewer, targetId).queryKey, (): FollowState => ({
             state: 'ready',
             following: next,
-          });
+          }));
         }
         if (!next) removedCallback.current?.();
         return reconcile;
