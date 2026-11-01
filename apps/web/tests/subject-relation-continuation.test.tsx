@@ -5,6 +5,7 @@ import { act } from 'react';
 import { chromium, type Browser, type Page } from 'playwright';
 import { cleanupAll, ownBunProcess, type ProcessCustody } from './support/server-custody.ts';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
+import type { RelationGroupRequest } from '../src/features/pages/relation-stream-query';
 
 // Authored for controller execution. This exercises the real PageStory route/composition and its local page fixtures.
 let child: ReturnType<typeof Bun.spawn> | undefined;
@@ -239,16 +240,17 @@ test('Retired composed continuations cannot alter or invalidate a replacement re
     title: string;
   };
   type Deferred = {
-    request: unknown;
+    request: RelationGroupRequest;
     resolve: (section: Section) => void;
     reject: (error: Error) => void;
   };
   const pending: Deferred[] = [];
   mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
   mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
+  const { relationGroupKey } = await import('../src/features/pages/relation-stream-query');
   mock.module('../src/features/pages/relation-stream-query', () => ({
-    relationGroupKey: (request: unknown, incarnation?: string) => ['test-relation-stream', request, incarnation],
-    loadRelationGroup: ({ data }: { data: unknown }) =>
+    relationGroupKey,
+    loadRelationGroup: ({ data }: { data: RelationGroupRequest }) =>
       new Promise<Section>((resolve, reject) => pending.push({ request: data, resolve, reject })),
   }));
 
@@ -400,6 +402,24 @@ test('Retired composed continuations cannot alter or invalidate a replacement re
     });
     await flush();
   };
+  const expectRetired = (node: string) => {
+    expect(stream(node).querySelector('[data-layout="cover-grid"]')).toBeNull();
+    expect(stream(node).querySelector('[data-slot="continue-group"]')).toBeNull();
+    expect(stream(node).querySelector('[role="alert"]')).not.toBeNull();
+    expect(stream(node).getAttribute('aria-busy')).toBe('false');
+    expect(status(node).textContent).toBe('');
+    expect(pending).toHaveLength(3);
+    expect(invalidations).toBe(0);
+  };
+  const pendingKey = (request: RelationGroupRequest) => {
+    const key = client
+      .getQueryCache()
+      .getAll()
+      .find((query) => query.queryKey[0] === 'subject-relation-group')?.queryKey;
+    expect(key).toBeDefined();
+    expect(key).toEqual(relationGroupKey(request, key?.at(-1) as string));
+    return key!;
+  };
 
   try {
     await act(async () => {
@@ -452,20 +472,57 @@ test('Retired composed continuations cannot alter or invalidate a replacement re
     expect(invalidations).toBe(0);
     expect(retiredNodeTrigger.isConnected).toBe(false);
 
-    // A to B to A returns to the same serialized reader, Context, node and cursor, but gets a new incarnation.
+    // Returning to healthy A cannot authorize its exact retired reading objects.
     await replace(firstA);
+    expectRetired('side-stories');
+
+    // Fresh authoritative fixtures keep the same serialized reader, Context, node and cursor for A/B/A.
+    const freshA = makeReading(idA, 'reader-A', contextA, 'side-stories', 'First A', 'cursor-A');
+    const freshB = makeReading(idA, 'reader-B', contextB, 'adaptations', 'Adaptations', 'cursor-node-B');
+    const replacementA = makeReading(idA, 'reader-A', contextA, 'side-stories', 'First A', 'cursor-A');
+    for (const reading of [freshA, replacementA]) {
+      expect(reading.section).toEqual(firstA.section);
+      expect(reading.section).not.toBe(firstA.section);
+      if (reading.section.ok && firstA.section.ok) {
+        expect(reading.section.body).not.toBe(firstA.section.body);
+        expect(reading.section.body.links).not.toBe(firstA.section.body.links);
+        expect((reading.section.body.links as unknown[])[0]).not.toBe((firstA.section.body.links as unknown[])[0]);
+      }
+    }
+    expect(replacementA.section).not.toBe(freshA.section);
+    if (replacementA.section.ok && freshA.section.ok) {
+      expect(replacementA.section.body).not.toBe(freshA.section.body);
+      expect(replacementA.section.body.links).not.toBe(freshA.section.body.links);
+      expect((replacementA.section.body.links as unknown[])[0]).not.toBe((freshA.section.body.links as unknown[])[0]);
+    }
+    await replace(freshA);
     const firstARequest = await start('side-stories');
     expect(pending).toHaveLength(4);
+    const retiredAKey = pendingKey(pending[3]!.request);
     await replace(nodeBReading);
-    await replace(firstA);
+    expect(stream('adaptations').querySelector('[data-layout="cover-grid"]')).toBeNull();
+    expect(stream('adaptations').querySelector('[data-slot="continue-group"]')).toBeNull();
+    expect(stream('adaptations').querySelector('[role="alert"]')).not.toBeNull();
+    expect(status('adaptations').textContent).toBe('');
+    expect(pending).toHaveLength(4);
+    expect(client.getQueryCache().find({ queryKey: retiredAKey, exact: true })).toBeUndefined();
+    await replace(freshB);
+    expect(stream('adaptations').querySelector('[data-layout="cover-grid"]')?.textContent).toContain('Adaptations');
+    expect(trigger('adaptations').getAttribute('href')).toContain('cursor=cursor-node-B');
+    await replace(replacementA);
     const replacementATrigger = trigger('side-stories');
     replacementATrigger.focus();
     await start('side-stories');
     expect(pending).toHaveLength(5);
+    const currentAKey = pendingKey(pending[4]!.request);
+    expect(pending[4]!.request).toEqual(pending[3]!.request);
+    expect(currentAKey).not.toEqual(retiredAKey);
     pending[3]!.resolve(addition(idA, contextA, 'Retired A row', null));
     await flush();
     expect(status('side-stories').textContent).toContain('Loading more');
     expect(stream('side-stories').textContent).not.toContain('Retired A row');
+    expect(client.getQueryCache().find({ queryKey: retiredAKey, exact: true })).toBeUndefined();
+    expect(client.getQueryCache().find({ queryKey: currentAKey, exact: true })).toBeDefined();
     expect(window.document.activeElement).toBe(replacementATrigger);
     expect(invalidations).toBe(0);
     pending[4]!.resolve(addition(idA, contextA, 'Current A row', 'current-a-next'));
@@ -473,8 +530,11 @@ test('Retired composed continuations cannot alter or invalidate a replacement re
     expect(status('side-stories').textContent).toContain('New visible items');
     expect(status('side-stories').textContent).toContain(': 1. You can load more.');
     expect(stream('side-stories').textContent).toContain('Current A row');
+    expect(stream('side-stories').querySelector('[data-layout="cover-grid"]')?.textContent).toContain('First A');
     expect(stream('side-stories').textContent).not.toContain('Retired A row');
     expect(trigger('side-stories').getAttribute('href')).toContain('cursor=current-a-next');
+    expect(client.getQueryCache().find({ queryKey: retiredAKey, exact: true })).toBeUndefined();
+    expect(client.getQueryCache().find({ queryKey: currentAKey, exact: true })).toBeUndefined();
     expect(window.document.activeElement).toBe(replacementATrigger);
     expect(invalidations).toBe(0);
     expect(firstARequest.isConnected).toBe(false);

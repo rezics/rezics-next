@@ -648,6 +648,22 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       heldRelations = [];
 
       // A normal session refetch keeps the successful cached reader and must not retire the stream.
+      const healthySessionQuery = clientB.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+      const expectRecoveredReading = () => {
+        const rows = stream('side-stories').querySelector('[data-layout="cover-grid"]');
+        expect(rows?.textContent).toContain('Fresh A after retained error');
+        expect(rows?.textContent).toContain('Recovered continuation');
+        expect(status('side-stories').textContent).toContain(': 1. You can load more.');
+        expect(trigger('side-stories')).toBe(recoveredAction);
+        expect(trigger('side-stories').getAttribute('href')).toContain('cursor=recovered-next');
+        expect(stream('side-stories').getAttribute('aria-busy')).toBe('false');
+        expect(stream('side-stories').querySelector('[role="alert"]')).toBeNull();
+        expect(clientB.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })).toBe(healthySessionQuery);
+        expect(clientB.getQueryCache().find({ queryKey: recoveredKey, exact: true })).toBeUndefined();
+        expect(heldRelations).toHaveLength(0);
+        expect(window.document.activeElement).toBe(recoveredAction);
+        expect(invalidations).toBe(0);
+      };
       const sameSession = deferred<typeof sessionA>();
       const sameSessionFetch = clientB.fetchQuery({
         queryKey: sessionQuery.queryKey,
@@ -656,16 +672,19 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
         queryFn: () => sameSession.promise,
       });
       await settle();
-      expect(stream('side-stories').textContent).toContain('First A');
+      expect(clientB.getQueryState(sessionQuery.queryKey)?.fetchStatus).toBe('fetching');
+      expectRecoveredReading();
       sameSession.resolve(sessionA);
       await sameSessionFetch;
       await settle();
-      expect(stream('side-stories').textContent).toContain('First A');
+      expect(clientB.getQueryState(sessionQuery.queryKey)?.fetchStatus).toBe('idle');
+      expectRecoveredReading();
 
       // Error with retained data retires synchronously. The old anchor is invoked before React commits.
       const errorAction = await startMore('side-stories');
       expect(heldRelations).toHaveLength(1);
       const errorRequest = heldRelations[0]!;
+      expect(errorRequest.request.cursor).toBe('recovered-next');
       const errorKey = assertPendingKey(clientB, errorRequest);
       outside().focus();
       const sessionError = clientB.fetchQuery({
@@ -686,6 +705,9 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       expect(clientB.getQueryData(sessionQuery.queryKey)).toEqual(sessionA);
       await settle();
       expectRetired('side-stories');
+      expect(stream('side-stories').querySelector('[data-layout="cover-grid"]')).toBeNull();
+      expect(stream('side-stories').textContent).not.toContain('Recovered continuation');
+      expect(stream('side-stories').querySelector('[role="alert"]')).not.toBeNull();
       expect(stream('side-stories').querySelector('[href*="node=side-stories"]')).not.toBeNull();
       expect(clientB.getQueryCache().find({ queryKey: errorKey, exact: true })).toBeUndefined();
       expect(clientB.getQueryData(['subject-relation-group', 'another-owner'])).toEqual({ sentinel: true });
@@ -708,12 +730,18 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       // Equal recovery alone cannot bless the retired section; a new section object starts a new visit.
       clientB.setQueryData(sessionQuery.queryKey, sessionA);
       await settle();
+      expectRetired('side-stories');
+      expect(stream('side-stories').querySelector('[data-layout="cover-grid"]')).toBeNull();
+      expect(stream('side-stories').textContent).not.toContain('Recovered continuation');
       expect(stream('side-stories').textContent).not.toContain('First A');
       const borrowed = makeReading({ ...baseSpec, label: 'Borrowed wrapper' }, h);
-      const borrowedSection: Section = first.section.ok
-        ? { ...first.section, body: first.section.body }
-        : first.section;
+      const borrowedSection: Section = afterUnobservedError.section.ok
+        ? { ...afterUnobservedError.section, body: afterUnobservedError.section.body }
+        : afterUnobservedError.section;
       await replaceWith({ ...borrowed, section: borrowedSection });
+      expectRetired('side-stories');
+      expect(stream('side-stories').textContent).not.toContain('Fresh A after retained error');
+      expect(stream('side-stories').textContent).not.toContain('Recovered continuation');
       expect(stream('side-stories').textContent).not.toContain('First A');
       expect(stream('side-stories').querySelector('[role="alert"]')).not.toBeNull();
       const afterError = makeReading({ ...baseSpec, label: 'Fresh A after error' }, h);
