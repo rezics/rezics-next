@@ -29,9 +29,11 @@ import {
   historyDeadline,
   historyReceivingGap,
   verifyCurrentHistoryReceiving,
+  verifyHistoryReceivingReceipt,
   readHistoryReceivingReceipt,
   type HistoryReceivingContext,
   type HistoryReceivingDependencies,
+  type HistoryReceivingReceipt,
 } from './receiving.ts';
 
 /** First owner declaration: exact original Accounts key and native tuple, never an erasure Source authority.
@@ -80,6 +82,46 @@ export type AgentIdentityInventoryVerification =
       gap: string;
     }>
   | Readonly<{ state: 'verified'; native: 'verified'; gap: null }>;
+const recoveryInventoryProof: unique symbol = Symbol('Agent identity recovery native inventory');
+export type AgentIdentityRecoveryInventoryProof = Readonly<{
+  key: AgentIdentitySourceKey;
+  partition: number;
+  epoch: number;
+  position: bigint;
+  transactionId: string;
+  digest: string;
+  generation: string;
+  domainGeneration: string;
+  receiverEpoch: number;
+  cutDigest: string;
+  artifacts: readonly HistoryArtifact[];
+  readonly [recoveryInventoryProof]: true;
+}>;
+export type AgentIdentityRecoveryInventory =
+  | Readonly<{
+      state: 'absent';
+      gap: null;
+      native: 'absent';
+      proof: null;
+      receipts: readonly [];
+    }>
+  | Readonly<{
+      state: 'pending';
+      gap: string;
+      native: 'pending' | 'sealed';
+      proof: null;
+      receipts: readonly [];
+    }>
+  | Readonly<{
+      state: 'sealed';
+      gap: null;
+      native: 'sealed';
+      proof: AgentIdentityRecoveryInventoryProof;
+      receipts: readonly HistoryReceivingReceipt[];
+    }>;
+export type AgentIdentityRecoveryInventoryVerification =
+  | Readonly<{ state: 'pending'; native: 'pending' | 'verified'; gap: string }>
+  | Readonly<{ state: 'verified'; native: 'verified'; gap: null }>;
 const unsealed = () =>
   ({
     state: 'pending',
@@ -87,7 +129,11 @@ const unsealed = () =>
     proof: null,
   }) as const;
 const sdkGap = 'agent-identity-sdk-recording-port-unavailable';
-const expected = new WeakMap<CommandTransaction, readonly Buffer[]>();
+type ExpectedSerializerCut = Readonly<{
+  locators: readonly Buffer[];
+  eventTypes: readonly string[];
+}>;
+const expected = new WeakMap<CommandTransaction, ExpectedSerializerCut>();
 const eventsFor = (kind: string): readonly string[] => {
   if (kind === 'access.agent-verification.pending') return ['com.rezics.access.account-updated.v1'];
   if (
@@ -109,7 +155,12 @@ function params(key: AgentIdentitySourceKey): [number, number, string, string, s
 export async function declareAgentIdentityInventory(
   tx: CommandTransaction,
   original: ReturnType<typeof originalAccountIdentitySource>,
+  accounts: readonly import('./locator.ts').AccountReference[],
 ): Promise<void> {
+  if (original.writerKind === 'recovery') {
+    await declareAgentIdentityRecoveryInventory(tx, original, accounts);
+    return;
+  }
   // The owner may declare the genuine NEW recovery writer for native copies.
   // It cannot recreate the original command's finite cut or SDK enqueue seam.
   if (original.handoff === null) return;
@@ -153,6 +204,72 @@ export async function declareAgentIdentityInventory(
   );
 }
 
+/** The later recovery command has its own finite native cut. It contains exactly its real
+ * receipt and one account-updated event; it never mutates the original command inventory. */
+async function declareAgentIdentityRecoveryInventory(
+  tx: CommandTransaction,
+  original: ReturnType<typeof originalAccountIdentitySource>,
+  accounts: readonly import('./locator.ts').AccountReference[],
+): Promise<void> {
+  const receipt = currentCommandReceipt(tx);
+  const command = currentCommand(tx);
+  if (
+    original.writerKind !== 'recovery' ||
+    receipt.kind !== 'access.agent-identity.recover' ||
+    command.transactionId !== original.transactionId ||
+    command.partition !== original.partition ||
+    original.position < 1n ||
+    accounts.length < 1 ||
+    accounts.length > 64
+  )
+    throw new TypeError('Invalid recovery identity native writer');
+  const [namespace, version, mac] = receipt.storageKey.split('.');
+  const token = Buffer.from(mac ?? '', 'base64url');
+  if (
+    namespace !== 'rk1' ||
+    !/^(0|[1-9]\d*)$/.test(version ?? '') ||
+    Number(version) > 255 ||
+    token.length !== 32
+  )
+    throw new TypeError('Recovery identity receipt codec unavailable');
+  const expectedAccounts = JSON.stringify(
+    [...accounts]
+      .sort((a, b) => a.accountRoute - b.accountRoute || a.accountId.localeCompare(b.accountId))
+      .map(({ accountRoute, accountId, roles }) => [accountRoute, accountId, roles]),
+  );
+  const inserted = await tx.query(
+    `INSERT INTO core.agent_identity_recovery_inventory
+     (partition_no,source_route,source_account_id,source_direction,source_receipt_id,source_digest,
+      recovery_epoch,recovery_position,recovery_transaction_id,receiver_epoch,domain_generation,
+      native_command_kind,native_principal_kind,native_principal_id,native_receipt_key,native_request_digest,
+      expected_accounts,state)
+     SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,p.epoch,d.generation,$10,$11,$12,$13,r.request_digest,$14,'declared'
+     FROM core.partition p CROSS JOIN core.history_family_domain d
+     JOIN access.agent_identity_recovery a ON a.route=$2 AND a.account_id=$3
+       AND a.direction=$4 AND a.receipt_id=$5 AND a.intent_digest=$6
+       AND a.source_partition=$1 AND a.recovery_epoch=$7 AND a.recovery_position=$8
+       AND a.recovery_transaction_id=$9 AND a.xmin::text=pg_current_xact_id()::text
+     JOIN core.receipt r ON r.partition_no=$1 AND r.principal_kind=$11 AND r.principal_id=$12
+       AND r.command_kind=$10 AND r.idempotency_key=$13 AND r.transaction_id=$9
+       AND r.epoch=$7 AND r.position=$8 AND r.payload_state='present'
+       AND r.xmin::text=pg_current_xact_id()::text
+     WHERE p.partition_no=$1 AND p.write_state='active' AND p.epoch=$7 AND p.position=$8-1 AND d.singleton`,
+    [
+      ...params(original.key),
+      original.digest,
+      original.epoch,
+      original.position.toString(),
+      original.transactionId,
+      receipt.kind,
+      receipt.principal.kind,
+      receipt.principal.id,
+      receipt.storageKey,
+      expectedAccounts,
+    ],
+  );
+  if (inserted.rowCount !== 1) throw new TypeError('Recovery identity inventory home unavailable');
+}
+
 /** Executor calls before JSON.stringify of any event data or response. Types and slots are copied
  * synchronously; getters/toJSON cannot reduce the expected work while serialization is running. */
 export function captureAgentIdentityInventory(
@@ -161,18 +278,24 @@ export function captureAgentIdentityInventory(
   events: readonly { type: string }[],
 ): void {
   const declaration = commandAgentIdentitySource(tx);
-  if (!declaration || declaration.original.handoff === null) return;
+  if (
+    !declaration ||
+    (declaration.original.writerKind === 'original' && declaration.original.handoff === null)
+  )
+    return;
   if (expected.has(tx) || declaration.kind !== kind) throw new TypeError('Repeated identity serializer obligations');
-  const types = eventsFor(kind!);
+  const types =
+    declaration.original.writerKind === 'recovery'
+      ? ['com.rezics.access.account-updated.v1']
+      : eventsFor(kind!);
   if (types.length !== events.length || events.some((event, index) => event.type !== types[index]))
     throw new TypeError('Unconverted identity serializer obligations');
   const receipt = currentCommandReceipt(tx);
   const [namespace, version, mac] = receipt.storageKey.split('.');
   const commandKindId = COMMAND_HISTORY_KINDS[kind as keyof typeof COMMAND_HISTORY_KINDS];
   if (namespace !== 'rk1' || !commandKindId) throw new TypeError('Original native identity receipt unavailable');
-  expected.set(
-    tx,
-    Object.freeze([
+  expected.set(tx, Object.freeze({
+    locators: Object.freeze([
       Buffer.from(
         encodeLocator({
           artifactType: 'command-receipt/v1',
@@ -195,22 +318,38 @@ export function captureAgentIdentityInventory(
         ),
       ),
     ]),
-  );
+    eventTypes: Object.freeze([...types]),
+  }));
 }
 
 /** After EVERY actual serializer hook and final physical fence, still in the original transaction.
  * Durable validation matches each expected slot to its genuine association and physical row. */
 export async function finalizeAgentIdentityInventory(tx: CommandTransaction, position: bigint): Promise<void> {
   const declaration = commandAgentIdentitySource(tx);
-  if (!declaration || declaration.original.handoff === null) return;
-  const locators = expected.get(tx);
-  if (!locators || position !== declaration.original.position)
+  if (
+    !declaration ||
+    (declaration.original.writerKind === 'original' && declaration.original.handoff === null)
+  )
+    return;
+  const cut = expected.get(tx);
+  if (!cut || position !== declaration.original.position)
     throw new TypeError('Identity serializer obligations incomplete');
+  if (declaration.original.writerKind === 'recovery') {
+    const updated = await tx.query(
+      `UPDATE core.agent_identity_recovery_inventory SET expected_locators=$6,expected_event_types=$7,
+         native_writer_state='closed',state='sealed'
+       WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3 AND source_direction=$4
+         AND source_receipt_id=$5 AND state='declared' AND xmin::text=pg_current_xact_id()::text`,
+      [...params(declaration.original.key), cut.locators, cut.eventTypes],
+    );
+    if (updated.rowCount !== 1) throw new TypeError('Recovery identity native inventory did not seal');
+    return;
+  }
   const updated = await tx.query(
     `UPDATE core.agent_identity_inventory SET expected_locators=$6,expected_event_types=$7,state='sealed'
      WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3 AND source_direction=$4
        AND source_receipt_id=$5 AND state='declared' AND xmin::text=pg_current_xact_id()::text`,
-    [...params(declaration.original.key), locators, eventsFor(declaration.kind)],
+    [...params(declaration.original.key), cut.locators, cut.eventTypes],
   );
   if (updated.rowCount !== 1) throw new TypeError('Original identity native inventory did not seal');
 }
@@ -343,6 +482,452 @@ export async function readAgentIdentityInventoryInTransaction(
       [inventoryProof]: true as const,
     }),
   };
+}
+
+function recoveryAccountManifest(accounts: readonly import('./locator.ts').AccountReference[]): string {
+  return JSON.stringify(
+    [...accounts]
+      .sort((a, b) => a.accountRoute - b.accountRoute || a.accountId.localeCompare(b.accountId))
+      .map(({ accountRoute, accountId, roles }) => [accountRoute, accountId, roles]),
+  );
+}
+
+function recoveryCutDigest(
+  proof: Omit<AgentIdentityRecoveryInventoryProof, typeof recoveryInventoryProof>,
+): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        agentIdentitySourceKey(proof.key),
+        proof.partition,
+        proof.epoch,
+        proof.position.toString(),
+        proof.transactionId,
+        proof.digest,
+        proof.generation,
+        proof.domainGeneration,
+        proof.receiverEpoch,
+        proof.artifacts.map((artifact) => [
+          Buffer.from(encodeLocator(artifact.locator)).toString('hex'),
+          roleDigest(artifact).toString('hex'),
+        ]),
+      ]),
+    )
+    .digest('hex');
+}
+
+/** Exact native cut for the NEW recovery command only. The original finite cut and SDK seam
+ * remain independent, including for a source whose original cut was lost. */
+export async function readAgentIdentityRecoveryInventoryInTransaction(
+  tx: CommandTransaction,
+  key: AgentIdentitySourceKey,
+): Promise<AgentIdentityRecoveryInventory> {
+  const pending = (
+    gap: string,
+    native: 'pending' | 'sealed' = 'pending',
+  ): AgentIdentityRecoveryInventory => ({ state: 'pending', gap, native, proof: null, receipts: [] });
+  const row = (
+    await tx.query<{
+      partition_no: number;
+      source_digest: string;
+      recovery_epoch: number;
+      recovery_position: string;
+      recovery_transaction_id: string;
+      receiver_epoch: number;
+      domain_generation: string;
+      generation: string;
+      state: string;
+      producer_version: number;
+      conversion_coverage: string;
+      native_writer_state: string;
+      native_command_kind: string;
+      native_principal_kind: 'account' | 'anonymous';
+      native_principal_id: string;
+      native_receipt_key: string;
+      native_request_digest: Buffer;
+      expected_accounts: unknown;
+      expected_locators: Buffer[];
+      expected_event_types: string[];
+      current_epoch: number;
+      current_domain: string;
+      current_request_digest: Buffer;
+    }>(
+      `SELECT i.*,p.epoch AS current_epoch,d.generation AS current_domain,r.request_digest AS current_request_digest
+       FROM core.agent_identity_recovery_inventory i
+       JOIN core.partition p ON p.partition_no=i.partition_no AND p.write_state='active'
+       JOIN core.history_family_domain d ON d.singleton
+       JOIN access.agent_identity_recovery a ON a.route=i.source_route AND a.account_id=i.source_account_id
+         AND a.direction=i.source_direction AND a.receipt_id=i.source_receipt_id
+         AND a.source_partition=i.partition_no AND a.intent_digest=i.source_digest
+         AND a.recovery_epoch=i.recovery_epoch AND a.recovery_position=i.recovery_position
+         AND a.recovery_transaction_id=i.recovery_transaction_id
+         AND a.recovery_receipt_key=i.native_receipt_key
+       JOIN core.receipt r ON r.partition_no=i.partition_no AND r.principal_kind=i.native_principal_kind
+         AND r.principal_id=i.native_principal_id AND r.command_kind=i.native_command_kind
+         AND r.idempotency_key=i.native_receipt_key AND r.transaction_id=i.recovery_transaction_id
+         AND r.epoch=i.recovery_epoch AND r.position=i.recovery_position
+         AND r.payload_state IN ('present','minimized') AND r.response='null'::jsonb
+         AND r.request_digest=i.native_request_digest
+       WHERE i.partition_no=$1 AND i.source_route=$2 AND i.source_account_id=$3
+         AND i.source_direction=$4 AND i.source_receipt_id=$5 FOR SHARE OF i,p,d,a,r`,
+      params(key),
+    )
+  ).rows[0];
+  if (!row) {
+    const recovery = (
+      await tx.query(
+        `SELECT 1 FROM access.agent_identity_recovery
+         WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4 FOR SHARE`,
+        [key.route, key.accountId, key.direction, key.receiptId],
+      )
+    ).rows[0];
+    return recovery
+      ? pending('agent-identity-recovery-inventory-unsealed')
+      : { state: 'absent', gap: null, native: 'absent', proof: null, receipts: [] };
+  }
+  if (
+    row.state !== 'sealed' ||
+    row.producer_version !== 1 ||
+    row.conversion_coverage !== 'native-receipt-outbox/v1' ||
+    row.native_writer_state !== 'closed' ||
+    row.receiver_epoch !== row.current_epoch ||
+    String(row.domain_generation) !== String(row.current_domain) ||
+    !/^[0-9a-f]{64}$/.test(row.source_digest) ||
+    !Buffer.from(row.native_request_digest).equals(Buffer.from(row.current_request_digest))
+  )
+    return pending('agent-identity-recovery-inventory-unsealed');
+  const expectedLocators = row.expected_locators;
+  const eventTypes = row.expected_event_types;
+  if (
+    !expectedLocators ||
+    expectedLocators.length !== 2 ||
+    !eventTypes ||
+    eventTypes.length !== 1 ||
+    eventTypes[0] !== 'com.rezics.access.account-updated.v1' ||
+    !Array.isArray(row.expected_accounts) ||
+    row.expected_accounts.length < 1 ||
+    row.expected_accounts.length > 64
+  )
+    return pending('agent-identity-recovery-inventory-unsealed');
+  const copies = (
+    await tx.query<{
+      artifact_type: 'command-receipt/v1' | 'outbox-event/v1';
+      locator: Buffer;
+      source_digest: string;
+      source_epoch: number;
+      source_position: string;
+      source_transaction_id: string;
+      receiver_epoch: number;
+      domain_generation: string;
+    }>(
+      `SELECT artifact_type,locator,source_digest,source_epoch,source_position::text,source_transaction_id,
+         receiver_epoch,domain_generation
+       FROM core.agent_identity_history_copy
+       WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3 AND source_direction=$4
+         AND source_receipt_id=$5 AND source_epoch=$6 AND source_position=$7 AND source_transaction_id=$8
+       ORDER BY artifact_type,locator LIMIT 3 FOR SHARE`,
+      [
+        ...params(key),
+        row.recovery_epoch,
+        row.recovery_position,
+        row.recovery_transaction_id,
+      ],
+    )
+  ).rows;
+  if (
+    copies.length !== 2 ||
+    copies.some(
+      (copy) =>
+        !expectedLocators.some((locator) => Buffer.from(locator).equals(copy.locator)) ||
+        copy.source_digest !== row.source_digest ||
+        copy.source_epoch !== row.recovery_epoch ||
+        String(copy.source_position) !== String(row.recovery_position) ||
+        copy.source_transaction_id !== row.recovery_transaction_id ||
+        copy.receiver_epoch !== row.receiver_epoch ||
+        String(copy.domain_generation) !== String(row.domain_generation),
+    )
+  )
+    return pending('agent-identity-recovery-copy-cut-incomplete');
+  const artifacts: HistoryArtifact[] = [];
+  for (const encoded of expectedLocators) {
+    const copy = copies.find((candidate) => Buffer.from(encoded).equals(candidate.locator));
+    if (!copy) return pending('agent-identity-recovery-copy-cut-incomplete');
+    const refs = (
+      await tx.query<{
+        account_route: number;
+        account_id: string;
+        roles: number;
+        minimizer_version: number;
+      }>(
+        `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
+         WHERE partition_no=$1 AND artifact_type=$2 AND locator=$3
+         ORDER BY account_route,account_id LIMIT 65 FOR SHARE`,
+        [row.partition_no, copy.artifact_type, encoded],
+      )
+    ).rows;
+    if (
+      !refs.length ||
+      refs.length > 64 ||
+      refs.some((ref) => ref.minimizer_version !== 1) ||
+      recoveryAccountManifest(
+        refs.map((ref) => ({ accountRoute: ref.account_route, accountId: ref.account_id, roles: ref.roles })),
+      ) !== JSON.stringify(row.expected_accounts)
+    )
+      return pending('agent-identity-recovery-role-union-changed');
+    const locator = decodeLocator(copy.artifact_type, encoded);
+    if (copy.artifact_type === 'command-receipt/v1') {
+      const receipt = (
+        await tx.query(
+          `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3
+           AND command_kind=$4 AND idempotency_key=$5 AND transaction_id=$6 AND epoch=$7 AND position=$8
+           AND request_digest=$9 AND response='null'::jsonb AND payload_state IN ('present','minimized') FOR SHARE`,
+          [
+            row.partition_no,
+            row.native_principal_kind,
+            row.native_principal_id,
+            row.native_command_kind,
+            row.native_receipt_key,
+            row.recovery_transaction_id,
+            row.recovery_epoch,
+            row.recovery_position,
+            row.native_request_digest,
+          ],
+        )
+      ).rows[0];
+      if (!receipt) return pending('agent-identity-recovery-receipt-changed');
+    } else {
+      const event = (
+        await tx.query(
+          `SELECT 1 FROM core.outbox WHERE partition_no=$1 AND epoch=$2 AND position=$3 AND event_seq=0
+           AND event_count=1 AND type=$4 AND payload_state IN ('present','minimized')
+           AND ((payload_state='present' AND subject=$5 AND data=jsonb_build_object('accountId',$5::text)) OR
+                (payload_state='minimized' AND subject IS NULL AND data='{}'::jsonb)) FOR SHARE`,
+          [
+            row.partition_no,
+            row.recovery_epoch,
+            row.recovery_position,
+            'com.rezics.access.account-updated.v1',
+            key.accountId,
+          ],
+        )
+      ).rows[0];
+      if (!event) return pending('agent-identity-recovery-event-changed');
+    }
+    artifacts.push({
+      partition: row.partition_no,
+      locator,
+      accounts: refs.map((ref) => ({
+        accountRoute: ref.account_route,
+        accountId: ref.account_id,
+        roles: ref.roles,
+      })),
+    });
+  }
+  if (
+    !artifacts.some((artifact) => artifact.locator.artifactType === 'command-receipt/v1') ||
+    !artifacts.some((artifact) => artifact.locator.artifactType === 'outbox-event/v1')
+  )
+    return pending('agent-identity-recovery-copy-cut-incomplete');
+  const unsigned = {
+    key: { ...key },
+    partition: row.partition_no,
+    epoch: row.recovery_epoch,
+    position: BigInt(row.recovery_position),
+    transactionId: row.recovery_transaction_id,
+    digest: row.source_digest,
+    generation: String(row.generation),
+    domainGeneration: String(row.domain_generation),
+    receiverEpoch: row.receiver_epoch,
+    cutDigest: '',
+    artifacts: Object.freeze(artifacts),
+  };
+  const proof = Object.freeze({
+    ...unsigned,
+    cutDigest: recoveryCutDigest(unsigned),
+    [recoveryInventoryProof]: true as const,
+  });
+  return {
+    state: 'sealed',
+    gap: null,
+    native: 'sealed',
+    proof,
+    receipts: [],
+  };
+}
+
+export type AgentIdentityRecoveryArtifactInspection =
+  | Readonly<{ state: 'absent'; gap: null; proof: null }>
+  | Readonly<{ state: 'pending'; gap: string; proof: null }>
+  | Readonly<{
+      state: 'sealed';
+      gap: null;
+      proof: AgentIdentityRecoveryInventoryProof;
+      artifact: HistoryArtifact;
+      recoveryEvent: HistoryArtifact;
+    }>;
+
+/** Resolve one artifact-leading recovery association and re-read its exact two-slot cut.
+ * No source JSON, account-prefix, or history population scan participates. */
+export async function readAgentIdentityRecoveryArtifactInTransaction(
+  tx: CommandTransaction,
+  artifact: HistoryArtifact,
+  pool?: Pool,
+): Promise<AgentIdentityRecoveryArtifactInspection> {
+  const absent: AgentIdentityRecoveryArtifactInspection = { state: 'absent', gap: null, proof: null };
+  const pending = (gap: string): AgentIdentityRecoveryArtifactInspection => ({ state: 'pending', gap, proof: null });
+  if (
+    artifact.locator.artifactType === 'durable-work/v1' ||
+    artifact.partition !== artifact.locator.partitionNo
+  )
+    return absent;
+  if (pool) {
+    const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+    if (maintenance.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1))
+      await reserveIdentityHistoryWork(pool, nativeWork(2, 2, 1, 512));
+  }
+  const matches = (
+    await tx.query<{
+      source_route: number;
+      source_account_id: string;
+      source_direction: AgentIdentitySourceKey['direction'];
+      source_receipt_id: string;
+    }>(
+      `SELECT i.source_route,i.source_account_id,i.source_direction,i.source_receipt_id
+       FROM core.agent_identity_recovery_inventory i
+       JOIN core.agent_identity_history_copy c ON c.partition_no=i.partition_no
+         AND c.source_route=i.source_route AND c.source_account_id=i.source_account_id
+         AND c.source_direction=i.source_direction AND c.source_receipt_id=i.source_receipt_id
+         AND c.source_digest=i.source_digest AND c.source_epoch=i.recovery_epoch
+         AND c.source_position=i.recovery_position AND c.source_transaction_id=i.recovery_transaction_id
+         AND c.receiver_epoch=i.receiver_epoch AND c.domain_generation=i.domain_generation
+         AND c.artifact_type=$2 AND c.locator=$3 AND c.locator=ANY(i.expected_locators)
+       AND EXISTS (SELECT 1 FROM access.agent_identity_recovery a WHERE a.route=i.source_route
+         AND a.account_id=i.source_account_id AND a.direction=i.source_direction AND a.receipt_id=i.source_receipt_id
+         AND a.source_partition=i.partition_no AND a.intent_digest=i.source_digest
+         AND a.recovery_epoch=i.recovery_epoch AND a.recovery_position=i.recovery_position
+         AND a.recovery_transaction_id=i.recovery_transaction_id AND a.recovery_receipt_key=i.native_receipt_key)
+       WHERE i.partition_no=$1 ORDER BY i.source_route,i.source_account_id,i.source_direction,i.source_receipt_id
+       LIMIT 2 FOR SHARE OF i,c`,
+      [artifact.partition, artifact.locator.artifactType, Buffer.from(encodeLocator(artifact.locator))],
+    )
+  ).rows;
+  if (!matches.length) return absent;
+  if (matches.length !== 1) return pending('agent-identity-recovery-copy-fanout-unavailable');
+  if (pool) {
+    const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+    if (maintenance.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1))
+      await reserveIdentityHistoryWork(pool, nativeWork(135, 135, 6, 32768));
+  }
+  const key: AgentIdentitySourceKey = {
+    route: matches[0]!.source_route,
+    accountId: matches[0]!.source_account_id,
+    direction: matches[0]!.source_direction,
+    receiptId: matches[0]!.source_receipt_id,
+  };
+  const current = await readAgentIdentityRecoveryInventoryInTransaction(tx, key);
+  if (current.state !== 'sealed') return pending(current.gap ?? 'agent-identity-recovery-inventory-unsealed');
+  const exact = current.proof.artifacts.find(
+    (candidate) =>
+      candidate.partition === artifact.partition &&
+      candidate.locator.artifactType === artifact.locator.artifactType &&
+      Buffer.from(encodeLocator(candidate.locator)).equals(Buffer.from(encodeLocator(artifact.locator))),
+  );
+  if (!exact) return pending('agent-identity-recovery-artifact-scope-changed');
+  const recoveryEvent = current.proof.artifacts.find((candidate) => candidate.locator.artifactType === 'outbox-event/v1');
+  if (!recoveryEvent) return pending('agent-identity-recovery-copy-cut-incomplete');
+  return {
+    state: 'sealed',
+    gap: null,
+    proof: current.proof,
+    artifact: exact,
+    recoveryEvent,
+  };
+}
+
+/** Released exact recovery cut plus the ordinary History receiving API; no SDK mapping is read. */
+export async function readAgentIdentityRecoveryInventory(
+  deps: HistoryReceivingDependencies,
+  barrier: HistoryBarrier,
+  key: AgentIdentitySourceKey,
+  context: HistoryReceivingContext,
+): Promise<AgentIdentityRecoveryInventory> {
+  const fixedBarrier = Object.freeze({ ...barrier });
+  const fixedKey = structuredClone(key);
+  const partition = params(fixedKey)[0];
+  historyDeadline(context, partition);
+  const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
+  if (owner.currentIdentitySourceConsumerMaintenance(deps.pool, context.deadline))
+    await reserveIdentityHistoryWork(deps.pool, nativeWork(135, 135, 6, 32768));
+  const inventory = await withConnection(deps.pool, async (tx) => {
+    await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    try {
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [
+        `${Math.max(1, context.deadline - Date.now())}ms`,
+      ]);
+      const result = await readAgentIdentityRecoveryInventoryInTransaction(tx, fixedKey);
+      historyDeadline(context, partition);
+      await tx.query('COMMIT');
+      return result;
+    } catch (error) {
+      await tx.query('ROLLBACK');
+      throw error;
+    }
+  });
+  if (inventory.state !== 'sealed') return inventory;
+  const receipts: HistoryReceivingReceipt[] = [];
+  for (const artifact of inventory.proof.artifacts) {
+    const receipt = await readHistoryReceivingReceipt(deps, fixedBarrier, artifact, context);
+    if (!receipt)
+      return {
+        state: 'pending',
+        gap: `agent-identity-recovery-receiving-pending:${artifact.locator.artifactType}`,
+        native: 'sealed',
+        proof: null,
+        receipts: [],
+      };
+    receipts.push(receipt);
+  }
+  return { ...inventory, receipts: Object.freeze(receipts) };
+}
+
+/** Same source-home final command: recheck the recovery discriminator and every real receiver receipt. */
+export async function verifyAgentIdentityRecoveryInventory(
+  tx: CommandTransaction,
+  barrier: HistoryBarrier,
+  key: AgentIdentitySourceKey,
+  proof: AgentIdentityRecoveryInventoryProof,
+  receipts: readonly HistoryReceivingReceipt[],
+): Promise<AgentIdentityRecoveryInventoryVerification> {
+  const pending = (gap: string): AgentIdentityRecoveryInventoryVerification => ({
+    state: 'pending',
+    native: 'pending',
+    gap,
+  });
+  if (currentCommand(tx).partition !== params(key)[0])
+    throw new TypeError('Recovery inventory requires its SAME source home');
+  if (!proof || proof[recoveryInventoryProof] !== true || receipts.length !== 2)
+    return pending('agent-identity-recovery-native-cut-stale');
+  const { pool, deadline } = currentCommandResources(tx);
+  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+  if (maintenance.currentIdentitySourceConsumerMaintenance(pool, deadline))
+    await reserveIdentityHistoryWork(pool, nativeWork(275, 275, 18, 49152));
+  const current = await readAgentIdentityRecoveryInventoryInTransaction(tx, key);
+  if (
+    current.state !== 'sealed' ||
+    current.proof.cutDigest !== proof.cutDigest ||
+    recoveryCutDigest(proof) !== proof.cutDigest ||
+    current.proof.generation !== proof.generation ||
+    current.proof.domainGeneration !== proof.domainGeneration ||
+    current.proof.receiverEpoch !== proof.receiverEpoch
+  )
+    return pending('agent-identity-recovery-native-cut-stale');
+  if (partitionOf(barrier.accountRoute) !== proof.partition)
+    return pending('agent-identity-recovery-source-barrier-home-unavailable');
+  for (let index = 0; index < proof.artifacts.length; index++) {
+    if (!(await verifyHistoryReceivingReceipt(tx, barrier, current.proof.artifacts[index]!, receipts[index]!)))
+      return pending(`agent-identity-recovery-receiving-pending:${proof.artifacts[index]!.locator.artifactType}`);
+  }
+  return { state: 'verified', native: 'verified', gap: null };
 }
 
 export async function readAgentIdentityNativeInventory(

@@ -8,8 +8,11 @@ import type { Pool } from 'pg';
 import { readAgentIdentityCopyReceiving, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import {
   readAgentIdentityInventory,
+  readAgentIdentityRecoveryInventory,
   verifyAgentIdentityInventory,
+  verifyAgentIdentityRecoveryInventory,
   type AgentIdentityInventoryVerification,
+  type AgentIdentityRecoveryInventoryVerification,
 } from '../history/agent-identity-inventory.ts';
 import { readAgentIdentitySDKRetirementGap } from '../history/agent-identity-retirement.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
@@ -26,6 +29,7 @@ export type AgentIdentityCopyRetention =
 export type PreparedAgentIdentityCopy = Awaited<ReturnType<typeof readAgentIdentityCopyReceiving>> &
   Readonly<{
     inventory: Awaited<ReturnType<typeof readAgentIdentityInventory>>;
+    recoveryInventory: Awaited<ReturnType<typeof readAgentIdentityRecoveryInventory>>;
     sdkGap: string | null;
     durable: HistoryArtifact | null;
   }>;
@@ -36,13 +40,21 @@ export type PreparedAgentIdentityCopy = Awaited<ReturnType<typeof readAgentIdent
 export function agentIdentityCopyRetention(
   copy?: PreparedAgentIdentityCopy,
   verified?: AgentIdentityInventoryVerification,
+  recoveryVerified?: AgentIdentityRecoveryInventoryVerification,
 ): AgentIdentityCopyRetention {
   const gaps = copy
     ? [
         ...new Set(
-          [verified ? verified.gap : copy.inventory.gap, verified?.state === 'verified' ? null : copy.sdkGap].filter(
-            (gap): gap is string => gap !== null,
-          ),
+          [
+            verified ? verified.gap : copy.inventory.gap,
+            verified?.state === 'verified' ? null : copy.sdkGap,
+            copy.recoveryInventory.state === 'pending' ? copy.recoveryInventory.gap : null,
+            copy.recoveryInventory.state === 'sealed'
+              ? recoveryVerified?.state === 'verified'
+                ? null
+                : (recoveryVerified?.gap ?? 'agent-identity-recovery-receiving-pending')
+              : null,
+          ].filter((gap): gap is string => gap !== null),
         ),
       ]
     : ['agent-identity-original-inventory-unsealed', 'agent-identity-sdk-recording-port-unavailable'];
@@ -84,6 +96,7 @@ export async function prepareAgentIdentityCopyRetention(
     key,
     context,
   );
+  const recoveryInventory = await readAgentIdentityRecoveryInventory({ pool }, barrier, key, context);
   const sdkGap = receiving
     ? inventory.gap
     : await readAgentIdentitySDKRetirementGap(
@@ -102,9 +115,34 @@ export async function prepareAgentIdentityCopyRetention(
   return {
     ...point,
     inventory,
+    recoveryInventory,
     sdkGap,
     durable: lookup?.state === 'associated' ? lookup.artifact : null,
   };
+}
+
+/** Recovery has no SDK handoff. It still has an exact current two-copy receiver cut. */
+export async function verifyAgentIdentityRecoveryCopyInventory(
+  tx: CommandTransaction,
+  barrier: HistoryBarrier,
+  key: AgentIdentitySourceKey,
+  copy: PreparedAgentIdentityCopy,
+): Promise<AgentIdentityRecoveryInventoryVerification> {
+  if (copy.recoveryInventory.state === 'absent')
+    return { state: 'verified', native: 'verified', gap: null };
+  if (copy.recoveryInventory.state !== 'sealed' || !copy.recoveryInventory.proof)
+    return {
+      state: 'pending',
+      native: copy.recoveryInventory.native === 'sealed' ? 'verified' : 'pending',
+      gap: copy.recoveryInventory.gap,
+    };
+  return verifyAgentIdentityRecoveryInventory(
+    tx,
+    barrier,
+    key,
+    copy.recoveryInventory.proof,
+    copy.recoveryInventory.receipts,
+  );
 }
 
 /** A point receipt is independent of complete inventory custody. */

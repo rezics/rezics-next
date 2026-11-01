@@ -84,7 +84,7 @@ export async function declareAgentIdentitySource(
     }),
   );
   await guardHistoryAccounts(tx, command.partition, accounts);
-  await declareAgentIdentityInventory(tx, original);
+  await declareAgentIdentityInventory(tx, original, accounts);
 }
 
 export function commandAgentIdentitySource(tx: CommandTransaction): Declaration | undefined {
@@ -296,13 +296,30 @@ export async function agentIdentityCopyRetentionGap(
   const copy = await tx.query(
     `SELECT 1 FROM core.agent_identity_history_copy c
      WHERE c.partition_no=$1 AND c.artifact_type=$2 AND c.locator=$3
-     AND NOT EXISTS (SELECT 1 FROM core.agent_identity_inventory i
-       WHERE i.partition_no=c.partition_no AND i.source_route=c.source_route
-       AND i.source_account_id=c.source_account_id AND i.source_direction=c.source_direction
-       AND i.source_receipt_id=c.source_receipt_id AND i.state='sealed' AND i.native_writer_state='closed'
-       AND EXISTS (SELECT 1 FROM core.partition p WHERE p.partition_no=i.partition_no
-         AND p.write_state='active' AND p.epoch=i.receiver_epoch)
-       AND EXISTS (SELECT 1 FROM core.history_family_domain d WHERE d.singleton AND d.generation=i.domain_generation)) LIMIT 1`,
+     AND NOT (
+       EXISTS (SELECT 1 FROM core.agent_identity_inventory i
+         WHERE i.partition_no=c.partition_no AND i.source_route=c.source_route
+           AND i.source_account_id=c.source_account_id AND i.source_direction=c.source_direction
+           AND i.source_receipt_id=c.source_receipt_id AND i.state='sealed' AND i.native_writer_state='closed'
+           AND c.source_digest=i.source_digest AND c.source_epoch=i.source_epoch
+           AND c.source_position=i.source_position AND c.source_transaction_id=i.source_transaction_id
+           AND c.locator=ANY(i.expected_locators) AND c.receiver_epoch=i.receiver_epoch
+           AND c.domain_generation=i.domain_generation
+           AND EXISTS (SELECT 1 FROM core.partition p WHERE p.partition_no=i.partition_no
+             AND p.write_state='active' AND p.epoch=i.receiver_epoch)
+           AND EXISTS (SELECT 1 FROM core.history_family_domain d WHERE d.singleton AND d.generation=i.domain_generation))
+       OR EXISTS (SELECT 1 FROM core.agent_identity_recovery_inventory i
+         WHERE i.partition_no=c.partition_no AND i.source_route=c.source_route
+           AND i.source_account_id=c.source_account_id AND i.source_direction=c.source_direction
+           AND i.source_receipt_id=c.source_receipt_id AND i.state='sealed' AND i.native_writer_state='closed'
+           AND c.source_digest=i.source_digest AND c.source_epoch=i.recovery_epoch
+           AND c.source_position=i.recovery_position AND c.source_transaction_id=i.recovery_transaction_id
+           AND c.locator=ANY(i.expected_locators) AND c.receiver_epoch=i.receiver_epoch
+           AND c.domain_generation=i.domain_generation
+           AND EXISTS (SELECT 1 FROM core.partition p WHERE p.partition_no=i.partition_no
+             AND p.write_state='active' AND p.epoch=i.receiver_epoch)
+           AND EXISTS (SELECT 1 FROM core.history_family_domain d WHERE d.singleton AND d.generation=i.domain_generation))
+     ) LIMIT 1`,
     [partition, type, locator],
   );
   return copy.rows.length ? 'agent-identity-source-retention-custody-pending' : null;

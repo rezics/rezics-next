@@ -1,6 +1,8 @@
 import { advanceOutstandingRecordHistory } from '../history/work.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { withConnection } from '../database/pool.ts';
+import { nativeWork, reserveIdentityHistoryWork } from '../history/agent-identity-inventory-work.ts';
+import { verifyAgentIdentityRecoveryArtifactReadiness } from '../history/agent-identity-recovery-receiving.ts';
 import { admitSharedHistory, advanceSharedHistory } from './shared-history.ts';
 import { advancePendingContextRoleProvenance, type ContextRoleOccurrence } from './shared-history-context.ts';
 
@@ -28,12 +30,80 @@ export const sharedHistoryWorkModule: WorkModule = {
       },
     });
     history.registerOwner({
+      name: 'access.agent-identity.recover',
+      artifactType: 'command-receipt/v1',
+      version: 1,
+      async readiness(tx, artifact, barrier) {
+        const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool);
+        if (recovery.state === 'ready') return { ready: true };
+        return {
+          ready: false,
+          gap: recovery.state === 'pending' ? recovery.gap : 'agent-identity-recovery-inventory-unavailable',
+        };
+      },
+    });
+    history.registerOwner({
       name: 'com.rezics.library.entry.purged.v1',
       artifactType: 'outbox-event/v1',
       version: 1,
       // The closed deletionId event has no projection subscriber. Exact effects admission and
       // completion are independently enforced by the outbox minimizer.
       async readiness() {
+        return { ready: true };
+      },
+    });
+    history.registerOwner({
+      name: 'com.rezics.access.account-updated.v1',
+      artifactType: 'outbox-event/v1',
+      version: 1,
+      async readiness(tx, artifact, barrier) {
+        const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool);
+        if (recovery.state === 'ready') return { ready: true };
+        if (recovery.state === 'pending') return { ready: false, gap: recovery.gap };
+        const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+        if (maintenance.currentIdentitySourceConsumerMaintenance(context.pool, Date.now() + 1))
+          await reserveIdentityHistoryWork(context.pool, nativeWork(66, 66, 34, 8192));
+        const locator = artifact.locator;
+        if (
+          locator.artifactType !== 'outbox-event/v1' ||
+          locator.eventSeq !== 0 ||
+          locator.partitionNo !== artifact.partition ||
+          !artifact.accounts.some(
+            (account) => account.accountRoute === barrier.accountRoute && account.accountId === barrier.accountId,
+          )
+        )
+          return { ready: false, gap: 'account-updated-recovery-owner-binding-unavailable' };
+        const event = (
+          await tx.query<{ epoch: number; event_count: number; payload_state: string; subject: string | null }>(
+            `SELECT epoch,event_count,payload_state,subject FROM core.outbox
+             WHERE partition_no=$1 AND position=$2 AND event_seq=0 AND type='com.rezics.access.account-updated.v1'
+               AND subject=$3 AND data=jsonb_build_object('accountId',$3::text) FOR SHARE`,
+            [artifact.partition, locator.position.toString(), barrier.accountId],
+          )
+        ).rows[0];
+        if (!event || event.event_count !== 1 || event.payload_state !== 'present')
+          return { ready: false, gap: 'account-updated-recovery-event-unavailable' };
+        // A bounded current generation set is the actual Search relay registry. Unknown,
+        // missing or lagging consumers keep the event pending.
+        const generations = (
+          await tx.query<{ prefix: string; generation: string }>(
+            `SELECT prefix,generation::text AS generation FROM search.discovery_generation
+             WHERE partition_no=0 AND state='active' ORDER BY prefix,generation LIMIT 33 FOR SHARE`,
+          )
+        ).rows;
+        if (generations.length === 0 || generations.length > 32)
+          return { ready: false, gap: 'account-updated-search-consumer-unavailable' };
+        for (const generation of generations) {
+          const consumer = `search_${generation.prefix.replaceAll('-', '_')}discovery_g${generation.generation}`;
+          const checkpoint = (
+            await tx.query<{ position: string }>(
+              `SELECT position::text FROM core.consumer_checkpoint
+               WHERE partition_no=$1 AND consumer=$2 AND position >= $3 FOR SHARE`,
+              [artifact.partition, consumer, locator.position.toString()],
+            )
+          ).rows[0];
+          if (!checkpoint) return { ready: false, gap: 'account-updated-search-consumer-pending' };
+        }
         return { ready: true };
       },
     });

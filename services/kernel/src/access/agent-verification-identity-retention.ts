@@ -37,6 +37,7 @@ import {
   prepareAgentIdentityCopyRetention,
   verifyAgentIdentityCopyRetention,
   verifyAgentIdentityCopyInventory,
+  verifyAgentIdentityRecoveryCopyInventory,
   type PreparedAgentIdentityCopy,
 } from './shared-history-agent-identity.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
@@ -585,21 +586,40 @@ async function prepareNativeRetention(
             prepared.stage ?? undefined,
             prepared.client,
           );
-          copies = agentIdentityCopyRetention(copy, inventory);
+          const recoveryInventory = await verifyAgentIdentityRecoveryCopyInventory(
+            tx,
+            input.barrier,
+            key,
+            copy,
+          );
+          copies = agentIdentityCopyRetention(copy, inventory, recoveryInventory);
           gap = consumed ? 'native-source-copies-pending' : agentIdentityConsumerCustody.dependency;
           if (consumed && receiving === 'verified' && inventory.state === 'verified') {
-            const { pool } = currentCommandResources(tx);
-            await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 0));
-            const recovery = await tx.query(
-              `SELECT 1 FROM access.agent_identity_recovery
-              WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4 FOR SHARE`,
-              [key.route, key.accountId, key.direction, key.receiptId],
-            );
-            if (recovery.rowCount) gap = 'native-source-recovery-copies-unavailable';
+            if (recoveryInventory.state !== 'verified') gap = 'native-source-recovery-copies-unavailable';
             else {
-              // One UPDATE; the native trigger independently locks original authority,
-              // all-role copy/physical custody, root, restore and current writer closure.
-              await reserveIdentityHistoryWork(pool, AGENT_IDENTITY_ROLE_TRANSITION_COST);
+              const { pool } = currentCommandResources(tx);
+              // A sealed recovery causes two guarded UPDATEs. Both independently recheck the
+              // original closure and recovery cut before the shared transaction can commit.
+              await reserveIdentityHistoryWork(
+                pool,
+                copy.recoveryInventory.state === 'sealed'
+                  ? AGENT_IDENTITY_ROLE_TRANSITION_RECOVERY_COST
+                  : AGENT_IDENTITY_ROLE_TRANSITION_COST,
+              );
+              if (copy.recoveryInventory.state === 'sealed') {
+                const recoveryChanged = await tx.query(
+                  `UPDATE access.agent_identity_recovery SET
+                     requested_by=CASE WHEN requested_by=$5 THEN NULL ELSE requested_by END,
+                     decided_by=CASE WHEN decided_by=$5 THEN NULL ELSE decided_by END,
+                     original_source=CASE WHEN $6='account_id'
+                       THEN access.agent_identity_recovery_skeleton(original_source) ELSE original_source END,
+                     original_source_minimized=original_source_minimized OR ($6='account_id' AND original_source IS NOT NULL)
+                   WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+                  [key.route, key.accountId, key.direction, key.receiptId, input.barrier.accountId, input.role],
+                );
+                if (recoveryChanged.rowCount !== 1)
+                  throw new Error('Identity recovery source changed after verification');
+              }
               const changed = await tx.query(
                 `UPDATE access.agent_identity_intent
                 SET requested_by=CASE WHEN requested_by=$5 THEN NULL ELSE requested_by END,
@@ -695,12 +715,20 @@ async function consumerReference(
   }
 }
 
-// Trigger expansion: fixed native points plus four all-role copy cuts (LIMIT65),
-// original G + A, exact outbox consumers (2*LIMIT33). No invalidation writes occur.
+// The original source closure retains its established bound. A sealed recovery cut adds the
+// exact two-copy/effect/Search current verifier twice because its two native UPDATE guards each
+// re-enter the original Source closure before the shared COMMIT.
+export const AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST = nativeWork(239, 239, 45, 65536);
 export const AGENT_IDENTITY_ROLE_TRANSITION_COST = addNativeWork(
   nativeWork(460, 460, 50, 180224),
   AGENT_IDENTITY_HISTORY_GUARD_COST,
   AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+);
+export const AGENT_IDENTITY_ROLE_TRANSITION_RECOVERY_COST = addNativeWork(
+  AGENT_IDENTITY_ROLE_TRANSITION_COST,
+  AGENT_IDENTITY_ROLE_TRANSITION_COST,
+  AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST,
+  AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST,
 );
 
 /** Bounded native role minimizer. Foreign probes release before the final home

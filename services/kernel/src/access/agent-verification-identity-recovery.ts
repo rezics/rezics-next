@@ -419,6 +419,7 @@ async function declareRecovery(
   recoveredDeclarations.set(
     tx,
     Object.freeze({
+      writerKind: 'recovery',
       key,
       digest,
       partition: command.partition,
@@ -518,15 +519,20 @@ async function recoverOriginalSource(
           `Source verifyOriginalAccountAgentIdentity lost original custody ${keyOf(receipt)}`,
         );
       const existing = (
-        await tx.query<{ intent_digest: string; original_source: unknown }>(
-          `SELECT i.intent_digest,a.original_source FROM access.agent_identity_intent i
+        await tx.query<{ intent_digest: string; original_source: unknown; original_source_minimized: boolean }>(
+          `SELECT i.intent_digest,a.original_source,COALESCE(a.original_source_minimized,false) AS original_source_minimized
+       FROM access.agent_identity_intent i
        LEFT JOIN access.agent_identity_recovery a USING(route,account_id,direction,receipt_id)
        WHERE i.route=$1 AND i.account_id=$2 AND i.direction=$3 AND i.receipt_id=$4 FOR SHARE OF i`,
           [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
         )
       ).rows[0];
       if (existing) {
-        if (existing.intent_digest !== source.digest || normalized(existing.original_source) !== normalized(source))
+        if (
+          existing.original_source_minimized ||
+          existing.intent_digest !== source.digest ||
+          normalized(existing.original_source) !== normalized(source)
+        )
           throw accountIdentityUnavailable(`conflicting original source ${keyOf(receipt)}`);
         return noEffect(null);
       }

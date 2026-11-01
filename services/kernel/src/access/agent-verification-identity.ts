@@ -78,6 +78,8 @@ const digestOf = (input: IdentityAdmissionInput) =>
     .update(normalized([input.intent, input.receipt]))
     .digest('hex');
 type OriginalIdentity = Readonly<{
+  /** Identifies the actual serializer whose finite cut History owns. */
+  writerKind: 'original' | 'recovery';
   key: AgentIdentitySourceKey;
   digest: string;
   partition: number;
@@ -269,6 +271,7 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
   originalIdentities.set(
     tx,
     Object.freeze({
+      writerKind: 'original',
       key,
       digest: row.intent_digest,
       partition: row.source_partition,

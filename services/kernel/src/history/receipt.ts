@@ -18,6 +18,13 @@ export const RECEIPT_OWNER_DISPOSITIONS = Object.freeze({
     minimizerVersion: 1,
     barrierCompletesResult: true,
   }),
+  // Recovery receipts have no response workflow. Their independent two-slot native cut
+  // and current account-updated receiver remain required before physical minimization.
+  'access.agent-identity.recover': Object.freeze({
+    commandKindId: 7,
+    minimizerVersion: 1,
+    barrierCompletesResult: true,
+  }),
 });
 export type PreferenceHistoryCode = 'more' | 'covered-pending';
 type Job = {

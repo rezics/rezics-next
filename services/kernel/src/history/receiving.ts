@@ -213,6 +213,17 @@ export async function historyReceivingGap(
     Buffer.from(encodeLocator(locator)),
   );
   if (identityGap) return identityGap;
+  if (locator.artifactType === 'command-receipt/v1' || locator.artifactType === 'outbox-event/v1') {
+    const { verifyAgentIdentityRecoveryArtifactReadiness } = await import('./agent-identity-recovery-receiving.ts');
+    const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(
+      tx,
+      { partition, locator, accounts: [] },
+      barrier,
+      pool,
+    );
+    if (recovery.state === 'pending') return recovery.gap;
+    if (recovery.state === 'ready') return null;
+  }
   if (locator.artifactType === 'durable-work/v1') return mapping?.gap ?? null;
   if (locator.artifactType !== 'outbox-event/v1') return null;
   const charge = async (rows: number, points: number, statements: number, bytes: number) => {
