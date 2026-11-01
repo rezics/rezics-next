@@ -14,7 +14,7 @@ type ClientEntry = {
   references: number;
   authoritativeReferences: number;
   readStarted: boolean;
-  unsubscribeCache?: () => void;
+  unsubscribeCache: (() => void) | undefined;
 };
 
 // Entries exist only while a useSession subscription is mounted. Anonymous entries can
@@ -61,6 +61,7 @@ function entryFor(client: QueryClient): ClientEntry {
       references: 0,
       authoritativeReferences: 0,
       readStarted: false,
+      unsubscribeCache: undefined,
     };
     entries.push(entry);
   }
