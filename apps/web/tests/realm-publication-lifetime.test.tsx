@@ -204,341 +204,343 @@ afterAll(async () => {
 });
 
 describe('Complete Realm publication original caller lifetime', () => {
-test('healthy renders keep the draft and read the current authoritative shelf head', async () => {
-  await mountHook();
-  await act(async () => latestControl.choose(target()));
-  const selected = latestControl.target;
-  shelfSubjects = [{ ...target(), publicationId: nextHead }];
-  rerenderMarker++;
-  await paintHook();
-  expect(latestControl.target).toEqual(selected);
-
-  const pending = await startChange('withdraw');
-  expect(writes).toHaveLength(1);
-  expect(writes[0]!.input.expectedHead).toBe(nextHead);
-  await settle(0, { kind: 'saved', head: id(32) });
-  await pending;
-  expect(saved).toEqual([{ subject: target().id, head: id(32) }]);
-  expect(latestControl.outcome).toEqual({ kind: 'saved', head: id(32) });
-});
-
-test('a session-cache transition fences queued callbacks and old credentials before transport', async () => {
-  await mountHook();
-  const queued = latestControl;
-  await act(async () => {
-    client!.setQueryData(sessionQuery.queryKey, viewer(reader, 'csrf-away'));
-    client!.setQueryData(sessionQuery.queryKey, viewer());
-    queued.choose(target());
-    void queued.change('publish', target());
-  });
-  expect(writes).toHaveLength(0);
-  expect(latestControl.target).toBeNull();
-
-  await act(async () => latestControl.choose(target()));
-  const pending = await startChange('publish');
-  expect(writes).toHaveLength(1);
-  expect(writes[0]!.credential).toBe('csrf-one');
-  await settle(0, { kind: 'saved', head: nextHead });
-  await pending;
-  expect(saved).toEqual([{ subject: target().id, head: nextHead }]);
-});
-
-test('late saved, denied and conflict replies cannot update a same-account replacement lifetime', async () => {
-  for (const outcome of [
-    { kind: 'saved', head: nextHead },
-    { kind: 'denied' },
-    { kind: 'conflict', currentHead: nextHead },
-  ] as const) {
+  test('healthy renders keep the draft and read the current authoritative shelf head', async () => {
     await mountHook();
+    await act(async () => latestControl.choose(target()));
+    const selected = latestControl.target;
+    shelfSubjects = [{ ...target(), publicationId: nextHead }];
+    rerenderMarker++;
+    await paintHook();
+    expect(latestControl.target).toEqual(selected);
+
+    const pending = await startChange('withdraw');
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.input.expectedHead).toBe(nextHead);
+    await settle(0, { kind: 'saved', head: id(32) });
+    await pending;
+    expect(saved).toEqual([{ subject: target().id, head: id(32) }]);
+    expect(latestControl.outcome).toEqual({ kind: 'saved', head: id(32) });
+  });
+
+  test('a session-cache transition fences queued callbacks and old credentials before transport', async () => {
+    await mountHook();
+    const queued = latestControl;
+    await act(async () => {
+      client!.setQueryData(sessionQuery.queryKey, viewer(reader, 'csrf-away'));
+      client!.setQueryData(sessionQuery.queryKey, viewer());
+      queued.choose(target());
+      void queued.change('publish', target());
+    });
+    expect(writes).toHaveLength(0);
+    expect(latestControl.target).toBeNull();
+
     await act(async () => latestControl.choose(target()));
     const pending = await startChange('publish');
     expect(writes).toHaveLength(1);
-    let currentCredential = 'csrf-two';
-    if (outcome.kind === 'denied') {
-      currentCredential = 'csrf-one';
-      await act(async () => {
-        // Same-value writes still create a new session-cache revision.
-        client!.setQueryData(sessionQuery.queryKey, viewer());
-        await tick();
-      });
-    } else if (outcome.kind === 'conflict') {
-      await act(async () => {
-        client!.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: reader, csrfToken: null });
-        client!.setQueryData(sessionQuery.queryKey, viewer(reader, currentCredential));
-        await tick();
-      });
-      activeCredential = currentCredential;
-    } else {
-      await updateSession(viewer(reader, currentCredential));
-    }
-    await settle(0, outcome);
+    expect(writes[0]!.credential).toBe('csrf-one');
+    await settle(0, { kind: 'saved', head: nextHead });
     await pending;
-    expect(saved).toHaveLength(0);
+    expect(saved).toEqual([{ subject: target().id, head: nextHead }]);
+  });
+
+  test('late saved, denied and conflict replies cannot update a same-account replacement lifetime', async () => {
+    for (const outcome of [
+      { kind: 'saved', head: nextHead },
+      { kind: 'denied' },
+      { kind: 'conflict', currentHead: nextHead },
+    ] as const) {
+      await mountHook();
+      await act(async () => latestControl.choose(target()));
+      const pending = await startChange('publish');
+      expect(writes).toHaveLength(1);
+      let currentCredential = 'csrf-two';
+      if (outcome.kind === 'denied') {
+        currentCredential = 'csrf-one';
+        await act(async () => {
+          // Same-value writes still create a new session-cache revision.
+          client!.setQueryData(sessionQuery.queryKey, viewer());
+          await tick();
+        });
+      } else if (outcome.kind === 'conflict') {
+        await act(async () => {
+          client!.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: reader, csrfToken: null });
+          client!.setQueryData(sessionQuery.queryKey, viewer(reader, currentCredential));
+          await tick();
+        });
+        activeCredential = currentCredential;
+      } else {
+        await updateSession(viewer(reader, currentCredential));
+      }
+      await settle(0, outcome);
+      await pending;
+      expect(saved).toHaveLength(0);
+      expect(latestControl.target).toBeNull();
+      expect(latestControl.outcome).toBeNull();
+      expect(writes).toHaveLength(1);
+
+      await act(async () => latestControl.choose(target()));
+      const current = await startChange('publish');
+      expect(writes).toHaveLength(2);
+      expect(writes[1]!.credential).toBe(currentCredential);
+      await settle(1, { kind: 'saved', head: nextHead });
+      await current;
+      expect(saved).toEqual([{ subject: target().id, head: nextHead }]);
+    }
+  });
+
+  test('uncertain retry preserves the exact request and conflict review creates a fresh key at the current head', async () => {
+    await mountHook();
+    await act(async () => latestControl.choose(target()));
+    const first = await startChange('withdraw');
+    expect(writes).toHaveLength(1);
+    await settle(0, { kind: 'unavailable' });
+    await first;
+    const exact = structuredClone(writes[0]!.input);
+    expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
+
+    let retry: Promise<void> | undefined;
+    await act(async () => {
+      retry = latestControl.retry();
+    });
+    expect(writes[1]!.input).toEqual(exact);
+    await settle(1, { kind: 'conflict', currentHead: nextHead });
+    await retry;
+    let review: Promise<void> | undefined;
+    await act(async () => {
+      review = latestControl.review();
+    });
+    expect(writes[2]!.input).toMatchObject({
+      realmId,
+      subjectId: target().id,
+      action: 'withdraw',
+      expectedHead: nextHead,
+    });
+    expect(writes[2]!.input.idempotencyKey).not.toBe(exact.idempotencyKey);
+    await settle(2, { kind: 'saved', head: id(32) });
+    await review;
+    expect(writes).toHaveLength(3);
+  });
+
+  test('returning to the same account does not restore private outcomes, heads or uncertain intents', async () => {
+    await mountHook();
+    const privateTarget = { ...target(), id: id(41) };
+    await act(async () => latestControl.choose(privateTarget));
+    const first = await startChange('publish');
+    await settle(0, { kind: 'unavailable' });
+    await first;
+    expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
+    const retired = latestControl;
+
+    await act(async () => {
+      client!.setQueryData(sessionQuery.queryKey, viewer(id(21), 'csrf-other'));
+      client!.setQueryData(sessionQuery.queryKey, viewer());
+      await tick();
+    });
     expect(latestControl.target).toBeNull();
     expect(latestControl.outcome).toBeNull();
+    await act(async () => {
+      void retired.retry();
+      void retired.review();
+      void retired.change('withdraw', privateTarget);
+    });
     expect(writes).toHaveLength(1);
+
+    await act(async () => latestControl.choose(privateTarget));
+    let staleHeadAction: Promise<void> | undefined;
+    await act(async () => {
+      staleHeadAction = latestControl.change('withdraw', privateTarget);
+    });
+    expect(writes).toHaveLength(1);
+    let current: Promise<void> | undefined;
+    await act(async () => {
+      current = latestControl.change('publish', privateTarget);
+    });
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.input.expectedHead).toBeUndefined();
+    expect(writes[1]!.input.idempotencyKey).not.toBe(writes[0]!.input.idempotencyKey);
+    await settle(1, { kind: 'saved', head: nextHead });
+    await staleHeadAction;
+    await current;
+    expect(saved).toEqual([{ subject: privateTarget.id, head: nextHead }]);
+  });
+
+  test('unmount and remount under the same account cannot revive its retained controls or result', async () => {
+    await mountHook();
+    await act(async () => latestControl.choose(target()));
+    const retained = latestControl;
+    const pending = await startChange('publish');
+    expect(writes).toHaveLength(1);
+    await close();
+    await act(async () => {
+      retained.choose(target());
+      void retained.change('publish', target());
+      void retained.retry();
+      void retained.review();
+    });
+    root = createRoot(host);
+    await paintHook();
+    expect(latestControl.target).toBeNull();
+    expect(writes).toHaveLength(1);
+    await settle(0, { kind: 'saved', head: nextHead });
+    await pending;
+    expect(saved).toHaveLength(0);
+    expect(latestControl.outcome).toBeNull();
 
     await act(async () => latestControl.choose(target()));
     const current = await startChange('publish');
     expect(writes).toHaveLength(2);
-    expect(writes[1]!.credential).toBe(currentCredential);
     await settle(1, { kind: 'saved', head: nextHead });
     await current;
-    expect(saved).toEqual([{ subject: target().id, head: nextHead }]);
+    expect(saved).toHaveLength(1);
+  });
+
+  const hostSubject = { ...target(), publicationId: head };
+  const realm: RealmHome = {
+    id: realmId,
+    title: 'Atlas',
+    visibility: 'public',
+    viewer: null,
+    boards: [],
+    published: [hostSubject],
+    boardNext: null,
+    publicationNext: null,
+  };
+  const hostWrites: (ReturnType<typeof deferred<PublicationOutcome>> & { input: Write['input'] })[] = [];
+  const hostSearch = publicationSubjectSearch(
+    'en',
+    async () =>
+      ({
+        subjects: [{ id: hostSubject.id, type: 'schema:Book', labels: { en: hostSubject.title }, summary: null }],
+        types: { 'schema:Book': { en: 'Book' } },
+        as_of: '2026-10-31T00:00:00Z',
+      }) satisfies SuggestionResult,
+  );
+  const hostTransport = {
+    boards: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
+    publications: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
+    change: (input: Write['input']) => {
+      const call = { ...deferred<PublicationOutcome>(), input: structuredClone(input) };
+      hostWrites.push(call);
+      return call.promise;
+    },
+  };
+  function RealmShelfHost() {
+    return <RealmShelf realm={realm} transport={hostTransport} search={hostSearch} />;
   }
-});
 
-test('uncertain retry preserves the exact request and conflict review creates a fresh key at the current head', async () => {
-  await mountHook();
-  await act(async () => latestControl.choose(target()));
-  const first = await startChange('withdraw');
-  expect(writes).toHaveLength(1);
-  await settle(0, { kind: 'unavailable' });
-  await first;
-  const exact = structuredClone(writes[0]!.input);
-  expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
+  async function paintShelf() {
+    await act(async () => {
+      root!.render(tree(<RealmShelfHost />));
+      await tick();
+    });
+  }
 
-  let retry: Promise<void> | undefined;
-  await act(async () => {
-    retry = latestControl.retry();
-  });
-  expect(writes[1]!.input).toEqual(exact);
-  await settle(1, { kind: 'conflict', currentHead: nextHead });
-  await retry;
-  let review: Promise<void> | undefined;
-  await act(async () => {
-    review = latestControl.review();
-  });
-  expect(writes[2]!.input).toMatchObject({
-    realmId,
-    subjectId: target().id,
-    action: 'withdraw',
-    expectedHead: nextHead,
-  });
-  expect(writes[2]!.input.idempotencyKey).not.toBe(exact.idempotencyKey);
-  await settle(2, { kind: 'saved', head: id(32) });
-  await review;
-  expect(writes).toHaveLength(3);
-});
+  function shelfButton(name: string) {
+    const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (node) => node.getAttribute('aria-label') === name || node.textContent?.trim() === name,
+    );
+    expect(button).toBeDefined();
+    return button!;
+  }
 
-test('returning to the same account does not restore private outcomes, heads or uncertain intents', async () => {
-  await mountHook();
-  const privateTarget = { ...target(), id: id(41) };
-  await act(async () => latestControl.choose(privateTarget));
-  const first = await startChange('publish');
-  await settle(0, { kind: 'unavailable' });
-  await first;
-  expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
-  const retired = latestControl;
+  async function shelfWithdraw() {
+    const trigger = shelfButton(m.realm_publication_actions({ title: target().title }));
+    await act(async () => {
+      trigger.focus();
+      trigger.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await tick();
+    });
+    const item = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (node) => node.textContent?.trim() === m.realm_publication_withdraw(),
+    );
+    expect(item).toBeDefined();
+    await act(async () => {
+      item!.click();
+      await tick();
+    });
+  }
 
-  await act(async () => {
-    client!.setQueryData(sessionQuery.queryKey, viewer(id(21), 'csrf-other'));
-    client!.setQueryData(sessionQuery.queryKey, viewer());
-    await tick();
-  });
-  expect(latestControl.target).toBeNull();
-  expect(latestControl.outcome).toBeNull();
-  await act(async () => {
-    void retired.retry();
-    void retired.review();
-    void retired.change('withdraw', privateTarget);
-  });
-  expect(writes).toHaveLength(1);
+  async function shelfPublish() {
+    await act(async () => {
+      shelfButton(m.realm_publication_curate()).click();
+      await tick();
+    });
+    const input = [...host.querySelectorAll<HTMLInputElement>('input')].find(
+      (node) => node.getAttribute('aria-label') === m.realm_publication_choose(),
+    );
+    expect(input).toBeDefined();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, hostSubject.title);
+      input!.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
+      node.textContent?.includes(hostSubject.title),
+    );
+    expect(option).toBeDefined();
+    await act(async () => {
+      option!.click();
+      await tick();
+    });
+    await act(async () => {
+      shelfButton(m.realm_publication_publish()).click();
+      await tick();
+    });
+  }
 
-  await act(async () => latestControl.choose(privateTarget));
-  let staleHeadAction: Promise<void> | undefined;
-  await act(async () => {
-    staleHeadAction = latestControl.change('withdraw', privateTarget);
-  });
-  expect(writes).toHaveLength(1);
-  let current: Promise<void> | undefined;
-  await act(async () => {
-    current = latestControl.change('publish', privateTarget);
-  });
-  expect(writes).toHaveLength(2);
-  expect(writes[1]!.input.expectedHead).toBeUndefined();
-  expect(writes[1]!.input.idempotencyKey).not.toBe(writes[0]!.input.idempotencyKey);
-  await settle(1, { kind: 'saved', head: nextHead });
-  await staleHeadAction;
-  await current;
-  expect(saved).toEqual([{ subject: privateTarget.id, head: nextHead }]);
-});
+  test('a successful republish replaces the existing Realm slot with its authoritative head once', async () => {
+    await mountHook();
+    hostWrites.length = 0;
+    await paintShelf();
+    await shelfPublish();
+    expect(hostWrites).toHaveLength(1);
+    expect(hostWrites[0]!.input).toMatchObject({
+      realmId,
+      subjectId: hostSubject.id,
+      action: 'publish',
+      expectedHead: head,
+    });
+    await act(async () => {
+      hostWrites[0]!.resolve({ kind: 'saved', head: nextHead });
+      await tick();
+    });
+    const subjectCards = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((node) =>
+      node.textContent?.includes(hostSubject.title),
+    );
+    expect(subjectCards).toHaveLength(1);
 
-test('unmount and remount under the same account cannot revive its retained controls or result', async () => {
-  await mountHook();
-  await act(async () => latestControl.choose(target()));
-  const retained = latestControl;
-  const pending = await startChange('publish');
-  expect(writes).toHaveLength(1);
-  await close();
-  await act(async () => {
-    retained.choose(target());
-    void retained.change('publish', target());
-    void retained.retry();
-    void retained.review();
+    await shelfWithdraw();
+    expect(hostWrites).toHaveLength(2);
+    expect(hostWrites[1]!.input.expectedHead).toBe(nextHead);
+    await act(async () => {
+      hostWrites[1]!.resolve({ kind: 'saved', head: id(32) });
+      await tick();
+    });
+    expect(host.querySelectorAll('a').length).toBe(0);
   });
-  root = createRoot(host);
-  await paintHook();
-  expect(latestControl.target).toBeNull();
-  expect(writes).toHaveLength(1);
-  await settle(0, { kind: 'saved', head: nextHead });
-  await pending;
-  expect(saved).toHaveLength(0);
-  expect(latestControl.outcome).toBeNull();
 
-  await act(async () => latestControl.choose(target()));
-  const current = await startChange('publish');
-  expect(writes).toHaveLength(2);
-  await settle(1, { kind: 'saved', head: nextHead });
-  await current;
-  expect(saved).toHaveLength(1);
-});
+  test('RealmShelf saved callback reconciles one current slot and ignores a late retired response', async () => {
+    await mountHook();
+    hostWrites.length = 0;
+    await paintShelf();
+    await shelfWithdraw();
+    expect(hostWrites).toHaveLength(1);
+    await updateSession(viewer(reader, 'csrf-two'));
+    await act(async () => {
+      hostWrites[0]!.resolve({ kind: 'saved', head: nextHead });
+      await tick();
+    });
+    expect(host.textContent).toContain(target().title);
+    expect(host.textContent).not.toContain(m.realm_publication_removed());
+    expect(hostWrites).toHaveLength(1);
 
-const hostSubject = { ...target(), publicationId: head };
-const realm: RealmHome = {
-  id: realmId,
-  title: 'Atlas',
-  visibility: 'public',
-  viewer: null,
-  boards: [],
-  published: [hostSubject],
-  boardNext: null,
-  publicationNext: null,
-};
-const hostWrites: (ReturnType<typeof deferred<PublicationOutcome>> & { input: Write['input'] })[] = [];
-const hostSearch = publicationSubjectSearch('en', async () =>
-  ({
-    subjects: [{ id: hostSubject.id, type: 'schema:Book', labels: { en: hostSubject.title }, summary: null }],
-    types: { 'schema:Book': { en: 'Book' } },
-    as_of: '2026-10-31T00:00:00Z',
-  }) satisfies SuggestionResult,
-);
-const hostTransport = {
-  boards: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
-  publications: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
-  change: (input: Write['input']) => {
-    const call = { ...deferred<PublicationOutcome>(), input: structuredClone(input) };
-    hostWrites.push(call);
-    return call.promise;
-  },
-};
-function RealmShelfHost() {
-  return <RealmShelf realm={realm} transport={hostTransport} search={hostSearch} />;
-}
-
-async function paintShelf() {
-  await act(async () => {
-    root!.render(tree(<RealmShelfHost />));
-    await tick();
+    await shelfWithdraw();
+    expect(hostWrites).toHaveLength(2);
+    await act(async () => {
+      hostWrites[1]!.resolve({ kind: 'saved', head: nextHead });
+      await tick();
+    });
+    expect(host.textContent).not.toContain(target().title);
+    expect(host.textContent).toContain(m.realm_publication_removed());
   });
-}
-
-function shelfButton(name: string) {
-  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-    (node) => node.getAttribute('aria-label') === name || node.textContent?.trim() === name,
-  );
-  expect(button).toBeDefined();
-  return button!;
-}
-
-async function shelfWithdraw() {
-  const trigger = shelfButton(m.realm_publication_actions({ title: target().title }));
-  await act(async () => {
-    trigger.focus();
-    trigger.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    await tick();
-  });
-  const item = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (node) => node.textContent?.trim() === m.realm_publication_withdraw(),
-  );
-  expect(item).toBeDefined();
-  await act(async () => {
-    item!.click();
-    await tick();
-  });
-}
-
-async function shelfPublish() {
-  await act(async () => {
-    shelfButton(m.realm_publication_curate()).click();
-    await tick();
-  });
-  const input = [...host.querySelectorAll<HTMLInputElement>('input')].find(
-    (node) => node.getAttribute('aria-label') === m.realm_publication_choose(),
-  );
-  expect(input).toBeDefined();
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, hostSubject.title);
-    input!.dispatchEvent(new window.Event('input', { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  });
-  const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
-    node.textContent?.includes(hostSubject.title),
-  );
-  expect(option).toBeDefined();
-  await act(async () => {
-    option!.click();
-    await tick();
-  });
-  await act(async () => {
-    shelfButton(m.realm_publication_publish()).click();
-    await tick();
-  });
-}
-
-test('a successful republish replaces the existing Realm slot with its authoritative head once', async () => {
-  await mountHook();
-  hostWrites.length = 0;
-  await paintShelf();
-  await shelfPublish();
-  expect(hostWrites).toHaveLength(1);
-  expect(hostWrites[0]!.input).toMatchObject({
-    realmId,
-    subjectId: hostSubject.id,
-    action: 'publish',
-    expectedHead: head,
-  });
-  await act(async () => {
-    hostWrites[0]!.resolve({ kind: 'saved', head: nextHead });
-    await tick();
-  });
-  const subjectCards = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((node) =>
-    node.textContent?.includes(hostSubject.title),
-  );
-  expect(subjectCards).toHaveLength(1);
-
-  await shelfWithdraw();
-  expect(hostWrites).toHaveLength(2);
-  expect(hostWrites[1]!.input.expectedHead).toBe(nextHead);
-  await act(async () => {
-    hostWrites[1]!.resolve({ kind: 'saved', head: id(32) });
-    await tick();
-  });
-  expect(host.querySelectorAll('a').length).toBe(0);
-});
-
-test('RealmShelf saved callback reconciles one current slot and ignores a late retired response', async () => {
-  await mountHook();
-  hostWrites.length = 0;
-  await paintShelf();
-  await shelfWithdraw();
-  expect(hostWrites).toHaveLength(1);
-  await updateSession(viewer(reader, 'csrf-two'));
-  await act(async () => {
-    hostWrites[0]!.resolve({ kind: 'saved', head: nextHead });
-    await tick();
-  });
-  expect(host.textContent).toContain(target().title);
-  expect(host.textContent).not.toContain(m.realm_publication_removed());
-  expect(hostWrites).toHaveLength(1);
-
-  await shelfWithdraw();
-  expect(hostWrites).toHaveLength(2);
-  await act(async () => {
-    hostWrites[1]!.resolve({ kind: 'saved', head: nextHead });
-    await tick();
-  });
-  expect(host.textContent).not.toContain(target().title);
-  expect(host.textContent).toContain(m.realm_publication_removed());
-});
 });

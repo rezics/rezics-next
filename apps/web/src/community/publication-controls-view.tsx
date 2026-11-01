@@ -131,31 +131,28 @@ export function usePublicationControls(
   currentIdentity.current = identity;
   const subjects = useRef(currentSubjects);
   subjects.current = currentSubjects;
-  const draft = useMemo(
-    () => {
-      const current = () => {
-        const live = source?.read();
-        return (
-          ready &&
-          currentIdentity.current === identity &&
-          getLocale() === locale &&
-          !!queryClient &&
-          !!source &&
-          publicationSessionSource(queryClient) === source &&
-          source.snapshot() === revision &&
-          source.dataUpdateCount() === dataUpdateCount &&
-          source.dataUpdatedAt() === dataUpdatedAt &&
-          JSON.stringify([live?.state ?? 'unknown', live?.subject ?? null, live?.csrfToken ?? null]) === cacheIdentity
-        );
-      };
-      return createPublicationDraft(realmId, send, saved, () => subjects.current, enabled, {
-        current,
-        ...(source ? { watch: source.subscribe } : {}),
-        startDisconnected: true,
-      });
-    },
-    [realmId, identity],
-  );
+  const draft = useMemo(() => {
+    const current = () => {
+      const live = source?.read();
+      return (
+        ready &&
+        currentIdentity.current === identity &&
+        getLocale() === locale &&
+        !!queryClient &&
+        !!source &&
+        publicationSessionSource(queryClient) === source &&
+        source.snapshot() === revision &&
+        source.dataUpdateCount() === dataUpdateCount &&
+        source.dataUpdatedAt() === dataUpdatedAt &&
+        JSON.stringify([live?.state ?? 'unknown', live?.subject ?? null, live?.csrfToken ?? null]) === cacheIdentity
+      );
+    };
+    return createPublicationDraft(realmId, send, saved, () => subjects.current, enabled, {
+      current,
+      ...(source ? { watch: source.subscribe } : {}),
+      startDisconnected: true,
+    });
+  }, [realmId, identity]);
   const previousDraft = useRef(draft);
   usePublicationLayoutEffect(() => {
     if (previousDraft.current !== draft) {
