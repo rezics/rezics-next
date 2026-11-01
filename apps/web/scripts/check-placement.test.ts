@@ -471,11 +471,7 @@ test('ambient Nix trust path stays out of the remote overlay while semantics, ar
   const originalEnvironment = { ...env };
   const command = ['bun', 'test', 'tests/check placement.test.ts', '--test-name-pattern', 'a "quote"'];
 
-  await routeWebCheck(
-    { root, cwd: app, command, returns: ['apps/web/reports/check.json'] },
-    env,
-    f.adapter,
-  );
+  await routeWebCheck({ root, cwd: app, command, returns: ['apps/web/reports/check.json'] }, env, f.adapter);
 
   expect(f.overlays).toHaveLength(1);
   expect(f.overlays[0]).toEqual({
