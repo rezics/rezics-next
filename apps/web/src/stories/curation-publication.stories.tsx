@@ -105,9 +105,7 @@ async function expectPublished(canvasElement: HTMLElement, head: number) {
   await expect(await canvas.findByText(m.presentation_editor_published())).toBeVisible();
   await userEvent.click(await canvas.findByText(m.presentation_editor_publication_details()));
   await expect(
-    await canvas.findByText(
-      m.presentation_editor_version_reference({ head, digest: profileDigest(initialProfile) }),
-    ),
+    await canvas.findByText(m.presentation_editor_version_reference({ head, digest: profileDigest(initialProfile) })),
   ).toBeVisible();
 }
 

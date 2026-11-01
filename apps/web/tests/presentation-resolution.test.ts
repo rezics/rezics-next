@@ -341,7 +341,9 @@ test('presentation editing and published preview put draft meaning first and kee
   expect(editorText).toContain(m.curation_reload());
   expect(editorText).not.toContain(m.presentation_editor_version_reference({ head: 17, digest }));
   expect(editorText).not.toContain(m.curation_fallback());
-  expect(closedDisclosureContaining(editorHtml, m.presentation_editor_version_reference({ head: 17, digest }))).toBeDefined();
+  expect(
+    closedDisclosureContaining(editorHtml, m.presentation_editor_version_reference({ head: 17, digest })),
+  ).toBeDefined();
   expect(closedDisclosureContaining(editorHtml, m.curation_fallback())).toBeDefined();
 
   const publication = new CurationPublication(
@@ -369,6 +371,8 @@ test('presentation editing and published preview put draft meaning first and kee
   expect(recoveryText).toContain(m.curation_reconcile());
   expect(recoveryText).not.toContain(m.presentation_editor_version_reference({ head: 17, digest }));
   expect(recoveryText).not.toContain(m.curation_actual_head({ head: 18, digest }));
-  expect(closedDisclosureContaining(recoveryHtml, m.presentation_editor_version_reference({ head: 17, digest }))).toBeDefined();
+  expect(
+    closedDisclosureContaining(recoveryHtml, m.presentation_editor_version_reference({ head: 17, digest })),
+  ).toBeDefined();
   expect(closedDisclosureContaining(recoveryHtml, m.curation_actual_head({ head: 18, digest }))).toBeDefined();
 });

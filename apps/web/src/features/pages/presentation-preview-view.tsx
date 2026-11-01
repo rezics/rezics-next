@@ -252,7 +252,9 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
                 <>
                   <dt className="text-muted-foreground">{m.presentation_preview_context({}, o)}</dt>
                   <dd className="break-all">
-                    {result.page.context.population.kind === 'realm' ? `${result.page.context.population.title} · ` : ''}
+                    {result.page.context.population.kind === 'realm'
+                      ? `${result.page.context.population.title} · `
+                      : ''}
                     {result.page.context.id}
                   </dd>
                 </>
