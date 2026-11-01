@@ -479,6 +479,7 @@ function DisclosureReplacementReader() {
 }
 
 export const DisclosureReplacement: Story = {
+  args: { document: disclosureRevisionA },
   render: () => <DisclosureReplacementReader />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
