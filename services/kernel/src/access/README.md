@@ -3835,19 +3835,18 @@ Nested original trigger bounds, each charged before its triggering dispatch:
 The fresh success sequence has eight H invocations (readiness, closure, two preparation checks, bound physical
 selection, absence, two receiving checks), six L invocations, thirteen G invocations including native write guards,
 three O observations and two independently bracketed SDK receipt reads (four R commands). It also has two eight-table
-physical inspections, three W, two K, one T, one P and two seals. There are twenty History/Account commands including
+physical inspections, three W, two K, one T, one P and two seals. There are nineteen History/Account commands including
 the three commands inside the accepted-original lookup; the latter's controls are included in its bound. Source
 staging and its Library/current checks retain the producer's own separate reservations. Account settlement read
 64/64/20/65536 and EACH current verify64/64/15/65536 remain in that owner composition; they are never replaced by a
 fixed assumption of two checks. Each additional invocation of a receiving read or verification reserves again.
 The released `readHistoryReceivingReceipt` reserves 76/75/17/132000 + G + A; its same-command verifier reserves
 76/75/13/131872 + G + A, excluding its caller's already funded controls. The released receiving byte bound
-is M16384 + authority/readiness/closure106496 + roles8192 + barrier128 + partition64 + digest32 + physical64
-
-- two outer native void results512 + settings128 = 132000; the same-command verifier excludes settings128.
-  Inventory's released mapping-only snapshot reserves 6/5/8/16640, and its complete saved SDK receipt/work/mapping
-  snapshot reserves 7/6/8/33024 whenever either enters this existing frame; subsequent fence and receiving calls
-  reserve separately as above. Outside a Source callback their independent inventory admission remains unchanged.
+is the sum of M16384, authority/readiness/closure106496, roles8192, barrier128, partition64, digest32, physical64,
+two outer native void results512 and settings128 = 132000; the same-command verifier excludes settings128.
+Inventory's released mapping-only snapshot reserves 6/5/8/16640, and its complete saved SDK receipt/work/mapping
+snapshot reserves 7/6/8/33024 whenever either enters this existing frame; subsequent fence and receiving calls
+reserve separately as above. Outside a Source callback their independent inventory admission remains unchanged.
 
 The SDK single-attempt dispatch table is in [Work's owner contract](../work/README.md#bounded-selected-identity-maintenance).
 It funds every nested lock/retirement/deletion dispatch, including failed attempts and a rollback slot before BEGIN.

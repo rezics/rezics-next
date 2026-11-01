@@ -3032,6 +3032,10 @@ test('The real default selected identity unit records guarded readiness retires 
     const mapping = (
       await pool.query('SELECT custody_id FROM core.agent_identity_work WHERE workflow_id=$1', [native.workflowId])
     ).rows[0];
+    // Payload clearing cannot bypass readiness by leaving the state pending.
+    await expect(
+      pool.query('UPDATE core.history_work SET request=NULL WHERE partition_no=0 AND work_id=$1', [mapping.custody_id]),
+    ).rejects.toThrow('requires durable source transfer');
     await pool.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES(0,$1,1,now())', [account.id]);
     const job = randomUUID();
     await runCommand(pool, { partition: 0 }, async (tx) => {
