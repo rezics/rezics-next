@@ -575,6 +575,27 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(query().get('ratingQuestionId')).toBe(secondQuestion.id);
     await click(m.home_question_clear());
 
+    // A late selected feed cannot replace a newer cleared public selection, even if abort is ignored.
+    let releaseQuestionFeed!: () => void;
+    pause = new Promise<void>((resolve) => {
+      releaseQuestionFeed = resolve;
+    });
+    count = feedCalls().length;
+    await chooseQuestion(secondQuestion.id);
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    pause = undefined;
+    await click(m.home_question_clear());
+    expect(feedCalls()).toHaveLength(count + 2);
+    expect(query().has('ratingQuestionId')).toBe(false);
+    expect(query().get('kind')).toBe(nativeKind);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(1);
+    await act(async () => {
+      releaseQuestionFeed();
+    });
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(1);
+    expect(questionControl().value).toBe('');
+
     // A real metadata read observes changed revision and resets a selected feed frontier.
     // Start a fresh mounted directory because terminal pages do not invent more pages.
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: 'question-view', subject: 'viewer-a' });

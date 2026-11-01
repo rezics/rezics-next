@@ -125,12 +125,15 @@ export function homeFeedStoryPage(
         : ratingQuestionId !== undefined
           ? questionItems
           : state === 'partial' && personal
-          ? kind === undefined || kind === first.type
-            ? [discovery, continued]
-            : []
-          : items,
+            ? kind === undefined || kind === first.type
+              ? [discovery, continued]
+              : []
+            : items,
     next:
-      !cursor && (ratingQuestionId !== undefined || kind !== undefined || ((state === 'mixed' || spaceId !== undefined) && personal))
+      !cursor &&
+      (ratingQuestionId !== undefined ||
+        kind !== undefined ||
+        ((state === 'mixed' || spaceId !== undefined) && personal))
         ? 'illustrative-signed-frontier'
         : null,
     asOf: '2026-11-01T00:00:00.000Z',
