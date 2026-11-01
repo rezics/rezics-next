@@ -35,7 +35,7 @@ export function useProfileEditor() {
   const client = useQueryClient();
   const sessionState = client.getQueryState(sessionQuery.queryKey);
   const observed =
-    sessionState?.status === 'success'
+    sessionState?.status === 'success' && sessionState.data
       ? sessionState.data
       : { state: sessionState?.status === 'error' ? 'unavailable' : 'unknown', csrfToken: null };
   let entry = editors.get(client);
