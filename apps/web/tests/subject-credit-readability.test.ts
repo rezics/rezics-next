@@ -70,7 +70,7 @@ test('Subject credits preserve readable person role character and credited-as in
         expect(href.pathname).toContain(`/${locale}/subjects/`);
         expect(href.searchParams.get('realm')).toBe(qualifiedRealm);
       }
-      const title = cards[1]!.querySelector('[data-slot="cover-card-title"]')!;
+      const title = cards[1]!.querySelector('a')!;
       expect(title.textContent).toBe(unqualified.label);
       expect(title.className).not.toMatch(/line-clamp|truncate/);
       expect(cards[1]!.querySelector('ul')).toBeNull();
