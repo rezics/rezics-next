@@ -124,7 +124,13 @@ function SettingsFailure({
                   : m.settings_unavailable_text()}
             </p>
             {waiting ? <p>{m.settings_retry_wait()}</p> : null}
-            <Button type="button" variant="outline" disabled={waiting} onClick={onRetry}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5"
+              disabled={waiting}
+              onClick={onRetry}
+            >
               {m.settings_retry()}
             </Button>
           </AlertDescription>
@@ -284,9 +290,14 @@ function SettingsSections({
               <CardContent>
                 <Alert variant="destructive">
                   <AlertTitle>{m.settings_unavailable_title()}</AlertTitle>
-                  <AlertDescription>
+                  <AlertDescription className="space-y-3">
                     <p>{m.settings_unavailable_text()}</p>
-                    <Button type="button" variant="outline" onClick={() => void router.invalidate()}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5"
+                      onClick={() => void router.invalidate()}
+                    >
                       {m.settings_retry()}
                     </Button>
                   </AlertDescription>
@@ -399,7 +410,13 @@ export function SettingsSessionRecovery({
         {failed ? m.settings_session_unavailable() : m.settings_sections_loading()}
       </p>
       {retryable ? (
-        <Button type="button" variant="outline" disabled={pending} onClick={onRetry}>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5"
+          disabled={pending}
+          onClick={onRetry}
+        >
           {m.settings_retry()}
         </Button>
       ) : null}
@@ -510,7 +527,10 @@ export function SettingsPageView({
             <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
               <Card>
                 <CardHeader>
-                  <a className="text-sm text-primary underline" href={managedAccountsBackHref(location.publicHref)}>
+                  <a
+                    className="inline-flex min-h-11 max-w-full items-center rounded-2xl px-3 py-2 text-sm leading-5 whitespace-normal break-words text-primary underline underline-offset-4 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                    href={managedAccountsBackHref(location.publicHref)}
+                  >
                     {m.managed_back()}
                   </a>
                   <CardTitle>
