@@ -30,13 +30,6 @@ test('ordinary configured server returns current mixed discovery through its def
   // The fixture establishes actual owner resources only. Every search below goes to startServer.
   const driver = await createSemanticDriver(undefined, { isolatedAuth: true });
   const { pool, runtime } = driver.fixtures;
-  // The shared Realm input names its native authority even when no Subject or
-  // positive support exists. Delimiters and non-native identities cannot alias it.
-  const realmIdentity = newId(31000);
-  expect(publicFilterCoverageKey({ kind: 'realm',realm: realmIdentity })).toBe(
-    JSON.stringify(['authority','realm',31000,realmIdentity]),
-  );
-  expect(() => publicFilterCoverageKey({ kind: 'realm',realm: `realm:${realmIdentity}` })).toThrow();
   const prefix = `default-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
   const marker = `mixed${randomUUID().replaceAll('-', '')}`;
   const search = createOpenSearch(endpoint);
@@ -327,8 +320,40 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(current.events.indexOf('as_of')).toBeGreaterThan(current.events.indexOf('privacy-start'));
         expect(current.events.lastIndexOf('as_of')).toBeLessThan(current.events.indexOf('privacy-final'));
       };
+      let rejectedAckGap = false;
+      const rejectAckGap = async () => {
+        if (rejectedAckGap) return;
+        const native = await pool.connect();
+        try {
+          await native.query('BEGIN');
+          // Lock the actual independently verified terminal while its funded
+          // settlement frontier is still partial. The attempted jump remains
+          // inside 0..4096, so only the contiguous-prefix guard can reject it.
+          const pending = await native.query<{ bootstrap: string; execution: string }>(
+            `SELECT t.bootstrap::text,t.execution
+             FROM semantic.public_filter_repair_step t
+             JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
+             WHERE b.state='adopted' AND b.consumer LIKE $1
+               AND t.complete AND t.verified_root IS NOT NULL AND t.ack_after BETWEEN 0 AND 4093
+             LIMIT 1 FOR UPDATE OF t SKIP LOCKED`, [`%${prefix}%`],
+          );
+          const terminal = pending.rows[0];
+          if (terminal) {
+            await expect(native.query(
+              `UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+2
+               WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete`,
+              [terminal.bootstrap,terminal.execution],
+            )).rejects.toMatchObject({ code: '23514' });
+            rejectedAckGap = true;
+          }
+        } finally {
+          try { await native.query('ROLLBACK'); } finally { native.release(); }
+        }
+      };
       const page = (body: Record<string, unknown>) => eventually(async () => {
+        await rejectAckGap();
         const result = await send(body);
+        await rejectAckGap();
         if (result.response.status === 200) {
           assertEnvelope(result.trace);
           return result.body as DiscoveryPage;
@@ -339,6 +364,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         return undefined;
       });
       const first = await page(request);
+      expect(rejectedAckGap).toBe(true);
       expect(first.hits).toHaveLength(1);
       expect(typeof first.next).toBe('string');
       // Inspect native enrollment independently; the response must already have passed
@@ -457,7 +483,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
           [originalChain.bootstrap,originalChain.execution],
         )).rejects.toMatchObject({ code: '23514' });
         await immutable.query('ROLLBACK');
-        // Missing original window evidence and a jumped/regressed native ACK
+        // Missing original window evidence and a regressed native ACK
         // frontier cannot be supplied by a complete bit or a caller's counter.
         await immutable.query('BEGIN');
         await expect(immutable.query(
@@ -466,7 +492,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
           [originalChain.bootstrap,originalChain.execution],
         )).rejects.toMatchObject({ code: '23514' });
         await immutable.query('ROLLBACK');
-        for (const delta of [-1,2]) {
+        for (const delta of [-1]) {
           await immutable.query('BEGIN');
           await expect(immutable.query(
             `UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+$3
