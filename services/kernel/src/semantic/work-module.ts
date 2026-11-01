@@ -1,3 +1,4 @@
+import { registerDefinitionCatalogueWork } from './register.ts';
 import { contextDirectoryEffect, populateContextDirectory, registerContextDirectoryWork } from './context-directory.ts';
 import { startRelays } from '../events/relays.ts';
 import type { WorkModule } from '../work/registry.ts';
@@ -68,6 +69,7 @@ export const semanticWorkModule: WorkModule = {
     const publication = createSubjectPagePublication(binding);
     const relay = createSubjectPagePublicationRelay(binding);
     registerSubjectPagePublicationWork(context, publication);
+    registerDefinitionCatalogueWork(context);
     const scheduleErasure = registerSemanticErasureWork(context);
     await registerRecordRetentionWork(context);
     await registerIdentityScopedObservationWork(context);

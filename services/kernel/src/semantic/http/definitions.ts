@@ -1,3 +1,7 @@
+import { CatalogueArtifactError, type KindDeclarationV1 } from '@rezics/definitions';
+import { cataloguePin, type NativeDefinitionCatalogue, type DefinitionCatalogueReadContext } from '../definition-catalogue.ts';
+import { publishCatalogueArtifact, startCatalogueBuild, stepCatalogueBuild, activateCatalogue } from '../definition-catalogue-publication.ts';
+import { LeafNativeWork, LeafReservationUnavailable } from '../scope-leaf-selection.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -47,6 +51,11 @@ const unavailableCodes = [
 const sessionHeaders = { [SESSION_HEADER]: t.String() };
 
 function definitionProblem(error: unknown): never {
+  if (error instanceof CatalogueArtifactError) {
+    if (error.code === 'missing') throw new ProblemError('semantic_not_ready');
+    throw new ProblemError('invalid_request');
+  }
+  if (error instanceof LeafReservationUnavailable) throw new ProblemError('overloaded');
   if (error instanceof ExtensionInputError)
     throw new ProblemError('invalid_request', {
       errors: error.violations.map(({ pointer, code }) => ({ pointer: `/extension${pointer}`, code })),
@@ -65,13 +74,106 @@ function definitionProblem(error: unknown): never {
   throw error;
 }
 
+const cataloguePinSchema = t.Object({
+  format: t.Literal('https://rezics.com/definitions/catalogue/2'), rootDigest: t.String(),
+  kindSpec: t.Literal('https://rezics.com/definitions/kind/1'), reduction: t.Literal('https://rezics.com/definitions/kind-reduction/1'),
+}, {additionalProperties: false});
+const pinnedKindSchema = t.Object({ catalogue: cataloguePinSchema, declarationDigest: t.String(), declaration: t.Unsafe<KindDeclarationV1>(t.Record(t.String(), t.Any())) });
+const catalogueStatusSchema = t.Object({
+  pin: cataloguePinSchema, state: t.Union(['building','incomplete','refused','ready'].map(value => t.Literal(value))),
+  phase: t.Union(['node','release','declaration'].map(value => t.Literal(value))),
+  steps: t.String(), nodes: t.String(), releases: t.String(), declarations: t.String(), indexed_rows: t.String(), examined_bytes: t.String(),
+  missing_digest: t.Union([t.String(),t.Null()]), error: t.Union([t.String(),t.Null()]),
+});
+const catalogueWriteResponses = {
+  400: problemSchema('invalid_request'), 401: unauthorized, 403: problemSchema('forbidden'), 404: problemSchema('not_found'),
+  409: problemSchema('stale_editorial_head'), 422: problemSchema('idempotency_conflict'), 503: problemSchema('semantic_not_ready', ...unavailableCodes),
+};
+const catalogueReadResponses = {400: problemSchema('invalid_request'), 401: unauthorized,403:problemSchema('forbidden'),404:problemSchema('not_found'),503:problemSchema('semantic_not_ready', ...unavailableCodes)};
+function catalogueReadContext(actor: import('../../request/access.ts').Actor, deadline: number): DefinitionCatalogueReadContext {
+  // Reuse the native caller ledger. Access preparation, final authorization and metadata SQL share it.
+  const ledger = new LeafNativeWork({keys:1024, points:256, rows:2048, witnesses:1024, bytes:8*1048576, emptySeeks:512}, deadline);
+  return {actor,deadline,work:ledger.accounting};
+}
+const catalogueWriteDetail = (operationId: string, action: string) => ({
+  operationId, 'x-exposure': 'gate:definition_publication', 'x-action': action,
+  'x-resource-types': ['semantic.context'], 'x-rate-limit': defineRateLimit({family:'write',units:1}), security:[{bearerAuth:[]}],
+});
+const catalogueReadDetail = (operationId: string) => ({operationId, 'x-exposure':'public','x-action':'definitions:read',security:[{bearerAuth:[]},{}]});
+
 export function definitionRoutes(
   app: ReturnType<typeof subjectRoutes>,
-  { pool, access, clock }: { pool: Pool; access?: Access | AccessFactory; clock: () => Date },
+  { pool, access, clock, catalogue }: { pool: Pool; access?: Access | AccessFactory; clock: () => Date; catalogue: () => NativeDefinitionCatalogue },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
   return app
+    .post('/v1/definitions/catalogue/artifacts', {
+      headers:writeHeaders,body:t.Object({kind:t.Union(['root','node','release','declaration'].map(value=>t.Literal(value))),artifact:releaseObject},{additionalProperties:false}),
+      response:{200:withHeaders(digestResponse,sessionHeaders),201:withHeaders(digestResponse,sessionHeaders),...catalogueWriteResponses},
+      detail:{...catalogueWriteDetail('definitions.catalogue.publish_artifact','definitions:publish'),'x-body-limit':MAX_BODY_LIMIT},
+    }, async ({body,headers,actor,authorizeCommand,admission,job,session,set})=>{
+      if(actor.kind!=='account') throw new AuthenticationError(401,'Bearer');
+      const authorization=await authorizeCommand(resource,()=>new DefinitionAccessDeniedError());
+      try {
+        const result=await admission.run('normal',job,()=>publishCatalogueArtifact(pool,{
+          actor,kind:body.kind,artifact:body.artifact,idempotencyKey:idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+          digest:requestDigest('definitions.catalogue.publish_artifact',actor,{params:{},body}),authorize:authorization.check,authorization,deadline:job.deadline,clock,
+        }));
+        session.record(result.component);set.status=result.created?201:200;return {digest:result.digest};
+      }catch(error){return definitionProblem(error);}
+    })
+    .post('/v1/definitions/catalogues', {
+      headers:writeHeaders,body:t.Object({pin:cataloguePinSchema},{additionalProperties:false}),response:{200:withHeaders(catalogueStatusSchema,sessionHeaders),...catalogueWriteResponses},
+      detail:catalogueWriteDetail('definitions.catalogue.build','definitions:publish'),
+    },async ({body,headers,actor,authorizeCommand,admission,job,session})=>{
+      if(actor.kind!=='account')throw new AuthenticationError(401,'Bearer');
+      const authorization=await authorizeCommand(resource,()=>new DefinitionAccessDeniedError());
+      try{
+        const result=await admission.run('normal',job,()=>startCatalogueBuild(pool,{actor,pin:body.pin,idempotencyKey:idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),digest:requestDigest('definitions.catalogue.build',actor,{params:{},body}),authorize:authorization.check,authorization,deadline:job.deadline,clock}));
+        session.record(result.component);
+        const {component,replayed,...value}=result;return value;
+      }catch(error){return definitionProblem(error);}
+    })
+    .post(customMethod('/v1/definitions/catalogues/:root','step'), {
+      params:t.Object({root:t.String()}),headers:writeHeaders,body:t.Object({},{additionalProperties:false}),response:{200:withHeaders(catalogueStatusSchema,sessionHeaders),...catalogueWriteResponses},detail:catalogueWriteDetail('definitions.catalogue.step','definitions:publish'),
+    },async({params,body,headers,actor,authorizeCommand,admission,job,session})=>{
+      if(actor.kind!=='account')throw new AuthenticationError(401,'Bearer');
+      const authorization=await authorizeCommand(resource,()=>new DefinitionAccessDeniedError());
+      try{
+        const result=await admission.run('normal',job,()=>stepCatalogueBuild(pool,{actor,pin:cataloguePin(params.root),idempotencyKey:idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),digest:requestDigest('definitions.catalogue.step',actor,{params,body}),authorize:authorization.check,authorization,deadline:job.deadline,clock}));
+        session.record(result.component);const{component,replayed,...value}=result;return value;
+      }catch(error){return definitionProblem(error);}
+    })
+    .post(customMethod('/v1/definitions/catalogues/:root','activate'),{
+      params:t.Object({root:t.String()}),headers:writeHeaders,body:t.Object({expected_head:t.Union([t.Integer({minimum:1,maximum:2147483646}),t.Null()])},{additionalProperties:false}),
+      response:{200:withHeaders(t.Object({pin:cataloguePinSchema,head:t.Integer()}),sessionHeaders),...catalogueWriteResponses},detail:catalogueWriteDetail('definitions.catalogue.activate','definitions:activate'),
+    },async({params,body,headers,actor,authorizeCommand,admission,job,session})=>{
+      if(actor.kind!=='account')throw new AuthenticationError(401,'Bearer');
+      const authorization=await authorizeCommand(resource,()=>new DefinitionAccessDeniedError());
+      try{
+        const result=await admission.run('normal',job,()=>activateCatalogue(pool,{actor,pin:cataloguePin(params.root),expectedHead:body.expected_head,idempotencyKey:idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),digest:requestDigest('definitions.catalogue.activate',actor,{params,body}),authorize:authorization.check,authorization,deadline:job.deadline,clock}));
+        session.record(result.component);return {pin:result.pin,head:result.head};
+      }catch(error){return definitionProblem(error);}
+    })
+    .get('/v1/definitions/catalogue',{
+      response:{200:t.Union([t.Object({pin:cataloguePinSchema,head:t.Integer()}),t.Null()]),...catalogueReadResponses},detail:catalogueReadDetail('definitions.catalogue.head'),
+    },async({actor,admission,job})=>{try{return await admission.run('normal',job,()=>catalogue().head(catalogueReadContext(actor,job.deadline)));}catch(error){return definitionProblem(error);}})
+    .get('/v1/definitions/catalogues/:root/build',{
+      params:t.Object({root:t.String()}),response:{200:catalogueStatusSchema,...catalogueReadResponses},detail:catalogueReadDetail('definitions.catalogue.status'),
+    },async({params,actor,admission,job})=>{try{const value=await admission.run('normal',job,()=>catalogue().build({pin:cataloguePin(params.root)},catalogueReadContext(actor,job.deadline)));if(!value)throw new DefinitionNotFoundError();return value;}catch(error){return definitionProblem(error);}})
+    .post(customMethod('/v1/definitions/catalogues/:root/kinds','resolve'),{
+      params:t.Object({root:t.String()}),body:t.Object({ids:t.Array(t.String(),{minItems:1,maxItems:100,uniqueItems:true})},{additionalProperties:false}),
+      response:{200:t.Unsafe<Awaited<ReturnType<NativeDefinitionCatalogue['kinds']>>>(t.Array(t.Object({id:t.String(),value:t.Union([pinnedKindSchema,t.Null()])}))),...catalogueReadResponses},detail:catalogueReadDetail('definitions.catalogue.resolve_kinds'),
+    },async({params,body,actor,admission,job})=>{try{return await admission.run('normal',job,()=>catalogue().kinds({pin:cataloguePin(params.root),ids:body.ids},catalogueReadContext(actor,job.deadline)));}catch(error){return definitionProblem(error);}})
+    .get('/v1/definitions/catalogues/:root/kinds',{
+      params:t.Object({root:t.String()}),query:t.Object({query:t.Optional(t.String({maxLength:512,default:''})),language:t.Optional(t.String({default:'en'})),limit:t.Optional(t.Numeric({minimum:1,maximum:100,multipleOf:1,default:20})),cursor:t.Optional(t.String({maxLength:4096}))}),
+      response:{200:t.Unsafe<Awaited<ReturnType<NativeDefinitionCatalogue['kindPage']>>>(t.Object({kinds:t.Array(pinnedKindSchema),next:t.Union([t.String(),t.Null()])})),...catalogueReadResponses},detail:catalogueReadDetail('definitions.catalogue.kind_page'),
+    },async({params,query,actor,admission,job})=>{try{return await admission.run('normal',job,()=>catalogue().kindPage({pin:cataloguePin(params.root),query:query.query??'',language:query.language??'en',limit:query.limit??20,cursor:query.cursor??null},catalogueReadContext(actor,job.deadline)));}catch(error){return definitionProblem(error);}})
+    .get('/v1/definitions/catalogues/:root/candidates',{
+      params:t.Object({root:t.String()}),query:t.Object({exact_type_id:t.String(),limit:t.Optional(t.Numeric({minimum:1,maximum:100,multipleOf:1,default:20})),cursor:t.Optional(t.String({maxLength:4096}))}),
+      response:{200:t.Unsafe<Awaited<ReturnType<NativeDefinitionCatalogue['kindCandidates']>>>(t.Object({candidates:t.Array(pinnedKindSchema),next:t.Union([t.String(),t.Null()])})),...catalogueReadResponses},detail:catalogueReadDetail('definitions.catalogue.candidates'),
+    },async({params,query,actor,admission,job})=>{try{return await admission.run('normal',job,()=>catalogue().kindCandidates({pin:cataloguePin(params.root),exactTypeId:query.exact_type_id,limit:query.limit??20,cursor:query.cursor??null},catalogueReadContext(actor,job.deadline)));}catch(error){return definitionProblem(error);}})
     .post(
       '/v1/definitions/releases',
       {

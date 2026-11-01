@@ -65,6 +65,7 @@ import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { recentSearchRoutes } from '../search/recent-searches.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
+import { configureDefinitionCatalogue, createNativeDefinitionCatalogue } from '../semantic/definition-catalogue.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
@@ -320,6 +321,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     current: 1,
     keys: new Map([[1, new Uint8Array(randomBytes(32))]]),
   };
+  configureDefinitionCatalogue(dependencies.pool, tokens);
   const receiptKeys = readReceiptKeyRing(process.env, dependencies.receiptKeys);
   assertReceiptKeyRing(receiptKeys, tokens);
   configureReceiptKeys(dependencies.pool, receiptKeys);
@@ -410,6 +412,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(batched), realmRoleReader }),
   });
   const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, {
+    catalogue: () => createNativeDefinitionCatalogue({ pool: dependencies.pool, access: resolveAccess({actions: actionCatalogue(app), realmRoleReader}) }),
     pool: dependencies.pool,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),

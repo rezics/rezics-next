@@ -30,6 +30,11 @@ const linkChange = Type.Object(
   { additionalProperties: false },
 );
 
+export const CATALOGUE_ARTIFACT = 'com.rezics.definitions.catalogue.artifact.v1' as const;
+export const CATALOGUE_BUILD_REQUESTED = 'com.rezics.definitions.catalogue.build-requested.v1' as const;
+export const CATALOGUE_PROGRESS = 'com.rezics.definitions.catalogue.progress.v1' as const;
+export const CATALOGUE_ACTIVATED = 'com.rezics.definitions.catalogue.activated.v1' as const;
+
 export const SUBJECT_MERGED = 'com.rezics.subject.merged.v1' as const;
 export const SUBJECT_REVISED = 'com.rezics.subject.revised.v1' as const;
 export const LINKS_MOVING = 'com.rezics.semantic.links.moving.v1' as const;
@@ -92,6 +97,10 @@ const publicationComponent = Type.Object(
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
+  [CATALOGUE_ARTIFACT]: Type.Object({ digest: Type.String(), kind: Type.Union(['root','node','release','declaration'].map(value => Type.Literal(value))) }, { additionalProperties: false }),
+  [CATALOGUE_BUILD_REQUESTED]: Type.Object({ rootDigest: Type.String() }, { additionalProperties: false }),
+  [CATALOGUE_PROGRESS]: Type.Object({ rootDigest: Type.String(), state: Type.Union(['building','incomplete','refused','ready'].map(value => Type.Literal(value))), steps: Type.String() }, { additionalProperties: false }),
+  [CATALOGUE_ACTIVATED]: Type.Object({ rootDigest: Type.String(), head: Type.Integer({minimum: 1}), kindSpec: Type.Literal('https://rezics.com/definitions/kind/1'), reduction: Type.Literal('https://rezics.com/definitions/kind-reduction/1') }, { additionalProperties: false }),
   'com.rezics.semantic.public-source.advanced.v1': Type.Object(
     { id: UUID, bootstrap: UUID, execution: Type.String({ minLength: 1, maxLength: 4096 }) },
     { additionalProperties: false },

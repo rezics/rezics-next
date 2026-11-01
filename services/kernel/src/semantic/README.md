@@ -1888,3 +1888,83 @@ forward ticket and admission inverse; Source readiness requires both. Retirement
 the same open-bridge fence. The native admission ticket reader replaces the provisional declaration
 on integration; Source PREPARATION receiving remains Source-owned. Existing original tickets are
 re-enrolled before their summary can become clean after this directory binding is installed.
+
+## Immutable native definition catalogues
+
+The mounted Definitions API accepts bounded addressed artifacts at
+`POST /v1/definitions/catalogue/artifacts` (`{kind,artifact}`), retaining original
+canonical package bytes and computing the address itself. Supported kinds are
+`root`, `node`, `release` and `declaration`. There are no external URI resolvers.
+Release admission uses the original validator, construction policy and exact native
+historical exemption; a new catalogue cannot bypass small Release publication caps.
+Kind/1 construction supports **exact-type only**, including for ineligible Kinds.
+The package's original parser rejects unsupported versions, fields and generic filters.
+
+`POST /v1/definitions/catalogues` takes `{pin}` and commits immutable build input.
+The ordinary semantic Work module registers the build in the existing DBOS maintenance
+queue. Each native continuation locks that root's progress, validates one bounded
+artifact and retains its DFS stack/member cursor and counters in the same Global
+command. `POST /v1/definitions/catalogues/:root:step` provides an authorized finite
+continuation through the same body. `GET .../:root/build` exposes retained state,
+phase, counters, missing address and refusal diagnostic. Missing input is incomplete;
+uploading the exact bytes resumes it. Corrupt closure is refused. Every node digest,
+child range and repeated subtree is checked, followed by original Release validation,
+complete shared identity comparison and exact condition/presentation/profile closure.
+A savepoint rolls back an invalid step's derived rows before retaining refusal.
+Crash/replay either commits the whole step or none of it. No partial indexes are read.
+
+All publication/continuation operations require the existing `definitions:publish`
+action and publication gate on Global. Activation requires `definitions:activate`
+there, with fresh native command authorization before receipt lookup. Existing
+sealed request replay/conflict rules apply. `POST .../:root:activate` takes
+`{expected_head}` and changes the single Global catalogue head only for a complete
+root. The CAS and `com.rezics.definitions.catalogue.activated.v1` invalidation commit
+together. Building another root leaves the old head usable; old immutable pins remain
+readable after activation. The bounded Release1 publication, activation, historical
+read and construction paths retain their own original head and meaning. The explicit
+`legacyReleaseKinds` adapter accepts at most 100 selected IDs within one original
+bounded Release1, uses the original `compatibilityKind`, and never fabricates a
+catalogue root, profile or changed historical digest.
+
+`createNativeDefinitionCatalogue({pool,access})` is the actual mounted request reader.
+It imports the native Actor and Access accounting port. Native Access preparation,
+current authoritative time, final Global Definitions permission and metadata SQL share
+the caller's ledger and deadline. The HTTP adapter uses the existing native ledger
+implementation; it adds no permission or native Source evidence. `GET
+/v1/definitions/catalogue` returns null only when no catalogue is active. Missing or
+unfinished pinned indexes are typed unavailable, not an empty catalogue.
+
+`POST .../:root/kinds:resolve` accepts 1–100 unique exact IDs, independently of page
+membership. `GET .../:root/kinds` accepts `query`, `language`, `limit` and `cursor`.
+Metadata search is a literal, case-sensitive **label prefix in the exact requested
+language**, default English and empty prefix; it does not expand subtypes or search
+subjects. No language fallback is inferred. Sort is exact UTF-16 label order, then
+exact stable Kind ID order. Build-time DFS ordinals preserve the package's exact ID
+comparison without putting unbounded IDs into B-tree sort keys. Language/ID equality
+uses bounded SHA-256 keys with original identities retained and verified. Language
+label sort keys fit the original declaration label bound. Cursors use the host's
+existing signed cursor implementation and bind immutable root/spec/reduction,
+operation, query, language and actual sort; the payload is a bounded ordinal, never
+an unsigned caller key. Keyset boundaries have their own indexed lookup. A key-only
+lookahead establishes continuation; a short byte-limited response does not imply EOF.
+
+`GET .../:root/candidates?exact_type_id=...` plans only auto-eligible exact-Type
+candidates, precedence descending and exact stable Kind ID ascending. Two disjoint
+indexed ranges handle the same-precedence tail and remaining lower precedence without
+scanning old pages. The Type ID comparison is exact. The vocabulary Release pins
+meaning, not every item's Release. Candidate lists are not subject admission, voting,
+currentness, Source readiness or permission. Automatic consumer enrollment/cuts and
+Source adoption remain separate work; this publisher supplies no provisional ACK port.
+Existing ordinary subject creation continues to use its original Release admission.
+
+### Catalogue build and activation cost
+
+- Touches: one Global root/progress point, one addressed artifact, a retained DFS stack or member cursor, root-keyed identities/metadata and the native command/outbox.
+- Bound: a node is at most 256 entries/256 KiB; one continuation inserts at most 256 tasks. A Release is at most 4 MiB with original member caps; a continuation indexes at most 64 members (128 identity/member writes). A declaration is at most 64 KiB and indexes at most 64 labels. Statement/key/row counts are bounded by these plans plus fixed progress/command overhead. Only a single bounded Release is re-decoded on its successive member pages. Total build work follows the finite population, with no total Type, Kind, shard or node ceiling. Activation touches fixed Global build/head points and one event, with no catalogue enumeration.
+- Growth check: the authored `definition-catalogue-publication.test.ts` uses three genuinely compiled 384-Type shards and ordinary default createKernel APIs. Its native execution is deferred. For 200,000 Kinds plus 196 Release members and count-bound nodes, there are 783 leaves, four parents and one directory root (788 nodes). Each Kind needs one declaration continuation for an ordinary label set; each 1,024-Type shard needs 16 Type-member continuations plus its property/profile pages. Thus build commands are O(nodes + Kinds + member rows/64 + label rows/64), with storage O(population + labels + member semantics). This conservative one-artifact-per-step implementation trades throughput for fixed request work; 200,000 is a design workload, not a configured maximum or an executed benchmark.
+
+### Exact and paged metadata cost
+
+- Touches: fixed Global native Access/time points, one root readiness point, at most 100 exact keys or 101 indexed metadata keys, a continuation boundary and admitted body points in one repeatable-read snapshot.
+- Bound: O(K log N) application keys and indexed rows. Label pages select a bounded range before same-partition body-size joins. Candidate pages use exact-Type postings; neither GET traverses directories, history or complete release registries. Size projections precede body transfer. Total serialized response is at most 1 MiB; excess exact output or a single oversized record is explicitly unavailable, never silently omitted. Byte-limited pages retain a signed continuation. Original engine visibility work is not custom-metered.
+- Growth check: the same authored journey covers noninitial exact Kind lookup, signed metadata/candidate continuation, denied writes, stale CAS, incomplete/corrupt closure, original historical Release meaning and immutable old pins. Native acceptance, operational consumer/default Search/subject integration, physical scale and main proof remain deferred and unclaimed.
