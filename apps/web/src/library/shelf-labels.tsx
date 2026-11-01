@@ -69,7 +69,7 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
   const isCurrent = () => mounted.current && scope.active && scope.current();
   const retainedCurrent = () => isCurrent() && page === livePage.current;
   const changeOpen = (value: boolean) => {
-    if (!retainedCurrent()) return;
+    if (!retainedCurrent() || value === open) return;
     invalidate();
     setQuery('');
     setOpen(value);
@@ -155,9 +155,10 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
               maxLength={200}
               value={query}
               onChange={(event) => {
-                if (!retainedCurrent()) return;
+                const value = event.currentTarget.value.slice(0, 200);
+                if (!retainedCurrent() || value === query) return;
                 invalidate();
-                setQuery(event.currentTarget.value.slice(0, 200));
+                setQuery(value);
               }}
               className="h-11 w-full min-w-0 rounded-md border bg-background px-3"
             />
@@ -206,11 +207,15 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
               <SubjectLabelMore
                 key={`${query}:${requestId.current}`}
                 query={query}
-                next={page.next ?? null}
+                next={page.next && page.next.length <= 4096 ? page.next : null}
                 isCurrent={retainedCurrent}
                 acceptPage={(result, request) => {
                   if (!retainedCurrent()) return false;
-                  if (!accept(result, request)) {
+                  if (
+                    request.query !== query ||
+                    (request.cursor !== undefined && request.cursor !== page.next) ||
+                    !accept(result, request)
+                  ) {
                     const unavailable: LabelPage = { state: 'unavailable', labels: [] };
                     requestId.current++;
                     liveChoice.current = '';

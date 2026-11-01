@@ -223,10 +223,18 @@ function PersonalLibraryRead({
         void query.refetch();
     }
   }, [initial, readVersion, query.refetch, origin]);
-  const accepted = !query.isError && matches(query.data?.value, subject, address) ? query.data : undefined;
+  const actualRead = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
+  const accepted =
+    !query.isError &&
+    actualRead?.status === 'success' &&
+    matches(actualRead.data?.value, subject, address) &&
+    matches(query.data?.value, subject, address)
+      ? query.data
+      : undefined;
   const readLifetime = useMemo(() => {
     let generation = 0;
     let invalid = false;
+    let seen = false;
     const listeners = new Set<() => void>();
     const read = () => {
       const actual = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
