@@ -67,13 +67,13 @@ this representation question was consulted, and no answer was coordinated with a
 
 Repository files below are pinned to the repository revision at the top of this report. Main primary sources:
 
-| Source | Revision and licence | Inspected material |
-| --- | --- | --- |
-| [PostgreSQL source](https://github.com/postgres/postgres/tree/700b422af7e26cf310caf3fb76d78f4c8ca39c1f) | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; PostgreSQL License, `COPYRIGHT` | `src/include/access/nbtree.h`; `src/backend/access/nbtree/{nbtutils,nbtsearch}.c`; `src/backend/access/spgist/{spgtextproc,spgdoinsert,spgscan}.c`; `src/backend/utils/adt/{varlena,jsonb_util}.c`; `src/include/utils/memutils.h`; `src/backend/executor/nodeTidscan.c`; `src/backend/access/heap/heapam.c`; `src/include/storage/itemptr.h` |
-| [DBOS Transact TypeScript](https://github.com/dbos-inc/dbos-transact-ts/tree/980dc55095f445b189aecb59e7f3334345179f65) | `980dc55095f445b189aecb59e7f3334345179f65`; MIT, `LICENSE` | `src/client.ts`, caller-owned transactional enqueue |
-| [Rax](https://github.com/antirez/rax/tree/1927550cb218ec3c3dda8b39d82d1d019bf0476d) | `1927550cb218ec3c3dda8b39d82d1d019bf0476d`; BSD-2-Clause, `COPYING` | `README.md`; `rax.c`, especially `raxLowWalk`, `raxGenericInsert`, `raxRemove`; node layout in `rax.h` |
-| [The Adaptive Radix Tree](https://db.in.tum.de/~leis/papers/ART.pdf) | Leis, Kemper and Neumann, ICDE 2013, DOI `10.1109/ICDE.2013.6544812` | Primary research paper; scholarly publication, not a software licence |
-| [The String B-Tree](https://www.inf.fu-berlin.de/lehre/SS01/biodaten-seminar/papers/String-B-tree.pdf) | Ferragina and Grossi, JACM 46(2), 1999, pp. 236–280, DOI `10.1145/301970.301973` | Primary research paper, especially dynamic dictionary/string-search problem; ACM publication, not a software licence |
+| Source                                                                                                                 | Revision and licence                                                             | Inspected material                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [PostgreSQL source](https://github.com/postgres/postgres/tree/700b422af7e26cf310caf3fb76d78f4c8ca39c1f)                | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; PostgreSQL License, `COPYRIGHT`      | `src/include/access/nbtree.h`; `src/backend/access/nbtree/{nbtutils,nbtsearch}.c`; `src/backend/access/spgist/{spgtextproc,spgdoinsert,spgscan}.c`; `src/backend/utils/adt/{varlena,jsonb_util}.c`; `src/include/utils/memutils.h`; `src/backend/executor/nodeTidscan.c`; `src/backend/access/heap/heapam.c`; `src/include/storage/itemptr.h` |
+| [DBOS Transact TypeScript](https://github.com/dbos-inc/dbos-transact-ts/tree/980dc55095f445b189aecb59e7f3334345179f65) | `980dc55095f445b189aecb59e7f3334345179f65`; MIT, `LICENSE`                       | `src/client.ts`, caller-owned transactional enqueue                                                                                                                                                                                                                                                                                           |
+| [Rax](https://github.com/antirez/rax/tree/1927550cb218ec3c3dda8b39d82d1d019bf0476d)                                    | `1927550cb218ec3c3dda8b39d82d1d019bf0476d`; BSD-2-Clause, `COPYING`              | `README.md`; `rax.c`, especially `raxLowWalk`, `raxGenericInsert`, `raxRemove`; node layout in `rax.h`                                                                                                                                                                                                                                        |
+| [The Adaptive Radix Tree](https://db.in.tum.de/~leis/papers/ART.pdf)                                                   | Leis, Kemper and Neumann, ICDE 2013, DOI `10.1109/ICDE.2013.6544812`             | Primary research paper; scholarly publication, not a software licence                                                                                                                                                                                                                                                                         |
+| [The String B-Tree](https://www.inf.fu-berlin.de/lehre/SS01/biodaten-seminar/papers/String-B-tree.pdf)                 | Ferragina and Grossi, JACM 46(2), 1999, pp. 236–280, DOI `10.1145/301970.301973` | Primary research paper, especially dynamic dictionary/string-search problem; ACM publication, not a software licence                                                                                                                                                                                                                          |
 
 Existing reference clones were reused under the permitted main-checkout `.reference/` directory:
 `library-shelf-maintenance/postgres`, `search-worker-outcome-harness/dbos-transact-ts` and
@@ -84,11 +84,11 @@ recommendations for this stack; no source files or substantial source passages a
 Read-only installed DBOS evidence came from
 `node_modules/.bun/@dbos-inc+dbos-sdk@5.5.3-preview/node_modules/@dbos-inc/dbos-sdk/`:
 
-| Artifact | SHA-256 |
-| --- | --- |
-| `dist/src/client.js` | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
-| `dist/src/system_database.js` | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
-| `dist/src/sysdb_migrations/internal/migrations.js` | `d187c8a19e4c3141392c73701899ca0005155febdabdfde481bf5782fe61daff` |
+| Artifact                                                      | SHA-256                                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `dist/src/client.js`                                          | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
+| `dist/src/system_database.js`                                 | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
+| `dist/src/sysdb_migrations/internal/migrations.js`            | `d187c8a19e4c3141392c73701899ca0005155febdabdfde481bf5782fe61daff` |
 | Repository `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch` | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
 
 These identify files inspected, not a migration run, installed new hooks, deployment receipt or satisfied producer
@@ -110,11 +110,11 @@ that workflow has another name or no steps. Preserve SDK options, errors and ori
 
 When no exact native status exists, a matching pair consists of:
 
-| Half | Required stored status and extracted input text |
-| --- | --- |
-| Parent | `name = 'community.leave'`; `#>> '{json,0,realmId}' = realm`; `#>> '{json,0,memberAccountId}' = member` |
-| Child | `name = 'accounts.membership'`; `#>> '{json,0,principal,id}' = realm`; `#>> '{json,0,memberAccountId}' = member` |
-| Pair | Both statuses have their actual-ID-matched input row; extracted `#>> '{json,0,reservationId}'` values compare equal |
+| Half   | Required stored status and extracted input text                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------- |
+| Parent | `name = 'community.leave'`; `#>> '{json,0,realmId}' = realm`; `#>> '{json,0,memberAccountId}' = member`             |
+| Child  | `name = 'accounts.membership'`; `#>> '{json,0,principal,id}' = realm`; `#>> '{json,0,memberAccountId}' = member`    |
+| Pair   | Both statuses have their actual-ID-matched input row; extracted `#>> '{json,0,reservationId}'` values compare equal |
 
 Extraction is PostgreSQL `inputs::jsonb #>> path`. SQL NULL, including absent/null reservation, does not match.
 Empty extracted text does match itself. Number `42` and string `"42"`, boolean `true` and string `"true"`, and
@@ -149,14 +149,14 @@ The source explicitly explains why external TOAST pointers are not used there. H
 does not solve an arbitrarily long ordered index key. This is static source proof, not an observed SQL error.
 See also [TOAST](https://www.postgresql.org/docs/18/storage-toast.html).
 
-| Proposed shortcut | Exact failure under this contract |
-| --- | --- |
-| UUID cast or length limit | Removes legal extracted text and introduces new native input errors |
-| Truncated ordered key plus residual equality | Arbitrarily many retained unequal strings can share that prefix |
-| Digest as intern/group identity | Distinct texts are merged on collision |
-| Digest plus collision rejection | Adds a forbidden new error for a legal native input |
-| Digest plus full-text bucket scan | Correct equality, but no worst-case bound on bucket members or empty residual polls |
-| Prefix/digest index with application repair | Reintroduces population-dependent lookup or stale coverage |
+| Proposed shortcut                            | Exact failure under this contract                                                   |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| UUID cast or length limit                    | Removes legal extracted text and introduces new native input errors                 |
+| Truncated ordered key plus residual equality | Arbitrarily many retained unequal strings can share that prefix                     |
+| Digest as intern/group identity              | Distinct texts are merged on collision                                              |
+| Digest plus collision rejection              | Adds a forbidden new error for a legal native input                                 |
+| Digest plus full-text bucket scan            | Correct equality, but no worst-case bound on bucket members or empty residual polls |
+| Prefix/digest index with application repair  | Reintroduces population-dependent lookup or stale coverage                          |
 
 PostgreSQL's [hash-index documentation](https://www.postgresql.org/docs/18/hash-index.html) describes four-byte
 hash entries and overflow chains, not unique exact long-text identity. A larger cryptographic digest changes
@@ -176,13 +176,13 @@ only such reachable associations is a semantic consequence of recognition, not a
 An installer must still treat collation semantics correctly. The following widths are logical key payloads,
 excluding PostgreSQL tuple headers/alignment:
 
-| Relation/index | Key payload | Other required state |
-| --- | --- | --- |
-| Group identity | two reachable 36-byte texts plus 8-byte reservation intern: 80 bytes | 8-byte `g`, source/candidate reference counts |
-| Source by actual ID | exact native ID, variable | status/input presence and revisions, minimized extracted locators, input length, intern |
-| Parent candidates | `g` 8 + created-at 8 + ordered actual-ID external key | original actual ID and authoritative source-half reference |
-| Child candidates | `g` 8 + ordered actual-ID external key | original actual ID and authoritative source-half reference |
-| Eligible groups | realm/member 72 + best-parent time 8 + ordered parent/child keys | `g`, both original actual IDs and source revisions |
+| Relation/index      | Key payload                                                          | Other required state                                                                    |
+| ------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Group identity      | two reachable 36-byte texts plus 8-byte reservation intern: 80 bytes | 8-byte `g`, source/candidate reference counts                                           |
+| Source by actual ID | exact native ID, variable                                            | status/input presence and revisions, minimized extracted locators, input length, intern |
+| Parent candidates   | `g` 8 + created-at 8 + ordered actual-ID external key                | original actual ID and authoritative source-half reference                              |
+| Child candidates    | `g` 8 + ordered actual-ID external key                               | original actual ID and authoritative source-half reference                              |
+| Eligible groups     | realm/member 72 + best-parent time 8 + ordered parent/child keys     | `g`, both original actual IDs and source revisions                                      |
 
 The variable entries are obligations, not an assertion that their complete payload fits a B-tree.
 If suitable exact ordered keys exist, the group algorithm is simple:
@@ -305,15 +305,15 @@ nodes, and `z<=q` reclaimed nodes. Let `h(N)` be an ordinary fixed-width index d
 Count successful logical rows plus one charged row slot for a miss. Counts below describe the pseudocode,
 not a measured plan or existing SDK price. Each DML statement addresses at most one row.
 
-| Primitive | Rows | Points | Statements | Typed scalar payload bound |
-| --- | ---: | ---: | ---: | ---: |
-| Control version update | 1 | 1 | 1 | 26 bytes of fields, at most twice for input/output |
-| Read one transition | 1 | 1 | 1 | 10-byte key plus at most 28-byte result |
-| Insert node or update its count/reference | 1 | 1 | 1 | at most 28-byte input plus 28-byte result |
-| Allocate slot, including interval split and control | 4 | 4 | 4 | each addressed record at most 28 bytes each way |
-| Free slot, including two neighbours and coalescing | 6 | 6 | 6 | same fixed scalar envelope |
-| Release terminal and return its state | 1 | 1 | 1 | same fixed scalar envelope |
-| Reclaim node plus decrement/read parent | 2 | 2 | 2 | same fixed scalar envelope, excluding slot free |
+| Primitive                                           | Rows | Points | Statements |                         Typed scalar payload bound |
+| --------------------------------------------------- | ---: | -----: | ---------: | -------------------------------------------------: |
+| Control version update                              |    1 |      1 |          1 | 26 bytes of fields, at most twice for input/output |
+| Read one transition                                 |    1 |      1 |          1 |            10-byte key plus at most 28-byte result |
+| Insert node or update its count/reference           |    1 |      1 |          1 |          at most 28-byte input plus 28-byte result |
+| Allocate slot, including interval split and control |    4 |      4 |          4 |    each addressed record at most 28 bytes each way |
+| Free slot, including two neighbours and coalescing  |    6 |      6 |          6 |                         same fixed scalar envelope |
+| Release terminal and return its state               |    1 |      1 |          1 |                         same fixed scalar envelope |
+| Reclaim node plus decrement/read parent             |    2 |      2 |          2 |    same fixed scalar envelope, excluding slot free |
 
 Allocation's four slots are interval head read, interval delete, remainder insert, control update.
 Freeing's six are two neighbour reads, two deletes, one interval insert and one control update; alternatives
@@ -387,7 +387,7 @@ unique enforcement or a complete group-successor mechanism.
 
 An interning wrapper would still need serialization around equality-search/insert, reference updates, exact
 deletion by slot, source-half hooks and cleanup. A unique hash index is not a replacement for that wrapper.
-Keeping the dictionary row unique by protocol can limit *equal live values* to one; it does not prove a bound
+Keeping the dictionary row unique by protocol can limit _equal live values_ to one; it does not prove a bound
 on all index branches visited, insertion copies, or unrelated unequal values. Putting long `INCLUDE` values
 in a leaf is also not a solution: `spgdoinsert.c` checks that the remaining leaf tuple fits on a page.
 
@@ -439,18 +439,18 @@ universal impossibility claim; they do not install a storage engine here.
 
 A serious native producer would need all of the following as inspectable code and literal prices:
 
-| Mechanism | Required details before adoption |
-| --- | --- |
-| Key storage | Exact server-encoding bytes, terminal marker, segmented immutable byte arena; bounded-width page/slot references, no full key in an ordinary B-tree tuple |
-| Traversal | Actual page/node access algorithm; branch lookup cost; no per-byte SQL index descent; every byte comparison/copy counted, including long common prefixes |
-| Equality/interning | Atomic unique terminal insertion, refcounts, equal and unequal concurrent writers, no collision errors; no native ID alias |
-| Ordered keys | Exact C-order actual workflow IDs and time/null ordering; stable candidate successor interface, not an unrelated surrogate-number order |
-| Locking | Native fence order, index-page/slot order, root splits, old snapshots, lock wait/deadline; whole original transaction abort on conflict |
-| Persistence | WAL for every mutation, recovery/redo, abort/undo or equivalent visibility, crash-safe allocation and publication |
-| Lifetime | Source references and index references; bounded deletion and reclamation; no survivor-length recompression or whole historic-prefix sweep charged to one delete |
-| Reuse/restore | Slot generation/ABA protection, safe reclamation with old snapshots, independent coverage epoch, atomic refusal after restore until current rebuild is complete |
-| Inventory | All arenas, pages, nodes, prefixes, candidates, locators, eligible state and progress copies associated with native/account custody |
-| Accounting | Internal rows/points/statements, page work and byte-copy formulas; no opaque extension call treated as one free point |
+| Mechanism          | Required details before adoption                                                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Key storage        | Exact server-encoding bytes, terminal marker, segmented immutable byte arena; bounded-width page/slot references, no full key in an ordinary B-tree tuple       |
+| Traversal          | Actual page/node access algorithm; branch lookup cost; no per-byte SQL index descent; every byte comparison/copy counted, including long common prefixes        |
+| Equality/interning | Atomic unique terminal insertion, refcounts, equal and unequal concurrent writers, no collision errors; no native ID alias                                      |
+| Ordered keys       | Exact C-order actual workflow IDs and time/null ordering; stable candidate successor interface, not an unrelated surrogate-number order                         |
+| Locking            | Native fence order, index-page/slot order, root splits, old snapshots, lock wait/deadline; whole original transaction abort on conflict                         |
+| Persistence        | WAL for every mutation, recovery/redo, abort/undo or equivalent visibility, crash-safe allocation and publication                                               |
+| Lifetime           | Source references and index references; bounded deletion and reclamation; no survivor-length recompression or whole historic-prefix sweep charged to one delete |
+| Reuse/restore      | Slot generation/ABA protection, safe reclamation with old snapshots, independent coverage epoch, atomic refusal after restore until current rebuild is complete |
+| Inventory          | All arenas, pages, nodes, prefixes, candidates, locators, eligible state and progress copies associated with native/account custody                             |
+| Accounting         | Internal rows/points/statements, page work and byte-copy formulas; no opaque extension call treated as one free point                                           |
 
 A fixed-width external-key B-tree opclass alone is not enough. If its comparator follows an external slot
 through an ordinary SQL index and re-compares long strings at each tree level, it adds those accesses and
@@ -604,21 +604,21 @@ to the actual Pool and original deadline by
 failed statements, rollback and repeated calls stay charged. There are no refunds or replacement frames.
 `engineRequests=0` is preserved; logical SQL index work is not an external engine request.
 
-The current [SDK adapter](../../services/kernel/src/work/sdk-retirement-fence.ts) supplies these *old*, literal
+The current [SDK adapter](../../services/kernel/src/work/sdk-retirement-fence.ts) supplies these _old_, literal
 dispatch prices, inclusive of their current nested native body:
 
-| Dispatch | Current vector | New representation obligation |
-| --- | --- | --- |
-| rollback | `(0,0,1,0,0)` | Reserve before BEGIN/connect; retain on every failure |
-| begin | `(0,0,1,0,0)` | Same original transaction |
-| settings | `(1,0,1,128,0)` | Original remaining deadline and bounded lock wait |
-| lock | `(4,2,4,8192,0)` | Add only actual new nested synchronization; preserve native fence authority |
-| retire | `(8,5,9,32768,0)` | Reprice any new status UPDATE hook reached inside this body |
-| commit | `(0,0,1,0,0)` | Include deferred hook work here if it is actually deferred |
-| delete-workflow_input | `(1,1,1,0,0)` | Include old source-state, candidate/group invalidation, intern release and GC |
-| delete-workflow_output | `(1,1,1,0,0)` | No reservation projection source; retain any actual other nested hooks |
-| delete-operation_outputs | `(64,1,1,0,0)` | Preserve existing 64-row bound and native work |
-| delete-workflow_status | `(73,5,5,0,0)` | Includes existing four FK cascades; add exact new status-half work once |
+| Dispatch                 | Current vector    | New representation obligation                                                 |
+| ------------------------ | ----------------- | ----------------------------------------------------------------------------- |
+| rollback                 | `(0,0,1,0,0)`     | Reserve before BEGIN/connect; retain on every failure                         |
+| begin                    | `(0,0,1,0,0)`     | Same original transaction                                                     |
+| settings                 | `(1,0,1,128,0)`   | Original remaining deadline and bounded lock wait                             |
+| lock                     | `(4,2,4,8192,0)`  | Add only actual new nested synchronization; preserve native fence authority   |
+| retire                   | `(8,5,9,32768,0)` | Reprice any new status UPDATE hook reached inside this body                   |
+| commit                   | `(0,0,1,0,0)`     | Include deferred hook work here if it is actually deferred                    |
+| delete-workflow_input    | `(1,1,1,0,0)`     | Include old source-state, candidate/group invalidation, intern release and GC |
+| delete-workflow_output   | `(1,1,1,0,0)`     | No reservation projection source; retain any actual other nested hooks        |
+| delete-operation_outputs | `(64,1,1,0,0)`    | Preserve existing 64-row bound and native work                                |
+| delete-workflow_status   | `(73,5,5,0,0)`    | Includes existing four FK cascades; add exact new status-half work once       |
 
 `SDK_TRANSACTION_FENCE_COST` is currently `(4,2,4,8192,0)` (its exported last field is named `engineWork`).
 It must change if the real same-transaction native fence body grows. It cannot substitute for Source authority.
@@ -637,31 +637,31 @@ Installing guessed literals would contradict the requirement to derive them befo
 
 Other native entry points have independent actual owners and must prepay the same work:
 
-| Entry | Required reservation placement |
-| --- | --- |
-| Ordinary/bulk/SQL/transactional enqueue, status/input update, fork | Existing owner before original native DML; include both halves, replay/conflict outcomes and all reached hooks |
-| Direct/native retention DELETE | Before each affected original dispatch; DELETE of either source half is enough |
-| WorkClient lookup | Before exact-native precedence read, coverage/eligible seek, four authoritative half reads and original bounded step request, under its real caller contract |
-| Installer/backfill | Actual installer/job owner: control/rollback, bounded page read, every current-half reread and delta, progress and publication |
-| Repair/restore | Actual restore/repair owner before invalidation and bounded rebuild; no cost borrowed from a historical Source invocation |
+| Entry                                                              | Required reservation placement                                                                                                                               |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ordinary/bulk/SQL/transactional enqueue, status/input update, fork | Existing owner before original native DML; include both halves, replay/conflict outcomes and all reached hooks                                               |
+| Direct/native retention DELETE                                     | Before each affected original dispatch; DELETE of either source half is enough                                                                               |
+| WorkClient lookup                                                  | Before exact-native precedence read, coverage/eligible seek, four authoritative half reads and original bounded step request, under its real caller contract |
+| Installer/backfill                                                 | Actual installer/job owner: control/rollback, bounded page read, every current-half reread and delta, progress and publication                               |
+| Repair/restore                                                     | Actual restore/repair owner before invalidation and bounded rebuild; no cost borrowed from a historical Source invocation                                    |
 
 The complete Source parent must use fresh-verifier whole-call composition, as selected by the supplied owner
 decision. Relevant current literals establish a ledger, not the final total:
 
-| Component | Current vector/source |
-| --- | --- |
-| Independent Source verification, **each entry** | `(100,100,22,139264,0)`, `identity-source-consumer-custody.ts` |
-| Source custody read admission | `(32,32,29,32768,0)`, same file; nested verification still separately reached |
-| Directory whole allocation / each effective child | `(100,200,36,229376,0)` / `(50,100,18,114688,0)`; both child reservations precede their I/O |
-| Source history recheck | `(32,32,8,131072,0)` |
-| Source receiving-binding read | `(160,80,6,131072,0)` |
-| Source history guard | `(17,15,2,32768,0)` |
-| History command controls | `(3,1,8,256,0)`, `history/agent-identity-inventory-work.ts`; includes failure/rollback slots |
-| Released SDK state observation | `(3,2,1,8192,0)`, `history/agent-identity-sdk-fence.ts` |
-| Native same-command fence | `(4,2,4,8192,0)`; separately reserved where reached |
-| History guard / absence check | `(92,87,11,40960,0)` / `(9,9,9,0,0)` in the History SDK-fence body |
-| History work invalidation / wake | `(846,846,261,0,0)` / `(128,65,65,0,0)` |
-| Locator invalidation / receiving invalidation | `(1678,1678,518,0,0)` / `(845,845,261,0,0)` |
+| Component                                         | Current vector/source                                                                        |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Independent Source verification, **each entry**   | `(100,100,22,139264,0)`, `identity-source-consumer-custody.ts`                               |
+| Source custody read admission                     | `(32,32,29,32768,0)`, same file; nested verification still separately reached                |
+| Directory whole allocation / each effective child | `(100,200,36,229376,0)` / `(50,100,18,114688,0)`; both child reservations precede their I/O  |
+| Source history recheck                            | `(32,32,8,131072,0)`                                                                         |
+| Source receiving-binding read                     | `(160,80,6,131072,0)`                                                                        |
+| Source history guard                              | `(17,15,2,32768,0)`                                                                          |
+| History command controls                          | `(3,1,8,256,0)`, `history/agent-identity-inventory-work.ts`; includes failure/rollback slots |
+| Released SDK state observation                    | `(3,2,1,8192,0)`, `history/agent-identity-sdk-fence.ts`                                      |
+| Native same-command fence                         | `(4,2,4,8192,0)`; separately reserved where reached                                          |
+| History guard / absence check                     | `(92,87,11,40960,0)` / `(9,9,9,0,0)` in the History SDK-fence body                           |
+| History work invalidation / wake                  | `(846,846,261,0,0)` / `(128,65,65,0,0)`                                                      |
+| Locator invalidation / receiving invalidation     | `(1678,1678,518,0,0)` / `(845,845,261,0,0)`                                                  |
 
 The last two rows are derived from the current bounded family limits in
 `history/agent-identity-inventory-work.ts`, not estimated headroom. They remain charged where called even if
