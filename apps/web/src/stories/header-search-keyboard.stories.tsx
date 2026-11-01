@@ -62,8 +62,7 @@ export const SubjectDefaultCompositionNaming: Story = {
     const trigger = owner?.querySelector<HTMLButtonElement>('.header-search-trigger');
     const input = owner?.querySelector<HTMLInputElement>('input[role="combobox"]');
     const help = owner?.querySelector<HTMLElement>('[id$="-keyboard-help"]');
-    if (!owner || !trigger || !input || !help)
-      throw new Error('The default shell search naming surface is missing.');
+    if (!owner || !trigger || !input || !help) throw new Error('The default shell search naming surface is missing.');
 
     await expect(trigger).toBeVisible();
     const visibleName = trigger.innerText.replace(/\s+/gu, ' ').trim();

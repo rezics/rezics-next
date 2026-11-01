@@ -159,8 +159,7 @@ test('duplicate instances keep query and scoped names attached to their own visi
     ([trigger]) => trigger,
   );
   expect(triggers).toHaveLength(2);
-  const attribute = (element: string, name: string) =>
-    element.match(new RegExp(`\\b${name}="([^"]*)"`, 'u'))?.[1];
+  const attribute = (element: string, name: string) => element.match(new RegExp(`\\b${name}="([^"]*)"`, 'u'))?.[1];
   expect(triggers.map((trigger) => attribute(trigger, 'aria-label'))).toEqual([
     'A visible draft Ctrl/⌘ K',
     `${m.header_search_in_scope({ scope: 'Reading list' })} Ctrl/⌘ K`,

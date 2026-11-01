@@ -151,10 +151,7 @@ export const ScopedAccessibleNaming: Story = {
     await userEvent.click(trigger);
     const expandedInput = await canvas.findByRole('combobox', { name: m.search_label() });
     await expect(expandedInput).toHaveAccessibleName(m.search_label());
-    await expect(expandedInput).toHaveAttribute(
-      'placeholder',
-      m.header_search_in_scope({ scope: scope.name }),
-    );
+    await expect(expandedInput).toHaveAttribute('placeholder', m.header_search_in_scope({ scope: scope.name }));
     if (!input.getAttribute('aria-describedby')?.split(/\s+/u).includes(help.id)) {
       throw new globalThis.Error('The scoped search field lost its keyboard help description.');
     }
