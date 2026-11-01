@@ -320,6 +320,144 @@ qualifiers/units, compact/expanded conformance, two-release pins, current grant/
 sparse matches, crash/replay, canonical cross-page order, last-eligible-original direct targets, epoch readiness and
 native cursor restart/session/cache. Full persona/API/default/growth and unrelated owner acceptance remain required.
 
+## Bulk selection capture and confirmation
+
+The complete [integrated capture report](research/search-bulk-confirmation-capture.md) and
+[independent capture report](research/search-bulk-confirmation-capture-independent.md) are inspection evidence;
+both record execution as **UNRUN**. This owner adopts their Source direction and obligations, not a new ABI,
+native readiness claim, or competing authority. Their source inspection does not release stopped source custody,
+restart an old episode, or remove any existing failure or historical scope deviation.
+
+### Owner boundaries and conditional placement
+
+Search owns predicate, population and meaning capture. Semantic owns original and terminal identity operands and
+their currentness. Library owns actual actionable occurrences and native target expectations. Commerce owns the
+single immutable action manifest, explicit confirmation, and its actual operation transition and cut/root
+decision. A capture or currentness witness is never permission and cannot certify another owner's missing body.
+
+The preferred conditional Source direction is a genuine finite members-preparation result with an explicitly
+admitted bounded durable reader. Its actual immutable result, reservation/admission, provenance, current-owner
+restoration, retention, reader and inclusive price bodies remain missing. A real same-client bulk-work episode
+is a possible alternative only after its native role and lifecycle are explicitly adopted and built; it is not a
+selected role, export or substitute currentness mechanism. Neither placement exists merely because current
+preparation, prefixes or Work roles exist.
+
+Keep Commerce's one manifest and explicit confirmation, the authentic Core atomic outbox with registered
+deterministic effects, and the existing Library Work module and one worker. Do not cast Command into an
+Operational transaction, borrow kind/publication authority, add another manifest or introduce a second
+scheduler. Source called hooks and aggregate calls remain distinct from separately admitted autonomous Work
+scheduling.
+
+### Complete capture and sticky dependencies
+
+Enroll the complete dependency cover before scanning: empty and new population ranges and behind-frontier
+arrivals; positive and negative predicates, NOT, exclusions and order; canonical/dedup originals and terminals;
+meaning and release; and foreign-source and privacy dependencies. Coverage is not just the selected subjects or
+their positive facts. Preserve lossless committed OLD/NEW routing and stable finite frontiers. A dependency
+registered late must cover changes since the original baseline.
+
+A mutable scan plus changed anchors cannot reconstruct a lost old value. Completion therefore needs an admitted
+immutable baseline/history, or complete dependency-local sticky change detection that makes relevant drift
+stale/unavailable. Do not use coarse global/account invalidation. Repair may finish the admitted build; after a
+target expectation is captured or preview is exposed, relevant drift remains sticky through value restoration
+or repair acknowledgement. Do not renew membership or replace the captured basis.
+
+Keep canonical result subjects distinct from actual actionable occurrences and non-ABA absent-slot witnesses.
+The Source handoff still owes immutable capture definition and provenance; complete dependency, change and
+frontier indexes; bounded stable paging; completion receipts; exact page equality, checkpoint and ACK; and
+owner/due/phase/unfinished/erasure copy locators. Library supplies actual occurrence expansion and present
+incarnation/revision or an authoritative absent-slot lifecycle witness. Every relevant expectation writer
+participates even when selected subjects do not change. Empty capture has the same completeness obligation.
+
+Eviction must preserve separately admitted exact proof custody or make unfinished capture unavailable. Existing
+32-result and 24h-idle preparation policy is neither 48h bulk custody nor a byte allowance. Page, ACK or preview
+cannot renew the absolute proposed 24h execution deadline, 48h result horizon or shared proof expiry.
+
+### Confirmation cut and conditional writer ordering
+
+The whole-selection cut includes pre-cut drift in captured target expectations as well as population, meaning,
+identity and source dependencies. Relevant pre-cut drift means stale confirmation with no dispatch. Strictly
+post-cut target drift produces exact partial target conflicts; operation-wide authority loss stops remaining
+work. Completed effects remain. Current authorization, consent and delegation, source, identity, foreign and
+privacy checks, and original, terminal and exclusion checks remain independent before disclosure and effects.
+Unknown or incomplete evidence, including an empty result, is unavailable.
+
+Independent local validation followed by Commerce root CAS leaves the Q-validate/P-change race. A conditional
+dependency-local writer-interlock proposal would serialize every final writer against the exact complete cut
+participants, including already-started writers and writers using old snapshots. Each home visit releases its
+connection; each committed interlock remains until the exact definitive committed root disposition is known.
+Root counters or ACKs cannot prove participant coverage that the producer never established.
+
+The independent report's ticket/pending-root refinement is also conditional: a writer needs a native pre-effect
+ticket, registration serialized with confirmation, and original-owner terminal-abort/no-inflight evidence
+before pending can clear. Unknown remains pending. No dispatch follows a validating, unproved or unknown state.
+This protocol is not selected or available: immediate authority writes during root unavailability, in-doubt
+retention and recovery, terminal erasure, and indexed finite fanout/admission remain unresolved.
+
+Another real cross-home ordering protocol remains possible. One-connection placement alone is not an
+impossibility proof: prepared PostgreSQL transactions can retain locks after releasing a connection, but no
+two-phase commit coordinator is adopted. Do not use long-lived snapshots, global locks, permission freezes, new
+epochs, narrowed common cross-home support, timeout-as-release, digests or revision vectors as substitutes.
+These proposals confer no native readiness.
+
+### Cost
+
+Keep the existing direct, preparation, page, backend and raw-100-key ceilings, actual one-connection placement
+and each invocation's original frame and deadline. The comparison normalizes local vectors as
+`(candidateKeys, identityMetadataRows, nativeRows, nativePoints, witnessKeys, statements, bytes, emptySeeks)`.
+Local query prices from the reports remain query-specific and are not complete callable quotes. The Semantic
+guard subtotal `(0,14,112,14,0,4,2124544+sumQ,4)` is local only; two such sequences reserve `4249088+sumQ`
+bytes, exceeding 4 MiB by 54784 before nested work. The old mapper's 8 statements per original exceeds
+preparation's 16 at three originals. Sweeping 4096 privacy homes twice is 8192 rows, conflicting with
+`64+2(behind+changed)` when behind and changed are zero; complete indexed coverage is required. These are
+conditional composition conflicts, not whole-call prices. Inclusive whole-call and numeric remaining costs
+remain unavailable, including for empty capture.
+
+For each original finite invocation `f`, `R_f = A_f - sum_j V_fj` componentwise in that same invocation.
+Before dispatch, debit all query, engine, child, control, failed, repeated, rollback, unknown, retention and
+erasure work. Do not refund or refill dispatched work, reset the deadline, or create a replacement frame. Also
+account for connection and lock placement, examined and buffered work, and peak retained bytes beyond this
+projection.
+
+#### Capture construction and bounded page adoption
+
+- **Touches:** Complete population and predicate inputs, negative/NOT/exclusion/order and identity/meaning/
+  foreign/privacy dependencies; finite raw frontiers, old/new repair, canonical results, real occurrences,
+  expectation witnesses, immutable page transfer, equality/checkpoint/ACK and retained-copy locators.
+- **Bound:** Charge every query, empty seek, miss, alias, duplicate, tombstone, lookahead, repair, failed attempt,
+  child/control operation and retained byte to the original allowance before dispatch. Preserve the applicable
+  raw-key limit of 100, preparation and page limits, one connection per backend and the original deadline.
+  No available whole-capture or empty-capture price is implied by a local query subtotal.
+- **Growth check:** Owner evidence must show complete positive and negative coverage, new/behind-frontier
+  handling, bounded stable pages, empty capture, interrupted repair and exact page ACK at geometric input and
+  changed-dependency scales. Missing or unbounded coverage remains unavailable.
+
+#### Confirmation validation and cut
+
+- **Touches:** Restore current authority and validate the whole sealed selection and captured target expectations;
+  visit every proven participant home; account for interlock or alternate ordering evidence, pending writers,
+  root decision, receipt and exact release/recovery custody.
+- **Bound:** Price all home visits and conflicts inside the original confirmation episode and deadline. The
+  shared vector, SQL/engine work, connections/locks, child controls and retained evidence all count; local guard
+  prices and root counters do not price or prove the complete cut. Numeric inclusive and remaining costs are
+  unavailable.
+- **Growth check:** Prove that every final writer, including an already-started writer and old snapshot, orders
+  against complete participants; pre-cut drift yields no dispatch, later target drift yields exact conflicts,
+  and unknown decisions retain interlocks without timeout release or dispatch.
+
+#### Effects, results and retained custody
+
+- **Touches:** Current per-target authorization and exact captured expectations, native mutation and deterministic
+  effect/outbox receipt, no-effect and unknown reconciliation, partial outcomes, bounded result reads, and
+  owner/due/phase/unfinished/erasure cleanup including shared-history copies.
+- **Bound:** Preserve explicit-ID, result-page and backend limits and the same original frame/deadline for each
+  invocation. Debit failed/repeated effects, rollback, unknown resolution, retention and erasure with no refund;
+  include peak retained bytes and actual lock/connection placement. Deadlines and proof expiry cannot be renewed
+  by preview, page, ACK or retry.
+- **Growth check:** Verify exact target conflicts and authority stops after the cut, retained completed effects,
+  stable replay receipts, bounded partial-result continuation, and finite indexed cleanup as targets, retries,
+  unknown outcomes and retained copies grow. This documents obligations; it is not native acceptance evidence.
+
 ## Cost
 
 ### Direct and ready-result Collection pages
