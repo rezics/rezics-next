@@ -120,15 +120,34 @@ the native outcome, actual prepared file manifest, returned artifact digests, so
 remote cleanup, local frozen-worktree cleanup, and separate primary and cleanup failures. Only `cleanup.disposition`
 `settled` certifies a fully verified lifecycle; missing evidence or any unknown cleanup remains non-green and keeps
 consumer custody. The decoder rejects foreign, replayed, duplicate, partial, oversized and out-of-order messages.
+The additive status-only `finalCustody` schema 1 keeps the authenticated final immutable while tracking its canonical
+digest, delivery state, private-file cleanup state, exact invocation identity and up to 16 bounded observations.
+An unknown original final can settle only from a later exact observation for the same invocation, eleven-field binding,
+physical host/run, source and prepared inputs, returns and private-file references; that observation is appended to
+status and never replaces or re-emits the original final. Unknown evidence stays non-green.
+This metadata is status-only: the prepared descriptor and normal `native-terminal`/`final-settlement` FD 3 schemas
+remain unchanged. Consumer handling belongs at the ordinary result/status boundary; this producer work does not claim a
+Web or control-plane bridge.
 
 `registerCheckRunInvocation`, `getCheckRunStatus`, `cancelCheckRunInvocation`, and
 `reconcileCheckRunInvocation` are the supported API. The `check-run-settlement.ts` CLI provides `status <id>`,
 `cancel <id> [--signal 1|2|15]`, and `reconcile <id> [--hosts <absolute-hosts-json>]`, with an optional
 `--state-dir <absolute-dir>` for every command. Use the durable invocation ID in a prepared descriptor for process-loss
 status, cancellation, and reconciliation. Cancellation is durable before signal delivery and fences queued starts.
-Reconciliation observes or cleans up only the stored host/run and local transport-child identity; it never repeats the
-command or chooses another host/run. If source, producer, host, process or transport identity is missing or stale, the
-state stays unknown and the frozen inputs remain available. This producer protocol does not claim that a consumer's
+An fsynced queued-to-admission transition is the linearization point: cancellation that wins while queued prevents host
+probing and later physical allocation. Reconciliation observes or cleans up only the stored host/run and local
+transport-child identity; it never repeats the command or chooses another host/run. Local transport identity is
+`live-same`, `gone-or-replaced` or `unknown`. Only boot replacement, PID absence/`ESRCH`, or a well-formed changed
+process start identity proves the old child is gone; unreadable, malformed or unsupported identity evidence remains
+unknown and never authorizes a signal. Signals revalidate identity and use bounded cancellation. A failed unlink retains
+the exact private execution/intent file reference until absence or removal is verified. If source, producer, host,
+process or transport identity is missing or stale, the state stays unknown and the frozen inputs remain available.
+Preparation writes a private version 1 intent sidecar before creating the frozen worktree. A lost process can recover
+before registration with `reconcile --descriptor <absolute-private-json>`; after descriptor exposure, the same route
+reconciles only the registered invocation. The descriptor remains the private replay-resistant caller handle; the
+sidecar contains paths and input names, not environment values. The producer pins the exact final durably before FD 3
+emission and records delivery afterward, so a failed or interrupted write leaves a pending/unknown non-green record
+that rejects any contradictory final. This producer protocol does not claim that a consumer's
 `RemoteGateCustody` or verifier `NativeReceiptBridge` is installed.
 
 For a separate prepare and execution process, `scripts/check-run.ts` exports

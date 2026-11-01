@@ -16,7 +16,7 @@ import {
   writeSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { withCheckFence } from './check-custody.ts';
 import {
   executionCancellation,
@@ -37,6 +37,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASH = /^[0-9a-f]{64}$/;
 const REVISION = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const PHYSICAL_RUN = /^[a-zA-Z0-9-]{1,96}$/;
+const CHECK_RUN_CUSTODY_OBSERVATION_MAX = 16;
 
 export type CheckRunInvocationBinding = {
   sourceRevision: string;
@@ -54,6 +55,7 @@ export type CheckRunInvocationBinding = {
 
 export type CheckRunPhysicalIdentity = { host: 'a' | 'b'; run: string };
 export type CheckRunTransportChildIdentity = { pid: number; bootId: string; start: string };
+export type CheckRunTransportIdentityState = 'live-same' | 'gone-or-replaced' | 'unknown';
 
 export type CheckRunNativeDisposition = {
   exitCode: number;
@@ -142,11 +144,44 @@ export type CheckRunInvocationRecord = {
   candidateWorkspace: string | null;
   preparedExecution: { file: string; sha256: string } | null;
   descriptor: { file: string; sha256: string } | null;
+  preparationIntent: { file: string; sha256: string } | null;
   snapshotCustody: 'owned' | 'removed' | 'unknown' | null;
   returns: string[];
   cancellation: { requested: boolean; signal: 1 | 2 | 15 | null };
   final: CheckRunFinalSettlement | null;
+  finalCustody: CheckRunFinalCustody | null;
   failure: string | null;
+};
+
+export type CheckRunFinalCustodyObservation = {
+  observedAt: string;
+  disposition: 'unknown' | 'settled' | 'rejected';
+  transportIdentity: CheckRunTransportIdentityState | null;
+  final: CheckRunFinalSettlement | null;
+  reason: string | null;
+};
+
+/** Versioned status metadata; the authenticated final settlement itself remains immutable. */
+export type CheckRunFinalCustody = {
+  schema: 1;
+  delivery: 'not-required' | 'pending' | 'delivered' | 'unknown' | 'received' | 'reconciled';
+  deliverySha256: string;
+  privateFiles: 'pending' | 'settled' | 'unknown';
+  reconciliation: 'unknown' | 'settled';
+  originalFinalSha256: string;
+  identity: {
+    sha256: string;
+    bindingSha256: string;
+    physical: CheckRunPhysicalIdentity;
+    sourceSha256: string | null;
+    snapshotSha256: string | null;
+    candidateWorkspaceSha256: string | null;
+    returnsSha256: string;
+    preparedExecutionReferenceSha256: string | null;
+    descriptorReferenceSha256: string | null;
+    preparationIntentReferenceSha256: string | null;
+  };
+  observations: CheckRunFinalCustodyObservation[];
 };
 
 export type CheckRunRegistration = {
@@ -166,7 +201,25 @@ export type CheckRunPreparedDescriptor = {
   cancellation: { file: string; id: string };
 };
 
-export type CheckRunStateOptions = { stateDirectory?: string };
+export type CheckRunPreparationIntent = {
+  schema: 1;
+  type: 'check-run-preparation-intent';
+  invocationId: string;
+  descriptor: string;
+  candidateWorkspace: string;
+  snapshot: {
+    workspace: string;
+    scratch: string;
+    sourceSha256: string | null;
+    inputFiles: string[];
+  };
+};
+
+export type CheckRunStateOptions = {
+  stateDirectory?: string;
+  /** Narrow fault-injection seam for durable cleanup tests. Production callers omit it. */
+  removePrivateFile?: (path: string) => void;
+};
 
 export type CheckRunMessageExpectation = {
   invocationId: string;
@@ -178,8 +231,8 @@ export type CheckRunMessageExpectation = {
 };
 
 export type CheckRunReconciliation =
-  | { disposition: 'settled'; final: CheckRunFinalSettlement }
-  | { disposition: 'unknown'; reason: string };
+  | { disposition: 'settled'; final: CheckRunFinalSettlement; transportIdentity?: CheckRunTransportIdentityState }
+  | { disposition: 'unknown'; reason: string; transportIdentity?: CheckRunTransportIdentityState };
 
 export type CheckRunReconcileOptions = CheckRunStateOptions & {
   force?: boolean;
@@ -321,6 +374,54 @@ export function validateCheckRunPreparedDescriptor(value: unknown): CheckRunPrep
   };
 }
 
+function validateCheckRunPreparationIntent(value: unknown): CheckRunPreparationIntent {
+  const item = closedObject(
+    value,
+    ['schema', 'type', 'invocationId', 'descriptor', 'candidateWorkspace', 'snapshot'],
+    'preparation intent',
+  );
+  if (
+    item.schema !== 1 ||
+    item.type !== 'check-run-preparation-intent' ||
+    typeof item.invocationId !== 'string' ||
+    !UUID.test(item.invocationId)
+  )
+    throw new Error('check-run-settlement: invalid preparation intent identity');
+  const descriptor = boundedText(item.descriptor, 'preparation descriptor path', 4096);
+  const candidateWorkspace = boundedText(item.candidateWorkspace, 'preparation candidate path', 4096);
+  if (!isAbsolute(descriptor) || !isAbsolute(candidateWorkspace))
+    throw new Error('check-run-settlement: preparation paths must be absolute');
+  const snapshotValue = closedObject(
+    item.snapshot,
+    ['workspace', 'scratch', 'sourceSha256', 'inputFiles'],
+    'preparation snapshot',
+  );
+  const workspace = boundedText(snapshotValue.workspace, 'preparation workspace path', 4096);
+  const scratch = boundedText(snapshotValue.scratch, 'preparation scratch path', 4096);
+  if (
+    !isAbsolute(workspace) ||
+    !isAbsolute(scratch) ||
+    workspace !== join(scratch, 'workspace') ||
+    !/^check-run-[0-9a-f-]{36}$/.test(basename(scratch))
+  )
+    throw new Error('check-run-settlement: preparation snapshot paths are invalid');
+  const sourceSha256 =
+    snapshotValue.sourceSha256 === null ? null : boundedHash(snapshotValue.sourceSha256, 'preparation source hash');
+  return {
+    schema: 1,
+    type: 'check-run-preparation-intent',
+    invocationId: item.invocationId.toLowerCase(),
+    descriptor: resolve(descriptor),
+    candidateWorkspace: resolve(candidateWorkspace),
+    snapshot: {
+      workspace,
+      scratch,
+      sourceSha256,
+      inputFiles: validateInputFiles(snapshotValue.inputFiles),
+    },
+  };
+}
+
 function validatePhysical(value: unknown): CheckRunPhysicalIdentity {
   const item = closedObject(value, ['host', 'run'], 'physical identity');
   if (item.host !== 'a' && item.host !== 'b') throw new Error('check-run-settlement: invalid physical host');
@@ -337,6 +438,119 @@ function validateTransportChild(value: unknown): CheckRunTransportChildIdentity 
   if (pid < 1 || !/^[0-9a-f-]{36}$/i.test(bootId) || !/^\d+$/.test(start))
     throw new Error('check-run-settlement: invalid local transport child identity');
   return { pid, bootId, start };
+}
+
+function jsonSha256(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function privateReferenceSha256(reference: { file: string; sha256: string } | null): string | null {
+  return reference ? jsonSha256(reference) : null;
+}
+
+function validateFinalCustody(value: unknown): CheckRunFinalCustody {
+  const item = closedObject(
+    value,
+    [
+      'schema',
+      'delivery',
+      'deliverySha256',
+      'privateFiles',
+      'reconciliation',
+      'originalFinalSha256',
+      'identity',
+      'observations',
+    ],
+    'final custody state',
+  );
+  if (item.schema !== 1) throw new Error('check-run-settlement: unsupported final custody schema');
+  if (!['not-required', 'pending', 'delivered', 'unknown', 'received', 'reconciled'].includes(String(item.delivery)))
+    throw new Error('check-run-settlement: invalid final delivery state');
+  if (!['pending', 'settled', 'unknown'].includes(String(item.privateFiles)))
+    throw new Error('check-run-settlement: invalid private-file custody state');
+  if (!['unknown', 'settled'].includes(String(item.reconciliation)))
+    throw new Error('check-run-settlement: invalid final reconciliation state');
+  const deliverySha256 = boundedHash(item.deliverySha256, 'final delivery digest');
+  const originalFinalSha256 = boundedHash(item.originalFinalSha256, 'original final digest');
+  const identityValue = closedObject(
+    item.identity,
+    [
+      'sha256',
+      'bindingSha256',
+      'physical',
+      'sourceSha256',
+      'snapshotSha256',
+      'candidateWorkspaceSha256',
+      'returnsSha256',
+      'preparedExecutionReferenceSha256',
+      'descriptorReferenceSha256',
+      'preparationIntentReferenceSha256',
+    ],
+    'final custody identity',
+  );
+  const identityCore = {
+    bindingSha256: boundedHash(identityValue.bindingSha256, 'final binding digest'),
+    physical: validatePhysical(identityValue.physical),
+    sourceSha256:
+      identityValue.sourceSha256 === null ? null : boundedHash(identityValue.sourceSha256, 'final source digest'),
+    snapshotSha256:
+      identityValue.snapshotSha256 === null ? null : boundedHash(identityValue.snapshotSha256, 'snapshot identity digest'),
+    candidateWorkspaceSha256:
+      identityValue.candidateWorkspaceSha256 === null
+        ? null
+        : boundedHash(identityValue.candidateWorkspaceSha256, 'candidate workspace identity digest'),
+    returnsSha256: boundedHash(identityValue.returnsSha256, 'final returns digest'),
+    preparedExecutionReferenceSha256:
+      identityValue.preparedExecutionReferenceSha256 === null
+        ? null
+        : boundedHash(identityValue.preparedExecutionReferenceSha256, 'prepared execution reference digest'),
+    descriptorReferenceSha256:
+      identityValue.descriptorReferenceSha256 === null
+        ? null
+        : boundedHash(identityValue.descriptorReferenceSha256, 'prepared descriptor reference digest'),
+    preparationIntentReferenceSha256:
+      identityValue.preparationIntentReferenceSha256 === null
+        ? null
+        : boundedHash(identityValue.preparationIntentReferenceSha256, 'preparation intent reference digest'),
+  };
+  const identitySha = boundedHash(identityValue.sha256, 'final custody identity digest');
+  if (identitySha !== jsonSha256(identityCore))
+    throw new Error('check-run-settlement: final custody identity digest is inconsistent');
+  if (!Array.isArray(item.observations) || item.observations.length > CHECK_RUN_CUSTODY_OBSERVATION_MAX)
+    throw new Error('check-run-settlement: final custody observation bound exceeded');
+  const observations = item.observations.map((value): CheckRunFinalCustodyObservation => {
+    const observation = closedObject(
+      value,
+      ['observedAt', 'disposition', 'transportIdentity', 'final', 'reason'],
+      'custody observation',
+    );
+    if (!['unknown', 'settled', 'rejected'].includes(String(observation.disposition)))
+      throw new Error('check-run-settlement: invalid custody observation disposition');
+    if (
+      observation.transportIdentity !== null &&
+      !['live-same', 'gone-or-replaced', 'unknown'].includes(String(observation.transportIdentity))
+    )
+      throw new Error('check-run-settlement: invalid transport identity observation');
+    const final = observation.final === null ? null : validateCheckRunFinalSettlement(observation.final);
+    const reason = observation.reason === null ? null : boundedText(observation.reason, 'custody observation reason');
+    return {
+      observedAt: boundedText(observation.observedAt, 'custody observation time', 64),
+      disposition: observation.disposition as CheckRunFinalCustodyObservation['disposition'],
+      transportIdentity: observation.transportIdentity as CheckRunTransportIdentityState | null,
+      final,
+      reason,
+    };
+  });
+  return {
+    schema: 1,
+    delivery: item.delivery as CheckRunFinalCustody['delivery'],
+    deliverySha256,
+    privateFiles: item.privateFiles as CheckRunFinalCustody['privateFiles'],
+    reconciliation: item.reconciliation as CheckRunFinalCustody['reconciliation'],
+    originalFinalSha256,
+    identity: { sha256: identitySha, ...identityCore },
+    observations,
+  };
 }
 
 function validateNative(value: unknown): CheckRunNativeDisposition | null {
@@ -863,6 +1077,11 @@ function preparedExecutionFile(directory: string, id: string): string {
   return join(directory, `${id.toLowerCase()}.prepared.json`);
 }
 
+export function checkRunPreparationIntentFile(descriptorFile: string): string {
+  if (!isAbsolute(descriptorFile)) throw new Error('check-run-settlement: descriptor path must be absolute');
+  return `${resolve(descriptorFile)}.intent.json`;
+}
+
 function assertPrivateDirectory(path: string, label: string): void {
   const stats = lstatSync(path);
   if (!stats.isDirectory() || stats.isSymbolicLink() || (stats.mode & 0o077) !== 0)
@@ -934,6 +1153,61 @@ function readPrivateFile(path: string, maximumBytes: number, label: string): Buf
   }
 }
 
+export function writeCheckRunPreparationIntent(
+  file: string,
+  intentValue: CheckRunPreparationIntent,
+): { file: string; sha256: string } {
+  if (!isAbsolute(file)) throw new Error('check-run-settlement: preparation intent path must be absolute');
+  const intent = validateCheckRunPreparationIntent(intentValue);
+  const absolute = resolve(file);
+  if (absolute !== checkRunPreparationIntentFile(intent.descriptor))
+    throw new Error('check-run-settlement: preparation intent path does not match its descriptor');
+  assertCanonicalParent(absolute, 'preparation intent');
+  const parent = resolve(absolute, '..');
+  assertPrivateDirectory(parent, 'preparation intent directory');
+  assertOutsideCandidate(parent, intent.candidateWorkspace);
+  if (existsSync(absolute)) throw new Error('check-run-settlement: preparation intent already exists');
+  const bytes = Buffer.from(`${JSON.stringify(intent)}\n`);
+  writeNewPrivateFile(absolute, bytes, CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES, 'preparation intent');
+  return { file: absolute, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+
+export function readCheckRunPreparationIntent(file: string): CheckRunPreparationIntent {
+  return readCheckRunPreparationIntentReference(file).intent;
+}
+
+export function readCheckRunPreparationIntentReference(file: string): {
+  intent: CheckRunPreparationIntent;
+  reference: { file: string; sha256: string };
+} {
+  if (!isAbsolute(file)) throw new Error('check-run-settlement: preparation intent path must be absolute');
+  const absolute = resolve(file);
+  assertCanonicalParent(absolute, 'preparation intent');
+  const raw = readPrivateFile(absolute, CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES, 'preparation intent');
+  const intent = validateCheckRunPreparationIntent(parseUniqueJson(raw.toString('utf8')));
+  if (absolute !== checkRunPreparationIntentFile(intent.descriptor))
+    throw new Error('check-run-settlement: preparation intent does not match its descriptor');
+  return {
+    intent,
+    reference: { file: absolute, sha256: createHash('sha256').update(raw).digest('hex') },
+  };
+}
+
+export function removeCheckRunPreparationIntentFile(
+  reference: { file: string; sha256: string },
+  candidateWorkspace: string,
+  options: CheckRunStateOptions = {},
+): void {
+  if (
+    !isAbsolute(reference.file) ||
+    resolve(reference.file) !== reference.file ||
+    !reference.file.endsWith('.intent.json')
+  )
+    throw new Error('check-run-settlement: preparation intent path is invalid');
+  assertOutsideCandidate(resolve(reference.file, '..'), candidateWorkspace);
+  removePrivateFileReference(reference, CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES, 'preparation intent', options);
+}
+
 function syncDirectory(directory: string): void {
   const descriptor = openSync(directory, 'r');
   try {
@@ -962,6 +1236,200 @@ function writeRecord(directory: string, record: CheckRunInvocationRecord): void 
   syncDirectory(directory);
 }
 
+function finalCustodyIdentity(
+  record: Pick<
+    CheckRunInvocationRecord,
+    | 'binding'
+    | 'snapshot'
+    | 'candidateWorkspace'
+    | 'returns'
+    | 'preparedExecution'
+    | 'descriptor'
+    | 'preparationIntent'
+  >,
+  physical: CheckRunPhysicalIdentity,
+): CheckRunFinalCustody['identity'] {
+  const core = {
+    bindingSha256: checkRunBindingHash(record.binding),
+    physical: validatePhysical(physical),
+    sourceSha256: record.snapshot?.sourceSha256 ?? null,
+    snapshotSha256: record.snapshot ? jsonSha256(record.snapshot) : null,
+    candidateWorkspaceSha256: record.candidateWorkspace ? jsonSha256(record.candidateWorkspace) : null,
+    returnsSha256: jsonSha256(record.returns),
+    preparedExecutionReferenceSha256: privateReferenceSha256(record.preparedExecution),
+    descriptorReferenceSha256: privateReferenceSha256(record.descriptor),
+    preparationIntentReferenceSha256: privateReferenceSha256(record.preparationIntent),
+  };
+  return { sha256: jsonSha256(core), ...core };
+}
+
+function makeFinalCustody(
+  record: CheckRunInvocationRecord,
+  final: CheckRunFinalSettlement,
+  delivery: CheckRunFinalCustody['delivery'],
+): CheckRunFinalCustody {
+  if (!record.physical) throw new Error('check-run-settlement: final custody has no physical identity');
+  const identity = finalCustodyIdentity(record, final.physical);
+  if (identity.bindingSha256 !== checkRunBindingHash(final.binding))
+    throw new Error('check-run-settlement: final custody binding differs from its invocation');
+  const encoded = encodeCheckRunFinalSettlement(final);
+  const settled = final.cleanup.disposition === 'settled';
+  return {
+    schema: 1,
+    delivery,
+    deliverySha256: createHash('sha256').update(encoded).digest('hex'),
+    privateFiles: record.preparedExecution || record.preparationIntent ? 'pending' : 'settled',
+    reconciliation: settled ? 'settled' : 'unknown',
+    originalFinalSha256: jsonSha256(final),
+    identity,
+    observations: [
+      {
+        observedAt: new Date().toISOString(),
+        disposition: settled ? 'settled' : 'unknown',
+        transportIdentity: null,
+        final,
+        reason: settled ? null : 'original final settlement reported unknown cleanup',
+      },
+    ],
+  };
+}
+
+function appendFinalCustodyObservation(
+  custody: CheckRunFinalCustody,
+  observation: CheckRunFinalCustodyObservation,
+): CheckRunFinalCustody {
+  if (custody.observations.length >= CHECK_RUN_CUSTODY_OBSERVATION_MAX)
+    throw new Error('check-run-settlement: final custody observation bound reached');
+  return validateFinalCustody({
+    ...custody,
+    reconciliation: observation.disposition === 'settled' ? 'settled' : 'unknown',
+    observations: [...custody.observations, observation],
+  });
+}
+
+function validateFinalCustodyIdentity(record: CheckRunInvocationRecord, custody: CheckRunFinalCustody): string {
+  if (!record.final || !record.physical) return 'original final or physical identity is unavailable';
+  if (custody.originalFinalSha256 !== jsonSha256(record.final)) return 'original final digest changed';
+  const identity = custody.identity;
+  const core = {
+    bindingSha256: checkRunBindingHash(record.binding),
+    physical: validatePhysical(record.physical),
+    sourceSha256: record.snapshot?.sourceSha256 ?? null,
+    snapshotSha256: record.snapshot ? jsonSha256(record.snapshot) : null,
+    candidateWorkspaceSha256: record.candidateWorkspace ? jsonSha256(record.candidateWorkspace) : null,
+    returnsSha256: jsonSha256(record.returns),
+    preparedExecutionReferenceSha256: identity.preparedExecutionReferenceSha256,
+    descriptorReferenceSha256: identity.descriptorReferenceSha256,
+    preparationIntentReferenceSha256: identity.preparationIntentReferenceSha256,
+  };
+  if (identity.sha256 !== jsonSha256(core))
+    return 'retained snapshot, declarations, or private-file identity changed';
+  if (
+    record.final.physical.host !== record.physical.host ||
+    record.final.physical.run !== record.physical.run ||
+    checkRunBindingHash(record.final.binding) !== identity.bindingSha256 ||
+    identity.physical.host !== record.physical.host ||
+    identity.physical.run !== record.physical.run
+  )
+    return 'original final binding or physical identity differs from its retained invocation';
+  if (
+    (record.preparedExecution &&
+      privateReferenceSha256(record.preparedExecution) !== identity.preparedExecutionReferenceSha256) ||
+    privateReferenceSha256(record.descriptor) !== identity.descriptorReferenceSha256 ||
+    (record.preparationIntent &&
+      privateReferenceSha256(record.preparationIntent) !== identity.preparationIntentReferenceSha256)
+  )
+    return 'retained private-file identity differs from the original invocation';
+  return '';
+}
+
+function validateReconciliationCandidate(
+  record: CheckRunInvocationRecord,
+  custody: CheckRunFinalCustody,
+  observed: CheckRunFinalSettlement,
+  transportIdentity: CheckRunTransportIdentityState | null,
+): string {
+  const original = record.final;
+  const physical = record.physical;
+  const identityFailure = validateFinalCustodyIdentity(record, custody);
+  if (identityFailure) return identityFailure;
+  if (!original || !physical) return 'original final or physical identity is unavailable';
+  const identity = custody.identity;
+  if (observed.invocationId !== record.invocationId || observed.nonce !== record.nonce)
+    return 'reconciliation returned a foreign invocation settlement';
+  if (checkRunBindingHash(observed.binding) !== identity.bindingSha256)
+    return 'reconciliation returned a changed eleven-field binding';
+  if (observed.physical.host !== physical.host || observed.physical.run !== physical.run)
+    return 'reconciliation returned a replacement physical host or run';
+  if (transportIdentity !== 'gone-or-replaced')
+    return 'original local transport child is not affirmatively absent';
+  if (
+    JSON.stringify(observed.native) !== JSON.stringify(original.native) ||
+    (record.native !== null &&
+      JSON.stringify(observed.native) !==
+        JSON.stringify({
+          exitCode: record.native.exitCode,
+          lifetimeFailure: record.native.lifetimeFailure,
+          receiptSha256: record.native.receiptSha256,
+        }))
+  )
+    return 'reconciliation native result differs from the immutable original terminal observation';
+  if (observed.preparedInputs.sourceSha256 !== record.binding.sourceSha256)
+    return 'reconciliation prepared source differs from the original frozen source';
+  if (
+    original.preparedInputs.status === 'verified' &&
+    JSON.stringify(observed.preparedInputs) !== JSON.stringify(original.preparedInputs)
+  )
+    return 'reconciliation prepared-input evidence differs from the original verified evidence';
+  if (
+    observed.returns.declarationsSha256 !== record.binding.returnsSha256 ||
+    observed.returns.declarationsSha256 !== original.returns.declarationsSha256
+  )
+    return 'reconciliation return declarations differ from the original invocation';
+  if (
+    ['empty', 'restored'].includes(original.returns.status) &&
+    JSON.stringify(observed.returns) !== JSON.stringify(original.returns)
+  )
+    return 'reconciliation changed previously verified returned artifacts';
+  if (observed.cleanup.disposition !== 'settled') return 'original physical run cleanup remains unverified';
+  return '';
+}
+
+function validateFreshReconciliationCandidate(
+  record: CheckRunInvocationRecord,
+  observed: CheckRunFinalSettlement,
+  transportIdentity: CheckRunTransportIdentityState | null,
+): string {
+  if (observed.invocationId !== record.invocationId || observed.nonce !== record.nonce)
+    return 'reconciliation returned a foreign invocation settlement';
+  if (checkRunBindingHash(observed.binding) !== checkRunBindingHash(record.binding))
+    return 'reconciliation returned a changed eleven-field binding';
+  if (!record.physical || observed.physical.host !== record.physical.host || observed.physical.run !== record.physical.run)
+    return 'reconciliation returned a replacement physical host or run';
+  if (transportIdentity !== 'gone-or-replaced') return 'original local transport child is not affirmatively absent';
+  if (
+    record.native &&
+    JSON.stringify(observed.native) !==
+      JSON.stringify({
+        exitCode: record.native.exitCode,
+        lifetimeFailure: record.native.lifetimeFailure,
+        receiptSha256: record.native.receiptSha256,
+      })
+  )
+    return 'reconciliation native result differs from the retained terminal event';
+  if (observed.preparedInputs.sourceSha256 !== record.binding.sourceSha256)
+    return 'reconciliation prepared source differs from the original frozen source';
+  if (record.snapshot && observed.preparedInputs.sourceSha256 !== record.snapshot.sourceSha256)
+    return 'reconciliation prepared inputs do not match the retained snapshot';
+  if (
+    observed.returns.declarationsSha256 !== record.binding.returnsSha256 ||
+    observed.returns.declarationsSha256 !== jsonSha256(record.returns)
+  )
+    return 'reconciliation return declarations differ from the registered invocation';
+  if (observed.cleanup.disposition !== 'settled') return 'original physical run cleanup remains unverified';
+  return '';
+}
+
 function validateRecord(value: unknown): CheckRunInvocationRecord {
   const item = closedObjectWithOptional(
     value,
@@ -983,7 +1451,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
       'final',
       'failure',
     ],
-    ['preparedExecution', 'descriptor', 'snapshotCustody'],
+    ['preparedExecution', 'descriptor', 'preparationIntent', 'snapshotCustody', 'finalCustody'],
     'invocation record',
   );
   if (item.schema !== 1 || typeof item.invocationId !== 'string' || !UUID.test(item.invocationId))
@@ -1048,6 +1516,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     throw new Error('check-run-settlement: invalid snapshot custody');
   const preparedExecution = privateFileReference(item.preparedExecution, 'prepared execution');
   const descriptor = privateFileReference(item.descriptor, 'prepared descriptor');
+  const preparationIntent = privateFileReference(item.preparationIntent, 'preparation intent');
   if (item.phase === 'prepared' && (!snapshot || !preparedExecution || !descriptor))
     throw new Error('check-run-settlement: prepared invocation is missing its durable execution state');
   if (item.phase === 'claimed' && (!snapshot || !descriptor))
@@ -1073,6 +1542,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     candidateWorkspace,
     preparedExecution,
     descriptor,
+    preparationIntent,
     snapshotCustody: snapshotCustody as CheckRunInvocationRecord['snapshotCustody'],
     returns,
     cancellation: {
@@ -1080,6 +1550,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
       signal: cancellation.signal as 1 | 2 | 15 | null,
     },
     final: item.final === null ? null : validateCheckRunFinalSettlement(item.final),
+    finalCustody: item.finalCustody == null ? null : validateFinalCustody(item.finalCustody),
     failure,
   };
 }
@@ -1090,19 +1561,104 @@ function readRecord(directory: string, id: string): CheckRunInvocationRecord {
   return validateRecord(parseUniqueJson(raw.toString('utf8')));
 }
 
-function removePreparedExecutionFile(
-  directory: string,
-  invocationId: string,
-  reference: CheckRunInvocationRecord['preparedExecution'],
+function removePrivateFileReference(
+  reference: { file: string; sha256: string },
+  maximumBytes: number,
+  label: string,
+  options: CheckRunStateOptions,
 ): void {
-  if (!reference) return;
-  if (reference.file !== preparedExecutionFile(directory, invocationId))
-    throw new Error('check-run-settlement: prepared execution path does not match its invocation');
-  const raw = readPrivateFile(reference.file, CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES, 'prepared execution');
+  const absolute = resolve(reference.file);
+  if (absolute !== reference.file) throw new Error(`check-run-settlement: ${label} path is not canonical`);
+  assertCanonicalParent(absolute, label);
+  const parent = resolve(absolute, '..');
+  assertPrivateDirectory(parent, `${label} directory`);
+  let before;
+  try {
+    before = lstatSync(absolute);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    syncDirectory(parent);
+    return;
+  }
+  const raw = readPrivateFile(absolute, maximumBytes, label);
   if (createHash('sha256').update(raw).digest('hex') !== reference.sha256)
-    throw new Error('check-run-settlement: prepared execution state was substituted');
-  unlinkSync(reference.file);
-  syncDirectory(directory);
+    throw new Error(`check-run-settlement: ${label} state was substituted`);
+  const current = lstatSync(absolute);
+  if (
+    !current.isFile() ||
+    current.isSymbolicLink() ||
+    current.dev !== before.dev ||
+    current.ino !== before.ino ||
+    current.nlink !== 1 ||
+    (current.mode & 0o077) !== 0 ||
+    (typeof process.getuid === 'function' && current.uid !== process.getuid())
+  )
+    throw new Error(`check-run-settlement: ${label} identity changed during disposal`);
+  (options.removePrivateFile ?? unlinkSync)(absolute);
+  syncDirectory(parent);
+  try {
+    lstatSync(absolute);
+    throw new Error(`check-run-settlement: ${label} removal was not verified`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
+
+type PrivateCleanupResult = { record: CheckRunInvocationRecord; failure?: Error };
+
+async function cleanupPrivateReferencesUnderLock(
+  directory: string,
+  initial: CheckRunInvocationRecord,
+  options: CheckRunStateOptions,
+): Promise<PrivateCleanupResult> {
+  let record = initial;
+  // The caller descriptor remains the durable replay-resistant handle; private execution and pre-exposure intent are erased.
+  for (const field of ['preparedExecution', 'preparationIntent'] as const) {
+    const reference = record[field];
+    if (!reference) continue;
+    try {
+      if (field === 'preparedExecution') {
+        if (reference.file !== preparedExecutionFile(directory, record.invocationId))
+          throw new Error('check-run-settlement: prepared execution path does not match its invocation');
+        removePrivateFileReference(reference, CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES, 'prepared execution', options);
+        record = await updateRecord(directory, record, { preparedExecution: null });
+      } else {
+        const intent = readCheckRunPreparationIntent(reference.file);
+        if (
+          intent.invocationId !== record.invocationId ||
+          intent.candidateWorkspace !== record.candidateWorkspace ||
+          (record.snapshot &&
+            (intent.snapshot.workspace !== record.snapshot.workspace || intent.snapshot.scratch !== record.snapshot.scratch))
+        )
+          throw new Error('check-run-settlement: preparation intent differs from its durable invocation');
+        removeCheckRunPreparationIntentFile(reference, intent.candidateWorkspace, options);
+        record = await updateRecord(directory, record, { preparationIntent: null });
+      }
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      if (record.finalCustody) {
+        try {
+          record = await updateRecord(directory, record, {
+            phase: 'unknown',
+            finalCustody: { ...record.finalCustody, privateFiles: 'unknown' },
+          });
+        } catch {
+          // The previous durable record still contains the exact outstanding file reference.
+        }
+      }
+      return { record, failure };
+    }
+  }
+  if (record.finalCustody && record.finalCustody.privateFiles !== 'settled') {
+    record = await updateRecord(directory, record, {
+      phase:
+        record.final.cleanup.disposition === 'settled' || record.finalCustody.reconciliation === 'settled'
+          ? 'settled'
+          : 'unknown',
+      finalCustody: { ...record.finalCustody, privateFiles: 'settled' },
+    });
+  }
+  return { record };
 }
 
 async function mutateRecord<T>(
@@ -1130,13 +1686,60 @@ async function updateRecord(
 
 export async function registerCheckRunInvocation(
   bindingValue: CheckRunInvocationBinding,
-  options: CheckRunStateOptions & { invocationId?: string; candidateWorkspace?: string } = {},
+  options: CheckRunStateOptions & {
+    invocationId?: string;
+    candidateWorkspace?: string;
+    snapshot?: { workspace: string; scratch: string; sourceSha256: string; inputFiles: readonly string[] };
+    returns?: readonly string[];
+    preparationIntent?: { file: string; sha256: string };
+    descriptorFile?: string;
+  } = {},
 ): Promise<CheckRunRegistration> {
   const binding = validateCheckRunInvocationBinding(bindingValue);
   const directory = checkRunSettlementStateDirectory(options);
   assertOutsideCandidate(directory, options.candidateWorkspace);
   const invocationId = (options.invocationId ?? randomUUID()).toLowerCase();
   if (!UUID.test(invocationId)) throw new Error('check-run-settlement: invocation id must be a UUID');
+  const candidateWorkspace = options.candidateWorkspace ? resolve(options.candidateWorkspace) : null;
+  const snapshot = options.snapshot
+    ? {
+        workspace: resolve(options.snapshot.workspace),
+        scratch: resolve(options.snapshot.scratch),
+        sourceSha256: boundedHash(options.snapshot.sourceSha256, 'snapshot source hash'),
+        inputFiles: validateInputFiles([...options.snapshot.inputFiles]),
+      }
+    : null;
+  const returns = options.returns ? validatePathList([...options.returns], 'declared return path', true) : [];
+  if (snapshot && snapshot.sourceSha256 !== binding.sourceSha256)
+    throw new Error('check-run-settlement: registered snapshot does not match its binding');
+  if (options.returns && jsonSha256(returns) !== binding.returnsSha256)
+    throw new Error('check-run-settlement: registered returns do not match their binding');
+  if (candidateWorkspace) assertOutsideCandidate(directory, candidateWorkspace);
+  let preparationIntent: { file: string; sha256: string } | null = null;
+  if (options.preparationIntent) {
+    preparationIntent = {
+      file: boundedText(options.preparationIntent.file, 'preparation intent path', 4096),
+      sha256: boundedHash(options.preparationIntent.sha256, 'preparation intent digest'),
+    };
+    const rawIntent = readPrivateFile(
+      preparationIntent.file,
+      CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES,
+      'preparation intent',
+    );
+    if (createHash('sha256').update(rawIntent).digest('hex') !== preparationIntent.sha256)
+      throw new Error('check-run-settlement: preparation intent was substituted');
+    const intent = validateCheckRunPreparationIntent(parseUniqueJson(rawIntent.toString('utf8')));
+    if (
+      intent.invocationId !== invocationId ||
+      intent.candidateWorkspace !== candidateWorkspace ||
+      (options.descriptorFile && intent.descriptor !== resolve(options.descriptorFile)) ||
+      (snapshot &&
+        (intent.snapshot.workspace !== snapshot.workspace ||
+          intent.snapshot.scratch !== snapshot.scratch ||
+          (intent.snapshot.sourceSha256 !== null && intent.snapshot.sourceSha256 !== snapshot.sourceSha256)))
+    )
+      throw new Error('check-run-settlement: preparation intent differs from the registered invocation');
+  }
   return withCheckFence(directory, invocationId, () => {
     const path = recordPath(directory, invocationId);
     if (existsSync(path)) throw new Error('check-run-settlement: invocation id is already registered');
@@ -1153,14 +1756,16 @@ export async function registerCheckRunInvocation(
       physical: null,
       transportChild: null,
       native: null,
-      snapshot: null,
-      candidateWorkspace: null,
+      snapshot,
+      candidateWorkspace,
       preparedExecution: null,
       descriptor: null,
-      snapshotCustody: null,
-      returns: [],
+      preparationIntent,
+      snapshotCustody: snapshot ? 'owned' : null,
+      returns,
       cancellation: { requested: false, signal: null },
       final: null,
+      finalCustody: null,
       failure: null,
     };
     writeRecord(directory, record);
@@ -1227,9 +1832,7 @@ export async function persistCheckRunPreparedInvocation(
     if (record.nonce !== registration.nonce) throw new Error('check-run-settlement: wrong invocation nonce');
     if (record.phase !== 'registered' || cancellationWasRequested(directory, record))
       throw new Error('check-run-settlement: invocation is no longer available for preparation');
-    writeNewPrivateFile(executionFile, executionBytes, CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES, 'prepared execution');
-    const next = await updateRecord(directory, record, {
-      phase: 'prepared',
+    const recordedCustody = await updateRecord(directory, record, {
       candidateWorkspace,
       snapshot,
       returns,
@@ -1237,6 +1840,8 @@ export async function persistCheckRunPreparedInvocation(
       descriptor: { file: descriptorFile, sha256: descriptorHash },
       snapshotCustody: 'owned',
     });
+    writeNewPrivateFile(executionFile, executionBytes, CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES, 'prepared execution');
+    const next = await updateRecord(directory, recordedCustody, { phase: 'prepared' });
     if (next.phase !== 'prepared') throw new Error('check-run-settlement: prepared invocation was not persisted');
     writeNewPrivateFile(
       descriptorFile,
@@ -1249,12 +1854,22 @@ export async function persistCheckRunPreparedInvocation(
 }
 
 export function readCheckRunPreparedDescriptor(file: string): CheckRunPreparedDescriptor {
+  return readCheckRunPreparedDescriptorReference(file).descriptor;
+}
+
+export function readCheckRunPreparedDescriptorReference(file: string): {
+  descriptor: CheckRunPreparedDescriptor;
+  reference: { file: string; sha256: string };
+} {
   if (!isAbsolute(file)) throw new Error('check-run-settlement: prepared descriptor path must be absolute');
   const absolute = resolve(file);
   assertCanonicalParent(absolute, 'prepared descriptor');
   const raw = readPrivateFile(absolute, CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES, 'prepared descriptor');
   try {
-    return validateCheckRunPreparedDescriptor(parseUniqueJson(raw.toString('utf8')));
+    return {
+      descriptor: validateCheckRunPreparedDescriptor(parseUniqueJson(raw.toString('utf8'))),
+      reference: { file: absolute, sha256: createHash('sha256').update(raw).digest('hex') },
+    };
   } catch (error) {
     throw new Error(
       `check-run-settlement: invalid prepared descriptor: ${error instanceof Error ? error.message : String(error)}`,
@@ -1437,6 +2052,23 @@ export async function allocateCheckRunPhysical(
   });
 }
 
+/** Linearize the queued-to-admission boundary against durable cancellation before transport starts. */
+export async function beginCheckRunAllocation(
+  invocationId: string,
+  nonce: string,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (record.final) throw new Error('check-run-settlement: invocation is already terminal');
+    if (cancellationWasRequested(directory, record))
+      throw new Error('check-run-settlement: cancelled invocation cannot begin allocation');
+    if (record.phase !== 'queued')
+      throw new Error(`check-run-settlement: allocation admission needs a queued invocation, got ${record.phase}`);
+    return updateRecord(directory, record, { phase: 'uploading' });
+  });
+}
+
 export async function withCheckRunSpawnPermit<T>(
   invocationId: string,
   nonce: string,
@@ -1513,7 +2145,51 @@ export async function acceptCheckRunFinalSettlement(
   const parsed = validateCheckRunFinalSettlement(value);
   return mutateRecord(parsed.invocationId, options, async (directory, record) => {
     if (record.final) throw new Error('check-run-settlement: duplicate or replayed final authority');
-    return acceptFinalUnderLock(directory, record, raw);
+    return acceptFinalUnderLock(directory, record, raw, 'received', options);
+  });
+}
+
+/** Pin a final durably before attempting FD 3 emission; the digest blocks contradictory replay. */
+export async function stageCheckRunFinalSettlement(
+  raw: string,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  if (Buffer.byteLength(raw) > CHECK_RUN_SETTLEMENT_MAX_BYTES)
+    throw new Error('check-run-settlement: message exceeds its byte bound');
+  let value: unknown;
+  try {
+    value = parseUniqueJson(raw.endsWith('\n') ? raw.slice(0, -1) : raw);
+  } catch {
+    throw new Error('check-run-settlement: malformed or partial final settlement');
+  }
+  const parsed = validateCheckRunFinalSettlement(value);
+  return mutateRecord(parsed.invocationId, options, async (directory, record) => {
+    if (record.final) throw new Error('check-run-settlement: duplicate or replayed final authority');
+    return acceptFinalUnderLock(directory, record, raw, 'pending', options);
+  });
+}
+
+export async function markCheckRunFinalSettlementDelivery(
+  invocationId: string,
+  deliverySha256: string,
+  disposition: 'delivered' | 'unknown' | 'not-required',
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (!record.final || !record.finalCustody)
+      throw new Error('check-run-settlement: final settlement is not durably staged');
+    const digest = boundedHash(deliverySha256, 'final delivery digest');
+    if (
+      digest !== record.finalCustody.deliverySha256 ||
+      record.finalCustody.originalFinalSha256 !== jsonSha256(record.final)
+    )
+      throw new Error('check-run-settlement: final delivery does not match the immutable original settlement');
+    if (record.finalCustody.delivery === disposition) return record;
+    if (record.finalCustody.delivery !== 'pending')
+      throw new Error('check-run-settlement: final delivery state is already terminal');
+    return updateRecord(directory, record, {
+      finalCustody: { ...record.finalCustody, delivery: disposition },
+    });
   });
 }
 
@@ -1521,6 +2197,8 @@ async function acceptFinalUnderLock(
   directory: string,
   record: CheckRunInvocationRecord,
   raw: string,
+  delivery: CheckRunFinalCustody['delivery'],
+  options: CheckRunStateOptions,
 ): Promise<CheckRunInvocationRecord> {
   if (record.final) throw new Error('check-run-settlement: duplicate or replayed final authority');
   const message = decodeCheckRunSettlement(raw, {
@@ -1551,16 +2229,10 @@ async function acceptFinalUnderLock(
   const next = await updateRecord(directory, record, {
     phase,
     final: message,
-    failure: null,
-    preparedExecution: null,
+    finalCustody: makeFinalCustody(record, message, delivery),
     snapshotCustody,
   });
-  try {
-    removePreparedExecutionFile(directory, record.invocationId, record.preparedExecution);
-  } catch {
-    // The private file remains owner-only; final authority does not depend on optional secret erasure.
-  }
-  return next;
+  return (await cleanupPrivateReferencesUnderLock(directory, next, options)).record;
 }
 
 export async function cancelCheckRunInvocation(
@@ -1575,7 +2247,8 @@ export async function cancelCheckRunInvocation(
     if (record.final) return record;
     const selectedSignal = record.cancellation.signal ?? signal;
     const next = await updateRecord(directory, record, {
-      phase: 'cancel-requested',
+      // Keep the terminal native observation's phase so a racing authenticated final can still be admitted.
+      phase: record.phase === 'native-terminal' ? 'native-terminal' : 'cancel-requested',
       cancellation: { requested: true, signal: selectedSignal },
     });
     requestExecutionCancellation({ file: cancellationFile(directory, invocationId), id: invocationId }, selectedSignal);
@@ -1588,7 +2261,157 @@ export async function reconcileCheckRunInvocation(
   options: CheckRunReconcileOptions = {},
 ): Promise<CheckRunInvocationRecord> {
   const before = await getCheckRunStatus(invocationId, options);
-  if (before.final) return before;
+  if (before.final) {
+    const custody = before.finalCustody ?? makeFinalCustody(before, before.final, 'unknown');
+    const identityFailure = validateFinalCustodyIdentity(before, custody);
+    if (identityFailure) {
+      return mutateRecord(invocationId, options, async (directory, record) => {
+        if (!record.final) return record;
+        const currentCustody = record.finalCustody ?? makeFinalCustody(record, record.final, 'unknown');
+        const reason = validateFinalCustodyIdentity(record, currentCustody) || identityFailure;
+        const updated = appendFinalCustodyObservation(currentCustody, {
+          observedAt: new Date().toISOString(),
+          disposition: 'rejected',
+          transportIdentity: null,
+          final: null,
+          reason,
+        });
+        return updateRecord(directory, record, {
+          phase: 'unknown',
+          finalCustody: updated,
+          failure: reason,
+        });
+      });
+    }
+    if (custody.reconciliation === 'settled' || before.final.cleanup.disposition === 'settled') {
+      return mutateRecord(invocationId, options, async (directory, record) => {
+        if (!record.final) return record;
+        const currentCustody = record.finalCustody ?? makeFinalCustody(record, record.final, 'unknown');
+        const currentIdentityFailure = validateFinalCustodyIdentity(record, currentCustody);
+        if (currentIdentityFailure) {
+          const updated = appendFinalCustodyObservation(currentCustody, {
+            observedAt: new Date().toISOString(),
+            disposition: 'rejected',
+            transportIdentity: null,
+            final: null,
+            reason: currentIdentityFailure,
+          });
+          return updateRecord(directory, record, {
+            phase: 'unknown',
+            finalCustody: updated,
+            failure: currentIdentityFailure,
+          });
+        }
+        const cleaned = await cleanupPrivateReferencesUnderLock(
+          directory,
+          record.finalCustody ? record : await updateRecord(directory, record, { finalCustody: currentCustody }),
+          options,
+        );
+        const nextPhase =
+          cleaned.record.finalCustody?.privateFiles === 'settled' &&
+          (cleaned.record.final?.cleanup.disposition === 'settled' ||
+            cleaned.record.finalCustody?.reconciliation === 'settled')
+            ? 'settled'
+            : 'unknown';
+        if (cleaned.record.phase !== nextPhase)
+          return updateRecord(directory, cleaned.record, { phase: nextPhase });
+        return cleaned.record;
+      });
+    }
+    if (!before.physical || !options.reconcilePhysical) {
+      return mutateRecord(invocationId, options, async (directory, record) => {
+        if (!record.final || !record.finalCustody) {
+          if (!record.final) return record;
+          return updateRecord(directory, record, {
+            phase: 'unknown',
+            finalCustody: makeFinalCustody(record, record.final, 'unknown'),
+            failure: 'exact physical reconciliation evidence is unavailable; original final remains immutable',
+          });
+        }
+        const custody = record.finalCustody;
+        if (custody.reconciliation === 'settled') return record;
+        const updated = appendFinalCustodyObservation(custody, {
+          observedAt: new Date().toISOString(),
+          disposition: 'unknown',
+          transportIdentity: null,
+          final: null,
+          reason: 'exact physical reconciliation evidence is unavailable; original final remains immutable',
+        });
+        return updateRecord(directory, record, {
+          phase: 'unknown',
+          finalCustody: updated,
+          failure: 'exact physical reconciliation evidence is unavailable; original final remains immutable',
+        });
+      });
+    }
+
+    let observedFinal: CheckRunFinalSettlement | null = null;
+    let observedTransportIdentity: CheckRunTransportIdentityState | null = null;
+    let reconciliationFailure = 'reconciliation did not return exact custody evidence';
+    try {
+      const observed = await options.reconcilePhysical(before.physical, before);
+      observedTransportIdentity = observed.transportIdentity ?? null;
+      if (observed.disposition === 'settled') observedFinal = validateCheckRunFinalSettlement(observed.final);
+      else reconciliationFailure = boundedText(observed.reason, 'reconciliation failure');
+      if (observedFinal)
+        reconciliationFailure = validateReconciliationCandidate(before, custody, observedFinal, observedTransportIdentity);
+    } catch (error) {
+      reconciliationFailure = `reconciliation failed for the original physical run: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`;
+    }
+    return mutateRecord(invocationId, options, async (directory, record) => {
+      if (!record.final) return record;
+      const currentCustody = record.finalCustody ?? makeFinalCustody(record, record.final, 'unknown');
+      const currentIdentityFailure = validateFinalCustodyIdentity(record, currentCustody);
+      if (currentIdentityFailure) {
+        const updated = appendFinalCustodyObservation(currentCustody, {
+          observedAt: new Date().toISOString(),
+          disposition: observedFinal ? 'rejected' : 'unknown',
+          transportIdentity: observedTransportIdentity,
+          final: observedFinal,
+          reason: currentIdentityFailure,
+        });
+        return updateRecord(directory, record, {
+          phase: 'unknown',
+          finalCustody: updated,
+          failure: currentIdentityFailure,
+        });
+      }
+      if (currentCustody.reconciliation === 'settled') return record;
+      const currentCandidateFailure = observedFinal
+        ? validateReconciliationCandidate(record, currentCustody, observedFinal, observedTransportIdentity)
+        : '';
+      const reason = currentCandidateFailure || reconciliationFailure || null;
+      const disposition = observedFinal
+        ? reason
+          ? 'rejected'
+          : observedFinal.cleanup.disposition === 'settled'
+            ? 'settled'
+            : 'unknown'
+        : 'unknown';
+      const updatedCustody = appendFinalCustodyObservation(currentCustody, {
+        observedAt: new Date().toISOString(),
+        disposition,
+        transportIdentity: observedTransportIdentity,
+        final: observedFinal,
+        reason,
+      });
+      const phase =
+        disposition === 'settled' && updatedCustody.privateFiles === 'settled' ? 'settled' : 'unknown';
+      const snapshotCustody: CheckRunInvocationRecord['snapshotCustody'] = observedFinal
+        ? observedFinal.cleanup.localWorktree === 'removed'
+          ? 'removed'
+          : observedFinal.cleanup.localWorktree === 'retained'
+            ? 'owned'
+            : 'unknown'
+        : record.snapshotCustody;
+      return updateRecord(directory, record, {
+        phase,
+        snapshotCustody,
+        finalCustody: updatedCustody,
+        failure: reason ?? record.failure,
+      });
+    });
+  }
   if (before.phase === 'unknown' && !options.force) return before;
   if (!before.physical) {
     if (before.cancellation.requested) {
@@ -1622,12 +2445,8 @@ export async function reconcileCheckRunInvocation(
       );
     }
     const message = validateCheckRunFinalSettlement(observed.final);
-    if (message.invocationId !== before.invocationId || message.nonce !== before.nonce)
-      throw new Error('reconciliation returned a foreign invocation settlement');
-    if (JSON.stringify(message.binding) !== JSON.stringify(before.binding))
-      throw new Error('reconciliation returned a mismatched invocation binding');
-    if (message.physical.host !== before.physical.host || message.physical.run !== before.physical.run)
-      throw new Error('reconciliation returned a replacement physical run');
+    const mismatch = validateFreshReconciliationCandidate(before, message, observed.transportIdentity ?? null);
+    if (mismatch) throw new Error(mismatch);
     return mutateRecord(invocationId, options, async (directory, record) => {
       if (record.final) return record;
       if (!record.native && message.native) {
@@ -1644,15 +2463,14 @@ export async function reconcileCheckRunInvocation(
         record = readRecord(directory, invocationId);
       }
       const encoded = encodeCheckRunFinalSettlement(message);
-      return acceptFinalUnderLock(directory, record, encoded);
+      return acceptFinalUnderLock(directory, record, encoded, 'reconciled', options);
     });
   } catch (error) {
-    return mutateRecord(invocationId, options, async (directory, record) =>
-      updateRecord(directory, record, {
-        phase: 'unknown',
-        failure: `reconciliation failed for the original physical run: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
-      }),
-    );
+    return mutateRecord(invocationId, options, async (directory, record) => {
+      const reason = `reconciliation failed for the original physical run: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`;
+      if (record.final) return record;
+      return updateRecord(directory, record, { phase: 'unknown', failure: reason });
+    });
   }
 }
 
@@ -1669,16 +2487,9 @@ export async function markCheckRunPreparedSnapshotCustody(
       throw new Error('check-run-settlement: physical invocation custody needs remote reconciliation');
     if (disposition === 'removed' && !['cancelled', 'unknown'].includes(record.phase))
       throw new Error('check-run-settlement: snapshot removal needs a terminal pre-physical invocation');
-    const next = await updateRecord(directory, record, {
-      snapshotCustody: disposition,
-      preparedExecution: null,
-    });
-    try {
-      removePreparedExecutionFile(directory, record.invocationId, record.preparedExecution);
-    } catch {
-      // The record no longer needs execution secrets; an unremovable private file is not treated as public state.
-    }
-    return next;
+    const next = await updateRecord(directory, record, { snapshotCustody: disposition });
+    if (disposition === 'unknown') return next;
+    return (await cleanupPrivateReferencesUnderLock(directory, next, options)).record;
   });
 }
 
@@ -1691,13 +2502,30 @@ export async function discardCheckRunPreparedExecution(
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
     if (record.phase === 'prepared' || record.phase === 'registered')
       throw new Error('check-run-settlement: unclaimed prepared execution cannot be discarded');
-    const next = await updateRecord(directory, record, { preparedExecution: null });
-    try {
-      removePreparedExecutionFile(directory, record.invocationId, record.preparedExecution);
-    } catch {
-      // Preserve custody of any private file that could not be verified for removal.
-    }
-    return next;
+    const result = await cleanupPrivateReferencesUnderLock(directory, record, options);
+    if (result.failure) throw result.failure;
+    return result.record;
+  });
+}
+
+export async function discardCheckRunPreparationIntent(
+  invocationId: string,
+  nonce: string,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (!record.preparationIntent) return record;
+    const intent = readCheckRunPreparationIntent(record.preparationIntent.file);
+    if (
+      intent.invocationId !== record.invocationId ||
+      intent.candidateWorkspace !== record.candidateWorkspace ||
+      (record.snapshot &&
+        (intent.snapshot.workspace !== record.snapshot.workspace || intent.snapshot.scratch !== record.snapshot.scratch))
+    )
+      throw new Error('check-run-settlement: preparation intent differs from its durable invocation');
+    removeCheckRunPreparationIntentFile(record.preparationIntent, intent.candidateWorkspace, options);
+    return updateRecord(directory, record, { preparationIntent: null });
   });
 }
 
@@ -1773,6 +2601,7 @@ function usage(): string {
     '  bun scripts/check-run-settlement.ts status <invocation-id> [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts cancel <invocation-id> [--signal 1|2|15] [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
+    '  bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
   ].join('\n');
 }
 
@@ -1807,19 +2636,22 @@ if (import.meta.main) {
         `${JSON.stringify(await cancelCheckRunInvocation(id, record.nonce, signal, stateOptions))}\n`,
       );
     } else if (operation === 'reconcile') {
-      const id = args[0];
+      const descriptorAt = args.indexOf('--descriptor');
+      const descriptorFile = descriptorAt >= 0 ? args[descriptorAt + 1] : undefined;
+      const id = descriptorAt >= 0 ? undefined : args[0];
       const hostsAt = args.indexOf('--hosts');
       const hostsFile = hostsAt >= 0 ? args[hostsAt + 1] : undefined;
-      if (!id || (hostsFile !== undefined && !isAbsolute(hostsFile)))
+      if (
+        (!id && !descriptorFile) ||
+        (descriptorFile !== undefined && !isAbsolute(descriptorFile)) ||
+        (hostsFile !== undefined && !isAbsolute(hostsFile))
+      )
         throw new Error('reconcile needs an id and, for a physical run, an absolute --hosts file');
-      const record = await getCheckRunStatus(id, stateOptions);
-      if (record.final) {
-        process.stdout.write(`${JSON.stringify(record)}\n`);
-      } else {
-        const { reconcileRegisteredCheckRun } = await import('./check-run.ts');
-        const reconciled = await reconcileRegisteredCheckRun(id, hostsFile, stateOptions);
-        process.stdout.write(`${JSON.stringify(reconciled)}\n`);
-      }
+      const checkRun = await import('./check-run.ts');
+      const reconciled = descriptorFile
+        ? await checkRun.reconcileCheckRunPreparationIntent(descriptorFile, hostsFile, stateOptions)
+        : await checkRun.reconcileRegisteredCheckRun(id!, hostsFile, stateOptions);
+      process.stdout.write(`${JSON.stringify(reconciled)}\n`);
     } else {
       throw new Error(usage());
     }

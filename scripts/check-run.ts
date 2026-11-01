@@ -51,8 +51,8 @@ import {
 } from './check-artifacts.ts';
 import { environmentCommandIsSafe, PERFORMANCE_HOST_NAMES, performanceHosts } from './check-placement.ts';
 import {
-  acceptCheckRunFinalSettlement,
   allocateCheckRunPhysical,
+  beginCheckRunAllocation,
   bindCheckRunWorkspace,
   cancelCheckRunInvocation,
   claimCheckRunPreparedInvocation,
@@ -61,17 +61,26 @@ import {
   createCheckRunFinalSettlement,
   createCheckRunNativeTerminalMessage,
   discardCheckRunPreparedExecution,
+  discardCheckRunPreparationIntent,
   encodeCheckRunFinalSettlement,
   getCheckRunStatus,
   checkRunNativeReceiptDigest,
   markCheckRunPreparedSnapshotCustody,
+  markCheckRunFinalSettlementDelivery,
   markCheckRunNativeTerminal,
   persistCheckRunPreparedInvocation,
   readCheckRunPreparedDescriptor,
+  readCheckRunPreparedDescriptorReference,
   readCheckRunCancellation,
+  readCheckRunPreparationIntentReference,
   reconcileCheckRunInvocation,
   registerCheckRunInvocation,
   setCheckRunUnknown,
+  checkRunPreparationIntentFile,
+  removeCheckRunPreparationIntentFile,
+  writeCheckRunPreparationIntent,
+  type CheckRunPreparationIntent,
+  stageCheckRunFinalSettlement,
   withCheckRunSpawnPermit,
   type CheckRunCleanupDisposition,
   type CheckRunFinalSettlement,
@@ -457,6 +466,7 @@ export async function prepareCandidateSnapshot(
   sourceRevision: string,
   scratchParent?: string,
   excludedInputs: readonly string[] = [],
+  allocation?: { workspace: string; scratch: string },
 ): Promise<CandidateSnapshot> {
   const root = resolve(workspace);
   const repositoryRoot = resolve(git(root, ['rev-parse', '--show-toplevel']));
@@ -474,9 +484,18 @@ export async function prepareCandidateSnapshot(
   const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', head]);
   const scratchBase = scratchParent ?? join(root, '.temp');
   mkdirSync(scratchBase, { recursive: true, mode: 0o700 });
-  const scratch = mkdtempSync(join(scratchBase, `check-run-${randomUUID()}-`));
+  const scratch = allocation ? resolve(allocation.scratch) : mkdtempSync(join(scratchBase, `check-run-${randomUUID()}-`));
+  if (allocation) {
+    if (
+      scratch !== allocation.scratch ||
+      resolve(dirname(scratch)) !== resolve(scratchBase) ||
+      allocation.workspace !== join(scratch, 'workspace')
+    )
+      throw new CheckRunUnavailable('check-run: prepared snapshot allocation is invalid');
+    mkdirSync(scratch, { mode: 0o700 });
+  }
   chmodSync(scratch, 0o700);
-  const frozen = join(scratch, 'workspace');
+  const frozen = allocation?.workspace ?? join(scratch, 'workspace');
   let worktreeRegistered = false;
   try {
     const add = Bun.spawnSync(
@@ -1118,6 +1137,7 @@ async function prepareFinalRun(
   processEnvironment: NodeJS.ProcessEnv,
   trustedRoot: string,
   includeReceiptChannel: boolean,
+  snapshotAllocation?: { workspace: string; scratch: string },
 ): Promise<PreparedFinalRun> {
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
   if (candidateRoot === trustedRoot)
@@ -1154,7 +1174,13 @@ async function prepareFinalRun(
   const requestedPriority = processEnvironment.REMOTE_CHECK_PRIORITY;
   if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical')
     throw new CheckRunUnavailable('check-run: invalid REMOTE_CHECK_PRIORITY');
-  const snapshot = await prepareCandidateSnapshot(candidateRoot, sourceRevision, join(trustedRoot, '.temp'), returns);
+  const snapshot = await prepareCandidateSnapshot(
+    candidateRoot,
+    sourceRevision,
+    join(trustedRoot, '.temp'),
+    returns,
+    snapshotAllocation,
+  );
   try {
     const overlay = resolveEnvironmentFileSettings(originalEnvironment, candidateRoot, snapshot.workspace, cwd);
     const preparation = preparationCommands(snapshot.workspace, cwd, frozenArgs);
@@ -1585,6 +1611,11 @@ async function runCheckWithFinalSettlement(
     );
     snapshotBound = true;
     signal.addEventListener('abort', onAbort, { once: true });
+    // This fsynced transition is the admission linearization point. A cancellation that wins
+    // while the record is queued prevents host probing and any later run identity allocation.
+    await beginCheckRunAllocation(registration.invocationId, registration.nonce, stateOptions);
+    if (signal.aborted || readCheckRunCancellation(registration.invocationId, stateOptions).requested)
+      throw new Aborted('check-run: cancelled invocation cannot enter remote admission');
 
     const remoteOptions: RemoteCheck = {
       hosts,
@@ -1949,21 +1980,40 @@ async function runCheckWithFinalSettlement(
     const encoded = `${encodeCheckRunFinalSettlement(finalMessage)}\n`;
     const writer = dependencies.settlementWriter ?? (receiptChannel?.invocationId ? receiptChannel.write : undefined);
     try {
+      finalRecord = await stageCheckRunFinalSettlement(encoded, stateOptions);
+      const deliverySha256 = finalRecord.finalCustody!.deliverySha256;
       writer?.(encoded);
-      finalRecord = await acceptCheckRunFinalSettlement(encoded, stateOptions);
+      finalRecord = await markCheckRunFinalSettlementDelivery(
+        registration.invocationId,
+        deliverySha256,
+        writer ? 'delivered' : 'not-required',
+        stateOptions,
+      );
     } catch (error) {
       runFailure ??= error;
-      try {
-        await setCheckRunUnknown(
-          registration.invocationId,
-          registration.nonce,
-          `final settlement could not be accepted or forwarded: ${error instanceof Error ? error.message.slice(0, 400) : 'unknown error'}`,
-          stateOptions,
-        );
-      } catch {
-        // The retained phase remains conservative if even the private state update fails.
+      if (finalRecord?.final && finalRecord.finalCustody?.delivery === 'pending') {
+        try {
+          finalRecord = await markCheckRunFinalSettlementDelivery(
+            registration.invocationId,
+            finalRecord.finalCustody.deliverySha256,
+            'unknown',
+            stateOptions,
+          );
+        } catch {
+          // The durable pending record pins the exact original final and prevents a contradictory replay.
+        }
+      } else {
+        try {
+          await setCheckRunUnknown(
+            registration.invocationId,
+            registration.nonce,
+            `final settlement could not be accepted or forwarded: ${error instanceof Error ? error.message.slice(0, 400) : 'unknown error'}`,
+            stateOptions,
+          );
+        } catch {
+          // The retained phase remains conservative if even the private state update fails.
+        }
       }
-      finalRecord = undefined;
     }
   } else {
     try {
@@ -1983,7 +2033,15 @@ async function runCheckWithFinalSettlement(
     process.stderr.write(`${returnFailure instanceof Error ? returnFailure.message : String(returnFailure)}\n`);
   if (finalRecord?.final?.native && finalRecord.final.native.exitCode !== 0) return finalRecord.final.native.exitCode;
   if (receivedReceipt.exitCode !== 0) return receivedReceipt.exitCode;
-  if (!finalRecord?.final || finalRecord.final.cleanup.disposition !== 'settled') return REMOTE_TRANSPORT_FAILURE;
+  if (
+    !finalRecord?.final ||
+    finalRecord.final.cleanup.disposition !== 'settled' ||
+    !finalRecord.finalCustody ||
+    !['delivered', 'not-required'].includes(finalRecord.finalCustody.delivery) ||
+    finalRecord.finalCustody.privateFiles !== 'settled' ||
+    finalRecord.finalCustody.reconciliation !== 'settled'
+  )
+    return REMOTE_TRANSPORT_FAILURE;
   return 0;
 }
 
@@ -2213,14 +2271,40 @@ export async function prepareCheckRunInvocation(
   if (stateInside === '' || (!stateInside.startsWith(`..${sep}`) && stateInside !== '..' && !isAbsolute(stateInside)))
     throw new CheckRunUnavailable('check-run: private invocation state must be outside the candidate workspace');
   const trustedRoot = resolve(import.meta.dir, '..');
-  const state = await prepareFinalRun(args, processEnvironment, trustedRoot, false);
+  const invocationId = randomUUID();
+  const snapshotScratch = join(trustedRoot, '.temp', `check-run-${invocationId}`);
+  const snapshotAllocation = { scratch: snapshotScratch, workspace: join(snapshotScratch, 'workspace') };
+  const preparationIntent: CheckRunPreparationIntent = {
+    schema: 1,
+    type: 'check-run-preparation-intent',
+    invocationId,
+    descriptor: absoluteDescriptor,
+    candidateWorkspace: candidateRoot,
+    snapshot: { ...snapshotAllocation, sourceSha256: null, inputFiles: [] },
+  };
+  const intentReference = writeCheckRunPreparationIntent(
+    checkRunPreparationIntentFile(absoluteDescriptor),
+    preparationIntent,
+  );
+  let state: PreparedFinalRun | undefined;
   let registration: Awaited<ReturnType<typeof registerCheckRunInvocation>> | undefined;
   try {
+    state = await prepareFinalRun(args, processEnvironment, trustedRoot, false, snapshotAllocation);
     registration = await registerCheckRunInvocation(state.binding, {
       ...stateOptions,
+      invocationId,
       candidateWorkspace: state.candidateRoot,
+      snapshot: {
+        workspace: state.snapshot.workspace,
+        scratch: state.snapshot.scratch,
+        sourceSha256: state.snapshot.sourceHash,
+        inputFiles: state.snapshot.inputFiles,
+      },
+      returns: state.returns,
+      preparationIntent: intentReference,
+      descriptorFile: absoluteDescriptor,
     });
-    return await persistCheckRunPreparedInvocation(registration, {
+    const descriptor = await persistCheckRunPreparedInvocation(registration, {
       ...stateOptions,
       candidateWorkspace: state.candidateRoot,
       snapshot: {
@@ -2233,40 +2317,20 @@ export async function prepareCheckRunInvocation(
       descriptorFile: absoluteDescriptor,
       execution: state,
     });
+    await discardCheckRunPreparationIntent(registration.invocationId, registration.nonce, stateOptions);
+    return descriptor;
   } catch (error) {
     if (registration) {
       const current = await getCheckRunStatus(registration.invocationId, stateOptions);
       if (current.snapshot) await abandonClaimedPreparedInvocation(current, stateOptions);
-      else {
-        try {
-          await cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, stateOptions);
-          await reconcileCheckRunInvocation(registration.invocationId, { ...stateOptions, force: true });
-          cleanupWorktree(state.candidateRoot, state.snapshot.workspace, state.snapshot.scratch);
-          await markCheckRunPreparedSnapshotCustody(
-            registration.invocationId,
-            registration.nonce,
-            'removed',
-            stateOptions,
-          );
-        } catch {
-          dependencies.onRetainSnapshot?.(state.snapshot);
-          await markCheckRunPreparedSnapshotCustody(
-            registration.invocationId,
-            registration.nonce,
-            'unknown',
-            stateOptions,
-          ).catch(() => undefined);
-        }
-      }
+      else await reconcileCheckRunPreparationIntent(absoluteDescriptor, undefined, stateOptions).catch(() => undefined);
     } else {
-      try {
-        cleanupWorktree(state.candidateRoot, state.snapshot.workspace, state.snapshot.scratch);
-      } catch (cleanupError) {
-        dependencies.onRetainSnapshot?.(state.snapshot);
+      await reconcileCheckRunPreparationIntent(absoluteDescriptor, undefined, stateOptions).catch((cleanupError) => {
+        if (state) dependencies.onRetainSnapshot?.(state.snapshot);
         process.stderr.write(
-          `check-run: prepared snapshot cleanup failed; retaining workspace=${state.snapshot.workspace} source-sha256=${state.snapshot.sourceHash}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}\n`,
+          `check-run: prepared snapshot cleanup failed; retaining workspace=${snapshotAllocation.workspace}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}\n`,
         );
-      }
+      });
     }
     throw error;
   }
@@ -2338,9 +2402,15 @@ export async function reconcileRegisteredCheckRun(
   stateOptions: CheckRunStateOptions = {},
 ): Promise<CheckRunInvocationRecord> {
   let initial = await getCheckRunStatus(invocationId, stateOptions);
-  if (initial.final) return initial;
+  if (
+    initial.final &&
+    (initial.final.cleanup.disposition === 'settled' || initial.finalCustody?.reconciliation === 'settled')
+  )
+    return reconcileCheckRunInvocation(invocationId, { ...stateOptions, force: true });
+  if (initial.final && !initial.physical)
+    return reconcileCheckRunInvocation(invocationId, { ...stateOptions, force: true });
   if (!initial.physical && initial.phase === 'cancelled' && initial.snapshotCustody === 'removed') return initial;
-  if (!initial.physical) {
+  if (!initial.final && !initial.physical) {
     await cancelCheckRunInvocation(initial.invocationId, initial.nonce, 15, stateOptions);
     initial = await getCheckRunStatus(invocationId, stateOptions);
     if (!initial.physical) {
@@ -2414,21 +2484,28 @@ export async function reconcileRegisteredCheckRun(
         returns: record.returns,
         allowedHosts: [...PERFORMANCE_HOST_NAMES],
       });
-      const originalTransportReaped = record.transportChild
+      const originalTransportIdentity = record.transportChild
         ? await reapRetainedTransportChild(record.transportChild)
-        : false;
+        : 'unknown';
+      const originalTransportReaped = originalTransportIdentity === 'gone-or-replaced';
       const reconciledRemote = {
         ...remote,
         transportChildReaped: remote.transportChildReaped && originalTransportReaped,
       };
       if (!remote.native)
-        return unknown('original physical run has no retained native terminal receipt; no replacement was started');
+        return {
+          ...unknown('original physical run has no retained native terminal receipt; no replacement was started'),
+          transportIdentity: originalTransportIdentity,
+        };
       const remoteNativeDigest = checkRunNativeReceiptDigest(remote.native);
       if (
         record.native &&
         (record.native.exitCode !== remote.native.exitCode || record.native.receiptSha256 !== remoteNativeDigest)
       )
-        return unknown('original host native outcome differs from the retained terminal event');
+        return {
+          ...unknown('original host native outcome differs from the retained terminal event'),
+          transportIdentity: originalTransportIdentity,
+        };
 
       let local: ReturnedOutputResult | undefined;
       let returnFailure: unknown;
@@ -2518,50 +2595,209 @@ export async function reconcileRegisteredCheckRun(
         cleanup,
         failures: { primary: primaryFailures, cleanup: cleanupFailures },
       });
-      return { disposition: 'settled', final };
+      return { disposition: 'settled', final, transportIdentity: originalTransportIdentity };
     },
   });
 }
 
-async function reapRetainedTransportChild(identity: CheckRunTransportChildIdentity): Promise<boolean> {
-  if (process.platform !== 'linux') return false;
-  const sameLiveIdentity = (): boolean => {
-    try {
-      const bootId = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
-      if (bootId !== identity.bootId) return false;
-      const stat = readFileSync(`/proc/${identity.pid}/stat`, 'utf8');
-      const fields = stat
-        .slice(stat.lastIndexOf(')') + 1)
-        .trim()
-        .split(/\s+/);
-      return fields[19] === identity.start;
-    } catch {
-      return false;
-    }
-  };
-  const signalExact = (signal: NodeJS.Signals): void => {
-    if (!sameLiveIdentity()) return;
-    try {
-      process.kill(identity.pid, signal);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-    }
-  };
-  const waitGone = async (milliseconds: number): Promise<boolean> => {
-    const deadline = Date.now() + milliseconds;
-    while (sameLiveIdentity()) {
-      if (Date.now() >= deadline) return false;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    return true;
-  };
+/** Recover a pre-exposure snapshot intent, or route an exposed descriptor to its original invocation. */
+export async function reconcileCheckRunPreparationIntent(
+  descriptorFile: string,
+  hostsFile?: string,
+  stateOptions: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord | {
+  schema: 1;
+  type: 'check-run-preparation-reconciliation';
+  invocationId: string;
+  snapshotCustody: 'removed';
+  preparationIntent: 'removed';
+}> {
+  if (!isAbsolute(descriptorFile)) throw new Error('--descriptor must be an absolute private JSON path');
+  const absoluteDescriptor = resolve(descriptorFile);
+  let descriptorExists = false;
   try {
-    signalExact('SIGTERM');
-    if (await waitGone(10_000)) return true;
-    signalExact('SIGKILL');
-    return await waitGone(10_000);
+    const stats = lstatSync(absoluteDescriptor);
+    descriptorExists = true;
+    if (!stats.isFile() || stats.isSymbolicLink())
+      throw new CheckRunUnavailable('check-run: prepared descriptor is not a regular file');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  if (descriptorExists) {
+    const { descriptor, reference } = readCheckRunPreparedDescriptorReference(absoluteDescriptor);
+    const record = await getCheckRunStatus(descriptor.invocationId, stateOptions);
+    if (
+      record.nonce !== descriptor.nonce ||
+      checkRunBindingHash(record.binding) !== checkRunBindingHash(descriptor.binding) ||
+      !record.descriptor ||
+      record.descriptor.file !== reference.file ||
+      record.descriptor.sha256 !== reference.sha256
+    )
+      throw new CheckRunUnavailable('check-run: exposed descriptor differs from the retained invocation');
+    return reconcileRegisteredCheckRun(descriptor.invocationId, hostsFile, stateOptions);
+  }
+
+  const intentFile = checkRunPreparationIntentFile(absoluteDescriptor);
+  const { intent, reference: intentReference } = readCheckRunPreparationIntentReference(intentFile);
+  if (intent.descriptor !== absoluteDescriptor)
+    throw new CheckRunUnavailable('check-run: preparation intent names a different descriptor');
+  const stateDirectory = checkRunSettlementStateDirectory(stateOptions);
+  const recordFile = join(stateDirectory, `${intent.invocationId}.json`);
+  if (existsSync(recordFile)) {
+    const record = await getCheckRunStatus(intent.invocationId, stateOptions);
+    if (
+      record.candidateWorkspace !== intent.candidateWorkspace ||
+      !record.preparationIntent ||
+      record.preparationIntent.file !== intentReference.file ||
+      record.preparationIntent.sha256 !== intentReference.sha256 ||
+      !record.snapshot ||
+      record.snapshot.workspace !== intent.snapshot.workspace ||
+      record.snapshot.scratch !== intent.snapshot.scratch ||
+      (intent.snapshot.sourceSha256 !== null && record.snapshot.sourceSha256 !== intent.snapshot.sourceSha256)
+    )
+      throw new CheckRunUnavailable('check-run: preparation intent differs from the durable snapshot custody');
+    return reconcileRegisteredCheckRun(intent.invocationId, hostsFile, stateOptions);
+  }
+
+  const candidateRoot = absoluteDirectory(intent.candidateWorkspace, '--workspace');
+  const scratchParent = resolve(dirname(intent.snapshot.scratch));
+  if (existsSync(scratchParent)) {
+    if (realpathSync(scratchParent) !== scratchParent)
+      throw new CheckRunUnavailable('check-run: snapshot intent parent is not canonical');
+    const scratchParentStats = lstatSync(scratchParent);
+    if (!scratchParentStats.isDirectory() || scratchParentStats.isSymbolicLink())
+      throw new CheckRunUnavailable('check-run: snapshot intent parent is not a real directory');
+  }
+  const scratchInside = relative(candidateRoot, intent.snapshot.scratch);
+  if (scratchInside === '' || (!scratchInside.startsWith(`..${sep}`) && scratchInside !== '..' && !isAbsolute(scratchInside)))
+    throw new CheckRunUnavailable('check-run: snapshot intent is inside its candidate workspace');
+  if (existsSync(intent.snapshot.scratch)) {
+    const scratchStats = lstatSync(intent.snapshot.scratch);
+    if (
+      !scratchStats.isDirectory() ||
+      scratchStats.isSymbolicLink() ||
+      (scratchStats.mode & 0o077) !== 0 ||
+      (typeof process.getuid === 'function' && scratchStats.uid !== process.getuid())
+    )
+      throw new CheckRunUnavailable('check-run: snapshot intent scratch directory is not owner-private');
+  }
+  if (existsSync(intent.snapshot.workspace)) {
+    cleanupWorktree(candidateRoot, intent.snapshot.workspace, intent.snapshot.scratch);
+  } else {
+    rmSync(intent.snapshot.scratch, { recursive: true, force: true });
+  }
+  if (existsSync(intent.snapshot.workspace) || existsSync(intent.snapshot.scratch))
+    throw new CheckRunUnavailable('check-run: pre-exposure snapshot removal was not verified');
+  removeCheckRunPreparationIntentFile(intentReference, candidateRoot, stateOptions);
+  return {
+    schema: 1,
+    type: 'check-run-preparation-reconciliation',
+    invocationId: intent.invocationId,
+    snapshotCustody: 'removed',
+    preparationIntent: 'removed',
+  };
+}
+
+export type CheckRunTransportIdentityDependencies = {
+  platform?: string;
+  readBootId?: () => string;
+  readProcStat?: (pid: number) => string;
+  sendSignal?: (pid: number, signal: NodeJS.Signals) => void;
+  now?: () => number;
+  sleep?: (milliseconds: number) => Promise<void>;
+  pollIntervalMs?: number;
+  termTimeoutMs?: number;
+  killTimeoutMs?: number;
+};
+
+/** Reap only a positively identified Linux child; identity uncertainty never grants signal authority. */
+export async function reapRetainedTransportChild(
+  identity: CheckRunTransportChildIdentity,
+  dependencies: CheckRunTransportIdentityDependencies = {},
+): Promise<'live-same' | 'gone-or-replaced' | 'unknown'> {
+  const platform = dependencies.platform ?? process.platform;
+  if (platform !== 'linux') return 'unknown';
+  const readBootId = dependencies.readBootId ?? (() => readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim());
+  const readProcStat = dependencies.readProcStat ?? ((pid: number) => readFileSync(`/proc/${pid}/stat`, 'utf8'));
+  const sendSignal = dependencies.sendSignal ?? ((pid, selectedSignal) => process.kill(pid, selectedSignal));
+  const now = dependencies.now ?? Date.now;
+  const pollIntervalMs = Math.max(1, Math.min(dependencies.pollIntervalMs ?? 50, 1000));
+  const termTimeoutMs = Math.max(0, Math.min(dependencies.termTimeoutMs ?? 10_000, 10_000));
+  const killTimeoutMs = Math.max(0, Math.min(dependencies.killTimeoutMs ?? 10_000, 10_000));
+  const sleep = dependencies.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+
+  const observe = (): 'live-same' | 'gone-or-replaced' | 'unknown' => {
+    let bootId: string | null = null;
+    try {
+      const selected = readBootId().trim();
+      if (/^[0-9a-f-]{36}$/i.test(selected)) bootId = selected;
+    } catch {
+      // A boot-ID read failure is uncertainty, not evidence of process absence.
+    }
+    if (bootId !== null && bootId !== identity.bootId) return 'gone-or-replaced';
+
+    let stat: string;
+    try {
+      stat = readProcStat(identity.pid);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'gone-or-replaced';
+      return 'unknown';
+    }
+    const commandEnd = stat.lastIndexOf(')');
+    const prefix = stat.slice(0, commandEnd + 1);
+    const fields = commandEnd >= 0 ? stat.slice(commandEnd + 1).trim().split(/\s+/) : [];
+    if (
+      !new RegExp(`^${identity.pid} \\(.+\\)$`).test(prefix) ||
+      fields.length < 20 ||
+      !/^[A-Za-z]$/.test(fields[0] ?? '') ||
+      !/^\d+$/.test(fields[19] ?? '')
+    )
+      return 'unknown';
+    if (fields[19] !== identity.start) return 'gone-or-replaced';
+    if (bootId === null) return 'unknown';
+    return 'live-same';
+  };
+
+  const signalExact = (signal: NodeJS.Signals): 'live-same' | 'gone-or-replaced' | 'unknown' => {
+    const state = observe();
+    if (state !== 'live-same') return state;
+    try {
+      sendSignal(identity.pid, signal);
+      return 'live-same';
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return 'gone-or-replaced';
+      return 'unknown';
+    }
+  };
+
+  const waitForExit = async (
+    milliseconds: number,
+  ): Promise<'live-same' | 'gone-or-replaced' | 'unknown'> => {
+    const deadline = now() + milliseconds;
+    const maxPolls = Math.ceil(milliseconds / pollIntervalMs) + 1;
+    for (let poll = 0; poll < maxPolls; poll += 1) {
+      const state = observe();
+      if (state !== 'live-same') return state;
+      if (now() >= deadline) return 'live-same';
+      try {
+        await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - now())));
+      } catch {
+        return 'unknown';
+      }
+    }
+    return observe();
+  };
+
+  try {
+    const term = signalExact('SIGTERM');
+    if (term !== 'live-same') return term;
+    const afterTerm = await waitForExit(termTimeoutMs);
+    if (afterTerm !== 'live-same') return afterTerm;
+    const kill = signalExact('SIGKILL');
+    if (kill !== 'live-same') return kill;
+    return await waitForExit(killTimeoutMs);
   } catch {
-    return false;
+    return 'unknown';
   }
 }
 
