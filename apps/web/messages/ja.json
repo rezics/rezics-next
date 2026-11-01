@@ -4023,5 +4023,14 @@
   "home_questions_restart": "選択肢が変更されました。質問一覧を最初から読み込んでください。",
   "home_questions_invalid": "質問のリクエストが拒否されました。再試行するか質問を解除してください。",
   "home_questions_lost": "選択した質問は利用できなくなりました。更新するか解除してください。",
-  "home_questions_restart_action": "質問一覧を最初から"
+  "home_questions_restart_action": "質問一覧を最初から",
+  "catalogue_terms_validation_language": "en、ja、zh-Hant などの言語タグを入力してください。",
+  "catalogue_terms_validation_name_required": "少なくとも1つの言語で名前を残すか追加してください。",
+  "catalogue_terms_validation_name": "名前は1〜250文字で、前後に空白を入れずに入力してください。",
+  "catalogue_terms_validation_description": "説明は1〜250文字で、前後に空白を入れずに入力してください。",
+  "catalogue_terms_validation_alias_count": "別名は1行に1つずつ、32個以内で入力してください。",
+  "catalogue_terms_validation_alias": "別名は1行に1つずつ、各1〜250文字で、前後に空白を入れずに入力してください。",
+  "catalogue_terms_validation_alias_unique": "別名は重複させず、1行に1つずつ入力してください。",
+  "catalogue_terms_validation_unsupported": "この変更はサポートされていません。編集内容を確認するか、元の値を保持してください。",
+  "catalogue_terms_validation_unknown": "この値は受け付けられませんでした。具体的な修正方法は不明です。編集内容を確認してください。"
 }

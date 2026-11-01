@@ -4023,5 +4023,14 @@
   "home_questions_restart": "Die Fragenauswahl hat sich geändert. Starte das Verzeichnis neu.",
   "home_questions_invalid": "Diese Fragenanfrage wurde abgelehnt. Versuche es erneut oder entferne die Frage.",
   "home_questions_lost": "Die gewählte Frage ist nicht mehr verfügbar. Aktualisiere oder entferne sie.",
-  "home_questions_restart_action": "Fragen neu starten"
+  "home_questions_restart_action": "Fragen neu starten",
+  "catalogue_terms_validation_language": "Verwende ein Sprachkürzel wie en, ja oder zh-Hant.",
+  "catalogue_terms_validation_name_required": "Behalte oder ergänze einen Namen in mindestens einer Sprache.",
+  "catalogue_terms_validation_name": "Gib einen Namen mit 1–250 Zeichen ohne Leerzeichen am Anfang oder Ende ein.",
+  "catalogue_terms_validation_description": "Gib eine Beschreibung mit 1–250 Zeichen ohne Leerzeichen am Anfang oder Ende ein.",
+  "catalogue_terms_validation_alias_count": "Gib höchstens 32 Aliasnamen ein, einen pro Zeile.",
+  "catalogue_terms_validation_alias": "Gib einen Aliasnamen pro Zeile mit jeweils 1–250 Zeichen ohne Leerzeichen am Anfang oder Ende ein.",
+  "catalogue_terms_validation_alias_unique": "Verwende jeden Aliasnamen nur einmal, einen pro Zeile.",
+  "catalogue_terms_validation_unsupported": "Diese Änderung wird nicht unterstützt. Prüfe die Eingabe oder behalte den ursprünglichen Wert.",
+  "catalogue_terms_validation_unknown": "Der Wert wurde abgelehnt. Eine konkrete Korrektur ist nicht bekannt. Prüfe die Eingabe."
 }

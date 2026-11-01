@@ -4023,5 +4023,14 @@
   "home_questions_restart": "問題選項已變更，請從頭載入目錄。",
   "home_questions_invalid": "此問題請求遭拒，請重試或清除問題。",
   "home_questions_lost": "所選問題已無法使用，請重新整理或清除。",
-  "home_questions_restart_action": "從頭載入問題"
+  "home_questions_restart_action": "從頭載入問題",
+  "catalogue_terms_validation_language": "請使用 en、ja 或 zh-Hant 等語言標籤。",
+  "catalogue_terms_validation_name_required": "請至少保留或新增一種語言的名稱。",
+  "catalogue_terms_validation_name": "請輸入 1–250 個字元的名稱，開頭和結尾不可有空白。",
+  "catalogue_terms_validation_description": "請輸入 1–250 個字元的描述，開頭和結尾不可有空白。",
+  "catalogue_terms_validation_alias_count": "別名最多 32 個，每行一個。",
+  "catalogue_terms_validation_alias": "每行請輸入一個別名，每個 1–250 個字元，開頭和結尾不可有空白。",
+  "catalogue_terms_validation_alias_unique": "別名不可重複，每行一個。",
+  "catalogue_terms_validation_unsupported": "不支援此變更，請檢查編輯內容或保留原值。",
+  "catalogue_terms_validation_unknown": "此值未獲接受，目前沒有具體的修正說明，請檢查編輯內容。"
 }

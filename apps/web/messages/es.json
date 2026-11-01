@@ -4023,5 +4023,14 @@
   "home_questions_restart": "Las opciones han cambiado. Reinicia el directorio.",
   "home_questions_invalid": "Se rechazó esta solicitud. Reintenta o quita la pregunta.",
   "home_questions_lost": "La pregunta seleccionada ya no está disponible. Actualízala o quítala.",
-  "home_questions_restart_action": "Reiniciar preguntas"
+  "home_questions_restart_action": "Reiniciar preguntas",
+  "catalogue_terms_validation_language": "Usa una etiqueta de idioma como en, ja o zh-Hant.",
+  "catalogue_terms_validation_name_required": "Conserva o añade un nombre en al menos un idioma.",
+  "catalogue_terms_validation_name": "Introduce un nombre de 1 a 250 caracteres, sin espacios al principio ni al final.",
+  "catalogue_terms_validation_description": "Introduce una descripción de 1 a 250 caracteres, sin espacios al principio ni al final.",
+  "catalogue_terms_validation_alias_count": "Introduce como máximo 32 alias, uno por línea.",
+  "catalogue_terms_validation_alias": "Introduce un alias por línea, de 1 a 250 caracteres cada uno, sin espacios al principio ni al final.",
+  "catalogue_terms_validation_alias_unique": "Usa cada alias una sola vez, uno por línea.",
+  "catalogue_terms_validation_unsupported": "Este cambio no es compatible. Revisa la edición o conserva el valor original.",
+  "catalogue_terms_validation_unknown": "El valor se ha rechazado. No hay una corrección específica disponible. Revisa la edición."
 }

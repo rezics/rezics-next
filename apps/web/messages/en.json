@@ -4026,5 +4026,14 @@
   "home_questions_restart": "Question choices changed. Restart the directory.",
   "home_questions_invalid": "This question request was refused. Retry or clear the question.",
   "home_questions_lost": "The selected question is no longer available. Refresh or clear it.",
-  "home_questions_restart_action": "Restart questions"
+  "home_questions_restart_action": "Restart questions",
+  "catalogue_terms_validation_language": "Use a language tag such as en, ja or zh-Hant.",
+  "catalogue_terms_validation_name_required": "Keep or add a Name in at least one language.",
+  "catalogue_terms_validation_name": "Enter a Name of 1–250 characters, without leading or trailing spaces.",
+  "catalogue_terms_validation_description": "Enter a Description of 1–250 characters, without leading or trailing spaces.",
+  "catalogue_terms_validation_alias_count": "Use at most 32 aliases, one per line.",
+  "catalogue_terms_validation_alias": "Enter one alias per line, each 1–250 characters without leading or trailing spaces.",
+  "catalogue_terms_validation_alias_unique": "Use each alias only once, one per line.",
+  "catalogue_terms_validation_unsupported": "This change is not supported. Review the edit or keep the original value.",
+  "catalogue_terms_validation_unknown": "The value was rejected; no specific correction is available. Review the edit."
 }

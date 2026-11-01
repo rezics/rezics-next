@@ -114,6 +114,10 @@ export const Invalid: Story = {
       m.catalogue_create_invalid(),
     );
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveAttribute('aria-invalid', 'true');
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveAccessibleDescription(
+      m.catalogue_terms_validation_name(),
+    );
+    expect(canvas.getByText(m.catalogue_terms_validation_name())).toBeVisible();
   },
 };
 export const StaleDraft: Story = {

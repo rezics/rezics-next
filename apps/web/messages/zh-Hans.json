@@ -4024,5 +4024,14 @@
   "home_questions_restart": "问题选项已更改，请从头加载目录。",
   "home_questions_invalid": "此问题请求被拒绝，请重试或清除问题。",
   "home_questions_lost": "所选问题已不可用，请刷新或清除。",
-  "home_questions_restart_action": "从头加载问题"
+  "home_questions_restart_action": "从头加载问题",
+  "catalogue_terms_validation_language": "请使用 en、ja 或 zh-Hant 等语言标签。",
+  "catalogue_terms_validation_name_required": "请至少保留或添加一种语言的名称。",
+  "catalogue_terms_validation_name": "请输入 1–250 个字符的名称，开头和结尾不能有空白。",
+  "catalogue_terms_validation_description": "请输入 1–250 个字符的描述，开头和结尾不能有空白。",
+  "catalogue_terms_validation_alias_count": "别名最多 32 个，每行一个。",
+  "catalogue_terms_validation_alias": "每行请输入一个别名，每个 1–250 个字符，开头和结尾不能有空白。",
+  "catalogue_terms_validation_alias_unique": "别名不能重复，每行一个。",
+  "catalogue_terms_validation_unsupported": "不支持此更改，请检查编辑内容或保留原值。",
+  "catalogue_terms_validation_unknown": "此值未被接受，目前没有具体的修改说明，请检查编辑内容。"
 }

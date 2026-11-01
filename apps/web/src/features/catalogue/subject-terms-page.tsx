@@ -8,6 +8,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
+import { termsFieldGuidance } from './subject-terms-guidance';
 import {
   hasTermsPatch,
   languageDraft,
@@ -192,8 +193,7 @@ export function SubjectTermsPage({
   const row = base ? (drafts[language] ?? languageDraft(base.subject, language)) : undefined;
   const typeLabel = base ? typeLabels?.[base.subject.type] : undefined;
   const errors = failure?.errors ?? [];
-  const errorFor = (field: TermField) =>
-    errors.some((error) => error.pointer.startsWith(`/${field}/${language}`) || error.pointer === `/${field}`);
+  const guidance = (field: TermField) => (row ? termsFieldGuidance(errors, field, language, row[field], locale) : []);
 
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
@@ -286,6 +286,7 @@ export function SubjectTermsPage({
                 <NativeSelect
                   className={selectClassName}
                   id="terms-language"
+                  aria-describedby="terms-language-help"
                   value={language}
                   disabled={busy}
                   onChange={(event) => setLanguage(event.target.value)}
@@ -296,7 +297,9 @@ export function SubjectTermsPage({
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
-                <FieldDescription>{m.catalogue_create_language_help({}, options)}</FieldDescription>
+                <FieldDescription id="terms-language-help">
+                  {m.catalogue_create_language_help({}, options)}
+                </FieldDescription>
               </Field>
               <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
                 <Field className="min-w-0 flex-1">
@@ -308,12 +311,17 @@ export function SubjectTermsPage({
                     disabled={locked}
                     maxLength={64}
                     aria-invalid={languageError}
+                    aria-describedby={languageError ? 'terms-new-language-error' : undefined}
                     onChange={(event) => {
                       setNewLanguage(event.target.value);
                       setLanguageError(false);
                     }}
                   />
-                  {languageError && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
+                  {languageError && (
+                    <FieldError id="terms-new-language-error">
+                      {m.catalogue_terms_validation_language({}, options)}
+                    </FieldError>
+                  )}
                 </Field>
                 <Button
                   className={actionClassName}
@@ -335,68 +343,76 @@ export function SubjectTermsPage({
               {!termFields.some((field) => Object.hasOwn(base.subject[field], language)) && (
                 <p role="status">{m.catalogue_terms_empty({}, options)}</p>
               )}
-              {termFields.map((field) => (
-                <fieldset
-                  key={field}
-                  disabled={locked}
-                  className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6"
-                >
-                  <legend className="px-1 text-sm font-semibold">{fieldLabel(field)}</legend>
-                  <p className="whitespace-pre-wrap break-words text-sm">
-                    <span className="text-muted-foreground">{m.catalogue_terms_original({}, options)}: </span>
-                    <span lang={language}>
-                      {termValue(base, field, language) || m.catalogue_terms_absent({}, options)}
-                    </span>
-                  </p>
-                  <Field>
-                    <FieldLabel htmlFor={`terms-${field}-mode`}>{m.catalogue_terms_action({}, options)}</FieldLabel>
-                    <NativeSelect
-                      className={selectClassName}
-                      id={`terms-${field}-mode`}
-                      value={row[field].mode}
-                      onChange={(event) =>
-                        update(field, { mode: event.target.value as LanguageDraft[TermField]['mode'] })
-                      }
-                    >
-                      <NativeSelectOption value="keep">{m.catalogue_terms_keep({}, options)}</NativeSelectOption>
-                      <NativeSelectOption value="set">{m.catalogue_terms_replace({}, options)}</NativeSelectOption>
-                      <NativeSelectOption value="remove">{m.catalogue_terms_remove({}, options)}</NativeSelectOption>
-                    </NativeSelect>
-                  </Field>
-                  {row[field].mode === 'set' && (
-                    <Field data-invalid={errorFor(field) || undefined}>
-                      <FieldLabel htmlFor={`terms-${field}`}>{fieldLabel(field)}</FieldLabel>
-                      {field === 'aliases' ? (
-                        <Textarea
-                          id={`terms-${field}`}
-                          lang={language}
-                          value={row[field].value}
-                          rows={3}
-                          aria-invalid={errorFor(field)}
-                          aria-describedby="terms-aliases-help"
-                          onChange={(event) => update(field, { value: event.target.value })}
-                        />
-                      ) : (
-                        <Input
-                          className={inputClassName}
-                          id={`terms-${field}`}
-                          lang={language}
-                          value={row[field].value}
-                          maxLength={250}
-                          aria-invalid={errorFor(field)}
-                          onChange={(event) => update(field, { value: event.target.value })}
-                        />
-                      )}
-                      {field === 'aliases' && (
-                        <FieldDescription id="terms-aliases-help">
-                          {m.catalogue_terms_alias_limits({}, options)}
-                        </FieldDescription>
-                      )}
-                      {errorFor(field) && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
+              {termFields.map((field) => {
+                const messages = guidance(field);
+                const invalid = messages.length > 0;
+                const errorId = invalid ? `terms-${field}-error` : undefined;
+                return (
+                  <fieldset
+                    key={field}
+                    disabled={locked}
+                    className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6"
+                  >
+                    <legend className="px-1 text-sm font-semibold">{fieldLabel(field)}</legend>
+                    <p className="whitespace-pre-wrap break-words text-sm">
+                      <span className="text-muted-foreground">{m.catalogue_terms_original({}, options)}: </span>
+                      <span lang={language}>
+                        {termValue(base, field, language) || m.catalogue_terms_absent({}, options)}
+                      </span>
+                    </p>
+                    <Field>
+                      <FieldLabel htmlFor={`terms-${field}-mode`}>{m.catalogue_terms_action({}, options)}</FieldLabel>
+                      <NativeSelect
+                        className={selectClassName}
+                        id={`terms-${field}-mode`}
+                        value={row[field].mode}
+                        aria-invalid={invalid}
+                        aria-describedby={errorId}
+                        onChange={(event) =>
+                          update(field, { mode: event.target.value as LanguageDraft[TermField]['mode'] })
+                        }
+                      >
+                        <NativeSelectOption value="keep">{m.catalogue_terms_keep({}, options)}</NativeSelectOption>
+                        <NativeSelectOption value="set">{m.catalogue_terms_replace({}, options)}</NativeSelectOption>
+                        <NativeSelectOption value="remove">{m.catalogue_terms_remove({}, options)}</NativeSelectOption>
+                      </NativeSelect>
                     </Field>
-                  )}
-                </fieldset>
-              ))}
+                    {row[field].mode === 'set' && (
+                      <Field data-invalid={invalid || undefined}>
+                        <FieldLabel htmlFor={`terms-${field}`}>{fieldLabel(field)}</FieldLabel>
+                        {field === 'aliases' ? (
+                          <Textarea
+                            id={`terms-${field}`}
+                            lang={language}
+                            value={row[field].value}
+                            rows={3}
+                            aria-invalid={invalid}
+                            aria-describedby={['terms-aliases-help', errorId].filter(Boolean).join(' ')}
+                            onChange={(event) => update(field, { value: event.target.value })}
+                          />
+                        ) : (
+                          <Input
+                            className={inputClassName}
+                            id={`terms-${field}`}
+                            lang={language}
+                            value={row[field].value}
+                            maxLength={250}
+                            aria-invalid={invalid}
+                            aria-describedby={errorId}
+                            onChange={(event) => update(field, { value: event.target.value })}
+                          />
+                        )}
+                        {field === 'aliases' && (
+                          <FieldDescription id="terms-aliases-help">
+                            {m.catalogue_terms_alias_limits({}, options)}
+                          </FieldDescription>
+                        )}
+                      </Field>
+                    )}
+                    {invalid && <FieldError id={errorId} errors={messages.map((message) => ({ message }))} />}
+                  </fieldset>
+                );
+              })}
               {failure && (
                 <section role="alert" className="space-y-3 rounded-xl border border-destructive/40 p-4">
                   <p>{failureText(failure.reason)}</p>

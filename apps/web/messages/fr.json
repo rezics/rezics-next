@@ -4023,5 +4023,14 @@
   "home_questions_restart": "Les choix ont changé. Reprenez le répertoire au début.",
   "home_questions_invalid": "Cette demande a été refusée. Réessayez ou effacez la question.",
   "home_questions_lost": "La question sélectionnée n’est plus disponible. Actualisez-la ou effacez-la.",
-  "home_questions_restart_action": "Reprendre les questions"
+  "home_questions_restart_action": "Reprendre les questions",
+  "catalogue_terms_validation_language": "Utilisez un code de langue comme en, ja ou zh-Hant.",
+  "catalogue_terms_validation_name_required": "Conservez ou ajoutez un nom dans au moins une langue.",
+  "catalogue_terms_validation_name": "Saisissez un nom de 1 à 250 caractères, sans espaces au début ni à la fin.",
+  "catalogue_terms_validation_description": "Saisissez une description de 1 à 250 caractères, sans espaces au début ni à la fin.",
+  "catalogue_terms_validation_alias_count": "Saisissez au maximum 32 alias, un par ligne.",
+  "catalogue_terms_validation_alias": "Saisissez un alias par ligne, de 1 à 250 caractères chacun, sans espaces au début ni à la fin.",
+  "catalogue_terms_validation_alias_unique": "Utilisez chaque alias une seule fois, un par ligne.",
+  "catalogue_terms_validation_unsupported": "Cette modification n’est pas prise en charge. Vérifiez la saisie ou conservez la valeur d’origine.",
+  "catalogue_terms_validation_unknown": "La valeur a été refusée. Aucune correction précise n’est disponible. Vérifiez la saisie."
 }
