@@ -607,11 +607,9 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
     '';
   return (
     <ListRow className="flex items-center gap-3 py-4 sm:gap-4">
-      {href && copy.subject ? (
-        <ListRowLink href={href.href} className="z-[2]">
-          <LibraryTitle label={copy.subject.label} locale={pageLocale} />
-        </ListRowLink>
-      ) : null}
+      <ListRowLink href={href?.href} aria-hidden={copy.subject ? undefined : true} className="z-[2]">
+        {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
+      </ListRowLink>
       <div className="w-[72px] shrink-0 sm:w-24">
         <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
       </div>
