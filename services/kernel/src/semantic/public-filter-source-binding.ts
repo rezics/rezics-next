@@ -1,7 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { publicFilterSource, publicFilterSourceOrigin } from './public-filter-source.ts';
-import { readOriginalPublicFilterProjectionPage, readRetainedPublicFilterProjectionPage } from './public-filter-projection.ts';
+import {
+  readOriginalPublicFilterProjectionPage,
+  readRetainedPublicFilterProjectionPage,
+  retainedPublicFilterProjectionDependenciesCurrent,
+} from './public-filter-projection.ts';
 import { systemClock } from '../clock.ts';
 import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -1134,17 +1138,20 @@ export function createPublicFilterSourceBinding(
         if (record.output) {
           if (record.input.phase !== 'project' || record.input.subject === null)
             throw new BindingError('owner_unavailable');
-          const page = await readRetainedPublicFilterProjectionPage(pool, {
-          identity: { bootstrap: nativeId(input.bootstrap), execution: input.execution, predecessor: input.predecessor },
-          subject: record.input.subject,
-          meaning: cut.definition.meaning,
-          inputLimit: row.input_limit,
-          frontier: record.input.projection,
-        }, { deadline });
-        if (!page) throw new BindingError('owner_unavailable');
-          addCost(cost, page.cost);
+          const page = await readRetainedPublicFilterProjectionPage(db, {
+            identity: { bootstrap: nativeId(input.bootstrap), execution: input.execution, predecessor: input.predecessor },
+            subject: record.input.subject,
+            meaning: cut.definition.meaning,
+            inputLimit: row.input_limit,
+            frontier: record.input.projection,
+          }, { deadline });
+          if (!page) throw new BindingError('owner_unavailable');
           if (page.status !== 'progress' && page.status !== 'complete')
             throw new BindingError(page.status === 'changed' ? 'binding_mismatch' : 'owner_unavailable');
+          // Charge this original-page verification, rather than replaying the
+          // historical producer's SQL/Access accounting from its serialized page.
+          cost.candidates += page.records.length;
+          cost.inputKeys += page.repairLocators.length;
           const currentDigests = page.repairLocators.map((locator) => hash(encode(locator)));
           if (
             projectionDigest(page) !== record.output.digest ||
@@ -1153,6 +1160,9 @@ export function createPublicFilterSourceBinding(
             !isDeepStrictEqual(currentDigests, receiptDigests)
           )
             throw new BindingError('binding_mismatch');
+          if (!await retainedPublicFilterProjectionDependenciesCurrent(db, {
+            page, meaning: cut.definition.meaning,
+          }, { deadline })) throw new BindingError('owner_unavailable');
           await currentRepairHome(input.bootstrap, input.execution, record.input, page.source, db);
         } else if (
           (record.input.phase !== 'scan' && record.input.phase !== 'advance') ||
@@ -1257,7 +1267,7 @@ export function createPublicFilterSourceBinding(
           throw new BindingError('binding_mismatch');
         // Resolve the exact original native projection input and allowance. A freshly generated build,
         // changed continuation, newer Source position or equivalent caller body fails the digest check.
-        const page = await readRetainedPublicFilterProjectionPage(pool, {
+        const page = await readRetainedPublicFilterProjectionPage(db, {
           identity: { bootstrap: nativeId(receipt.bootstrap), execution: execution, predecessor: row.predecessor },
           subject: record.input.subject!,
           meaning: cut.definition.meaning,
@@ -1265,9 +1275,10 @@ export function createPublicFilterSourceBinding(
           frontier: record.input.projection,
         }, { deadline });
         if (!page) throw new BindingError('owner_unavailable');
-        addCost(cost, page.cost);
         if (page.status !== 'progress' && page.status !== 'complete')
           throw new BindingError(page.status === 'changed' ? 'binding_mismatch' : 'owner_unavailable');
+        cost.candidates += page.records.length;
+        cost.inputKeys += page.repairLocators.length;
         if (
           projectionDigest(page) !== record.output.digest ||
           encode(page.source) !== encode(record.output.source) ||
@@ -1277,7 +1288,11 @@ export function createPublicFilterSourceBinding(
           throw new BindingError('binding_mismatch');
         const locator = page.repairLocators.find((candidate) => hash(encode(candidate)) === receipt.locatorDigest);
         if (!locator) throw new BindingError('binding_mismatch');
-        // Projection readers stage/release their foreign probes. Final local native verification follows.
+        // Validate original retained foreign heads, then recheck local native authority
+        // after releasing those homes. No newly produced page can replace the original.
+        if (!await retainedPublicFilterProjectionDependenciesCurrent(db, {
+          page, meaning: cut.definition.meaning,
+        }, { deadline })) throw new BindingError('owner_unavailable');
         await currentRepairHome(receipt.bootstrap, execution, record.input, page.source, db);
         const current = await loadBootstrap(receipt.bootstrap, db);
         if (

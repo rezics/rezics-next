@@ -38,6 +38,7 @@ import readRetainedHeadPage from './public-filter-projection-head-page.sql';
 import readCurrentRetainedHead from './public-filter-projection-head-current.sql';
 import upsertRetainedHeads from './public-filter-projection-head-upsert.sql';
 import readOriginalPage from './public-filter-projection-replay-read.sql';
+import readReplayHead from './public-filter-projection-replay-head.sql';
 import writeOriginalPage from './public-filter-projection-replay-write.sql';
 
 type Configuration = Parameters<PublicFilterSourceFactory>[0];
@@ -150,6 +151,60 @@ export async function readRetainedPublicFilterProjectionPage(
     page.source.subject !== request.subject || page.source.partition !== routed.partition)
     throw new Error('Retained projection page identity mismatch');
   return page;
+}
+
+/** Validate the retained build's actual dependency heads without producing a new page.
+ * The caller has already resolved the exact original page and separately verifies
+ * its native original/terminal command fences. Every query uses the caller's meter.
+ */
+export async function retainedPublicFilterProjectionDependenciesCurrent(
+  pool: Pool,
+  request: Readonly<{
+    page: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }>;
+    meaning: Pick<PublicFilterProjectionMeaning, 'digest' | 'type'>;
+  }>,
+  context: Readonly<{ deadline: number }>,
+): Promise<boolean> {
+  const { page, meaning } = structuredClone(request);
+  const deadline = context.deadline;
+  requireAccessDeadline(deadline);
+  const routed = routePartition(page.source.subject);
+  if (!routed) return false;
+  const build = rows(await readBuild.run(pool, {
+    partition_no: routed.partition, route: routed.route, subject_id: page.source.subject,
+    meaning_digest: meaning.digest, meaning_type: meaning.type,
+  }))[0];
+  if (!build || build.build_id !== page.frontier.build ||
+    BigInt(build.generation) !== page.frontier.generation || build.owner_epoch !== page.source.epoch ||
+    BigInt(build.source_position) !== page.source.position || build.terminal_id !== page.source.terminal ||
+    build.subject_revision !== page.source.revision || build.security_revision !== page.source.securityRevision ||
+    build.current_release !== page.source.currentRelease) return false;
+  const terminal = routePartition(page.source.terminal);
+  if (!terminal) return false;
+  const homes = new Set([routed.partition,terminal.partition]);
+  const dependencies = [
+    ...page.repairLocators.flatMap((locator) => locator.dependencies),
+    ...page.records.flatMap((record) => record.dependencies),
+  ];
+  for (const dependency of dependencies) {
+    // A Semantic privacy head cannot stand in for an original Account tuple.
+    // Until that tuple is retained by this projection build, consent replay is
+    // unknown and cannot produce a verified repair receipt.
+    if (dependency.kind === 'consent') return false;
+    const route = dependency.kind === 'sourceTuple' ? dependency.tuple.route : dependency.route;
+    if (!Number.isInteger(route) || route < 0 || route > 65535) return false;
+    homes.add(partitionOf(route));
+  }
+  // These are the original build's keyed retained heads, not a current catalogue
+  // enumeration or a newly captured replacement for the original Source page.
+  for (const partition of homes) {
+    requireAccessDeadline(deadline);
+    const head = await readReplayHead.run(pool, { build_id: page.frontier.build, partition_no: partition });
+    if (!head || head.write_state !== 'active' || head.epoch !== head.owner_epoch ||
+      head.position !== head.current_position) return false;
+  }
+  requireAccessDeadline(deadline);
+  return true;
 }
 
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
