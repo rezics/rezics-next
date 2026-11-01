@@ -24,6 +24,7 @@ import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
 import { useContextIntent } from './intent';
+import { useContextCurrent } from './lifetime';
 import {
   admits,
   detailHref,
@@ -239,6 +240,7 @@ export function ContextCreateView({
   submit: (command: Command) => Promise<MutationResult>;
   reload: () => Promise<unknown>;
 }) {
+  const current = useContextCurrent();
   const o = options(locale);
   const [label, setLabel] = useState('');
   const [language, setLanguage] = useState(locale);
@@ -267,7 +269,7 @@ export function ContextCreateView({
           aria-busy={intent.busy}
           onSubmit={(event) => {
             event.preventDefault();
-            if (actions && admits(actions, 'create') && !locked)
+            if (current() && actions && admits(actions, 'create') && !locked)
               void intent.submit({
                 operation: 'create',
                 labels: { [language]: label.trim() },
@@ -282,7 +284,9 @@ export function ContextCreateView({
               id={`${field}-language`}
               value={language}
               disabled={locked}
-              onChange={(event) => setLanguage(event.target.value)}
+              onChange={(event) => {
+                if (current()) setLanguage(event.target.value);
+              }}
             >
               {locales.map((language) => (
                 <NativeSelectOption key={language} value={language}>
@@ -301,7 +305,9 @@ export function ContextCreateView({
               disabled={locked}
               aria-invalid={intent.result?.kind === 'invalid'}
               aria-describedby={`${field}-help`}
-              onChange={(event) => setLabel(event.target.value)}
+              onChange={(event) => {
+                if (current()) setLabel(event.target.value);
+              }}
             />
             <FieldDescription id={`${field}-help`}>{m.ctxw_label_help({}, o)}</FieldDescription>
           </Field>
@@ -331,6 +337,7 @@ function ServerDate({ value, locale }: { value: string; locale: string }) {
   );
 }
 function SubjectJourney({ id, locale, search }: { id: string; locale: string; search?: EntityPickerSearch }) {
+  const current = useContextCurrent();
   const [subjects, setSubjects] = useState<EntityPickerSubject[]>([]);
   const o = options(locale);
   const subject = subjects[0];
@@ -342,7 +349,9 @@ function SubjectJourney({ id, locale, search }: { id: string; locale: string; se
         <EntityPicker
           search={search}
           value={subjects}
-          onValueChange={setSubjects}
+          onValueChange={(subjects) => {
+            if (current()) setSubjects(subjects);
+          }}
           label={m.ctxw_choose_subject({}, o)}
           src={(id, variant) => `/media/images/${id}/${variant}`}
         />
@@ -373,6 +382,7 @@ export function ContextDetailView({
   reload: () => Promise<unknown>;
   search?: EntityPickerSearch;
 }) {
+  const live = useContextCurrent();
   const o = options(locale);
   const intent = useContextIntent(submit, reload);
   const [confirm, setConfirm] = useState(false);
@@ -466,7 +476,12 @@ export function ContextDetailView({
           {resource.kind === 'community' ? (
             <section className="space-y-3">
               <Permission actions={current.actions} locale={locale} />
-              <AlertDialog open={confirm} onOpenChange={setConfirm}>
+              <AlertDialog
+                open={confirm}
+                onOpenChange={(open) => {
+                  if (live()) setConfirm(open);
+                }}
+              >
                 <AlertDialogTrigger
                   render={
                     <Button
@@ -490,6 +505,7 @@ export function ContextDetailView({
                       variant={operation === 'delete' ? 'destructive' : 'default'}
                       disabled={!allowed || !!intent.pending}
                       onClick={() => {
+                        if (!live()) return;
                         setConfirm(false);
                         if (operation && allowed && !intent.pending)
                           void intent.submit({

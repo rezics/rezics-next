@@ -1,178 +1,178 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMemo, useSyncExternalStore } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { personalRead } from '../../kernel/query';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { relationTargetSearch } from '../catalogue/relation-editor-search';
-import { changeContextWorkspace, readContextCreation, readContextDirectory, readContextWorkspace } from './actions';
-import { contextQueryKey, unavailable, type Command, type DirectoryInput, type MutationResult } from './model';
+import {
+  changeContextWorkspace,
+  readContextCreation,
+  readContextDirectory,
+  readContextTargets,
+  readContextWorkspace,
+} from './actions';
+import { ContextAdmissions, ContextWork, useContextVisit, type ContextAdmission } from './lifetime';
+import {
+  contextQueryKey,
+  unavailable,
+  type Actions,
+  type Command,
+  type DirectoryInput,
+  type DirectoryWorkspace,
+  type MutationResult,
+  type Result,
+  type Workspace,
+} from './model';
 import { ContextCreateView, ContextDetailView, ContextDirectoryView, ContextFeedback } from './view';
 
 type Mode = { mode: 'directory'; input: DirectoryInput } | { mode: 'create' } | { mode: 'detail'; id: string };
-const prefix = ['context-workspace'] as const;
-function clearPrivate(client: QueryClient, actor?: string, keep?: readonly unknown[]) {
-  client.removeQueries({
-    predicate: (query) =>
-      query.queryKey[0] === prefix[0] &&
-      (!actor || query.queryKey[1] === actor) &&
-      (!keep || JSON.stringify(query.queryKey) !== JSON.stringify(keep)),
-  });
-}
-function useVisit(key: readonly unknown[]) {
-  const scope = JSON.stringify(key);
+type AdmissionProps = { admissions: ContextAdmissions; admission: ContextAdmission; locale: string };
+
+function VisitSession({ admissions, admission, locale, ...props }: Mode & AdmissionProps) {
   const client = useQueryClient();
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-      // Retire only this visit; a newly mounted query for this actor owns its own lifetime.
-      void client.cancelQueries({ queryKey: key, exact: true });
-      client.removeQueries({ queryKey: key, exact: true });
-    };
-  }, [scope, client]);
-  return { client, alive };
-}
-function DirectorySession({ actor, locale, input }: { actor: string; locale: string; input: DirectoryInput }) {
-  const key = contextQueryKey(actor, locale, 'directory', input);
-  const { client } = useVisit(key);
-  const query = useQuery({
-    ...personalRead,
-    queryKey: key,
-    queryFn: () => readContextDirectory({ data: input }),
-    gcTime: 0,
-    retry: false,
-  });
-  const data = query.data;
-  useEffect(() => {
-    if (data && [data.page.kind, data.creation.kind].some((kind) => kind === 'denied' || kind === 'signed-out'))
-      clearPrivate(client, actor, key);
-  }, [data, actor, client]);
-  return (
-    <ContextDirectoryView
-      locale={locale}
-      input={input}
-      data={query.isFetching ? null : query.isError ? { page: unavailable, creation: unavailable } : (data ?? null)}
-      reload={() => query.refetch()}
-    />
+  const address = props.mode === 'detail' ? props.id : props.mode === 'directory' ? props.input : null;
+  const visit = useContextVisit(
+    client,
+    admissions,
+    admission,
+    contextQueryKey(admission.reader, locale, props.mode, address),
   );
-}
-function CreateSession({ actor, locale, csrfToken }: { actor: string; locale: string; csrfToken: string }) {
-  const key = contextQueryKey(actor, locale, 'create', null);
-  const { client, alive } = useVisit(key);
   const query = useQuery({
     ...personalRead,
-    queryKey: key,
-    queryFn: () => readContextCreation(),
+    queryKey: visit.key,
+    queryFn: ({ signal }) =>
+      visit.read<DirectoryWorkspace | Result<Actions> | Result<Workspace>>(
+        signal,
+        (signal) => {
+          visit.assertCurrent();
+          const options = { headers: visit.headers, signal };
+          if (props.mode === 'directory') return readContextDirectory({ data: props.input, ...options });
+          if (props.mode === 'create') return readContextCreation(options);
+          return readContextWorkspace({
+            data: { id: props.id, ...(visit.session ? { session: visit.session } : {}) },
+            ...options,
+          });
+        },
+        (result) => {
+          if (props.mode === 'detail' && 'session' in result) visit.session = result.session ?? visit.session;
+        },
+      ),
     gcTime: 0,
     retry: false,
   });
-  async function submit(command: Command): Promise<MutationResult> {
-    await client.cancelQueries({ queryKey: key, exact: true });
-    if (!alive.current) return unavailable;
-    clearPrivate(client, actor, key);
-    const result = await changeContextWorkspace({ data: command, headers: { 'X-CSRF-Token': csrfToken } });
-    if (!alive.current) return result;
-    await query.refetch();
+  async function reload() {
+    if (!visit.live()) return;
+    const result = await query.refetch();
+    if (!visit.live()) return;
     return result;
   }
-  return (
-    <ContextCreateView
-      locale={locale}
-      actions={query.isFetching ? null : query.isError ? unavailable : (query.data ?? null)}
-      submit={submit}
-      reload={() => query.refetch()}
-    />
-  );
-}
-function DetailSession({
-  actor,
-  locale,
-  id,
-  csrfToken,
-}: {
-  actor: string;
-  locale: string;
-  id: string;
-  csrfToken: string;
-}) {
-  const key = contextQueryKey(actor, locale, 'detail', id);
-  const { client, alive } = useVisit(key);
-  const session = useRef<string | undefined>(undefined);
-  const query = useQuery({
-    ...personalRead,
-    queryKey: key,
-    queryFn: async () => {
-      const result = await readContextWorkspace({
-        data: { id, ...(session.current ? { session: session.current } : {}) },
-      });
-      session.current = result.session ?? session.current;
+  async function submit(command: Command): Promise<MutationResult> {
+    visit.assertCurrent();
+    await client.cancelQueries({ queryKey: visit.key, exact: true });
+    visit.assertCurrent();
+    try {
+      const result = await changeContextWorkspace({ data: command, headers: visit.headers, signal: visit.signal });
+      visit.assertCurrent();
+      if (props.mode === 'detail') {
+        visit.session = result.session ?? visit.session;
+        if (result.kind === 'confirmed') {
+          visit.session = result.current.session ?? visit.session;
+          client.setQueryData(visit.key, result.current);
+        } else {
+          // Current denial/conflict and unknown outcomes drop the previous private payload.
+          client.setQueryData(visit.key, unavailable);
+          await reload();
+        }
+      } else await reload();
+      visit.assertCurrent();
       return result;
-    },
-    gcTime: 0,
-    retry: false,
-  });
-  const data = query.data;
-  useEffect(() => {
-    if (data?.kind === 'denied' || data?.kind === 'signed-out' || data?.kind === 'missing')
-      clearPrivate(client, actor, key);
-  }, [data, actor, client]);
-  const search = useMemo(
-    () => (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
-    [locale],
-  );
-  async function submit(command: Command): Promise<MutationResult> {
-    await client.cancelQueries({ queryKey: key, exact: true });
-    if (!alive.current) return unavailable;
-    clearPrivate(client, actor, key);
-    const result = await changeContextWorkspace({ data: command, headers: { 'X-CSRF-Token': csrfToken } });
-    if (!alive.current) return result;
-    session.current = result.session ?? session.current;
-    if (result.kind === 'confirmed') {
-      session.current = result.current.session ?? session.current;
-      client.setQueryData(key, result.current);
-    } else {
-      // Definite denial/conflict and uncertain outcomes all drop the previous private payload before a current read.
-      client.setQueryData(key, unavailable);
-      await query.refetch();
+    } catch (error) {
+      visit.assertCurrent();
+      throw error;
     }
-    return result;
   }
+  const search = useMemo(
+    () => async (text: string, signal: AbortSignal) => {
+      visit.assertCurrent();
+      const combined = AbortSignal.any([signal, visit.signal]);
+      combined.throwIfAborted();
+      try {
+        const result = await readContextTargets({ data: { text, locale }, headers: visit.headers, signal: combined });
+        visit.assertCurrent();
+        combined.throwIfAborted();
+        if (result.kind !== 'ready') throw new Error('Context targets unavailable');
+        return result.value;
+      } catch (error) {
+        visit.assertCurrent();
+        throw error;
+      }
+    },
+    [visit, locale],
+  );
   return (
-    <ContextDetailView
-      id={id}
-      locale={locale}
-      data={query.isFetching ? null : query.isError ? unavailable : (data ?? null)}
-      submit={submit}
-      reload={() => query.refetch()}
-      search={search}
-    />
+    <ContextWork.Provider key={JSON.stringify(visit.key)} value={visit.live}>
+      {props.mode === 'directory' ? (
+        <ContextDirectoryView
+          locale={locale}
+          input={props.input}
+          data={
+            query.isFetching
+              ? null
+              : query.isError
+                ? { page: unavailable, creation: unavailable }
+                : ((query.data as DirectoryWorkspace | undefined) ?? null)
+          }
+          reload={reload}
+        />
+      ) : props.mode === 'create' ? (
+        <ContextCreateView
+          locale={locale}
+          actions={
+            query.isFetching
+              ? null
+              : query.isError
+                ? unavailable
+                : ((query.data as Result<Actions> | undefined) ?? null)
+          }
+          submit={submit}
+          reload={reload}
+        />
+      ) : (
+        <ContextDetailView
+          id={props.id}
+          locale={locale}
+          data={
+            query.isFetching
+              ? null
+              : query.isError
+                ? unavailable
+                : ((query.data as Result<Workspace> | undefined) ?? null)
+          }
+          submit={submit}
+          reload={reload}
+          search={search}
+        />
+      )}
+    </ContextWork.Provider>
   );
 }
-/** Personal data starts after hydration and is scoped to this actual session subject. */
+
+const serverAdmission = () => null;
+/** Personal work belongs to one successful session admission, never just subject equality. */
 export function ContextSession(props: Mode) {
-  const { state, subject, csrfToken } = useSession();
+  const { state, subject } = useSession();
   const client = useQueryClient();
+  const admissions = useMemo(() => new ContextAdmissions(client), [client]);
+  const admission = useSyncExternalStore(admissions.subscribe, admissions.snapshot, serverAdmission);
   const locale = getLocale();
-  useEffect(() => {
-    if (state !== 'signed-in') {
-      void client.cancelQueries({ queryKey: prefix });
-      clearPrivate(client);
-    }
-  }, [state, subject, client]);
   if (state === 'unknown') return <p role="status">{m.ctxw_loading()}</p>;
-  if (state !== 'signed-in' || !subject || !csrfToken)
+  if (state !== 'signed-in' || !admission || admission.reader !== subject)
     return (
       <ContextFeedback locale={locale} failure={{ kind: state === 'signed-out' ? 'signed-out' : 'unavailable' }} />
     );
-  const identity = `${subject}:${locale}:${props.mode}:${props.mode === 'detail' ? props.id : props.mode === 'directory' ? JSON.stringify(props.input) : ''}`;
-  if (props.mode === 'directory')
-    return <DirectorySession key={identity} actor={subject} locale={locale} input={props.input} />;
-  if (props.mode === 'create')
-    return <CreateSession key={identity} actor={subject} locale={locale} csrfToken={csrfToken} />;
-  return <DetailSession key={identity} actor={subject} locale={locale} id={props.id} csrfToken={csrfToken} />;
+  const identity = JSON.stringify([admission.id, locale, props]);
+  return <VisitSession key={identity} {...props} admissions={admissions} admission={admission} locale={locale} />;
 }
 export function ContextPending() {
   return <p role="status">{m.ctxw_loading()}</p>;

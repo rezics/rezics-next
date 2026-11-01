@@ -1,18 +1,28 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { pickText } from '@rezics/composition';
+import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { kernelClient } from '../../kernel/client';
+import { coverOf, coverSubject } from '../../media/summary';
 import { MediaProblem } from '../../media/kernel';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { suggestSubjects } from '../../search/suggestions';
+import { hitYear } from '../../search/results';
+import { validSuggestionText } from '../../search/typeahead';
+import { locales } from '../../paraglide/runtime.js';
+import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
 import { createContextApi } from './api';
-import { directoryInput, parseAddress, parseCommand, type Failure } from './model';
+import { contextId, directoryInput, parseAddress, parseCommand, type Failure, type Result } from './model';
 
 async function viewer(): Promise<string | Failure> {
   setResponseHeader('cache-control', 'private, no-store');
   try {
     const request = getRequest();
     const stale = await prepareSession(request, env as Partial<SessionEnv>);
+    // The browser's original reader is a mismatch guard, never an authorization credential.
+    const expected = request.headers.get('X-Context-Reader');
+    if (!expected || !contextId.test(expected) || sessionSubject(request) !== expected) return { kind: 'signed-out' };
     return (!stale && viewerCredential(request)) || { kind: 'signed-out' };
   } catch (error) {
     return error instanceof MediaProblem
@@ -47,4 +57,31 @@ export const changeContextWorkspace = createServerFn({ method: 'POST', strict: f
     return typeof authorization === 'string'
       ? createContextApi(kernelClient(), authorization).submit(data)
       : authorization;
+  });
+
+/** The ordinary bounded suggestion reader, admitted for this Context visit's original reader. */
+export const readContextTargets = createServerFn({ method: 'GET', strict: false })
+  .validator((input: { text: string; locale: string }) => {
+    if (!input || !validSuggestionText(input.text) || !locales.some((locale) => locale === input.locale))
+      throw new Error('Invalid Context target search');
+    return { text: input.text, locale: input.locale };
+  })
+  .handler(async ({ data }): Promise<Result<EntityPickerSubject[]>> => {
+    const authorization = await viewer();
+    if (typeof authorization !== 'string') return authorization;
+    const result = await suggestSubjects(data.text, getRequest(), data.locale);
+    return {
+      kind: 'ready',
+      value: result.subjects.map((subject) => {
+        const title = pickText(subject.labels, data.locale).text;
+        return {
+          id: subject.id,
+          title,
+          types: coverSubject(subject.id, title, subject.summary, subject.type).types,
+          typeLabel: pickText(result.types[subject.type] ?? {}, data.locale).text,
+          year: hitYear(subject.facts) ?? null,
+          cover: coverOf(subject.summary),
+        };
+      }),
+    };
   });

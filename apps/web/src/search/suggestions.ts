@@ -59,13 +59,17 @@ export type SuggestionResult = Omit<Suggested, 'subjects'> & {
   types: Record<string, Record<string, string>>;
 };
 
-export async function suggestSubjects(query: string, request: Request): Promise<SuggestionResult> {
+export async function suggestSubjects(
+  query: string,
+  request: Request,
+  requestedLocale?: string,
+): Promise<SuggestionResult> {
   const [{ kernelClient, requestLocale }, { readRelease }, { viewerCredential }] = await Promise.all([
     import('../kernel/client.ts'),
     import('../subject/definitions.ts'),
     import('../session/request.ts'),
   ]);
-  const locale = new URL(request.url).searchParams.get('locale') ?? requestLocale(request);
+  const locale = requestedLocale ?? new URL(request.url).searchParams.get('locale') ?? requestLocale(request);
   const languages = requestLanguages(locale ?? 'en');
   const rawLimit = new URL(request.url).searchParams.get('limit');
   const parameters = validateSuggestQuery({
