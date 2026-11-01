@@ -38,6 +38,12 @@ export type ScreenTransport = {
   review?: (property: string, session?: string) => CandidateTransport;
   relations?: RelationTransport;
 };
+
+const screenActionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const screenSummaryClassName =
+  'min-h-11 max-w-full cursor-pointer py-2 font-semibold [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+
 export function ScreenProfile({
   id,
   locale,
@@ -78,7 +84,7 @@ export function ScreenProfile({
   );
   if (!read)
     return (
-      <article className="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
+      <article className="mx-auto w-full max-w-4xl min-w-0 space-y-5 p-4 sm:p-6">
         <ViewHeadingActions label={id ? m.screen_edit({}, o) : m.screen_title({}, o)} headingClassName="font-sans" />
         {query.isPending ? (
           <p role="status">{m.candidate_loading({}, o)}</p>
@@ -92,15 +98,17 @@ export function ScreenProfile({
                 reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
               />
             )}
-            <Button onClick={() => void query.refetch()}>{m.correction_retry({}, o)}</Button>
+            <Button className={screenActionClassName} onClick={() => void query.refetch()}>
+              {m.correction_retry({}, o)}
+            </Button>
           </>
         )}
       </article>
     );
   if (!id)
     return (
-      <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
-        <header className="space-y-3">
+      <div className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6">
+        <header className="min-w-0 space-y-3">
           <ViewHeadingActions label={m.screen_title({}, o)} headingClassName="font-sans" />
           {intro}
         </header>
@@ -151,17 +159,27 @@ export function ScreenProfile({
   if (!subject || !read.public) return <EditorFailure locale={locale} reason="unavailable" />;
   const current = { ok: true as const, release: read.release, public: read.public, source: null };
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
+    <article className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
       <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
-      <header className="space-y-3">
-        <a href={href} lang={label.lang ?? undefined} className="font-sans text-2xl font-semibold underline">
+      <header className="min-w-0 space-y-3">
+        <a
+          href={href}
+          lang={label.lang ?? undefined}
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere] py-1 font-sans text-2xl font-semibold underline md:pointer-fine:min-h-8"
+        >
           {label.text || m.subject_value_unlabelled({}, o)}
         </a>
-        <p lang={pickText(read.release.types[subject.type]?.labels ?? {}, locale).lang ?? undefined}>
+        <p
+          lang={pickText(read.release.types[subject.type]?.labels ?? {}, locale).lang ?? undefined}
+          className="min-w-0 max-w-full [overflow-wrap:anywhere]"
+        >
           {pickText(read.release.types[subject.type]?.labels ?? {}, locale).text}
         </p>
         {intro}
-        <nav className="flex flex-wrap gap-2" aria-label={m.facts_other_editors({}, o)}>
+        <nav
+          className="flex min-w-0 flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1"
+          aria-label={m.facts_other_editors({}, o)}
+        >
           <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={href}>
             {m.candidate_view_public({}, o)}
           </a>
@@ -169,28 +187,33 @@ export function ScreenProfile({
           <PublicationEditorEntry work={id} locale={locale} />
         </nav>
       </header>
-      <section className="space-y-5" aria-label={m.candidate_current({}, o)}>
+      <section className="min-w-0 space-y-5" aria-label={m.candidate_current({}, o)}>
         <h2 className="text-xl font-semibold">{m.candidate_current({}, o)}</h2>
         {Object.entries(screenGroups(read.release, subject.type))
           .filter(([, fields]) => fields.length)
           .map(([group, fields]) => (
-            <section key={group} className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
-              <h3 className="text-lg font-semibold">{screenGroupLabel(group as ScreenGroup, locale)}</h3>
-              <dl className="space-y-4">
+            <section key={group} className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+              <h3 className="min-w-0 max-w-full text-lg font-semibold [overflow-wrap:anywhere]">
+                {screenGroupLabel(group as ScreenGroup, locale)}
+              </h3>
+              <dl className="min-w-0 space-y-4">
                 {fields.map((property) => (
-                  <div key={property} className="space-y-2">
-                    <dt lang={screenName(read.release, property, locale).lang ?? undefined} className="font-medium">
+                  <div key={property} className="min-w-0 space-y-2">
+                    <dt
+                      lang={screenName(read.release, property, locale).lang ?? undefined}
+                      className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]"
+                    >
                       {screenName(read.release, property, locale).text}
                     </dt>
-                    <dd className="space-y-3 text-sm">
+                    <dd className="min-w-0 max-w-full space-y-3 text-sm [overflow-wrap:anywhere]">
                       {!subject.statements[property]?.length && (
                         <p className="text-muted-foreground">{m.facts_no_value({}, o)}</p>
                       )}
                       {(subject.statements[property] ?? []).map((statement) => (
-                        <div key={statement.id} className="space-y-2">
+                        <div key={statement.id} className="min-w-0 space-y-2">
                           <CandidateValue snak={statement} related={read.public!.related} locale={locale} />
                           {statement.qualifiers.map((part, index) => (
-                            <p key={index}>
+                            <p key={index} className="min-w-0 max-w-full [overflow-wrap:anywhere]">
                               <span lang={screenName(read.release, part.property.id, locale).lang ?? undefined}>
                                 {screenName(read.release, part.property.id, locale).text}:{' '}
                               </span>
@@ -198,7 +221,7 @@ export function ScreenProfile({
                             </p>
                           ))}
                           {statement.references.map((reference, index) => (
-                            <div key={index} className="border-s-2 ps-3">
+                            <div key={index} className="min-w-0 max-w-full border-s-2 ps-3 [overflow-wrap:anywhere]">
                               {reference.parts.map((part, at) => (
                                 <CandidateValue key={at} snak={part} related={read.public!.related} locale={locale} />
                               ))}
@@ -228,8 +251,8 @@ export function ScreenProfile({
       ) : (
         <>
           {transport.facts && transport.review && (
-            <details className="rounded-xl border border-border p-4" open>
-              <summary className="cursor-pointer font-semibold">{m.facts_title({}, o)}</summary>
+            <details className="min-w-0 rounded-xl border border-border p-4" open>
+              <summary className={screenSummaryClassName}>{m.facts_title({}, o)}</summary>
               <SubjectFacts
                 embedded
                 initial={current}
@@ -240,8 +263,8 @@ export function ScreenProfile({
             </details>
           )}
           {transport.relations && (
-            <details className="space-y-4 rounded-xl border border-border p-4">
-              <summary className="cursor-pointer font-semibold">{m.screen_credits_parts({}, o)}</summary>
+            <details className="min-w-0 space-y-4 rounded-xl border border-border p-4">
+              <summary className={screenSummaryClassName}>{m.screen_credits_parts({}, o)}</summary>
               <RelationEditor embedded id={id} locale={locale} search={search} transport={transport.relations} />
             </details>
           )}

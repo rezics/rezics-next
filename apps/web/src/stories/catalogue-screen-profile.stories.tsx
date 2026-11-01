@@ -79,6 +79,20 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 const field = (id: string) => screenName(definitions.release as Release, id, getLocale()).text;
+async function assertOwnedTarget(control: HTMLElement, region: HTMLElement, document: Document) {
+  const rect = control.getBoundingClientRect();
+  const bounds = region.getBoundingClientRect();
+  const view = document.defaultView!;
+  const phoneWidth = document.documentElement.clientWidth < 768;
+  const coarsePointer = view.matchMedia('(pointer: coarse)').matches;
+  const minimumHeight = phoneWidth || coarsePointer ? 44 : 32;
+  await expect(control).toBeVisible();
+  await expect(rect.height).toBeGreaterThanOrEqual(minimumHeight);
+  if (!phoneWidth && !coarsePointer) await expect(rect.height).toBeLessThan(44);
+  await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+  await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+  await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+}
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.selectOptions(
@@ -109,16 +123,57 @@ async function fill(canvasElement: HTMLElement) {
 }
 export const Route: Story = {
   render: () => <PageStory visitor="Signed In" path="/catalogue/screen" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: Run this actual route journey at phone390 and desktop1280. It measures owned select, add/remove and citation controls against rendered bounds, uses the real pointer media query for target sizing, and exercises add/remove with the keyboard before preserving the duration-entry oracle. Creation and correction result stories remain unchanged.',
+      },
+    },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const document = canvasElement.ownerDocument;
     await expect(await canvas.findByRole('heading', { level: 1, name: m.screen_title() })).toBeVisible();
     await expect(canvasElement.querySelectorAll('main#main-content')).toHaveLength(1);
     await userEvent.selectOptions(
       await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
       'schema:Episode',
     );
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:duration');
-    await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
+    const addField = canvas.getByRole('combobox', { name: m.character_add_fact() });
+    const fields = addField.closest('fieldset')!;
+    const add = canvas.getByRole('button', { name: m.correction_add() });
+    await assertOwnedTarget(addField, fields, document);
+    await assertOwnedTarget(add, fields, document);
+    await userEvent.selectOptions(addField, 'schema:director');
+    addField.focus();
+    await userEvent.tab();
+    await expect(add).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+
+    const directorHeading = await canvas.findByRole('heading', { name: field('schema:director') });
+    const director = within(directorHeading.closest('section')!);
+    const qualifier = director.getByRole('combobox', { name: m.correction_add_qualifier() });
+    await assertOwnedTarget(qualifier, directorHeading.closest('section')!, document);
+    await userEvent.selectOptions(qualifier, 'schema:position');
+    const citation = director.getByRole('textbox', { name: m.relation_citation() });
+    await assertOwnedTarget(citation, directorHeading.closest('section')!, document);
+    await userEvent.type(citation, 'https://example.org/credits/observatory-director');
+    await expect(citation).toHaveValue('https://example.org/credits/observatory-director');
+
+    const remove = director.getAllByRole('button', { name: m.relation_remove() });
+    await expect(remove).toHaveLength(2);
+    for (const action of remove) await assertOwnedTarget(action, directorHeading.closest('section')!, document);
+    remove[0]!.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(director.getAllByRole('button', { name: m.relation_remove() })).toHaveLength(1);
+    const removeFact = director.getByRole('button', { name: m.relation_remove() });
+    removeFact.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(directorHeading).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(addField, 'schema:duration');
+    await userEvent.click(add);
     const duration = within(canvas.getByRole('heading', { name: field('schema:duration') }).closest('section')!);
     await userEvent.type(duration.getByRole('textbox', { name: m.correction_amount() }), '+1440');
     await userEvent.selectOptions(

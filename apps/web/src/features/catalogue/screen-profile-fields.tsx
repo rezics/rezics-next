@@ -11,6 +11,13 @@ import { ScalarControl } from './statement-editor-view';
 import type { SnakInput, StatementInput } from './statement-editor';
 import { screenFactId, screenGroups, screenName, screenTarget, type ScreenGroup } from './screen-profile';
 
+const screenActionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const screenSelectClassName =
+  'w-full min-w-0 max-w-full max-md:[&>select]:min-h-11 md:pointer-fine:[&>select]:min-h-8 pointer-coarse:[&>select]:min-h-11';
+const screenInputClassName = 'min-w-0 max-w-full max-md:min-h-11 md:pointer-fine:min-h-8 pointer-coarse:min-h-11';
+const screenLabelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
+
 export type ScreenRow = { key: string; statement: StatementInput };
 export function screenGroupLabel(group: ScreenGroup, locale: string) {
   const o = { locale: locale as never };
@@ -105,7 +112,7 @@ function InitialStatement({
   const citation = statement.references[0]?.parts.find((part) => part.property.id === 'schema:url')?.value;
   if (!property) return <p role="status">{m.correction_preserved({}, o)}</p>;
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <InitialValue
         part={statement}
         release={release}
@@ -115,8 +122,11 @@ function InitialStatement({
         change={(value) => change({ ...statement, value })}
       />
       {(statement.qualifiers ?? []).map((part, index) => (
-        <div key={`${part.property.id}:${index}`} className="space-y-2 border-s-2 ps-3">
-          <p lang={screenName(release, part.property.id, locale).lang ?? undefined} className="text-sm font-medium">
+        <div key={`${part.property.id}:${index}`} className="min-w-0 space-y-2 border-s-2 ps-3">
+          <p
+            lang={screenName(release, part.property.id, locale).lang ?? undefined}
+            className="min-w-0 max-w-full text-sm font-medium [overflow-wrap:anywhere]"
+          >
             {screenName(release, part.property.id, locale).text}
           </p>
           <InitialValue
@@ -133,6 +143,7 @@ function InitialStatement({
             }
           />
           <Button
+            className={screenActionClassName}
             type="button"
             variant="ghost"
             onClick={() => change({ ...statement, qualifiers: statement.qualifiers!.filter((_, at) => at !== index) })}
@@ -142,9 +153,12 @@ function InitialStatement({
         </div>
       ))}
       {!!property.qualifiers.length && (
-        <Field>
-          <FieldLabel htmlFor={`screen-qualifier-${row.key}`}>{m.correction_add_qualifier({}, o)}</FieldLabel>
+        <Field className="min-w-0">
+          <FieldLabel className={screenLabelClassName} htmlFor={`screen-qualifier-${row.key}`}>
+            {m.correction_add_qualifier({}, o)}
+          </FieldLabel>
           <NativeSelect
+            className={screenSelectClassName}
             id={`screen-qualifier-${row.key}`}
             value=""
             onChange={(event) => {
@@ -170,9 +184,12 @@ function InitialStatement({
         </Field>
       )}
       {release.properties['schema:url']?.datatype === 'url' && (
-        <Field>
-          <FieldLabel htmlFor={`screen-citation-${row.key}`}>{m.relation_citation({}, o)}</FieldLabel>
+        <Field className="min-w-0">
+          <FieldLabel className={screenLabelClassName} htmlFor={`screen-citation-${row.key}`}>
+            {m.relation_citation({}, o)}
+          </FieldLabel>
           <Input
+            className={screenInputClassName}
             id={`screen-citation-${row.key}`}
             type="url"
             value={citation?.type === 'value' && typeof citation.content === 'string' ? citation.content : ''}
@@ -222,9 +239,12 @@ export function ScreenInitialFields({
     <fieldset disabled={disabled} className="min-w-0 space-y-5">
       <legend className="text-lg font-semibold">{m.screen_initial_facts({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.screen_native_help({}, o)}</p>
-      <Field>
-        <FieldLabel htmlFor="screen-add-field">{m.character_add_fact({}, o)}</FieldLabel>
+      <Field className="min-w-0">
+        <FieldLabel className={screenLabelClassName} htmlFor="screen-add-field">
+          {m.character_add_fact({}, o)}
+        </FieldLabel>
         <NativeSelect
+          className={screenSelectClassName}
           id="screen-add-field"
           value={fields.includes(property) ? property : ''}
           onChange={(event) => setProperty(event.target.value)}
@@ -250,6 +270,7 @@ export function ScreenInitialFields({
         </NativeSelect>
       </Field>
       <Button
+        className={screenActionClassName}
         type="button"
         variant="outline"
         disabled={
@@ -283,9 +304,12 @@ export function ScreenInitialFields({
               ? screenFactId(row.statement.property.id)
               : undefined
           }
-          className="space-y-4 rounded-xl border border-border bg-card p-4"
+          className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4"
         >
-          <h3 lang={name(row.statement.property.id).lang ?? undefined} className="font-sans font-semibold">
+          <h3
+            lang={name(row.statement.property.id).lang ?? undefined}
+            className="min-w-0 max-w-full font-sans font-semibold [overflow-wrap:anywhere]"
+          >
             {name(row.statement.property.id).text}
           </h3>
           <InitialStatement
@@ -296,7 +320,12 @@ export function ScreenInitialFields({
             disabled={disabled}
             change={(statement) => change(rows.map((item) => (item.key === row.key ? { ...item, statement } : item)))}
           />
-          <Button type="button" variant="ghost" onClick={() => change(rows.filter((item) => item.key !== row.key))}>
+          <Button
+            className={screenActionClassName}
+            type="button"
+            variant="ghost"
+            onClick={() => change(rows.filter((item) => item.key !== row.key))}
+          >
             {m.relation_remove({}, o)}
           </Button>
         </section>
