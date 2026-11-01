@@ -1,11 +1,14 @@
 import type { Access } from '../request/access.ts';
+import { inheritOriginalAuthenticator } from './authentication-work.ts';
 
 const bases = new WeakMap<Access, Access>();
 
 /** Build an Access adapter while preserving the identity of its installed ports. */
 export function deriveAccess(base: Access, overrides: Partial<Access>): Access {
+  const authenticate = base.authenticate.bind(base);
+  inheritOriginalAuthenticator(base.authenticate, authenticate);
   const derived: Access = {
-    authenticate: base.authenticate.bind(base),
+    authenticate,
     ...(base.prepare ? { prepare: base.prepare.bind(base) } : {}),
     ...(base.replayAuthorization ? { replayAuthorization: base.replayAuthorization.bind(base) } : {}),
     authorize: base.authorize.bind(base),

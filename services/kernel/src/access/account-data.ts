@@ -14,6 +14,7 @@ import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 import { accountAgentId } from '../semantic/agents.ts';
+import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
@@ -152,8 +153,14 @@ async function publicIdentityForAccount(
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */
-export async function readAccount(client: Queryable, route: number, accountId: string): Promise<Account | null> {
-  const row = await accountRead.run(client, { route, account_id: accountId });
+export async function readAccount(
+  client: Queryable,
+  route: number,
+  accountId: string,
+  work?: AccessWorkAccounting,
+): Promise<Account | null> {
+  const input = { route, account_id: accountId };
+  const row = await accessNativeWork(work, 'account-state', input, { targets: 1 }, () => accountRead.run(client, input));
   if (!row) return null;
   return { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) };
 }

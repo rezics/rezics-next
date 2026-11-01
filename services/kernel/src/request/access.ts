@@ -1,8 +1,8 @@
 import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
 import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
 import { accessRoot } from '../access/derived-access.ts';
-import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { hasOriginalAuthenticator } from '../access/authentication-work.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -241,7 +241,7 @@ export interface Access {
    */
   readonly kindAudience?: KindAudienceAccess;
   /** Authentication has no authorization-time input; preserve its native request contract. */
-  authenticate(token: string, context: { pool: Pool; deadline: number }): Promise<AccountActor>;
+  authenticate(token: string, context: AccessContext): Promise<AccountActor>;
   prepareReadDecisions?(input: PrepareReadDecisionsInput): Promise<ReadDecisions>;
   prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
   preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;
@@ -437,7 +437,8 @@ export async function actorOf(access: Access, request: Request, context: AccessC
 
   const credentials = /^Bearer[ \t]+([A-Za-z0-9\-._~+/]+=*)$/i.exec(authorization);
   if (!credentials) throw invalidRequest();
-  if (context.work) context.work.unavailable('Auth bearer authentication native work producer');
+  if (context.work && !hasOriginalAuthenticator(access.authenticate))
+    context.work.unavailable('Auth bearer authentication native work producer');
   return access.authenticate(credentials[1]!, context);
 }
 

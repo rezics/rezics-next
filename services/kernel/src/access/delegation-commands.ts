@@ -8,6 +8,7 @@ import { grantCommand, type GrantCommandContext } from './grant-command.ts';
 import createStatement from './delegation-create.sql';
 import revokeStatement from './delegation-revoke.sql';
 import readStatement from './delegation-read.sql';
+import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
 
 export class DelegationDeniedError extends Error {
   constructor() {
@@ -38,18 +39,20 @@ export async function readAssignment(
   requestedBy: string | null,
   assignedActorId: string,
   clock: KernelClock = systemClock,
+  work?: AccessWorkAccounting,
 ): Promise<AssignmentEvidence> {
   if (requestedBy === null) return { kind: 'none' };
   const match = typeof requestedBy === 'string' ? referencePattern.exec(requestedBy) : null;
   if (!match || match[0] !== requestedBy || routeOf(assignedActorId) === null) return { kind: 'unresolved' };
   try {
-    const row = await readStatement.run(client, {
+    const input = {
       route: routeOf(match[1]!)!,
       principal_id: match[1]!,
       request_id: match[2]!,
       actor_id: assignedActorId,
       at: clock().toISOString(),
-    });
+    };
+    const row = await accessNativeWork(work, 'assignment', input, {}, () => readStatement.run(client, input));
     if (!row) return { kind: 'unresolved' };
     return { kind: 'resolved', principalId: match[1]!, assignedActorId, requestId: match[2]!, valid: row.valid };
   } catch (error) {
