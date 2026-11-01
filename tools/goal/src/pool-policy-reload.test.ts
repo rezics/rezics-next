@@ -29,12 +29,19 @@ test('reservePerHour accepts every finite positive fractional hourly value while
       expect(pool.policy).toEqual({ ...independentPolicy, reservePerHour });
     }
 
-    for (const reservePerHour of [0, -0.6, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, '0.6', null, true, {}]) {
+    for (const reservePerHour of [
+      0,
+      -0.6,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      '0.6',
+      null,
+      true,
+      {},
+    ]) {
       expect(() =>
-        readPoolPolicies(
-          [{ ...sourcePool, policy: { ...sourcePool.policy, reservePerHour } }],
-          h.settings.localFile,
-        ),
+        readPoolPolicies([{ ...sourcePool, policy: { ...sourcePool.policy, reservePerHour } }], h.settings.localFile),
       ).toThrow('invalid reservePerHour');
     }
 
