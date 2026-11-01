@@ -36,10 +36,10 @@ export function validateReaction(input: unknown): ChangeReactionInput {
     !(input.kind === null || (typeof input.kind === 'string' && kinds.has(input.kind)))
   )
     throw new Error('Invalid reaction');
+  const expectedReader = 'expectedReader' in input ? input.expectedReader : undefined;
   if (
-    'expectedReader' in input &&
-    input.expectedReader !== undefined &&
-    (typeof input.expectedReader !== 'string' || !input.expectedReader || input.expectedReader.length > 128)
+    expectedReader !== undefined &&
+    (typeof expectedReader !== 'string' || !expectedReader || expectedReader.length > 128)
   )
     throw new Error('Invalid reaction');
   if (input.target === 'subject' && (input.kind === 'upvote' || input.kind === 'downvote'))
@@ -48,7 +48,7 @@ export function validateReaction(input: unknown): ChangeReactionInput {
     target: input.target,
     id: input.id,
     kind: input.kind as ReactionKind | null,
-    ...(typeof input.expectedReader === 'string' ? { expectedReader: input.expectedReader } : {}),
+    ...(typeof expectedReader === 'string' ? { expectedReader } : {}),
   };
 }
 
