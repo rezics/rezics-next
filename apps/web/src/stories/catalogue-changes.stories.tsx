@@ -9,6 +9,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { pageText } from '../features/pages/shared';
 import { sourceDefinitions } from '../kernel/fake/catalogue-sources';
+import { languageName } from '../subject/language';
 
 /** Isolated presentation samples use the delivered terms field/language structure, without native proof. */
 function ChangesStory({
@@ -104,11 +105,32 @@ export const Revisions: Story = {};
 export const ContinueAndExplain: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.changes_more() }));
-    await waitFor(() => expect(canvas.getByRole('button', { name: m.changes_more() })).toBeEnabled());
-    await userEvent.click(await canvas.findByRole('button', { name: m.changes_more() }));
-    await select(canvasElement, 2);
-    expect(await canvas.findByText(m.changes_terms())).toBeTruthy();
+    const revisions = within(await canvas.findByRole('region', { name: m.changes_revisions() }));
+    await userEvent.click(await revisions.findByRole('button', { name: m.changes_more() }));
+    await waitFor(() => expect(revisions.getByRole('button', { name: m.changes_more() })).toBeEnabled());
+    expect(revisions.getAllByRole('listitem')).toHaveLength(2);
+    expect(revisions.getByText(m.changes_proposal())).toBeTruthy();
+    expect(revisions.getByText(m.changes_acceptance())).toBeTruthy();
+    await userEvent.click(await revisions.findByRole('button', { name: m.changes_more() }));
+    const revision = await revisions.findByRole('button', {
+      name: new RegExp(m.changes_revision({ revision: '2' })),
+    });
+    expect(within(revision).getByText(m.changes_recorded())).toBeTruthy();
+    expect(within(revision).queryByText(m.changes_adoption())).toBeNull();
+    expect(revisions.getAllByRole('listitem')).toHaveLength(3);
+    expect(revisions.queryByRole('button', { name: m.changes_more() })).toBeNull();
+    await userEvent.click(revision);
+    const detail = within(await canvas.findByRole('region', { name: m.changes_revision({ revision: '2' }) }));
+    expect(await detail.findByText(m.changes_terms())).toBeTruthy();
+    expect(revision).toHaveAttribute('aria-pressed', 'true');
+    const fields = within(detail.getByLabelText(m.changes_fields()));
+    expect(within(fields.getByText(m.changes_name()).parentElement!).getByRole('definition')).toHaveTextContent(
+      languageName('fr', getLocale())!,
+    );
+    expect(within(fields.getByText(m.changes_description()).parentElement!).getByRole('definition')).toHaveTextContent(
+      languageName('en', getLocale())!,
+    );
+    expect(detail.getByText(m.changes_current_notice())).toBeTruthy();
     expect(canvas.getByRole('link', { name: m.changes_current() }).getAttribute('href')).toContain('/subjects/');
   },
 };

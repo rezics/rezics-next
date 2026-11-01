@@ -81,7 +81,7 @@ export function catalogueChangesFixture(
           : cursor === changesCursor
             ? { revisions: [], next: changesLastCursor }
             : cursor === changesLastCursor
-              ? { revisions: [row(2, 'adopt')], next: null }
+              ? { revisions: [row(2, 'terms')], next: null }
               : { revisions: [row(5, 'propose'), row(4, 'accept')], next: changesCursor },
       );
     }) as typeof fetch,
