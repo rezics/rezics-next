@@ -3848,6 +3848,19 @@ Inventory's released mapping-only snapshot reserves 6/5/8/16640, and its complet
 snapshot reserves 7/6/8/33024 whenever either enters this existing frame; subsequent fence and receiving calls
 reserve separately as above. Outside a Source callback their independent inventory admission remains unchanged.
 
+For the fresh subject path, the fixed consumer dispatch envelope is **11588/9856/2731/6843136/0**. Its expansion
+is fourteen C, the initial mapping/receiving/source/accepted-original/local-stage/verify rows, five R, eight H,
+thirteen G, six L outer portions (2/1/2/123136 each), both readiness reads, readiness/ready/closure outer writes,
+two seals, prepared work/roles, actual owner readiness's local portion, retirement/absence/locator outer writes,
+final job/barrier/cursor, separate final absence/roles, final receiving outer write, four A, three W, two K,
+one T, one P, three O, two SDK receipt reads, two physical inspections, and the single SDK retirement/deletion
+envelopes 13/7/17/41088/0 and 144/10/16/8320/0. H and G children are counted once in this expansion, rather
+than adding L again. This excludes the separately reserved initial Source staging/current verification and
+any additional independent receiving/inventory invocation described above. It is a handoff of the actual
+consumer body, not an adopted whole-frame budget. Semantic must reconcile those producer dispatches and exact
+SQL identities before adopting the final aggregate. A refusal spends its already reserved prefix; a delayed
+reschedule, when admitted, additionally spends C + 1/1/1/0/0. A later scheduling admission starts afresh.
+
 The SDK single-attempt dispatch table is in [Work's owner contract](../work/README.md#bounded-selected-identity-maintenance).
 It funds every nested lock/retirement/deletion dispatch, including failed attempts and a rollback slot before BEGIN.
 A new invocation never refunds prior work. No success retry occurs in this frame; exact prior committed readiness

@@ -509,7 +509,7 @@ export async function lockAgentIdentityHistoryHandoff(
 }
 
 // Native check: m(1), partition/domain(2), work(1), bounded roles(65), aggregate(1),
-// barrier(1), original Source function(16), SDK current lock(4). Each physical role
+// barrier(1), original Source wrapper/function(17), SDK current lock(4). Each physical role
 // is charged as a visible key. The outer SELECT/write is charged separately.
 export const AGENT_IDENTITY_HISTORY_GUARD_COST = Object.freeze({
   rows: 92,
