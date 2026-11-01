@@ -10,6 +10,7 @@ import {
   homeFeedStoryPage,
   homeKindStoryPage,
   homeQuestionStoryPage,
+  homeStorySpace,
   type HomeFeedStory,
 } from '../src/kernel/fake/home-feed-stories';
 import { setLocale } from '../src/paraglide/runtime.js';
@@ -65,6 +66,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
   let questionRevision = 1;
   let emptyQuestionPage = false;
   let oversizedQuestions = false;
+  let repeatedQuestionCursor = false;
   let directoryPause: Promise<void> | undefined;
   let pointPause: Promise<void> | undefined;
   const firstQuestion = homeQuestionStoryPage().ratingQuestions[0]!;
@@ -97,6 +99,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
       const page = homeQuestionStoryPage(url.searchParams.get('cursor') ?? undefined);
       return Response.json({
         ...page,
+        ...(repeatedQuestionCursor ? { next: url.searchParams.get('cursor') } : {}),
         ratingQuestions: oversizedQuestions
           ? Array.from({ length: 21 }, (_, index) => ({
               ...firstQuestion,
@@ -121,6 +124,16 @@ test('The default home route renders a bounded mixed discovery Following and Con
           { status: pointStatus },
         );
       return Response.json({ ...question, revision });
+    }
+    if (url.pathname.startsWith('/v1/spaceAddresses/')) {
+      expect(call.cache).toBe('no-store');
+      expect(call.redirect).toBe('manual');
+      return Response.json({ spaceId: homeStorySpace.spaceId });
+    }
+    if (url.pathname === `/v1/spaces/${homeStorySpace.spaceId}`) {
+      expect(call.cache).toBe('no-store');
+      expect(call.redirect).toBe('manual');
+      return Response.json({ space: homeStorySpace, community: null });
     }
     if (url.pathname === '/v1/subjects:search') {
       const body = (await call.json()) as {
@@ -166,6 +179,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
       state,
       url.searchParams.get('cursor') ?? undefined,
       url.searchParams.get('kind') ?? undefined,
+      url.searchParams.get('spaceId') ?? undefined,
       url.searchParams.get('ratingQuestionId') ?? undefined,
     );
     return Response.json(page, { headers: { 'cache-control': personal ? 'private, no-store' : 'public, max-age=60' } });
@@ -275,6 +289,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     document: browser.document,
     navigator: browser.navigator,
     HTMLElement: browser.HTMLElement,
+    HTMLInputElement: browser.HTMLInputElement,
     HTMLSelectElement: browser.HTMLSelectElement,
     HTMLButtonElement: browser.HTMLButtonElement,
     Element: browser.Element,
@@ -457,6 +472,20 @@ test('The default home route renders a bounded mixed discovery Following and Con
 
     // Default Home selects a real bounded-directory rating question and carries its exact identity
     // through public and private mixed-feed requests while retiring stale choices rows and cursors.
+    const selectSpace = async () => {
+      const label = [...host.querySelectorAll('label')].find((node) => node.textContent === m.home_space_label())!;
+      const input = host.querySelector<HTMLInputElement>(`[id="${label.htmlFor}"]`)!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(browser.HTMLInputElement.prototype, 'value')!.set!.call(
+          input,
+          'home-reading-room',
+        );
+        input.dispatchEvent(new browser.Event('input', { bubbles: true }) as unknown as Event);
+        input.dispatchEvent(new browser.Event('change', { bubbles: true }) as unknown as Event);
+      });
+      await click(m.home_space_lookup());
+      await click(m.home_space_select());
+    };
     const questionControl = () => host.querySelectorAll<HTMLSelectElement>('select')[1]!;
     const chooseQuestion = (id: string) =>
       act(async () => {
@@ -474,6 +503,8 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(calls).toHaveLength(beforeInvalidQuestion);
     await click(m.home_kinds_load());
     await choose(nativeKind);
+    await selectSpace();
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     let count = calls.length;
     await click(m.home_questions_load());
     expect(calls).toHaveLength(count + 1);
@@ -487,6 +518,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(pointCalls()).toHaveLength(1);
     expect(feedCalls()).toHaveLength(count + 1); // One mixed load; no per-dimension requests/refill.
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().get('kind')).toBe(nativeKind);
     expect(query().has('cursor')).toBe(false);
     expect(query().has('revision')).toBe(false);
@@ -505,6 +537,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(button(m.home_questions_next()).disabled).toBe(true); // Actual next=null.
     await click(m.library_next_page());
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().get('kind')).toBe(nativeKind);
     expect(query().get('cursor')).toBe('illustrative-signed-frontier');
     expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0); // Sparse is not refilled.
@@ -514,6 +547,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(pointCalls()).toHaveLength(pointsBeforeRefresh + 1);
     expect(query().has('cursor')).toBe(false);
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(host.textContent).toContain('Revision 2');
 
     // An actual point loss/refusal retains the selected identity, removes rows and offers refresh/clear.
@@ -531,8 +565,10 @@ test('The default home route renders a bounded mixed discovery Following and Con
     pointStatus = 200;
     await click(m.home_question_refresh());
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     await click(m.home_question_clear());
     expect(query().has('ratingQuestionId')).toBe(false);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().get('kind')).toBe(nativeKind);
     expect(query().has('cursor')).toBe(false);
     await chooseQuestion(secondQuestion.id);
@@ -549,6 +585,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     await settle();
     await click(m.home_kinds_load());
     await choose(nativeKind);
+    await selectSpace();
     await click(m.home_questions_load());
     await chooseQuestion(firstQuestion.id);
     expect(lastFeed().headers.get('authorization')).toBe('Bearer private-token');
@@ -557,9 +594,11 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(headers['Cache-Control']).toBe('private, no-store');
     await click(m.library_next_page());
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     await click(m.home_feed_following());
     expect(query().get('stream')).toBe('following');
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().get('kind')).toBe(nativeKind);
     expect(query().has('cursor')).toBe(false);
     expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
@@ -569,6 +608,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     feedStatus = 200;
     await click(m.home_feed_restart());
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().get('kind')).toBe(nativeKind);
     expect(query().has('cursor')).toBe(false);
     feedStatus = 503;
@@ -577,6 +617,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     feedStatus = 200;
     await click(m.library_follow_retry());
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().get('cursor')).toBe('illustrative-signed-frontier');
     await click(m.home_heading());
     await click(m.library_next_page());
@@ -590,6 +631,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(new URL(questionCalls().at(-1)!.url).searchParams.has('cursor')).toBe(false);
     expect(feedCalls()).toHaveLength(count + 1);
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().has('cursor')).toBe(false);
     expect(host.textContent).toContain('Revision 3');
     emptyQuestionPage = true;
@@ -598,8 +640,30 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(questionControl().value).toBe(firstQuestion.id);
     emptyQuestionPage = false;
 
-    // Delayed selected metadata cannot restore a cleared question; the old cursor retires immediately.
+    // A kind change fences a pending exact refresh without silently clearing its selected question or Space.
     let releasePoint!: () => void;
+    pointPause = new Promise<void>((resolve) => {
+      releasePoint = resolve;
+    });
+    count = feedCalls().length;
+    await click(m.home_question_refresh());
+    await choose('');
+    await act(async () => {
+      releasePoint();
+    });
+    pointPause = undefined;
+    expect(feedCalls()).toHaveLength(count);
+    expect(questionControl().value).toBe(firstQuestion.id);
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    expect(host.textContent).toContain(m.home_questions_unavailable());
+    await click(m.home_question_refresh());
+    expect(query().has('kind')).toBe(false);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
+    expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
+    expect(query().has('cursor')).toBe(false);
+    await choose(nativeKind);
+
+    // Delayed selected metadata cannot restore a cleared question; the old cursor retires immediately.
     pointPause = new Promise<void>((resolve) => {
       releasePoint = resolve;
     });
@@ -612,6 +676,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     pointPause = undefined;
     expect(questionControl().value).toBe('');
     expect(query().has('ratingQuestionId')).toBe(false);
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
 
     // A pending directory page is retired by selection; stale options cannot replace current metadata.
     client.setQueryData(sessionQuery.queryKey, {
@@ -740,6 +805,14 @@ test('The default home route renders a bounded mixed discovery Following and Con
     await click(m.home_questions_restart_action());
     expect(new URL(questionCalls().at(-1)!.url).searchParams.has('cursor')).toBe(false);
     expect(questionControl().options).toHaveLength(2);
+    repeatedQuestionCursor = true;
+    await click(m.home_questions_next());
+    expect(host.textContent).toContain(m.home_questions_unavailable());
+    expect(questionControl().options).toHaveLength(1);
+    repeatedQuestionCursor = false;
+    await click(m.home_questions_retry());
+    expect(questionControl().options).toHaveLength(2);
+    expect(button(m.home_questions_next()).disabled).toBe(true);
     const beforeMismatchMetadata = calls.length;
     expect(await readHomeQuestions({ data: { locale: 'en', viewer: 'viewer-b' } })).toEqual({
       status: 'auth',

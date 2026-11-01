@@ -140,9 +140,9 @@ a post or reply requires that qualifying review thread and its own current discl
 membership. Native Accounts, Collections and ordinary discussions have no membership in this version. A Subject's
 Space witness and question-review witness may be different threads; selection does not assert that its cited review
 was posted in the selected Space. Private votes, aggregates, question grain/applicability, Realm populations and
-editorial Contexts are not substitutes for these witnesses. The adopted future request-only `ratingQuestion.id`
-shape is not an installed API, stored-reference predicate, permission or rating threshold. Detailed producer
-admission belongs to the feed owner, rather than a Web-derived membership rule.
+editorial Contexts are not substitutes for these witnesses. The exact optional request field is `ratingQuestionId`;
+the server resolves its current revision. Metadata supplies no stored-reference predicate, permission or rating
+threshold. Detailed producer admission belongs to the feed owner, rather than a Web-derived membership rule.
 
 Before a dependent consumer promises completion, preflight the complete positive DEFAULT call graph, including:
 
@@ -182,7 +182,7 @@ exact question point route is used at selection and explicit currentness refresh
 question text; grain, revision, scale and all control/error text have all eight launch-locale messages.
 
 The existing default-route composition regression has additional authored cases for question propagation, bounded
-paging, sparse continuation, revision/lost identity and stale request isolation. It has not been executed for this
+paging, conjunctive kind/Space/question propagation, sparse continuation, revision/lost identity and stale request isolation. It has not been executed for this
 source delivery. Home-only illustrative native-format envelopes support the interactive PageStory IDs
 `pages-discovery-home--question-selection`, `pages-discovery-home--question-choices-unavailable` and
 `pages-discovery-home--question-choices-next-page`; existing IDs remain. These are consumer fixtures, not native

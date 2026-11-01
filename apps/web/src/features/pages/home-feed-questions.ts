@@ -101,6 +101,8 @@ export async function readHomeQuestionPage(
         parsed.output.ratingQuestions.length
     )
       return { status: 'unavailable', code: 'invalid_question_response' };
+    if (cursor !== undefined && parsed.output.next === cursor)
+      return { status: 'unavailable', code: 'repeated_question_cursor' };
     return { status: 'ready', page: parsed.output };
   } catch (error) {
     return failed(error);
@@ -154,7 +156,12 @@ export function createHomeQuestionChoices(
   };
   const retire = () => {
     generation++;
-    if (selectedPending) snapshot = { ...snapshot, selection: 'unavailable', failure: { status: 'unavailable', code: 'question_refresh_retired' } };
+    if (selectedPending)
+      snapshot = {
+        ...snapshot,
+        selection: 'unavailable',
+        failure: { status: 'unavailable', code: 'question_refresh_retired' },
+      };
     pending?.abort();
     selectedPending?.abort();
     pending = selectedPending = undefined;
@@ -232,6 +239,7 @@ export function createHomeQuestionChoices(
         const observed = result.page.ratingQuestions.find((question) => question.id === snapshot.selected?.id);
         if (observed && observed.revision !== snapshot.selected.revision) {
           selectedPending?.abort();
+          selectedPending = undefined;
           snapshot = { ...snapshot, selected: observed, selection: 'ready', failure: undefined };
           changed(observed, { status: 'ready', question: observed });
         }

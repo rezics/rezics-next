@@ -12,7 +12,12 @@ import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spac
 import { HomeFeedSpaceControl } from './home-feed-space-control';
 import { HomeFeedKindControl } from './home-feed-kind-control';
 import { HomeFeedQuestionControl } from './home-feed-question-control';
-import { createHomeQuestionChoices, questionFeedFailure, type HomeQuestionsReader, type HomeQuestionReader } from './home-feed-questions';
+import {
+  createHomeQuestionChoices,
+  questionFeedFailure,
+  type HomeQuestionsReader,
+  type HomeQuestionReader,
+} from './home-feed-questions';
 import type { ReactNode } from 'react';
 import { PageHeading } from '../../shell/page-heading';
 import { homeFeedDestination, homeFeedResume, homeFeedTitle } from './home-feed-destination';
@@ -269,7 +274,17 @@ export function HomeFeed({
 }
 
 /** Route and stories both mount this bounded default consumer. Viewer changes remount it synchronously. */
-export function HomeFeedConsumer({ initial, locale, signedIn, read, readKinds, readSpace, readQuestions, readQuestion, origin }: {
+export function HomeFeedConsumer({
+  initial,
+  locale,
+  signedIn,
+  read,
+  readKinds,
+  readSpace,
+  readQuestions,
+  readQuestion,
+  origin,
+}: {
   initial: HomeFeedResult;
   locale: string;
   signedIn: boolean;
@@ -283,22 +298,26 @@ export function HomeFeedConsumer({ initial, locale, signedIn, read, readKinds, r
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
   // Store callbacks run after construction, when both independent selection stores exist.
-  const questions = useState(() => createHomeQuestionChoices(readQuestions, readQuestion, (question, result) => {
-    choices.retire();
-    spaces.retire();
-    const { cursor: _cursor, ratingQuestionId: _question, ...selection } = window.snapshot().input;
-    const input = { ...selection, ...(question ? { ratingQuestionId: question.id } : {}) };
-    window.retire(result && result.status !== 'ready' ? questionFeedFailure(result) : undefined, input);
-    if ((!question || result?.status === 'ready') && !loadRefusal(input)) void window.load(input);
-  }))[0];
-  const spaces = useState(() => createHomeSpaceSelection(readSpace, (space, available) => {
-    choices.retire();
-    questions.retire();
-    const { cursor: _cursor, spaceId: _space, ...selection } = window.snapshot().input;
-    const input = { ...selection, ...(space ? { spaceId: space.spaceId } : {}) };
-    window.retire(available ? undefined : { state: 'unavailable', code: 'space_unavailable' }, input);
-    if (available && !loadRefusal(input)) void window.load(input);
-  }))[0];
+  const questions = useState(() =>
+    createHomeQuestionChoices(readQuestions, readQuestion, (question, result) => {
+      choices.retire();
+      spaces.retire();
+      const { cursor: _cursor, ratingQuestionId: _question, ...selection } = window.snapshot().input;
+      const input = { ...selection, ...(question ? { ratingQuestionId: question.id } : {}) };
+      window.retire(result && result.status !== 'ready' ? questionFeedFailure(result) : undefined, input);
+      if ((!question || result?.status === 'ready') && !loadRefusal(input)) void window.load(input);
+    }),
+  )[0];
+  const spaces = useState(() =>
+    createHomeSpaceSelection(readSpace, (space, available) => {
+      choices.retire();
+      questions.retire();
+      const { cursor: _cursor, spaceId: _space, ...selection } = window.snapshot().input;
+      const input = { ...selection, ...(space ? { spaceId: space.spaceId } : {}) };
+      window.retire(available ? undefined : { state: 'unavailable', code: 'space_unavailable' }, input);
+      if (available && !loadRefusal(input)) void window.load(input);
+    }),
+  )[0];
   // These stores retain metadata only. Every feed request still goes through the single window.
   function loadRefusal(input: FeedInput): boolean {
     if (!spaces.snapshot().available) {
@@ -307,7 +326,12 @@ export function HomeFeedConsumer({ initial, locale, signedIn, read, readKinds, r
     }
     const question = questions.snapshot();
     if (question.selected && question.selection !== 'ready') {
-      window.retire(question.selection === 'loading' ? undefined : questionFeedFailure(question.failure ?? { status: 'unavailable', code: 'question_unavailable' }), input);
+      window.retire(
+        question.selection === 'loading'
+          ? undefined
+          : questionFeedFailure(question.failure ?? { status: 'unavailable', code: 'question_unavailable' }),
+        input,
+      );
       return true;
     }
     return false;
@@ -328,24 +352,53 @@ export function HomeFeedConsumer({ initial, locale, signedIn, read, readKinds, r
   const spaceSnapshot = useSyncExternalStore(spaces.subscribe, spaces.snapshot, spaces.snapshot);
   const kinds = useSyncExternalStore(choices.subscribe, choices.snapshot, choices.snapshot);
   const snapshot = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
-  useEffect(() => () => { choices.retire(); spaces.retire(); questions.retire(); }, [choices, spaces, questions]);
+  useEffect(
+    () => () => {
+      choices.retire();
+      spaces.retire();
+      questions.retire();
+    },
+    [choices, spaces, questions],
+  );
   useEffect(() => {
     if (signedIn) void window.load({ stream: 'home' });
     return window.clear;
   }, [window, signedIn]);
   return (
-    <HomeFeed result={snapshot.result} locale={locale} signedIn={signedIn} stream={snapshot.input.stream} busy={snapshot.busy}
-      spaceControl={<HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />}
+    <HomeFeed
+      result={snapshot.result}
+      locale={locale}
+      signedIn={signedIn}
+      stream={snapshot.input.stream}
+      busy={snapshot.busy}
+      spaceControl={
+        <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
+      }
       questionControl={<HomeFeedQuestionControl choices={questions} snapshot={questionSnapshot} locale={locale} />}
-      kindControl={<HomeFeedKindControl choices={choices} snapshot={kinds} locale={locale} onSelect={(choice) => {
-        choices.select(choice);
-        const { cursor: _cursor, kind: _kind, ...selection } = snapshot.input;
-        loadSelection({ ...selection, ...(choice ? { kind: choice.id } : {}) });
-      }} />}
-      onSelect={(stream) => { const { cursor: _cursor, ...selection } = snapshot.input; loadSelection({ ...selection, stream }); }}
+      kindControl={
+        <HomeFeedKindControl
+          choices={choices}
+          snapshot={kinds}
+          locale={locale}
+          onSelect={(choice) => {
+            choices.select(choice);
+            const { cursor: _cursor, kind: _kind, ...selection } = snapshot.input;
+            loadSelection({ ...selection, ...(choice ? { kind: choice.id } : {}) });
+          }}
+        />
+      }
+      onSelect={(stream) => {
+        const { cursor: _cursor, ...selection } = snapshot.input;
+        loadSelection({ ...selection, stream });
+      }}
       onRetry={retry}
-      onRestart={() => { const { cursor: _cursor, ...selection } = snapshot.input; loadSelection(selection); }}
-      onNext={(cursor) => { if (!loadRefusal(snapshot.input)) void window.load({ ...snapshot.input, cursor }); }}
+      onRestart={() => {
+        const { cursor: _cursor, ...selection } = snapshot.input;
+        loadSelection(selection);
+      }}
+      onNext={(cursor) => {
+        if (!loadRefusal(snapshot.input)) void window.load({ ...snapshot.input, cursor });
+      }}
     />
   );
 }
