@@ -11,6 +11,7 @@ import {
   readAccountIdentitySource,
   assertAccountIdentitySource,
   type AccountIdentitySource,
+  type AccountIdentityReversalSettlement,
 } from '../access/agent-verification-identity.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import { createHash } from 'node:crypto';
@@ -644,9 +645,13 @@ export async function lockIdentitySourceConsumerCut(
   tx: CommandTransaction,
   reference: IdentitySourceConsumerReference,
   expected: IdentitySourceConsumerGeneration,
+  reversal?: AccountIdentityReversalSettlement,
 ): Promise<IdentitySourceConsumerDisposition | null> {
   const row = await currentConsumerClaim(tx, reference, expected);
   if (!row || row.terminal_custody !== null) return null;
+  // This is a same-home candidate only. Source persists a subject discharge only after
+  // verifyIdentitySourceConsumerCut revalidates this exact Accounts receipt in the same tx.
+  if (reference.erasedRole === 'subject' && reversal) return 'discharged';
   return 'transferred';
 }
 
@@ -655,10 +660,13 @@ export async function verifyIdentitySourceConsumerCut(
   reference: IdentitySourceConsumerReference,
   expected: IdentitySourceConsumerGeneration,
   disposition: IdentitySourceConsumerDisposition,
+  reversal?: AccountIdentityReversalSettlement,
 ): Promise<boolean> {
-  // A settled native reversal receipt is not available locally. Keeping this
-  // branch pending preserves the surviving consumers, including Account subject.
-  if (disposition !== 'transferred') return false;
+  if (disposition === 'discharged') {
+    if (reference.erasedRole !== 'subject' || !reversal) return false;
+    const account = await import('../access/agent-verification-identity.ts');
+    if (!(await account.verifyAccountIdentityReversalSettlement(tx, reference, reversal))) return false;
+  } else if (disposition !== 'transferred' || reference.erasedRole === 'subject') return false;
   const row = await currentConsumerClaim(tx, reference, expected);
   if (!row) return false;
   if (row.terminal_custody === null) return true;

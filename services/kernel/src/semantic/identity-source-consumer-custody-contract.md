@@ -59,9 +59,11 @@ In `identity-epoch-binding.ts`:
 readIdentitySourceConsumerWork(pool: Pool, reference: IdentitySourceConsumerReference,
   context: IdentitySourceConsumerContext): Promise<IdentitySourceConsumerWork | null>;
 lockIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
-  expected: IdentitySourceConsumerGeneration): Promise<IdentitySourceConsumerDisposition | null>;
+  expected: IdentitySourceConsumerGeneration,
+  reversal?: AccountIdentityReversalSettlement): Promise<IdentitySourceConsumerDisposition | null>;
 verifyIdentitySourceConsumerCut(tx: CommandTransaction, reference: IdentitySourceConsumerReference,
-  expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition): Promise<boolean>;
+  expected: IdentitySourceConsumerGeneration, disposition: IdentitySourceConsumerDisposition,
+  reversal?: AccountIdentityReversalSettlement): Promise<boolean>;
 ```
 
 `read` resolves native replay, undo and restore generations using the same live
@@ -72,13 +74,12 @@ from the accepted claim/job. Source separately charges its fixed local
 claim/source/progress commands against this frame. `lock` and `verify` use the native
 binding and terminal trigger. The current lock can transfer an immutable technical
 input after exact claim/current-generation validation, and later consumers consult
-the committed terminal pointer. Subject discharge is still unavailable: these owner
-methods do not yet prove a settled native reversal and all surviving consumers. A
-generation pre-read, fixed publication state or current pending-job absence cannot
-replace that proof. `verify` revalidates the same-source state in the caller's live
-original-home command without foreign I/O. Existing `readAccountIdentityUndo` resolves
-the genuine technical source after transfer, retaining the original accepted job and
-input.
+the committed terminal pointer. Subject discharge now requires the actual Accounts
+reversal settlement described below. Source carries its opaque proof only in the live
+maintenance invocation; the terminal row stores no proof brand. `verify` revalidates
+the same-source state in the caller's live original-home command without foreign I/O.
+Existing `readAccountIdentityUndo` resolves the genuine technical source after
+transfer, retaining the original accepted job and input.
 
 In `identity-scoped-observations.ts`:
 
@@ -113,6 +114,8 @@ acceptAccountIdentityTechnicalSource(tx: CommandTransaction,
   reference: IdentitySourceConsumerReference): Promise<IdentityNativeReceipt | null>;
 verifyAccountIdentityTechnicalSource(tx: CommandTransaction,
   reference: IdentitySourceConsumerReference, receiving: IdentityNativeReceipt): Promise<boolean>;
+readAccountIdentityReversalSettlement(pool: Pool, reference: IdentitySourceConsumerReference,
+  context: IdentitySourceConsumerContext): Promise<AccountIdentityReversalSettlement | null>;
 ```
 
 These are same-original-home native receiving operations. Acceptance resolves the
@@ -126,6 +129,28 @@ must resolve this native obligation after original source minimization, without 
 active-account requirement or current-release reconstruction. Verify resolves and
 locks that actual durable receiver in the same live command, with no foreign I/O.
 Source's own receipt does not implement this receiver and cannot stand in for it.
+
+`readAccountIdentityReversalSettlement` is the actual Account-owned same-source
+settlement reader. It uses the original funded `identityConsumerWork` frame and exact
+reference; Source never reconstructs the reversal's own accepted job or accepts an
+opaque proof by brand alone. The Semantic binding owner calls the released Account
+`verifyAccountIdentityReversalSettlement(tx, reference, proof)` from its same-home
+`verifyIdentitySourceConsumerCut` for both the pre-commit cut and later local receipt
+verification. This Account proof closes only Account-native reversal dependencies;
+it does not close Library scopes, Semantic's own cut, History copies, SDK custody,
+or Account root/copy erasure.
+
+The existing default native frame is 249 rows, 249 points, 81 statements and 286720
+bytes. The same terminal invocation must also fund the fixed Source work (32 rows,
+29 statements, 32768 bytes), binding snapshot (13 rows, 10 statements, 16384 bytes),
+two bounded directory children (200 rows, 36 statements, 229376 bytes), Account
+settlement read (64 rows, 20 statements, 65536 bytes), its same-home verification
+before commit and after commit (128 rows, 30 statements, 131072 bytes), and Source's
+same-home receipt verification (4 rows, 6 statements, 8192 bytes). The sum is 441
+rows/points, 131 statements and 483328 bytes. With the original configured bounds,
+the Account read or verification refuses before dispatch, so subject discharge stays
+pending. Increasing those existing bounds is a product/spec decision; Source does not
+mint another work frame or bypass the Account reservations.
 
 The Semantic retained-directory reader, scoped fence, and Accounts technical receiver
 are present and consumed through these original ports. Their native receipts remain

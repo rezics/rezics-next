@@ -22,6 +22,7 @@ import { identityScopeAddress } from './identity-scoped-observations.ts';
 import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';
 import type { IdentityReceivingSelection, IdentityReceivingRecord } from './identity-receiving-effects-types.ts';
 import { readAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
+import type { AccountIdentityReversalSettlement } from '../access/agent-verification-identity-reversal.ts';
 import {
   currentCommand,
   currentCommandResources,
@@ -101,12 +102,14 @@ type BindingConsumerOwner = {
     tx: CommandTransaction,
     reference: IdentitySourceConsumerReference,
     expected: IdentitySourceConsumerGeneration,
+    reversal?: AccountIdentityReversalSettlement,
   ): Promise<IdentitySourceConsumerDisposition | null>;
   verifyIdentitySourceConsumerCut(
     tx: CommandTransaction,
     reference: IdentitySourceConsumerReference,
     expected: IdentitySourceConsumerGeneration,
     disposition: IdentitySourceConsumerDisposition,
+    reversal?: AccountIdentityReversalSettlement,
   ): Promise<boolean>;
 };
 type ScopedConsumerOwner = {
@@ -122,6 +125,11 @@ type ScopedConsumerOwner = {
   ): Promise<IdentityNativeReceipt | null>;
 };
 type TechnicalConsumerOwner = {
+  readAccountIdentityReversalSettlement(
+    pool: Pool,
+    reference: IdentitySourceConsumerReference,
+    context: IdentitySourceConsumerContext,
+  ): Promise<AccountIdentityReversalSettlement | null>;
   acceptAccountIdentityTechnicalSource(
     tx: CommandTransaction,
     reference: IdentitySourceConsumerReference,
@@ -137,7 +145,13 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = /^[0-9a-f]{64}$/;
 const json = (value: unknown): string => canonicalize(JSON.parse(serializeIdentityValue(value)))!;
 const locator = Symbol('identity-source-consumer-custody-locator');
-type LocalProof = IdentitySourceConsumerCustody & Readonly<{ [locator]: IdentityNativeReceipt }>;
+type LocalProof = IdentitySourceConsumerCustody &
+  Readonly<{
+    [locator]: Readonly<{
+      source: IdentityNativeReceipt;
+      reversal: AccountIdentityReversalSettlement | null;
+    }>;
+  }>;
 
 function valid(reference: IdentitySourceConsumerReference): boolean {
   const { receipt, source, barrier } = reference;
@@ -324,17 +338,16 @@ export async function readIdentitySourceConsumerCustody(
     try {
       // A genuine transferred source remains readable after Accounts minimizes its original
       // bytes. Resolve terminal native custody before asking the old-source/undo reader.
-      const committed = (
+      const committedRow = (
         await runCommand(pool, { partition: reference.source.partition, deadline: context.deadline }, async (tx) => {
           const retained = (await tx.query<Retained>(select.sql, referenceValues(reference))).rows[0];
           if (!retained) return noEffect(null);
           const row = await latest(tx, retained);
-          if (!row || !terminal(row.state)) return noEffect(null);
-          const proof = nativeProof(reference, row);
-          return noEffect((await verifyIdentitySourceConsumerCustody(tx, reference, proof)) ? proof : null);
+          return noEffect(row && terminal(row.state) ? row : null);
         })
       ).value;
-      if (committed) return committed;
+      if (committedRow)
+        return await verifiedTerminal(pool, reference, committedRow, context.deadline, funded);
       const source = await original(pool, reference, context.deadline);
       if (!source) return null;
       const binding = (
@@ -484,15 +497,45 @@ function boundedFrontier(value: IdentityFrontier): boolean {
     Buffer.byteLength(json(value)) <= 2048
   );
 }
-function nativeProof(reference: IdentitySourceConsumerReference, row: Progress): IdentitySourceConsumerCustody {
+function nativeProof(
+  reference: IdentitySourceConsumerReference,
+  row: Progress,
+  reversal: AccountIdentityReversalSettlement | null = null,
+): IdentitySourceConsumerCustody {
   return Object.freeze({
     [locator]: Object.freeze({
-      partition: reference.source.partition,
-      epoch: row.owner_epoch,
-      position: BigInt(row.position),
-      transactionId: row.transaction_id,
+      source: Object.freeze({
+        partition: reference.source.partition,
+        epoch: row.owner_epoch,
+        position: BigInt(row.position),
+        transactionId: row.transaction_id,
+      }),
+      reversal,
     }),
   }) as LocalProof;
+}
+async function verifiedTerminal(
+  pool: Pool,
+  reference: IdentitySourceConsumerReference,
+  row: Progress,
+  deadline: number,
+  identityConsumerWork: IdentitySourceConsumerMaintenanceWork,
+): Promise<IdentitySourceConsumerCustody | null> {
+  let reversal: AccountIdentityReversalSettlement | null = null;
+  if (row.state === 'discharged') {
+    if (reference.erasedRole !== 'subject') return null;
+    reversal = await (await owners()).technical.readAccountIdentityReversalSettlement?.(pool, reference, {
+      deadline,
+      identityConsumerWork,
+    });
+    if (!reversal) return null;
+  }
+  const proof = nativeProof(reference, row, reversal);
+  return (
+    await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
+      noEffect((await verifyIdentitySourceConsumerCustody(tx, reference, proof)) ? proof : null),
+    )
+  ).value;
 }
 async function owners() {
   // Only exact original modules are consulted. Missing additive exports fail pending, with
@@ -661,14 +704,7 @@ async function advanceConsumers(
     )
   ).value;
   if (saved && terminal(saved.state)) {
-    const proof = nativeProof(reference, saved);
-    return (
-      await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
-        noEffect(await verifyIdentitySourceConsumerCustody(tx, reference, proof)),
-      )
-    ).value
-      ? proof
-      : null;
+    return verifiedTerminal(pool, reference, saved, deadline, identityConsumerWork);
   }
   const work = await ports.binding.readIdentitySourceConsumerWork?.(pool, reference, {
     deadline,
@@ -914,6 +950,14 @@ async function finishConsumers(
   identityConsumerWork: IdentitySourceConsumerMaintenanceWork,
 ): Promise<IdentitySourceConsumerCustody | null> {
   if (!ports.binding.lockIdentitySourceConsumerCut || !ports.binding.verifyIdentitySourceConsumerCut) return null;
+  let reversal: AccountIdentityReversalSettlement | null = null;
+  if (reference.erasedRole === 'subject') {
+    reversal = await ports.technical.readAccountIdentityReversalSettlement?.(pool, reference, {
+      deadline,
+      identityConsumerWork,
+    });
+    if (!reversal) return null;
+  }
   if (
     (await verifyIdentityPrearmCustodyCut(pool, reference.job, directory.cut, { deadline, identityConsumerWork }))
       .status !== 'current'
@@ -933,7 +977,12 @@ async function finishConsumers(
     const owner = await readPartition(tx, reference.source.partition);
     const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
     if (!owner || owner.writeState !== 'active' || !sameSource(reference, source)) return noEffect(false);
-    const disposition = await ports.binding.lockIdentitySourceConsumerCut!(tx, reference, generation);
+    const disposition = await ports.binding.lockIdentitySourceConsumerCut!(
+      tx,
+      reference,
+      generation,
+      reversal ?? undefined,
+    );
     if (
       !disposition ||
       (reference.erasedRole === 'subject' && disposition !== 'discharged') ||
@@ -960,7 +1009,15 @@ async function finishConsumers(
       )
         throw new IdentityEpochStoreError('identity_effect_stale', 'Technical source acceptance lost native custody');
     }
-    if (!(await ports.binding.verifyIdentitySourceConsumerCut!(tx, reference, generation, disposition)))
+    if (
+      !(await ports.binding.verifyIdentitySourceConsumerCut!(
+        tx,
+        reference,
+        generation,
+        disposition,
+        reversal ?? undefined,
+      ))
+    )
       throw new IdentityEpochStoreError('identity_effect_stale', 'Original consumer fence changed during transfer');
     bindSemanticProducerRoles(tx, roles);
     registerCommandCallback(tx, async (transactionId) => {
@@ -1004,10 +1061,13 @@ async function finishConsumers(
   if (!result.value) return null;
   const proof = Object.freeze({
     [locator]: Object.freeze({
-      partition: result.partition,
-      epoch: result.epoch,
-      position: result.position,
-      transactionId: result.transactionId,
+      source: Object.freeze({
+        partition: result.partition,
+        epoch: result.epoch,
+        position: result.position,
+        transactionId: result.transactionId,
+      }),
+      reversal,
     }),
   }) as LocalProof;
   // Re-enter only this home after commit. The brand cannot replace durable live revalidation.
@@ -1047,7 +1107,8 @@ export async function verifyIdentitySourceConsumerCustody(
     resources.deadline <= Date.now()
   )
     return false;
-  const native = (proof as LocalProof | null)?.[locator];
+  const local = (proof as LocalProof | null)?.[locator];
+  const native = local?.source;
   if (!native || native.partition !== reference.source.partition) return false;
   const retained = (await tx.query<Retained>(select.sql, referenceValues(reference))).rows[0];
   if (!retained || !(await acceptedClaim(tx, reference))) return false;
@@ -1069,7 +1130,15 @@ export async function verifyIdentitySourceConsumerCustody(
   )
     return false;
   const ports = await owners();
-  if (!(await ports.binding.verifyIdentitySourceConsumerCut?.(tx, reference, generations(row), row.state)))
+  if (
+    !(await ports.binding.verifyIdentitySourceConsumerCut?.(
+      tx,
+      reference,
+      generations(row),
+      row.state,
+      local.reversal ?? undefined,
+    ))
+  )
     return false;
   if (row.state !== 'transferred') return true;
   if (
