@@ -382,7 +382,10 @@ export async function runHostTests(
 
 /** Runs the Auth-backed Web host fixture in Auth's database lane without widening the general Web host suite. */
 async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  const routed = await routeWebCheck({ root, cwd: app, command: ['bun', 'scripts/check.ts', '--auth-binding-host'] }, env);
+  const routed = await routeWebCheck(
+    { root, cwd: app, command: ['bun', 'scripts/check.ts', '--auth-binding-host'] },
+    env,
+  );
   if (routed !== null) {
     if (routed !== 0) throw new Error(`Auth binding host test placement failed with status ${routed}`);
     return;
@@ -564,7 +567,12 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   const workerReport = browserWorkerRequest(args)?.report;
   const returned = workerReport ? [workspacePath(root, workerReport)] : ['apps/web/.cache/check-timings.json'];
   if (args.includes('--prepare-only')) returned.push('apps/web/.dev.vars');
-  const routed = await routeWebCheck({ root, cwd: app, command: ['bun', 'scripts/check.ts', ...args], returns: returned });
+  const routed = await routeWebCheck({
+    root,
+    cwd: app,
+    command: ['bun', 'scripts/check.ts', ...args],
+    returns: returned,
+  });
   if (routed !== null) {
     process.exitCode = routed;
     return;

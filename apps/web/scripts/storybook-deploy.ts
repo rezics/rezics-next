@@ -130,7 +130,9 @@ export async function validateStorybook(): Promise<void> {
   const app = resolve(import.meta.dir, '..');
   const root = resolve(app, '../..');
   const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? resolve(app, 'storybook-static'));
-  const code = await routeWebCheck({ root, cwd: app,
+  const code = await routeWebCheck({
+    root,
+    cwd: app,
     command: ['bun', 'scripts/storybook-deploy.ts', '--validate-only'],
     returns: [workspacePath(root, output)],
   });
@@ -139,8 +141,13 @@ export async function validateStorybook(): Promise<void> {
     return;
   }
   for (const script of ['scripts/storybook-build.ts', 'scripts/storybook-smoke.ts']) {
-    const child = Bun.spawn(['bun', script], { cwd: app, env: process.env,
-      stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+    const child = Bun.spawn(['bun', script], {
+      cwd: app,
+      env: process.env,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
     const status = await child.exited;
     if (status !== 0) throw new WebCheckFailure(status, script);
   }
@@ -166,7 +173,11 @@ if (import.meta.main) {
       } else {
         const run = async (script: string) => {
           const result = Bun.spawn(['bun', script], {
-            cwd: app, env: process.env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit',
+            cwd: app,
+            env: process.env,
+            stdin: 'inherit',
+            stdout: 'inherit',
+            stderr: 'inherit',
           });
           const code = await result.exited;
           if (code !== 0) throw new WebCheckFailure(code, script);

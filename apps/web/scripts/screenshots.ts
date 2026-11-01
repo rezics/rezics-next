@@ -707,7 +707,8 @@ export async function runScreenshots(argv: readonly string[] = process.argv.slic
     return 0;
   }
   const returned = workspaceRelative(options.out);
-  if (returned === undefined) throw new Error('Web screenshots unavailable: --out must be inside the candidate workspace.');
+  if (returned === undefined)
+    throw new Error('Web screenshots unavailable: --out must be inside the candidate workspace.');
   return placeWebCheck(
     {
       label: 'web screenshots',

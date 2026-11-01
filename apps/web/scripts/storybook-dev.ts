@@ -3,7 +3,9 @@ import { requireWebCheckCustody } from './check-placement.ts';
 
 /** Interactive listeners need a real remote access/tunnel and durable long-running custody API. */
 export function unavailableInteractiveCheck(): never {
-  throw new Error('Interactive Web/Storybook development is unavailable: the remote check interface supports finite commands only; remote access/tunnel and durable listener custody are not available.');
+  throw new Error(
+    'Interactive Web/Storybook development is unavailable: the remote check interface supports finite commands only; remote access/tunnel and durable listener custody are not available.',
+  );
 }
 
 if (import.meta.main) {
@@ -15,15 +17,22 @@ if (import.meta.main) {
     const app = resolve(import.meta.dir, '..');
     requireWebCheckCustody(resolve(app, '../..'), app);
     const child = Bun.spawn(['vite', '--config', 'vite.config.ts', ...args.slice(1)], {
-      cwd: app, env: process.env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit',
+      cwd: app,
+      env: process.env,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
     });
     const forwarders = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map((signal) => {
       const forward = () => child.kill(signal);
       process.on(signal, forward);
       return [signal, forward] as const;
     });
-    try { process.exitCode = await child.exited; }
-    finally { for (const [signal, forward] of forwarders) process.off(signal, forward); }
+    try {
+      process.exitCode = await child.exited;
+    } finally {
+      for (const [signal, forward] of forwarders) process.off(signal, forward);
+    }
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 75;

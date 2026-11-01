@@ -8,7 +8,10 @@ const root = resolve(import.meta.dir, '../../..');
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
 export class WebCheckFailure extends Error {
-  constructor(public readonly code: number, label: string) {
+  constructor(
+    public readonly code: number,
+    label: string,
+  ) {
     super(`${label} failed with status ${code}`);
   }
 }
@@ -32,38 +35,75 @@ export function hasWebCheckCustody(workspace = root, cwd = workspace): boolean {
   const physicalRoot = realpathSync(workspace);
   const physicalCwd = realpathSync(cwd);
   const inside = relative(physicalRoot, physicalCwd);
-  return onCheckHost(physicalRoot) && onCheckHost(physicalCwd) &&
-    inside !== '..' && !inside.startsWith(`..${sep}`) && !isAbsolute(inside);
+  return (
+    onCheckHost(physicalRoot) &&
+    onCheckHost(physicalCwd) &&
+    inside !== '..' &&
+    !inside.startsWith(`..${sep}`) &&
+    !isAbsolute(inside)
+  );
 }
 
 export function requireWebCheckCustody(workspace = root, cwd = workspace): void {
   if (!hasWebCheckCustody(workspace, cwd))
-    throw new Error('Web check unavailable: this callable browser/check worker requires an actual remote run directory; use its routed script entrypoint.');
+    throw new Error(
+      'Web check unavailable: this callable browser/check worker requires an actual remote run directory; use its routed script entrypoint.',
+    );
 }
 
 // Transport controls belong to the driver, not the native command's semantic overlay.
 const transportEnvironment = /^(?:GOAL_|CODEX_|REMOTE_CHECK_|REZICS_CHECK_|REZICS_STACK_)/;
 const credentialEnvironment = /^(?:CLOUDFLARE_|CF_|AWS_|GH_|GITHUB_|OPENAI_|ANTHROPIC_)/;
 const hostEnvironment = new Set([
-  'PATH', 'HOME', 'PWD', 'OLDPWD', 'SHELL', 'SHLVL', '_', 'USER', 'LOGNAME', 'TMPDIR', 'TMP', 'TEMP',
-  'XDG_RUNTIME_DIR', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'SSH_AUTH_SOCK',
-  'SSH_AGENT_PID', 'BUN_INSTALL', 'BUN_RUNTIME_TRANSPILER_CACHE_PATH', 'BUN_INSTALL_CACHE_DIR',
-  'NODE_PATH', 'KERNEL_CHECK_REMOTE', 'KERNEL_CHECK_ON_REMOTE',
+  'PATH',
+  'HOME',
+  'PWD',
+  'OLDPWD',
+  'SHELL',
+  'SHLVL',
+  '_',
+  'USER',
+  'LOGNAME',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'XDG_RUNTIME_DIR',
+  'XDG_CACHE_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+  'SSH_AUTH_SOCK',
+  'SSH_AGENT_PID',
+  'BUN_INSTALL',
+  'BUN_RUNTIME_TRANSPILER_CACHE_PATH',
+  'BUN_INSTALL_CACHE_DIR',
+  'NODE_PATH',
+  'KERNEL_CHECK_REMOTE',
+  'KERNEL_CHECK_ON_REMOTE',
   'WEB_CHECK_DRIVER_ROOT',
-  'NPM_TOKEN', 'NODE_AUTH_TOKEN', 'BUN_AUTH_TOKEN',
+  'NPM_TOKEN',
+  'NODE_AUTH_TOKEN',
+  'BUN_AUTH_TOKEN',
 ]);
 const relocatedPaths = new Set(['STORYBOOK_OUTPUT_DIR', 'GROWTH_PROFILE', 'WEB_TEST_STATE_DIR', 'WEB_CHECK_EVENTS']);
 
 export function webCheckEnvironment(env: NodeJS.ProcessEnv, workspace: string, cwd: string): Record<string, string> {
   const semantic: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
-    if (value === undefined || transportEnvironment.test(name) || credentialEnvironment.test(name) || hostEnvironment.has(name)) continue;
+    if (
+      value === undefined ||
+      transportEnvironment.test(name) ||
+      credentialEnvironment.test(name) ||
+      hostEnvironment.has(name)
+    )
+      continue;
     if (relocatedPaths.has(name) && value) {
       const path = workspacePath(workspace, resolve(cwd, value));
       semantic[name] = relative(cwd, resolve(workspace, path)) || '.';
     } else {
-      if ((/(?:_FILE|_DIR|_PATH|_ROOT)$/.test(name) && isAbsolute(value)) ||
-        (['NODE_OPTIONS', 'BUN_OPTIONS'].includes(name) && value))
+      if (
+        (/(?:_FILE|_DIR|_PATH|_ROOT)$/.test(name) && isAbsolute(value)) ||
+        (['NODE_OPTIONS', 'BUN_OPTIONS'].includes(name) && value)
+      )
         throw new Error(`Web check unavailable: unsupported host-path environment setting ${name}`);
       semantic[name] = value;
     }
@@ -84,17 +124,29 @@ export type DriverInput = {
 
 /** The agreed Performance CLI; original argv remains individual, ordered tokens. */
 export function webCheckDriverCommand(input: DriverInput): string[] {
-  if (!/^[a-f0-9]{40}$/.test(input.revision)) throw new Error('Web check unavailable: full candidate revision required');
+  if (!/^[a-f0-9]{40}$/.test(input.revision))
+    throw new Error('Web check unavailable: full candidate revision required');
   if (![input.driverRoot, input.hosts, input.workspace, input.environmentFile].every(isAbsolute))
     throw new Error('Web check unavailable: driver, hosts, workspace and environment file must be absolute');
   if (resolve(input.driverRoot) === resolve(input.workspace))
     throw new Error('Web check unavailable: the trusted driver must be separate from candidate source');
   if (!input.command.length) throw new Error('Web check unavailable: empty command');
   return [
-    'bun', join(input.driverRoot, 'scripts/check-run.ts'), '--hosts', input.hosts,
-    '--workspace', input.workspace, '--cwd', input.cwd, '--source-revision', input.revision,
-    '--env-file', input.environmentFile,
-    ...input.returns.flatMap((path) => ['--returns', path]), '--', ...input.command,
+    'bun',
+    join(input.driverRoot, 'scripts/check-run.ts'),
+    '--hosts',
+    input.hosts,
+    '--workspace',
+    input.workspace,
+    '--cwd',
+    input.cwd,
+    '--source-revision',
+    input.revision,
+    '--env-file',
+    input.environmentFile,
+    ...input.returns.flatMap((path) => ['--returns', path]),
+    '--',
+    ...input.command,
   ];
 }
 
@@ -119,7 +171,14 @@ function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string {
   git(driverRoot, ['ls-files', '--error-unmatch', 'scripts/check-run.ts']);
   const producerRevision = git(driverRoot, ['rev-parse', 'HEAD']);
   const integratedRevision = git(integrated, ['rev-parse', 'HEAD']);
-  const ancestry = spawnSync('git', ['-C', integrated, 'merge-base', '--is-ancestor', producerRevision, integratedRevision]);
+  const ancestry = spawnSync('git', [
+    '-C',
+    integrated,
+    'merge-base',
+    '--is-ancestor',
+    producerRevision,
+    integratedRevision,
+  ]);
   if (ancestry.error) throw ancestry.error;
   if (ancestry.status !== 0)
     throw new Error('Web check unavailable: the selected Performance snapshot is not integrated');
@@ -143,14 +202,20 @@ async function executeDriver(input: DriverExecution): Promise<number> {
   if ((fd !== undefined || nonce !== undefined) && (fd !== '3' || !nonce))
     throw new Error('Invalid remote-check receipt channel');
   const child = spawn(input.command[0]!, input.command.slice(1), {
-    cwd: input.cwd, env: input.env, stdio: fd === '3' ? ['inherit', 'inherit', 'inherit', 3] : 'inherit',
+    cwd: input.cwd,
+    env: input.env,
+    stdio: fd === '3' ? ['inherit', 'inherit', 'inherit', 3] : 'inherit',
   });
   const forwarders = signals.map((signal) => {
-    const forward = () => { child.kill(signal); };
+    const forward = () => {
+      child.kill(signal);
+    };
     process.on(signal, forward);
     return [signal, forward] as const;
   });
-  const cancel = () => { child.kill('SIGTERM'); };
+  const cancel = () => {
+    child.kill('SIGTERM');
+  };
   input.signal?.addEventListener('abort', cancel, { once: true });
   if (input.signal?.aborted) cancel();
   try {
@@ -187,8 +252,12 @@ const runtime: WebPlacementRuntime = {
     // Private caller data outside the candidate source; never included in its source transfer.
     const directory = mkdtempSync(join(tmpdir(), 'rezics-web-check-'));
     const path = join(directory, 'environment.json');
-    try { writeFileSync(path, JSON.stringify(values), { mode: 0o600 }); }
-    catch (error) { rmSync(directory, { recursive: true, force: true }); throw error; }
+    try {
+      writeFileSync(path, JSON.stringify(values), { mode: 0o600 });
+    } catch (error) {
+      rmSync(directory, { recursive: true, force: true });
+      throw error;
+    }
     return { path, close: () => rmSync(directory, { recursive: true, force: true }) };
   },
   execute: executeDriver,
@@ -225,8 +294,16 @@ export async function routeWebCheck(
   try {
     if (signal?.aborted) code = 143;
     else {
-      const command = webCheckDriverCommand({ driverRoot, hosts, workspace, cwd, revision,
-        environmentFile: file.path, command: run.command, returns });
+      const command = webCheckDriverCommand({
+        driverRoot,
+        hosts,
+        workspace,
+        cwd,
+        revision,
+        environmentFile: file.path,
+        command: run.command,
+        returns,
+      });
       code = await adapter.execute({ command, cwd: workspace, env, ...(signal ? { signal } : {}) });
     }
   } catch (error) {
@@ -236,8 +313,13 @@ export async function routeWebCheck(
   try {
     file.close();
   } catch (cleanup) {
-    if (failed) throw new AggregateError([failure, cleanup], 'Web placement and environment cleanup failed', { cause: failure });
-    if (code !== 0) throw new AggregateError([new WebCheckFailure(code!, 'Web remote command'), cleanup], 'Web remote command and environment cleanup failed');
+    if (failed)
+      throw new AggregateError([failure, cleanup], 'Web placement and environment cleanup failed', { cause: failure });
+    if (code !== 0)
+      throw new AggregateError(
+        [new WebCheckFailure(code!, 'Web remote command'), cleanup],
+        'Web remote command and environment cleanup failed',
+      );
     throw cleanup;
   }
   if (failed) throw failure;
@@ -267,10 +349,11 @@ if (import.meta.main) {
       returns.push(args[i + 1]!);
     }
     const command = args.slice(separator + 1);
-    if (separator < 0 || !command.length) throw new Error('Usage: check-placement.ts [--returns <path>]... -- <command...>');
+    if (separator < 0 || !command.length)
+      throw new Error('Usage: check-placement.ts [--returns <path>]... -- <command...>');
     const run = { root, cwd: process.cwd(), command, returns };
     const code = await routeWebCheck(run);
-    process.exitCode = code ?? await executeDriver({ command, cwd: run.cwd, env: process.env });
+    process.exitCode = code ?? (await executeDriver({ command, cwd: run.cwd, env: process.env }));
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 75;

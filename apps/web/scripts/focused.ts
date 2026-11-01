@@ -85,13 +85,27 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     throw new Error('--private-network requires Linux user and network namespaces');
 
   const appDirectory = resolve(options.appDirectory ?? app);
-  if (!hasWebCheckCustody(resolve(app, '../..'), appDirectory) &&
-      (options.prepare || options.onStart || options.onOutput))
-    throw new Error('Focused check unavailable: in-process preparation/start/output hooks require actual remote custody; callbacks cannot be transferred through the finite CLI.');
-  const routed = await routeWebCheck({
-    root: resolve(app, '../..'), cwd: appDirectory,
-    command: ['bun', 'scripts/focused.ts', ...(options.privateNetwork ? ['--private-network'] : []), '--', ...command],
-  }, { ...process.env, ...options.env });
+  if (
+    !hasWebCheckCustody(resolve(app, '../..'), appDirectory) &&
+    (options.prepare || options.onStart || options.onOutput)
+  )
+    throw new Error(
+      'Focused check unavailable: in-process preparation/start/output hooks require actual remote custody; callbacks cannot be transferred through the finite CLI.',
+    );
+  const routed = await routeWebCheck(
+    {
+      root: resolve(app, '../..'),
+      cwd: appDirectory,
+      command: [
+        'bun',
+        'scripts/focused.ts',
+        ...(options.privateNetwork ? ['--private-network'] : []),
+        '--',
+        ...command,
+      ],
+    },
+    { ...process.env, ...options.env },
+  );
   if (routed !== null) return routed;
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {

@@ -8,7 +8,12 @@ const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
 const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? join(app, 'storybook-static'));
 const returnedOutput = workspacePath(root, output);
-const routed = await routeWebCheck({ root, cwd: app, command: ['bun', 'scripts/storybook-build.ts', ...process.argv.slice(2)], returns: [returnedOutput] });
+const routed = await routeWebCheck({
+  root,
+  cwd: app,
+  command: ['bun', 'scripts/storybook-build.ts', ...process.argv.slice(2)],
+  returns: [returnedOutput],
+});
 if (routed !== null) process.exit(routed);
 const uiOutput = join(root, '.temp', `storybook-ui-${process.pid}`);
 const startedAt = Date.now();

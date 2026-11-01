@@ -57,8 +57,11 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
   const root = resolve(app, '../..');
   if (suppliedBrowser) requireWebCheckCustody(root, app);
   else {
-    const routed = await routeWebCheck({ root, cwd: app,
-      command: ['bun', 'scripts/storybook-smoke.ts', ...(origin ? ['--origin', origin] : [])] });
+    const routed = await routeWebCheck({
+      root,
+      cwd: app,
+      command: ['bun', 'scripts/storybook-smoke.ts', ...(origin ? ['--origin', origin] : [])],
+    });
     if (routed !== null) {
       if (routed !== 0) throw new WebCheckFailure(routed, 'Storybook smoke');
       return;
@@ -67,7 +70,9 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
   const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? `${app}/storybook-static`);
   const ownsBrowser = suppliedBrowser === undefined;
   if (!existsSync(resolve(output, 'index.json')) || !existsSync(resolve(output, 'ui/index.json')))
-    throw new Error('Storybook smoke unavailable: both built indexes must exist in this physical snapshot. Use storybook-deploy.ts --validate-only to build and run the six smoke scenarios together.');
+    throw new Error(
+      'Storybook smoke unavailable: both built indexes must exist in this physical snapshot. Use storybook-deploy.ts --validate-only to build and run the six smoke scenarios together.',
+    );
   const webIndex = JSON.parse(readFileSync(resolve(output, 'index.json'), 'utf8')) as SmokeStoryIndex;
   const uiIndex = JSON.parse(readFileSync(resolve(output, 'ui/index.json'), 'utf8')) as SmokeStoryIndex;
   const copyRecording = JSON.parse(
@@ -95,18 +100,18 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
   let failure: unknown;
   try {
     server = origin
-    ? undefined
-    : Bun.serve({
-        hostname: '127.0.0.1',
-        port: 0,
-        async fetch(request) {
-          const pathname = decodeURIComponent(new URL(request.url).pathname);
-          const filePath = resolve(output, pathname === '/' ? 'index.html' : `.${pathname}`);
-          if (!filePath.startsWith(`${output}/`)) return new Response('not found', { status: 404 });
-          const file = Bun.file(filePath);
-          return (await file.exists()) ? new Response(file) : new Response('not found', { status: 404 });
-        },
-      });
+      ? undefined
+      : Bun.serve({
+          hostname: '127.0.0.1',
+          port: 0,
+          async fetch(request) {
+            const pathname = decodeURIComponent(new URL(request.url).pathname);
+            const filePath = resolve(output, pathname === '/' ? 'index.html' : `.${pathname}`);
+            if (!filePath.startsWith(`${output}/`)) return new Response('not found', { status: 404 });
+            const file = Bun.file(filePath);
+            return (await file.exists()) ? new Response(file) : new Response('not found', { status: 404 });
+          },
+        });
     const base = origin ?? server!.url.toString();
     for (const scenario of scenarios) {
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -212,11 +217,20 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
     failure = error;
   }
   const cleanup: unknown[] = [];
-  try { server?.stop(true); } catch (error) { cleanup.push(error); }
-  if (ownsBrowser) {
-    try { await browser.close(); } catch (error) { cleanup.push(error); }
+  try {
+    server?.stop(true);
+  } catch (error) {
+    cleanup.push(error);
   }
-  if (failed && cleanup.length) throw new AggregateError([failure, ...cleanup], 'Storybook smoke and cleanup failed', { cause: failure });
+  if (ownsBrowser) {
+    try {
+      await browser.close();
+    } catch (error) {
+      cleanup.push(error);
+    }
+  }
+  if (failed && cleanup.length)
+    throw new AggregateError([failure, ...cleanup], 'Storybook smoke and cleanup failed', { cause: failure });
   if (failed) throw failure;
   if (cleanup.length) throw new AggregateError(cleanup, 'Storybook smoke cleanup failed');
 }
