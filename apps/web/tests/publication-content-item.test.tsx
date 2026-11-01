@@ -124,7 +124,11 @@ test('Publication uses shared candidate items while preserving exact selected ID
     expect(document.activeElement).toBe(checkbox);
     await click(checkboxes()[1]!);
     await click(checkbox);
-    expect(checkboxes().slice(0, 2).every((node) => node.checked)).toBe(true);
+    expect(
+      checkboxes()
+        .slice(0, 2)
+        .every((node) => node.checked),
+    ).toBe(true);
     expect(navigations).toEqual([href]);
     expect(calls).toHaveLength(0);
     expect(button(m.library_publication_publish()).disabled).toBe(true);
@@ -165,7 +169,11 @@ test('Publication uses shared candidate items while preserving exact selected ID
       }),
     );
     expect(host.textContent).toContain(m.library_publication_complete({ count: '2' }));
-    expect(checkboxes().slice(0, 2).every((node) => !node.checked)).toBe(true);
+    expect(
+      checkboxes()
+        .slice(0, 2)
+        .every((node) => !node.checked),
+    ).toBe(true);
   } finally {
     await act(async () => root.unmount());
     host.remove();
