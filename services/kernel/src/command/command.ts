@@ -2,6 +2,7 @@ import { finalizeCommandRecordSources } from '../history/record-source.ts';
 export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 
 import type { Pool, PoolClient } from 'pg';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Actor } from '../request/access.ts';
 import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
 export { CommandUnavailableError } from '../access/unavailable.ts';
@@ -27,6 +28,13 @@ import {
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
+
+// A maintenance owner may surrender automatic retries. This is scheduling policy,
+// never authorization or another work allowance. Later scheduling starts a new unit.
+const singleAttempt = new AsyncLocalStorage<boolean>();
+export function withSingleCommandAttempt<T>(body: () => Promise<T>): Promise<T> {
+  return singleAttempt.run(true, body);
+}
 export type CommandCallback = (transactionId: string) => void | Promise<void>;
 export type CommandResult<T> = Readonly<{ value: T; events: readonly CommandEvent[] }>;
 const noEffectResults = new WeakSet<object>();
@@ -559,7 +567,10 @@ async function executeCommand<T>(
   const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
+  let singleAttemptCount = 0;
   while (Date.now() < deadline) {
+    if (singleAttempt.getStore() && singleAttemptCount++ > 0)
+      throw new CommandUnavailableError('contention', partition);
     let time: AuthoritativeTime | undefined;
     try {
       let evidence: unknown;
@@ -708,6 +719,7 @@ async function executeCommand<T>(
                 receipt,
               });
           if (row.length === 0) {
+            if (singleAttempt.getStore()) throw new CommandUnavailableError('contention', partition);
             receiptOwners.delete(tx);
             try {
               await client.query('ROLLBACK');
@@ -790,6 +802,7 @@ async function executeCommand<T>(
       if (error instanceof AccessUnavailableError && reason !== 'contention') throw error;
       if (reason === 'deadline') throw new CommandUnavailableError('deadline', partition);
       if (reason === 'contention') {
+        if (singleAttempt.getStore()) throw new CommandUnavailableError('contention', partition);
         if (Date.now() >= deadline) {
           if (error instanceof AccessUnavailableError) throw error;
           throw new CommandUnavailableError('contention', partition);

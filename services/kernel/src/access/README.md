@@ -773,13 +773,10 @@ for its fence migration, writer/lineage guards, owner-token serialization and re
 shape alone do not establish current installed coverage. Missing native coverage remains unsupported; a technical
 fence never supplies consumer, Source or Account-root cleanup authority.
 
-`history/agent-identity-sdk-fence.ts` defines the Kernel consumer entry point
-`retireAgentIdentitySDKWork(pool, client, stage, context)`. It first verifies the original source home and releases
-that command before entering the receiver or SDK. Retained or missing Semantic evidence stops before SDK retirement.
-It then revalidates Source and locks the current SDK writer state in the same Source command. The durable native
-Source-to-History handoff is unavailable, so this command remains pending without retiring SDK writers, recording
-a receipt, settling History work or authorizing physical deletion. The current interface and charge are detailed
-under guarded identity History readiness below.
+`history/agent-identity-sdk-fence.ts:retireAgentIdentitySDKWork` consumes the original Source
+expected-address handoff, records guarded generation-1 readiness on the original association, releases its
+command, retires the exact original SDK writer once, and records separately guarded generation-2 closure.
+The complete selected-unit composition, its installation prerequisites and charges are described below.
 
 The receiving binding is `access.agent-identity.sdk-retirement/v1`:
 `{ kind, custodyId, workflowId, requestDigest, source, receiver: { partition: 0, epoch, generation, writerVersion: 1 },
@@ -3737,51 +3734,122 @@ generation 2 and the exact closure UUID, timestamp and SDK restore generation. A
 `identity-sdk-source-pool-mismatch`; matching URLs never establish physical placement. A moved cross-database Source
 has no supported native bridge. These technical checks establish neither legal readiness nor History copy closure.
 
-`retireAgentIdentitySDKWork` first verifies the actual Source, then releases that command and checks the original
-receiver binding. It releases that receiver before observing the SDK, and finally revalidates Source and locks the
-observed SDK tuple in the same Source command. It stops at
-`identity-source-history-durable-handoff-unavailable`: the current
-`semantic/identity-source-consumer-custody.ts:verifyIdentitySourceConsumerCustody` returns a current boolean under
-its native claim/role/barrier/source/restore locks, but supplies no native durable handoff interface that the
-original History guard can consume. No SDK retirement, receipt write, owner readiness, work retirement, physical
-delete or receiving absence write follows that refusal. `agentIdentityRetirementReadiness` likewise refuses a
-copied receipt. `core.guard_agent_identity_sdk_retirement` remains closed; a permissive migration cannot supply the
-missing Source authority. Distinct durable readiness, final current Source and exact SDK closure, supported deletion
-and complete receiving-copy probes all remain required before eligible closure. No positive History eligibility is
-implemented for this absent owner boundary.
+The selected identity durable unit enters `withAgentIdentityHistoryUnit` only after the original bounded
+job/locator selection has committed and released its checkout. This wraps the actual
+`shared-history -> minimizeHistoryWork -> advanceAgentIdentityConsumerMaintenance` chain and the final receiving
+transaction in ONE original Source callback and deadline. Its async context carries scheduling information,
+never Source authority, a new allowance or a portable certificate. All native commands make one attempt; automatic
+command retries are surrendered for this callback. Errors roll back and ordinary later scheduling starts another
+admitted unit, re-observing exact durable state rather than repeating an ambiguous SDK retirement in this frame.
 
-Source stages match every field of the original native tuple, job, erased role and exact barrier. A foreign
-erased-role barrier remains `agent-identity-source-barrier-home-unavailable` before any foreign Account read in the
-Source command. Commerce's `library/identity-scope-effects.ts:readLibraryScopeEffectsPage` remains unavailable and
-`verifyLibraryScopeEffectsSeal` remains false. Library, Account root, Source discharge, unknown legacy SDK creation
-and missing foreign receiving custody stay independent. Original payloads and existing database guards remain intact.
+The default body stages the native receiving mapping, source tuple, accepted original job and actual Source
+consumer. `lockIdentitySourceHistoryHandoff` is the agreed original Semantic port. It must revalidate the current
+custody, Account settlement/technical receiver and Library current seal and lock the original Source expected
+address plus the actual SDK generation-1/domain on this SAME command. Only its returned address is persisted as
+`agent_identity_work.history_authority`; `sdk_readiness` records the exact original binding and writer.
+The original History work transitions separately to `owner_ready/state=ready`. Native ALWAYS guards re-resolve
+`semantic.lock_identity_source_history_handoff(reference,expected)` and `dbos.check_workflow_writer_state` on the
+original association, all roles, barrier, source/receiver/domain and writer generations through COMMIT. A released
+boolean, supplied workflow ID, copied terminal or technical SDK receipt cannot enable readiness.
 
-#### Cost: current SDK state in original History maintenance
+After reading the actual committed readiness, the bounded original SDK owner makes at most ONE retirement attempt.
+It revokes the original owner token and retains permanent fences. A fresh Source command obtains current Source
+and exact SDK generation-2/domain authority before recording `sdk_closure` and the technical receipt. Technical
+receipt metadata remains compatible with old callers, immutable and insufficient for any History transition;
+legacy generation-2 rows without genuine recorded generation-1 readiness stay pending.
 
-- Touches: the existing live Source maintenance frame and the original SDK producer's keyed domain and workflow
-  fence. History executes no SDK SQL of its own. Released observation dispatches the owner's one keyed fence/domain
-  SELECT. The current port dispatches the owner's `check_workflow_writer_state` SELECT, its keyed domain `FOR SHARE`,
-  keyed workflow `FOR UPDATE`, and locked-value return SELECT. No nested History, Source, retirement or physical
-  probes occur inside either SDK port.
-- Bound: reserve released observation as **3 rows / 2 points / 1 statement / 8192 bytes / 0 engine requests**, and
-  each current check as **4 / 2 / 4 / 8192 / 0**, before entering the owner port in the existing frame. A missing,
-  foreign, ended or exhausted frame refuses before dispatch. Failed and repeated checks spend the complete allowance;
-  nothing is refunded. Wrong-pool refusal still spends its pre-reservation despite dispatching no SQL. SQL stale,
-  serialization and deadlock errors propagate for whole-command rollback; there is no statement retry or savepoint.
-  Each subsequent command attempt reserves again. For one released observation and N dispatched current checks,
-  including command retries, the additive bound is **(3+4N) / (2+2N) / (1+4N) / (8192+8192N) / 0**. Each repeated
-  Source verification also spends its own original owner reservation. The SDK allowance includes every nested
-  lookup and result row.
-  The installed maintenance body reaches at most one released observation and one current check after its two
-  existing Source checks and released receiving check: its additive allowance is **7 / 4 / 5 / 16384 / 0** per
-  attempt. Relative to the previous **577 / 577 / 173 / 630784 / 0**, simple addition gives
-  **584 / 581 / 178 / 647168 / 0**, solely for this stopped sequence, not a final aggregate or an authorized budget.
-  History changes no Source footprint, default, ceiling, directory child cap or ABI. Semantic must derive and approve
-  the full composition before implementing any later readiness/closure writes. Those writes, final closure checks,
-  retirement and physical probes have no claimed funding here; the sequence stops before dispatching them.
-- Growth check: deferred native existing-fixture cases in `agent-verification-reversal.test.ts` cover actual owner
-  state, distinct live/closed phases, locks through commit, exact stale/wrong identity/closure/restore rejection,
-  pool rejection and repeated/failing pre-reservations. Typing establishes no native or growth proof.
+Later commands independently obtain current Source and SDK closure before sealing and retiring History work,
+clearing request/scope, verifying absence and minimizing the locator. A real SDK fence observation precedes the
+first physical inspection; every one of the eight actual SDK tables keeps its original LIMIT+1 and storage limits.
+Supported SDK deletion is exact, children=false, with no internal retry. Another independent fence observation and
+all eight physical absence probes follow it. The absence/locator transaction re-resolves current authority, and
+native guards inspect physical absence while permanent SDK non-revival remains in force.
+
+The actual final receiving/progress transaction checks the original selected job, cursor and barrier, freshly
+re-enters the Source/SDK owner, and independently re-enters it again for the receiving proof. Its native proof
+trigger checks the immutable association, current Source and SDK, physical absence, retired work, exact role hash,
+receiver epoch and minimized locator. These locks survive the actual receiving proof and cursor COMMIT within the
+same original callback. Stale selections never advance a cursor. Refusals preserve work and cursor and use the
+ordinary delayed scheduling path when its own reservation can be admitted.
+
+The supported positive body is the fresh preserved source0/barrier0/receiver0 path on the actual SAME configured
+SDK Pool. Matching URLs do not prove pool identity. Missing/moved physical homes, missing original association,
+unsupported restore, lost permanent fences, changed receiving custody and absent real Source handoff remain precise
+pending branches. The current snapshot lacks the agreed Source handoff export; it refuses
+`identity-source-history-owner-not-installed` before attempting that dispatch. Library's exhaustive page/current
+seal and Semantic's matching Source SQL footprint and adopted aggregate must land with their owners. Unknown SQL
+and exhausted reservations continue to refuse. This consumer does not install foreign bodies or raise budgets.
+Account-root, all roles/copies, Source discharge, public/routing exceptions and later source minimization remain
+independent. No native or whole-Goal success follows from this source implementation or typing.
+
+#### Cost: complete selected identity unit
+
+Axes below are **rows / points / statements / returned content bytes / engine requests**, with engine=0 throughout.
+These are closed pre-reserved dispatch bounds, including refusal, rather than observed successful row counts.
+Payload stored bytes are checked inside PostgreSQL and never charged as returned payload/protocol bytes. Limits
+apply to visible keys and nested native work, not MVCC engine visibility. The exact literal SQL is in the named
+callable and the one forward History migration; Source and SDK function bodies remain with their original owners.
+
+| Symbol / actual dispatch                           | Bound                           | Native home and lock lifetime                                                                                                                                                                      |
+| -------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C: `identityHistoryCommand` controls               | 3/1/8/256/0                     | BEGIN, two SET LOCAL, time, final SET, original no-effect partition fence, COMMIT and prepaid failure ROLLBACK; one attempt                                                                        |
+| Initial mapping: `resolveAgentIdentitySDKWork`     | 4/4/3/16384/0                   | Original m/work, receiver partition, History domain; released before staging                                                                                                                       |
+| Initial `readAgentIdentitySDKReceivingBinding`     | 72/72/6/32768/0 + C             | Mapping, m/work, roles LIMIT65, barrier; released                                                                                                                                                  |
+| Initial `readAccountIdentitySource`                | 70/68/25/73984/0                | Includes C and original normal plus bounded technical fallback; released                                                                                                                           |
+| `readOriginalAccountAgentIdentity`                 | 86/80/59/205920/0               | Three independently released one-attempt commands and six RR snapshots at most for unmerge, including controls and failure slots                                                                   |
+| Local `readAgentIdentityRetirementStage`           | 73/71/26/82176/0                | Includes C, current Account source/technical fallback and source-association/partition/domain statement; released                                                                                  |
+| Initial `verifyAgentIdentityRetirementStage`       | 71/71/19/82048/0 + C            | Local source/barrier; Source's own current verification reserves its nested allowance independently                                                                                                |
+| R: later receiving binding                         | 160/80/6/131072/0 + C           | Before retirement and each side of each independent SDK fence observation                                                                                                                          |
+| H: genuine Source composed handoff                 | 377/293/57/507904/0             | Existing producer-owned composed subject handoff; includes its Account/current custody, Library seal, Source expected address and SDK lock; this consumer never charges its children a second time |
+| G: `core.check_agent_identity_history` nested body | 92/87/11/40960/0                | Association1, receiver/domain2, original work1, role LIMIT65+aggregate1, barrier1, standalone Source function17/15/2/32768, SDK4/2/4/8192; same tx through commit                                  |
+| L: `lockRecordedAgentIdentityHistory`              | H + G + 2/1/2/123136/0          | Original four capped JSON fields (122880) and outer native guard SELECT (256); same tx                                                                                                             |
+| Readiness read / committed reread                  | 1/1/1/106496/0; 1/1/1/65536/0   | Original association only, in separate commands                                                                                                                                                    |
+| Readiness association UPDATE                       | G + 1/1/1/0/0                   | Immutable native readiness guard                                                                                                                                                                   |
+| Ready work UPDATE                                  | G + W + K + 2/2/2/0/0           | Work guard's association read plus outer UPDATE                                                                                                                                                    |
+| Closure association UPDATE                         | G + 3/3/2/0/0                   | Includes compatible receipt metadata's current partition/domain check                                                                                                                              |
+| `sealHistoryAccount`                               | 16/16/7/64/0                    | Erasure selection, upsert, two FK checks and one F; unchanged seal may do less                                                                                                                     |
+| Prepared work / roles reads                        | 1/1/1/64/0; 65/65/1/8192/0      | Same retirement command                                                                                                                                                                            |
+| Actual owner readiness                             | 74/74/7/49152/0 + L             | Independent receiving binding and technical receipt comparison before L                                                                                                                            |
+| Work retirement UPDATE                             | G + W + 2/2/2/0/0               | Current native guard through request/scope clearing and COMMIT                                                                                                                                     |
+| A: `core.check_agent_identity_history_absence`     | 9/9/9/0/0                       | Mapping workflow point plus eight actual SDK existence probes, early refusal spends full reservation                                                                                               |
+| Absence UPDATE                                     | G + A + W + K + 2/2/2/0/0       | Current guard and physical absence through COMMIT                                                                                                                                                  |
+| Locator UPDATE                                     | G + A + T + 4/4/4/0/0           | Outer write, native m/work checks and erasure FK                                                                                                                                                   |
+| Final selected job, barrier and cursor             | 3/3/3/4224/0                    | Actual selected cursor/identity compare, current barrier, cursor write; same receiving tx                                                                                                          |
+| Final proof: separate absence / roles              | A + 1/0/1/256/0; 65/65/1/8192/0 | Independently observed in real receiving transaction                                                                                                                                               |
+| Final receiving INSERT                             | G + A + P + 72/71/7/0/0         | Outer insert, m/work, role hash LIMIT65+aggregate, minimized locator, two FK checks; existing immutable proof may cause ON CONFLICT to do less                                                     |
+| O: released SDK current observation                | 3/2/1/8192/0                    | Independent SDK owner checkout, no held Source checkout                                                                                                                                            |
+| Released SDK retirement receipt read               | 1/1/1/8192/0                    | Existing owner keyed SELECT, independently bracketed by two R calls                                                                                                                                |
+| One eight-table physical inspection                | 148/8/12/11888/0                | Per-table LIMIT+1 maxima 2,2,2,65,9,65,1,1; only scalar size/validity results leave PG. Includes BEGIN, settings, COMMIT and the failure ROLLBACK slot                                             |
+
+Nested original trigger bounds, each charged before its triggering dispatch:
+
+| Symbol                               | Exact closed formula and bound                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| F: `history_family_touch`            | erasure1 + fence upsert1 + FK1 + nine coverage rows = 12/12/4/0/0                           |
+| W: `history_family_physical_changed` | watch1 + role LIMIT65 + 65 F = 846/846/261/0/0                                              |
+| K: `history_work_changed`            | role LIMIT64 + at most one original pending job per role = 128/65/65/0/0                    |
+| T: locator invalidation              | one F + two (LIMIT65 role union + at most64 F before its limit refusal) = 1678/1678/518/0/0 |
+| P: receiving invalidation            | one F + LIMIT65 role union + at most64 F = 845/845/261/0/0                                  |
+
+The fresh success sequence has eight H invocations (readiness, closure, two preparation checks, bound physical
+selection, absence, two receiving checks), six L invocations, thirteen G invocations including native write guards,
+three O observations and two independently bracketed SDK receipt reads (four R commands). It also has two eight-table
+physical inspections, three W, two K, one T, one P and two seals. There are twenty History/Account commands including
+the three commands inside the accepted-original lookup; the latter's controls are included in its bound. Source
+staging and its Library/current checks retain the producer's own separate reservations. Account settlement read
+64/64/20/65536 and EACH current verify64/64/15/65536 remain in that owner composition; they are never replaced by a
+fixed assumption of two checks. Each additional invocation of a receiving read or verification reserves again.
+The released `readHistoryReceivingReceipt` reserves 76/75/17/123136 + G + A; its same-command verifier reserves
+76/75/13/123136 + G + A, excluding its caller's already funded controls.
+
+The SDK single-attempt dispatch table is in [Work's owner contract](../work/README.md#bounded-selected-identity-maintenance).
+It funds every nested lock/retirement/deletion dispatch, including failed attempts and a rollback slot before BEGIN.
+A new invocation never refunds prior work. No success retry occurs in this frame; exact prior committed readiness
+plus genuine current generation2 is the only ambiguous-retirement recovery path at later scheduling admission.
+The old 577/577/173/630784/0 aggregate, two-lock subtotal and earlier conditional subtotal do not fund this body.
+Semantic owns final matching SQL footprint and aggregate adoption. Directory parent100/200/36/229376 and effective
+children50/100/18/114688, configured remainders, Library caps and the native100-row page ceiling remain unchanged.
+Native/growth, acceptance, browser and whole-Goal proof remain deferred.
 
 ## Selected automated creation operator
 

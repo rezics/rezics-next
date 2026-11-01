@@ -12,7 +12,20 @@ import { historyArtifact, type HistoryArtifactType } from '../history/contracts.
 import type { HistoryBarrier, HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE } from '../history/agent-identity-retirement.ts';
+import {
+  IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE,
+  withAgentIdentityHistoryUnit,
+  currentAgentIdentityHistoryUnit,
+} from '../history/agent-identity-retirement.ts';
+import {
+  identityHistoryCommand,
+  reserveIdentityHistoryWork,
+  nativeWork,
+  IdentityHistoryWorkUnavailable,
+} from '../history/agent-identity-inventory-work.ts';
+import { lockRecordedAgentIdentityHistory } from '../history/agent-identity-sdk-fence.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 
 type Job = {
   job_id: string;
@@ -90,7 +103,7 @@ export async function advanceSharedHistory(
         .rows[0];
       if (!job) throw new TypeError('Shared history job unavailable');
       const proof = await barrier(tx, job);
-      let answer: SharedHistoryResult | { work: Buffer; job: Job; proof: HistoryBarrier };
+      let answer: SharedHistoryResult | { work: Buffer; job: Job; proof: HistoryBarrier; identity: boolean };
       if (job.phase === 'pending' || job.phase === 'complete') answer = result(job.phase);
       else if (job.phase === 'verify') answer = await verifyHome(tx, job, deps.registry);
       else if (job.scan_partition === PARTITIONS) {
@@ -167,8 +180,22 @@ export async function advanceSharedHistory(
               [job.account_route, job.account_id, partition],
             );
             const key = { partition_no: partition, account_route: job.account_route, account_id: job.account_id };
-            if (first.artifact_type === 'durable-work/v1' && first.state === 'pending')
-              answer = { work: first.locator, job, proof };
+            let identity = false;
+            if (first.artifact_type === 'durable-work/v1') {
+              const selected = decodeLocator('durable-work/v1', first.locator);
+              if (selected.artifactType !== 'durable-work/v1') throw new TypeError('Invalid selected durable locator');
+              // Classification belongs to the bounded original selection, before the
+              // checkout is released. No Source/SDK/receiving observation is made here.
+              identity =
+                (
+                  await tx.query(`SELECT owner FROM core.history_work WHERE partition_no=$1 AND work_id=$2`, [
+                    partition,
+                    selected.workId,
+                  ])
+                ).rows[0]?.owner === 'access.agent-identity';
+            }
+            if (first.artifact_type === 'durable-work/v1' && (first.state === 'pending' || identity))
+              answer = { work: first.locator, job, proof, identity };
             else {
               let gap =
                 first.state === 'minimized'
@@ -217,6 +244,75 @@ export async function advanceSharedHistory(
   if (!('work' in deferred)) return deferred;
   // No source checkout survives SDK calls. Permanent native retirement makes either crash cut replayable.
   const { job, work, proof } = deferred;
+  if (deferred.identity) {
+    if (!deps.env) return result('more', IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE);
+    try {
+      return await withAgentIdentityHistoryUnit(
+        { pool: deps.pool, client: deps.client, env: deps.env, clock: deps.clock },
+        { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) },
+        async (funded) => {
+          const gap = await minimizeHistoryWork(
+            deps.pool,
+            deps.client,
+            { partition_no: job.scan_partition, account_route: job.account_route, account_id: job.account_id },
+            work,
+            deps.registry,
+            proof,
+            { env: deps.env!, clock: deps.clock },
+          );
+          if (gap) {
+            await identityHistoryCommand(deps.pool, funded, async (tx) => {
+              await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
+              await tx.query(
+                "UPDATE core.preference_history_job SET next_run=now()+interval '10 seconds' WHERE job_id=$1",
+                [jobId],
+              );
+            });
+            return result('more', gap);
+          }
+          const unit = currentAgentIdentityHistoryUnit();
+          if (!unit?.stage) return result('more', 'identity-history-current-unit-unavailable');
+          return identityHistoryCommand(deps.pool, funded, async (tx) => {
+            await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 4096));
+            const current = (
+              await tx.query<Job>(`SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE`, [jobId])
+            ).rows[0];
+            if (
+              !current ||
+              current.phase !== job.phase ||
+              current.scan_partition !== job.scan_partition ||
+              current.scan_type !== job.scan_type ||
+              !sameLocator(current.scan_locator, job.scan_locator) ||
+              current.account_id !== job.account_id ||
+              current.account_route !== job.account_route ||
+              current.barrier_id !== job.barrier_id ||
+              current.barrier_version !== job.barrier_version ||
+              current.barrier_at !== job.barrier_at
+            )
+              return result('more', 'identity-history-selected-cursor-changed');
+            await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 128));
+            await barrier(tx, current);
+            const held = await lockRecordedAgentIdentityHistory(tx, deps.client, unit.stage!, funded);
+            if (held.state === 'pending') return result('more', held.gap);
+            const receivingGap = await recordHistoryReceivingProof(
+              tx,
+              proof,
+              job.scan_partition,
+              decodeLocator('durable-work/v1', work),
+            );
+            if (receivingGap) return result('more', receivingGap);
+            await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
+            await scannedArtifact(tx, current, 'durable-work/v1', work, null);
+            // The real Source/domain/fence and receiving locks survive this command's COMMIT.
+            return result('more');
+          });
+        },
+      );
+    } catch (error) {
+      if (error instanceof IdentityHistoryWorkUnavailable) return result('more', error.message);
+      throw error;
+    }
+  }
   let gap = await minimizeHistoryWork(
     deps.pool,
     deps.client,
@@ -317,4 +413,8 @@ export async function redriveSharedHistory(tx: CommandTransaction, accountId: st
   const route = routeOf(accountId);
   if (route === null) throw new TypeError('Invalid shared history account');
   await tx.query('SELECT core.history_wake_account($1,$2)', [route, accountId]);
+}
+
+function sameLocator(a: Buffer | null, b: Buffer | null): boolean {
+  return a === null ? b === null : b !== null && a.equals(b);
 }

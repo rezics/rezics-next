@@ -423,7 +423,7 @@ export async function resolveAgentIdentitySDKWork(
       source_key: string;
       accounts: AgentIdentityWorkSource['accounts'];
     }>(
-      `SELECT m.workflow_id,m.source,m.source_key,m.accounts,m.creation_captured,m.receiver_epoch,m.receiver_generation::text,m.writer_version,
+      `SELECT m.workflow_id,m.source,m.source_key,CASE WHEN octet_length(m.accounts::text)<=8192 THEN m.accounts END AS accounts,m.creation_captured,m.receiver_epoch,m.receiver_generation::text,m.writer_version,
        w.request_digest=m.request_digest AND w.owner=$2 AS bound
      FROM core.agent_identity_work m LEFT JOIN core.history_work w ON w.partition_no=0 AND w.work_id=m.custody_id
      WHERE m.custody_id=$1 FOR SHARE OF m`,

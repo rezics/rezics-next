@@ -2913,3 +2913,244 @@ test('Genuine current source and SDK fences guard distinct History readiness and
     await client.close();
   }
 }, 60_000);
+
+// A fresh home-zero subject exercises the supported preserved native custody path.
+// Existing cross-home fixtures and their refusal assertions remain unchanged.
+async function verifiedHistoryHomeZero() {
+  const account: Seeded = {
+    id: newId(0),
+    handle: `history_${randomUUID().slice(0, 8)}`,
+    kind: 'actor',
+    displayName: 'History account',
+  };
+  await pool.query(
+    `INSERT INTO access.account(route,account_id,kind,handle,display_name,state,transaction_id)
+    VALUES(0,$1,'actor',$2,$3,'active',$1)`,
+    [account.id, account.handle, account.displayName],
+  );
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES(0,$1,$1,'account:update','(,)',$1),(0,$1,$1,'account:read','(,)',$1)`,
+    [account.id],
+  );
+  const token = await bearer(account);
+  await ensureAccountAgent(pool, { account: account.id, kind: 'person', name: account.displayName, language: 'en' });
+  const subject = await catalogueSubject('schema:Person', 'History catalogue');
+  const handleRoute = createHash('sha256').update(account.handle).digest().readUInt16BE(0);
+  await pool.query(
+    `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
+    VALUES($1,$2,$3,'active',$3)`,
+    [handleRoute, account.handle, account.id],
+  );
+  const applied = await request(account, subject, token);
+  expect(applied.response.status).toBe(201);
+  const approved = await post(
+    `/v1/verification-requests/${applied.body.verificationRequest.id}:approve`,
+    await bearer(staff),
+    {},
+  );
+  expect(approved.response.status).toBe(200);
+  const decision = (await readAgentVerificationWorkflowRequest(pool, applied.body.verificationRequest.id))!;
+  const workflow = { ...decision, receiptId: decision.decisionReceiptId! };
+  await recordPendingAgentVerification(pool, workflow, clock);
+  await mergeVerifiedAgent(pool, workflow);
+  await writeAgentVerificationPage(pool, workflow);
+  await completeAgentVerification(pool, workflow, clock);
+  await finishAgentVerification(pool, workflow, clock);
+  return { account, token };
+}
+
+test('The real default selected identity unit records guarded readiness retires its exact SDK writer and closes physical and receiving copies under current Source and SDK authority in one original frame', async () => {
+  const { spyOn } = await import('bun:test');
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueAgentIdentityReversal, agentIdentityRetirementReadiness } =
+    await import('../../src/history/agent-identity-work.ts');
+  const source = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const sdk = await import('../../src/work/sdk-retirement-fence.ts');
+  const { HistoryRegistry } = await import('../../src/history/registry.ts');
+  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/access/shared-history.ts');
+  const { encodeLocator } = await import('../../src/history/locator.ts');
+  const { account, token } = await verifiedHistoryHomeZero();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const decision = released.body.reversal as AgentVerificationReversal;
+  await finish(decision);
+  const native = await loadAccountIdentitySource(pool, {
+    kind: 'account-agent.unverify',
+    account: account.id,
+    receipt: decision.receiptId,
+  });
+  expect(native.partition).toBe(0);
+  const client = await createWorkClient(databaseUrl, pool);
+  let frames = 0;
+  let active = false;
+  let originalDeadline: number | undefined;
+  const actions: string[] = [];
+  const enter = source.withIdentitySourceConsumerMaintenance;
+  const frameSpy = spyOn(source, 'withIdentitySourceConsumerMaintenance').mockImplementation(
+    async (deps, context, body) => {
+      frames++;
+      return enter(deps, context, async (funded) => {
+        expect(active).toBe(false);
+        active = true;
+        originalDeadline = funded.deadline;
+        try {
+          return await body(funded);
+        } finally {
+          active = false;
+        }
+      });
+    },
+  );
+  const maintain = sdk.maintainSdkWorkflowOnce;
+  const sdkSpy = spyOn(sdk, 'maintainSdkWorkflowOnce').mockImplementation(async (...args) => {
+    expect(active).toBe(true);
+    expect(args[0]).toBe(pool);
+    expect(args[1]).toBe(client);
+    expect(args[2].workflowID).toBe(native.workflowId);
+    expect(args[4]).toBe(originalDeadline);
+    actions.push(args[3]);
+    if (args[3] === 'retire') {
+      const row = (
+        await pool.query(
+          `SELECT m.sdk_readiness,m.history_authority,w.owner_ready
+        FROM core.agent_identity_work m JOIN core.history_work w ON w.work_id=m.custody_id AND w.partition_no=0
+        WHERE m.workflow_id=$1`,
+          [native.workflowId],
+        )
+      ).rows[0];
+      expect(row.owner_ready).toBe(true);
+      expect(row.history_authority).not.toBeNull();
+      expect(row.sdk_readiness.writer.generation).toBe('1');
+    }
+    return maintain(...args);
+  });
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('admitted');
+    const mapping = (
+      await pool.query('SELECT custody_id FROM core.agent_identity_work WHERE workflow_id=$1', [native.workflowId])
+    ).rows[0];
+    await pool.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES(0,$1,1,now())', [account.id]);
+    const job = randomUUID();
+    await runCommand(pool, { partition: 0 }, async (tx) => {
+      await admitSharedHistory(tx, account.id, job);
+      return noEffect(null);
+    });
+    // Select this original unit with the ordinary cursor; never supply a workflow ID to maintenance.
+    await pool.query(
+      "UPDATE core.preference_history_job SET scan_type='command-receipt/v1',scan_locator=$2 WHERE job_id=$1",
+      [job, Buffer.from([255])],
+    );
+    const registry = new HistoryRegistry();
+    registry.registerOwner({
+      name: 'access.agent-identity',
+      artifactType: 'durable-work/v1',
+      version: 1,
+      readiness: agentIdentityRetirementReadiness,
+    });
+    expect(await advanceSharedHistory({ pool, client, registry, env: process.env, clock }, job)).toEqual({
+      state: 'more',
+      gap: null,
+    });
+    expect(frames).toBe(1);
+    expect(active).toBe(false);
+    expect(actions).toEqual(['retire', 'delete']);
+    const row = (
+      await pool.query(
+        `SELECT m.*,w.state,w.owner_ready,w.absence_verified,w.request,w.scope
+      FROM core.agent_identity_work m JOIN core.history_work w ON w.work_id=m.custody_id AND w.partition_no=0
+      WHERE m.custody_id=$1`,
+        [mapping.custody_id],
+      )
+    ).rows[0];
+    expect(row.sdk_readiness.writer.generation).toBe('1');
+    expect(row.sdk_closure.generation).toBe('2');
+    expect(row.sdk_closure.restoreGeneration).toBe(row.sdk_readiness.writer.restoreGeneration);
+    expect(row.state).toBe('retired');
+    expect(row.owner_ready).toBe(true);
+    expect(row.absence_verified).toBe(true);
+    expect(row.request).toBeNull();
+    expect(row.scope).toBeNull();
+    const encoded = Buffer.from(encodeLocator({ artifactType: 'durable-work/v1', workId: mapping.custody_id }));
+    expect(
+      (
+        await pool.query(
+          `SELECT state,proof_barrier FROM core.history_locator WHERE partition_no=0
+      AND account_id=$1 AND artifact_type='durable-work/v1' AND locator=$2`,
+          [account.id, encoded],
+        )
+      ).rows[0],
+    ).toEqual({ state: 'minimized', proof_barrier: account.id });
+    expect(
+      (
+        await pool.query(
+          `SELECT count(*)::integer n FROM core.history_receiving_proof WHERE partition_no=0
+      AND account_id=$1 AND artifact_type='durable-work/v1' AND locator=$2`,
+          [account.id, encoded],
+        )
+      ).rows[0].n,
+    ).toBe(1);
+    expect(
+      (await pool.query('SELECT scan_locator FROM core.preference_history_job WHERE job_id=$1', [job])).rows[0]
+        .scan_locator,
+    ).toEqual(encoded);
+    for (const [table, key] of [
+      ['workflow_status', 'workflow_uuid'],
+      ['workflow_input', 'workflow_uuid'],
+      ['workflow_output', 'workflow_uuid'],
+      ['operation_outputs', 'workflow_uuid'],
+      ['workflow_events', 'workflow_uuid'],
+      ['workflow_events_history', 'workflow_uuid'],
+      ['notifications', 'destination_uuid'],
+      ['streams', 'workflow_uuid'],
+    ]) {
+      expect(
+        (await pool.query(`SELECT 1 FROM dbos.${table} WHERE ${key}=$1 LIMIT 1`, [native.workflowId])).rows,
+      ).toHaveLength(0);
+    }
+    const check = (binding: unknown, authority: unknown, writer: unknown) =>
+      pool.query("SELECT core.check_agent_identity_history($1,$2,$3,$4,'closure')", [
+        mapping.custody_id,
+        binding,
+        authority,
+        writer,
+      ]);
+    await check(row.sdk_readiness.binding, row.history_authority, row.sdk_closure);
+    // Each independent stale axis is tested against a genuine successful native baseline.
+    await expect(
+      check(
+        { ...row.sdk_readiness.binding, source: { ...row.source, digest: '0'.repeat(64) } },
+        row.history_authority,
+        row.sdk_closure,
+      ),
+    ).rejects.toThrow('original binding changed');
+    await expect(
+      check(
+        { ...row.sdk_readiness.binding, receiver: { ...row.sdk_readiness.binding.receiver, epoch: 0 } },
+        row.history_authority,
+        row.sdk_closure,
+      ),
+    ).rejects.toThrow('original binding changed');
+    await expect(
+      check(row.sdk_readiness.binding, { ...row.history_authority, sequence: '0' }, row.sdk_closure),
+    ).rejects.toThrow();
+    await expect(
+      check(row.sdk_readiness.binding, row.history_authority, { ...row.sdk_closure, restoreGeneration: randomUUID() }),
+    ).rejects.toThrow('restore generation changed');
+    await expect(
+      check(row.sdk_readiness.binding, row.history_authority, { ...row.sdk_closure, closureID: randomUUID() }),
+    ).rejects.toThrow('writer state changed');
+    await expect(
+      client.enqueue(
+        { workflowID: native.workflowId, workflowName: 'accounts.agent-verification-reversal', queueName: 'workflows' },
+        decision,
+      ),
+    ).rejects.toThrow('permanently retired');
+    expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('retired');
+  } finally {
+    sdkSpy.mockRestore();
+    frameSpy.mockRestore();
+    await client.destroy();
+  }
+});

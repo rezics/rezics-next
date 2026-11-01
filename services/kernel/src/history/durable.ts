@@ -5,12 +5,33 @@ import { sealHistoryAccount } from './gates.ts';
 import type { WorkClient } from '../work/client.ts';
 import { decodeLocator } from './locator.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
-import { AGENT_IDENTITY_SDK_RETIREMENT, advanceAgentIdentityConsumerMaintenance } from './agent-identity-retirement.ts';
+import {
+  AGENT_IDENTITY_SDK_RETIREMENT,
+  advanceAgentIdentityConsumerMaintenance,
+  currentAgentIdentityHistoryUnit,
+} from './agent-identity-retirement.ts';
 import type { AgentIdentityWorkSource } from './agent-identity-source.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { readAgentIdentitySDKFence, type AgentIdentitySDKRetirementReceipt } from './agent-identity-sdk-fence.ts';
+import {
+  AGENT_IDENTITY_HISTORY_GUARD_COST,
+  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+  lockRecordedAgentIdentityHistory,
+  readAgentIdentitySDKWriterState,
+  readAgentIdentitySDKFence,
+  type AgentIdentitySDKRetirementReceipt,
+} from './agent-identity-sdk-fence.ts';
 import canonicalize from 'canonicalize';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { maintainSdkWorkflowOnce } from '../work/sdk-retirement-fence.ts';
+import {
+  identityHistoryCommand,
+  reserveIdentityHistoryWork,
+  nativeWork,
+  addNativeWork,
+  HISTORY_WORK_INVALIDATION,
+  HISTORY_WORK_WAKE,
+  HISTORY_LOCATOR_INVALIDATION,
+} from './agent-identity-inventory-work.ts';
 import { deadlineFor } from '../request/deadline.ts';
 
 /** Historical executions without captured native SDK creation keep this exact unresolved gap.
@@ -53,40 +74,67 @@ const TABLES = [
 
 /** Exact supported SDK schema, including the three non-FK payload tables. Limits apply before
  * calculating row bytes, so an uncovered old execution never produces an unbounded certificate. */
-async function inspect(pool: Pool, workId: string): Promise<{ empty: boolean; bounded: boolean }> {
+async function inspect(
+  pool: Pool,
+  workId: string,
+  context?: HistoryReceivingContext,
+): Promise<{ empty: boolean; bounded: boolean }> {
   return withConnection(pool, async (tx) => {
-    let rows = 0;
-    let bytes = 0;
-    let bounded = true;
-    for (const table of TABLES) {
-      const payloadFields = table.payload.map((field) => `'${field}'`).join(',');
-      const payloadValid = table.payload
-        .map(
-          (field) => `(value->'${field}' IS NULL OR
+    if (context) {
+      historyDeadline(context, 0);
+      // BEGIN, one settings SELECT, COMMIT and the possible ROLLBACK are prepaid.
+      await reserveIdentityHistoryWork(pool, nativeWork(1, 0, 4, 128));
+      await tx.query('BEGIN READ ONLY');
+    }
+    try {
+      if (context)
+        await tx.query("SELECT set_config('statement_timeout',$1,true)", [
+          String(Math.max(1, Math.floor(context.deadline - Date.now()))),
+        ]);
+      let rows = 0;
+      let bytes = 0;
+      let bounded = true;
+      for (const table of TABLES) {
+        const payloadFields = table.payload.map((field) => `'${field}'`).join(',');
+        const payloadValid = table.payload
+          .map(
+            (field) => `(value->'${field}' IS NULL OR
         jsonb_typeof(value->'${field}')='null' OR (jsonb_typeof(value->'${field}')='string'
         AND octet_length(value->>'${field}')<=65536))`,
-        )
-        .join(' AND ');
-      // Only scalar lengths leave PostgreSQL. An old oversized value never becomes a new
-      // private JavaScript copy just so the minimizer can reject its budget.
-      const result = await tx.query<{ bytes: number; metadata_bytes: number; payload_valid: boolean }>(
-        `SELECT octet_length(value::text) AS bytes,
+          )
+          .join(' AND ');
+        // Only scalar lengths leave PostgreSQL. An old oversized value never becomes a new
+        // private JavaScript copy just so the minimizer can reject its budget.
+        if (context) {
+          historyDeadline(context, 0);
+          await reserveIdentityHistoryWork(pool, nativeWork(table.limit + 1, 1, 1, (table.limit + 1) * 80));
+        }
+        const result = await tx.query<{ bytes: number; metadata_bytes: number; payload_valid: boolean }>(
+          `SELECT octet_length(value::text) AS bytes,
           octet_length((value-ARRAY[${payloadFields}]::text[])::text) AS metadata_bytes,
           ${payloadValid} AS payload_valid FROM (
             SELECT to_jsonb(bounded_row) AS value FROM (
               SELECT * FROM dbos.${table.name} WHERE ${table.key}=$1 ORDER BY ${table.order} LIMIT $2
             ) bounded_row
           ) measured`,
-        [workId, table.limit + 1],
-      );
-      if (result.rows.length > table.limit) bounded = false;
-      rows += result.rows.length;
-      for (const row of result.rows) {
-        bytes += row.bytes;
-        if (!row.payload_valid || row.metadata_bytes > HISTORY_WORK_BOUNDS.metadataBytes) bounded = false;
+          [workId, table.limit + 1],
+        );
+        if (result.rows.length > table.limit) bounded = false;
+        rows += result.rows.length;
+        for (const row of result.rows) {
+          bytes += row.bytes;
+          if (!row.payload_valid || row.metadata_bytes > HISTORY_WORK_BOUNDS.metadataBytes) bounded = false;
+        }
       }
+      if (context) {
+        historyDeadline(context, 0);
+        await tx.query('COMMIT');
+      }
+      return { empty: rows === 0, bounded: bounded && rows <= 139 && bytes < 10 * 1024 * 1024 };
+    } catch (error) {
+      if (context) await tx.query('ROLLBACK');
+      throw error;
     }
-    return { empty: rows === 0, bounded: bounded && rows <= 139 && bytes < 10 * 1024 * 1024 };
   });
 }
 
@@ -95,6 +143,7 @@ async function inspect(pool: Pool, workId: string): Promise<{ empty: boolean; bo
  * exact SDK probes. */
 async function prepareIdentitySDKWorkRetirement(
   pool: Pool,
+  client: WorkClient,
   job: { partition_no: number; account_route: number; account_id: string },
   custodyId: string,
   locator: Buffer,
@@ -102,85 +151,60 @@ async function prepareIdentitySDKWorkRetirement(
   barrier: HistoryBarrier,
   context: HistoryReceivingContext,
 ): Promise<string | null> {
-  historyDeadline(context, 0);
-  return withConnection(pool, async (tx) => {
-    await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-    try {
-      await tx.query("SELECT set_config('statement_timeout',$1,true)", [
-        `${Math.max(1, context.deadline - Date.now())}ms`,
-      ]);
-      historyDeadline(context, 0);
-      if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
-      const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
-      const mapping = await resolveAgentIdentitySDKWork(tx, custodyId);
-      if (!mapping || mapping.gap) {
-        await tx.query('COMMIT');
-        return mapping?.gap ?? 'identity-sdk-native-binding-unavailable';
-      }
-      await sealHistoryAccount(tx, job.partition_no, job.account_route, job.account_id);
-      const result = await tx.query('SELECT * FROM core.history_work WHERE partition_no=$1 AND work_id=$2 FOR UPDATE', [
-        job.partition_no,
-        custodyId,
-      ]);
-      const work = result.rows[0];
-      let gap: string | null = null;
-      if (!work) gap = 'work-native-custody-missing';
-      else if (work.state !== 'retired') {
-        if (!work.owner_ready) gap = 'work-owner-consumer-open';
-        const owner = registry.owner('durable-work/v1', work.owner);
-        if (!owner) gap = 'work-owner-unregistered';
-        if (!gap && owner) {
-          const associations = await tx.query(
-            `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
-             WHERE partition_no=$1 AND artifact_type='durable-work/v1' AND locator=$2
-             ORDER BY account_route,account_id LIMIT 65`,
-            [job.partition_no, locator],
-          );
-          if (
-            associations.rows.length > 64 ||
-            associations.rows.some((ref) => ref.minimizer_version !== 1) ||
-            !associations.rows.some(
-              (ref) => ref.account_id === job.account_id && ref.account_route === job.account_route,
-            )
-          )
-            gap = 'work-role-scope-unavailable';
-          else {
-            const readiness = await owner.readiness(
-              tx,
-              {
-                partition: job.partition_no,
-                locator: decodeLocator('durable-work/v1', locator),
-                accounts: associations.rows.map((ref) => ({
-                  accountRoute: ref.account_route,
-                  accountId: ref.account_id,
-                  roles: ref.roles,
-                })),
-              },
-              barrier,
-            );
-            if (!readiness.ready) gap = readiness.gap;
-          }
-        }
-        if (!gap && job.partition_no !== 0) {
-          const destination = await tx.query(
-            'SELECT absence_verified FROM core.history_work WHERE partition_no=0 AND work_id=$1',
-            [custodyId],
-          );
-          if (!destination.rows[0]?.absence_verified) gap = 'work-destination-retirement-pending';
-        }
-        if (!gap)
-          await tx.query(
-            `UPDATE core.history_work SET state='retired',retired_at=clock_timestamp(),request=NULL,scope=NULL
-             WHERE partition_no=$1 AND work_id=$2`,
-            [job.partition_no, custodyId],
-          );
-      }
-      await tx.query('COMMIT');
-      return gap;
-    } catch (error) {
-      await tx.query('ROLLBACK');
-      throw error;
+  const unit = currentAgentIdentityHistoryUnit();
+  if (!unit?.stage) return 'identity-history-current-unit-unavailable';
+  return identityHistoryCommand(pool, context, async (tx) => {
+    const held = await lockRecordedAgentIdentityHistory(tx, client, unit.stage!, context);
+    if (held.state === 'pending') return held.gap;
+    await reserveIdentityHistoryWork(pool, nativeWork(16, 16, 7, 64));
+    await sealHistoryAccount(tx, 0, job.account_route, job.account_id);
+    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 64));
+    const work = (
+      await tx.query<{ state: string; owner_ready: boolean; owner: string }>(
+        `SELECT state,owner_ready,owner FROM core.history_work WHERE partition_no=0 AND work_id=$1 FOR UPDATE`,
+        [custodyId],
+      )
+    ).rows[0];
+    if (!work) return 'work-native-custody-missing';
+    if (!work.owner_ready) return 'work-owner-consumer-open';
+    const owner = registry.owner('durable-work/v1', work.owner);
+    if (!owner) return 'work-owner-unregistered';
+    await reserveIdentityHistoryWork(pool, nativeWork(65, 65, 1, 8192));
+    const roles = (
+      await tx.query(
+        `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
+      WHERE partition_no=0 AND artifact_type='durable-work/v1' AND locator=$1 ORDER BY account_route,account_id LIMIT 65 FOR SHARE`,
+        [locator],
+      )
+    ).rows;
+    if (
+      roles.length > 64 ||
+      roles.some((r) => r.minimizer_version !== 1) ||
+      !roles.some((r) => r.account_route === job.account_route && r.account_id === job.account_id)
+    )
+      return 'work-role-scope-unavailable';
+    const ready = await owner.readiness(
+      tx,
+      {
+        partition: 0,
+        locator: decodeLocator('durable-work/v1', locator),
+        accounts: roles.map((r) => ({ accountRoute: r.account_route, accountId: r.account_id, roles: r.roles })),
+      },
+      barrier,
+    );
+    if (!ready.ready) return ready.gap;
+    if (work.state !== 'retired') {
+      await reserveIdentityHistoryWork(
+        pool,
+        addNativeWork(nativeWork(2, 2, 2, 0), AGENT_IDENTITY_HISTORY_GUARD_COST, HISTORY_WORK_INVALIDATION),
+      );
+      await tx.query(
+        `UPDATE core.history_work SET state='retired',retired_at=clock_timestamp(),request=NULL,scope=NULL
+        WHERE partition_no=0 AND work_id=$1`,
+        [custodyId],
+      );
     }
+    return null;
   });
 }
 
@@ -195,117 +219,88 @@ async function minimizeIdentitySDKWork(
   context: HistoryReceivingContext,
   maintenance?: Pick<WorkContext, 'env' | 'clock'> & { source: AgentIdentityWorkSource },
 ): Promise<string | null> {
-  const readSaved = async () => {
-    historyDeadline(context, 0);
-    const saved = await withConnection(pool, async (tx) => {
-      const result = await tx.query<{
-        sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null;
-        state: string;
-        owner_ready: boolean;
-        request: unknown;
-        scope: unknown;
-      }>(
-        `SELECT m.sdk_retirement_receipt,w.state,w.owner_ready,w.request,w.scope
-     FROM core.agent_identity_work m JOIN core.history_work w
-       ON w.partition_no=0 AND w.work_id=m.custody_id AND w.owner='access.agent-identity'
-         AND w.request_digest=m.request_digest WHERE m.custody_id=$1`,
-        [custodyId],
-      );
-      return result.rows[0];
-    });
-    historyDeadline(context, 0);
-    return saved;
-  };
-  let saved = await readSaved();
-  if (!saved?.sdk_retirement_receipt || !saved.owner_ready) {
-    if (!maintenance) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
-    const advanced = await advanceAgentIdentityConsumerMaintenance(
-      { pool, client, env: maintenance.env, clock: maintenance.clock },
-      {
-        partition: job.partition_no,
-        locator: { artifactType: 'durable-work/v1', workId: custodyId },
-        accounts: maintenance.source.accounts,
-      },
-      barrier,
-      context,
-    );
-    if (advanced !== null) return advanced;
-    saved = await readSaved();
-  }
-  if (!saved?.sdk_retirement_receipt || !saved.owner_ready) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
-  const prepared = await prepareIdentitySDKWorkRetirement(pool, job, custodyId, locator, registry, barrier, context);
+  if (!maintenance || !currentAgentIdentityHistoryUnit()) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
+  const advanced = await advanceAgentIdentityConsumerMaintenance(
+    { pool, client, env: maintenance.env, clock: maintenance.clock },
+    {
+      partition: job.partition_no,
+      locator: { artifactType: 'durable-work/v1', workId: custodyId },
+      accounts: maintenance.source.accounts,
+    },
+    barrier,
+    context,
+  );
+  if (advanced) return advanced;
+  const prepared = await prepareIdentitySDKWorkRetirement(
+    pool,
+    client,
+    job,
+    custodyId,
+    locator,
+    registry,
+    barrier,
+    context,
+  );
   if (prepared) return prepared;
-  saved = await readSaved();
-  if (
-    !saved?.sdk_retirement_receipt ||
-    saved.state !== 'retired' ||
-    !saved.owner_ready ||
-    saved.request !== null ||
-    saved.scope !== null
-  )
-    return AGENT_IDENTITY_SDK_RETIREMENT.gap;
-  const receipt = saved.sdk_retirement_receipt;
-  if (
-    job.account_route !== barrier.accountRoute ||
-    job.account_id !== barrier.accountId ||
-    canonicalize(receipt.binding.barrier) !== canonicalize(barrier)
-  )
-    return 'identity-sdk-retirement-barrier-changed';
-  // This path runs under the existing caller deadline, including SDK and physical probes.
-  if (job.partition_no !== 0) return 'identity-sdk-receiving-home-mismatch';
+  const unit = currentAgentIdentityHistoryUnit();
+  if (!unit?.stage) return 'identity-history-current-unit-unavailable';
+  // The original observations remain independent of the current native cleanup guard.
+  const bound = await identityHistoryCommand(pool, context, (tx) =>
+    lockRecordedAgentIdentityHistory(tx, client, unit.stage!, context),
+  );
+  if (bound.state === 'pending') return bound.gap;
+  const receipt = bound.receipt;
   const before = await readAgentIdentitySDKFence(pool, client, receipt, context);
   if (before.state === 'pending') return before.gap;
-  const physical = await inspect(pool, receipt.binding.workflowId);
+  const physical = await inspect(pool, receipt.binding.workflowId, context);
   if (!physical.bounded) return 'work-execution-budget-uncovered';
-  // Supported deletion only. No status check, cancellation or forced deletion of descendants.
-  await client.deleteWorkflows([receipt.binding.workflowId], false);
+  const writer = await readAgentIdentitySDKWriterState(pool, client, receipt.binding.workflowId, context);
+  if (writer.state === 'pending') return writer.gap;
+  if (writer.writer.generation !== '2' || canonicalize(writer.writer) !== canonicalize(bound.writer))
+    return 'identity-sdk-native-receipt-changed';
+  // Exact original supported deletion body, children=false, one funded owner attempt.
+  await maintainSdkWorkflowOnce(pool, client, writer.writer, 'delete', context.deadline, (cost) =>
+    reserveIdentityHistoryWork(pool, cost),
+  );
   const after = await readAgentIdentitySDKFence(pool, client, receipt, context);
   if (after.state === 'pending') return after.gap;
-  if (!(await inspect(pool, receipt.binding.workflowId)).empty) return 'work-physical-copy-remains';
-  return withConnection(pool, async (tx) => {
-    await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-    try {
-      if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
-      const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
-      const current = await resolveAgentIdentitySDKWork(tx, custodyId);
-      if (!current || current.gap) {
-        await tx.query('COMMIT');
-        return current?.gap ?? 'identity-sdk-native-binding-unavailable';
-      }
-      const bound = (
-        await tx.query(
-          `SELECT 1 FROM core.agent_identity_work m JOIN core.history_work w
-         ON w.partition_no=0 AND w.work_id=m.custody_id AND w.request_digest=m.request_digest
-         WHERE m.custody_id=$1 AND m.sdk_retirement_receipt=$2 AND w.owner='access.agent-identity'
-           AND w.state='retired' AND w.owner_ready AND w.request IS NULL AND w.scope IS NULL
-         FOR UPDATE OF m,w`,
-          [custodyId, receipt],
-        )
-      ).rows[0];
-      if (!bound) {
-        await tx.query('COMMIT');
-        return 'identity-sdk-retirement-receiving-binding-changed';
-      }
-      await sealHistoryAccount(tx, 0, job.account_route, job.account_id);
-      await tx.query('UPDATE core.history_work SET absence_verified=true WHERE partition_no=0 AND work_id=$1', [
-        custodyId,
-      ]);
-      await tx.query(
-        `UPDATE core.history_locator SET state='minimized',proof_barrier=$3
-         WHERE partition_no=0 AND account_route=$1 AND account_id=$3 AND artifact_type='durable-work/v1' AND locator=$2`,
-        [job.account_route, locator, job.account_id],
-      );
-      await tx.query('COMMIT');
-      return null;
-    } catch (error) {
-      await tx.query('ROLLBACK');
-      throw error;
-    }
+  if (!(await inspect(pool, receipt.binding.workflowId, context)).empty) return 'work-physical-copy-remains';
+  return identityHistoryCommand(pool, context, async (tx) => {
+    const held = await lockRecordedAgentIdentityHistory(tx, client, unit.stage!, context);
+    if (held.state === 'pending') return held.gap;
+    await reserveIdentityHistoryWork(pool, nativeWork(16, 16, 7, 64));
+    await sealHistoryAccount(tx, 0, job.account_route, job.account_id);
+    await reserveIdentityHistoryWork(
+      pool,
+      addNativeWork(
+        nativeWork(2, 2, 2, 0),
+        AGENT_IDENTITY_HISTORY_GUARD_COST,
+        AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+        HISTORY_WORK_INVALIDATION,
+        HISTORY_WORK_WAKE,
+      ),
+    );
+    await tx.query(`UPDATE core.history_work SET absence_verified=true WHERE partition_no=0 AND work_id=$1`, [
+      custodyId,
+    ]);
+    await reserveIdentityHistoryWork(
+      pool,
+      addNativeWork(
+        nativeWork(4, 4, 4, 0),
+        AGENT_IDENTITY_HISTORY_GUARD_COST,
+        AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+        HISTORY_LOCATOR_INVALIDATION,
+      ),
+    );
+    await tx.query(
+      `UPDATE core.history_locator SET state='minimized',proof_barrier=$3 WHERE partition_no=0
+      AND account_route=$1 AND account_id=$3 AND artifact_type='durable-work/v1' AND locator=$2`,
+      [job.account_route, locator, job.account_id],
+    );
+    return null;
   });
 }
 
-/** Retirement commits before any SDK call. All connections are released between native/SDK
- * phases. An absent status is never enough; a permanent retirement plus all exact probes is. */
 export async function minimizeHistoryWork(
   pool: Pool,
   client: WorkClient,
@@ -318,6 +313,8 @@ export async function minimizeHistoryWork(
   const key = decodeLocator('durable-work/v1', locator);
   if (key.artifactType !== 'durable-work/v1') throw new TypeError('Invalid durable locator');
   const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
+  const unit = currentAgentIdentityHistoryUnit();
+  if (unit) await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 16384));
   const mapping = await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
   const sdkWorkId = mapping?.workflowId ?? key.workId;
   if (mapping?.gap) return mapping.gap;
@@ -330,7 +327,7 @@ export async function minimizeHistoryWork(
       locator,
       registry,
       barrier,
-      { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) },
+      unit?.context ?? { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) },
       maintenance && mapping.source ? { ...maintenance, source: mapping.source } : undefined,
     );
   const prepared = await withConnection(pool, async (tx): Promise<string | null> => {

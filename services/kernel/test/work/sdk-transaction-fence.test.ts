@@ -128,3 +128,56 @@ test('SDK transaction guard refuses independent pools, wrong native identity, re
     'No authorized live command transaction',
   );
 });
+
+test('Bounded original SDK maintenance funds each dispatch once, rolls back refusals and preserves exact permanent writer custody', async () => {
+  const { maintainSdkWorkflowOnce, SDK_MAINTENANCE_DISPATCH } = await import('../../src/work/sdk-retirement-fence.ts');
+  const workflowID = id();
+  await client.enqueue(options(workflowID), workflowID);
+  const live = (await readSdkWorkflowWriterState(workflowID, client))!;
+  const charged: unknown[] = [];
+  const refused = new Error('Fixture refuses the owner retirement dispatch');
+  await expect(
+    maintainSdkWorkflowOnce(pool, client, live, 'retire', Date.now() + 5000, async (cost) => {
+      charged.push(cost);
+      if (cost === SDK_MAINTENANCE_DISPATCH.retire) throw refused;
+    }),
+  ).rejects.toBe(refused);
+  expect(charged).toEqual(
+    ['rollback', 'begin', 'settings', 'lock', 'retire'].map(
+      (key) => SDK_MAINTENANCE_DISPATCH[key as keyof typeof SDK_MAINTENANCE_DISPATCH],
+    ),
+  );
+  expect(await readSdkWorkflowWriterState(workflowID, client)).toEqual(live);
+  const closed = await maintainSdkWorkflowOnce(pool, client, live, 'retire', Date.now() + 5000, async () => {});
+  expect(closed?.generation).toBe('2');
+  const current = (await readSdkWorkflowWriterState(workflowID, client))!;
+  const deletion: unknown[] = [];
+  await maintainSdkWorkflowOnce(pool, client, current, 'delete', Date.now() + 5000, async (cost) => {
+    deletion.push(cost);
+  });
+  expect(deletion).toEqual(
+    [
+      'rollback',
+      'begin',
+      'settings',
+      'lock',
+      'delete-workflow_input',
+      'delete-workflow_output',
+      'delete-operation_outputs',
+      'delete-workflow_status',
+      'commit',
+    ].map((key) => SDK_MAINTENANCE_DISPATCH[key as keyof typeof SDK_MAINTENANCE_DISPATCH]),
+  );
+  expect(await readSdkWorkflowWriterState(workflowID, client)).toEqual(current);
+  await expect(client.enqueue(options(workflowID), workflowID)).rejects.toThrow('permanently retired');
+  await expect(
+    maintainSdkWorkflowOnce(
+      pool,
+      client,
+      { ...current, restoreGeneration: crypto.randomUUID() },
+      'delete',
+      Date.now() + 5000,
+      async () => {},
+    ),
+  ).rejects.toThrow('restore generation changed');
+});

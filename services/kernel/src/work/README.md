@@ -146,3 +146,47 @@ The new existing-database fixture cases in
 commit, original transactional enqueue refusal while a live fence is locked, post-delete permanent closure,
 independent-pool refusal and stale/wrong identity/closure/restore refusal. Their native execution is deferred to
 integration; source and typing alone do not establish that evidence or whole-feature closure.
+
+## Bounded selected identity maintenance
+
+`maintainSdkWorkflowOnce(pool,sdk,expected,action,deadline,reserve)` consumes the pinned SDK's additive
+`DBOSClient.maintainWorkflowOnce` port. It requires the actual same configured Pool and original exact current
+writer tuple. `retire` accepts generation1; `delete` accepts generation2. The caller must establish genuine native
+History readiness before retirement and bounded eight-table physical custody before deletion. This is the original
+retirement function and original four-table deletion body, children=false. Permanent fences/domain and ALWAYS
+writer guards are never deleted or disabled. The wrapper does not assert legal Source/History authority.
+
+The owner opens ONE READ COMMITTED transaction and makes ONE attempt. Every dispatch calls the caller's existing
+Source reservation before IO. It does not use `withDbRetry`, create a frame, refund failures, retry statements,
+change IDs, launch an SDK executor or install dependencies. Rollback is prepaid before checkout/BEGIN. Native
+current domain and exact workflow locks survive all owner work through COMMIT. Refusal of a later reservation
+rolls back the original transaction. An ambiguous commit propagates; later ordinary admission must read the exact
+current durable state and original binding. Old methods retain their original semantics and retry policy.
+
+| Dispatch identity / literal SQL                                                                    | rows / points / statements / returned content bytes / engine |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| rollback: `ROLLBACK` prepaid                                                                       | 0/0/1/0/0                                                    |
+| begin: `BEGIN ISOLATION LEVEL READ COMMITTED`                                                      | 0/0/1/0/0                                                    |
+| settings: `SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout','200ms',true)` | 1/0/1/128/0                                                  |
+| lock: original `checkWorkflowWriterStateInTransaction`                                             | 4/2/4/8192/0                                                 |
+| retire: `SELECT * FROM dbos.retire_workflow_writers($1)`                                           | 8/5/9/32768/0                                                |
+| delete-workflow_input: `DELETE FROM dbos.workflow_input WHERE workflow_uuid=ANY($1)`               | 1/1/1/0/0                                                    |
+| delete-workflow_output: same predicate                                                             | 1/1/1/0/0                                                    |
+| delete-operation_outputs: same predicate                                                           | 64/1/1/0/0                                                   |
+| delete-workflow_status: same predicate, four native FK cascades                                    | 73/5/5/0/0                                                   |
+| commit: `COMMIT`                                                                                   | 0/0/1/0/0                                                    |
+
+Retirement's nested allowance includes original status lock1, fence upsert1, status owner-token update1, row-guard
+DISTINCT ID selection1, guard invocation/upsert, closure update and native/outer return. Deletion's status bound
+is status1 + events8 + history64, with notifications/streams required zero by the independent physical inspection;
+its five statements/points include all four actual FK cascades. Inputs/outputs/operations use the original separate
+non-FK deletes. No DELETE calls the INSERT/UPDATE writer trigger. Control, locks and rollback are charged once per
+attempt; full retirement bound is13/7/17/41088/0, deletion144/10/16/8320/0. Partial/refused dispatches retain all prior
+charges and rollback's reservation. An unknown dispatch identity refuses before SQL.
+
+The wrapper and pinned patch are source-delivered here; dependency installation is controller-owned and was not
+run. A runtime without the actual bounded owner method refuses before retirement. Native existing-fixture journey,
+refusal/rollback and late-writer cases remain UNRUN pending integration. This additive method needs no SDK migration:
+it consumes the existing producer's permanent fence, restore domain and native functions. History's compatible
+forward migration owns only its own original association and receiving guards. The detailed default wiring and
+same-frame Source cost handoff are in [Access](../access/README.md#cost-complete-selected-identity-unit).

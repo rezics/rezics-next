@@ -3,6 +3,13 @@ import type {
   IdentitySourceConsumerReference,
 } from '../semantic/identity-source-consumer-custody.ts';
 import canonicalize from 'canonicalize';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import {
+  identityHistoryCommand,
+  reserveIdentityHistoryWork,
+  nativeWork,
+  IdentityHistoryWorkUnavailable,
+} from './agent-identity-inventory-work.ts';
 import { existsSync } from 'node:fs';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -13,6 +20,7 @@ import {
   currentCommandResources,
   noEffect,
   runCommand,
+  withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -120,102 +128,140 @@ export async function advanceAgentIdentityConsumerMaintenance(
   historyDeadline(context, artifact.partition);
   if (artifact.partition !== 0 || artifact.locator.artifactType !== 'durable-work/v1')
     return 'identity-sdk-receiving-home-mismatch';
-  const path = new URL('../semantic/identity-source-consumer-maintenance.ts', import.meta.url);
-  if (!existsSync(path)) return IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE;
-  const producer: IdentitySourceConsumerMaintenanceModule = await import(path.href);
-  if (typeof producer.withIdentitySourceConsumerMaintenance !== 'function')
-    return IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE;
-  let entered = false;
+  const active = identityUnits.getStore();
+  if (active) return advanceInFrame(deps, artifact, barrier, active.context);
   try {
-    return await producer.withIdentitySourceConsumerMaintenance(
-      { pool: deps.pool, env: deps.env, ...(deps.clock === undefined ? {} : { clock: deps.clock }) },
-      context,
-      async (funded) => {
-        entered = true;
-        maintenanceCallbacks.add(funded);
-        try {
-          // The original accepted lookup also observes this unit's unchanged deadline.
-          return await withRequestDeadline(funded.deadline, async () => {
-            historyDeadline(funded, artifact.partition);
-            const receiving = (
-              await runCommand(deps.pool, { partition: 0, deadline: funded.deadline }, async (tx) =>
-                noEffect(await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier)),
-              )
-            ).value;
-            if (receiving.state === 'pending') return receiving.gap;
-            const source = receiving.binding.source;
-            const receipt = sourceReceipt(source);
-            if (!receipt) return 'identity-sdk-source-native-binding-changed';
-            const { readAccountIdentitySource } = await import('../access/agent-verification-identity.ts');
-            const native = (
-              await runCommand(deps.pool, { partition: source.partition, deadline: funded.deadline }, async (tx) =>
-                noEffect(await readAccountIdentitySource(tx, receipt, undefined, true)),
-              )
-            ).value;
-            if (
-              native.partition !== source.partition ||
-              native.epoch !== source.epoch ||
-              native.position.toString() !== source.position ||
-              native.transactionId !== source.transactionId ||
-              native.digest !== source.digest ||
-              native.workflowId !== source.workflowId ||
-              native.input.intent.release !== source.release
-            )
-              return 'identity-sdk-source-native-binding-changed';
-            // The original source owns the erased role; a receiver's manifest alone is not
-            // authority to select a role or to supply an accepted identity job.
-            const role = native.roles.find((entry) => entry.account_id === barrier.accountId)?.role;
-            const erasedRole =
-              role === 'subject' ? 'subject' : role === 'actor' ? 'requester' : role === 'editor' ? 'decider' : null;
-            if (!erasedRole) return 'identity-sdk-retirement-role-scope-changed';
-            const { readOriginalAccountAgentIdentity } = await import('../semantic/account-agent-identity-recovery.ts');
-            const accepted = await readOriginalAccountAgentIdentity(deps.pool, {
-              account: receipt.account,
-              direction: receipt.kind,
-              receipt: receipt.receipt,
-            });
-            historyDeadline(funded, source.partition);
-            if (!accepted || accepted.digest !== native.digest) return 'identity-source-consumer-custody-pending';
-            const stage = await readAgentIdentityRetirementStage(
-              deps.pool,
-              {
-                receipt,
-                job: accepted.job,
-                source: {
-                  partition: native.partition,
-                  epoch: native.epoch,
-                  position: native.position,
-                  transactionId: native.transactionId,
-                },
-                sourceDigest: native.digest,
-                barrier,
-                erasedRole,
-              },
-              funded,
-            );
-            if (!stage) return 'identity-sdk-retirement-source-fence-changed';
-            if (
-              stage.handoff.custodyId !== receiving.binding.custodyId ||
-              stage.handoff.generation !== receiving.binding.receiver.generation ||
-              !same(stage.handoff.source, source)
-            )
-              return 'identity-sdk-retirement-source-fence-changed';
-            const { retireAgentIdentitySDKWork } = await import('./agent-identity-sdk-fence.ts');
-            const verified = await retireAgentIdentitySDKWork(deps.pool, deps.client, stage, funded);
-            return verified.state === 'pending' ? verified.gap : null;
-          });
-        } finally {
-          maintenanceCallbacks.delete(funded);
-        }
-      },
+    return await withAgentIdentityHistoryUnit(deps, context, (funded) =>
+      advanceInFrame(deps, artifact, barrier, funded),
     );
   } catch (error) {
-    // Exact provisional producer refusal. Callback/control failures propagate with their
-    // real spent work; never retry or open another allocation inside this invocation.
-    if (!entered && error instanceof Error && error.message === 'Identity Source maintenance funding is unavailable')
-      return IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE;
+    if (error instanceof IdentityHistoryWorkUnavailable) return error.message;
     throw error;
   }
+}
+
+type IdentityUnit = { context: HistoryReceivingContext; stage?: AgentIdentityRetirementStage; client?: WorkClient };
+const identityUnits = new AsyncLocalStorage<IdentityUnit>();
+export function currentAgentIdentityHistoryUnit(): Readonly<IdentityUnit> | undefined {
+  return identityUnits.getStore();
+}
+
+/** The default scheduler enters this AFTER selection releases its checkout. The only
+ * Source frame and deadline survive physical cleanup and the final receiving COMMIT. */
+export async function withAgentIdentityHistoryUnit<T>(
+  deps: Readonly<{
+    pool: Pool;
+    env: Readonly<Record<string, string | undefined>>;
+    clock?: KernelClock;
+    client?: WorkClient;
+  }>,
+  context: HistoryReceivingContext,
+  body: (funded: HistoryReceivingContext) => Promise<T>,
+): Promise<T> {
+  if (identityUnits.getStore()) throw new TypeError('Identity History unit cannot replace its Source frame');
+  const path = new URL('../semantic/identity-source-consumer-maintenance.ts', import.meta.url);
+  if (!existsSync(path)) throw new IdentityHistoryWorkUnavailable();
+  const producer: IdentitySourceConsumerMaintenanceModule = await import(path.href);
+  if (typeof producer.withIdentitySourceConsumerMaintenance !== 'function') throw new IdentityHistoryWorkUnavailable();
+  return producer.withIdentitySourceConsumerMaintenance(deps, context, (funded) => {
+    maintenanceCallbacks.add(funded);
+    return withSingleCommandAttempt(() =>
+      withRequestDeadline(funded.deadline, () =>
+        identityUnits.run({ context: funded, client: deps.client }, async () => {
+          try {
+            return await body(funded);
+          } finally {
+            maintenanceCallbacks.delete(funded);
+          }
+        }),
+      ),
+    );
+  });
+}
+
+async function advanceInFrame(
+  deps: Readonly<{
+    pool: Pool;
+    client: WorkClient;
+    env: Readonly<Record<string, string | undefined>>;
+    clock?: KernelClock;
+  }>,
+  artifact: HistoryArtifact,
+  barrier: HistoryBarrier,
+  funded: HistoryReceivingContext,
+): Promise<string | null> {
+  historyDeadline(funded, artifact.partition);
+  await reserveIdentityHistoryWork(deps.pool, nativeWork(72, 72, 6, 32768));
+  const receiving = await identityHistoryCommand(deps.pool, funded, (tx) =>
+    readAgentIdentitySDKReceivingBinding(tx, artifact, barrier),
+  );
+  if (receiving.state === 'pending') return receiving.gap;
+  const source = receiving.binding.source;
+  const receipt = sourceReceipt(source);
+  if (!receipt) return 'identity-sdk-source-native-binding-changed';
+  const { readAccountIdentitySource } = await import('../access/agent-verification-identity.ts');
+  await reserveIdentityHistoryWork(deps.pool, nativeWork(70, 68, 25, 73984));
+  const native = (
+    await runCommand(deps.pool, { partition: source.partition, deadline: funded.deadline }, async (tx) =>
+      noEffect(await readAccountIdentitySource(tx, receipt, undefined, true)),
+    )
+  ).value;
+  if (
+    native.partition !== source.partition ||
+    native.epoch !== source.epoch ||
+    native.position.toString() !== source.position ||
+    native.transactionId !== source.transactionId ||
+    native.digest !== source.digest ||
+    native.workflowId !== source.workflowId ||
+    native.input.intent.release !== source.release
+  )
+    return 'identity-sdk-source-native-binding-changed';
+  // The original source owns the erased role; a receiver's manifest alone is not
+  // authority to select a role or to supply an accepted identity job.
+  const role = native.roles.find((entry) => entry.account_id === barrier.accountId)?.role;
+  const erasedRole =
+    role === 'subject' ? 'subject' : role === 'actor' ? 'requester' : role === 'editor' ? 'decider' : null;
+  if (!erasedRole) return 'identity-sdk-retirement-role-scope-changed';
+  const { readOriginalAccountAgentIdentity } = await import('../semantic/account-agent-identity-recovery.ts');
+  // The original accepted lookup has at most three command attempts and six RR
+  // snapshots on unmerge; all SQL/control/failure slots are reserved before entry.
+  await reserveIdentityHistoryWork(deps.pool, nativeWork(86, 80, 59, 205920));
+  const accepted = await readOriginalAccountAgentIdentity(deps.pool, {
+    account: receipt.account,
+    direction: receipt.kind,
+    receipt: receipt.receipt,
+  });
+  historyDeadline(funded, source.partition);
+  if (!accepted || accepted.digest !== native.digest) return 'identity-source-consumer-custody-pending';
+  const stage = await readAgentIdentityRetirementStage(
+    deps.pool,
+    {
+      receipt,
+      job: accepted.job,
+      source: {
+        partition: native.partition,
+        epoch: native.epoch,
+        position: native.position,
+        transactionId: native.transactionId,
+      },
+      sourceDigest: native.digest,
+      barrier,
+      erasedRole,
+    },
+    funded,
+  );
+  if (!stage) return 'identity-sdk-retirement-source-fence-changed';
+  if (
+    stage.handoff.custodyId !== receiving.binding.custodyId ||
+    stage.handoff.generation !== receiving.binding.receiver.generation ||
+    !same(stage.handoff.source, source)
+  )
+    return 'identity-sdk-retirement-source-fence-changed';
+  const unit = identityUnits.getStore();
+  if (unit) unit.stage = stage;
+  const { retireAgentIdentitySDKWork } = await import('./agent-identity-sdk-fence.ts');
+  const verified = await retireAgentIdentitySDKWork(deps.pool, deps.client, stage, funded);
+  return verified.state === 'pending' ? verified.gap : null;
 }
 
 /** SAME source home only. Re-read native source bytes and the immutable original SDK
@@ -263,6 +309,7 @@ export async function readAgentIdentityRetirementStage(
 ): Promise<AgentIdentityRetirementStage | null> {
   const fixed = structuredClone(reference);
   historyDeadline(context, fixed.source.partition);
+  if (maintenanceCallbacks.has(context)) await reserveIdentityHistoryWork(pool, nativeWork(73, 71, 26, 82176));
   const handoff = (
     await runCommand(pool, { partition: fixed.source.partition, deadline: context.deadline }, async (tx) =>
       noEffect(await sourceHandoff(tx, fixed)),
@@ -316,6 +363,11 @@ export async function agentIdentityRetirementReadiness(
   artifact: HistoryArtifact,
   barrier: HistoryBarrier,
 ): Promise<HistoryReadiness> {
+  const active = currentAgentIdentityHistoryUnit();
+  if (active) {
+    const { pool } = currentCommandResources(tx);
+    await reserveIdentityHistoryWork(pool, nativeWork(74, 74, 7, 49152));
+  }
   const receiving = await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier);
   if (receiving.state === 'pending') return { ready: false, gap: receiving.gap };
   const row = (
@@ -334,10 +386,17 @@ export async function agentIdentityRetirementReadiness(
     !same(receipt.binding, receiving.binding)
   )
     return { ready: false, gap: AGENT_IDENTITY_SDK_RETIREMENT.gap };
-  // A copied SDK receipt never establishes the distinct pre-retirement transition.
-  // Keep the native guard closed until the Source owner can authorize that transition
-  // on original History ownership. Generation 2 and physical receiving closure follow it.
-  return { ready: false, gap: IDENTITY_HISTORY_HANDOFF_UNAVAILABLE };
+  const unit = currentAgentIdentityHistoryUnit();
+  if (!unit?.stage || !unit.client) return { ready: false, gap: IDENTITY_HISTORY_HANDOFF_UNAVAILABLE };
+  if (
+    artifact.locator.artifactType !== 'durable-work/v1' ||
+    artifact.locator.workId !== unit.stage.handoff.custodyId ||
+    !same(barrier, unit.stage.reference.barrier)
+  )
+    return { ready: false, gap: 'identity-history-current-unit-changed' };
+  const { lockRecordedAgentIdentityHistory } = await import('./agent-identity-sdk-fence.ts');
+  const held = await lockRecordedAgentIdentityHistory(tx, unit.client, unit.stage, unit.context);
+  return held.state === 'guarded' ? { ready: true } : { ready: false, gap: held.gap };
 }
 
 /** Released SDK receiving observation for inventory presentation. It cannot be used in the
