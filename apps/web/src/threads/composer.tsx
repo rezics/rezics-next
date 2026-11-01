@@ -118,7 +118,7 @@ function useComposerUpload(
   };
   useLayoutEffect(() => {
     recovery.invalidate();
-    for (const [source, entry] of copies.current) if (entry.target !== JSON.stringify(target)) removeCopy(source);
+    for (const entry of copies.current.values()) if (entry.target !== JSON.stringify(target)) entry.controller.abort();
   });
   useLayoutEffect(
     () => () => {
@@ -539,9 +539,7 @@ function PostComposerContent<T, Context = undefined>({
   const editorHost = useRef<HTMLDivElement>(null);
   const [editorReady, setEditorReady] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(initialKey);
-  const idempotencyRef = useRef(initialKey);
   const replyIntent = useRef(new ReplyIntent<Context>(initialKey));
-  idempotencyRef.current = idempotencyKey;
   const [failure, setFailure] = useState<WriteFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(() =>
     initialBody && imageSources(initialBody).length > replyImageLimit ? m.thread_image_limit() : null,
@@ -643,7 +641,6 @@ function PostComposerContent<T, Context = undefined>({
   useEffect(() => {
     if (replyTargetId === undefined) return;
     const key = replyIntent.current.selectParent(replyTargetId);
-    idempotencyRef.current = key;
     setIdempotencyKey(key);
     setFailure((current) => (current?.reason === 'media-unavailable' ? current : null));
   }, [replyTargetId]);
@@ -813,7 +810,6 @@ function PostComposerContent<T, Context = undefined>({
     const command = replyIntent.current.prepare(draft, replyTargetId ?? null, commandContext);
     // Pending and lost responses both retain the entire command until its outcome is known.
     replyIntent.current.settle(false);
-    idempotencyRef.current = command.idempotencyKey;
     setIdempotencyKey(command.idempotencyKey);
     submittingRef.current = true;
     setSubmitting(true);
@@ -846,7 +842,6 @@ function PostComposerContent<T, Context = undefined>({
       setUploadNotice(null);
       if (containerId || !boardId) {
         const nextKey = crypto.randomUUID();
-        idempotencyRef.current = nextKey;
         setIdempotencyKey(nextKey);
         replyIntent.current.reset(nextKey);
       }
