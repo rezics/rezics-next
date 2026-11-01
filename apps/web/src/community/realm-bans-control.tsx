@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -14,9 +14,12 @@ import {
   type ResolveBanTarget,
 } from './realm-ban-target';
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
+import { RealmBanLifetime } from './realm-ban-lifetime';
 
 export type RealmBansControlProps = {
   realmId: string;
+  /** Default Panel admission; standalone fixtures may omit it. */
+  lifetime?: RealmBanLifetime;
   initial?: BanReadState;
   ready: boolean;
   resolve?: ResolveBanTarget;
@@ -112,15 +115,57 @@ function TargetPreview({ target }: { target: RealmBanTarget }) {
 
 const unavailableTarget: ResolveBanTarget = async () => ({ state: 'unavailable' });
 
-/** A complete Realm management region, composed from shadcn fields and buttons; no registry equivalent exists. */
-export function RealmBansControl({
+const serverCurrent = () => false;
+const retiredInitials = new WeakSet<BanReadState>();
+
+/** Replace the whole private visit synchronously when any original caller source changes. */
+export function RealmBansControl(props: RealmBansControlProps) {
+  const visit = useRef<{
+    props: RealmBansControlProps;
+    gate: RealmBanLifetime;
+    initial?: BanReadState;
+  } | null>(null);
+  const old = visit.current;
+  if (
+    !old ||
+    old.props.realmId !== props.realmId ||
+    old.props.ready !== props.ready ||
+    old.props.read !== props.read ||
+    old.props.write !== props.write ||
+    old.props.resolve !== props.resolve ||
+    old.props.lifetime !== props.lifetime ||
+    old.props.initial !== props.initial
+  ) {
+    old?.gate.retire();
+    if (old?.initial) retiredInitials.add(old.initial);
+    visit.current = {
+      props,
+      gate: new RealmBanLifetime(
+        () => props.ready && (props.lifetime?.current() ?? true),
+        props.lifetime?.subscribe,
+        () => {
+          if (props.initial) retiredInitials.add(props.initial);
+        },
+      ),
+      // A repeated initial page cannot lend its private data to a replacement caller.
+      initial: props.initial && !retiredInitials.has(props.initial) ? props.initial : undefined,
+    };
+  }
+  const current = visit.current!;
+  const retired = useSyncExternalStore(current.gate.subscribe, current.gate.snapshot, serverCurrent);
+  if (retired || !props.ready) return null;
+  return <RealmBansVisit key={current.gate.id} {...props} initial={current.initial} gate={current.gate} />;
+}
+
+/** A complete Realm management region, composed from the existing administration controls. */
+function RealmBansVisit({
   realmId,
   initial,
-  ready,
   read,
   write,
   resolve = unavailableTarget,
-}: RealmBansControlProps) {
+  gate,
+}: RealmBansControlProps & { gate: RealmBanLifetime }) {
   const id = useId();
   const [view, setView] = useState<BanReadState>(initial ?? { state: 'loading' });
   const [query, setQuery] = useState('');
@@ -128,71 +173,108 @@ export function RealmBansControl({
   const [selected, setSelected] = useState<RealmBanTarget | null>(null);
   const [banConfirm, setBanConfirm] = useState(false);
   const lookup = useRef<AbortController | null>(null);
+  const intent = useRef(0);
+  const renderIntent = intent.current;
   const invalidateTarget = useCallback(() => {
+    intent.current++;
     lookup.current?.abort();
     lookup.current = null;
     setTarget({ state: 'idle' });
     setSelected(null);
     setBanConfirm(false);
   }, []);
-  useEffect(() => {
-    invalidateTarget();
-    return () => {
-      lookup.current?.abort();
-    };
-  }, [realmId, ready, resolve, invalidateTarget]);
   const [reason, setReason] = useState('');
   const [confirm, setConfirm] = useState<string | null>(null);
   const [result, setResult] = useState<BanWriteResult | null>(null);
   const [retry, setRetry] = useState<BanWriteInput | null>(null);
   const [busy, setBusy] = useState(false);
-  const working = useRef(false);
+  const working = useRef<object | null>(null);
   const generation = useRef(0);
+  const renderGeneration = generation.current;
+  const pageReady = useRef(initial?.state === 'ready');
+  const uncertain = useRef<BanWriteInput | null>(null);
 
   const refresh = useCallback(
     async (cursor?: string) => {
-      invalidateTarget();
+      if (!gate.current() || working.current || uncertain.current) return;
+      pageReady.current = false;
+      const ticket = gate.ticket();
       const current = ++generation.current;
+      const owns = () => gate.owns(ticket) && generation.current === current;
+      invalidateTarget();
+      setConfirm(null);
       setView({ state: 'loading' });
       let next: BanReadState;
       try {
+        // Fence queued transports as well as their results.
+        await Promise.resolve();
+        if (!owns()) return;
         next = await read(cursor);
       } catch {
         next = { state: 'unavailable' };
       }
-      if (generation.current === current) {
-        setView(next);
-        if (next.state === 'forbidden' || next.state === 'closed' || next.state === 'signed-out') {
-          setResult(null);
-          setConfirm(null);
-        }
+      if (!owns()) return;
+      pageReady.current = next.state === 'ready';
+      setView(next);
+      if (next.state === 'forbidden' || next.state === 'closed' || next.state === 'signed-out') {
+        setResult(null);
+        setRetry(null);
+        setQuery('');
+        setReason('');
       }
     },
-    [read, invalidateTarget],
+    [read, invalidateTarget, gate],
   );
 
   useEffect(() => {
+    setBusy(false);
     if (initial === undefined) void refresh();
     return () => {
-      generation.current++;
+      lookup.current?.abort();
+      lookup.current = null;
+      working.current = null;
     };
   }, [initial, refresh]);
 
-  async function change(input: BanWriteInput) {
-    if (!ready || working.current || view.state !== 'ready') return;
-    const current = generation.current;
-    working.current = true;
+  function acquire() {
+    if (
+      !gate.current() ||
+      working.current ||
+      !pageReady.current ||
+      renderGeneration !== generation.current ||
+      renderIntent !== intent.current
+    )
+      return null;
+    const operation = {};
+    const ticket = gate.ticket();
+    const readGeneration = generation.current;
+    working.current = operation;
     setBusy(true);
+    return {
+      owns: () => gate.owns(ticket) && working.current === operation && generation.current === readGeneration,
+      release: () => {
+        if (working.current !== operation) return;
+        working.current = null;
+        if (gate.owns(ticket)) setBusy(false);
+      },
+    };
+  }
+
+  async function send(input: BanWriteInput, operation: NonNullable<ReturnType<typeof acquire>>) {
+    if (!operation.owns()) return;
     setResult(null);
     let next: BanWriteResult;
     try {
+      await Promise.resolve();
+      if (!operation.owns()) return;
       next = await write(input);
     } catch {
       next = { ok: false, reason: 'unavailable' };
     }
-    if (generation.current !== current) return;
+    if (!operation.owns()) return;
     setResult(next);
-    setRetry(!next.ok && next.reason === 'unavailable' ? input : null);
+    uncertain.current = !next.ok && next.reason === 'unavailable' ? input : null;
+    setRetry(uncertain.current);
     if (next.ok) {
       setConfirm(null);
       if (input.action === 'ban') {
@@ -200,18 +282,41 @@ export function RealmBansControl({
         setQuery('');
         setReason('');
       }
+      operation.release();
       void refresh();
     } else if (next.reason === 'forbidden' || next.reason === 'signed-out' || next.reason === 'closed') {
       invalidateTarget();
+      setQuery('');
+      setReason('');
+      pageReady.current = false;
       setView({ state: next.reason });
       setConfirm(null);
     }
-    working.current = false;
-    setBusy(false);
+  }
+
+  async function change(input: BanWriteInput) {
+    if (uncertain.current && uncertain.current !== input) return;
+    const operation = acquire();
+    if (!operation) return;
+    // The uncertain command is immutable and is retried only by explicit activation.
+    const command = Object.freeze({ ...input });
+    try {
+      await send(command, operation);
+    } finally {
+      operation.release();
+    }
   }
 
   async function findTarget() {
-    if (!ready || busy || retry || view.state !== 'ready') return;
+    if (
+      !gate.current() ||
+      working.current ||
+      uncertain.current ||
+      !pageReady.current ||
+      renderGeneration !== generation.current ||
+      renderIntent !== intent.current
+    )
+      return;
     invalidateTarget();
     const handle = parseRealmBanTarget(query, window.location.origin);
     if (!handle) {
@@ -219,55 +324,83 @@ export function RealmBansControl({
       return;
     }
     const controller = new AbortController();
+    const ticket = gate.ticket();
+    const readGeneration = generation.current;
+    const targetGeneration = intent.current;
     lookup.current = controller;
+    const owns = () =>
+      gate.owns(ticket) &&
+      generation.current === readGeneration &&
+      intent.current === targetGeneration &&
+      !controller.signal.aborted &&
+      lookup.current === controller;
     setTarget({ state: 'pending' });
     let next: BanTargetState;
     try {
+      await Promise.resolve();
+      if (!owns()) return;
       next = await resolve(handle, controller.signal);
     } catch {
       next = { state: 'unavailable' };
     }
-    if (!controller.signal.aborted && lookup.current === controller) {
-      setTarget(next);
-      if (next.state === 'signed-out') setView({ state: 'signed-out' });
+    if (!owns()) return;
+    setTarget(next);
+    if (next.state === 'signed-out') {
+      pageReady.current = false;
+      setView({ state: 'signed-out' });
+      setQuery('');
+      setReason('');
+      setResult(null);
     }
   }
 
   async function submitBan() {
-    if (!ready || working.current || retry || view.state !== 'ready' || !selected || !banConfirm) return;
+    if (uncertain.current || !selected || !banConfirm || target.state !== 'ready') return;
+    const operation = acquire();
+    if (!operation) return;
     const reviewed = selected;
-    const controller = new AbortController();
-    lookup.current?.abort();
-    lookup.current = controller;
-    working.current = true;
-    setBusy(true);
-    setTarget({ state: 'pending' });
-    let current: BanTargetState;
-    try {
-      current = await revalidateRealmBanTarget(resolve, reviewed, controller.signal);
-    } catch {
-      current = { state: 'unavailable' };
-    }
-    working.current = false;
-    setBusy(false);
-    if (controller.signal.aborted || lookup.current !== controller) return;
-    if (current.state !== 'ready') {
-      invalidateTarget();
-      setTarget(current);
-      if (current.state === 'signed-out') setView({ state: 'signed-out' });
-      return;
-    }
-    setTarget(current);
-    await change({
+    const command = Object.freeze({
       realmId,
       accountId: reviewed.account.id,
       reason,
-      action: 'ban',
+      action: 'ban' as const,
       idempotencyKey: crypto.randomUUID(),
     });
+    const controller = new AbortController();
+    lookup.current?.abort();
+    lookup.current = controller;
+    try {
+      await Promise.resolve();
+      if (!operation.owns()) return;
+      let current: BanTargetState;
+      try {
+        current = await revalidateRealmBanTarget(resolve, reviewed, controller.signal);
+      } catch {
+        current = { state: 'unavailable' };
+      }
+      if (!operation.owns() || controller.signal.aborted || lookup.current !== controller) return;
+      if (current.state !== 'ready') {
+        invalidateTarget();
+        setTarget(current);
+        if (current.state === 'signed-out') {
+          pageReady.current = false;
+          setView({ state: 'signed-out' });
+          setQuery('');
+          setReason('');
+          setResult(null);
+        }
+        return;
+      }
+      setTarget(current);
+      // The same synchronous owner covers revalidation through the final send.
+      await send(command, operation);
+    } finally {
+      operation.release();
+    }
   }
 
-  const disabled = !ready || busy || retry !== null;
+  const disabled = busy || retry !== null;
+  if (!gate.current()) return null;
   return (
     <section
       aria-labelledby={`${id}-title`}
@@ -282,8 +415,9 @@ export function RealmBansControl({
           type="button"
           variant="outline"
           className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-          disabled={busy || view.state === 'loading' || retry !== null}
+          disabled={disabled || view.state === 'loading'}
           onClick={() => {
+            if (!gate.current() || generation.current !== renderGeneration) return;
             setConfirm(null);
             void refresh();
           }}
@@ -302,7 +436,8 @@ export function RealmBansControl({
             className="min-w-0 max-w-xl space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
-              if (!disabled && selected) setBanConfirm(true);
+              if (gate.current() && !working.current && !uncertain.current && !disabled && selected)
+                setBanConfirm(true);
             }}
           >
             <Field>
@@ -318,6 +453,7 @@ export function RealmBansControl({
                 value={query}
                 disabled={disabled}
                 onChange={(event) => {
+                  if (!gate.current() || working.current || uncertain.current) return;
                   invalidateTarget();
                   setQuery(event.target.value);
                 }}
@@ -349,6 +485,9 @@ export function RealmBansControl({
                     className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                     disabled={disabled}
                     onClick={() => {
+                      if (!gate.current() || working.current || uncertain.current) return;
+                      if (renderIntent !== intent.current || renderGeneration !== generation.current) return;
+                      intent.current++;
                       setSelected(target.target);
                       setBanConfirm(false);
                     }}
@@ -371,6 +510,8 @@ export function RealmBansControl({
                 value={reason}
                 disabled={disabled}
                 onChange={(event) => {
+                  if (!gate.current() || working.current || uncertain.current) return;
+                  intent.current++;
                   setReason(event.target.value);
                   setBanConfirm(false);
                 }}
@@ -402,7 +543,12 @@ export function RealmBansControl({
                     variant="ghost"
                     className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                     disabled={disabled}
-                    onClick={() => setBanConfirm(false)}
+                    onClick={() => {
+                      if (gate.current() && !working.current) {
+                        intent.current++;
+                        setBanConfirm(false);
+                      }
+                    }}
                   >
                     {m.realm_bans_cancel()}
                   </Button>
@@ -429,7 +575,17 @@ export function RealmBansControl({
                       variant="outline"
                       className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                       disabled={disabled}
-                      onClick={() => setConfirm(ban.accountId)}
+                      onClick={() => {
+                        if (
+                          gate.current() &&
+                          !working.current &&
+                          !uncertain.current &&
+                          renderGeneration === generation.current
+                        ) {
+                          intent.current++;
+                          setConfirm(ban.accountId);
+                        }
+                      }}
                     >
                       {m.realm_bans_unban()}
                     </Button>
@@ -459,7 +615,12 @@ export function RealmBansControl({
                           variant="ghost"
                           className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                           disabled={disabled}
-                          onClick={() => setConfirm(null)}
+                          onClick={() => {
+                            if (gate.current() && !working.current) {
+                              intent.current++;
+                              setConfirm(null);
+                            }
+                          }}
                         >
                           {m.realm_bans_cancel()}
                         </Button>
@@ -477,6 +638,7 @@ export function RealmBansControl({
               className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
               disabled={disabled}
               onClick={() => {
+                if (!gate.current() || generation.current !== renderGeneration) return;
                 setConfirm(null);
                 void refresh(view.page.next ?? undefined);
               }}
@@ -497,7 +659,7 @@ export function RealmBansControl({
               type="button"
               variant="outline"
               className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-              disabled={busy || !ready || view.state !== 'ready'}
+              disabled={busy || view.state !== 'ready'}
               onClick={() => void change(retry)}
             >
               {m.realm_bans_retry()}
