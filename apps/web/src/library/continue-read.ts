@@ -62,7 +62,7 @@ export async function loadContinueState(
   source: ContinueSource = nativeContinueSource,
 ): Promise<ContinueResult> {
   try {
-    await prepareSession(request, sessionEnv, { refresh: false });
+    if (await prepareSession(request, sessionEnv, { refresh: false })) return { state: 'signed-out' };
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'signed-out' };
     const result = await source(client, authorization, { limit: CONTINUE_LIMIT, ...input }, request.signal);

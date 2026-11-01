@@ -101,7 +101,7 @@ export async function readFollowCounts(
   const context = followCountsSearch(input);
   const target =
     context.targetType && context.targetId ? { targetType: context.targetType, targetId: context.targetId } : undefined;
-  const options = { headers: { authorization }, fetch: { cache: 'no-store' as const } };
+  const options = { headers: { authorization }, fetch: { cache: 'no-store' as const, redirect: 'manual' as const } };
   const [outgoing, targetCount] = await Promise.all([
     readCount(() => client.followCounts.outgoing.get(options)),
     target
@@ -123,7 +123,7 @@ export async function loadPrivateFollowCounts(
   const context = followCountsSearch(input);
   let viewer: FollowCountsViewer | null = null;
   try {
-    await prepareSession(request, env);
+    if (await prepareSession(request, env)) return { viewer, context, outgoing: { state: 'signed-out' }, target: null };
     const authorization = viewerCredential(request);
     const subject = sessionSubject(request);
     const csrfToken = requestCsrfToken(request);
