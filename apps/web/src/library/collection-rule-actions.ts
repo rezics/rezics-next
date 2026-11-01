@@ -5,7 +5,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import {
   asSession,
   fromKernel,
@@ -137,5 +137,8 @@ export const readCollectionRuleChoices = createServerFn({ method: 'GET' })
     const request = getRequest();
     if (await prepareSession(request, env as Partial<SessionEnv>)) return null;
     const authorization = viewerCredential(request);
-    return authorization ? loadRuleChoices(kernelClient(), authorization, data) : null;
+    const viewerId = sessionSubject(request);
+    return authorization && viewerId
+      ? { viewerId, choices: await loadRuleChoices(kernelClient(), authorization, data) }
+      : null;
   });

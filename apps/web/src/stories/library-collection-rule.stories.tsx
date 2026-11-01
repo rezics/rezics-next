@@ -23,6 +23,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 const draft: RulePage = {
   state: 'new',
+  viewerId: 'story-viewer',
   choices: unavailableRuleChoices(),
   intent: '10000000-0000-4000-8000-000000000001',
 };
@@ -30,7 +31,10 @@ function UnavailableDraft() {
   return (
     <CollectionRuleEditor
       page={draft}
-      csrfToken=""
+      viewerId="story-viewer"
+      collectionId={null}
+      admitted={['collection.create']}
+      csrfToken="story-csrf-token"
       save={async () => ({ ok: false, reason: 'unavailable' })}
       reload={async () => draft}
     />
@@ -77,7 +81,10 @@ export const Denied: Story = {
       <AppShell>
         <CollectionRuleEditor
           page={{ state: 'denied' }}
-          csrfToken=""
+          viewerId="story-viewer"
+          collectionId="saved-rule-unavailable"
+          admitted={['collection_rule.get', 'collection_rule.update']}
+          csrfToken="story-csrf-token"
           save={async () => ({ ok: false, reason: 'forbidden' })}
           reload={async () => ({ state: 'denied' })}
         />

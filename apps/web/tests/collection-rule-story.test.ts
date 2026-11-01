@@ -67,7 +67,10 @@ test('refused rule bodies render only the localized refusal and retry without an
         const html = renderToStaticMarkup(
           createElement(CollectionRuleEditor, {
             page: { state },
-            csrfToken: '',
+            viewerId: 'owner',
+            collectionId: 'saved',
+            admitted: ['collection_rule.get', 'collection_rule.update'],
+            csrfToken: 'current-csrf',
             save: async () => ({ ok: false, reason: 'unavailable' }),
             reload: async () => ({ state }),
           }),

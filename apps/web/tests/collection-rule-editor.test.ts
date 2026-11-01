@@ -26,6 +26,20 @@ const filter = parseFilter({
     },
   ],
 });
+const credential = async () => ({
+  status: 'active' as const,
+  subject: 'owner',
+  accessToken: 'owner-token',
+  csrfToken: 'a'.repeat(22),
+});
+const sessionEnv = {
+  AUTH_ISSUER: 'https://auth.test',
+  API_RESOURCE: 'https://kernel.test',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'rule-test',
+  WEBSITE_CLIENT_KEY: '{}',
+  SESSIONS: { idFromName: (id: string) => id, get: () => ({ credential, credentialIfFresh: credential }) },
+} as unknown as Partial<import('../src/session/client').SessionEnv>;
 const request = () =>
   new Request('https://web.test/action', { method: 'POST', headers: { authorization: 'Bearer current-viewer' } });
 
@@ -116,8 +130,8 @@ test('private GET denial never falls back to criteria in public metadata and una
   expect(
     await loadCollectionRule(
       client,
-      new Request('https://web.test/rule', { headers: { authorization: 'Bearer foreign' } }),
-      {},
+      new Request('https://web.test/rule', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } }),
+      sessionEnv,
       'saved',
     ),
   ).toEqual({ state: 'denied' });
@@ -161,6 +175,7 @@ test('all locales retain historical owner meanings in the shared structured comp
         createElement(CollectionRuleEditor, {
           page: {
             state: 'ready',
+            viewerId: 'owner',
             id: 'saved',
             title: 'Rule',
             intent: key,
@@ -174,7 +189,10 @@ test('all locales retain historical owner meanings in the shared structured comp
               sourceGeneration: '12',
             },
           },
-          csrfToken: '',
+          viewerId: 'owner',
+          collectionId: 'saved',
+          admitted: ['collection_rule.get', 'collection_rule.update'],
+          csrfToken: 'current-csrf',
           save: async () => ({ ok: false, reason: 'unavailable' }),
           reload: async () => ({ state: 'unavailable' }),
         }),
@@ -201,4 +219,44 @@ test('all locales retain historical owner meanings in the shared structured comp
   } finally {
     setLocale(previous, { reload: false });
   }
+});
+
+// Source transport coverage; these assertions do not establish native authorization proof.
+test('private loader provenance comes only from the prepared session subject, including new pages', async () => {
+  const calls: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const call = new Request(input, init);
+      calls.push(call);
+      const path = new URL(call.url).pathname;
+      if (path === '/v1/collections/saved/rule')
+        return Response.json({
+          rule: {
+            filter,
+            sort: 'id',
+            revision: 7,
+            collectionRevision: 9,
+            releaseDigest: 'stored-release',
+            sourceGeneration: '12',
+          },
+        });
+      if (path === '/v1/collections/saved') return Response.json({ collection: { title: 'Private rule' } });
+      return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+    },
+  });
+  const unbound = new Request('https://web.test/rule', { headers: { authorization: 'Bearer opaque-no-subject' } });
+  expect(await loadCollectionRule(client, unbound, sessionEnv, 'saved')).toEqual({ state: 'denied' });
+  expect(calls).toEqual([]);
+  const bound = () =>
+    new Request('https://web.test/rule', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } });
+  const loaded = await loadCollectionRule(client, bound(), sessionEnv, 'saved');
+  expect(loaded.state).toBe('ready');
+  if (loaded.state !== 'ready') throw new Error('Expected private native rule');
+  expect(loaded.viewerId).toBe('owner');
+  expect(loaded.rule.filter).toEqual(filter);
+  const created = await loadCollectionRule(client, bound(), sessionEnv);
+  expect(created.state).toBe('new');
+  if (created.state !== 'new') throw new Error('Expected a private create page');
+  expect(created.viewerId).toBe('owner');
+  for (const call of calls) expect(call.headers.get('authorization')).toBe('Bearer owner-token');
 });

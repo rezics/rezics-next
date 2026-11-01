@@ -4,7 +4,7 @@ import { parseFilter, type FilterDocument } from '@rezics/filter';
 import { conditionMetadata, type ConditionMetadata } from '../search/condition-editor-model';
 import type { Release } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 
 export type SavedRule = {
   filter: FilterDocument;
@@ -20,9 +20,19 @@ export type RuleChoices = {
   labels: { state: ChoiceState; values: { id: string; name: string }[]; next: string | null };
 };
 export type RulePage =
-  | { state: 'new'; choices: RuleChoices; intent: string }
-  | { state: 'ready'; id: string; title: string; rule: SavedRule; choices: RuleChoices; intent: string }
+  | { state: 'new'; viewerId: string; choices: RuleChoices; intent: string }
+  | {
+      state: 'ready';
+      viewerId: string;
+      id: string;
+      title: string;
+      rule: SavedRule;
+      choices: RuleChoices;
+      intent: string;
+    }
   | { state: 'denied' | 'unavailable' };
+
+export type RuleChoicePage = { viewerId: string; choices: RuleChoices };
 
 const preparing = (problem: unknown): ChoiceState => {
   const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : undefined;
@@ -98,9 +108,15 @@ export async function loadCollectionRule(
   try {
     if (await prepareSession(request, sessionEnv)) return { state: 'denied' };
     const authorization = viewerCredential(request);
-    if (!authorization) return { state: 'denied' };
+    const viewerId = sessionSubject(request);
+    if (!authorization || !viewerId) return { state: 'denied' };
     if (id === undefined)
-      return { state: 'new', choices: await loadRuleChoices(client, authorization), intent: crypto.randomUUID() };
+      return {
+        state: 'new',
+        viewerId,
+        choices: await loadRuleChoices(client, authorization),
+        intent: crypto.randomUUID(),
+      };
     const response = await client.collections({ collectionId: id }).rule.get({ headers: { authorization } });
     if (response.error || !response.data) return { state: response.status < 500 ? 'denied' : 'unavailable' };
     const rule = response.data.rule;
@@ -108,6 +124,7 @@ export async function loadCollectionRule(
     if (collection.error || !collection.data) return { state: 'unavailable' };
     return {
       state: 'ready',
+      viewerId,
       id,
       title: collection.data.collection.title ?? id,
       rule: { ...rule, filter: parseFilter(rule.filter) },
