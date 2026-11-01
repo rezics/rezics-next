@@ -16,7 +16,13 @@ WITH input AS (
   ON CONFLICT (partition_no, input_key) DO UPDATE SET
     owner_epoch = EXCLUDED.owner_epoch,
     through_position = EXCLUDED.through_position,
-    enqueue_revision = EXCLUDED.enqueue_revision
+    enqueue_revision = semantic.public_filter_privacy_pending.enqueue_revision + 1,
+    first_position = CASE WHEN semantic.public_filter_privacy_pending.live
+      THEN semantic.public_filter_privacy_pending.first_position ELSE EXCLUDED.first_position END,
+    next_first_position = CASE WHEN semantic.public_filter_privacy_pending.captured_through IS NOT NULL
+      THEN coalesce(semantic.public_filter_privacy_pending.next_first_position,EXCLUDED.first_position)
+      ELSE NULL END,
+    live = true
   -- The home-head lock orders appends. Do not renew a captured maintenance
   -- interval/frontier when a later input arrives; its old clear must lose CAS.
   WHERE semantic.public_filter_privacy_pending.through_position < EXCLUDED.through_position

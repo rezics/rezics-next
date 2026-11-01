@@ -1,3 +1,6 @@
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { maintainPublicFilterCoverageHome } from '../semantic/public-filter-coverage-maintenance.ts';
 import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -143,7 +146,12 @@ export async function redriveAccountDiscovery(
   }
   const local = await read('account_discovery_intent');
   for (const input of local) delivered += (await deliverAccountDiscoveryIntent(deps, input, 'account')).value ? 1 : 0;
-  return { delivered, more: foreign.length === limit || local.length === limit };
+  // Delivery remains independent of native registration apply. Only the Source
+  // maintainer adopts committed receiver receipts and retires its own barriers.
+  const coverage = await maintainPublicFilterCoverageHome(deps.pool, partition, {
+    deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
+  });
+  return { delivered, more: foreign.length === limit || local.length === limit || coverage.more };
 }
 
 /** Default production service, plus source-event wakeups for normal mutations.

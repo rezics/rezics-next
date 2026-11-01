@@ -42,6 +42,8 @@ BEGIN
     r := OLD.route; a := OLD.account_id; v := nextval('access.account_discovery_revision');
   END IF;
   UPDATE access.account_discovery_population SET population = population + delta, revision = v WHERE partition_no = r >> 4;
+  PERFORM semantic.enqueue_account_public_filter(partition_no,revision,claim_revision)
+    FROM access.account_discovery_population WHERE partition_no=r >> 4;
   IF TG_OP <> 'UPDATE' OR NOT access.native_terminal_account_ready(OLD) THEN
     INSERT INTO access.account_discovery_intent VALUES (r, a, v)
       ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
@@ -69,6 +71,9 @@ BEGIN
   -- Serialize allocation with the native head; a late commit must advance it too.
   PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
+  -- Same local lock order as retained enrollment: Account head, then Source head.
+  PERFORM 1 FROM semantic.public_filter_privacy_head WHERE partition_no=p FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter Source head is missing'; END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   NEW.discovery_revision := nextval('access.account_discovery_revision');
   RETURN NEW;
@@ -87,6 +92,8 @@ BEGIN
   IF TG_OP = 'DELETE' THEN r := OLD.route; v := nextval('access.account_discovery_revision');
   ELSE r := NEW.route; v := NEW.discovery_revision; END IF;
   UPDATE access.account_discovery_population SET claim_revision = v WHERE partition_no = r >> 4;
+  PERFORM semantic.enqueue_account_public_filter(partition_no,revision,claim_revision)
+    FROM access.account_discovery_population WHERE partition_no=r >> 4;
   IF TG_OP <> 'INSERT' AND OLD.account_id IS NOT NULL THEN
     INSERT INTO access.account_discovery_claim_intent VALUES (r, OLD.account_id, v)
       ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
@@ -114,6 +121,9 @@ BEGIN
   p := CASE WHEN TG_OP = 'DELETE' THEN OLD.route >> 4 ELSE NEW.route >> 4 END;
   PERFORM 1 FROM access.account_discovery_population WHERE partition_no = p FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Account discovery census is not installed'; END IF;
+  -- Same local lock order as retained enrollment: Account head, then Source head.
+  PERFORM 1 FROM semantic.public_filter_privacy_head WHERE partition_no=p FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter Source head is missing'; END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   NEW.discovery_revision := nextval('access.account_discovery_revision');
   RETURN NEW;
@@ -144,12 +154,24 @@ END $$;
 CREATE FUNCTION access.account_discovery_truncate() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE home integer;
 BEGIN
-  IF TG_TABLE_NAME = 'account' THEN
-    UPDATE access.account_discovery_population SET population = 0, revision = nextval('access.account_discovery_revision');
-  ELSE
-    UPDATE access.account_discovery_population SET claim_revision = nextval('access.account_discovery_revision');
-  END IF;
+  -- A table reset has no Account row identity. Each original native home remains
+  -- independently dirty; no event delivery or clearing of intents retires it.
+  FOR home IN SELECT partition_no FROM access.account_discovery_population ORDER BY partition_no LOOP
+    PERFORM 1 FROM access.account_discovery_population WHERE partition_no=home FOR UPDATE;
+    PERFORM 1 FROM semantic.public_filter_privacy_head WHERE partition_no=home FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter Source head is missing'; END IF;
+    IF TG_TABLE_NAME = 'account' THEN
+      UPDATE access.account_discovery_population SET population=0,
+        revision=nextval('access.account_discovery_revision') WHERE partition_no=home;
+    ELSE
+      UPDATE access.account_discovery_population SET claim_revision=nextval('access.account_discovery_revision')
+        WHERE partition_no=home;
+    END IF;
+    PERFORM semantic.enqueue_account_public_filter(partition_no,revision,claim_revision)
+      FROM access.account_discovery_population WHERE partition_no=home;
+  END LOOP;
   RETURN NULL;
 END $$;
 

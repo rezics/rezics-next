@@ -375,3 +375,26 @@ Remaining Root/Search delivery: shared discriminated registry/source/document/su
 custody; writer/activation/rollback and erasure participation; test assembler plus Web/generated-client migration.
 Accounts selects the population, text, exact-claim guards, version and native key inventory here. There is no
 remaining Accounts product-policy question and no new research prerequisite.
+
+## Native public-filter maintenance
+
+Account and handle-claim triggers publish the internal Account-domain pending key
+in the original Semantic Source home in the same authoritative transaction. The
+Account population and Source head use a consistent lock order. Rollback removes
+both the native revision change and its pending work. Preference invalidation,
+old and new claim identities, deletion and reset retain their original native
+revision and terminal-account guards. Native Account revisions remain separate
+from Semantic privacy-log positions.
+
+The default Account discovery worker advances the retained Source reverse-key
+frontier after its ordinary intent work. Each receiver applies its coverage
+summary and registration generation in its own committed transaction before the
+Source home advances its frontier. Sending an intent or applying a summary does
+not acknowledge repair. Unknown receiver custody retains the pending interval; a
+later enqueue survives retirement of an earlier captured interval.
+
+`enrollAccountDiscoveryHome` retains the original native tuple and compiler-key
+frontier under the same writer locks. Its receipt proves only that home enrollment
+step. It does not certify population repair, a complete baseline, physical
+publication or public-filter readiness. Population reads retain their existing
+fail-closed guards until the original complete Source handover is available.
