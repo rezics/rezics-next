@@ -59,10 +59,11 @@ export type PublishedLogCurrentRead = PublishedLogDetail & { requestedId: string
 
 async function readPublishedLogSnapshot(
   client: KernelClient,
-  request: Request,
+  sourceRequest: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { id: string },
 ): Promise<PublishedLogCurrentRead> {
+  const request = new Request(sourceRequest);
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
   // Capture the successful preparation before dispatch, never from a later preparation
@@ -103,7 +104,7 @@ export function loadPublishedLogCurrent(
   sessionEnv: Partial<SessionEnv>,
   input: { id: string },
 ): Promise<PublishedLogCurrentRead> {
-  return readPublishedLogSnapshot(client, new Request(request), sessionEnv, input);
+  return readPublishedLogSnapshot(client, request, sessionEnv, input);
 }
 
 async function readLogPage(client: KernelClient, accountId: string, authorization: string, cursor?: string) {

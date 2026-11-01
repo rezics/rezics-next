@@ -294,6 +294,9 @@ test('the actual point read proves native ownership once; anonymous snapshots hy
   const anonymous = await actualRead({ data: { id: 'original' } });
   expect(anonymous).toMatchObject({ isOwner: false, owner: null, log: owner.log });
   expect(nativeReads.at(-1)!.headers.has('authorization')).toBe(false);
+  request.headers.delete('cookie');
+  expect(await server.readPublishedLog({ data: { id: 'original' } })).toEqual({ log: owner.log, isOwner: false });
+  expect(nativeReads.at(-1)!.headers.has('authorization')).toBe(false);
   request.headers.set('authorization', 'Bearer explicit-owner');
   preparation = 'active';
   expect(await actualRead({ data: { id: 'original' } })).toMatchObject({ isOwner: false, owner: null });
