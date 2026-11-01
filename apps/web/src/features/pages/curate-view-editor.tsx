@@ -811,7 +811,7 @@ function AdmittedPresentationViewEditor({
       {preview}
       <CurationPublicationRecovery
         publication={publication}
-        visit={visit ?? undefined}
+        {...(visit ? { visit } : {})}
         profile={profile}
         head={saved.head}
         onPublished={published}

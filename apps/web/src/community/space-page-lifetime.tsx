@@ -356,7 +356,7 @@ export function captureSpacePageAdmission(
     baseline: current,
     revision: source.revision(),
     initialized: current.state !== 'unknown',
-    routeSignal: input.signal,
+    ...(input.signal ? { routeSignal: input.signal } : {}),
     routeAborted: !!input.signal?.aborted,
   };
   if (input.signal && !input.signal.aborted) {
@@ -448,8 +448,8 @@ export function releaseSpacePageRead(admission: SpacePageAdmission) {
   const runtime = runtimes.get(admission);
   runtime?.stopRouteAbort?.();
   if (runtime) {
-    runtime.stopRouteAbort = undefined;
-    runtime.routeSignal = undefined;
+    delete runtime.stopRouteAbort;
+    delete runtime.routeSignal;
   }
 }
 
