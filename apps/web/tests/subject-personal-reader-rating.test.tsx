@@ -94,7 +94,10 @@ type Harness = {
   host: HTMLElement;
   page: Page;
   observers: number;
-  render(nextPage?: Page, observers?: number): Promise<void>;
+  enabled: boolean;
+  render(nextPage?: Page, observers?: number, enabled?: boolean): Promise<void>;
+  setEnabled(enabled: boolean): Promise<void>;
+  setPanelEnabled(label: string, enabled: boolean): Promise<void>;
   setSession(session: Session): Promise<void>;
   flush(): Promise<void>;
   unmount(): Promise<void>;
@@ -130,6 +133,8 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
   window.document.body.append(host);
   let page = initialPage;
   let observers = observerCount;
+  let enabled = true;
+  const disabledPanels = new Set<string>();
   let root: ReturnType<typeof createRoot> | null = null;
 
   function PersonalPanel({ label }: { label: string }) {
@@ -140,6 +145,7 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
       locale: page.locale,
       view: page.view,
       session,
+      enabled: enabled && !disabledPanels.has(label),
       includeOwnRating: true,
       transport: readTransport,
     });
@@ -212,9 +218,10 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
     );
   }
 
-  async function render(nextPage = page, nextObservers = observers) {
+  async function render(nextPage = page, nextObservers = observers, nextEnabled = enabled) {
     page = nextPage;
     observers = nextObservers;
+    enabled = nextEnabled;
     if (!root) root = createRoot(host);
     await act(async () => {
       root!.render(
@@ -235,6 +242,16 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
       client.setQueryData(['session'], session);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+  }
+
+  async function setEnabled(nextEnabled: boolean) {
+    await render(page, observers, nextEnabled);
+  }
+
+  async function setPanelEnabled(label: string, nextEnabled: boolean) {
+    if (nextEnabled) disabledPanels.delete(label);
+    else disabledPanels.add(label);
+    await render();
   }
 
   async function unmount() {
@@ -259,8 +276,15 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
     get page() {
       return page;
     },
-    observers,
+    get observers() {
+      return observers;
+    },
+    get enabled() {
+      return enabled;
+    },
     render,
+    setEnabled,
+    setPanelEnabled,
     setSession,
     flush,
     unmount,
@@ -417,10 +441,10 @@ test('subject preferences and own rating retire across the complete mounted read
     await clickControlSave(main);
     expect(main.writes).toHaveLength(6);
     expect(main.writes[5]).toMatchObject({ units: 12, expectedReader: 'reader-a' });
-    await act(async () => {
-      main.writes[5]!.resolve(true);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    // Capture another legitimate A write before retirement. Both were dispatched while A still owned the page.
+    await clickIntent(main, 'change', 'panel-2');
+    expect(main.writes).toHaveLength(7);
+    expect(main.writes[6]).toMatchObject({ units: 16, expectedReader: 'reader-a' });
     await main.setSession(readerB);
     expect(main.readers).toHaveLength(2);
     expect(main.ratings).toHaveLength(2);
@@ -430,11 +454,9 @@ test('subject preferences and own rating retire across the complete mounted read
     const freshRange = panel(main).querySelector('input[type="range"]') as unknown as HTMLInputElement;
     expect(freshRange.getAttribute('aria-valuenow')).toBe('8');
 
-    // Keep two old writes queued, focus B's control, then settle success/failure after the admission changed.
-    await clickIntent(main, 'set', 'panel-1');
-    await clickIntent(main, 'change', 'panel-2');
-    const staleSuccess = main.writes[6]!;
-    const staleFailure = main.writes[7]!;
+    // Settle A's already-dispatched success/failure only after B has admitted fresh private data.
+    const staleSuccess = main.writes[5]!;
+    const staleFailure = main.writes[6]!;
     freshRange.focus();
     const focusedRange = window.document.activeElement;
     await act(async () => {
@@ -453,6 +475,54 @@ test('subject preferences and own rating retire across the complete mounted read
     expect(value(main, 'mutation-status', 'panel-1')).toBe('');
     expect(value(main, 'mutation-status', 'panel-2')).toBe('');
 
+    // Retiring the latest writer restores the surviving sibling's pending intent and leaves it usable.
+    const concurrent = makeHarness(readerA, basePage, 2);
+    try {
+      await concurrent.render();
+      await concurrent.flush();
+      expect(concurrent.readers).toHaveLength(1);
+      expect(concurrent.ratings).toHaveLength(1);
+      await resolvePair(concurrent, 0, 0, 2, 8);
+      await clickIntent(concurrent, 'set', 'panel-1');
+      await clickIntent(concurrent, 'change', 'panel-2');
+      expect(concurrent.writes).toHaveLength(2);
+      expect(value(concurrent, 'own-rating', 'panel-2')).toBe('16');
+      await concurrent.setPanelEnabled('panel-2', false);
+      expect(value(concurrent, 'own-rating', 'panel-2')).toBe('unavailable');
+      expect(value(concurrent, 'own-rating', 'panel-1')).toBe('12');
+      await act(async () => {
+        concurrent.writes[1]!.resolve(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(value(concurrent, 'own-rating', 'panel-1')).toBe('12');
+      expect(value(concurrent, 'mutation-status', 'panel-1')).toBe('pending:12');
+      await act(async () => {
+        concurrent.writes[0]!.resolve(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(concurrent.client.getQueryData<SubjectOwnRating>(currentKey(concurrent, 'data-rating-query', 'panel-1'))).toEqual({
+        reader: 'reader-a',
+        kind: 'ready',
+        units: 12,
+      });
+      await clickIntent(concurrent, 'set', 'panel-2');
+      expect(concurrent.writes).toHaveLength(2);
+
+      await concurrent.setPanelEnabled('panel-2', true);
+      expect(concurrent.readers).toHaveLength(2);
+      expect(concurrent.ratings).toHaveLength(2);
+      expect(currentKey(concurrent, 'data-rating-query', 'panel-1')).not.toEqual(
+        currentKey(concurrent, 'data-rating-query', 'panel-2'),
+      );
+      await resolvePair(concurrent, 1, 1, 2, 12);
+      expect(value(concurrent, 'own-rating', 'panel-1')).toBe('12');
+      expect(value(concurrent, 'own-rating', 'panel-2')).toBe('12');
+      expect(concurrent.writes).toHaveLength(2);
+    } finally {
+      await concurrent.unmount();
+      concurrent.client.clear();
+    }
+
     type Retirement =
       | 'sign-out'
       | 'viewer'
@@ -462,7 +532,9 @@ test('subject preferences and own rating retire across the complete mounted read
       | 'view'
       | 'unmount'
       | 'query-error'
-      | 'query-removal';
+      | 'own-rating-error'
+      | 'query-removal'
+      | 'route-disabled';
     const retirements: Retirement[] = [
       'sign-out',
       'viewer',
@@ -472,7 +544,9 @@ test('subject preferences and own rating retire across the complete mounted read
       'view',
       'unmount',
       'query-error',
+      'own-rating-error',
       'query-removal',
+      'route-disabled',
     ];
     const outcomes = ['success', 'failure', 'throw'] as const;
 
@@ -489,10 +563,25 @@ test('subject preferences and own rating retire across the complete mounted read
           let freshReaderIndex = 1;
           let freshRatingIndex = 1;
           let currentPage = basePage;
+          let staleReaderRejected = false;
+          let staleRatingRejected = false;
+          let retiredReaderKey: QueryKey | undefined;
+          let retiredRatingKey: QueryKey | undefined;
+          let retiredRange: HTMLInputElement | undefined;
+          let protectedRange: HTMLInputElement | undefined;
+          let protectedFocus: Element | null = null;
+          let freshWrite: WriteCall | undefined;
 
-          if (retirement === 'query-error' || retirement === 'query-removal') {
+          if (
+            retirement === 'query-error' ||
+            retirement === 'own-rating-error' ||
+            retirement === 'query-removal' ||
+            retirement === 'route-disabled'
+          ) {
             await resolvePair(harness, 0, 0, 2, 8);
             expect(value(harness, 'preferences')).toBe('2:show');
+            retiredReaderKey = currentKey(harness, 'data-reader-query');
+            retiredRatingKey = currentKey(harness, 'data-rating-query');
             await startCurrentRefetch(harness);
             staleReaderCall = harness.readers[1]!;
             staleRatingCall = harness.ratings[1]!;
@@ -500,10 +589,18 @@ test('subject preferences and own rating retire across the complete mounted read
             freshRatingIndex = 2;
           }
 
-          await clickIntent(harness, 'set');
+          if (retirement === 'route-disabled') {
+            retiredRange = panel(harness).querySelector('input[type="range"]') as unknown as HTMLInputElement;
+            retiredRange.focus();
+            await act(async () => {
+              retiredRange!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+            });
+            expect(retiredRange.getAttribute('aria-valuenow')).toBe('0');
+            await clickControlSave(harness);
+          } else await clickIntent(harness, 'set');
           const oldWrite = harness.writes[0]!;
           expect(oldWrite.expectedReader).toBe('reader-a');
-          expect(value(harness, 'own-rating')).toBe('12');
+          expect(value(harness, 'own-rating')).toBe(retirement === 'route-disabled' ? '0' : '12');
 
           if (retirement === 'sign-out') {
             await harness.setSession(signedOut);
@@ -530,15 +627,39 @@ test('subject preferences and own rating retire across the complete mounted read
           } else if (retirement === 'query-error') {
             await act(async () => {
               staleReaderCall.reject(new Error('preference read failed'));
-              await new Promise((resolve) => setTimeout(resolve, 0));
-            });
-            await act(async () => {
-              resolveRating(staleRatingCall, 20);
+              staleReaderRejected = true;
               await new Promise((resolve) => setTimeout(resolve, 0));
             });
             expect(value(harness, 'preferences')).toBe('0:blur');
             expect(value(harness, 'own-rating')).toBe('unavailable');
-            await startCurrentRefetch(harness);
+            expect(currentKey(harness, 'data-reader-query')).not.toEqual(retiredReaderKey);
+            expect(currentKey(harness, 'data-rating-query')).not.toEqual(retiredRatingKey);
+            expect(harness.client.getQueryData<SubjectOwnRating>(retiredRatingKey!)).toEqual({
+              reader: 'reader-a',
+              kind: 'ready',
+              units: 12,
+            });
+          } else if (retirement === 'own-rating-error') {
+            await act(async () => {
+              staleRatingCall.reject(new Error('own rating read failed'));
+              staleRatingRejected = true;
+              await new Promise((resolve) => setTimeout(resolve, 0));
+            });
+            expect(value(harness, 'preferences')).toBe('0:blur');
+            expect(value(harness, 'own-rating')).toBe('unavailable');
+            expect(currentKey(harness, 'data-reader-query')).not.toEqual(retiredReaderKey);
+            expect(currentKey(harness, 'data-rating-query')).not.toEqual(retiredRatingKey);
+            expect(harness.client.getQueryData<SubjectReaderObservation>(retiredReaderKey!)).toEqual({
+              reader: 'reader-a',
+              preferences: { spoilerLevel: 2, suitability: 'show' },
+            });
+          } else if (retirement === 'route-disabled') {
+            await harness.setEnabled(false);
+            expect(value(harness, 'preferences')).toBe('0:blur');
+            expect(value(harness, 'own-rating')).toBe('unavailable');
+            expect(harness.readers).toHaveLength(2);
+            expect(harness.ratings).toHaveLength(2);
+            await harness.setEnabled(true);
           } else {
             const oldOwnKey = currentKey(harness, 'data-rating-query');
             harness.client.removeQueries({ queryKey: oldOwnKey, exact: true });
@@ -560,33 +681,30 @@ test('subject preferences and own rating retire across the complete mounted read
             await resolvePair(harness, freshReaderIndex, freshRatingIndex, 1, 8);
             expect(value(harness, 'preferences')).toBe('1:blur');
             expect(value(harness, 'own-rating')).toBe('8');
+            if (retirement === 'route-disabled') {
+              protectedRange = panel(harness).querySelector('input[type="range"]') as unknown as HTMLInputElement;
+              expect(protectedRange).not.toBe(retiredRange);
+              expect(protectedRange.getAttribute('aria-valuenow')).toBe('8');
+              expect(currentKey(harness, 'data-reader-query')).not.toEqual(retiredReaderKey);
+              expect(currentKey(harness, 'data-rating-query')).not.toEqual(retiredRatingKey);
+              protectedRange.focus();
+              protectedFocus = window.document.activeElement;
+              await clickIntent(harness, 'change');
+              freshWrite = harness.writes[1]!;
+              expect(freshWrite).toMatchObject({ units: 16, expectedReader: 'reader-a' });
+              expect(value(harness, 'own-rating')).toBe('16');
+            }
           } else {
             expect(value(harness, 'preferences')).toBe('0:blur');
             expect(value(harness, 'own-rating')).toBe('unavailable');
           }
 
-          if (retirement === 'query-error' || retirement === 'query-removal') {
-            // Old reads from the prior same-reader observer arrive after a fresh same-reader response.
-            await act(async () => {
-              if (retirement === 'query-removal') {
-                resolveReader(staleReaderCall, 2);
-                resolveRating(staleRatingCall, 20);
-              }
-              await new Promise((resolve) => setTimeout(resolve, 0));
-            });
-          } else if (retirement !== 'sign-out') {
-            await act(async () => {
-              resolveReader(staleReaderCall, 2);
-              resolveRating(staleRatingCall, 20);
-              await new Promise((resolve) => setTimeout(resolve, 0));
-            });
-          } else {
-            await act(async () => {
-              resolveReader(staleReaderCall, 2);
-              resolveRating(staleRatingCall, 20);
-              await new Promise((resolve) => setTimeout(resolve, 0));
-            });
-          }
+          // Delayed old reads arrive only after the fresh same-reader observation is visible.
+          await act(async () => {
+            if (!staleReaderRejected) resolveReader(staleReaderCall, 2);
+            if (!staleRatingRejected) resolveRating(staleRatingCall, 20);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          });
 
           if (outcome === 'success') oldWrite.resolve(true);
           else if (outcome === 'failure') oldWrite.resolve(false);
@@ -598,15 +716,32 @@ test('subject preferences and own rating retire across the complete mounted read
             expect(value(harness, 'own-rating')).toBe('unavailable');
           } else {
             expect(value(harness, 'preferences')).toBe('1:blur');
-            expect(value(harness, 'own-rating')).toBe('8');
+            const expectedUnits = retirement === 'route-disabled' ? 16 : 8;
+            expect(value(harness, 'own-rating')).toBe(String(expectedUnits));
             expect(harness.client.getQueryData<SubjectOwnRating>(currentKey(harness, 'data-rating-query'))).toEqual({
               reader: retirement === 'viewer' ? 'reader-b' : 'reader-a',
               kind: 'ready',
-              units: 8,
+              units: expectedUnits,
             });
-            expect(value(harness, 'mutation-status')).toBe('');
+            if (retirement === 'route-disabled') {
+              expect(value(harness, 'mutation-status')).toBe('pending:16');
+              await act(async () => {
+                freshWrite!.resolve(true);
+                await new Promise((resolve) => setTimeout(resolve, 0));
+              });
+              expect(value(harness, 'mutation-status')).toBe('saved');
+            } else expect(value(harness, 'mutation-status')).toBe('');
           }
-          expect(harness.writes).toHaveLength(1); // No implicit retry creates a second command after uncertainty.
+          if (retirement === 'route-disabled') {
+            expect(value(harness, 'preferences')).toBe('1:blur');
+            expect(value(harness, 'own-rating')).toBe('16');
+            expect(protectedRange?.getAttribute('aria-valuenow')).toBe('16');
+            expect(window.document.activeElement).toBe(protectedFocus);
+            expect(panel(harness).querySelector('[data-slot="rating-control-reserved"] [role="status"]')).toBeNull();
+            expect(harness.readers).toHaveLength(3);
+            expect(harness.ratings).toHaveLength(3);
+          }
+          expect(harness.writes).toHaveLength(retirement === 'route-disabled' ? 2 : 1); // No stale retry adds a command.
         } finally {
           await harness.unmount();
           harness.client.clear();

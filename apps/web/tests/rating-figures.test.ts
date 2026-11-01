@@ -166,6 +166,39 @@ test('question-driven save and clear include zero, enforce the live scale and pr
   cache.clear();
 });
 
+test('an uncertain private vote preserves only its own value and leaves public figures untouched', async () => {
+  const cache = new QueryClient();
+  const binding = ratingLease();
+  const ownKey = subjectOwnRatingQuery(subjectId, 'en', binding.scope).queryKey;
+  const publicKey = subjectRatingQuery(subjectId, 'en').queryKey;
+  cache.setQueryData(ownKey, { reader: binding.reader, kind: 'ready', units: 8 });
+  cache.setQueryData(publicKey, { figure: ready });
+  let writes = 0;
+  const failures: { uncertain: boolean }[] = [];
+
+  await expect(
+    applyOptimisticRatingChange({
+      queryClient: cache,
+      subjectId,
+      locale: 'en',
+      binding,
+      units: 12,
+      write: async () => {
+        writes++;
+        throw new Error('The vote may have reached the server');
+      },
+      onFailure: (failure) => failures.push(failure),
+    }),
+  ).resolves.toBe(false);
+
+  expect(writes).toBe(1);
+  expect(failures).toEqual([{ uncertain: true }]);
+  expect(cache.getQueryData(ownKey)).toEqual({ reader: binding.reader, kind: 'ready', units: 12 });
+  expect(cache.getQueryData(publicKey)).toEqual({ figure: ready });
+  expect(cache.getQueryState(publicKey)?.isInvalidated).toBe(false);
+  cache.clear();
+});
+
 test('subject and Search render published ready, pending and below-threshold figures with independent imports and metadata', async () => {
   for (const figure of [
     ready,

@@ -16,7 +16,22 @@ type SessionAdmission = {
   subject?: string | null;
 };
 
-type ScopeState = { observers: number; retirement: number };
+type LeaseState = {
+  active: boolean;
+  incarnation: number;
+  cacheEpoch: number;
+  errorEpoch: number;
+  operations: Map<number, RatingWriteState>;
+};
+type ScopeState = {
+  incarnation: number;
+  observers: Set<LeaseState>;
+  retirement: number;
+  cacheEpoch: number;
+  errorEpoch: number;
+  writeState: RatingWriteState;
+  retired: boolean;
+};
 type RatingWriteState = {
   revision: number;
   nextId: number;
@@ -24,8 +39,19 @@ type RatingWriteState = {
   committedSequence: number;
   committed?: SubjectOwnRating;
   owner: number | null;
-  pending: Set<number>;
+  pending: Map<number, { sequence: number; value: SubjectOwnRating }>;
 };
+
+function createRatingWriteState(): RatingWriteState {
+  return {
+    revision: 0,
+    nextId: 0,
+    sequence: 0,
+    committedSequence: 0,
+    owner: null,
+    pending: new Map(),
+  };
+}
 
 export type SubjectRatingWriteOperation = {
   readonly id: number;
@@ -45,7 +71,7 @@ export type SubjectPersonalLease = {
   readonly scope: SubjectPersonalQueryScope;
   retire(): void;
   isCurrent(): boolean;
-  beginRatingWrite(before: SubjectOwnRating | undefined): SubjectRatingWriteOperation | null;
+  beginRatingWrite(before: SubjectOwnRating | undefined, value: SubjectOwnRating): SubjectRatingWriteOperation | null;
 };
 
 type PersonalScope = {
@@ -57,6 +83,7 @@ type PersonalScope = {
   view: string;
   cacheEpoch: number;
   errorEpoch: number;
+  incarnation: number;
 };
 
 function sessionData(client: QueryClient): SessionAdmission | undefined {
@@ -70,10 +97,8 @@ function metaString(value: unknown): string | null {
 class SubjectPersonalReaderRegistry {
   private version = 0;
   private readonly listeners = new Set<() => void>();
-  private readonly cacheEpochs = new Map<string, number>();
-  private readonly errorEpochs = new Map<string, number>();
   private readonly scopes = new Map<string, ScopeState>();
-  private readonly writes = new Map<string, RatingWriteState>();
+  private nextIncarnation = 0;
   private sessionHealthy: boolean;
   private sessionVersion: number;
 
@@ -127,22 +152,31 @@ class SubjectPersonalReaderRegistry {
     const meta = event.query.meta as Record<string, unknown> | undefined;
     const scopeKey = metaString(meta?.subjectPersonalScope);
     if (!scopeKey) return;
+    const scopeState = this.scopes.get(scopeKey);
+    if (!scopeState || scopeState.retired) return;
+    const incarnation = typeof meta?.subjectPersonalIncarnation === 'number' ? meta.subjectPersonalIncarnation : 0;
+    if (incarnation !== scopeState.incarnation) return;
     const cacheEpoch = typeof meta?.subjectPersonalCacheEpoch === 'number' ? meta.subjectPersonalCacheEpoch : 0;
+    const errorEpoch = typeof meta?.subjectPersonalErrorEpoch === 'number' ? meta.subjectPersonalErrorEpoch : 0;
     if (event.type === 'removed') {
-      if (cacheEpoch !== this.getCacheEpoch(scopeKey)) return;
-      this.cacheEpochs.set(scopeKey, cacheEpoch + 1);
+      if (cacheEpoch !== scopeState.cacheEpoch || errorEpoch !== scopeState.errorEpoch) return;
+      this.retireWrites(scopeState);
+      scopeState.cacheEpoch++;
+      scopeState.errorEpoch = 0;
+      scopeState.writeState = createRatingWriteState();
       this.notify();
       return;
     }
-    const errorEpoch = typeof meta?.subjectPersonalErrorEpoch === 'number' ? meta.subjectPersonalErrorEpoch : 0;
     if (
       event.type === 'updated' &&
       event.action.type === 'error' &&
-      cacheEpoch === this.getCacheEpoch(scopeKey) &&
-      errorEpoch === this.getErrorEpoch(scopeKey) &&
-      this.hasLiveObserver(scopeKey, cacheEpoch)
+      cacheEpoch === scopeState.cacheEpoch &&
+      errorEpoch === scopeState.errorEpoch &&
+      this.hasLiveObserver(scopeKey, cacheEpoch, errorEpoch, incarnation)
     ) {
-      this.errorEpochs.set(scopeKey, this.getErrorEpoch(scopeKey) + 1);
+      this.retireWrites(scopeState);
+      scopeState.errorEpoch++;
+      scopeState.writeState = createRatingWriteState();
       this.notify();
     }
   }
@@ -169,37 +203,80 @@ class SubjectPersonalReaderRegistry {
   }
 
   getCacheEpoch(scopeKey: string) {
-    return this.cacheEpochs.get(scopeKey) ?? 0;
+    return this.scopes.get(scopeKey)?.cacheEpoch ?? 0;
   }
 
   getErrorEpoch(scopeKey: string) {
-    return this.errorEpochs.get(scopeKey) ?? 0;
+    return this.scopes.get(scopeKey)?.errorEpoch ?? 0;
+  }
+
+  getIncarnation(scopeKey: string) {
+    return this.scopes.get(scopeKey)?.incarnation ?? 0;
+  }
+
+  prepareScope(scopeKey: string) {
+    const scope = this.scope(scopeKey);
+    return { cacheEpoch: scope.cacheEpoch, errorEpoch: scope.errorEpoch, incarnation: scope.incarnation };
+  }
+
+  nextRouteIncarnation() {
+    return ++this.nextIncarnation;
   }
 
   private scope(scopeKey: string) {
     let value = this.scopes.get(scopeKey);
     if (!value) {
-      value = { observers: 0, retirement: 0 };
+      value = {
+        incarnation: ++this.nextIncarnation,
+        observers: new Set(),
+        retirement: 0,
+        cacheEpoch: 0,
+        errorEpoch: 0,
+        writeState: createRatingWriteState(),
+        retired: false,
+      };
       this.scopes.set(scopeKey, value);
     }
     return value;
   }
 
-  hasLiveObserver(scopeKey: string, cacheEpoch: number) {
-    return this.getCacheEpoch(scopeKey) === cacheEpoch && (this.scopes.get(scopeKey)?.observers ?? 0) > 0;
+  private matchingScope(scopeKey: string, cacheEpoch: number, errorEpoch: number, incarnation: number) {
+    const state = this.scopes.get(scopeKey);
+    return state &&
+      !state.retired &&
+      state.incarnation === incarnation &&
+      state.cacheEpoch === cacheEpoch &&
+      state.errorEpoch === errorEpoch
+      ? state
+      : undefined;
+  }
+
+  hasLiveObserver(scopeKey: string, cacheEpoch: number, errorEpoch: number, incarnation: number) {
+    const state = this.matchingScope(scopeKey, cacheEpoch, errorEpoch, incarnation);
+    if (!state) return false;
+    for (const observer of state.observers)
+      if (
+        observer.active &&
+        observer.incarnation === incarnation &&
+        observer.cacheEpoch === cacheEpoch &&
+        observer.errorEpoch === errorEpoch
+      )
+        return true;
+    return false;
   }
 
   isQueryCurrent(scope: PersonalScope) {
     const current = sessionData(this.client);
     return (
-      this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch) &&
+      this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation) &&
       this.sessionHealthy &&
       this.client.getQueryState(['session'])?.status === 'success' &&
       this.sessionVersion === scope.admission &&
       current?.state === 'signed-in' &&
       current.subject === scope.reader &&
       this.getCacheEpoch(scope.scopeKey) === scope.cacheEpoch &&
-      this.getErrorEpoch(scope.scopeKey) === scope.errorEpoch
+      this.getErrorEpoch(scope.scopeKey) === scope.errorEpoch &&
+      this.getIncarnation(scope.scopeKey) === scope.incarnation
     );
   }
 
@@ -207,44 +284,107 @@ class SubjectPersonalReaderRegistry {
     return isDesired() && this.isQueryCurrent(scope);
   }
 
-  getWriteRevision(scopeKey: string, cacheEpoch: number) {
-    return this.writeState(scopeKey, cacheEpoch).revision;
+  getWriteRevision(scopeKey: string, cacheEpoch: number, errorEpoch: number, incarnation: number) {
+    return this.matchingScope(scopeKey, cacheEpoch, errorEpoch, incarnation)?.writeState.revision ?? -1;
   }
 
-  recordRatingRead(scopeKey: string, cacheEpoch: number, value: SubjectOwnRating) {
-    if (this.getCacheEpoch(scopeKey) !== cacheEpoch) return;
-    const state = this.writeState(scopeKey, cacheEpoch);
+  recordRatingRead(
+    scopeKey: string,
+    cacheEpoch: number,
+    errorEpoch: number,
+    incarnation: number,
+    value: SubjectOwnRating,
+  ) {
+    if (!this.hasLiveObserver(scopeKey, cacheEpoch, errorEpoch, incarnation)) return;
+    const state = this.matchingScope(scopeKey, cacheEpoch, errorEpoch, incarnation)?.writeState;
+    if (!state) return;
     if (state.owner !== null || state.pending.size > 0) return;
     state.committed = value;
     state.committedSequence = state.sequence;
   }
 
-  private writeState(scopeKey: string, cacheEpoch: number) {
-    const key = `${scopeKey}:${cacheEpoch}`;
-    let state = this.writes.get(key);
-    if (!state) {
-      state = {
-        revision: 0,
-        nextId: 0,
-        sequence: 0,
-        committedSequence: 0,
-        owner: null,
-        pending: new Set(),
-      };
-      this.writes.set(key, state);
+  private selectCurrentOwner(state: RatingWriteState) {
+    let owner: number | null = null;
+    let sequence = state.committedSequence;
+    for (const [id, pending] of state.pending) {
+      if (pending.sequence > sequence) {
+        owner = id;
+        sequence = pending.sequence;
+      }
     }
-    return state;
+    state.owner = owner;
+  }
+
+  private releaseOperation(state: RatingWriteState, id: number) {
+    if (!state.pending.delete(id)) return false;
+    const ownedCache = state.owner === id;
+    if (ownedCache) this.selectCurrentOwner(state);
+    state.revision++;
+    return ownedCache;
+  }
+
+  private retireWrites(scopeState: ScopeState) {
+    for (const observer of scopeState.observers) {
+      for (const [id, state] of observer.operations) this.releaseOperation(state, id);
+      observer.operations.clear();
+    }
+  }
+
+  private inertLease(scope: PersonalScope): SubjectPersonalLease {
+    return {
+      key: JSON.stringify([scope.scopeKey, scope.incarnation, scope.cacheEpoch, scope.errorEpoch]),
+      reader: scope.reader,
+      subjectId: scope.subjectId,
+      locale: scope.locale,
+      view: scope.view,
+      scope: {
+        reader: scope.reader,
+        admission: scope.admission,
+        view: scope.view,
+        cacheEpoch: scope.cacheEpoch,
+        errorEpoch: scope.errorEpoch,
+        incarnation: scope.incarnation,
+        scopeKey: scope.scopeKey,
+      },
+      retire: () => {},
+      isCurrent: () => false,
+      beginRatingWrite: () => null,
+    };
   }
 
   register(scope: PersonalScope, isDesired: () => boolean): SubjectPersonalLease {
-    const scopeState = this.scope(scope.scopeKey);
-    scopeState.observers++;
+    const scopeState = this.scopes.get(scope.scopeKey);
+    if (
+      !scopeState ||
+      scopeState.retired ||
+      scopeState.incarnation !== scope.incarnation ||
+      scopeState.cacheEpoch !== scope.cacheEpoch ||
+      scopeState.errorEpoch !== scope.errorEpoch
+    ) {
+      if (scopeState && scopeState.observers.size === 0) {
+        const retirement = ++scopeState.retirement;
+        queueMicrotask(() => {
+          if (scopeState.observers.size !== 0 || scopeState.retirement !== retirement) return;
+          scopeState.retired = true;
+          if (this.scopes.get(scope.scopeKey) === scopeState) this.scopes.delete(scope.scopeKey);
+        });
+      }
+      return this.inertLease(scope);
+    }
+    const observer: LeaseState = {
+      active: true,
+      incarnation: scope.incarnation,
+      cacheEpoch: scope.cacheEpoch,
+      errorEpoch: scope.errorEpoch,
+      operations: new Map(),
+    };
+    scopeState.observers.add(observer);
     scopeState.retirement++;
-    let live = true;
-    const isCurrent = () => live && this.isScopeCurrent(scope, isDesired);
-    const writeState = () => this.writeState(scope.scopeKey, scope.cacheEpoch);
+    const isCurrent = () => observer.active && this.isScopeCurrent(scope, isDesired);
+    const writeState = () => scopeState.writeState;
     const key = JSON.stringify([
       scope.scopeKey,
+      scope.incarnation,
       scope.cacheEpoch,
       scope.errorEpoch,
       scope.admission,
@@ -259,22 +399,38 @@ class SubjectPersonalReaderRegistry {
       view: scope.view,
       cacheEpoch: scope.cacheEpoch,
       errorEpoch: scope.errorEpoch,
+      incarnation: scope.incarnation,
       scopeKey: scope.scopeKey,
-      getWriteRevision: () => writeState().revision,
-      hasLiveObserver: () => this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch),
+      getWriteRevision: () =>
+        this.getWriteRevision(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation),
+      hasLiveObserver: () =>
+        this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation),
       isCurrent,
-      recordRatingRead: (rating) => this.recordRatingRead(scope.scopeKey, scope.cacheEpoch, rating),
+      recordRatingRead: (rating) =>
+        this.recordRatingRead(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation, rating),
     };
+    const ownRatingKey = subjectOwnRatingQuery(scope.subjectId, scope.locale, leaseScope).queryKey;
     const retire = () => {
-      if (!live) return;
-      live = false;
-      scopeState.observers--;
-      if (scopeState.observers !== 0) return;
+      if (!observer.active) return;
+      observer.active = false;
+      scopeState.observers.delete(observer);
+      let restoreRating = false;
+      for (const [id, state] of observer.operations)
+        if (this.releaseOperation(state, id)) restoreRating = true;
+      observer.operations.clear();
+      if (restoreRating && this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation)) {
+        const owner = scopeState.writeState.owner;
+        const rating =
+          (owner === null ? undefined : scopeState.writeState.pending.get(owner)?.value) ??
+          scopeState.writeState.committed;
+        if (rating !== undefined) this.client.setQueryData(ownRatingKey, rating);
+      }
+      if (scopeState.observers.size !== 0) return;
       const retirement = ++scopeState.retirement;
       queueMicrotask(() => {
-        if (scopeState.observers !== 0 || scopeState.retirement !== retirement) return;
-        this.cacheEpochs.set(scope.scopeKey, this.getCacheEpoch(scope.scopeKey) + 1);
-        this.notify();
+        if (scopeState.observers.size !== 0 || scopeState.retirement !== retirement) return;
+        scopeState.retired = true;
+        if (this.scopes.get(scope.scopeKey) === scopeState) this.scopes.delete(scope.scopeKey);
       });
     };
     const lease: SubjectPersonalLease = {
@@ -286,7 +442,7 @@ class SubjectPersonalReaderRegistry {
       scope: leaseScope,
       retire,
       isCurrent,
-      beginRatingWrite: (before) => {
+      beginRatingWrite: (before, value) => {
         if (!isCurrent()) return null;
         const state = writeState();
         if (state.committed === undefined && before !== undefined) state.committed = before;
@@ -294,35 +450,43 @@ class SubjectPersonalReaderRegistry {
         const sequence = ++state.sequence;
         state.revision++;
         state.owner = id;
-        state.pending.add(id);
+        state.pending.set(id, { sequence, value });
+        observer.operations.set(id, state);
         return {
           id,
           sequence,
-          ownsCache: () => state.owner === id,
+          ownsCache: () => isCurrent() && state.owner === id,
           commit: (value) => {
             if (!isCurrent()) return;
+            observer.operations.delete(id);
             state.pending.delete(id);
             if (sequence >= state.committedSequence) {
               state.committed = value;
               state.committedSequence = sequence;
             }
-            if (state.owner === id) state.owner = null;
+            if (state.owner === id) this.selectCurrentOwner(state);
+            state.revision++;
           },
           rollback: (fallback) => {
             if (!isCurrent()) return null;
+            observer.operations.delete(id);
             state.pending.delete(id);
+            state.revision++;
             if (state.owner !== id) return null;
-            state.owner = null;
-            return state.committed ?? fallback;
+            this.selectCurrentOwner(state);
+            const owner = state.owner;
+            return (owner === null ? undefined : state.pending.get(owner)?.value) ?? state.committed ?? fallback;
           },
           preserveUncertainty: (value) => {
             if (!isCurrent()) return;
+            observer.operations.delete(id);
             state.pending.delete(id);
             if (sequence >= state.committedSequence) {
               state.committed = value;
               state.committedSequence = sequence;
             }
-            if (state.owner === id) state.owner = null;
+            if (state.owner === id) this.selectCurrentOwner(state);
+            state.revision++;
           },
         };
       },
@@ -357,16 +521,24 @@ export function useSubjectPersonalReader(input: {
   useSyncExternalStore(registry.subscribe, registry.getSnapshot, registry.getServerSnapshot);
   const current = registry.currentSession(session);
   const { reader, admission, ready: sessionReady } = current;
-  const scopeKey = JSON.stringify([subjectId, locale, view, reader, admission]);
-  const cacheEpoch = registry.getCacheEpoch(scopeKey);
-  const errorEpoch = registry.getErrorEpoch(scopeKey);
-  const bindingToken = JSON.stringify([scopeKey, cacheEpoch, errorEpoch]);
+  const routeAdmission = useRef({ enabled: routeEnabled, incarnation: 0 });
+  if (routeAdmission.current.enabled !== routeEnabled) {
+    routeAdmission.current = { enabled: routeEnabled, incarnation: registry.nextRouteIncarnation() };
+  }
+  const routeIncarnation = routeAdmission.current.incarnation;
+  const scopeKey = JSON.stringify([subjectId, locale, view, reader, admission, routeIncarnation]);
+  const enabled = personalRead.enabled && routeEnabled && sessionReady && reader !== null;
+  const scopeIdentity = enabled
+    ? registry.prepareScope(scopeKey)
+    : { cacheEpoch: 0, errorEpoch: 0, incarnation: routeIncarnation };
+  const { cacheEpoch, errorEpoch, incarnation } = scopeIdentity;
+  const bindingToken = JSON.stringify([scopeKey, incarnation, cacheEpoch, errorEpoch, routeEnabled]);
   const desiredRef = useRef(bindingToken);
   desiredRef.current = bindingToken;
   const [leaseState, setLeaseState] = useState<{ token: string; lease: SubjectPersonalLease } | null>(null);
 
   useLayoutEffect(() => {
-    if (!sessionReady || !reader) {
+    if (!enabled || !reader) {
       setLeaseState(null);
       return;
     }
@@ -379,6 +551,7 @@ export function useSubjectPersonalReader(input: {
       view,
       cacheEpoch,
       errorEpoch,
+      incarnation,
     };
     const lease = registry.register(personalScope, () => desiredRef.current === bindingToken);
     setLeaseState({ token: bindingToken, lease });
@@ -391,8 +564,10 @@ export function useSubjectPersonalReader(input: {
     subjectId,
     locale,
     view,
+    routeEnabled,
     cacheEpoch,
     errorEpoch,
+    incarnation,
     sessionReady,
     bindingToken,
   ]);
@@ -403,9 +578,10 @@ export function useSubjectPersonalReader(input: {
     view,
     cacheEpoch,
     errorEpoch,
+    incarnation,
     scopeKey,
-    getWriteRevision: () => registry.getWriteRevision(scopeKey, cacheEpoch),
-    hasLiveObserver: () => registry.hasLiveObserver(scopeKey, cacheEpoch),
+    getWriteRevision: () => registry.getWriteRevision(scopeKey, cacheEpoch, errorEpoch, incarnation),
+    hasLiveObserver: () => registry.hasLiveObserver(scopeKey, cacheEpoch, errorEpoch, incarnation),
     isCurrent: () =>
       registry.isQueryCurrent({
         scopeKey,
@@ -416,10 +592,10 @@ export function useSubjectPersonalReader(input: {
         view,
         cacheEpoch,
         errorEpoch,
+        incarnation,
       }),
-    recordRatingRead: (rating) => registry.recordRatingRead(scopeKey, cacheEpoch, rating),
+    recordRatingRead: (rating) => registry.recordRatingRead(scopeKey, cacheEpoch, errorEpoch, incarnation, rating),
   };
-  const enabled = personalRead.enabled && routeEnabled && sessionReady && reader !== null;
   const preferencesOptions = subjectReaderQuery(subjectId, locale, queryScope, transport);
   const ownRatingOptions = subjectOwnRatingQuery(subjectId, locale, queryScope, transport);
   const preferencesQuery = useQuery({

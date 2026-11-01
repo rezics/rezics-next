@@ -37,9 +37,9 @@ export async function applyOptimisticRatingChange(input: {
   const ownQueryOptions = subjectOwnRatingQuery(subjectId, locale, binding.scope);
   const ownKey = ownQueryOptions.queryKey;
   const before = queryClient.getQueryData<SubjectOwnRating>(ownKey);
-  const operation = binding.beginRatingWrite(before);
-  if (!operation || !binding.isCurrent()) return false;
   const optimistic: SubjectOwnRating = { reader: binding.reader, kind: 'ready', units };
+  const operation = binding.beginRatingWrite(before, optimistic);
+  if (!operation || !binding.isCurrent()) return false;
   queryClient.setQueryData(ownKey, optimistic);
 
   let saved = false;
@@ -351,8 +351,10 @@ export function SubjectRatingControl({
 
   const change = async (units: number | null) => {
     const originatingBinding = bindingRef.current;
-    if (!originatingBinding || !originatingBinding.isCurrent()) return;
+    if (!originatingBinding) return;
     const scope = originatingBinding.key;
+    const isCurrentBinding = () => originatingBinding.isCurrent() && bindingRef.current?.key === scope;
+    if (!isCurrentBinding()) return;
     if (activePending.current?.scope === scope) return;
     const id = ++pendingId.current;
     activePending.current = { scope, id };
@@ -370,14 +372,13 @@ export function SubjectRatingControl({
           (async ({ idempotencyKey, expectedReader }) =>
             changeSubjectRating({ data: { subjectId, units, idempotencyKey, expectedReader } })),
         onFailure: () => {
-          if (originatingBinding.isCurrent() && bindingRef.current?.key === scope)
+          if (isCurrentBinding())
             setFailureState({ scope, message: m.subject_rating_control_error({}, { locale: locale as never }) });
         },
       });
     } finally {
       if (
-        originatingBinding.isCurrent() &&
-        bindingRef.current?.key === scope &&
+        isCurrentBinding() &&
         activePending.current?.scope === scope &&
         activePending.current.id === id
       ) {

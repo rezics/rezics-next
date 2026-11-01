@@ -396,6 +396,7 @@ export type SubjectPersonalQueryScope = {
   view: string;
   cacheEpoch: number;
   errorEpoch?: number;
+  incarnation?: number;
   scopeKey?: string;
   getWriteRevision?: () => number;
   hasLiveObserver?: () => boolean;
@@ -430,6 +431,7 @@ function subjectPersonalMeta(
     subjectPersonalScope: scope.scopeKey ?? JSON.stringify([id, locale, scope.reader, scope.admission, scope.view]),
     subjectPersonalCacheEpoch: scope.cacheEpoch,
     subjectPersonalErrorEpoch: scope.errorEpoch ?? 0,
+    subjectPersonalIncarnation: scope.incarnation ?? 0,
     subjectPersonalKind: kind,
   };
 }
@@ -551,7 +553,17 @@ export const subjectReaderQuery = (
 ) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['subject-reader', id, locale, scope.reader, scope.admission, scope.view, scope.cacheEpoch] as const,
+    queryKey: [
+      'subject-reader',
+      id,
+      locale,
+      scope.reader,
+      scope.admission,
+      scope.view,
+      scope.cacheEpoch,
+      scope.errorEpoch ?? 0,
+      scope.incarnation ?? 0,
+    ] as const,
     meta: subjectPersonalMeta(id, locale, scope, 'reader'),
     queryFn: async () => {
       const result = await transport.readReader({ id, locale });
@@ -593,7 +605,17 @@ export const subjectOwnRatingQuery = (
 ) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['subject-own-rating', id, locale, scope.reader, scope.admission, scope.view, scope.cacheEpoch] as const,
+    queryKey: [
+      'subject-own-rating',
+      id,
+      locale,
+      scope.reader,
+      scope.admission,
+      scope.view,
+      scope.cacheEpoch,
+      scope.errorEpoch ?? 0,
+      scope.incarnation ?? 0,
+    ] as const,
     meta: subjectPersonalMeta(id, locale, scope, 'own-rating'),
     queryFn: async (context) => {
       const writeRevision = scope.getWriteRevision?.() ?? 0;

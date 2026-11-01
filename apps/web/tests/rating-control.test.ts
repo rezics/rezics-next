@@ -321,6 +321,32 @@ test('writes update the personal query optimistically, carry idempotency keys an
   await client.cancelQueries();
 });
 
+test('a current write with an uncertain response keeps its optimistic value and reports uncertainty', async () => {
+  const client = new QueryClient();
+  const binding = personalLease(subjectId, 'en');
+  const queryKey = subjectOwnRatingQuery(subjectId, 'en', binding.scope).queryKey;
+  client.setQueryData(queryKey, { reader: binding.reader, kind: 'ready', units: 8 } as const);
+  const failures: { uncertain: boolean }[] = [];
+
+  await expect(
+    applyOptimisticRatingChange({
+      queryClient: client,
+      subjectId,
+      locale: 'en',
+      binding,
+      units: 15,
+      write: async () => {
+        throw new Error('The response was lost after dispatch');
+      },
+      onFailure: (failure) => failures.push(failure),
+    }),
+  ).resolves.toBe(false);
+
+  expect(client.getQueryData(queryKey)).toEqual({ reader: binding.reader, kind: 'ready', units: 15 });
+  expect(failures).toEqual([{ uncertain: true }]);
+  await client.cancelQueries();
+});
+
 test('setting, changing and clearing each issue one bounded write', async () => {
   const client = new QueryClient();
   const binding = personalLease(subjectId, 'en');

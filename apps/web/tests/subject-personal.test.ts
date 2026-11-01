@@ -46,11 +46,34 @@ test('personal subject data queries are disabled during server rendering', async
   ];
   expect(queries.map((query) => query.queryKey)).toEqual([
     ['subject-library', id, 'en'],
-    ['subject-reader', id, 'en', null, 0, 'overview', 0],
+    ['subject-reader', id, 'en', null, 0, 'overview', 0, 0, 0],
     ['subject-own-reaction', id, 'en'],
-    ['subject-own-rating', id, 'en', null, 0, 'overview', 0],
+    ['subject-own-rating', id, 'en', null, 0, 'overview', 0, 0, 0],
   ]);
   expect(queries.every((query) => query.enabled === false)).toBe(true);
+});
+
+test('private Subject cache keys isolate route incarnations, removals and private query errors', () => {
+  const scope = {
+    reader: 'reader-a',
+    admission: 4,
+    view: 'overview',
+    cacheEpoch: 2,
+    errorEpoch: 3,
+    incarnation: 9,
+    scopeKey: 'subject-personal-scope',
+  } as const;
+  const readerKey = subjectReaderQuery(id, 'en', scope).queryKey;
+  const ratingKey = subjectOwnRatingQuery(id, 'en', scope).queryKey;
+
+  expect(readerKey).toEqual(['subject-reader', id, 'en', 'reader-a', 4, 'overview', 2, 3, 9]);
+  expect(ratingKey).toEqual(['subject-own-rating', id, 'en', 'reader-a', 4, 'overview', 2, 3, 9]);
+  expect(subjectReaderQuery(id, 'en', { ...scope, errorEpoch: 4 }).queryKey).not.toEqual(readerKey);
+  expect(subjectOwnRatingQuery(id, 'en', { ...scope, errorEpoch: 4 }).queryKey).not.toEqual(ratingKey);
+  expect(subjectReaderQuery(id, 'en', { ...scope, cacheEpoch: 3 }).queryKey).not.toEqual(readerKey);
+  expect(subjectOwnRatingQuery(id, 'en', { ...scope, cacheEpoch: 3 }).queryKey).not.toEqual(ratingKey);
+  expect(subjectReaderQuery(id, 'en', { ...scope, incarnation: 10 }).queryKey).not.toEqual(readerKey);
+  expect(subjectOwnRatingQuery(id, 'en', { ...scope, incarnation: 10 }).queryKey).not.toEqual(ratingKey);
 });
 
 test('server-side public reads can be ensured without a request session', async () => {
