@@ -30,11 +30,66 @@ export const Composed: Story = {
 
     await userEvent.tab();
     await expect(primaryLink).toHaveFocus();
+
+    const coverLink = canvas.getByRole('link', { name: 'Open cover artwork' });
+    await userEvent.tab();
+    await expect(coverLink).toHaveFocus();
+    await userEvent.click(coverLink);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Cover link activated');
+
+    const coverButton = canvas.getByRole('button', { name: 'Rotate cover' });
+    await userEvent.tab();
+    await expect(coverButton).toHaveFocus();
+    await userEvent.click(coverButton);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Cover action activated');
+
+    const followButton = canvas.getByRole('button', { name: 'Follow author' });
+    await userEvent.tab();
+    await expect(followButton).toHaveFocus();
+    await userEvent.click(followButton);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Author followed');
+
     const authorLink = canvas.getByRole('link', { name: 'A. Author' });
     await userEvent.tab();
     await expect(authorLink).toHaveFocus();
     await userEvent.click(authorLink);
     await expect(canvas.getByRole('status')).toHaveTextContent('Author link activated');
+
+    const noteSummary = canvas.getByText('Read the complete note');
+    await userEvent.tab();
+    await expect(noteSummary).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByText('The complete note remains visible after the disclosure opens.')).toBeVisible();
+
+    const privateCheckbox = canvas.getByRole('checkbox', { name: 'Keep note private' });
+    await userEvent.tab();
+    await expect(privateCheckbox).toHaveFocus();
+    await userEvent.click(privateCheckbox);
+    await expect(privateCheckbox).toBeChecked();
+
+    const noteVisibility = canvas.getByRole('combobox', { name: 'Note visibility' });
+    await userEvent.tab();
+    await expect(noteVisibility).toHaveFocus();
+    await userEvent.selectOptions(noteVisibility, 'shared');
+    await expect(noteVisibility).toHaveValue('shared');
+
+    const personalNote = canvas.getByRole('textbox', { name: 'Personal note' });
+    await userEvent.tab();
+    await expect(personalNote).toHaveFocus();
+    await userEvent.type(personalNote, 'Keep this detail.');
+
+    const saveNoteButton = canvas.getByRole('button', { name: 'Save personal note' });
+    await userEvent.tab();
+    await expect(saveNoteButton).toHaveFocus();
+    await userEvent.click(saveNoteButton);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Personal note saved');
+
+    const sourceLink = canvas.getByRole('link', { name: 'Open note source' });
+    await userEvent.tab();
+    await expect(sourceLink).toHaveFocus();
+    await userEvent.click(sourceLink);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Note source activated');
+
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await expect(canvas.getByRole('status')).toHaveTextContent('Saved');
 
@@ -69,11 +124,42 @@ function Example() {
           title={title}
           titleLang="en"
           visual={
-            <div className="flex aspect-[5/7] w-[72px] items-end rounded bg-primary/10 p-2 text-xs text-primary sm:w-24">
-              Cover
+            <div className="flex aspect-[5/7] w-[72px] flex-col items-start justify-between rounded bg-primary/10 p-2 text-xs text-primary sm:w-24">
+              <a
+                href="#cover"
+                aria-label="Open cover artwork"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setMessage('Cover link activated');
+                }}
+              >
+                Cover
+              </a>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Rotate cover"
+                onClick={() => setMessage('Cover action activated')}
+              >
+                ↻
+              </Button>
             </div>
           }
-          context="Continue reading"
+          context={
+            <span>
+              Continue reading{' '}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="Follow author"
+                onClick={() => setMessage('Author followed')}
+              >
+                Follow
+              </Button>
+            </span>
+          }
           metadata={
             <span>
               By{' '}
@@ -88,7 +174,43 @@ function Example() {
               </a>
             </span>
           }
-          preview="A short description supplied by the owning page, shown beneath the title."
+          preview={
+            <div className="space-y-2">
+              <p>A short description supplied by the owning page, shown beneath the title.</p>
+              <details>
+                <summary className="min-h-11 cursor-pointer rounded py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  Read the complete note
+                </summary>
+                <p>The complete note remains visible after the disclosure opens.</p>
+                <div className="mt-2 flex flex-col items-start gap-2">
+                  <label>
+                    <input type="checkbox" aria-label="Keep note private" /> Keep note private
+                  </label>
+                  <select aria-label="Note visibility" defaultValue="private">
+                    <option value="private">Private</option>
+                    <option value="shared">Shared</option>
+                  </select>
+                  <textarea aria-label="Personal note" defaultValue="A personal annotation" />
+                  <Button
+                    type="button"
+                    aria-label="Save personal note"
+                    onClick={() => setMessage('Personal note saved')}
+                  >
+                    Save note
+                  </Button>
+                  <a
+                    href="#note-source"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setMessage('Note source activated');
+                    }}
+                  >
+                    Open note source
+                  </a>
+                </div>
+              </details>
+            </div>
+          }
           state={<span>Episode 3 of 12</span>}
           actions={
             <Button variant="outline" size="sm" onClick={() => setMessage('Saved')}>

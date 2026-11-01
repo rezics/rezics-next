@@ -91,6 +91,22 @@ function hasSlot(value: ReactNode): boolean {
   return value !== null && value !== undefined && typeof value !== 'boolean';
 }
 
+const independentInteractiveLayerClassName = cn(
+  '[&_a]:relative [&_a]:z-10',
+  '[&_button]:relative [&_button]:z-10',
+  '[&_summary]:relative [&_summary]:z-10',
+  '[&_label]:relative [&_label]:z-10',
+  '[&_input]:relative [&_input]:z-10',
+  '[&_select]:relative [&_select]:z-10',
+  '[&_textarea]:relative [&_textarea]:z-10',
+  '[&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring',
+  '[&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring',
+  '[&_summary:focus-visible]:outline-2 [&_summary:focus-visible]:outline-offset-2 [&_summary:focus-visible]:outline-ring',
+  '[&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring',
+  '[&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring',
+  '[&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring',
+);
+
 /** A semantic content-list item built on the shared hover, focus and press behavior. */
 export function ContentItem({
   title,
@@ -131,7 +147,10 @@ export function ContentItem({
         </ListRowLink>
       )}
       {hasSlot(visual) && (
-        <div data-content-item-slot="visual" className="shrink-0 [&_button]:relative [&_button]:z-10">
+        <div
+          data-content-item-slot="visual"
+          className={cn('shrink-0', independentInteractiveLayerClassName)}
+        >
           {visual}
         </div>
       )}
@@ -140,7 +159,10 @@ export function ContentItem({
           {hasSlot(context) && (
             <div
               data-content-item-slot="context"
-              className="mb-2 text-[13px] leading-snug text-muted-foreground sm:text-sm"
+              className={cn(
+                'mb-2 text-[13px] leading-snug text-muted-foreground sm:text-sm',
+                independentInteractiveLayerClassName,
+              )}
             >
               {context}
             </div>
@@ -163,7 +185,10 @@ export function ContentItem({
             </ListRowControl>
           )}
           {hasSlot(preview) && (
-            <div data-content-item-slot="preview" className="mt-2 min-w-0 text-sm leading-relaxed">
+            <div
+              data-content-item-slot="preview"
+              className={cn('mt-2 min-w-0 text-sm leading-relaxed', independentInteractiveLayerClassName)}
+            >
               {preview}
             </div>
           )}

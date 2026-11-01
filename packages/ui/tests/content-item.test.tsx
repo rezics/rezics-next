@@ -148,6 +148,151 @@ test('ContentItem names supplied primary summaries without replacing the visible
   expect(plainRow).toContain('Supplied plain summary context');
 });
 
+test('ContentItem layers native independent controls per slot and keeps plain and unavailable rows intact', () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      'ul',
+      null,
+      createElement(ContentItem, {
+        title: 'A work with independent controls',
+        href: '/works/independent',
+        visual: createElement(
+          'div',
+          null,
+          createElement('a', { href: '/people/artist', 'aria-label': 'Artist profile' }, 'Artist'),
+          createElement('button', { type: 'button', 'aria-label': 'Visual options' }, 'Options'),
+        ),
+        context: createElement(
+          'div',
+          null,
+          createElement('a', { href: '/series/stars' }, 'The Stars series'),
+          createElement('button', { type: 'button', 'aria-label': 'Follow the series' }, 'Follow'),
+        ),
+        metadata: createElement('a', { href: '/people/editor' }, 'Editor'),
+        preview: createElement(
+          'div',
+          null,
+          createElement('p', null, 'Plain preview excerpt.'),
+          createElement(
+            'details',
+            null,
+            createElement('summary', null, 'Show complete note'),
+            createElement('p', null, 'The complete supplied note.'),
+            createElement(
+              'form',
+              { action: '/annotations', method: 'post' },
+              createElement(
+                'label',
+                null,
+                createElement('input', { type: 'checkbox', name: 'keep-private' }),
+                ' Keep this note private',
+              ),
+              createElement(
+                'select',
+                { 'aria-label': 'Note visibility', defaultValue: 'private' },
+                createElement('option', { value: 'private' }, 'Private'),
+                createElement('option', { value: 'shared' }, 'Shared'),
+              ),
+              createElement('label', null, 'Personal note', createElement('textarea', { name: 'note' })),
+              createElement('button', { type: 'submit' }, 'Save note'),
+              createElement('a', { href: '/works/source' }, 'Open source'),
+            ),
+          ),
+        ),
+        state: createElement('a', { href: '/status', 'aria-label': 'Reading status' }, 'Reading'),
+        actions: createElement('button', { type: 'button', 'aria-label': 'Save work' }, 'Save'),
+        trailing: createElement('button', { type: 'button', 'aria-label': 'More actions' }, 'More'),
+        'data-testid': 'independent-item',
+      }),
+      createElement(ContentItem, {
+        title: 'A plain preview row',
+        href: '/works/plain',
+        preview: 'Plain preview text stays in the row.',
+        'data-testid': 'plain-preview-item',
+      }),
+      createElement(ContentItem, {
+        title: 'An unavailable item',
+        context: 'No destination is available.',
+        'data-testid': 'unavailable-item',
+      }),
+    ),
+  );
+
+  const row = (testId: string) => {
+    const rendered = html.match(new RegExp(`<li\\b[^>]*data-testid="${testId}"[^>]*>[\\s\\S]*?<\\/li>`));
+    expect(rendered).toBeDefined();
+    return rendered![0];
+  };
+  const slotOpening = (renderedRow: string, slot: string) => {
+    const opening = renderedRow.match(new RegExp(`<[^>]*data-content-item-slot="${slot}"[^>]*>`));
+    expect(opening).toBeDefined();
+    return opening![0];
+  };
+
+  const controlledRow = row('independent-item');
+  const independentPrimaryLink = controlledRow.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
+  expect(independentPrimaryLink).toBeDefined();
+  assertPrimaryAnchorHasNoInteractiveDescendants(independentPrimaryLink!);
+
+  const raisedSelectors = [
+    '[&_a]:relative',
+    '[&_a]:z-10',
+    '[&_button]:relative',
+    '[&_button]:z-10',
+    '[&_summary]:relative',
+    '[&_summary]:z-10',
+    '[&_label]:relative',
+    '[&_label]:z-10',
+    '[&_input]:relative',
+    '[&_input]:z-10',
+    '[&_select]:relative',
+    '[&_select]:z-10',
+    '[&_textarea]:relative',
+    '[&_textarea]:z-10',
+  ];
+  for (const slot of ['visual', 'context', 'preview']) {
+    const opening = slotOpening(controlledRow, slot);
+    for (const selector of raisedSelectors) expect(opening).toContain(selector);
+  }
+  expect(slotOpening(controlledRow, 'preview')).toContain('[&_summary:focus-visible]:outline-ring');
+  expect(slotOpening(controlledRow, 'preview')).toContain('[&_textarea:focus-visible]:outline-ring');
+
+  for (const slot of ['metadata', 'state', 'actions', 'trailing']) {
+    expect(slotOpening(controlledRow, slot)).toContain('relative z-10');
+  }
+  for (const accessibleName of [
+    'Artist profile',
+    'Visual options',
+    'The Stars series',
+    'Follow the series',
+    'Show complete note',
+    'Keep this note private',
+    'Note visibility',
+    'Personal note',
+    'Save note',
+    'Open source',
+    'Reading status',
+    'Save work',
+    'More actions',
+  ]) {
+    expect(controlledRow).toContain(accessibleName);
+  }
+
+  const plainPreviewRow = row('plain-preview-item');
+  expect(plainPreviewRow).toContain('href="/works/plain"');
+  expect(plainPreviewRow).toContain('Plain preview text stays in the row.');
+  const plainPreviewOpening = slotOpening(plainPreviewRow, 'preview');
+  const plainPreviewClasses = plainPreviewOpening.match(/\bclass="([^"]*)"/)?.[1]?.split(/\s+/) ?? [];
+  expect(plainPreviewClasses).not.toContain('relative');
+  expect(plainPreviewClasses).not.toContain('z-10');
+  expect(plainPreviewOpening).not.toContain('select-none');
+
+  const unavailableRow = row('unavailable-item');
+  expect(unavailableRow).not.toContain('data-slot="list-row-link"');
+  expect(unavailableRow).toContain('<h2');
+  expect(unavailableRow).toContain('No destination is available.');
+});
+
 test('ShelfListRow preserves its selection controls, independent status link, cover ratio and unknown progress', () => {
   const html = renderToStaticMarkup(
     createElement(
