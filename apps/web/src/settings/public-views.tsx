@@ -85,6 +85,7 @@ export function PublicViewsCard({ editor, writable = true }: { editor: ProfileEd
               <Button
                 type="button"
                 variant="outline"
+                className="mt-2 h-auto min-h-11 w-full max-w-sm justify-start whitespace-normal break-words py-2 text-left"
                 disabled={closed || !!state.attempt}
                 onClick={() => void editor.submit('views')}
               >
