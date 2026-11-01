@@ -23,6 +23,7 @@ function ItemCard({
   value,
   listPresentationFor,
   facts,
+  credit = false,
 }: {
   item: Item;
   value: RowValue;
@@ -90,7 +91,6 @@ export function CoverList({
   value,
   label,
   preview = false,
-  credit = false,
   listPresentationFor,
   memberFacts,
 }: {
