@@ -13,7 +13,7 @@ import type {
 } from './public-filter-consumer-contract.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import {
@@ -308,6 +308,16 @@ export function validatePublicFilterRepairWriterEvidence(index: string, receipt:
       receipt.account.head.epoch !== receipt.epoch || receipt.account.position > receipt.sourcePosition :
       receipt.account !== undefined)
     throw unavailable('Mixed repair native Account binding changed');
+  if (receipt.account) {
+    const { binding, account, claimHead } = receipt.account;
+    if ((account === null) !== (binding === null) ||
+      (account !== null && (account.id !== receipt.subject || account.revision !== binding!.revision ||
+        account.handle !== binding!.handle)) ||
+      (binding?.claim ? !claimHead || claimHead.partition !== partitionOf(binding.claim.route) ||
+        claimHead.epoch < 1 || claimHead.revision < 1n || claimHead.claimRevision < 1n ||
+        binding.consumedClaimRevision < binding.claim.revision : claimHead !== null))
+      throw unavailable('Mixed repair native claim binding changed');
+  }
   const seen = new Set<string>();
   let floor: bigint | undefined;
   for (const { key, action, evidence, winner } of receipt.effects) {
