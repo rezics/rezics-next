@@ -436,12 +436,16 @@ test('candidate source mutation during transport is rejected after the authentic
 test('Early native zero cannot settle before returns source verification and cleanup', async () => {
   const missing = candidate({ output: 'reports/result.txt' });
   const missingFinals: string[] = [];
+  let missingRetained: CandidateSnapshot | undefined;
   const missingCode = await runCheck(
     argsFor(missing, ['bun', 'run', 'check'], ['reports/result.txt']),
     {
       settlementWriter: (line) => missingFinals.push(line),
+      stateDirectory: missing.parent,
+      onRetainSnapshot: (snapshot) => (missingRetained = snapshot),
       transport: async (options) => {
         const native = receipt('a', 0);
+        await options.allocated?.({ host: 'a', run: native.run });
         options.completed?.(native);
         options.settled?.(
           remoteSettlement(options, native, {
@@ -455,13 +459,18 @@ test('Early native zero cannot settle before returns source verification and cle
   expect(missingCode).toBe(75);
   expect(missingFinals).toHaveLength(1);
   expect(JSON.parse(missingFinals[0]!).cleanup).toMatchObject({ disposition: 'unknown' });
+  if (missingRetained) removeRetainedSnapshot(missing, missingRetained);
 
   const changed = candidate();
   const changedFinals: string[] = [];
+  let changedRetained: CandidateSnapshot | undefined;
   const changedCode = await runCheck(argsFor(changed, ['bun', 'run', 'check']), {
     settlementWriter: (line) => changedFinals.push(line),
+    stateDirectory: changed.parent,
+    onRetainSnapshot: (snapshot) => (changedRetained = snapshot),
     transport: async (options) => {
       const native = receipt('b', 0);
+      await options.allocated?.({ host: 'b', run: native.run });
       options.completed?.(native);
       options.settled?.(remoteSettlement(options, native));
       writeFileSync(join(changed.root, 'src/input.ts'), 'changed while native exit was already zero\n');
@@ -470,6 +479,7 @@ test('Early native zero cannot settle before returns source verification and cle
   });
   expect(changedCode).toBe(75);
   expect(JSON.parse(changedFinals[0]!).cleanup).toMatchObject({ source: 'changed' });
+  if (changedRetained) removeRetainedSnapshot(changed, changedRetained);
 
   const cleanup = candidate();
   let retained: CandidateSnapshot | undefined;
@@ -479,9 +489,11 @@ test('Early native zero cannot settle before returns source verification and cle
       argsFor(cleanup, ['bun', 'run', 'check']),
       {
         settlementWriter: (line) => cleanupFinals.push(line),
+        stateDirectory: cleanup.parent,
         onRetainSnapshot: (snapshot) => (retained = snapshot),
         transport: async (options) => {
           const native = receipt('a', 0);
+          await options.allocated?.({ host: 'a', run: native.run });
           options.completed?.(native);
           options.settled?.(
             remoteSettlement(options, native, {
@@ -508,5 +520,108 @@ test('Early native zero cannot settle before returns source verification and cle
     expect(existsSync(retained!.workspace)).toBe(true);
   } finally {
     if (retained) removeRetainedSnapshot(cleanup, retained);
+  }
+});
+
+test('final settlement follows verified local cleanup and terminal replay never allocates a replacement run', async () => {
+  const fixture = candidate();
+  const finals: string[] = [];
+  let physicalWorkspace = '';
+  const dependencies = {
+    settlementWriter: (line: string) => finals.push(line),
+    stateDirectory: fixture.parent,
+    transport: async (options: RemoteCheck) => {
+      const native = receipt('a', 0);
+      physicalWorkspace = options.workspace;
+      await options.allocated?.({ host: 'a', run: native.run });
+      options.completed?.(native);
+      options.settled?.(remoteSettlement(options, native));
+      return 0;
+    },
+  };
+  const result = await runCheck(argsFor(fixture, ['bun', 'run', 'check']), dependencies);
+  expect(result).toBe(0);
+  expect(existsSync(physicalWorkspace)).toBe(false);
+  const final = JSON.parse(finals[0]!) as {
+    invocationId: string;
+    nonce: string;
+    binding: { sourceRevision: string; sourceSha256: string; argvSha256: string };
+    physical: { host: string; run: string };
+    native: { exitCode: number };
+    cleanup: { disposition: string; localWorktree: string };
+  };
+  expect(final.invocationId).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(final.nonce).toMatch(/^[a-f0-9]{64}$/);
+  expect(final.binding).toMatchObject({ sourceRevision: fixture.revision, sourceSha256: expect.any(String) });
+  expect(final.physical).toEqual({ host: 'a', run: 'physical-run-1' });
+  expect(final.native.exitCode).toBe(0);
+  expect(final.cleanup).toEqual({
+    disposition: 'settled',
+    remote: 'verified',
+    transportChild: 'reaped',
+    source: 'verified',
+    localWorktree: 'removed',
+    failures: [],
+  });
+
+  let replacementCommands = 0;
+  const replay = await runCheck(
+    argsFor(fixture, ['bun', 'run', 'check']),
+    {
+      stateDirectory: fixture.parent,
+      transport: async () => {
+        replacementCommands += 1;
+        return 0;
+      },
+    },
+    new AbortController().signal,
+    {
+      REMOTE_CHECK_RECEIPT_FD: '3',
+      REMOTE_CHECK_RECEIPT_NONCE: final.nonce,
+      REMOTE_CHECK_INVOCATION_ID: final.invocationId,
+    },
+  );
+  expect(replay).toBe(0);
+  expect(replacementCommands).toBe(0);
+});
+
+test('private environment rejects runtime injection and host executable path authority', async () => {
+  const fixture = candidate();
+  for (const [name, value] of [
+    ['NODE_OPTIONS', '--require /tmp/injected.cjs'],
+    ['NODE_PATH', '/tmp/injected-modules'],
+    ['LD_PRELOAD', '/tmp/injected.so'],
+  ]) {
+    writeFileSync(fixture.envFile, JSON.stringify({ [name]: value }) + '\n');
+    await expect(runCheck(argsFor(fixture, ['bun', 'run', 'check']), { transport: async () => 0 })).rejects.toThrow(name);
+  }
+});
+
+test('local frozen-worktree cleanup failure keeps final settlement unknown and retains the snapshot', async () => {
+  const fixture = candidate();
+  const finals: string[] = [];
+  let retained: CandidateSnapshot | undefined;
+  try {
+    const result = await runCheck(argsFor(fixture, ['bun', 'run', 'check']), {
+      settlementWriter: (line) => finals.push(line),
+      stateDirectory: fixture.parent,
+      onRetainSnapshot: (snapshot) => (retained = snapshot),
+      cleanupWorktree: () => {
+        throw new Error('mock local worktree cleanup failure');
+      },
+      transport: async (options) => {
+        const native = receipt('b', 0);
+        await options.allocated?.({ host: 'b', run: native.run });
+        options.completed?.(native);
+        options.settled?.(remoteSettlement(options, native));
+        return 0;
+      },
+    });
+    expect(result).toBe(75);
+    expect(JSON.parse(finals[0]!).cleanup).toMatchObject({ disposition: 'unknown', localWorktree: 'retained' });
+    expect(retained).toBeDefined();
+    expect(existsSync(retained!.workspace)).toBe(true);
+  } finally {
+    if (retained) removeRetainedSnapshot(fixture, retained);
   }
 });

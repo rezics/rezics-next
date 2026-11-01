@@ -106,9 +106,27 @@ index and admitted tracked, modified, deleted and untracked source, then transpo
 `remote-check`. It does not borrow the trusted driver's checkout or candidate `node_modules`, caches or `.temp`.
 Web and Auth generated inputs are prepared from the frozen candidate after the remote frozen install. Declared return
 paths are cleared before transfer, bounded and checked on return, and restored only from the terminal physical run.
-The private environment overlay cannot replace host runtime, placement or task-custody authority; unsupported
-host-absolute file settings fail closed. Cancellation uses the existing durable remote-check intent and receipt
-channel. Transport loss never starts a local copy of the command.
+The private environment overlay cannot replace host runtime, placement or task-custody authority; `NODE_OPTIONS`,
+`NODE_PATH`, Bun runtime controls, dynamic loader injection, and unsupported host-absolute file settings fail closed.
+Each producer invocation is durably registered outside the candidate before remote admission. Its final binding covers
+the exact commit, index and source fingerprint, original argv and cwd, hashes of the semantic and relocated
+environment, trusted producer closure, selected host configuration, declared preparation and returns. Secret values
+are never serialized.
+
+The native receipt is an intermediate event. A bounded version 1 FD 3 channel can send a `native-terminal` message,
+then a distinct `final-settlement` message bound to the caller's UUID invocation and nonce. The final message reports
+the native outcome, actual prepared file manifest, returned artifact digests, source verification, SSH child state,
+remote cleanup, local frozen-worktree cleanup, and separate primary and cleanup failures. Only `cleanup.disposition`
+`settled` certifies a fully verified lifecycle; missing evidence or any unknown cleanup remains non-green and keeps
+consumer custody. The decoder rejects foreign, replayed, duplicate, partial, oversized and out-of-order messages.
+
+`registerCheckRunInvocation`, `getCheckRunStatus`, `cancelCheckRunInvocation`, and
+`reconcileCheckRunInvocation` are the supported API. The `check-run-settlement.ts` CLI also provides registration,
+status, cancellation and reconciliation. Cancellation is durable before signal delivery and fences queued starts.
+Reconciliation observes or cleans up only the stored host/run and local transport-child identity; it never repeats the
+command or chooses another host/run. If source, producer, host, process or transport identity is missing or stale, the
+state stays unknown and the frozen inputs remain available. This producer protocol does not claim that a consumer's
+`RemoteGateCustody` or verifier `NativeReceiptBridge` is installed.
 
 ## External integrations
 

@@ -75,7 +75,28 @@ export type RemoteCheck = {
   /** An owner-published durable intent, independent of transport availability or a runner incarnation. */
   cancellation?: ExecutionCancellation;
   /** Trusted outer execution boundary; command stdout never supplies this value. */
-  completed?: (receipt: RemotePhysicalRunReceipt) => void;
+  completed?: (receipt: RemotePhysicalRunReceipt) => void | Promise<void>;
+  /** Durable producer identity is recorded before transfer, admission, or an execution spawn. */
+  allocated?: (physical: { host: string; run: string }) => void | Promise<void>;
+  /** Runs the actual transport spawn while the caller holds its durable cancellation/start fence. */
+  spawnWithCustody?: (
+    physical: { host: string; run: string },
+    spawn: () => ReturnType<typeof Bun.spawn>,
+  ) => ReturnType<typeof Bun.spawn> | Promise<ReturnType<typeof Bun.spawn>>;
+  /** Final remote evidence is emitted only after remote cleanup and transport-child reaping. */
+  settled?: (settlement: RemoteCheckSettlement) => void | Promise<void>;
+  /** Expected frozen candidate fingerprint; remote upload bytes are checked against this before preparation. */
+  expectedSourceSha256?: string;
+  /** Trusted per-file input inventory used to reject an incomplete or mixed upload before host preparation. */
+  expectedSourceManifest?: {
+    sourceSha256: string;
+    head: string;
+    indexTree: string;
+    entries: Array<{ path: string; mode: number; kind: 'file' | 'link'; sha256: string; target: string | null }>;
+    deleted: string[];
+  };
+  /** Bounded retry count. Check-run invocations use one physical run and reconcile that identity after loss. */
+  maxTransportAttempts?: number;
   slots?: number;
   /** Memory reservation in GiB; callers without a class weight retain the 2.5 GiB legacy reservation. */
   memoryGiB?: number;
@@ -111,6 +132,47 @@ export type RemoteCheck = {
    * the run directory is removed. A path that is not on the host is skipped.
    */
   returns?: string[];
+};
+
+export type RemotePreparedInputsEvidence = {
+  schema: 1;
+  sourceSha256: string;
+  manifestSha256: string;
+  fileCount: number;
+  totalBytes: number;
+};
+
+export type RemoteReturnedArtifact = { path: string; size: number; sha256: string; kind: 'file' | 'directory' };
+
+export type RemoteReturnManifest = {
+  schema: 1;
+  status: 'empty' | 'complete' | 'missing' | 'failed' | 'unknown';
+  entries: RemoteReturnedArtifact[];
+  missing?: string[];
+  failures: string[];
+};
+
+export type RemoteCleanupReceipt = {
+  schema: 1;
+  host: string;
+  run: string;
+  status: 'verified' | 'unknown';
+  supervisorStopped: boolean;
+  commandGroupTerminal: boolean;
+  containersRemoved: boolean;
+  runDirectoryRemoved: boolean;
+  failures: string[];
+};
+
+export type RemoteCheckSettlement = {
+  schema: 1;
+  host: string;
+  run: string;
+  native: RemotePhysicalRunReceipt | null;
+  preparedInputs: RemotePreparedInputsEvidence | null;
+  returns: RemoteReturnManifest;
+  cleanup: RemoteCleanupReceipt;
+  transportChildReaped: boolean;
 };
 
 /** What a try-once run reports: no host had a free slot, or the command ran there and exited with this code. */
@@ -1243,13 +1305,31 @@ function stopSupervisor(directory: string): string {
 
 /** Both normal cleanup and the stale-directory sweep remove only containers labelled for this run. */
 function cleanupCommands(removeDirectory = true): string {
+  if (removeDirectory) {
+    return `set -eu
+[ "$run_directory" = ${quote(`${ROOT}/runs/`)}"$run_id" ] || exit 1
+${stopSupervisor('"$run_directory"')} || exit 1
+systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1 || true
+if systemctl is-active --quiet "rezics-check-$run_id.scope"; then echo 'cleanup: command scope remains active' >&2; exit 1; fi
+command -v docker >/dev/null 2>&1 || { echo 'cleanup: Docker control is unavailable' >&2; exit 1; }
+containers=$(docker ps -aq --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not inspect owned containers' >&2; exit 1; }
+for container in $containers; do docker rm -f -v "$container" >/dev/null || { echo 'cleanup: owned container removal failed' >&2; exit 1; }; done
+remaining=$(docker ps -aq --filter "label=rezics.check.run=$run_id") || { echo 'cleanup: could not verify owned containers' >&2; exit 1; }
+[ -z "$remaining" ] || { echo 'cleanup: owned containers remain' >&2; exit 1; }
+systemctl stop "$run_slice" >/dev/null 2>&1 || true
+if systemctl is-active --quiet "$run_slice"; then echo 'cleanup: run slice remains active' >&2; exit 1; fi
+mkdir -p ${quote(`${ROOT}/receipts`)}
+if [ -e "$run_directory" ]; then rm -rf -- "$run_directory" || { echo 'cleanup: run directory removal failed' >&2; exit 1; }; fi
+[ ! -e "$run_directory" ] || { echo 'cleanup: run directory remains' >&2; exit 1; }
+printf 'CLEANED %s\\n' "$run_id"`;
+  }
   return `${stopSupervisor('"$run_directory"')} || exit 1
 systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1
 docker ps -aq --filter "label=rezics.check.run=$run_id" | while IFS= read -r container; do
   [ -z "$container" ] || docker rm -f -v "$container" >/dev/null 2>&1
 done
 systemctl stop "$run_slice" >/dev/null 2>&1
-${removeDirectory ? 'rm -rf -- "$run_directory"' : ''}`;
+`;
 }
 
 /** Executed by the host Python 3 prerequisite, before selecting or downloading pinned Bun. */
@@ -2058,6 +2138,135 @@ export function ownedLocalCommand(command: readonly string[]): string[] {
     : [...command];
 }
 
+const sourceInputVerificationProgram = String.raw`import hashlib,json,os,stat,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+manifest_path=root/'.temp/check-host'/('source-manifest-'+sys.argv[3]+'.json')
+expected=sys.argv[2]
+if not manifest_path.is_file() or manifest_path.stat().st_size > 8*1024*1024:
+    raise SystemExit('source manifest is missing or oversized')
+manifest=json.loads(manifest_path.read_text())
+if manifest.get('sourceSha256') != expected or len(manifest.get('entries', [])) > 50000 or len(manifest.get('deleted', [])) > 50000:
+    raise SystemExit('source manifest identity or bounds are invalid')
+entries=manifest['entries']
+digest=hashlib.sha256()
+expected_paths=set()
+for entry in sorted(entries,key=lambda item:item['path']):
+    path=entry['path']
+    if not isinstance(path,str) or not path or path.startswith('/') or '\x00' in path or len(path.encode())>1024 or any(part in ('','.','..') for part in path.split('/')):
+        raise SystemExit('source manifest contains an unsafe path')
+    expected_paths.add(path)
+    absolute=root/path
+    info=os.lstat(absolute)
+    mode=stat.S_IMODE(info.st_mode)
+    if mode != entry['mode']:
+        raise SystemExit('source mode mismatch: '+path)
+    digest.update((path+'\x00'+str(mode)+'\x00').encode())
+    if stat.S_ISREG(info.st_mode):
+        value=hashlib.sha256()
+        with absolute.open('rb') as source:
+            for block in iter(lambda:source.read(1024*1024),b''): value.update(block)
+        actual=value.hexdigest()
+        if entry['kind']!='file' or entry['sha256']!=actual:
+            raise SystemExit('source bytes mismatch: '+path)
+        digest.update(('file\x00'+actual+'\x00').encode())
+    elif stat.S_ISLNK(info.st_mode):
+        target=os.readlink(absolute)
+        if entry['kind']!='link' or entry['target']!=target or entry['sha256']!=hashlib.sha256(target.encode()).hexdigest():
+            raise SystemExit('source link mismatch: '+path)
+        digest.update(('link\x00'+target+'\x00').encode())
+    else:
+        raise SystemExit('unsupported source input: '+path)
+for path in sorted(manifest['deleted']): digest.update(('deleted\x00'+path+'\x00').encode())
+digest.update(('HEAD\x00'+manifest['head']+'\x00index\x00'+manifest['indexTree']+'\x00').encode())
+if digest.hexdigest()!=expected:
+    raise SystemExit('source manifest fingerprint does not match the frozen candidate')
+skip={'build','dist','out','coverage','.next','.turbo','playwright-report','test-results','node_modules','.git','.temp'}
+actual_paths=set()
+for current,dirs,files in os.walk(root,followlinks=False):
+    dirs[:]=[name for name in dirs if name not in skip]
+    for name in list(dirs):
+        full=Path(current)/name
+        if full.is_symlink():
+            actual_paths.add(full.relative_to(root).as_posix())
+            dirs.remove(name)
+    for name in files:
+        full=Path(current)/name
+        rel=full.relative_to(root).as_posix()
+        if any(part in skip for part in rel.split('/')): continue
+        actual_paths.add(rel)
+if actual_paths!=expected_paths:
+    raise SystemExit('uploaded source file set does not match the frozen candidate')
+`;
+
+const preparedInputEvidenceProgram = String.raw`import hashlib,json,os,stat,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+run=sys.argv[2]
+host=sys.argv[3]
+source=sys.argv[4]
+max_files=50000
+max_bytes=1024*1024*1024
+skip={'.git','.temp','node_modules'}
+entries=[]
+total=0
+def add(path,full,info):
+    global total
+    if len(path.encode())>1024: raise ValueError('prepared input path exceeds its bound')
+    mode=stat.S_IMODE(info.st_mode)
+    if stat.S_ISREG(info.st_mode):
+        value=hashlib.sha256()
+        with full.open('rb') as source_file:
+            for block in iter(lambda:source_file.read(1024*1024),b''): value.update(block)
+        size=info.st_size; kind='file'; digest=value.hexdigest()
+    elif stat.S_ISLNK(info.st_mode):
+        target=os.readlink(full).encode()
+        size=len(target); kind='link'; digest=hashlib.sha256(target).hexdigest()
+    else: raise ValueError('unsupported prepared input type')
+    total+=size
+    if total>max_bytes: raise ValueError('prepared input bytes exceed their bound')
+    entries.append({'path':path,'mode':mode,'kind':kind,'size':size,'sha256':digest})
+for current,dirs,files in os.walk(root,followlinks=False):
+    dirs[:]=[name for name in dirs if name not in skip]
+    for name in list(dirs):
+        full=Path(current)/name
+        if full.is_symlink():
+            add(full.relative_to(root).as_posix(),full,os.lstat(full)); dirs.remove(name)
+    for name in files:
+        full=Path(current)/name
+        rel=full.relative_to(root).as_posix()
+        if any(part in skip for part in rel.split('/')): continue
+        add(rel,full,os.lstat(full))
+        if len(entries)>max_files: raise ValueError('prepared input file count exceeds its bound')
+entries.sort(key=lambda item:item['path'])
+manifest=json.dumps(entries,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+result={'schema':1,'host':host,'run':run,'sourceSha256':source,'manifestSha256':hashlib.sha256(manifest).hexdigest(),'fileCount':len(entries),'totalBytes':total}
+target=Path('/srv/rezics-check/receipts')/run/'prepared-inputs.json'
+target.parent.mkdir(parents=True,exist_ok=True)
+temporary=target.with_name(target.name+'.'+str(os.getpid())+'.pending')
+with temporary.open('x') as output:
+    output.write(json.dumps(result,separators=(',',':'))+'\n'); output.flush(); os.fsync(output.fileno())
+os.replace(temporary,target)
+descriptor=os.open(target.parent,os.O_RDONLY|os.O_DIRECTORY)
+try: os.fsync(descriptor)
+finally: os.close(descriptor)
+`;
+
+const persistNativeTerminalProgram = String.raw`import json,os,sys
+from pathlib import Path
+root=Path('/srv/rezics-check/receipts')/sys.argv[1]
+root.mkdir(parents=True,exist_ok=True)
+target=root/'physical-run-status.json'
+value={'schema':1,'host':sys.argv[2],'run':sys.argv[1],'exitCode':int(sys.argv[3])}
+temporary=target.with_name(target.name+'.'+str(os.getpid())+'.pending')
+with temporary.open('x') as output:
+    output.write(json.dumps(value,separators=(',',':'))+'\n'); output.flush(); os.fsync(output.fileno())
+os.replace(temporary,target)
+descriptor=os.open(root,os.O_RDONLY|os.O_DIRECTORY)
+try: os.fsync(descriptor)
+finally: os.close(descriptor)
+`;
+
 /**
  * The docker wrapper is written beside the run's files and comes first on the path, so every `docker` a workspace
  * starts is the one that adds the slice, whatever the workspace is.
@@ -2080,6 +2289,7 @@ export function runScript(
   gitManifestRelativePath?: string,
   gitManifestSha256?: string,
   prepare: { cwd: string; command: string[] }[] = [],
+  expectedSourceSha256?: string,
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
@@ -2126,6 +2336,20 @@ export function runScript(
       fi`;
     })
     .join('\n');
+  const sourceVerification = expectedSourceSha256
+    ? `if ! python3 -c ${quote(sourceInputVerificationProgram)} ${quote(directory)} ${quote(expectedSourceSha256)} ${quote(id)}; then
+      echo "remote-check: frozen source upload verification failed" >&2
+      exit 70
+    fi`
+    : '';
+  const preparedInputsEvidence = expectedSourceSha256
+    ? `if [ "$code" -eq 0 ]; then
+      if ! python3 -c ${quote(preparedInputEvidenceProgram)} ${quote(directory)} ${quote(id)} ${quote(hostName)} ${quote(expectedSourceSha256)}; then
+        echo "remote-check: prepared input evidence unavailable" >&2
+        code=70
+      fi
+    fi`
+    : '';
   const systemdScript = `${refreshBaseScript(id, directory, gitArtifactRelativePath)}
 set +e
 host=$REMOTE_CHECK_HOST
@@ -2175,6 +2399,7 @@ host=$REMOTE_CHECK_HOST
       bun="$pinned_cache/package/bin/bun"
     fi
     ${gitRestore}
+    ${sourceVerification}
     mkdir -p ${quote(`${directory}/.temp/node-compile-cache`)}
     export NODE_COMPILE_CACHE=${quote(`${directory}/.temp/node-compile-cache`)}
     real_bun=$bun
@@ -2193,6 +2418,7 @@ host=$REMOTE_CHECK_HOST
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       ${preparationScript}
     fi
+    ${preparedInputsEvidence}
     if [ "$code" -eq 0 ]; then
       cd "$1"
       code=$?
@@ -2273,6 +2499,7 @@ host=$REMOTE_CHECK_HOST
     terminal_status=${quote(statusFile)}
     if [ "\${REMOTE_CHECK_HOST_LIFETIME:-}" = 1 ]; then terminal_status=${quote(`${directory}/.command-result`)}; fi
     printf '%s\\n' "$code" > "$terminal_status"
+    python3 -c ${quote(persistNativeTerminalProgram)} ${quote(id)} ${quote(hostName)} "$code" || exit 70
     exit $code`;
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
@@ -3866,6 +4093,7 @@ export function returnsProbe(directory: string, paths: string[], inventory = fal
 ${paths.map((path) => `# PATH ${path}`).join('\n')}
 python3 - ${quote(directory)} ${quote(JSON.stringify(paths))} ${inventory ? '1' : '0'} <<'REMOTE_CHECK_RETURNS_PY'
 import json, os, stat, sys
+import base64, hashlib
 
 root = os.path.abspath(sys.argv[1])
 paths = json.loads(sys.argv[2])
@@ -3875,6 +4103,7 @@ max_bytes = ${CHECK_ARTIFACTS_MAX_BYTES}
 entries = {}
 total = 0
 examined = 0
+failed = False
 
 class Oversize(Exception):
     pass
@@ -3901,12 +4130,20 @@ def visit(full, path, info, selected):
         if not empty:
             return
         size = 0
+        kind = 'directory'
+        digest = hashlib.sha256(b'directory\\0').hexdigest()
     elif stat.S_ISREG(info.st_mode):
         size = info.st_size
+        kind = 'file'
+        value = hashlib.sha256()
+        with open(full, 'rb') as source:
+            for block in iter(lambda: source.read(1024 * 1024), b''):
+                value.update(block)
+        digest = value.hexdigest()
     else:
         raise ValueError('symlink or special file')
     if path not in entries:
-        entries[path] = size
+        entries[path] = {'path': path, 'size': size, 'sha256': digest, 'kind': kind}
         total += size
         if len(entries) > max_files or total > max_bytes:
             raise Oversize()
@@ -3929,19 +4166,25 @@ for path in paths:
         continue
     except (OSError, ValueError):
         print('UNSAFE ' + path)
+        failed = True
         break
     try:
         visit(full, path, info, selected)
     except Oversize:
         print('OVERSIZE ' + path + ' ' + str(len(entries)) + ' ' + str(total))
         print('OVERSIZE_RETURN_SET')
+        failed = True
         break
     except (OSError, ValueError):
         print('UNSAFE ' + path)
+        failed = True
         break
     else:
         for present in selected if inventory else [path]:
             print('PRESENT ' + present)
+if inventory and not failed:
+    manifest = json.dumps(sorted(entries.values(), key=lambda item: item['path']), separators=(',', ':'), ensure_ascii=False).encode()
+    print('MANIFEST ' + base64.b64encode(manifest).decode())
 REMOTE_CHECK_RETURNS_PY`;
 }
 
@@ -3952,9 +4195,9 @@ async function copyReturns(
   connectionId: string,
   options: RemoteCheck,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<RemoteReturnManifest> {
   const paths = options.returns ?? [];
-  if (paths.length === 0) return;
+  if (paths.length === 0) return { schema: 1, status: 'empty', entries: [], missing: [], failures: [] };
   for (const path of paths) assertReturnPath(path);
   const probe = Bun.spawn(
     ['ssh', ...sshOptions(host, connectionId), host.address, returnsProbe(directory, paths, true)],
@@ -3965,13 +4208,16 @@ async function copyReturns(
   if (signal.aborted) throw new Aborted();
   if (probed !== 0) throw new RemoteTransportError(host.name, 'returns probe', probed, false);
   const present: string[] = [];
+  const missing: string[] = [];
   const seen = new Set<string>();
+  let manifest: RemoteReturnedArtifact[] | undefined;
   for (const line of output.split('\n')) {
     if (/^(UNSAFE |OVERSIZE |OVERSIZE_RETURN_SET$)/.test(line)) {
       throw new Error(`remote-check: refused returned output from ${host.name}: ${line}`);
     }
     const found = line.match(/^PRESENT (.*)$/);
-    const missing = line.match(/^ABSENT (.*)$/);
+    const missingMatch = line.match(/^ABSENT (.*)$/);
+    const manifestLine = line.match(/^MANIFEST ([A-Za-z0-9+/=]+)$/);
     if (found) {
       const file = found[1]!;
       assertReturnPath(file);
@@ -3980,10 +4226,35 @@ async function copyReturns(
       for (const path of declarations) seen.add(path);
       if (!present.includes(file)) present.push(file);
       if (present.length > CHECK_ARTIFACTS_MAX_FILES) throw new Error('remote-check: too many returned files');
-    } else if (missing) {
-      if (!paths.includes(missing[1]!)) throw new Error(`remote-check: undeclared missing output from ${host.name}`);
-      seen.add(missing[1]!);
-      console.error(`remote-check: ${missing[1]} is not on ${host.name}, skipping`);
+    } else if (missingMatch) {
+      if (!paths.includes(missingMatch[1]!)) throw new Error(`remote-check: undeclared missing output from ${host.name}`);
+      seen.add(missingMatch[1]!);
+      missing.push(missingMatch[1]!);
+      console.error(`remote-check: ${missingMatch[1]} is not on ${host.name}, skipping`);
+    } else if (manifestLine) {
+      if (manifest) throw new Error(`remote-check: duplicate returns manifest from ${host.name}`);
+      const bytes = Buffer.from(manifestLine[1]!, 'base64');
+      if (bytes.byteLength > 256 * 1024) throw new Error('remote-check: returns manifest exceeds its bound');
+      const parsed: unknown = JSON.parse(bytes.toString('utf8'));
+      if (!Array.isArray(parsed) || parsed.length > CHECK_ARTIFACTS_MAX_FILES)
+        throw new Error(`remote-check: invalid returns manifest from ${host.name}`);
+      manifest = parsed.map((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+          throw new Error(`remote-check: invalid returns manifest entry from ${host.name}`);
+        const item = entry as Record<string, unknown>;
+        if (
+          Object.keys(item).sort().join(',') !== 'kind,path,sha256,size' ||
+          typeof item.path !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(String(item.sha256)) ||
+          !Number.isSafeInteger(item.size) ||
+          (item.size as number) < 0 ||
+          (item.size as number) > CHECK_ARTIFACTS_MAX_BYTES ||
+          (item.kind !== 'file' && item.kind !== 'directory')
+        )
+          throw new Error(`remote-check: invalid returns manifest entry from ${host.name}`);
+        assertReturnPath(item.path);
+        return { path: item.path, size: item.size as number, sha256: item.sha256 as string, kind: item.kind };
+      });
     } else if (line !== '') {
       throw new Error(`remote-check: invalid returns probe from ${host.name}`);
     }
@@ -3991,7 +4262,19 @@ async function copyReturns(
   for (const path of paths) {
     if (!seen.has(path)) throw new Error(`remote-check: returns probe omitted declared output on ${host.name}`);
   }
-  if (present.length === 0) return;
+  if (!manifest) throw new Error(`remote-check: returns probe omitted its manifest from ${host.name}`);
+  if (new Set(manifest.map(({ path }) => path)).size !== manifest.length)
+    throw new Error(`remote-check: duplicate returned manifest path from ${host.name}`);
+  if (JSON.stringify([...present].sort()) !== JSON.stringify(manifest.map(({ path }) => path).sort()))
+    throw new Error(`remote-check: returns manifest does not match present paths from ${host.name}`);
+  if (present.length === 0)
+    return {
+      schema: 1,
+      status: missing.length ? 'missing' : 'complete',
+      entries: manifest,
+      missing,
+      failures: [],
+    };
   const started = performance.now();
   const sync = Bun.spawn(
     [
@@ -4015,6 +4298,27 @@ async function copyReturns(
   if (signal.aborted) throw new Aborted();
   if (synced === 24) reportVanishedFiles('from', host.name, vanishedFileCount(stderr));
   else if (synced !== 0) throw new RemoteTransportError(host.name, 'returns copy', synced, false);
+  for (const item of manifest) {
+    const destination = resolve(options.workspace, item.path);
+    const stats = lstatSync(destination);
+    if (stats.isSymbolicLink()) throw new Error(`remote-check: returned output became a symlink: ${item.path}`);
+    if (item.kind === 'directory') {
+      if (!stats.isDirectory() || readdirSync(destination).length !== 0)
+        throw new Error(`remote-check: returned empty directory differs from its manifest: ${item.path}`);
+    } else {
+      if (!stats.isFile() || stats.size !== item.size)
+        throw new Error(`remote-check: returned file differs from its manifest: ${item.path}`);
+      const digest = createHash('sha256').update(readFileSync(destination)).digest('hex');
+      if (digest !== item.sha256) throw new Error(`remote-check: returned file digest mismatch: ${item.path}`);
+    }
+  }
+  return {
+    schema: 1,
+    status: missing.length ? 'missing' : 'complete',
+    entries: manifest,
+    missing,
+    failures: [],
+  };
 }
 
 type PreparedRun = {
@@ -4024,6 +4328,7 @@ type PreparedRun = {
   connectionId: string;
   gitManifestRelativePath?: string;
   gitManifestSha256?: string;
+  expectedSourceSha256?: string;
 };
 
 /** Transfers the workspace before admission so upload work never owns execution capacity. */
@@ -4040,10 +4345,26 @@ async function uploadRun(
   const base = await baseState(host, connectionId, transferLimit);
   if (signal.aborted) throw new Aborted();
   let localGitStage: string | undefined;
+  let sourceManifestFile: string | undefined;
   let gitManifestRelativePath: string | undefined;
   let gitManifestSha256: string | undefined;
   try {
     const uploadFiles = [...files];
+    if (options.expectedSourceManifest) {
+      if (options.expectedSourceSha256 !== options.expectedSourceManifest.sourceSha256)
+        throw new Error('remote-check: expected source manifest does not match its fingerprint');
+      const manifestBytes = Buffer.from(`${JSON.stringify(options.expectedSourceManifest)}\n`);
+      if (manifestBytes.byteLength > 8 * 1024 * 1024)
+        throw new Error('remote-check: expected source manifest exceeds its transport bound');
+      const temporaryRoot = join(resolve(options.workspace), '.temp', 'check-host');
+      mkdirSync(temporaryRoot, { recursive: true, mode: 0o700 });
+      const directoryStat = lstatSync(temporaryRoot);
+      if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory())
+        throw new Error('remote-check: source manifest staging path is unsafe');
+      sourceManifestFile = join(temporaryRoot, `source-manifest-${id}.json`);
+      writeFileSync(sourceManifestFile, manifestBytes, { mode: 0o600, flag: 'wx' });
+      uploadFiles.push(relative(resolve(options.workspace), sourceManifestFile));
+    }
     if (commandUsesBun(options.command)) {
       const localTemp = join(resolve(options.workspace), '.temp');
       mkdirSync(localTemp, { recursive: true, mode: 0o700 });
@@ -4102,25 +4423,83 @@ async function uploadRun(
         : { gitManifestRelativePath, gitManifestSha256: gitManifestSha256! }),
     };
   } finally {
+    if (sourceManifestFile !== undefined) rmSync(sourceManifestFile, { force: true });
     if (localGitStage !== undefined) rmSync(localGitStage, { recursive: true, force: true });
   }
 }
 
-async function cleanupPreparedRun(prepared: PreparedRun): Promise<void> {
-  const cleanup = Bun.spawn(
-    [
-      'ssh',
-      ...sshOptions(prepared.host, prepared.connectionId),
-      prepared.host.address,
-      cleanupScript(prepared.id, prepared.directory),
-    ],
-    { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
-  );
-  const cleaned = await within(60_000, cleanup.exited);
-  if (cleaned !== 0) {
-    await stopAndReap(cleanup);
-    console.error(`remote-check: could not remove ${prepared.directory} on ${prepared.host.name}`);
+async function cleanupPreparedRun(prepared: PreparedRun): Promise<RemoteCleanupReceipt> {
+  let lastFailure: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const cleanup = Bun.spawn(
+        [
+          'ssh',
+          ...sshOptions(prepared.host, prepared.connectionId),
+          prepared.host.address,
+          cleanupScript(prepared.id, prepared.directory),
+        ],
+        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+      );
+      const [cleaned, output] = await boundedTextChild(
+        cleanup,
+        new AbortController().signal,
+        60_000,
+        prepared.host,
+        'run cleanup',
+        false,
+      );
+      if (cleaned !== 0 || output.trim() !== `CLEANED ${prepared.id}`) {
+        throw new RemoteTransportError(prepared.host.name, 'run cleanup verification', cleaned || REMOTE_TRANSPORT_FAILURE, false);
+      }
+      return {
+        schema: 1,
+        host: prepared.host.name,
+        run: prepared.id,
+        status: 'verified',
+        supervisorStopped: true,
+        commandGroupTerminal: true,
+        containersRemoved: true,
+        runDirectoryRemoved: true,
+        failures: [],
+      };
+    } catch (error) {
+      lastFailure = error;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
   }
+  throw lastFailure instanceof Error
+    ? lastFailure
+    : new RemoteTransportError(prepared.host.name, 'run cleanup verification', REMOTE_TRANSPORT_FAILURE, false);
+}
+
+async function stopPreparedRun(prepared: PreparedRun): Promise<void> {
+  let lastFailure: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const child = Bun.spawn(
+        ['ssh', ...sshOptions(prepared.host, prepared.connectionId), prepared.host.address, stopRunScript(prepared.id)],
+        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+      );
+      const [code, output] = await boundedTextChild(
+        child,
+        new AbortController().signal,
+        30_000,
+        prepared.host,
+        'original run stop',
+        false,
+      );
+      if (code !== 0 || output.trim() !== 'STOPPED')
+        throw new RemoteTransportError(prepared.host.name, 'original run stop verification', code || REMOTE_TRANSPORT_FAILURE, false);
+      return;
+    } catch (error) {
+      lastFailure = error;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
+  throw lastFailure instanceof Error
+    ? lastFailure
+    : new RemoteTransportError(prepared.host.name, 'original run stop verification', REMOTE_TRANSPORT_FAILURE, false);
 }
 
 async function recoverRunLifetimeFailure(prepared: PreparedRun, workspace: string): Promise<RunLifetimeFailure | null> {
@@ -4178,6 +4557,219 @@ print(json.dumps(value))`;
   } // Sampling cannot change native exits, fallback, capacity or cleanup.
 }
 
+async function recoverPreparedInputs(prepared: PreparedRun): Promise<RemotePreparedInputsEvidence | null> {
+  const file = `${ROOT}/receipts/${prepared.id}/prepared-inputs.json`;
+  const script = `# REMOTE_CHECK_PREPARED_INPUTS\nfile=${quote(file)}; if [ -r "$file" ]; then head -c 4096 "$file"; else exit 4; fi`;
+  try {
+    const result = await boundedSsh(prepared.host, prepared.connectionId, script, 'prepared input evidence', 5_000);
+    if (result.code !== 0 || Buffer.byteLength(result.output) > 4096) return null;
+    const value: unknown = JSON.parse(result.output);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const item = value as Record<string, unknown>;
+    if (
+      Object.keys(item).sort().join(',') !== 'fileCount,host,manifestSha256,run,schema,sourceSha256,totalBytes' ||
+      item.schema !== 1 ||
+      item.host !== prepared.host.name ||
+      item.run !== prepared.id ||
+      !/^[a-f0-9]{64}$/.test(String(item.sourceSha256)) ||
+      !/^[a-f0-9]{64}$/.test(String(item.manifestSha256)) ||
+      !Number.isSafeInteger(item.fileCount) ||
+      (item.fileCount as number) < 0 ||
+      (item.fileCount as number) > 50_000 ||
+      !Number.isSafeInteger(item.totalBytes) ||
+      (item.totalBytes as number) < 0 ||
+      (item.totalBytes as number) > 1024 * 1024 * 1024 ||
+      (prepared.expectedSourceSha256 && item.sourceSha256 !== prepared.expectedSourceSha256)
+    )
+      return null;
+    return {
+      schema: 1,
+      sourceSha256: item.sourceSha256 as string,
+      manifestSha256: item.manifestSha256 as string,
+      fileCount: item.fileCount as number,
+      totalBytes: item.totalBytes as number,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Observe or stop only the supplied host/run identity. This path never allocates or starts a check. */
+export async function reconcileRemoteRun(
+  options: {
+    hosts: readonly Host[];
+    physical: { host: string; run: string };
+    workspace: string;
+    returns?: string[];
+    allowedHosts?: string[];
+    transferTimeoutMs?: number;
+    controlProbeTimeoutMs?: number;
+  },
+  signal: AbortSignal = new AbortController().signal,
+): Promise<RemoteCheckSettlement> {
+  const { host: hostName, run: runId } = options.physical;
+  if (!PERFORMANCE_HOST_NAMES.includes(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
+    throw new Error('remote-check: reconciliation requires a known original host and run identity');
+  if (options.allowedHosts && !options.allowedHosts.includes(hostName))
+    throw new Error('remote-check: reconciliation host is outside the approved host set');
+  const host = options.hosts.find(({ name }) => name === hostName);
+  if (!host) throw new Error(`remote-check: original host ${hostName} is unavailable for reconciliation`);
+  const prepared: PreparedRun = {
+    host,
+    id: runId,
+    directory: `${ROOT}/runs/${runId}`,
+    connectionId: randomUUID().slice(0, 8),
+  };
+  prepared.connectionId = await probeControl(
+    host,
+    prepared.connectionId,
+    options.controlProbeTimeoutMs ?? DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
+  );
+  const reader = String.raw`import json
+from pathlib import Path
+root=Path(${JSON.stringify(`${ROOT}/receipts/${runId}`)})
+def read(name):
+    path=root/name
+    if not path.is_file() or path.stat().st_size>8192: return None
+    return json.loads(path.read_text())
+print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':read('prepared-inputs.json'),'lifetimeFailure':read('run-lifetime-status.json')},separators=(',',':')))`;
+  const observed = await boundedSsh(
+    host,
+    prepared.connectionId,
+    `# REMOTE_CHECK_RECONCILE_STATUS\npython3 -c ${quote(reader)}`,
+    'reconciliation status',
+    10_000,
+  );
+  if (observed.code !== 0 || Buffer.byteLength(observed.output) > 24 * 1024)
+    throw new RemoteTransportError(host.name, 'reconciliation status', observed.code || REMOTE_TRANSPORT_FAILURE, false);
+  let native: RemotePhysicalRunReceipt | null = null;
+  let preparedInputs: RemotePreparedInputsEvidence | null = null;
+  const evidenceFailures: string[] = [];
+  try {
+    const value: unknown = JSON.parse(observed.output);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid reconciliation response');
+    const root = value as Record<string, unknown>;
+    if (Object.keys(root).sort().join(',') !== 'lifetimeFailure,native,preparedInputs')
+      throw new Error('invalid reconciliation response fields');
+    if (root.native !== null) {
+      const item = root.native as Record<string, unknown>;
+      if (
+        !item ||
+        Object.keys(item).sort().join(',') !== 'exitCode,host,run,schema' ||
+        item.schema !== 1 ||
+        item.host !== hostName ||
+        item.run !== runId
+      )
+        throw new Error('stored native identity mismatch');
+      const lifetimeFailure = root.lifetimeFailure === null
+        ? null
+        : parseRunLifetimeFailure(`${RUN_LIFETIME_FAILURE_MARKER}${JSON.stringify(root.lifetimeFailure)}`);
+      native = parseRemotePhysicalRunReceipt({
+        schema: 1,
+        host: hostName,
+        run: runId,
+        exitCode: item.exitCode,
+        lifetimeFailure,
+        resources: null,
+      });
+      if (!native) throw new Error('stored native terminal result is invalid');
+    }
+    if (root.preparedInputs !== null) {
+      const item = root.preparedInputs as Record<string, unknown>;
+      if (
+        !item ||
+        Object.keys(item).sort().join(',') !== 'fileCount,host,manifestSha256,run,schema,sourceSha256,totalBytes' ||
+        item.schema !== 1 ||
+        item.host !== hostName ||
+        item.run !== runId ||
+        !/^[a-f0-9]{64}$/.test(String(item.sourceSha256)) ||
+        !/^[a-f0-9]{64}$/.test(String(item.manifestSha256)) ||
+        !Number.isSafeInteger(item.fileCount) ||
+        (item.fileCount as number) < 0 ||
+        (item.fileCount as number) > 50_000 ||
+        !Number.isSafeInteger(item.totalBytes) ||
+        (item.totalBytes as number) < 0 ||
+        (item.totalBytes as number) > 1024 * 1024 * 1024
+      )
+        throw new Error('stored prepared input evidence is invalid');
+      preparedInputs = {
+        schema: 1,
+        sourceSha256: item.sourceSha256 as string,
+        manifestSha256: item.manifestSha256 as string,
+        fileCount: item.fileCount as number,
+        totalBytes: item.totalBytes as number,
+      };
+    }
+  } catch (error) {
+    evidenceFailures.push(error instanceof Error ? error.message.slice(0, 512) : 'stored evidence is invalid');
+    native = null;
+    preparedInputs = null;
+  }
+  let returns: RemoteReturnManifest = {
+    schema: 1,
+    status: options.returns?.length ? 'unknown' : 'empty',
+    entries: [],
+    missing: [],
+    failures: [],
+  };
+  try {
+    await stopPreparedRun(prepared);
+    try {
+      returns = await copyReturns(
+        host,
+        prepared.directory,
+        prepared.connectionId,
+        { workspace: options.workspace, command: [], returns: options.returns },
+        signal,
+      );
+    } catch (error) {
+      returns = {
+        schema: 1,
+        status: 'failed',
+        entries: [],
+        missing: [],
+        failures: [error instanceof Error ? error.message.slice(0, 512) : 'reconciliation returns failed'],
+      };
+    }
+  } catch (error) {
+    returns = {
+      schema: 1,
+      status: 'unknown',
+      entries: [],
+      missing: [],
+      failures: [error instanceof Error ? error.message.slice(0, 512) : 'original run stop is unverified'],
+    };
+  }
+  let cleanup: RemoteCleanupReceipt;
+  try {
+    cleanup = await cleanupPreparedRun(prepared);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.slice(0, 512) : 'reconciliation cleanup failed';
+    cleanup = {
+      schema: 1,
+      host: hostName,
+      run: runId,
+      status: 'unknown',
+      supervisorStopped: false,
+      commandGroupTerminal: false,
+      containersRemoved: false,
+      runDirectoryRemoved: false,
+      failures: [reason],
+    };
+  }
+  if (evidenceFailures.length) returns = { ...returns, status: 'failed', failures: [...returns.failures, ...evidenceFailures] };
+  return {
+    schema: 1,
+    host: hostName,
+    run: runId,
+    native,
+    preparedInputs,
+    returns,
+    cleanup,
+    transportChildReaped: true,
+  };
+}
+
 /** Executes only after upload and slot admission; releases the lease before returns and cleanup. */
 async function runLeased(
   lease: Lease,
@@ -4190,6 +4782,30 @@ async function runLeased(
   let leaseReleased = false;
   let commandTerminal = false;
   let run: ReturnType<typeof Bun.spawn> | undefined;
+  let transportChildReaped = true;
+  let native: RemotePhysicalRunReceipt | null = null;
+  let preparedInputs: RemotePreparedInputsEvidence | null = null;
+  let returnManifest: RemoteReturnManifest = {
+    schema: 1,
+    status: options.returns?.length ? 'unknown' : 'empty',
+    entries: [],
+    missing: [],
+    failures: [],
+  };
+  let cleanup: RemoteCleanupReceipt = {
+    schema: 1,
+    host: host.name,
+    run: id,
+    status: 'unknown',
+    supervisorStopped: false,
+    commandGroupTerminal: false,
+    containersRemoved: false,
+    runDirectoryRemoved: false,
+    failures: [],
+  };
+  let code = REMOTE_TRANSPORT_FAILURE;
+  let primaryFailure: unknown;
+  const cleanupFailures: string[] = [];
   const releaseLease = async () => {
     if (leaseReleased) return;
     leaseReleased = true;
@@ -4202,33 +4818,39 @@ async function runLeased(
     console.error(`remote-check: running on ${host.name}`);
     options.started?.(host.name);
     assertExecutionAllowed(options, signal);
-    run = Bun.spawn(
-      [
-        'ssh',
-        ...sshOptions(host, connectionId),
-        host.address,
-        runScript(
-          id,
-          directory,
-          options.cwd ?? '.',
-          options.command,
-          host.name,
-          options.progressIntervalMs,
-          options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
-          configuredTimeout(
-            options.preparationTimeoutMs,
-            'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
-            DEFAULT_PREPARATION_TIMEOUT_MS,
+    const launch = () =>
+      Bun.spawn(
+        [
+          'ssh',
+          ...sshOptions(host, connectionId),
+          host.address,
+          runScript(
+            id,
+            directory,
+            options.cwd ?? '.',
+            options.command,
+            host.name,
+            options.progressIntervalMs,
+            options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
+            configuredTimeout(
+              options.preparationTimeoutMs,
+              'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
+              DEFAULT_PREPARATION_TIMEOUT_MS,
+            ),
+            options.estimateMs,
+            options.maxMs,
+            prepared.gitManifestRelativePath,
+            prepared.gitManifestSha256,
+            options.prepare,
+            options.expectedSourceSha256,
           ),
-          options.estimateMs,
-          options.maxMs,
-          prepared.gitManifestRelativePath,
-          prepared.gitManifestSha256,
-          options.prepare,
-        ),
-      ],
-      { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
-    );
+        ],
+        { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
+      );
+    run = options.spawnWithCustody
+      ? await options.spawnWithCustody({ host: host.name, run: id }, launch)
+      : launch();
+    transportChildReaped = false;
     const maxMs = effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
     let heartbeatStopped = false;
@@ -4247,7 +4869,6 @@ async function runLeased(
       // The host owns the deadline and receipt. This later controller guard only recovers a broken host monitor.
       deadlineTimer = setTimeout(() => resolve(null), maxMs + 1_000);
     });
-    let code: number;
     try {
       const completed = await Promise.race([commandResult.then((value) => value), deadlineResult]);
       if (completed === null) {
@@ -4305,8 +4926,12 @@ async function runLeased(
       code = parsed;
       commandTerminal = true;
     }
-    assertExecutionAllowed(options, signal);
-    await releaseLease();
+    try {
+      await releaseLease();
+    } catch (error) {
+      cleanupFailures.push(`slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
+      primaryFailure ??= error;
+    }
     let lifetimeFailure: RunLifetimeFailure | null = null;
     if (code === REMOTE_DEADLINE_EXIT) {
       try {
@@ -4326,23 +4951,25 @@ async function runLeased(
       lifetimeFailure,
       resources,
     };
-    try {
-      options.completed?.(physical);
-    } catch (error) {
-      console.error(
-        `remote-check: physical receipt consumer failed: ${error instanceof Error ? error.message : error}`,
-      );
+    native = physical;
+    preparedInputs = await recoverPreparedInputs(prepared);
+    if (!preparedInputs) {
+      primaryFailure ??= new Error('remote-check: prepared source/generated input evidence is unavailable');
     }
     try {
-      await copyReturns(host, directory, connectionId, options, signal);
+      await options.completed?.(physical);
     } catch (error) {
-      if (!lifetimeFailure || signal.aborted) throw error;
-      console.error(
-        `remote-check: returns failed after recorded run-lifetime infrastructure failure: ${error instanceof Error ? error.message : error}`,
-      );
+      primaryFailure ??= error;
     }
-    assertExecutionAllowed(options, signal);
-    return code;
+    try {
+      returnManifest = await copyReturns(host, directory, connectionId, options, signal);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
+      returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
+      primaryFailure ??= error;
+    }
+  } catch (error) {
+    primaryFailure ??= error;
   } finally {
     if (!commandTerminal && run) {
       try {
@@ -4350,14 +4977,60 @@ async function runLeased(
       } catch {
         // The SSH client may already have exited; releasing the lease runs the host-side orphan stop first.
       }
-      await run.exited;
+      try {
+        await run.exited;
+        transportChildReaped = true;
+      } catch (error) {
+        cleanupFailures.push(`transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
+      }
+    } else if (run) {
+      try {
+        await run.exited;
+        transportChildReaped = true;
+      } catch (error) {
+        cleanupFailures.push(`transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
+      }
     }
     try {
       await releaseLease();
+    } catch (error) {
+      cleanupFailures.push(`slot lease release failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`);
     } finally {
-      await cleanupPreparedRun(prepared);
+      try {
+        cleanup = await cleanupPreparedRun(prepared);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message.slice(0, 512) : 'remote cleanup could not be verified';
+        cleanupFailures.push(reason);
+        cleanup = { ...cleanup, status: 'unknown', failures: [...cleanup.failures, reason] };
+      }
     }
   }
+  if (!transportChildReaped) {
+    cleanupFailures.push('local SSH transport child terminality is unknown');
+    cleanup = { ...cleanup, status: 'unknown', failures: [...cleanup.failures, 'local SSH transport child terminality is unknown'] };
+  }
+  if (cleanupFailures.length && cleanup.status === 'verified')
+    cleanup = { ...cleanup, status: 'unknown', failures: [...cleanup.failures, ...cleanupFailures] };
+  const settlement: RemoteCheckSettlement = {
+    schema: 1,
+    host: host.name,
+    run: id,
+    native,
+    preparedInputs,
+    returns: returnManifest,
+    cleanup,
+    transportChildReaped,
+  };
+  try {
+    await options.settled?.(settlement);
+  } catch (error) {
+    primaryFailure ??= error;
+  }
+  if (primaryFailure) throw primaryFailure;
+  if (cleanup.status !== 'verified')
+    throw new RemoteTransportError(host.name, 'run cleanup verification', REMOTE_TRANSPORT_FAILURE, false);
+  if (!native) throw new RemoteTransportError(host.name, 'native terminal receipt', REMOTE_TRANSPORT_FAILURE, false);
+  return code;
 }
 
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
@@ -4400,6 +5073,9 @@ async function runWithTransportRetries(
   onAnswered?: () => void,
 ): Promise<number | null> {
   validateMemoryGiB(options.memoryGiB);
+  const maxAttempts = options.maxTransportAttempts ?? 3;
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3)
+    throw new Error('remote-check: max transport attempts must be between one and three');
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
     options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
@@ -4408,7 +5084,7 @@ async function runWithTransportRetries(
   let transportAttempts = 0;
   let lastFailure: RemoteTransportError | undefined;
   let answered = false;
-  while (transportAttempts < 3) {
+  while (transportAttempts < maxAttempts) {
     assertExecutionAllowed(options, signal);
     if (transportAttempts > 0) {
       const delay = (options.retryBackoffMs ?? 100) * 2 ** (transportAttempts - 1);
@@ -4442,9 +5118,12 @@ async function runWithTransportRetries(
       id,
       directory: `${ROOT}/runs/${id}`,
       connectionId: randomUUID().slice(0, 8),
+      ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
     };
     let managedByRun = false;
     try {
+      await options.allocated?.({ host: host.name, run: id });
+      assertExecutionAllowed(options, signal);
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
       Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal));
       assertExecutionAllowed(options, signal);
@@ -4480,7 +5159,12 @@ async function runWithTransportRetries(
     } catch (error) {
       if (!managedByRun) await cleanupPreparedRun(prepared);
       assertExecutionAllowed(options, signal);
-      if (!(error instanceof RemoteTransportError) || !error.retryable || transportAttempts === 2 || signal.aborted)
+      if (
+        !(error instanceof RemoteTransportError) ||
+        !error.retryable ||
+        transportAttempts + 1 >= maxAttempts ||
+        signal.aborted
+      )
         throw error;
       lastFailure = error;
       failedHosts.add(error.host);
@@ -4547,6 +5231,7 @@ async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): P
     id,
     directory: `${ROOT}/runs/${id}`,
     connectionId: randomUUID().slice(0, 8),
+    ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
   };
   try {
     prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
