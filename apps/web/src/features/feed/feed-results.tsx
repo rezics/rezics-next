@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import { ContentItem, type ContentItemHeadingLevel, type ContentItemProps } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 
-export type FeedItemPresentation = Omit<ContentItemProps, 'headingLevel'>;
+export type FeedItemPresentation = Omit<ContentItemProps, 'headingLevel'> & {
+  'data-feed-id'?: string;
+  'data-feed-source'?: string;
+};
 
 export type FeedResultsSourceState = 'ready' | 'preparing' | 'unavailable' | 'not_requested';
 
@@ -42,20 +45,20 @@ export type FeedResultsProps<T> = {
   itemHeadingLevel: ContentItemHeadingLevel;
   listAs: 'ol' | 'ul';
   result: FeedResultsResult<T>;
-  busy?: boolean;
+  busy?: boolean | undefined;
   messages: FeedResultsMessages;
   getItemKey: (item: T) => string | number;
   itemPresentation: (item: T) => FeedItemPresentation;
-  onRetry?: () => void;
-  onRestart?: () => void;
+  onRetry?: (() => void) | undefined;
+  onRestart?: (() => void) | undefined;
   /** The caller's existing cursor-bound Button, RouterLink or anchor. */
-  nextControl?: ReactNode;
+  nextControl?: ReactNode | undefined;
   /** Caller-owned affordances appear only for a ready result with no returned items. */
-  emptyActions?: ReactNode;
+  emptyActions?: ReactNode | undefined;
   /** The owner sets this only when its own selector explains the current blocked result. */
-  suppressResultMessage?: boolean;
-  className?: string;
-  listClassName?: string;
+  suppressResultMessage?: boolean | undefined;
+  className?: string | undefined;
+  listClassName?: string | undefined;
 };
 
 /** One ordered, named result region. Its owner keeps selection, data access and continuation authority. */

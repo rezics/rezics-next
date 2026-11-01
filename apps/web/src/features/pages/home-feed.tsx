@@ -62,14 +62,14 @@ export function HomeFeed({
   const page = result.state === 'ready' ? result.page : undefined;
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
   const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
-  const results: FeedResultsResult<FeedItem> = page
+  const results: FeedResultsResult<FeedItem> = result.state === 'ready'
     ? {
         state: 'ready',
-        items: page.feedItems,
-        hasNext: page.next !== null,
+        items: result.page.feedItems,
+        hasNext: result.page.next !== null,
         availability: {
           state: hasPreparing || hasUnavailable ? 'partial' : 'complete',
-          sources: page.sources,
+          sources: result.page.sources,
         },
       }
     : result.state === 'loading'
@@ -327,6 +327,8 @@ export function HomeFeedConsumer({
     Boolean(questionSnapshot.selected) &&
     ((questionSnapshot.selection === 'loading' && currentResult.state === 'loading') ||
       (questionFailure !== undefined &&
+        currentResult.state !== 'ready' &&
+        currentResult.state !== 'loading' &&
         currentResult.state === questionFailure.state &&
         currentResult.code === questionFailure.code));
   const filterOwnsResultMessage = spaceOwnsResultMessage || questionOwnsResultMessage;

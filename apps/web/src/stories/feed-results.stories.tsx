@@ -57,8 +57,8 @@ function RealmResults({
   availability = { state: 'complete' },
   items = realmPage.realms,
 }: {
-  availability?: FeedResultsAvailability;
-  items?: readonly MyRealmSummary[];
+  availability?: FeedResultsAvailability | undefined;
+  items?: readonly MyRealmSummary[] | undefined;
 }) {
   const locale = getLocale();
   const next = realmPage.next;
@@ -95,7 +95,13 @@ function RealmResults({
   );
 }
 
-function RealmRouter({ availability, items }: { availability?: FeedResultsAvailability; items?: readonly MyRealmSummary[] }) {
+function RealmRouter({
+  availability,
+  items,
+}: {
+  availability?: FeedResultsAvailability | undefined;
+  items?: readonly MyRealmSummary[] | undefined;
+}) {
   const router = useMemo(() => {
     const root = createRootRoute({ component: Outlet });
     const realms = createRoute({
