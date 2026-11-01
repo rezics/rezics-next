@@ -237,6 +237,7 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     await import('@tanstack/react-router');
   const { Route } = await import('../src/routes/orders/index');
   const { OrdersPage } = await import('../src/checkout/orders-page');
+  const shell = await import('../src/shell/shell');
   const { requireSignedIn } = await import('../src/session/guard');
   expect(Route.options.beforeLoad).toBe(requireSignedIn);
   const validate = Route.options.validateSearch as (search: Record<string, unknown>) => { cursor?: string };
@@ -298,6 +299,13 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     history: createMemoryHistory({ initialEntries: ['/en/orders'] }),
   });
   const invalidate = spyOn(router, 'invalidate');
+  let retry: (() => void) | undefined;
+  const NativeErrorPage = shell.ErrorPage;
+  // Capture the originating callback while retaining the ordinary generic error UI.
+  const errorPage = spyOn(shell, 'ErrorPage').mockImplementation((props) => {
+    retry = props?.onRetry;
+    return <NativeErrorPage {...props} />;
+  });
   const reads: (ReturnType<typeof deferred<BuyerOrdersCurrentRead>> & { data: { cursor?: string; locale: string } })[] = [];
   const read = spyOn(orders, 'readBuyerOrdersCurrent').mockImplementation(({ data }) => {
     const work = { ...deferred<BuyerOrdersCurrentRead>(), data };
@@ -439,10 +447,9 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     absent('A');
     unknown();
     expect(host.textContent).toContain(m.error_heading());
-    const retryButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === m.status_retry())!;
-    expect(retryButton).toBeDefined();
-    const props = Object.entries(retryButton).find(([key]) => key.startsWith('__reactProps$'))![1] as { onClick: () => void };
-    const obsoleteRetry = props.onClick;
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === m.status_retry())).toBe(true);
+    expect(retry).toBeDefined();
+    const obsoleteRetry = retry!;
     search = { cursor: 'cursor-address' };
     show(viewer('B'));
     await tick();
@@ -499,6 +506,7 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     address.mockRestore();
     read.mockRestore();
     invalidate.mockRestore();
+    errorPage.mockRestore();
     client.clear();
     host.remove();
     setLocale('en', { reload: false });
