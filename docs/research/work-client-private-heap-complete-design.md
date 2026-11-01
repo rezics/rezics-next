@@ -2,8 +2,8 @@
 
 ## Result
 
-The selected immutable heap-TID direction removes the *per-byte ordinary-index
-descent* in the earlier relational radix model. It does not yet supply a complete
+The selected immutable heap-TID direction removes the _per-byte ordinary-index
+descent_ in the earlier relational radix model. It does not yet supply a complete
 compatible producer. In particular, the concrete candidate that uses PostgreSQL
 `inputs::jsonb #>> ...` to produce keys fails the required uniform
 `O(d log N + B)` byte-work bound. This report gives a source-level counterexample:
@@ -45,9 +45,9 @@ Repository behavior is pinned to
 `30d6045d9829bc07d022380265381965804f6eac`, abbreviated `30d6045d` below.
 The two preceding reports were read in full at their committed versions:
 
-| Evidence | Commit | Report |
-| --- | --- | --- |
-| Primary model analysis | `d7666822d6fa00edd90120d013e4beecbc8cebdc` | `docs/research/work-client-exact-reservation-key-primary.md` |
+| Evidence                   | Commit                                     | Report                                                           |
+| -------------------------- | ------------------------------------------ | ---------------------------------------------------------------- |
+| Primary model analysis     | `d7666822d6fa00edd90120d013e4beecbc8cebdc` | `docs/research/work-client-exact-reservation-key-primary.md`     |
 | Independent model analysis | `e1b230d1397418ea9c538e3c840644ca1f02972b` | `docs/research/work-client-exact-reservation-key-independent.md` |
 
 Both analyze `1556f48ef91b0aee8719fa6321e9b35d500c7dc0`, not `30d6045d`.
@@ -69,26 +69,26 @@ The following complete owner documents define the receiving boundary. They were
 read by these exact absolute paths. They are references to existing authority;
 this report neither duplicates their authority nor adopts new product decisions.
 
-| Document | Absolute path below `/home/edge/projects/rezics/rezics-next/` |
-| --- | --- |
-| Bounded legacy contract | `.temp/goal/performance/decisions/work-client-bounded-legacy-contract.md` |
-| Primary receiving/model selection | `.temp/goal/performance/decisions/work-client-exact-key-primary-receiving-20261101.md` |
-| Additional-copy disposition | `.temp/goal/accounts/work-client-legacy-locator-owner-disposition-20261102.md` |
-| Private-TID Source receiving | `.temp/goal/search/work-client-private-tid-source-receiving-20261102.md` |
-| Heap-TID accounting receiving | `.temp/goal/semantic/work-client-heap-tid-owner-receiving-20261102.md` |
-| Fixed aggregate disposition | `.temp/goal/semantic/work-client-fixed-aggregate-owner-disposition-20261102.md` |
-| Maintenance accessor review | `.temp/goal/performance/decisions/accounts-source-maintenance-owner-review-20261101.md` |
+| Document                          | Absolute path below `/home/edge/projects/rezics/rezics-next/`                           |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| Bounded legacy contract           | `.temp/goal/performance/decisions/work-client-bounded-legacy-contract.md`               |
+| Primary receiving/model selection | `.temp/goal/performance/decisions/work-client-exact-key-primary-receiving-20261101.md`  |
+| Additional-copy disposition       | `.temp/goal/accounts/work-client-legacy-locator-owner-disposition-20261102.md`          |
+| Private-TID Source receiving      | `.temp/goal/search/work-client-private-tid-source-receiving-20261102.md`                |
+| Heap-TID accounting receiving     | `.temp/goal/semantic/work-client-heap-tid-owner-receiving-20261102.md`                  |
+| Fixed aggregate disposition       | `.temp/goal/semantic/work-client-fixed-aggregate-owner-disposition-20261102.md`         |
+| Maintenance accessor review       | `.temp/goal/performance/decisions/accounts-source-maintenance-owner-review-20261101.md` |
 
 The source delta from `1556f48e` to `30d6045d` matters:
 
-| Area | Change at the new pin | Consequence |
-| --- | --- | --- |
-| `work/client.ts`, `work/sdk-retirement-fence.ts`, SDK patch | No change | Original lookup, native fences and dispatch-string admission remain the baseline. |
-| `history/agent-identity-inventory-work.ts` and callers | Explicit maintenance context propagation plus implicit active-frame observation | Observation does not create, renew or fund a frame. The implicit-null success remains an owner correction dependency. |
-| History inventory, recovery receiving, source and receipt paths | Additional original recovery/copy receiving work | Extra reached reservations cannot be omitted from a complete original invocation. |
-| `semantic/identity-source-consumer-maintenance.ts` | Additive active-frame accessor | Same-Pool observation alone is not live admission. |
-| Work registry/transport | Separate Kind-consent participant wiring | It installs no compatibility heap, quote producer or copy inventory. |
-| Source custody/config and Library successful adapter | No replacement complete composition | The old native ceiling is insufficient evidence; Library's successful body is still unavailable. |
+| Area                                                            | Change at the new pin                                                           | Consequence                                                                                                           |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `work/client.ts`, `work/sdk-retirement-fence.ts`, SDK patch     | No change                                                                       | Original lookup, native fences and dispatch-string admission remain the baseline.                                     |
+| `history/agent-identity-inventory-work.ts` and callers          | Explicit maintenance context propagation plus implicit active-frame observation | Observation does not create, renew or fund a frame. The implicit-null success remains an owner correction dependency. |
+| History inventory, recovery receiving, source and receipt paths | Additional original recovery/copy receiving work                                | Extra reached reservations cannot be omitted from a complete original invocation.                                     |
+| `semantic/identity-source-consumer-maintenance.ts`              | Additive active-frame accessor                                                  | Same-Pool observation alone is not live admission.                                                                    |
+| Work registry/transport                                         | Separate Kind-consent participant wiring                                        | It installs no compatibility heap, quote producer or copy inventory.                                                  |
+| Source custody/config and Library successful adapter            | No replacement complete composition                                             | The old native ceiling is insufficient evidence; Library's successful body is still unavailable.                      |
 
 Source visibility and runtime installation are separate. This launch has no
 dependency receipt proving installed source and satisfied preconditions. Nothing
@@ -100,11 +100,11 @@ completion prose.
 Existing clones were reused. No clone was installed, built, tested or executed.
 Only permitted reference-index metadata is updated outside the worktree.
 
-| Label | Local reference directory below `.reference/` | Exact revision | Licence |
-| --- | --- | --- | --- |
-| PG | `library-shelf-maintenance/postgres` | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | PostgreSQL License, `COPYRIGHT` |
-| SDK | `native-scheduler-funded-design/dbos-transact-ts` | `627990fc59619d3584ce88511ab546bc7483f4b9` | MIT, `LICENSE` |
-| Rax | `work-client-exact-reservation-key/rax` | `1927550cb218ec3c3dda8b39d82d1d019bf0476d` | BSD-2-Clause, `COPYING` |
+| Label | Local reference directory below `.reference/`     | Exact revision                             | Licence                         |
+| ----- | ------------------------------------------------- | ------------------------------------------ | ------------------------------- |
+| PG    | `library-shelf-maintenance/postgres`              | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | PostgreSQL License, `COPYRIGHT` |
+| SDK   | `native-scheduler-funded-design/dbos-transact-ts` | `627990fc59619d3584ce88511ab546bc7483f4b9` | MIT, `LICENSE`                  |
+| Rax   | `work-client-exact-reservation-key/rax`           | `1927550cb218ec3c3dda8b39d82d1d019bf0476d` | BSD-2-Clause, `COPYING`         |
 
 PG is an exact development-source model, not a claim about the deployed server
 major, build options, page size, encoding or collation. The SDK revision is the
@@ -152,11 +152,11 @@ method. A compatibility miss delegates using the **original** requested ID.
 
 The fallback joins actual status and split-input rows. Its complete predicate is:
 
-| Half | Status predicate | Extracted equality |
-| --- | --- | --- |
-| Parent | `name = 'community.leave'` | `realmId = realm`, `memberAccountId = member` |
-| Child | `name = 'accounts.membership'` | `principal.id = realm`, `memberAccountId = member` |
-| Pair | Both halves present for each actual ID | Child and parent extracted `reservationId` text compare equal |
+| Half   | Status predicate                       | Extracted equality                                            |
+| ------ | -------------------------------------- | ------------------------------------------------------------- |
+| Parent | `name = 'community.leave'`             | `realmId = realm`, `memberAccountId = member`                 |
+| Child  | `name = 'accounts.membership'`         | `principal.id = realm`, `memberAccountId = member`            |
+| Pair   | Both halves present for each actual ID | Child and parent extracted `reservationId` text compare equal |
 
 There is no additional status-value, application, role, `principal.kind`,
 authorization, parent-link, current-membership or deterministic-ID predicate.
@@ -252,13 +252,13 @@ tables would add real data and work; they are not hidden in these widths.
 Under the inspected conventional layout (six-byte TIDs, 8-byte MAXALIGN, 8 KiB
 pages, non-null flat one-dimensional arrays):
 
-| Shape | Logical attribute bytes | Aligned heap tuple plus line pointer |
-| --- | ---: | ---: |
-| 256 child TIDs | `24 + 256*6 = 1560` | Part of node |
-| Primary's children plus three int8 fields | `1560 + 24 = 1584` | `24 + 1584 + 4 = 1612` |
-| Ordered variant with an additional maximum-terminal int8 | `1592` | `24 + 1592 + 4 = 1620` |
-| Scratch: two TIDs, padding, int8 | `24` | `24 + 24 + 4 = 52` |
-| Root attributes: two int8, one TID | `22` | `MAXALIGN(24 + 22) + 4 = 52` |
+| Shape                                                    | Logical attribute bytes | Aligned heap tuple plus line pointer |
+| -------------------------------------------------------- | ----------------------: | -----------------------------------: |
+| 256 child TIDs                                           |     `24 + 256*6 = 1560` |                         Part of node |
+| Primary's children plus three int8 fields                |      `1560 + 24 = 1584` |               `24 + 1584 + 4 = 1612` |
+| Ordered variant with an additional maximum-terminal int8 |                  `1592` |               `24 + 1592 + 4 = 1620` |
+| Scratch: two TIDs, padding, int8                         |                    `24` |                   `24 + 24 + 4 = 52` |
+| Root attributes: two int8, one TID                       |                    `22` |         `MAXALIGN(24 + 22) + 4 = 52` |
 
 Five of either node shape fit in the model's page after the 24-byte page header;
 this is a layout calculation, not measured occupancy, index overhead or WAL.
@@ -269,7 +269,7 @@ it does not eliminate tuple headers, page space, WAL or tuple checks.
 At the PG pin, `TidNext` passes a requested TID and the executor snapshot to
 `table_tuple_fetch_row_version`. `heap_fetch` addresses the named block and line
 pointer, checks item validity and snapshot visibility, and does not follow HOT
-chains. Thus an *actual single-TID plan* can address one inline node without
+chains. Thus an _actual single-TID plan_ can address one inline node without
 searching a node-ID B-tree. It is not enough to write `WHERE ctid = ...` and
 declare every future planner choice proved. Future supported-server plans must
 show the single-TID access, no function-hidden scan and the real nested work;
@@ -302,16 +302,16 @@ following finite **algorithm-slot** bound. These slots are not yet inclusive
 `NativeStepWork` prices; a result row, trigger statement, inventory write or lock
 cannot be silently omitted when converting them.
 
-| Per position | Heap row action slots | Exact-TID probes/actions | Internal SQL slots |
-| --- | ---: | ---: | ---: |
-| Forward node read | 1 | 1 | 1 |
-| Scratch insert / returned TID | 1 | 0 | 1 |
-| Scratch read | 1 | 1 | 1 |
-| Old node reread | 1 | 1 | 1 |
-| Replacement insert / returned TID | 1 | 0 | 1 |
-| Superseded-node delete | 1 | 1 | 1 |
-| Scratch delete | 1 | 1 | 1 |
-| **Total upper bound** | **7** | **5** | **7** |
+| Per position                      | Heap row action slots | Exact-TID probes/actions | Internal SQL slots |
+| --------------------------------- | --------------------: | -----------------------: | -----------------: |
+| Forward node read                 |                     1 |                        1 |                  1 |
+| Scratch insert / returned TID     |                     1 |                        0 |                  1 |
+| Scratch read                      |                     1 |                        1 |                  1 |
+| Old node reread                   |                     1 |                        1 |                  1 |
+| Replacement insert / returned TID |                     1 |                        0 |                  1 |
+| Superseded-node delete            |                     1 |                        1 |                  1 |
+| Scratch delete                    |                     1 |                        1 |                  1 |
+| **Total upper bound**             |                 **7** |                    **5** |              **7** |
 
 The earlier seven charged row/point/statement slots per position is a conservative
 slot envelope, not evidence that an INSERT has a direct-TID probe. It also is not
@@ -346,11 +346,11 @@ physical maintenance, not an application traversal that may be priced zero.
 Equality interning is not ordered head selection. A conditional extension of H
 would need these exact ordered roots, rather than a full-text composite B-tree:
 
-| Root | Ordered key | Payload |
-| --- | --- | --- |
-| Group parent root | Parent time DESC NULLS FIRST, terminated actual parent ID in C byte order | Parent terminal/source identity |
-| Group child root | Terminated actual child ID in C byte order | Child terminal/source identity |
-| Eligible root | Realm/member prefix, best parent time, actual parent ID, actual child ID | Group and both source identities |
+| Root              | Ordered key                                                               | Payload                          |
+| ----------------- | ------------------------------------------------------------------------- | -------------------------------- |
+| Group parent root | Parent time DESC NULLS FIRST, terminated actual parent ID in C byte order | Parent terminal/source identity  |
+| Group child root  | Terminated actual child ID in C byte order                                | Child terminal/source identity   |
+| Eligible root     | Realm/member prefix, best parent time, actual parent ID, actual child ID  | Group and both source identities |
 
 The group equality identity is realm/member plus exact extracted reservation
 terminal; fixed intern IDs may identify a group but may not order full IDs.
@@ -376,7 +376,7 @@ slots, before root/terminal/allocator/inventory work. Scanning the fixed 256 chi
 entries costs a fixed 256 per position, not `log N`. The local byte-slot envelope
 becomes `2*1592+12 = 3196`, again not a returned-byte quotation.
 
-This describes a way to avoid copying unrelated survivor *bytes*. It does not
+This describes a way to avoid copying unrelated survivor _bytes_. It does not
 prove a complete ordered producer: cached-summary corruption checks, source
 versions, lock/abort behavior, authoritative inventory and exact quotes still
 need bodies. The extraction counterexample below rejects H even if this ordered
@@ -403,15 +403,15 @@ strings, `numeric_out` for numbers, fixed lower-case Boolean text, and
 Array/scalar traversal failures also return NULL as defined by that function;
 invalid input conversion can error before extraction.
 
-| Native value at the path | Extracted behavior that must be retained |
-| --- | --- |
-| SQL NULL input, missing path, JSON null | SQL NULL; equality is not TRUE even against another NULL |
-| `""` | Empty non-NULL text, distinct from NULL |
-| `1` and `"1"` | Both can extract text `1`; JSON type is not an equality discriminator |
-| `true` and `"true"` | Both extract `true` |
-| `1.0`, exponent forms, negative zero | Server numeric input/output semantics; do not assume all numerically equal spellings produce identical extracted text |
-| Object/array | Server-rendered structured text, including spacing, escaping, duplicate-key resolution and object ordering |
-| A string containing structured-looking text | Can equal structured output when its de-escaped bytes equal that exact server output |
+| Native value at the path                    | Extracted behavior that must be retained                                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| SQL NULL input, missing path, JSON null     | SQL NULL; equality is not TRUE even against another NULL                                                              |
+| `""`                                        | Empty non-NULL text, distinct from NULL                                                                               |
+| `1` and `"1"`                               | Both can extract text `1`; JSON type is not an equality discriminator                                                 |
+| `true` and `"true"`                         | Both extract `true`                                                                                                   |
+| `1.0`, exponent forms, negative zero        | Server numeric input/output semantics; do not assume all numerically equal spellings produce identical extracted text |
+| Object/array                                | Server-rendered structured text, including spacing, escaping, duplicate-key resolution and object ordering            |
+| A string containing structured-looking text | Can equal structured output when its de-escaped bytes equal that exact server output                                  |
 
 Object order is not general lexicographic order: PG's representation compares
 member-name byte lengths first and bytes second. Duplicate member handling and
@@ -422,7 +422,7 @@ digest or reject them as non-string reservations.
 
 Expression equality also carries collation. PG `texteq` uses byte equality for
 deterministic collations; nondeterministic collations use `text_cmp` and can equate
-different byte sequences. Explicit C order for the newly refined *ID ties* does
+different byte sequences. Explicit C order for the newly refined _ID ties_ does
 not change the original extraction expressions' equality collation. No deployment
 collation was queried here. A byte terminal implementation must establish and
 record its supported deterministic expression collation, or supply an exact
@@ -552,20 +552,20 @@ they must not be replaced by an assumed application enqueue callback. Standalone
 initialization joins the caller's transaction, while child initialization also
 records the parent's operation result before its original commit/rollback.
 
-| Native path | Required old/new/private behavior |
-| --- | --- |
-| Status INSERT, input absent | Record half-liveness; no joined candidate until actual input exists. |
-| Input INSERT, status absent | Preserve orphan association/inventory; no invented status or eager unrelated cast error. |
-| Either half arrives second | Reread both actual halves; produce exactly one current candidate. |
-| INSERT conflict / speculative insert / no-op UPDATE | Maintain the stored winner, handle pre-trigger work and rollback; no leaked terminal/scratch allocation from the losing attempt. |
-| Status UPDATE | Handle actual ID, name, time and every predicate-relevant change, including relevant-to-irrelevant and reverse. |
-| Input UPDATE | Remove old extraction and add new extraction; old and new complete key bytes are charged. |
-| Either-half DELETE | Remove eligibility immediately in the original deleting transaction; retain any still-existing orphan copy under its owner. |
-| Bulk or raw SQL | Same native hooks and caller transaction; not an optional SDK-only path. |
-| Fork/bulk fork | Copied status and split input, originals' metadata update, copied steps/events/streams and conflicts all use original native fence semantics. |
-| Cancellation/resume/rewind/recovery | Preserve original status predicates; relevant name/time/ID/input changes still maintain the projection. A queue or status change alone must not add a new eligibility filter. |
-| Retention | Original four explicit deletes plus FK cascades; additional private removal is same-original-transaction owner work. |
-| Failure/abort/retry | Original transaction rolls back roots, nodes, allocator, candidate and inventory changes together. Already spent admission is not refunded; a repeat reserves again. |
+| Native path                                         | Required old/new/private behavior                                                                                                                                             |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status INSERT, input absent                         | Record half-liveness; no joined candidate until actual input exists.                                                                                                          |
+| Input INSERT, status absent                         | Preserve orphan association/inventory; no invented status or eager unrelated cast error.                                                                                      |
+| Either half arrives second                          | Reread both actual halves; produce exactly one current candidate.                                                                                                             |
+| INSERT conflict / speculative insert / no-op UPDATE | Maintain the stored winner, handle pre-trigger work and rollback; no leaked terminal/scratch allocation from the losing attempt.                                              |
+| Status UPDATE                                       | Handle actual ID, name, time and every predicate-relevant change, including relevant-to-irrelevant and reverse.                                                               |
+| Input UPDATE                                        | Remove old extraction and add new extraction; old and new complete key bytes are charged.                                                                                     |
+| Either-half DELETE                                  | Remove eligibility immediately in the original deleting transaction; retain any still-existing orphan copy under its owner.                                                   |
+| Bulk or raw SQL                                     | Same native hooks and caller transaction; not an optional SDK-only path.                                                                                                      |
+| Fork/bulk fork                                      | Copied status and split input, originals' metadata update, copied steps/events/streams and conflicts all use original native fence semantics.                                 |
+| Cancellation/resume/rewind/recovery                 | Preserve original status predicates; relevant name/time/ID/input changes still maintain the projection. A queue or status change alone must not add a new eligibility filter. |
+| Retention                                           | Original four explicit deletes plus FK cascades; additional private removal is same-original-transaction owner work.                                                          |
+| Failure/abort/retry                                 | Original transaction rolls back roots, nodes, allocator, candidate and inventory changes together. Already spent admission is not refunded; a repeat reserves again.          |
 
 The repository patch's ALWAYS writer guards cover INSERT/UPDATE on the eight
 native families. They do **not** currently cover private compatibility copies,
@@ -624,16 +624,16 @@ across every read with the specified fresh-snapshot protocol. Root locking must
 actually change the version; an old repeatable snapshot cannot lock a stale root,
 ignore the serialization failure and traverse current TIDs.
 
-| Event | Required complete behavior |
-| --- | --- |
-| Path copy commits | Root, terminal counts, candidates, inventory and replaced-node deletions publish atomically. |
-| Path copy aborts | No new root or allocation becomes visible; original root remains valid; funding stays spent. |
-| Old reader spans commit | It sees its original root and all linked old node versions in one protected snapshot. |
-| New reader after commit | It sees current root plus current nodes; never mixes old pointer with a later visibility horizon. |
-| Missing/mismatched node | Refuse covered lookup and invalidate; do not treat it as a legitimate miss. |
-| Long whole transaction | Price every visited node and copy; impose actual admissible resource/deadline limits or refuse before affected work. Splitting into unprotected later snapshots is not a solution. |
-| Process restart | Discard in-process traversal state; use durable validated coverage/progress and actual current authority. |
-| TRUNCATE / bypass / rewrite / restore | Coverage becomes invalid before any subsequent lookup may trust it. Restore-domain rotation alone does not reconstruct private links. |
+| Event                                 | Required complete behavior                                                                                                                                                         |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Path copy commits                     | Root, terminal counts, candidates, inventory and replaced-node deletions publish atomically.                                                                                       |
+| Path copy aborts                      | No new root or allocation becomes visible; original root remains valid; funding stays spent.                                                                                       |
+| Old reader spans commit               | It sees its original root and all linked old node versions in one protected snapshot.                                                                                              |
+| New reader after commit               | It sees current root plus current nodes; never mixes old pointer with a later visibility horizon.                                                                                  |
+| Missing/mismatched node               | Refuse covered lookup and invalidate; do not treat it as a legitimate miss.                                                                                                        |
+| Long whole transaction                | Price every visited node and copy; impose actual admissible resource/deadline limits or refuse before affected work. Splitting into unprotected later snapshots is not a solution. |
+| Process restart                       | Discard in-process traversal state; use durable validated coverage/progress and actual current authority.                                                                          |
+| TRUNCATE / bypass / rewrite / restore | Coverage becomes invalid before any subsequent lookup may trust it. Restore-domain rotation alone does not reconstruct private links.                                              |
 
 A future versioned Work installer must run after supported SDK migration, inspect
 the expected native schema/patch/trigger coverage and publish its own version.
@@ -663,18 +663,18 @@ prove the new copies gone.
 Every following class must participate in the owner-authorized same-original-
 transaction source deletion and later actual native absence probes:
 
-| Copy class | Retained information / association | Removal condition |
-| --- | --- | --- |
-| Equality/ID/ordered trie nodes | Prefix bytes implicit in topology, terminals, child links and summaries | Remove only dead changed paths; preserve shared live prefixes. |
-| Roots and publication state | Private heap links, generation, realm/member/group relationship | Delete empty associations; do not leave account tombstones. |
-| Terminal records/refcounts | Exact-key logical identity, native source/candidate relations | Release all actual references before reuse. |
-| Allocator/free intervals | Reusable logical identities and ownership metadata | Coalesce/remove emptied per-owner state; no history-only ledger. |
-| Scratch/path-copy state | Old TIDs, byte positions and transaction/source association | Remove on success, abort atomically on failure; inventory any durable retained state. |
-| Source and orphan associations | Actual ID, half-presence, generation and account relationships | Handle either surviving native half, including pre-mapping input orphans. |
-| Parent/child candidates | Extracted realm/member/reservation relationship and full actual-ID terminal | Remove old membership in the original source-deletion transaction. |
-| Group heads and eligible entries | Best parent/child relationships, time and ordered root links | Recompute both components; remove empty/ineligible entries. |
-| Backfill/reconcile progress and pending state | Native source locators and account-derived links | Minimize/remove together with owner custody; never treat cursor EOF as erasure. |
-| Inventory itself | Physical/logical associations sufficient to find all the above | Remove its final links only after actual selected copies are removed and independently probed. |
+| Copy class                                    | Retained information / association                                          | Removal condition                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Equality/ID/ordered trie nodes                | Prefix bytes implicit in topology, terminals, child links and summaries     | Remove only dead changed paths; preserve shared live prefixes.                                 |
+| Roots and publication state                   | Private heap links, generation, realm/member/group relationship             | Delete empty associations; do not leave account tombstones.                                    |
+| Terminal records/refcounts                    | Exact-key logical identity, native source/candidate relations               | Release all actual references before reuse.                                                    |
+| Allocator/free intervals                      | Reusable logical identities and ownership metadata                          | Coalesce/remove emptied per-owner state; no history-only ledger.                               |
+| Scratch/path-copy state                       | Old TIDs, byte positions and transaction/source association                 | Remove on success, abort atomically on failure; inventory any durable retained state.          |
+| Source and orphan associations                | Actual ID, half-presence, generation and account relationships              | Handle either surviving native half, including pre-mapping input orphans.                      |
+| Parent/child candidates                       | Extracted realm/member/reservation relationship and full actual-ID terminal | Remove old membership in the original source-deletion transaction.                             |
+| Group heads and eligible entries              | Best parent/child relationships, time and ordered root links                | Recompute both components; remove empty/ineligible entries.                                    |
+| Backfill/reconcile progress and pending state | Native source locators and account-derived links                            | Minimize/remove together with owner custody; never treat cursor EOF as erasure.                |
+| Inventory itself                              | Physical/logical associations sufficient to find all the above              | Remove its final links only after actual selected copies are removed and independently probed. |
 
 Account associations must cover all relationships the original extraction can
 produce, including orphan-derived rows; an association only to the currently
@@ -772,34 +772,34 @@ free. A quotation that first parses/fetches the whole affected input must alread
 have funded that I/O and parsing. No Source token may be retained for a later
 background operation or used to create a new Source frame.
 
-| Caller | Funding required before quote and apply |
-| --- | --- |
-| Original Source/History unit | Existing live invocation, exact Pool, original deadline, actual callback reservations through final receiving commit. |
-| Ordinary/native enqueue, conflict or raw SQL | Actual owning invocation's admission covering trigger work; no manufactured Source context. |
-| Caller-owned bulk/SQL transaction | That caller's real whole-transaction admission and complete old/new body; no hidden second checkout. |
-| Retention/cancellation/rewind/recovery | Original owner allowance including all reached private and native work. |
-| Backfill/live reconciliation | Independently admitted page/attempt, failure and rollback, with actual bounded operands. |
-| Restore inventory repair | Independent restore/reconciliation funding before scanning or publication; invalidation supplies none. |
+| Caller                                       | Funding required before quote and apply                                                                               |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Original Source/History unit                 | Existing live invocation, exact Pool, original deadline, actual callback reservations through final receiving commit. |
+| Ordinary/native enqueue, conflict or raw SQL | Actual owning invocation's admission covering trigger work; no manufactured Source context.                           |
+| Caller-owned bulk/SQL transaction            | That caller's real whole-transaction admission and complete old/new body; no hidden second checkout.                  |
+| Retention/cancellation/rewind/recovery       | Original owner allowance including all reached private and native work.                                               |
+| Backfill/live reconciliation                 | Independently admitted page/attempt, failure and rollback, with actual bounded operands.                              |
+| Restore inventory repair                     | Independent restore/reconciliation funding before scanning or publication; invalidation supplies none.                |
 
 ### Existing exact Work literals, unchanged
 
 These are source facts from `30d6045d:services/kernel/src/work/README.md`,
 `sdk-retirement-fence.ts` and the repository SDK patch, not new H prices:
 
-| Original dispatch | R/P/S/bytes/engine |
-| --- | --- |
-| Prepaid rollback | `0/0/1/0/0` |
-| BEGIN | `0/0/1/0/0` |
-| Local timeout settings | `1/0/1/128/0` |
-| Current native writer/domain check | `4/2/4/8192/0` |
-| Native retirement, including existing nested guard | `8/5/9/32768/0` |
-| Delete input | `1/1/1/0/0` |
-| Delete output | `1/1/1/0/0` |
-| Delete operation outputs | `64/1/1/0/0` |
-| Delete status, including four original FK cascades | `73/5/5/0/0` |
-| COMMIT | `0/0/1/0/0` |
-| **One complete original retirement attempt** | **`13/7/17/41088/0`** |
-| **One complete original deletion attempt** | **`144/10/16/8320/0`** |
+| Original dispatch                                  | R/P/S/bytes/engine     |
+| -------------------------------------------------- | ---------------------- |
+| Prepaid rollback                                   | `0/0/1/0/0`            |
+| BEGIN                                              | `0/0/1/0/0`            |
+| Local timeout settings                             | `1/0/1/128/0`          |
+| Current native writer/domain check                 | `4/2/4/8192/0`         |
+| Native retirement, including existing nested guard | `8/5/9/32768/0`        |
+| Delete input                                       | `1/1/1/0/0`            |
+| Delete output                                      | `1/1/1/0/0`            |
+| Delete operation outputs                           | `64/1/1/0/0`           |
+| Delete status, including four original FK cascades | `73/5/5/0/0`           |
+| COMMIT                                             | `0/0/1/0/0`            |
+| **One complete original retirement attempt**       | **`13/7/17/41088/0`**  |
+| **One complete original deletion attempt**         | **`144/10/16/8320/0`** |
 
 Deletion assumes the independent physical limits: events 8, history 64,
 notifications/streams zero, operations 64. It is children=false. No new DELETE
@@ -817,18 +817,18 @@ operations, I for authoritative inventory/removal work and C for control/fences.
 Do not redefine B to mean “the work the algorithm happened to do.” In the decisive
 family E is Theta(B), so even a more generous B definition cannot hide the failure.
 
-| Body | Finite derivation available here | Status for an inclusive operation price |
-| --- | --- | --- |
-| Equality path mutation, already extracted key | At most `7Q` local row-action/SQL slots; direct-TID accesses as tabulated | Conditional local model only. |
-| Ordered summaries | At most two extra child-summary fetches per changed position; `9Q` local slots | Conditional local model only; all actual ID bytes included. |
-| Scratch and rollback | Explicit inserts/reads/deletes above; rollback control prepaid; rolled-back work remains spent | Must be included, never amortized away by eventual vacuum. |
-| Native both-half rereads | Four original halves; two heads per changed group; global eligible seek | Fixed operation count, but actual statement/parameter/return widths need concrete bodies. |
-| SQL JSONB canonicalization | Counterexample `Omega(B log m)` byte examination | **Fails uniform requirement.** |
-| Exact expression collation | Byte equality valid for deterministic expression collation | Deployment fact/alternative exact producer unproved; not zero. |
-| Terminal allocator/root publication | Fixed-width identities can use O(log N) operations per changed key | Complete lock, reuse, owner-state and failure bodies absent. |
-| GC and invalid-link copy inventory/removal | Root-only inventory has explicit restored-TID counterexample | Complete authoritative producer absent; not zero. |
-| Exhaustive native hooks and old-writer lock order | Original paths identified; simple root-order cycle identified | Complete compatible producer absent; not zero. |
-| Quote, installer/backfill/restore reconciliation | Required paid boundaries identified | Concrete bounded bodies/operands absent; not zero. |
+| Body                                              | Finite derivation available here                                                               | Status for an inclusive operation price                                                   |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Equality path mutation, already extracted key     | At most `7Q` local row-action/SQL slots; direct-TID accesses as tabulated                      | Conditional local model only.                                                             |
+| Ordered summaries                                 | At most two extra child-summary fetches per changed position; `9Q` local slots                 | Conditional local model only; all actual ID bytes included.                               |
+| Scratch and rollback                              | Explicit inserts/reads/deletes above; rollback control prepaid; rolled-back work remains spent | Must be included, never amortized away by eventual vacuum.                                |
+| Native both-half rereads                          | Four original halves; two heads per changed group; global eligible seek                        | Fixed operation count, but actual statement/parameter/return widths need concrete bodies. |
+| SQL JSONB canonicalization                        | Counterexample `Omega(B log m)` byte examination                                               | **Fails uniform requirement.**                                                            |
+| Exact expression collation                        | Byte equality valid for deterministic expression collation                                     | Deployment fact/alternative exact producer unproved; not zero.                            |
+| Terminal allocator/root publication               | Fixed-width identities can use O(log N) operations per changed key                             | Complete lock, reuse, owner-state and failure bodies absent.                              |
+| GC and invalid-link copy inventory/removal        | Root-only inventory has explicit restored-TID counterexample                                   | Complete authoritative producer absent; not zero.                                         |
+| Exhaustive native hooks and old-writer lock order | Original paths identified; simple root-order cycle identified                                  | Complete compatible producer absent; not zero.                                            |
+| Quote, installer/backfill/restore reconciliation  | Required paid boundaries identified                                                            | Concrete bounded bodies/operands absent; not zero.                                        |
 
 The correct inclusive expression is a sum of actual bodies, not a literal guess:
 
@@ -864,24 +864,24 @@ zero. The old default is no longer the reason to reject a new design.
 Exact operands below come from the pinned Source custody contract and actual
 History/Source implementations. They preserve all original child literals:
 
-| Operand | R/P/S/bytes/engine | Actual entry/body |
-| --- | --- | --- |
-| V | `100/100/22/139264/0` | Every `verifyIdentitySourceConsumerCustody` entry, including rejected/copied handles and post-commit/terminal reconstruction. |
-| Account current verification | `64/64/15/65536/0` | Independently reserved subject reversal verification in its owner. |
-| Account settlement read | `64/64/20/65536/0` | Actual released same-source settlement reader. |
-| History-only handoff recheck | `32/32/8/131072/0` | Original barrier/source/association recheck, separate from V. |
-| Receiving binding | `160/80/6/131072/0` | Real mapping/work/role/barrier reads. |
-| Source native guard | `17/15/2/32768/0` | Outer SELECT and fifteen-input native joined body. |
-| Current SDK check | `4/2/4/8192/0` | Same-original-command native domain/fence lock. |
-| H, complete conservative subject handoff | `377/293/57/507904/0` | Sum of recheck, V, Account verification, binding, Source guard and SDK check. |
-| G, native History guard | `92/87/11/40960/0` | Includes nested Source/SDK native functions; not another TS H/V call. |
-| Absence guard | `9/9/9/0/0` | Separate actual absence checks. |
-| C, History command control | `3/1/8/256/0` | Original BEGIN/settings/time/no-effect fence/commit/rollback envelope. |
-| SDK released observation O | `3/2/1/8192/0` | Native domain/current fence observation. |
-| Work invalidation I | `846/846/261/0/0` | Original enrolled work invalidation body. |
-| Wake W | `128/65/65/0/0` | Original wake fanout. |
-| Locator invalidation LI | `1678/1678/518/0/0` | Original locator minimization fanout. |
-| Receiving invalidation RI | `845/845/261/0/0` | Original receiving invalidation body. |
+| Operand                                  | R/P/S/bytes/engine    | Actual entry/body                                                                                                             |
+| ---------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| V                                        | `100/100/22/139264/0` | Every `verifyIdentitySourceConsumerCustody` entry, including rejected/copied handles and post-commit/terminal reconstruction. |
+| Account current verification             | `64/64/15/65536/0`    | Independently reserved subject reversal verification in its owner.                                                            |
+| Account settlement read                  | `64/64/20/65536/0`    | Actual released same-source settlement reader.                                                                                |
+| History-only handoff recheck             | `32/32/8/131072/0`    | Original barrier/source/association recheck, separate from V.                                                                 |
+| Receiving binding                        | `160/80/6/131072/0`   | Real mapping/work/role/barrier reads.                                                                                         |
+| Source native guard                      | `17/15/2/32768/0`     | Outer SELECT and fifteen-input native joined body.                                                                            |
+| Current SDK check                        | `4/2/4/8192/0`        | Same-original-command native domain/fence lock.                                                                               |
+| H, complete conservative subject handoff | `377/293/57/507904/0` | Sum of recheck, V, Account verification, binding, Source guard and SDK check.                                                 |
+| G, native History guard                  | `92/87/11/40960/0`    | Includes nested Source/SDK native functions; not another TS H/V call.                                                         |
+| Absence guard                            | `9/9/9/0/0`           | Separate actual absence checks.                                                                                               |
+| C, History command control               | `3/1/8/256/0`         | Original BEGIN/settings/time/no-effect fence/commit/rollback envelope.                                                        |
+| SDK released observation O               | `3/2/1/8192/0`        | Native domain/current fence observation.                                                                                      |
+| Work invalidation I                      | `846/846/261/0/0`     | Original enrolled work invalidation body.                                                                                     |
+| Wake W                                   | `128/65/65/0/0`       | Original wake fanout.                                                                                                         |
+| Locator invalidation LI                  | `1678/1678/518/0/0`   | Original locator minimization fanout.                                                                                         |
+| Receiving invalidation RI                | `845/845/261/0/0`     | Original receiving invalidation body.                                                                                         |
 
 For H, the explicit sum is
 `32/32/8/131072 + V + 64/64/15/65536 + 160/80/6/131072 +
@@ -891,27 +891,27 @@ Leaving out the independently reserved Account verifier would undercount H.
 The original path has these additional reached operands; they are not replaced
 by H or the native SDK totals:
 
-| Stage | Reservation operands / call graph |
-| --- | --- |
-| `advanceInFrame` | Receiving snapshot `72/72/6/32768 + C`; original native Account source read `70/68/25/73984`; accepted lookup `86/80/59/205920` including its own up-to-three command controls/six RR snapshots. |
-| Initial retirement stage | Source handoff read `73/71/26/82176` when actual context is present; then `readIdentitySourceConsumerCustody`. Retained-terminal reconstruction spends a new V and reached Account settlement/verification. |
-| Source staging | Entry `32/32/29/32768` before checkout. Binding work reader first `9/9/5/8192`, then `4/4/5/8192` before its released snapshots. Missing first result spends only the first prefix. |
-| Source directory and scoped effect | Actual current directory page and current cut verification; actual Library page, receiving selection, current seal and durable fence before advancement. A planning ceiling is not a reservation. |
-| Source finish | Original accepted claim/current progress/source lock; actual settlement for subject or actual technical receiver for transfer; native commit provenance; then a separate post-commit command invoking fresh V. |
-| `retireAgentIdentitySDKWork` entry | `71/71/19/82048 + C`, then fresh stage verification; separate receiving binding and released writer O. |
-| Readiness command | C; saved association `1/1/1/106496`; H; reached readiness write `1/1/1/0 + G`; History readiness `2/2/2/0 + G + I + W`. |
-| Committed readiness reread | C plus `1/1/1/65536`; no portable earlier check replaces it. |
-| Released SDK retirement | Original `13/7/17/41088`, plus all new inclusive Work deltas when supplied. |
-| Closure command | Released O, then C plus H and `3/3/2/0 + G`. |
-| Recorded handoff L | Saved state `1/1/1/122880` plus H plus `1/0/1/256 + G`, with caller C separately. |
-| Preparation | C + L; seal `16/16/7/64`; work `1/1/1/64`; roles `65/65/1/8192`; owner readiness `74/74/7/49152` and another L; reached update `2/2/2/0 + G + I`. |
-| Bound physical selection | C + L; actual SDK receipt before/after; no skipped current authority. |
-| Each physical inspection | Controls `1/0/4/128`, plus eight `(limit+1)/1/1/(80*(limit+1))` probes; limits `[1,1,1,64,8,64,0,0]`, total `148/8/12/11888`. |
-| Physical delete | Original `144/10/16/8320`, new inclusive Work deltas separately, O, and second actual inspection/receipt. |
-| Cleanup/absence | C + L; seal `16/16/7/64`; absence `2/2/2/0 + G + Absence + I + W`; locators `4/4/4/0 + G + Absence + LI`. |
-| Later receiving | Two fresh L/H checks, actual absence and roles, original receiving proof and cursor in one commit; record body includes `1/0/1/256 + Absence`, roles `65/65/1/8192`, and `72/71/7/0 + G + Absence + RI`. |
-| Additional released receiving read | `76/75/17/132000 + G + Absence`; same-command verifier `76/75/13/131872 + G + Absence`, caller controls separate. |
-| Independent snapshots/reschedule | Mapping `6/5/8/16640`; saved SDK/work/mapping `7/6/8/33024`; reached delayed reschedule `C + 1/1/1/0`. |
+| Stage                              | Reservation operands / call graph                                                                                                                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `advanceInFrame`                   | Receiving snapshot `72/72/6/32768 + C`; original native Account source read `70/68/25/73984`; accepted lookup `86/80/59/205920` including its own up-to-three command controls/six RR snapshots.               |
+| Initial retirement stage           | Source handoff read `73/71/26/82176` when actual context is present; then `readIdentitySourceConsumerCustody`. Retained-terminal reconstruction spends a new V and reached Account settlement/verification.    |
+| Source staging                     | Entry `32/32/29/32768` before checkout. Binding work reader first `9/9/5/8192`, then `4/4/5/8192` before its released snapshots. Missing first result spends only the first prefix.                            |
+| Source directory and scoped effect | Actual current directory page and current cut verification; actual Library page, receiving selection, current seal and durable fence before advancement. A planning ceiling is not a reservation.              |
+| Source finish                      | Original accepted claim/current progress/source lock; actual settlement for subject or actual technical receiver for transfer; native commit provenance; then a separate post-commit command invoking fresh V. |
+| `retireAgentIdentitySDKWork` entry | `71/71/19/82048 + C`, then fresh stage verification; separate receiving binding and released writer O.                                                                                                         |
+| Readiness command                  | C; saved association `1/1/1/106496`; H; reached readiness write `1/1/1/0 + G`; History readiness `2/2/2/0 + G + I + W`.                                                                                        |
+| Committed readiness reread         | C plus `1/1/1/65536`; no portable earlier check replaces it.                                                                                                                                                   |
+| Released SDK retirement            | Original `13/7/17/41088`, plus all new inclusive Work deltas when supplied.                                                                                                                                    |
+| Closure command                    | Released O, then C plus H and `3/3/2/0 + G`.                                                                                                                                                                   |
+| Recorded handoff L                 | Saved state `1/1/1/122880` plus H plus `1/0/1/256 + G`, with caller C separately.                                                                                                                              |
+| Preparation                        | C + L; seal `16/16/7/64`; work `1/1/1/64`; roles `65/65/1/8192`; owner readiness `74/74/7/49152` and another L; reached update `2/2/2/0 + G + I`.                                                              |
+| Bound physical selection           | C + L; actual SDK receipt before/after; no skipped current authority.                                                                                                                                          |
+| Each physical inspection           | Controls `1/0/4/128`, plus eight `(limit+1)/1/1/(80*(limit+1))` probes; limits `[1,1,1,64,8,64,0,0]`, total `148/8/12/11888`.                                                                                  |
+| Physical delete                    | Original `144/10/16/8320`, new inclusive Work deltas separately, O, and second actual inspection/receipt.                                                                                                      |
+| Cleanup/absence                    | C + L; seal `16/16/7/64`; absence `2/2/2/0 + G + Absence + I + W`; locators `4/4/4/0 + G + Absence + LI`.                                                                                                      |
+| Later receiving                    | Two fresh L/H checks, actual absence and roles, original receiving proof and cursor in one commit; record body includes `1/0/1/256 + Absence`, roles `65/65/1/8192`, and `72/71/7/0 + G + Absence + RI`.       |
+| Additional released receiving read | `76/75/17/132000 + G + Absence`; same-command verifier `76/75/13/131872 + G + Absence`, caller controls separate.                                                                                              |
+| Independent snapshots/reschedule   | Mapping `6/5/8/16640`; saved SDK/work/mapping `7/6/8/33024`; reached delayed reschedule `C + 1/1/1/0`.                                                                                                         |
 
 The complete original successful History consumer expansion has eight H calls:
 readiness, closure, two preparation checks, bound selection, absence, and two
@@ -970,23 +970,23 @@ executed product tests in this research task. Existing tests/frozen assertions
 are unchanged. No fixture cap, allowance increase, hidden repair, token renewal
 or shortened original call chain may make a case pass.
 
-| Class | Required future proof and observation |
-| --- | --- |
-| Unrestricted values | Empty, NULL/missing, numeric/string, Boolean/string, structured/string equality, duplicate fields, object key ordering, escaped text, Unicode and numeric range/error cases against original SQL semantics. |
-| Byte adversaries | High-entropy long keys and the exact equal-length/common-prefix object family above; measure/count parser comparisons, copies and complete old/new paths, not only final storage. |
-| Collation | Actual expression collation/encoding recorded; deterministic equality and C ID order preserved; unsupported nondeterministic equality never receives false complete coverage. |
-| Full-ID order | Native-valid IDs near their standalone-key limit whose composite would not fit; long common prefixes; parent NULL time; equal times; parent/child ID ties; all previously uniquely ranked results unchanged. |
-| Lookup selection | Exact native-ID precedence; original-ID miss fallback; eligible old hit behind unmatched parents; complete miss; parent/child multiplicity; options/errors unchanged. |
-| Half-liveness | Both arrival orders, either-half deletion, retained orphan input/status, ID/name/time/input updates and old/new group moves. Exactly two groups implies all four component probes and native-half rereads. |
-| Conflict/native writers | Native INSERT/UPDATE/DELETE, speculative/no-op conflicts, rollback/reuse, raw SQL, caller-owned and bulk enqueue, fork, cancellation/resume/rewind/recovery, retention and every original SDK route. |
-| Concurrency | Native fence/root lock-order graph for whole transactions, competing equal/different keys, opposite half arrival, cross-group changes, old snapshots, aborted root publication, deadlock/serialization/ambiguous commit. |
-| Release/GC | Shared live prefix preserved; deleted last reference removed without copying unrelated suffixes; allocator reuse/no ABA; no leaked scratch/progress/inventory; no empty-account tombstone. |
-| Copy custody | All table classes in the inventory above, pre-mapping orphan associations, same-original-transaction owner removal, actual private and native absence probes and no inferred Source/receiving closure. |
-| Restore | Numeric TIDs deliberately remapped/reused or out of range; root links invalid; retained unreachable tuple found by authoritative inventory; invalidation before lookup; independent funded rebuild; permanent native fences/domain non-revival. |
-| Restart/backfill | Interruption at every phase; live mutation between page/read/apply/publication; old and new writers; bounded authoritative convergence; no unlocked coverage gap or lookup repair scan. |
-| Funding refusal | Missing, expired, exhausted axis, wrong actual Pool, copied/settled frame, malformed quote, stale quote operands, unknown SQL/dispatch, absent owner admission, unavailable Library, implicit-null correction, original deadline expiry and repeat/rollback no-refund. |
-| Whole-call sum | Every original Source entry, Account check, eight H, thirteen G, independent receiving/recovery branch and actual Library/Work nested body; componentwise path maxima; every original child literal unchanged. |
-| Resource lifetime | Borrowed Pool not ended, private Pool lazy/ended once, SDK destruction once even on error, one close promise, no extra checkout inside caller-owned transaction. |
+| Class                   | Required future proof and observation                                                                                                                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unrestricted values     | Empty, NULL/missing, numeric/string, Boolean/string, structured/string equality, duplicate fields, object key ordering, escaped text, Unicode and numeric range/error cases against original SQL semantics.                                                            |
+| Byte adversaries        | High-entropy long keys and the exact equal-length/common-prefix object family above; measure/count parser comparisons, copies and complete old/new paths, not only final storage.                                                                                      |
+| Collation               | Actual expression collation/encoding recorded; deterministic equality and C ID order preserved; unsupported nondeterministic equality never receives false complete coverage.                                                                                          |
+| Full-ID order           | Native-valid IDs near their standalone-key limit whose composite would not fit; long common prefixes; parent NULL time; equal times; parent/child ID ties; all previously uniquely ranked results unchanged.                                                           |
+| Lookup selection        | Exact native-ID precedence; original-ID miss fallback; eligible old hit behind unmatched parents; complete miss; parent/child multiplicity; options/errors unchanged.                                                                                                  |
+| Half-liveness           | Both arrival orders, either-half deletion, retained orphan input/status, ID/name/time/input updates and old/new group moves. Exactly two groups implies all four component probes and native-half rereads.                                                             |
+| Conflict/native writers | Native INSERT/UPDATE/DELETE, speculative/no-op conflicts, rollback/reuse, raw SQL, caller-owned and bulk enqueue, fork, cancellation/resume/rewind/recovery, retention and every original SDK route.                                                                   |
+| Concurrency             | Native fence/root lock-order graph for whole transactions, competing equal/different keys, opposite half arrival, cross-group changes, old snapshots, aborted root publication, deadlock/serialization/ambiguous commit.                                               |
+| Release/GC              | Shared live prefix preserved; deleted last reference removed without copying unrelated suffixes; allocator reuse/no ABA; no leaked scratch/progress/inventory; no empty-account tombstone.                                                                             |
+| Copy custody            | All table classes in the inventory above, pre-mapping orphan associations, same-original-transaction owner removal, actual private and native absence probes and no inferred Source/receiving closure.                                                                 |
+| Restore                 | Numeric TIDs deliberately remapped/reused or out of range; root links invalid; retained unreachable tuple found by authoritative inventory; invalidation before lookup; independent funded rebuild; permanent native fences/domain non-revival.                        |
+| Restart/backfill        | Interruption at every phase; live mutation between page/read/apply/publication; old and new writers; bounded authoritative convergence; no unlocked coverage gap or lookup repair scan.                                                                                |
+| Funding refusal         | Missing, expired, exhausted axis, wrong actual Pool, copied/settled frame, malformed quote, stale quote operands, unknown SQL/dispatch, absent owner admission, unavailable Library, implicit-null correction, original deadline expiry and repeat/rollback no-refund. |
+| Whole-call sum          | Every original Source entry, Account check, eight H, thirteen G, independent receiving/recovery branch and actual Library/Work nested body; componentwise path maxima; every original child literal unchanged.                                                         |
+| Resource lifetime       | Borrowed Pool not ended, private Pool lazy/ended once, SDK destruction once even on error, one close promise, no extra checkout inside caller-owned transaction.                                                                                                       |
 
 Keep actual growth scales **64 / 512 / 4096** and the original production-shaped
 fixtures in `services/kernel/test/work/growth-work-client.test.ts`. They use
