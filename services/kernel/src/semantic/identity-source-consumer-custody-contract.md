@@ -246,13 +246,13 @@ the same Pool and invocation before reading.
 The default native aggregate is fixed at rows 577, points 577, statements 173, bytes
 630784 and engine requests 0. Its complete derivation is:
 
-| Existing work in the one invocation | Rows | Points | Statements | Bytes |
-| ------------------------------------ | ---: | -----: | ---------: | ----: |
-| Source, binding, directory and local Source verifier | 249 | 249 | 81 | 286720 |
-| Account reversal-settlement read | 64 | 64 | 20 | 65536 |
-| Account same-home verification before and after Source commit | 128 | 128 | 30 | 131072 |
-| History Source verification before SDK retirement and after fence observation | 136 | 136 | 42 | 147456 |
-| **Total** | **577** | **577** | **173** | **630784** |
+| Existing work in the one invocation                                           |    Rows |  Points | Statements |      Bytes |
+| ----------------------------------------------------------------------------- | ------: | ------: | ---------: | ---------: |
+| Source, binding, directory and local Source verifier                          |     249 |     249 |         81 |     286720 |
+| Account reversal-settlement read                                              |      64 |      64 |         20 |      65536 |
+| Account same-home verification before and after Source commit                 |     128 |     128 |         30 |     131072 |
+| History Source verification before SDK retirement and after fence observation |     136 |     136 |         42 |     147456 |
+| **Total**                                                                     | **577** | **577** |    **173** | **630784** |
 
 The larger aggregate does not enlarge the Source directory children. Before splitting,
 `identitySourceConsumerDirectoryPlan` clamps the current remaining allowance to the
@@ -281,21 +281,21 @@ result row counts.
 
 The exact optional overrides and defaults are:
 
-| Environment key                                                     | Default | Derivation                                                                                                                                                                         |
-| ------------------------------------------------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS`                    |     577 | Fixed sum of Source/binding/directory (249), Account settlement read (64), Account verification (128), and both History Source checks (136).                                      |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS`                  |     577 | Same fixed bounded operation count as the native row aggregate.                                                                                                                    |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS`              |     173 | Fixed sum of Source/binding/directory (81), Account settlement read (20), Account verification (30), and both History Source checks (42).                                         |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES`                   |  630784 | Fixed sum of Source/binding/directory (286720), Account settlement read (65536), Account verification (131072), and both History Source checks (147456).                          |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ENGINE_REQUESTS`         |       0 | This PostgreSQL path dispatches no engine request.                                                                                                                                 |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_CANDIDATE_KEYS`         |       1 | One effect selection in the existing one-page bound.                                                                                                                               |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_IDENTITY_METADATA_ROWS` |       0 | This path does not dispatch an identity metadata sweep.                                                                                                                            |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_ROWS`            |    8192 | Existing Collection Source one-page native row ceiling.                                                                                                                            |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_POINTS`          |     128 | Existing Collection Source one-page native point ceiling.                                                                                                                          |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_WITNESS_KEYS`           |       1 | One effect selection.                                                                                                                                                              |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_STATEMENTS`             |     128 | Existing Collection Source one-page statement ceiling.                                                                                                                             |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_BYTES`                  | 1048576 | Existing Collection Source one-page byte ceiling.                                                                                                                                  |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS`            |       2 | The bounded page-end and sealed-empty probes.                                                                                                                                      |
+| Environment key                                                     | Default | Derivation                                                                                                                                               |
+| ------------------------------------------------------------------- | ------: | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS`                    |     577 | Fixed sum of Source/binding/directory (249), Account settlement read (64), Account verification (128), and both History Source checks (136).             |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS`                  |     577 | Same fixed bounded operation count as the native row aggregate.                                                                                          |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS`              |     173 | Fixed sum of Source/binding/directory (81), Account settlement read (20), Account verification (30), and both History Source checks (42).                |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES`                   |  630784 | Fixed sum of Source/binding/directory (286720), Account settlement read (65536), Account verification (131072), and both History Source checks (147456). |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ENGINE_REQUESTS`         |       0 | This PostgreSQL path dispatches no engine request.                                                                                                       |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_CANDIDATE_KEYS`         |       1 | One effect selection in the existing one-page bound.                                                                                                     |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_IDENTITY_METADATA_ROWS` |       0 | This path does not dispatch an identity metadata sweep.                                                                                                  |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_ROWS`            |    8192 | Existing Collection Source one-page native row ceiling.                                                                                                  |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_NATIVE_POINTS`          |     128 | Existing Collection Source one-page native point ceiling.                                                                                                |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_WITNESS_KEYS`           |       1 | One effect selection.                                                                                                                                    |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_STATEMENTS`             |     128 | Existing Collection Source one-page statement ceiling.                                                                                                   |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_BYTES`                  | 1048576 | Existing Collection Source one-page byte ceiling.                                                                                                        |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_EMPTY_SEEKS`            |       2 | The bounded page-end and sealed-empty probes.                                                                                                            |
 
 Overrides are canonical non-negative safe integers no higher than the named
 existing ceilings; invalid values fail at frame creation. Required work dimensions

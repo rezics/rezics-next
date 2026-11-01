@@ -199,12 +199,12 @@ async function minimizeIdentitySDKWork(
     historyDeadline(context, 0);
     const saved = await withConnection(pool, async (tx) => {
       const result = await tx.query<{
-          sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null;
-          state: string;
-          owner_ready: boolean;
-          request: unknown;
-          scope: unknown;
-        }>(
+        sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null;
+        state: string;
+        owner_ready: boolean;
+        request: unknown;
+        scope: unknown;
+      }>(
         `SELECT m.sdk_retirement_receipt,w.state,w.owner_ready,w.request,w.scope
      FROM core.agent_identity_work m JOIN core.history_work w
        ON w.partition_no=0 AND w.work_id=m.custody_id AND w.owner='access.agent-identity'
@@ -217,10 +217,7 @@ async function minimizeIdentitySDKWork(
     return saved;
   };
   let saved = await readSaved();
-  if (
-    !saved?.sdk_retirement_receipt ||
-    !saved.owner_ready
-  ) {
+  if (!saved?.sdk_retirement_receipt || !saved.owner_ready) {
     if (!maintenance) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
     const advanced = await advanceAgentIdentityConsumerMaintenance(
       { pool, client, env: maintenance.env, clock: maintenance.clock },
@@ -235,8 +232,7 @@ async function minimizeIdentitySDKWork(
     if (advanced !== null) return advanced;
     saved = await readSaved();
   }
-  if (!saved?.sdk_retirement_receipt || !saved.owner_ready)
-    return AGENT_IDENTITY_SDK_RETIREMENT.gap;
+  if (!saved?.sdk_retirement_receipt || !saved.owner_ready) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
   const prepared = await prepareIdentitySDKWorkRetirement(pool, job, custodyId, locator, registry, barrier, context);
   if (prepared) return prepared;
   saved = await readSaved();

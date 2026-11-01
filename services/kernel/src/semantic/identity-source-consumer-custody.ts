@@ -347,8 +347,7 @@ export async function readIdentitySourceConsumerCustody(
           return noEffect(row && terminal(row.state) ? row : null);
         })
       ).value;
-      if (committedRow)
-        return await verifiedTerminal(pool, reference, committedRow, context.deadline, funded);
+      if (committedRow) return await verifiedTerminal(pool, reference, committedRow, context.deadline, funded);
       const source = await original(pool, reference, context.deadline);
       if (!source) return null;
       const binding = (
@@ -526,7 +525,9 @@ async function verifiedTerminal(
   if (row.state === 'discharged') {
     if (reference.erasedRole !== 'subject') return null;
     reversal =
-      (await (await owners()).technical.readAccountIdentityReversalSettlement?.(pool, reference, {
+      (await (
+        await owners()
+      ).technical.readAccountIdentityReversalSettlement?.(pool, reference, {
         deadline,
         identityConsumerWork,
       })) ?? null;
