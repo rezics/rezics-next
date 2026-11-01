@@ -566,8 +566,8 @@ type ShelfEntriesProps = {
 export function ShelfEntries(props: ShelfEntriesProps) {
   const session = useSession();
   const location = useLocation();
-  // Column visibility cannot change the loaded population. Keep the mounted command/unknown intent and
-  // selection on these same rows; actor, source URL and replacement loader rows still reset the page.
+  // Display preferences cannot change the loaded population. The actual composition owns viewer/source
+  // retirement; its authoritative refreshes reconcile rows without replacing an unresolved command.
   const sourceUrl = new URL(location.href, 'https://shelf.invalid');
   for (const field of ['columns', 'layout', 'size']) sourceUrl.searchParams.delete(field);
   const population = props.isCurrent

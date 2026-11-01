@@ -47,7 +47,7 @@ export function PersonalLibraryCurrent({
   const continueList = useOperation('library_continue.list');
   const labelAssign = useOperation('library_label.assign');
   const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
-  const admitted = !hydrated || (entries && progress && continueList);
+  const admitted = !search.label && (!hydrated || (entries && progress && continueList));
   const address = personalLibraryAddress(search, locale);
   const actorKey = JSON.stringify([subject, admitted, hydrated ? [pins, collections, labels, labelAssign] : null]);
   const [lease, setLease] = useState(() => ({ key: actorKey, value: shelfMutationLease() }));
@@ -77,11 +77,13 @@ export function PersonalLibraryCurrent({
   if (!subject || !admitted)
     return (
       <p role="status">
-        {session.state === 'signed-out'
-          ? m.library_sign_in()
-          : !admitted
-            ? m.library_sort_denied()
-            : m.library_sort_preparing()}
+        {search.label
+          ? m.library_sort_preparing()
+          : session.state === 'signed-out'
+            ? m.library_sign_in()
+            : !admitted
+              ? m.library_sort_denied()
+              : m.library_sort_preparing()}
       </p>
     );
   return (

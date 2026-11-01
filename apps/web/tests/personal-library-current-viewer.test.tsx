@@ -104,6 +104,29 @@ function response(viewer: string, search: ShelfSearch = {}): PersonalLibraryCurr
 }
 
 test('The actual personal Library accepts only matching prepared-viewer and source results and retires obsolete private state and mutation continuations', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const reads = await import('../src/library/personal-library-server');
   const calls: Request[] = [];
   let stale = false;
@@ -139,7 +162,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
       });
     }
     if (url.pathname === '/v1/collections') {
-      expect(url.searchParams.get('limit')).toBe('20');
+      expect(url.searchParams.get('limit')).toBe('100');
       expect(url.searchParams.get('curatorAccountId')).toBeTruthy();
       return Response.json({ collections: [{ id: id(5), title: 'Private collection', curator: null }], next: null });
     }
@@ -213,29 +236,6 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     native.mockRestore();
   }
 
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
-  const window = new Window({ url: 'https://site.test/en/library' });
-  const globals = {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    HTMLElement: window.HTMLElement,
-    Element: window.Element,
-    Node: window.Node,
-    Document: window.Document,
-    DocumentFragment: window.DocumentFragment,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
-  };
-  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot, hydrateRoot } = await import('react-dom/client');
   const { renderToString } = await import('react-dom/server');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
