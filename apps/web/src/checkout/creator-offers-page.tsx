@@ -216,7 +216,9 @@ export function CreatorOffersPage({
                         <span className="text-sm">{offer.currency.toUpperCase()}</span>
                       </p>
                       <p>
-                        {recordedTaxBehavior(offer) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
+                        {recordedTaxBehavior(offer) === 'exclusive'
+                          ? m.commerce_before_tax()
+                          : m.commerce_tax_unknown()}
                       </p>
                       <p className="leading-relaxed">
                         {offer.contentEdition === null ? m.creator_offers_unknown() : m.creator_offers_captured()}
