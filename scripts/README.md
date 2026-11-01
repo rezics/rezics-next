@@ -52,13 +52,91 @@ Remote worker checks preserve any existing local `GROWTH_PROFILE` lines and appe
 
 `bun scripts/check-run.ts` writes private invocation records under `${XDG_STATE_HOME:-~/.local/state}/rezics/check-runs` (or the absolute `REZICS_CHECK_RUN_STATE_DIR`). The state directory is owner-only, outside the candidate workspace, and each JSON record is replaced atomically and fsynced while holding the existing check-custody lock. A caller can register its invocation before launch with `registerCheckRunInvocation(binding)` or `bun scripts/check-run-settlement.ts register --binding <absolute-private-json>`. The returned `invocationId` and 256-bit `nonce` identify the run. To bind a launched producer to that registration, set `REMOTE_CHECK_INVOCATION_ID=<uuid>`, `REMOTE_CHECK_RECEIPT_FD=3`, and `REMOTE_CHECK_RECEIPT_NONCE=<nonce>`; the launcher must provide fd 3 only to the trusted producer.
 
-The version 1 `CheckRunInvocationBinding` has exactly these fields: `sourceRevision`, `indexTree`, `sourceSha256`, `argvSha256`, workspace-relative `cwd`, `semanticEnvironmentSha256`, `relocatedEnvironmentSha256`, `producerClosureSha256`, `hostsSha256`, `preparationCommandsSha256`, and `returnsSha256`. Hashes are SHA-256 over canonical JSON or the trusted source closure. Environment values themselves are never put in the record or wire messages. The source manifest verifies each frozen file or symlink, mode, deletion, candidate commit and index before preparation. A separate host receipt hashes the actual prepared source and generated file bytes after preparation; an unavailable receipt stays unavailable.
+The version 1 `CheckRunInvocationBinding` has exactly these fields: `sourceRevision`, `indexTree`, `sourceSha256`, `argvSha256`, workspace-relative `cwd`, `semanticEnvironmentSha256`, `relocatedEnvironmentSha256`, `producerClosureSha256`, `hostsSha256`, `preparationCommandsSha256`, and `returnsSha256`. Hashes are SHA-256 over canonical JSON or the trusted source closure. Environment values never appear in invocation status records, descriptors, FD 3 messages, stdout or stderr. The separate owner-only prepared-execution file stores the exact original and relocated environment privately so a later process can run the same preparation. The source manifest verifies each frozen file or symlink, mode, deletion, candidate commit and index before preparation. A separate host receipt hashes the actual prepared source and generated file bytes after preparation; an unavailable receipt stays unavailable.
+
+### Out-of-process prepared handoff
+
+The additive producer API is:
+
+```ts
+prepareCheckRunInvocation(
+  args: CheckRunArguments,
+  descriptorFile: string,
+  dependencies?: CheckRunDependencies,
+  processEnvironment?: NodeJS.ProcessEnv,
+): Promise<CheckRunPreparedDescriptor>
+
+runPreparedCheckRunInvocation(
+  descriptorFile: string,
+  dependencies?: CheckRunDependencies,
+  signal?: AbortSignal,
+  processEnvironment?: NodeJS.ProcessEnv,
+): Promise<number>
+```
+
+The normal CLI callers stay supported. An out-of-process caller prepares with the same options and command argv:
+
+```text
+bun scripts/check-run.ts prepare --descriptor <absolute-private-json> --hosts <absolute-hosts-json> --workspace <absolute-candidate-root> --cwd <workspace-relative-directory> --source-revision <full-candidate-commit> --env-file <absolute-environment-json> [--returns <workspace-relative-path>]... -- <original-argv...>
+```
+
+The version 1 descriptor is a closed JSON object with exactly this schema; `binding` is the complete eleven-field
+`CheckRunInvocationBinding` above and `cancellation` is the durable file/id returned for the invocation:
+
+```json
+{
+  "schema": 1,
+  "type": "check-run-preparation",
+  "invocationId": "<uuid>",
+  "nonce": "<64 lowercase hex characters>",
+  "binding": {
+    "sourceRevision": "<full commit>",
+    "indexTree": "<full tree object>",
+    "sourceSha256": "<sha256>",
+    "argvSha256": "<sha256>",
+    "cwd": "<workspace-relative path>",
+    "semanticEnvironmentSha256": "<sha256>",
+    "relocatedEnvironmentSha256": "<sha256>",
+    "producerClosureSha256": "<sha256>",
+    "hostsSha256": "<sha256>",
+    "preparationCommandsSha256": "<sha256>",
+    "returnsSha256": "<sha256>"
+  },
+  "cancellation": { "file": "<absolute private file>", "id": "<same uuid>" }
+}
+```
+
+The descriptor is at most 64 KiB, owner-only, a regular non-symlink file inside an owner-private directory, and outside
+candidate source. Its exact path and byte digest are recorded before the descriptor is exposed. The private execution
+file is at most 16 MiB, owner-only and outside candidate source. It holds the one relocated snapshot, source manifest,
+host and environment selections, preparation commands and original argv; the invocation record stores only its path
+and digest. `run-prepared` accepts only `--descriptor <absolute-private-json>`, requires the matching caller-established
+`REMOTE_CHECK_INVOCATION_ID`, `REMOTE_CHECK_RECEIPT_NONCE` and `REMOTE_CHECK_RECEIPT_FD=3`, and atomically claims the
+matching `prepared` record once. It reuses the saved snapshot and identities without creating another worktree or
+reconstructing the binding. Changed candidate/frozen inputs, environment file, priority, host file or trusted producer
+closure fail before remote admission. Preparation itself imports no candidate code, starts no check and emits no FD 3
+receipt.
+
+For process loss or abandonment, callers use the durable invocation id from the descriptor:
+
+```text
+bun scripts/check-run-settlement.ts status <invocation-id> [--state-dir <absolute-dir>]
+bun scripts/check-run-settlement.ts cancel <invocation-id> [--signal 1|2|15] [--state-dir <absolute-dir>]
+bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]
+```
+
+Reconciliation without `--hosts` handles a prepared/queued invocation with no physical run: it durably cancels the
+start, then removes only the recorded snapshot and records that custody. If a physical host/run was already recorded,
+reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. A final
+record is replayed by `status`; `run-prepared` rejects its descriptor after the one claim and never starts a replacement.
+After final settlement or a consumed run, the private execution payload is erased when its owner-only file can be
+verified. Secret environment values do not appear in any status or settlement message.
 
 Ordering is durable: registration precedes remote admission; `queued` precedes host probing and upload; the exact `{host,run}` is persisted before the native transport spawn; `running` and its local SSH PID/boot/start identity are stored under the spawn fence; and `native-terminal` records the original exit and lifetime outcome before final settlement. FD 3 uses one bounded newline-delimited version 1 JSON message per event. The optional intermediate `native-terminal` message has `invocationId`, `nonce`, the exact binding, physical identity and original `receipt`. It is not final authority. The final message is `{schema:1,type:"final-settlement",invocationId,nonce,binding,physical,native,preparedInputs,returns,cleanup,failures}`. `native` carries the original exit code, lifetime-timeout flag and receipt digest. `preparedInputs` carries `status`, `sourceSha256`, `manifestSha256`, `fileCount` and `totalBytes`. `returns` carries `status`, declaration digest, restored artifact `{path,size,sha256}` entries, missing paths and failures. `cleanup` carries overall disposition, remote cleanup, transport-child, source and frozen-worktree dispositions plus cleanup failures. `failures` keeps primary and cleanup causes separate.
 
 The final `cleanup.disposition:"settled"` message is emitted only after the SSH child is reaped, host command group and run containers are verified stopped, returns are copied and checked, frozen and caller source checks pass, and the frozen worktree removal is verified. An `unknown` final reports which part could not be verified; a missing or malformed message, FD 3 write failure, output mismatch, or unavailable identity/evidence is non-green and leaves the invocation occupied for its caller. Native nonzero, 75, 124 and signal exits remain in `native`; settlement never turns one into exit 0. The decoder rejects oversized messages and collections, duplicate JSON keys, foreign IDs, nonce/binding/physical mismatches, early or repeated native events, partial lines and final replay. Only the trusted producer callback plus the registered ID and nonce establishes wire provenance; child stdout and candidate JSON do not.
 
-`getCheckRunStatus`, `cancelCheckRunInvocation` and `reconcileCheckRunInvocation` expose status, durable cancellation and reconciliation. The CLI provides `status <id>`, `cancel <id> [--signal 1|2|15]` and `reconcile <id> --hosts <absolute-hosts-json>`. Cancellation is stored before its signal intent is published and the start fence refuses a later queued spawn. Reconciliation uses only the persisted host, run and exact local transport-child identity. It stops or observes that same run, verifies returns and cleanup, and never allocates a second command. Missing host state, stale process ownership, changed producer/host bindings or failed transport leaves custody unknown and frozen inputs retained. A final message alone does not install or claim an external `RemoteGateCustody` or `NativeReceiptBridge`.
+`getCheckRunStatus`, `cancelCheckRunInvocation` and `reconcileCheckRunInvocation` expose status, durable cancellation and reconciliation. The CLI provides `bun scripts/check-run-settlement.ts status <id> [--state-dir <absolute-dir>]`, `cancel <id> [--signal 1|2|15] [--state-dir <absolute-dir>]` and `reconcile <id> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]`. Cancellation is stored before its signal intent is published and the start fence refuses a later queued spawn. Reconciliation uses only the persisted host, run and exact local transport-child identity. It stops or observes that same run, verifies returns and cleanup, and never allocates a second command. Missing host state, stale process ownership, changed producer/host bindings or failed transport leaves custody unknown and frozen inputs retained. A final message alone does not install or claim an external `RemoteGateCustody` or `NativeReceiptBridge`.
 
 ### Bounded returned artifacts
 

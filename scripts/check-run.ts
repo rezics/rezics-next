@@ -9,6 +9,7 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  realpathSync,
   readdirSync,
   readFileSync,
   readSync,
@@ -54,13 +55,19 @@ import {
   allocateCheckRunPhysical,
   bindCheckRunWorkspace,
   cancelCheckRunInvocation,
+  claimCheckRunPreparedInvocation,
   checkRunBindingHash,
+  checkRunSettlementStateDirectory,
   createCheckRunFinalSettlement,
   createCheckRunNativeTerminalMessage,
+  discardCheckRunPreparedExecution,
   encodeCheckRunFinalSettlement,
   getCheckRunStatus,
   checkRunNativeReceiptDigest,
+  markCheckRunPreparedSnapshotCustody,
   markCheckRunNativeTerminal,
+  persistCheckRunPreparedInvocation,
+  readCheckRunPreparedDescriptor,
   readCheckRunCancellation,
   reconcileCheckRunInvocation,
   registerCheckRunInvocation,
@@ -70,6 +77,7 @@ import {
   type CheckRunFinalSettlement,
   type CheckRunInvocationBinding,
   type CheckRunInvocationRecord,
+  type CheckRunPreparedDescriptor,
   type CheckRunPreparedInputs,
   type CheckRunReturnDisposition,
   type CheckRunStateOptions,
@@ -85,6 +93,8 @@ export type CheckRunArguments = {
   returns: string[];
   command: string[];
 };
+
+export type { CheckRunPreparedDescriptor } from './check-run-settlement.ts';
 
 export type CheckRunDependencies = {
   transport?: (options: RemoteCheck, signal: AbortSignal) => Promise<number>;
@@ -1080,6 +1090,137 @@ function remoteCleanupIsVerified(remote: RemoteCheckSettlement | undefined): boo
   );
 }
 
+type PreparedCheckRunState = {
+  schema: 1;
+  args: CheckRunArguments;
+  candidateRoot: string;
+  hostsFile: string;
+  hosts: Host[];
+  cwd: string;
+  returns: string[];
+  sourceRevision: string;
+  originalEnvironment: Record<string, string>;
+  overlay: Record<string, string>;
+  requestedPriority: 'landing' | 'critical' | null;
+  frozenArgs: string[];
+  preparation: NonNullable<RemoteCheck['prepare']>;
+  sourceManifest: CandidateSourceManifest;
+  snapshot: CandidateSnapshot;
+  binding: CheckRunInvocationBinding;
+};
+
+type PreparedFinalRun = PreparedCheckRunState & {
+  receiptChannel?: ReturnType<typeof parseReceiptChannel>;
+};
+
+async function prepareFinalRun(
+  args: CheckRunArguments,
+  processEnvironment: NodeJS.ProcessEnv,
+  trustedRoot: string,
+  includeReceiptChannel: boolean,
+): Promise<PreparedFinalRun> {
+  const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
+  if (candidateRoot === trustedRoot)
+    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
+  const hostsFile = resolve(args.hosts);
+  const hostsStats = lstatSync(hostsFile);
+  if (!hostsStats.isFile() || hostsStats.isSymbolicLink())
+    throw new Error('--hosts must name an existing absolute regular file');
+  const hostsInside = relative(candidateRoot, hostsFile);
+  if (hostsInside === '' || (!hostsInside.startsWith(`..${sep}`) && hostsInside !== '..' && !isAbsolute(hostsInside)))
+    throw new CheckRunUnavailable('--hosts must be outside the candidate workspace');
+  const hosts: Host[] = performanceHosts(readHosts(hostsFile));
+  if (hosts.length === 0) throw new CheckRunUnavailable('--hosts contains no approved a/b host');
+  const cwd = candidateDirectory(candidateRoot, args.cwd, '--cwd');
+  const returns = validateNonOverlappingReturns(
+    args.returns.map((path) => workspaceRelative(candidateRoot, path, '--returns')),
+  );
+  if (
+    args.command.length === 0 ||
+    args.command.length > 1024 ||
+    args.command.some((argument) => argument.length > 4096) ||
+    Buffer.byteLength(JSON.stringify(args.command)) > 16 * 1024
+  )
+    throw new Error('check-run: original argv exceeds its argument bounds');
+  if (!environmentCommandIsSafe(args.command))
+    throw new CheckRunUnavailable('check-run: original env prefix changes remote runtime or placement authority');
+  const sourceRevision = args.sourceRevision;
+  const originalEnvironment = readEnvironmentFile(args.envFile, candidateRoot);
+  const frozenArgs = [...args.command];
+  const receiptChannel = includeReceiptChannel ? parseReceiptChannel(processEnvironment) : undefined;
+  if (receiptChannel && !receiptChannel.invocationId)
+    throw new Error('check-run: final settlement channel requires a caller-established invocation id');
+  const requestedPriority = processEnvironment.REMOTE_CHECK_PRIORITY;
+  if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical')
+    throw new CheckRunUnavailable('check-run: invalid REMOTE_CHECK_PRIORITY');
+  const snapshot = await prepareCandidateSnapshot(candidateRoot, sourceRevision, join(trustedRoot, '.temp'), returns);
+  try {
+    const overlay = resolveEnvironmentFileSettings(originalEnvironment, candidateRoot, snapshot.workspace, cwd);
+    const preparation = preparationCommands(snapshot.workspace, cwd, frozenArgs);
+    const sourceManifest = await buildCandidateSourceManifest(snapshot, returns);
+    const hostConfigurationHash = await hashFile(hostsFile);
+    const producerClosureSha256 = await trustedProducerClosureHash(trustedRoot);
+    const semanticEnvironmentSha256 = createHash('sha256')
+      .update(
+        JSON.stringify({
+          values: Object.entries(originalEnvironment).sort(([left], [right]) => left.localeCompare(right)),
+          priority: requestedPriority ?? null,
+        }),
+      )
+      .digest('hex');
+    const relocatedEnvironmentSha256 = createHash('sha256')
+      .update(
+        JSON.stringify({
+          values: Object.entries(overlay).sort(([left], [right]) => left.localeCompare(right)),
+          priority: requestedPriority ?? null,
+        }),
+      )
+      .digest('hex');
+    const binding: CheckRunInvocationBinding = {
+      sourceRevision,
+      indexTree: snapshot.indexTree,
+      sourceSha256: snapshot.sourceHash,
+      argvSha256: createHash('sha256').update(JSON.stringify(frozenArgs)).digest('hex'),
+      cwd,
+      semanticEnvironmentSha256,
+      relocatedEnvironmentSha256,
+      producerClosureSha256,
+      hostsSha256: hostConfigurationHash,
+      preparationCommandsSha256: createHash('sha256').update(JSON.stringify(preparation)).digest('hex'),
+      returnsSha256: createHash('sha256').update(JSON.stringify(returns)).digest('hex'),
+    };
+    return {
+      schema: 1,
+      args: { ...args, hosts: hostsFile, workspace: candidateRoot, returns: [...args.returns], command: frozenArgs },
+      candidateRoot,
+      hostsFile,
+      hosts,
+      cwd,
+      returns,
+      sourceRevision,
+      originalEnvironment,
+      overlay,
+      requestedPriority: requestedPriority ?? null,
+      frozenArgs,
+      preparation,
+      sourceManifest,
+      snapshot,
+      binding,
+      ...(receiptChannel === undefined ? {} : { receiptChannel }),
+    };
+  } catch (error) {
+    try {
+      cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
+    } catch (cleanupError) {
+      process.stderr.write(
+        `check-run: prepared snapshot cleanup failed; retaining workspace=${snapshot.workspace} source-sha256=${snapshot.sourceHash}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}\n`,
+      );
+    }
+    throw error;
+  }
+}
+
 async function runCheckLegacy(
   args: CheckRunArguments,
   dependencies: CheckRunDependencies = {},
@@ -1308,51 +1449,37 @@ async function runCheckWithFinalSettlement(
   dependencies: CheckRunDependencies,
   signal: AbortSignal,
   processEnvironment: NodeJS.ProcessEnv,
+  claimedPrepared?: { context: PreparedFinalRun; record: CheckRunInvocationRecord },
 ): Promise<number> {
   const trustedRoot = resolve(import.meta.dir, '..');
-  const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
-  if (candidateRoot === trustedRoot)
-    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
-  if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
-  const hostsFile = resolve(args.hosts);
-  const hostsStats = lstatSync(hostsFile);
-  if (!hostsStats.isFile() || hostsStats.isSymbolicLink())
-    throw new Error('--hosts must name an existing absolute regular file');
-  const hostsInside = relative(candidateRoot, hostsFile);
-  if (hostsInside === '' || (!hostsInside.startsWith(`..${sep}`) && hostsInside !== '..' && !isAbsolute(hostsInside)))
-    throw new CheckRunUnavailable('--hosts must be outside the candidate workspace');
-  const hosts: Host[] = performanceHosts(readHosts(hostsFile));
-  if (hosts.length === 0) throw new CheckRunUnavailable('--hosts contains no approved a/b host');
-  const cwd = candidateDirectory(candidateRoot, args.cwd, '--cwd');
-  const returns = validateNonOverlappingReturns(
-    args.returns.map((path) => workspaceRelative(candidateRoot, path, '--returns')),
-  );
-  if (
-    args.command.length === 0 ||
-    args.command.length > 1024 ||
-    args.command.some((argument) => argument.length > 4096) ||
-    Buffer.byteLength(JSON.stringify(args.command)) > 16 * 1024
-  )
-    throw new Error('check-run: original argv exceeds its argument bounds');
-  if (!environmentCommandIsSafe(args.command))
-    throw new CheckRunUnavailable('check-run: original env prefix changes remote runtime or placement authority');
-  const sourceRevision = args.sourceRevision;
-  const originalEnvironment = readEnvironmentFile(args.envFile, candidateRoot);
-  const frozenArgs = [...args.command];
-  const receiptChannel = parseReceiptChannel(processEnvironment);
-  if (receiptChannel && !receiptChannel.invocationId)
-    throw new Error('check-run: final settlement channel requires a caller-established invocation id');
-  const requestedPriority = processEnvironment.REMOTE_CHECK_PRIORITY;
-  if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical')
-    throw new CheckRunUnavailable('check-run: invalid REMOTE_CHECK_PRIORITY');
-  if (signal.aborted) return 130;
-
-  const snapshot = await prepareCandidateSnapshot(candidateRoot, sourceRevision, join(trustedRoot, '.temp'), returns);
+  if (signal.aborted && !claimedPrepared) return 130;
+  const prepared = claimedPrepared?.context ?? (await prepareFinalRun(args, processEnvironment, trustedRoot, true));
+  const {
+    candidateRoot,
+    hostsFile,
+    hosts,
+    cwd,
+    returns,
+    overlay,
+    requestedPriority,
+    frozenArgs,
+    preparation,
+    sourceManifest,
+    snapshot,
+    binding,
+  } = prepared;
+  const receiptChannel = prepared.receiptChannel;
   const stateOptions: CheckRunStateOptions = dependencies.stateDirectory
     ? { stateDirectory: dependencies.stateDirectory }
     : {};
-  let registration: Awaited<ReturnType<typeof registerCheckRunInvocation>> | undefined;
-  let record: CheckRunInvocationRecord | undefined;
+  let registration: Awaited<ReturnType<typeof registerCheckRunInvocation>> | undefined = claimedPrepared
+    ? {
+        invocationId: claimedPrepared.record.invocationId,
+        nonce: claimedPrepared.record.nonce,
+        binding: claimedPrepared.record.binding,
+        cancellation: readCheckRunCancellation(claimedPrepared.record.invocationId, stateOptions),
+      }
+    : undefined;
   let snapshotBound = false;
   let receivedReceipt: RemotePhysicalRunReceipt | undefined;
   let allocatedPhysical: { host: 'a' | 'b'; run: string } | undefined;
@@ -1378,44 +1505,17 @@ async function runCheckWithFinalSettlement(
   };
 
   try {
-    const overlay = resolveEnvironmentFileSettings(originalEnvironment, candidateRoot, snapshot.workspace, cwd);
-    const preparation = preparationCommands(snapshot.workspace, cwd, frozenArgs);
-    const sourceManifest = await buildCandidateSourceManifest(snapshot, returns);
-    const hostConfigurationHash = await hashFile(hostsFile);
-    const producerClosureSha256 = await trustedProducerClosureHash(trustedRoot);
-    const semanticEnvironmentSha256 = createHash('sha256')
-      .update(
-        JSON.stringify({
-          values: Object.entries(originalEnvironment).sort(([left], [right]) => left.localeCompare(right)),
-          priority: requestedPriority ?? null,
-        }),
-      )
-      .digest('hex');
-    const relocatedEnvironmentSha256 = createHash('sha256')
-      .update(
-        JSON.stringify({
-          values: Object.entries(overlay).sort(([left], [right]) => left.localeCompare(right)),
-          priority: requestedPriority ?? null,
-        }),
-      )
-      .digest('hex');
-    const binding: CheckRunInvocationBinding = {
-      sourceRevision,
-      indexTree: snapshot.indexTree,
-      sourceSha256: snapshot.sourceHash,
-      argvSha256: createHash('sha256').update(JSON.stringify(frozenArgs)).digest('hex'),
-      cwd,
-      semanticEnvironmentSha256,
-      relocatedEnvironmentSha256,
-      producerClosureSha256,
-      hostsSha256: hostConfigurationHash,
-      preparationCommandsSha256: createHash('sha256').update(JSON.stringify(preparation)).digest('hex'),
-      returnsSha256: createHash('sha256').update(JSON.stringify(returns)).digest('hex'),
-    };
-
     const callerInvocationId = receiptChannel?.invocationId;
-    if (callerInvocationId) {
-      record = await getCheckRunStatus(callerInvocationId, stateOptions);
+    if (claimedPrepared) {
+      if (
+        !receiptChannel?.invocationId ||
+        receiptChannel.invocationId !== claimedPrepared.record.invocationId ||
+        receiptChannel.nonce !== claimedPrepared.record.nonce ||
+        checkRunBindingHash(claimedPrepared.record.binding) !== checkRunBindingHash(binding)
+      )
+        throw new CheckRunUnavailable('check-run: prepared descriptor differs from the caller-established FD3 identity');
+    } else if (callerInvocationId) {
+      const record = await getCheckRunStatus(callerInvocationId, stateOptions);
       if (record.nonce !== receiptChannel?.nonce)
         throw new CheckRunUnavailable('check-run: caller invocation nonce does not match private producer state');
       if (checkRunBindingHash(record.binding) !== checkRunBindingHash(binding))
@@ -1445,7 +1545,6 @@ async function runCheckWithFinalSettlement(
         ...stateOptions,
         candidateWorkspace: candidateRoot,
       });
-      record = await getCheckRunStatus(registration.invocationId, stateOptions);
     }
     dependencies.onDurableCancellationReady?.((cancellationSignal) =>
       cancelCheckRunInvocation(registration!.invocationId, registration!.nonce, cancellationSignal, stateOptions).then(
@@ -1454,7 +1553,18 @@ async function runCheckWithFinalSettlement(
     );
     if (signal.aborted) {
       await cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, stateOptions);
-      cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
+      if (claimedPrepared) {
+        await reconcileCheckRunInvocation(registration.invocationId, { ...stateOptions, force: true });
+        cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
+        await markCheckRunPreparedSnapshotCustody(
+          registration.invocationId,
+          registration.nonce,
+          'removed',
+          stateOptions,
+        );
+      } else {
+        cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
+      }
       snapshotBound = true;
       return 130;
     }
@@ -1484,7 +1594,7 @@ async function runCheckWithFinalSettlement(
       returns,
       ...(preparation.length === 0 ? {} : { prepare: preparation }),
       cancellation: registration.cancellation,
-      ...(requestedPriority === undefined ? {} : { priority: requestedPriority }),
+      ...(requestedPriority == null ? {} : { priority: requestedPriority }),
       expectedSourceSha256: snapshot.sourceHash,
       expectedSourceManifest: sourceManifest,
       maxTransportAttempts: 1,
@@ -1637,9 +1747,23 @@ async function runCheckWithFinalSettlement(
     } else {
       try {
         cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
+        if (claimedPrepared)
+          await markCheckRunPreparedSnapshotCustody(
+            registration.invocationId,
+            registration.nonce,
+            'removed',
+            stateOptions,
+          );
       } catch (error) {
         cleanupFailure = error;
         dependencies.onRetainSnapshot?.(snapshot);
+        if (claimedPrepared)
+          await markCheckRunPreparedSnapshotCustody(
+            registration.invocationId,
+            registration.nonce,
+            'unknown',
+            stateOptions,
+          ).catch(() => undefined);
       }
     }
     if (runFailure) process.stderr.write(`${runFailure instanceof Error ? runFailure.message : String(runFailure)}\n`);
@@ -1861,15 +1985,379 @@ async function runCheckWithFinalSettlement(
   return 0;
 }
 
+function preparedStateFromUnknown(value: unknown, record: CheckRunInvocationRecord): PreparedCheckRunState {
+  const keys = [
+    'schema',
+    'args',
+    'candidateRoot',
+    'hostsFile',
+    'hosts',
+    'cwd',
+    'returns',
+    'sourceRevision',
+    'originalEnvironment',
+    'overlay',
+    'requestedPriority',
+    'frozenArgs',
+    'preparation',
+    'sourceManifest',
+    'snapshot',
+    'binding',
+  ];
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Reflect.ownKeys(value).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(value, key))
+  )
+    throw new CheckRunUnavailable('check-run: durable prepared execution has an invalid shape');
+  const state = value as PreparedCheckRunState;
+  const hashJson = (value: unknown) => {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new CheckRunUnavailable('check-run: durable prepared execution is not serializable');
+    return createHash('sha256').update(encoded).digest('hex');
+  };
+  const hashEnvironment = (values: Record<string, string>) =>
+    hashJson({
+      values: Object.entries(values).sort(([left], [right]) => left.localeCompare(right)),
+      priority: state.requestedPriority,
+    });
+  const isStringRecord = (item: unknown): item is Record<string, string> =>
+    Boolean(
+      item &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        Object.values(item).every((entry) => typeof entry === 'string'),
+    );
+  if (
+    state.schema !== 1 ||
+    !record.snapshot ||
+    !record.candidateWorkspace ||
+    !record.descriptor ||
+    !record.preparedExecution ||
+    resolve(state.candidateRoot) !== record.candidateWorkspace ||
+    resolve(state.snapshot.workspace) !== record.snapshot.workspace ||
+    resolve(state.snapshot.scratch) !== record.snapshot.scratch ||
+    state.snapshot.sourceHash !== record.snapshot.sourceSha256 ||
+    JSON.stringify([...state.snapshot.inputFiles].sort()) !== JSON.stringify([...record.snapshot.inputFiles].sort()) ||
+    checkRunBindingHash(state.binding) !== checkRunBindingHash(record.binding) ||
+    state.sourceManifest.sourceSha256 !== record.binding.sourceSha256 ||
+    state.sourceManifest.head !== record.binding.sourceRevision ||
+    state.sourceManifest.indexTree !== record.binding.indexTree ||
+    state.snapshot.indexTree !== record.binding.indexTree ||
+    state.sourceRevision !== record.binding.sourceRevision ||
+    state.cwd !== record.binding.cwd ||
+    !Array.isArray(state.frozenArgs) ||
+    !Array.isArray(state.returns) ||
+    !Array.isArray(state.hosts) ||
+    !Array.isArray(state.preparation) ||
+    !isStringRecord(state.originalEnvironment) ||
+    !isStringRecord(state.overlay) ||
+    hashJson(state.frozenArgs) !== record.binding.argvSha256 ||
+    hashJson(state.preparation) !== record.binding.preparationCommandsSha256 ||
+    hashJson(state.returns) !== record.binding.returnsSha256 ||
+    hashEnvironment(state.originalEnvironment) !== record.binding.semanticEnvironmentSha256 ||
+    hashEnvironment(state.overlay) !== record.binding.relocatedEnvironmentSha256
+  )
+    throw new CheckRunUnavailable('check-run: durable prepared execution differs from its registered binding');
+  if (state.requestedPriority !== null && state.requestedPriority !== 'landing' && state.requestedPriority !== 'critical')
+    throw new CheckRunUnavailable('check-run: durable prepared priority is invalid');
+  if (
+    !state.args ||
+    state.args.workspace !== state.candidateRoot ||
+    state.args.hosts !== state.hostsFile ||
+    state.args.sourceRevision !== state.sourceRevision ||
+    JSON.stringify(state.args.command) !== JSON.stringify(state.frozenArgs) ||
+    JSON.stringify(state.returns) !== JSON.stringify(
+      state.args.returns.map((path) => workspaceRelative(state.candidateRoot, path, '--returns')),
+    )
+  )
+    throw new CheckRunUnavailable('check-run: durable prepared arguments differ from their binding');
+  return state;
+}
+
+async function validatePreparedAuthorities(
+  state: PreparedCheckRunState,
+  record: CheckRunInvocationRecord,
+  processEnvironment: NodeJS.ProcessEnv,
+): Promise<PreparedFinalRun> {
+  const trustedRoot = resolve(import.meta.dir, '..');
+  const currentPriority = processEnvironment.REMOTE_CHECK_PRIORITY ?? null;
+  if (currentPriority !== state.requestedPriority)
+    throw new CheckRunUnavailable('check-run: remote priority changed after preparation');
+  if (
+    !isAbsolute(state.hostsFile) ||
+    !isAbsolute(state.args.envFile) ||
+    state.candidateRoot === trustedRoot ||
+    !record.snapshot ||
+    !record.candidateWorkspace
+  )
+    throw new CheckRunUnavailable('check-run: prepared execution authority is incomplete');
+  const hostsStats = lstatSync(state.hostsFile);
+  if (!hostsStats.isFile() || hostsStats.isSymbolicLink())
+    throw new CheckRunUnavailable('check-run: prepared host configuration is no longer a regular file');
+  const hostsInside = relative(state.candidateRoot, state.hostsFile);
+  if (hostsInside === '' || (!hostsInside.startsWith(`..${sep}`) && hostsInside !== '..' && !isAbsolute(hostsInside)))
+    throw new CheckRunUnavailable('check-run: prepared hosts file moved inside the candidate workspace');
+  const currentHosts = performanceHosts(readHosts(state.hostsFile));
+  if (currentHosts.length === 0) throw new CheckRunUnavailable('check-run: prepared host pool is no longer available');
+  const [hostsHash, closureHash, currentFingerprint, frozenFingerprint] = await Promise.all([
+    hashFile(state.hostsFile),
+    trustedProducerClosureHash(trustedRoot),
+    inputFingerprint(state.candidateRoot, workspaceFiles(state.candidateRoot), state.returns),
+    inputFingerprint(state.snapshot.workspace, state.snapshot.inputFiles, state.returns),
+  ]);
+  if (hostsHash !== record.binding.hostsSha256)
+    throw new CheckRunUnavailable('check-run: host configuration changed after preparation');
+  if (closureHash !== record.binding.producerClosureSha256)
+    throw new CheckRunUnavailable('check-run: trusted producer closure changed after preparation');
+  if (currentFingerprint !== record.binding.sourceSha256 || frozenFingerprint !== record.binding.sourceSha256)
+    throw new CheckRunUnavailable('check-run: candidate or frozen input changed after preparation');
+  const currentEnvironment = readEnvironmentFile(state.args.envFile, state.candidateRoot);
+  const semanticEnvironmentSha256 = createHash('sha256')
+    .update(
+      JSON.stringify({
+        values: Object.entries(currentEnvironment).sort(([left], [right]) => left.localeCompare(right)),
+        priority: currentPriority,
+      }),
+    )
+    .digest('hex');
+  if (semanticEnvironmentSha256 !== record.binding.semanticEnvironmentSha256)
+    throw new CheckRunUnavailable('check-run: private environment input changed after preparation');
+  const cwd = candidateDirectory(state.candidateRoot, state.cwd, '--cwd');
+  if (cwd !== state.cwd) throw new CheckRunUnavailable('check-run: prepared working directory changed');
+  return {
+    ...state,
+    hosts: currentHosts,
+    receiptChannel: parseReceiptChannel(processEnvironment),
+  };
+}
+
+async function abandonClaimedPreparedInvocation(
+  record: CheckRunInvocationRecord,
+  stateOptions: CheckRunStateOptions,
+): Promise<void> {
+  try {
+    await cancelCheckRunInvocation(record.invocationId, record.nonce, 15, stateOptions);
+    const reconciled = await reconcileCheckRunInvocation(record.invocationId, { ...stateOptions, force: true });
+    if (!reconciled.physical && reconciled.phase === 'cancelled' && reconciled.snapshot && reconciled.candidateWorkspace) {
+      cleanupWorktree(
+        reconciled.candidateWorkspace,
+        reconciled.snapshot.workspace,
+        reconciled.snapshot.scratch,
+      );
+      if (existsSync(reconciled.snapshot.workspace) || existsSync(reconciled.snapshot.scratch))
+        throw new CheckRunUnavailable('check-run: abandoned prepared snapshot removal was not verified');
+      await markCheckRunPreparedSnapshotCustody(record.invocationId, record.nonce, 'removed', stateOptions);
+      return;
+    }
+    if (!reconciled.physical && !reconciled.final)
+      await markCheckRunPreparedSnapshotCustody(record.invocationId, record.nonce, 'unknown', stateOptions);
+  } catch {
+    try {
+      const current = await getCheckRunStatus(record.invocationId, stateOptions);
+      if (!current.physical && !current.final)
+        await markCheckRunPreparedSnapshotCustody(record.invocationId, record.nonce, 'unknown', stateOptions);
+    } catch {
+      // Preserve the stored snapshot paths and conservative state for later reconciliation.
+    }
+  }
+}
+
+/** Prepare once, persist the complete binding and private execution state, then expose its owner-only descriptor. */
+export async function prepareCheckRunInvocation(
+  args: CheckRunArguments,
+  descriptorFile: string,
+  dependencies: CheckRunDependencies = {},
+  processEnvironment: NodeJS.ProcessEnv = process.env,
+): Promise<CheckRunPreparedDescriptor> {
+  if (!isAbsolute(descriptorFile)) throw new Error('--descriptor must be an absolute private JSON path');
+  const stateOptions: CheckRunStateOptions = dependencies.stateDirectory
+    ? { stateDirectory: dependencies.stateDirectory }
+    : {};
+  const stateDirectory = checkRunSettlementStateDirectory(stateOptions);
+  const absoluteDescriptor = resolve(descriptorFile);
+  const descriptorDirectory = resolve(dirname(absoluteDescriptor));
+  if (realpathSync(descriptorDirectory) !== descriptorDirectory)
+    throw new Error('--descriptor path cannot use a symlinked parent directory');
+  const directoryStats = lstatSync(descriptorDirectory);
+  if (
+    !directoryStats.isDirectory() ||
+    directoryStats.isSymbolicLink() ||
+    (directoryStats.mode & 0o077) !== 0 ||
+    (typeof process.getuid === 'function' && directoryStats.uid !== process.getuid())
+  )
+    throw new Error('--descriptor parent must be an owner-private real directory');
+  const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
+  const descriptorInside = relative(realpathSync(candidateRoot), realpathSync(descriptorDirectory));
+  if (descriptorInside === '' || (!descriptorInside.startsWith(`..${sep}`) && descriptorInside !== '..' && !isAbsolute(descriptorInside)))
+    throw new CheckRunUnavailable('--descriptor must be outside the candidate workspace');
+  try {
+    lstatSync(absoluteDescriptor);
+    throw new Error('--descriptor path already exists');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const stateInside = relative(candidateRoot, stateDirectory);
+  if (stateInside === '' || (!stateInside.startsWith(`..${sep}`) && stateInside !== '..' && !isAbsolute(stateInside)))
+    throw new CheckRunUnavailable('check-run: private invocation state must be outside the candidate workspace');
+  const trustedRoot = resolve(import.meta.dir, '..');
+  const state = await prepareFinalRun(args, processEnvironment, trustedRoot, false);
+  let registration: Awaited<ReturnType<typeof registerCheckRunInvocation>> | undefined;
+  try {
+    registration = await registerCheckRunInvocation(state.binding, {
+      ...stateOptions,
+      candidateWorkspace: state.candidateRoot,
+    });
+    return await persistCheckRunPreparedInvocation(registration, {
+      ...stateOptions,
+      candidateWorkspace: state.candidateRoot,
+      snapshot: {
+        workspace: state.snapshot.workspace,
+        scratch: state.snapshot.scratch,
+        sourceSha256: state.snapshot.sourceHash,
+        inputFiles: state.snapshot.inputFiles,
+      },
+      returns: state.returns,
+      descriptorFile: absoluteDescriptor,
+      execution: state,
+    });
+  } catch (error) {
+    if (registration) {
+      const current = await getCheckRunStatus(registration.invocationId, stateOptions);
+      if (current.snapshot) await abandonClaimedPreparedInvocation(current, stateOptions);
+      else {
+        try {
+          await cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, stateOptions);
+          await reconcileCheckRunInvocation(registration.invocationId, { ...stateOptions, force: true });
+          cleanupWorktree(state.candidateRoot, state.snapshot.workspace, state.snapshot.scratch);
+          await markCheckRunPreparedSnapshotCustody(
+            registration.invocationId,
+            registration.nonce,
+            'removed',
+            stateOptions,
+          );
+        } catch {
+          dependencies.onRetainSnapshot?.(state.snapshot);
+          await markCheckRunPreparedSnapshotCustody(
+            registration.invocationId,
+            registration.nonce,
+            'unknown',
+            stateOptions,
+          ).catch(() => undefined);
+        }
+      }
+    } else {
+      try {
+        cleanupWorktree(state.candidateRoot, state.snapshot.workspace, state.snapshot.scratch);
+      } catch (cleanupError) {
+        dependencies.onRetainSnapshot?.(state.snapshot);
+        process.stderr.write(
+          `check-run: prepared snapshot cleanup failed; retaining workspace=${state.snapshot.workspace} source-sha256=${state.snapshot.sourceHash}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}\n`,
+        );
+      }
+    }
+    throw error;
+  }
+}
+
+/** Claim and execute the exact durable preparation named by a matching caller-established FD 3 identity. */
+export async function runPreparedCheckRunInvocation(
+  descriptorFile: string,
+  dependencies: CheckRunDependencies = {},
+  signal = new AbortController().signal,
+  processEnvironment: NodeJS.ProcessEnv = process.env,
+): Promise<number> {
+  if (!isAbsolute(descriptorFile)) throw new Error('--descriptor must be an absolute private JSON path');
+  const descriptor = readCheckRunPreparedDescriptor(descriptorFile);
+  const receiptChannel = parseReceiptChannel(processEnvironment);
+  if (
+    !receiptChannel?.invocationId ||
+    receiptChannel.invocationId !== descriptor.invocationId ||
+    receiptChannel.nonce !== descriptor.nonce
+  )
+    throw new CheckRunUnavailable('check-run: run-prepared requires the matching caller-established FD 3 identity');
+  const stateOptions: CheckRunStateOptions = dependencies.stateDirectory
+    ? { stateDirectory: dependencies.stateDirectory }
+    : {};
+  const claimed = await claimCheckRunPreparedInvocation(descriptorFile, stateOptions);
+  let state: PreparedCheckRunState;
+  let context: PreparedFinalRun;
+  try {
+    if (
+      claimed.descriptor.invocationId !== receiptChannel.invocationId ||
+      claimed.descriptor.nonce !== receiptChannel.nonce ||
+      checkRunBindingHash(claimed.descriptor.binding) !== checkRunBindingHash(descriptor.binding)
+    )
+      throw new CheckRunUnavailable('check-run: descriptor changed during its authenticated claim');
+    state = preparedStateFromUnknown(claimed.execution, claimed.record);
+    const descriptorDirectory = resolve(dirname(resolve(descriptorFile)));
+    if (realpathSync(descriptorDirectory) !== descriptorDirectory)
+      throw new CheckRunUnavailable('check-run: prepared descriptor parent became a symlinked directory');
+    const descriptorInside = relative(realpathSync(state.candidateRoot), realpathSync(descriptorDirectory));
+    if (descriptorInside === '' || (!descriptorInside.startsWith(`..${sep}`) && descriptorInside !== '..' && !isAbsolute(descriptorInside)))
+      throw new CheckRunUnavailable('check-run: prepared descriptor is inside the candidate workspace');
+    context = await validatePreparedAuthorities(state, claimed.record, processEnvironment);
+  } catch (error) {
+    await abandonClaimedPreparedInvocation(claimed.record, stateOptions);
+    await discardCheckRunPreparedExecution(claimed.record.invocationId, claimed.record.nonce, stateOptions).catch(() => undefined);
+    throw error;
+  }
+  try {
+    return await runCheckWithFinalSettlement(state.args, dependencies, signal, processEnvironment, {
+      context,
+      record: claimed.record,
+    });
+  } finally {
+    await discardCheckRunPreparedExecution(claimed.record.invocationId, claimed.record.nonce, stateOptions).catch(
+      () => undefined,
+    );
+  }
+}
+
 /** Reconcile one retained invocation by host/run identity; this path never allocates another run. */
 export async function reconcileRegisteredCheckRun(
   invocationId: string,
-  hostsFile: string,
+  hostsFile?: string,
   stateOptions: CheckRunStateOptions = {},
 ): Promise<CheckRunInvocationRecord> {
-  const initial = await getCheckRunStatus(invocationId, stateOptions);
+  let initial = await getCheckRunStatus(invocationId, stateOptions);
   if (initial.final) return initial;
-  if (!isAbsolute(hostsFile)) throw new Error('check-run reconciliation needs an absolute hosts file');
+  if (!initial.physical && initial.phase === 'cancelled' && initial.snapshotCustody === 'removed') return initial;
+  if (!initial.physical) {
+    await cancelCheckRunInvocation(initial.invocationId, initial.nonce, 15, stateOptions);
+    initial = await getCheckRunStatus(invocationId, stateOptions);
+    if (!initial.physical) {
+      const cancelled = await reconcileCheckRunInvocation(invocationId, { ...stateOptions, force: true });
+      if (!cancelled.snapshot || !cancelled.candidateWorkspace)
+        return await getCheckRunStatus(invocationId, stateOptions);
+      try {
+        cleanupWorktree(cancelled.candidateWorkspace, cancelled.snapshot.workspace, cancelled.snapshot.scratch);
+        if (existsSync(cancelled.snapshot.workspace) || existsSync(cancelled.snapshot.scratch))
+          throw new CheckRunUnavailable('check-run: abandoned frozen workspace removal was not verified');
+        return await markCheckRunPreparedSnapshotCustody(
+          invocationId,
+          cancelled.nonce,
+          'removed',
+          stateOptions,
+        );
+      } catch (error) {
+        await setCheckRunUnknown(
+          invocationId,
+          cancelled.nonce,
+          error instanceof Error ? error.message.slice(0, 512) : 'prepared snapshot cleanup failed',
+          stateOptions,
+        ).catch(() => undefined);
+        await markCheckRunPreparedSnapshotCustody(invocationId, cancelled.nonce, 'unknown', stateOptions).catch(
+          () => undefined,
+        );
+        return await getCheckRunStatus(invocationId, stateOptions);
+      }
+    }
+  }
+  if (!hostsFile || !isAbsolute(hostsFile))
+    throw new Error('check-run reconciliation of a physical invocation needs an absolute hosts file');
   const selectedHostsFile = resolve(hostsFile);
   return reconcileCheckRunInvocation(invocationId, {
     ...stateOptions,
@@ -2068,7 +2556,50 @@ async function reapRetainedTransportChild(identity: CheckRunTransportChildIdenti
 }
 
 function usage(): string {
-  return 'Usage: bun scripts/check-run.ts --hosts <absolute-hosts-json> --workspace <absolute-candidate-root> --cwd <workspace-relative-directory> --source-revision <full-candidate-commit> --env-file <absolute-environment-json> [--returns <workspace-relative-path>]... -- <original-argv...>';
+  return [
+    'Usage:',
+    '  bun scripts/check-run.ts --hosts <absolute-hosts-json> --workspace <absolute-candidate-root> --cwd <workspace-relative-directory> --source-revision <full-candidate-commit> --env-file <absolute-environment-json> [--returns <workspace-relative-path>]... -- <original-argv...>',
+    '  bun scripts/check-run.ts prepare --descriptor <absolute-private-json> <existing-check-arguments...>',
+    '  bun scripts/check-run.ts run-prepared --descriptor <absolute-private-json>',
+  ].join('\n');
+}
+
+export async function runCheckRunCli(
+  argv: readonly string[],
+  dependencies: CheckRunDependencies = {},
+  processEnvironment: NodeJS.ProcessEnv = process.env,
+  signal = new AbortController().signal,
+): Promise<number> {
+  try {
+    const [operation, ...remaining] = argv;
+    if (operation === 'prepare') {
+      const separator = remaining.indexOf('--');
+      const optionsEnd = separator < 0 ? remaining.length : separator;
+      const descriptorAt = remaining.slice(0, optionsEnd).indexOf('--descriptor');
+      if (descriptorAt < 0 || descriptorAt + 1 >= optionsEnd)
+        throw new Error('prepare requires --descriptor <absolute-private-json>');
+      const descriptorFile = remaining[descriptorAt + 1]!;
+      const checkArgs = [...remaining.slice(0, descriptorAt), ...remaining.slice(descriptorAt + 2)];
+      const descriptor = await prepareCheckRunInvocation(
+        parseCheckRunArguments(checkArgs),
+        descriptorFile,
+        dependencies,
+        processEnvironment,
+      );
+      process.stdout.write(`${JSON.stringify(descriptor)}\n`);
+      return 0;
+    }
+    if (operation === 'run-prepared') {
+      if (remaining.length !== 2 || remaining[0] !== '--descriptor')
+        throw new Error('run-prepared requires exactly --descriptor <absolute-private-json>');
+      return await runPreparedCheckRunInvocation(remaining[1]!, dependencies, signal, processEnvironment);
+    }
+    return await runCheck(parseCheckRunArguments(argv), dependencies, signal, processEnvironment);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    console.error(usage());
+    return error instanceof CheckRunUnavailable ? error.exitCode : 2;
+  }
 }
 
 if (import.meta.main) {
@@ -2091,16 +2622,11 @@ if (import.meta.main) {
       }
     });
   }
-  try {
-    process.exitCode = await runCheck(
-      parseCheckRunArguments(process.argv.slice(2)),
-      { onDurableCancellationReady: (cancel) => (durableCancel = cancel) },
-      controller.signal,
-    );
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
-    console.error(usage());
-    process.exitCode = error instanceof CheckRunUnavailable ? error.exitCode : 2;
-  }
+  process.exitCode = await runCheckRunCli(
+    process.argv.slice(2),
+    { onDurableCancellationReady: (cancel) => (durableCancel = cancel) },
+    process.env,
+    controller.signal,
+  );
   if (received !== undefined) process.exitCode = 128 + received;
 }

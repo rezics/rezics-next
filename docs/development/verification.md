@@ -111,7 +111,8 @@ The private environment overlay cannot replace host runtime, placement or task-c
 Each producer invocation is durably registered outside the candidate before remote admission. Its final binding covers
 the exact commit, index and source fingerprint, original argv and cwd, hashes of the semantic and relocated
 environment, trusted producer closure, selected host configuration, declared preparation and returns. Secret values
-are never serialized.
+never appear in invocation status records, descriptors, FD 3 messages, stdout or stderr. Prepared mode keeps the
+original and relocated values only in a separate owner-only execution file outside candidate source.
 
 The native receipt is an intermediate event. A bounded version 1 FD 3 channel can send a `native-terminal` message,
 then a distinct `final-settlement` message bound to the caller's UUID invocation and nonce. The final message reports
@@ -121,12 +122,29 @@ remote cleanup, local frozen-worktree cleanup, and separate primary and cleanup 
 consumer custody. The decoder rejects foreign, replayed, duplicate, partial, oversized and out-of-order messages.
 
 `registerCheckRunInvocation`, `getCheckRunStatus`, `cancelCheckRunInvocation`, and
-`reconcileCheckRunInvocation` are the supported API. The `check-run-settlement.ts` CLI also provides registration,
-status, cancellation and reconciliation. Cancellation is durable before signal delivery and fences queued starts.
+`reconcileCheckRunInvocation` are the supported API. The `check-run-settlement.ts` CLI provides `status <id>`,
+`cancel <id> [--signal 1|2|15]`, and `reconcile <id> [--hosts <absolute-hosts-json>]`, with an optional
+`--state-dir <absolute-dir>` for every command. Use the durable invocation ID in a prepared descriptor for process-loss
+status, cancellation, and reconciliation. Cancellation is durable before signal delivery and fences queued starts.
 Reconciliation observes or cleans up only the stored host/run and local transport-child identity; it never repeats the
 command or chooses another host/run. If source, producer, host, process or transport identity is missing or stale, the
 state stays unknown and the frozen inputs remain available. This producer protocol does not claim that a consumer's
 `RemoteGateCustody` or verifier `NativeReceiptBridge` is installed.
+
+For a separate prepare and execution process, `scripts/check-run.ts` exports
+`prepareCheckRunInvocation(args, descriptorFile, dependencies?, processEnvironment?)` and
+`runPreparedCheckRunInvocation(descriptorFile, dependencies?, signal?, processEnvironment?)`. CLI usage is
+`bun scripts/check-run.ts prepare --descriptor <absolute-private-json> <existing check arguments>` followed by
+`bun scripts/check-run.ts run-prepared --descriptor <same absolute path>`. The descriptor has schema 1, type
+`check-run-preparation`, invocation ID, nonce, the complete eleven-field binding and durable cancellation file/id.
+Its exact closed JSON shape is documented in [Scripts](../../scripts/README.md#out-of-process-prepared-handoff).
+Preparation stores the original frozen snapshot and execution inputs once, then persists the descriptor path and digest
+before exposing it. `run-prepared` requires a matching caller-established FD 3 invocation ID and nonce, checks the
+current candidate, environment, priority, host configuration and trusted producer closure, and atomically claims the
+same saved preparation at most once. Cancellation before claim or while queued fences later start. Reconciliation
+without a physical identity cancels the start and removes that exact snapshot after verified cleanup; a recorded
+physical run still needs the host file and retains unknown custody when evidence is unavailable. Status returns a
+final record for replay; the descriptor cannot start a second physical run.
 
 ## External integrations
 

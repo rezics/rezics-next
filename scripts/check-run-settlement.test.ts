@@ -1,12 +1,12 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   acceptCheckRunFinalSettlement,
   allocateCheckRunPhysical,
   cancelCheckRunInvocation,
+  claimCheckRunPreparedInvocation,
   createCheckRunFinalSettlement,
   decodeCheckRunSettlement,
   getCheckRunStatus,
@@ -14,6 +14,7 @@ import {
   markCheckRunQueued,
   reconcileCheckRunInvocation,
   registerCheckRunInvocation,
+  persistCheckRunPreparedInvocation,
   withCheckRunSpawnPermit,
   type CheckRunInvocationBinding,
 } from './check-run-settlement.ts';
@@ -21,7 +22,9 @@ import {
 const directories: string[] = [];
 
 function stateDirectory(): string {
-  const path = mkdtempSync(join(tmpdir(), `check-run-settlement-${randomUUID()}-`));
+  const temporaryRoot = join(import.meta.dir, '..', '.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const path = mkdtempSync(join(temporaryRoot, `check-run-settlement-${randomUUID()}-`));
   chmodSync(path, 0o700);
   directories.push(path);
   return path;
@@ -191,4 +194,113 @@ test('durable queued and in-flight cancellation and reconciliation retain unknow
     host: 'b',
     run: 'physical-run-in-flight',
   });
+});
+
+test('prepared descriptor records the prior binding, claims once, and fences queued cancellation', async () => {
+  const state = stateDirectory();
+  const candidateRoot = mkdtempSync(join(tmpdir(), `check-run-prepared-candidate-${randomUUID()}-`));
+  directories.push(candidateRoot);
+  const selectedBinding = {
+    ...binding(),
+    returnsSha256: (await import('node:crypto')).createHash('sha256').update('[]').digest('hex'),
+  };
+  const registration = await registerCheckRunInvocation(selectedBinding, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+  });
+  const descriptorFile = join(state, 'caller.json');
+  const descriptor = await persistCheckRunPreparedInvocation(registration, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+    snapshot: {
+      workspace: join(candidateRoot, '.temp', 'frozen'),
+      scratch: join(candidateRoot, '.temp', 'scratch'),
+      sourceSha256: selectedBinding.sourceSha256,
+      inputFiles: ['src/input.ts'],
+    },
+    returns: [],
+    descriptorFile,
+    execution: { secretEnvironment: 'private-only' },
+  });
+  const record = await getCheckRunStatus(registration.invocationId, { stateDirectory: state });
+  expect(record.phase).toBe('prepared');
+  expect(record.binding).toEqual(selectedBinding);
+  expect(record.snapshot?.workspace).toBe(join(candidateRoot, '.temp', 'frozen'));
+  expect(record.preparedExecution).toBeDefined();
+  expect(record.descriptor?.file).toBe(descriptorFile);
+  expect(JSON.stringify(record)).not.toContain('private-only');
+  expect(descriptor).toMatchObject({ schema: 1, type: 'check-run-preparation', binding: selectedBinding });
+
+  const symlinkedDescriptor = join(state, 'descriptor-link.json');
+  symlinkSync(descriptorFile, symlinkedDescriptor);
+  await expect(claimCheckRunPreparedInvocation(symlinkedDescriptor, { stateDirectory: state })).rejects.toThrow(
+    /private regular file|readable/i,
+  );
+  chmodSync(descriptorFile, 0o644);
+  await expect(claimCheckRunPreparedInvocation(descriptorFile, { stateDirectory: state })).rejects.toThrow(
+    /owner-only/i,
+  );
+  chmodSync(descriptorFile, 0o600);
+
+  const claimed = await claimCheckRunPreparedInvocation(descriptorFile, { stateDirectory: state });
+  expect(claimed.record.phase).toBe('claimed');
+  expect(claimed.execution).toEqual({ secretEnvironment: 'private-only' });
+  await expect(claimCheckRunPreparedInvocation(descriptorFile, { stateDirectory: state })).rejects.toThrow(/claim/i);
+  await markCheckRunQueued(registration.invocationId, registration.nonce, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+    returns: [],
+    snapshot: record.snapshot!,
+  });
+  await allocateCheckRunPhysical(registration.invocationId, registration.nonce, 'a', 'prepared-queued-run', {
+    stateDirectory: state,
+  });
+  await cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, { stateDirectory: state });
+  let spawnCount = 0;
+  await expect(
+    withCheckRunSpawnPermit(
+      registration.invocationId,
+      registration.nonce,
+      'a',
+      'prepared-queued-run',
+      () => {
+        spawnCount += 1;
+      },
+      { stateDirectory: state },
+    ),
+  ).rejects.toThrow(/cancel/i);
+  expect(spawnCount).toBe(0);
+  const retained = await reconcileCheckRunInvocation(registration.invocationId, { stateDirectory: state });
+  expect(retained.phase).toBe('unknown');
+  expect(retained.snapshot?.workspace).toBe(record.snapshot?.workspace);
+  expect(retained.snapshotCustody).toBe('owned');
+
+  const abandoned = await registerCheckRunInvocation(selectedBinding, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+  });
+  const abandonedDescriptor = join(state, 'abandoned.json');
+  await persistCheckRunPreparedInvocation(abandoned, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+    snapshot: {
+      workspace: join(candidateRoot, '.temp', 'abandoned-frozen'),
+      scratch: join(candidateRoot, '.temp', 'abandoned-scratch'),
+      sourceSha256: selectedBinding.sourceSha256,
+      inputFiles: ['src/input.ts'],
+    },
+    returns: [],
+    descriptorFile: abandonedDescriptor,
+    execution: { run: 'must-not-start' },
+  });
+  await cancelCheckRunInvocation(abandoned.invocationId, abandoned.nonce, 15, { stateDirectory: state });
+  await expect(claimCheckRunPreparedInvocation(abandonedDescriptor, { stateDirectory: state })).rejects.toThrow(
+    /cannot be claimed/i,
+  );
+  const abandonedState = await reconcileCheckRunInvocation(abandoned.invocationId, {
+    stateDirectory: state,
+    force: true,
+  });
+  expect(abandonedState.phase).toBe('cancelled');
+  expect(abandonedState.snapshot?.workspace).toBe(join(candidateRoot, '.temp', 'abandoned-frozen'));
 });

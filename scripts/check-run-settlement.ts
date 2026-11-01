@@ -1,13 +1,18 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import {
   closeSync,
   existsSync,
+  fstatSync,
   fsyncSync,
   lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
+  linkSync,
+  unlinkSync,
   writeSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -23,6 +28,8 @@ import {
 export const CHECK_RUN_SETTLEMENT_SCHEMA = 1 as const;
 export const CHECK_RUN_SETTLEMENT_MAX_BYTES = 64 * 1024;
 export const CHECK_RUN_INVOCATION_RECORD_MAX_BYTES = 8 * 1024 * 1024;
+export const CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES = 16 * 1024 * 1024;
+export const CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES = 64 * 1024;
 export const CHECK_RUN_SETTLEMENT_MAX_ITEMS = 64;
 export const CHECK_RUN_SETTLEMENT_MAX_TEXT = 2048;
 
@@ -109,6 +116,8 @@ export type CheckRunMessage = CheckRunNativeTerminalMessage | CheckRunFinalSettl
 
 export type CheckRunInvocationPhase =
   | 'registered'
+  | 'prepared'
+  | 'claimed'
   | 'queued'
   | 'uploading'
   | 'running'
@@ -131,6 +140,9 @@ export type CheckRunInvocationRecord = {
   native: CheckRunNativeDisposition | null;
   snapshot: { workspace: string; scratch: string; sourceSha256: string; inputFiles: string[] } | null;
   candidateWorkspace: string | null;
+  preparedExecution: { file: string; sha256: string } | null;
+  descriptor: { file: string; sha256: string } | null;
+  snapshotCustody: 'owned' | 'removed' | 'unknown' | null;
   returns: string[];
   cancellation: { requested: boolean; signal: 1 | 2 | 15 | null };
   final: CheckRunFinalSettlement | null;
@@ -138,6 +150,16 @@ export type CheckRunInvocationRecord = {
 };
 
 export type CheckRunRegistration = {
+  invocationId: string;
+  nonce: string;
+  binding: CheckRunInvocationBinding;
+  cancellation: { file: string; id: string };
+};
+
+/** The owner-private, versioned caller ABI emitted by prepareCheckRunInvocation. */
+export type CheckRunPreparedDescriptor = {
+  schema: 1;
+  type: 'check-run-preparation';
   invocationId: string;
   nonce: string;
   binding: CheckRunInvocationBinding;
@@ -175,6 +197,25 @@ function closedObject(value: unknown, keys: readonly string[], label: string): R
     ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
     Reflect.ownKeys(value).length !== keys.length ||
     keys.some((key) => !Object.hasOwn(value, key))
+  ) {
+    throw new Error(`check-run-settlement: invalid ${label}`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function closedObjectWithOptional(
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
+    Reflect.ownKeys(value).some((key) => typeof key !== 'string' || (!required.includes(key) && !optional.includes(key))) ||
+    required.some((key) => !Object.hasOwn(value, key))
   ) {
     throw new Error(`check-run-settlement: invalid ${label}`);
   }
@@ -246,6 +287,35 @@ export function validateCheckRunInvocationBinding(value: unknown): CheckRunInvoc
     hostsSha256: boundedHash(item.hostsSha256, 'host configuration hash'),
     preparationCommandsSha256: boundedHash(item.preparationCommandsSha256, 'preparation command hash'),
     returnsSha256: boundedHash(item.returnsSha256, 'declared returns hash'),
+  };
+}
+
+export function validateCheckRunPreparedDescriptor(value: unknown): CheckRunPreparedDescriptor {
+  const item = closedObject(
+    value,
+    ['schema', 'type', 'invocationId', 'nonce', 'binding', 'cancellation'],
+    'prepared descriptor',
+  );
+  if (
+    item.schema !== 1 ||
+    item.type !== 'check-run-preparation' ||
+    typeof item.invocationId !== 'string' ||
+    !UUID.test(item.invocationId)
+  )
+    throw new Error('check-run-settlement: invalid prepared descriptor identity');
+  const nonce = boundedText(item.nonce, 'prepared descriptor nonce', 64);
+  if (!/^[a-f0-9]{64}$/.test(nonce)) throw new Error('check-run-settlement: invalid prepared descriptor nonce');
+  const cancellation = closedObject(item.cancellation, ['file', 'id'], 'prepared cancellation identity');
+  const file = boundedText(cancellation.file, 'prepared cancellation file', 4096);
+  if (!isAbsolute(file) || cancellation.id !== item.invocationId)
+    throw new Error('check-run-settlement: invalid prepared cancellation identity');
+  return {
+    schema: 1,
+    type: 'check-run-preparation',
+    invocationId: item.invocationId,
+    nonce,
+    binding: validateCheckRunInvocationBinding(item.binding),
+    cancellation: { file, id: item.invocationId },
   };
 }
 
@@ -760,9 +830,10 @@ export function checkRunSettlementStateDirectory(options: CheckRunStateOptions =
 
 function assertOutsideCandidate(stateDirectory: string, workspace?: string): void {
   if (!workspace) return;
-  const root = resolve(workspace);
-  const fromWorkspace = relative(root, stateDirectory);
-  const fromState = relative(stateDirectory, root);
+  const root = realpathSync(workspace);
+  const privateDirectory = realpathSync(stateDirectory);
+  const fromWorkspace = relative(root, privateDirectory);
+  const fromState = relative(privateDirectory, root);
   if (
     fromWorkspace === '' ||
     (!fromWorkspace.startsWith('..') && !isAbsolute(fromWorkspace)) ||
@@ -780,6 +851,88 @@ function recordPath(directory: string, id: string): string {
 
 function cancellationFile(directory: string, id: string): string {
   return join(directory, `${id.toLowerCase()}.cancel.json`);
+}
+
+function cancellationWasRequested(directory: string, record: CheckRunInvocationRecord): boolean {
+  return (
+    record.cancellation.requested ||
+    executionCancellation({ file: cancellationFile(directory, record.invocationId), id: record.invocationId }) !== null
+  );
+}
+
+function preparedExecutionFile(directory: string, id: string): string {
+  return join(directory, `${id.toLowerCase()}.prepared.json`);
+}
+
+function assertPrivateDirectory(path: string, label: string): void {
+  const stats = lstatSync(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink() || (stats.mode & 0o077) !== 0)
+    throw new Error(`check-run-settlement: ${label} must be an owner-private real directory`);
+  if (typeof process.getuid === 'function' && stats.uid !== process.getuid())
+    throw new Error(`check-run-settlement: ${label} is owned by another user`);
+}
+
+function assertCanonicalParent(path: string, label: string): void {
+  const directory = resolve(path, '..');
+  if (realpathSync(directory) !== directory)
+    throw new Error(`check-run-settlement: ${label} cannot use a symlinked parent directory`);
+}
+
+function writeNewPrivateFile(path: string, content: Buffer, maximumBytes: number, label: string): void {
+  if (content.byteLength > maximumBytes) throw new Error(`check-run-settlement: ${label} exceeds its byte bound`);
+  const directory = resolve(path, '..');
+  assertPrivateDirectory(directory, `${label} directory`);
+  assertCanonicalParent(path, label);
+  const temporary = join(directory, `.${process.pid}.${randomUUID()}.pending`);
+  try {
+    const descriptor = openSync(temporary, 'wx', 0o600);
+    try {
+      let offset = 0;
+      while (offset < content.byteLength) offset += writeSync(descriptor, content, offset, content.byteLength - offset);
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
+    linkSync(temporary, path);
+    unlinkSync(temporary);
+    syncDirectory(directory);
+  } catch (error) {
+    try {
+      unlinkSync(temporary);
+    } catch {
+      // Preserve the creation error.
+    }
+    throw error;
+  }
+}
+
+function readPrivateFile(path: string, maximumBytes: number, label: string): Buffer {
+  const absolute = resolve(path);
+  assertPrivateDirectory(resolve(absolute, '..'), `${label} directory`);
+  let descriptor: number;
+  try {
+    descriptor = openSync(absolute, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  } catch (error) {
+    throw new Error(
+      `check-run-settlement: ${label} is not a readable private regular file: ${error instanceof Error ? error.message : 'open failed'}`,
+    );
+  }
+  try {
+    const stats = fstatSync(descriptor);
+    if (
+      !stats.isFile() ||
+      (stats.mode & 0o077) !== 0 ||
+      stats.nlink !== 1 ||
+      (typeof process.getuid === 'function' && stats.uid !== process.getuid())
+    )
+      throw new Error(`check-run-settlement: ${label} must be an owner-only private regular file`);
+    if (stats.size > maximumBytes) throw new Error(`check-run-settlement: ${label} exceeds its byte bound`);
+    const bytes = readFileSync(descriptor);
+    if (bytes.byteLength > maximumBytes) throw new Error(`check-run-settlement: ${label} exceeds its byte bound`);
+    return bytes;
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 function syncDirectory(directory: string): void {
@@ -811,7 +964,7 @@ function writeRecord(directory: string, record: CheckRunInvocationRecord): void 
 }
 
 function validateRecord(value: unknown): CheckRunInvocationRecord {
-  const item = closedObject(
+  const item = closedObjectWithOptional(
     value,
     [
       'schema',
@@ -831,6 +984,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
       'final',
       'failure',
     ],
+    ['preparedExecution', 'descriptor', 'snapshotCustody'],
     'invocation record',
   );
   if (item.schema !== 1 || typeof item.invocationId !== 'string' || !UUID.test(item.invocationId))
@@ -840,6 +994,8 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
   if (
     ![
       'registered',
+      'prepared',
+      'claimed',
       'queued',
       'uploading',
       'running',
@@ -881,6 +1037,24 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     if (!isAbsolute(candidateWorkspace))
       throw new Error('check-run-settlement: candidate workspace path must be absolute');
   }
+  const privateFileReference = (value: unknown, label: string): { file: string; sha256: string } | null => {
+    if (value === undefined || value === null) return null;
+    const reference = closedObject(value, ['file', 'sha256'], label);
+    const file = boundedText(reference.file, `${label} path`, 4096);
+    if (!isAbsolute(file)) throw new Error(`check-run-settlement: ${label} path must be absolute`);
+    return { file, sha256: boundedHash(reference.sha256, `${label} digest`) };
+  };
+  const snapshotCustody = item.snapshotCustody === undefined ? null : item.snapshotCustody;
+  if (snapshotCustody !== null && !['owned', 'removed', 'unknown'].includes(String(snapshotCustody)))
+    throw new Error('check-run-settlement: invalid snapshot custody');
+  const preparedExecution = privateFileReference(item.preparedExecution, 'prepared execution');
+  const descriptor = privateFileReference(item.descriptor, 'prepared descriptor');
+  if (item.phase === 'prepared' && (!snapshot || !preparedExecution || !descriptor))
+    throw new Error('check-run-settlement: prepared invocation is missing its durable execution state');
+  if (item.phase === 'claimed' && (!snapshot || !descriptor))
+    throw new Error('check-run-settlement: prepared invocation is missing its durable execution state');
+  if (['prepared', 'claimed'].includes(String(item.phase)) && snapshotCustody !== 'owned')
+    throw new Error('check-run-settlement: prepared invocation does not own its frozen snapshot');
   if (!Array.isArray(item.returns) || item.returns.length > CHECK_RUN_SETTLEMENT_MAX_ITEMS)
     throw new Error('check-run-settlement: invalid declared returns');
   const returns = validatePathList(item.returns, 'declared return path', true);
@@ -898,6 +1072,9 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     native: validateNative(item.native),
     snapshot,
     candidateWorkspace,
+    preparedExecution,
+    descriptor,
+    snapshotCustody: snapshotCustody as CheckRunInvocationRecord['snapshotCustody'],
     returns,
     cancellation: {
       requested: cancellation.requested,
@@ -910,14 +1087,23 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
 
 function readRecord(directory: string, id: string): CheckRunInvocationRecord {
   const file = recordPath(directory, id);
-  const stat = lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0)
-    throw new Error('check-run-settlement: invocation record is not a private regular file');
-  if (typeof process.getuid === 'function' && stat.uid !== process.getuid())
-    throw new Error('check-run-settlement: invocation record is owned by another user');
-  if (stat.size > CHECK_RUN_INVOCATION_RECORD_MAX_BYTES)
-    throw new Error('check-run-settlement: invocation record exceeds its byte bound');
-  return validateRecord(JSON.parse(readFileSync(file, 'utf8')));
+  const raw = readPrivateFile(file, CHECK_RUN_INVOCATION_RECORD_MAX_BYTES, 'invocation record');
+  return validateRecord(parseUniqueJson(raw.toString('utf8')));
+}
+
+function removePreparedExecutionFile(
+  directory: string,
+  invocationId: string,
+  reference: CheckRunInvocationRecord['preparedExecution'],
+): void {
+  if (!reference) return;
+  if (reference.file !== preparedExecutionFile(directory, invocationId))
+    throw new Error('check-run-settlement: prepared execution path does not match its invocation');
+  const raw = readPrivateFile(reference.file, CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES, 'prepared execution');
+  if (createHash('sha256').update(raw).digest('hex') !== reference.sha256)
+    throw new Error('check-run-settlement: prepared execution state was substituted');
+  unlinkSync(reference.file);
+  syncDirectory(directory);
 }
 
 async function mutateRecord<T>(
@@ -970,6 +1156,9 @@ export async function registerCheckRunInvocation(
       native: null,
       snapshot: null,
       candidateWorkspace: null,
+      preparedExecution: null,
+      descriptor: null,
+      snapshotCustody: null,
       returns: [],
       cancellation: { requested: false, signal: null },
       final: null,
@@ -982,6 +1171,140 @@ export async function registerCheckRunInvocation(
       binding,
       cancellation: { file: cancellationFile(directory, invocationId), id: invocationId },
     };
+  });
+}
+
+export async function persistCheckRunPreparedInvocation(
+  registration: CheckRunRegistration,
+  options: CheckRunStateOptions & {
+    candidateWorkspace: string;
+    snapshot: { workspace: string; scratch: string; sourceSha256: string; inputFiles: readonly string[] };
+    returns: readonly string[];
+    descriptorFile: string;
+    execution: unknown;
+  },
+): Promise<CheckRunPreparedDescriptor> {
+  if (!isAbsolute(options.descriptorFile))
+    throw new Error('check-run-settlement: prepared descriptor path must be absolute');
+  const directory = checkRunSettlementStateDirectory(options);
+  const descriptorFile = resolve(options.descriptorFile);
+  const descriptorDirectory = resolve(descriptorFile, '..');
+  assertPrivateDirectory(descriptorDirectory, 'prepared descriptor directory');
+  assertCanonicalParent(descriptorFile, 'prepared descriptor');
+  assertOutsideCandidate(directory, options.candidateWorkspace);
+  assertOutsideCandidate(descriptorDirectory, options.candidateWorkspace);
+  if (existsSync(descriptorFile)) throw new Error('check-run-settlement: prepared descriptor path already exists');
+  const snapshot = {
+    workspace: resolve(options.snapshot.workspace),
+    scratch: resolve(options.snapshot.scratch),
+    sourceSha256: boundedHash(options.snapshot.sourceSha256, 'snapshot source hash'),
+    inputFiles: validateInputFiles([...options.snapshot.inputFiles]),
+  };
+  const candidateWorkspace = resolve(options.candidateWorkspace);
+  const returns = validatePathList([...options.returns], 'declared return path', true);
+  if (snapshot.sourceSha256 !== registration.binding.sourceSha256)
+    throw new Error('check-run-settlement: prepared snapshot does not match its registered binding');
+  if (createHash('sha256').update(JSON.stringify(returns)).digest('hex') !== registration.binding.returnsSha256)
+    throw new Error('check-run-settlement: prepared returns do not match their registered binding');
+  const executionFile = preparedExecutionFile(directory, registration.invocationId);
+  const executionBytes = Buffer.from(`${JSON.stringify(options.execution)}\n`);
+  if (executionBytes.byteLength > CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES)
+    throw new Error('check-run-settlement: prepared execution exceeds its byte bound');
+  const descriptor: CheckRunPreparedDescriptor = {
+    schema: 1,
+    type: 'check-run-preparation',
+    invocationId: registration.invocationId,
+    nonce: registration.nonce,
+    binding: registration.binding,
+    cancellation: registration.cancellation,
+  };
+  const descriptorBytes = Buffer.from(`${JSON.stringify(descriptor)}\n`);
+  if (descriptorBytes.byteLength > CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES)
+    throw new Error('check-run-settlement: prepared descriptor exceeds its byte bound');
+  const executionHash = createHash('sha256').update(executionBytes).digest('hex');
+  const descriptorHash = createHash('sha256').update(descriptorBytes).digest('hex');
+  return withCheckFence(directory, registration.invocationId, async () => {
+    const record = readRecord(directory, registration.invocationId);
+    if (record.nonce !== registration.nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (record.phase !== 'registered' || cancellationWasRequested(directory, record))
+      throw new Error('check-run-settlement: invocation is no longer available for preparation');
+    writeNewPrivateFile(executionFile, executionBytes, CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES, 'prepared execution');
+    const next = await updateRecord(directory, record, {
+      phase: 'prepared',
+      candidateWorkspace,
+      snapshot,
+      returns,
+      preparedExecution: { file: executionFile, sha256: executionHash },
+      descriptor: { file: descriptorFile, sha256: descriptorHash },
+      snapshotCustody: 'owned',
+    });
+    if (next.phase !== 'prepared') throw new Error('check-run-settlement: prepared invocation was not persisted');
+    writeNewPrivateFile(descriptorFile, descriptorBytes, CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES, 'prepared descriptor');
+    return descriptor;
+  });
+}
+
+export function readCheckRunPreparedDescriptor(file: string): CheckRunPreparedDescriptor {
+  if (!isAbsolute(file)) throw new Error('check-run-settlement: prepared descriptor path must be absolute');
+  const absolute = resolve(file);
+  assertCanonicalParent(absolute, 'prepared descriptor');
+  const raw = readPrivateFile(absolute, CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES, 'prepared descriptor');
+  try {
+    return validateCheckRunPreparedDescriptor(parseUniqueJson(raw.toString('utf8')));
+  } catch (error) {
+    throw new Error(
+      `check-run-settlement: invalid prepared descriptor: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function claimCheckRunPreparedInvocation(
+  descriptorFile: string,
+  options: CheckRunStateOptions = {},
+): Promise<{ descriptor: CheckRunPreparedDescriptor; record: CheckRunInvocationRecord; execution: unknown }> {
+  const first = readCheckRunPreparedDescriptor(descriptorFile);
+  const directory = checkRunSettlementStateDirectory(options);
+  const absoluteDescriptorFile = resolve(descriptorFile);
+  const recordPathForInvocation = recordPath(directory, first.invocationId);
+  if (!existsSync(recordPathForInvocation)) throw new Error('check-run-settlement: prepared invocation is not registered');
+  return withCheckFence(directory, first.invocationId, async () => {
+    const record = readRecord(directory, first.invocationId);
+    assertCanonicalParent(absoluteDescriptorFile, 'prepared descriptor');
+    const rawDescriptor = readPrivateFile(
+      absoluteDescriptorFile,
+      CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES,
+      'prepared descriptor',
+    );
+    const descriptor = validateCheckRunPreparedDescriptor(parseUniqueJson(rawDescriptor.toString('utf8')));
+    const descriptorHash = createHash('sha256').update(rawDescriptor).digest('hex');
+    if (
+      !record.descriptor ||
+      record.descriptor.file !== absoluteDescriptorFile ||
+      record.descriptor.sha256 !== descriptorHash ||
+      first.invocationId !== descriptor.invocationId ||
+      first.nonce !== descriptor.nonce ||
+      checkRunBindingHash(first.binding) !== checkRunBindingHash(descriptor.binding) ||
+      JSON.stringify(first.cancellation) !== JSON.stringify(descriptor.cancellation) ||
+      record.nonce !== descriptor.nonce ||
+      checkRunBindingHash(record.binding) !== checkRunBindingHash(descriptor.binding) ||
+      descriptor.cancellation.file !== cancellationFile(directory, descriptor.invocationId) ||
+      descriptor.cancellation.id !== descriptor.invocationId
+    )
+      throw new Error('check-run-settlement: prepared descriptor does not match its durable invocation');
+    if (record.phase !== 'prepared' || cancellationWasRequested(directory, record) || record.final)
+      throw new Error(`check-run-settlement: prepared invocation cannot be claimed from ${record.phase}`);
+    if (!record.preparedExecution || record.preparedExecution.file !== preparedExecutionFile(directory, record.invocationId))
+      throw new Error('check-run-settlement: prepared execution state is unavailable');
+    const rawExecution = readPrivateFile(
+      record.preparedExecution.file,
+      CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES,
+      'prepared execution',
+    );
+    if (createHash('sha256').update(rawExecution).digest('hex') !== record.preparedExecution.sha256)
+      throw new Error('check-run-settlement: prepared execution state was substituted');
+    const execution = parseUniqueJson(rawExecution.toString('utf8'));
+    const claimed = await updateRecord(directory, record, { phase: 'claimed' });
+    return { descriptor, record: claimed, execution };
   });
 }
 
@@ -1005,8 +1328,9 @@ export async function markCheckRunQueued(
   return mutateRecord(invocationId, options, async (directory, record) => {
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
     if (record.final) throw new Error('check-run-settlement: invocation is already terminal');
-    if (record.cancellation.requested) throw new Error('check-run-settlement: cancelled invocation cannot queue');
-    if (record.phase !== 'registered' && record.phase !== 'queued')
+    if (cancellationWasRequested(directory, record))
+      throw new Error('check-run-settlement: cancelled invocation cannot queue');
+    if (record.phase !== 'registered' && record.phase !== 'claimed' && record.phase !== 'queued')
       throw new Error(`check-run-settlement: cannot queue from ${record.phase}`);
     if (options.candidateWorkspace) assertOutsideCandidate(directory, options.candidateWorkspace);
     const selectedReturns = options.returns
@@ -1025,6 +1349,26 @@ export async function markCheckRunQueued(
       throw new Error(
         'check-run-settlement: frozen snapshot or return declarations do not match the registered binding',
       );
+    if (record.phase === 'prepared' || record.phase === 'claimed') {
+      if (record.phase !== 'claimed') throw new Error('check-run-settlement: prepared invocation must be claimed before queueing');
+      const candidateWorkspace = options.candidateWorkspace ? resolve(options.candidateWorkspace) : null;
+      const paths = options.returns ? validatePathList([...options.returns], 'declared return path', true) : [];
+      const snapshot = options.snapshot
+        ? {
+            workspace: resolve(options.snapshot.workspace),
+            scratch: resolve(options.snapshot.scratch),
+            sourceSha256: boundedHash(options.snapshot.sourceSha256, 'snapshot source hash'),
+            inputFiles: validateInputFiles(options.snapshot.inputFiles ?? []),
+          }
+        : null;
+      if (
+        candidateWorkspace !== record.candidateWorkspace ||
+        JSON.stringify(paths) !== JSON.stringify(record.returns) ||
+        JSON.stringify(snapshot) !== JSON.stringify(record.snapshot)
+      )
+        throw new Error('check-run-settlement: claimed prepared invocation identity cannot be rebound');
+      return updateRecord(directory, record, { phase: 'queued' });
+    }
     if (record.phase === 'queued') {
       const candidateWorkspace = options.candidateWorkspace
         ? resolve(options.candidateWorkspace)
@@ -1073,7 +1417,7 @@ export async function allocateCheckRunPhysical(
 ): Promise<CheckRunInvocationRecord> {
   return mutateRecord(invocationId, options, async (directory, record) => {
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
-    if (record.cancellation.requested)
+    if (cancellationWasRequested(directory, record))
       throw new Error('check-run-settlement: cancelled invocation cannot allocate a run');
     if (record.phase !== 'queued' && record.phase !== 'uploading')
       throw new Error(`check-run-settlement: cannot allocate a run from ${record.phase}`);
@@ -1096,7 +1440,8 @@ export async function withCheckRunSpawnPermit<T>(
   return mutateRecord(invocationId, options, async (directory, record) => {
     const physical = validatePhysical({ host, run });
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
-    if (record.cancellation.requested) throw new Error('check-run-settlement: cancelled invocation cannot start');
+    if (cancellationWasRequested(directory, record))
+      throw new Error('check-run-settlement: cancelled invocation cannot start');
     if (!record.physical || record.physical.host !== physical.host || record.physical.run !== physical.run)
       throw new Error('check-run-settlement: spawn does not match the registered physical run');
     if (record.phase !== 'uploading' && record.phase !== 'running')
@@ -1188,7 +1533,25 @@ async function acceptFinalUnderLock(
   )
     throw new Error('check-run-settlement: final native outcome differs from the retained terminal event');
   const phase = message.cleanup.disposition === 'settled' ? 'settled' : 'unknown';
-  return updateRecord(directory, record, { phase, final: message, failure: null });
+  const snapshotCustody: CheckRunInvocationRecord['snapshotCustody'] =
+    message.cleanup.localWorktree === 'removed'
+      ? 'removed'
+      : message.cleanup.localWorktree === 'retained'
+        ? 'owned'
+        : 'unknown';
+  const next = await updateRecord(directory, record, {
+    phase,
+    final: message,
+    failure: null,
+    preparedExecution: null,
+    snapshotCustody,
+  });
+  try {
+    removePreparedExecutionFile(directory, record.invocationId, record.preparedExecution);
+  } catch {
+    // The private file remains owner-only; final authority does not depend on optional secret erasure.
+  }
+  return next;
 }
 
 export async function cancelCheckRunInvocation(
@@ -1219,7 +1582,7 @@ export async function reconcileCheckRunInvocation(
   if (before.final) return before;
   if (before.phase === 'unknown' && !options.force) return before;
   if (!before.physical) {
-    if (before.cancellation.requested && (before.phase === 'cancel-requested' || before.phase === 'queued')) {
+    if (before.cancellation.requested) {
       return mutateRecord(invocationId, options, async (directory, record) => {
         if (record.physical || record.final) return record;
         return updateRecord(directory, record, { phase: 'cancelled', failure: null });
@@ -1282,6 +1645,50 @@ export async function reconcileCheckRunInvocation(
       }),
     );
   }
+}
+
+export async function markCheckRunPreparedSnapshotCustody(
+  invocationId: string,
+  nonce: string,
+  disposition: 'removed' | 'unknown',
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (record.final) throw new Error('check-run-settlement: final invocation custody is immutable');
+    if (record.physical) throw new Error('check-run-settlement: physical invocation custody needs remote reconciliation');
+    if (disposition === 'removed' && !['cancelled', 'unknown'].includes(record.phase))
+      throw new Error('check-run-settlement: snapshot removal needs a terminal pre-physical invocation');
+    const next = await updateRecord(directory, record, {
+      snapshotCustody: disposition,
+      preparedExecution: null,
+    });
+    try {
+      removePreparedExecutionFile(directory, record.invocationId, record.preparedExecution);
+    } catch {
+      // The record no longer needs execution secrets; an unremovable private file is not treated as public state.
+    }
+    return next;
+  });
+}
+
+export async function discardCheckRunPreparedExecution(
+  invocationId: string,
+  nonce: string,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (record.phase === 'prepared' || record.phase === 'registered')
+      throw new Error('check-run-settlement: unclaimed prepared execution cannot be discarded');
+    const next = await updateRecord(directory, record, { preparedExecution: null });
+    try {
+      removePreparedExecutionFile(directory, record.invocationId, record.preparedExecution);
+    } catch {
+      // Preserve custody of any private file that could not be verified for removal.
+    }
+    return next;
+  });
 }
 
 export function readCheckRunCancellation(
@@ -1355,7 +1762,7 @@ function usage(): string {
     '  bun scripts/check-run-settlement.ts register --binding <private-json> [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts status <invocation-id> [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts cancel <invocation-id> [--signal 1|2|15] [--state-dir <absolute-dir>]',
-    '  bun scripts/check-run-settlement.ts reconcile <invocation-id> --hosts <absolute-hosts-json>',
+    '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
   ].join('\n');
 }
 
@@ -1393,8 +1800,8 @@ if (import.meta.main) {
       const id = args[0];
       const hostsAt = args.indexOf('--hosts');
       const hostsFile = hostsAt >= 0 ? args[hostsAt + 1] : undefined;
-      if (!id || !hostsFile || !isAbsolute(hostsFile))
-        throw new Error('reconcile needs an id and absolute --hosts file');
+      if (!id || (hostsFile !== undefined && !isAbsolute(hostsFile)))
+        throw new Error('reconcile needs an id and, for a physical run, an absolute --hosts file');
       const record = await getCheckRunStatus(id, stateOptions);
       if (record.final) {
         process.stdout.write(`${JSON.stringify(record)}\n`);

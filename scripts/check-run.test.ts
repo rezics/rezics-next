@@ -2,8 +2,20 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { parseCheckRunArguments, runCheck, type CandidateSnapshot, type CheckRunArguments } from './check-run.ts';
+import {
+  parseCheckRunArguments,
+  reconcileRegisteredCheckRun,
+  runCheck,
+  type CandidateSnapshot,
+  type CheckRunArguments,
+} from './check-run.ts';
+import {
+  cancelCheckRunInvocation,
+  getCheckRunStatus,
+  readCheckRunPreparedDescriptor,
+} from './check-run-settlement.ts';
 import type { RemoteCheck, RemotePhysicalRunReceipt } from './remote-check.ts';
 import type { RemoteCheckSettlement } from './remote-check.ts';
 
@@ -139,6 +151,119 @@ function removeRetainedSnapshot(fixture: ReturnType<typeof candidate>, snapshot:
     },
   );
   rmSync(snapshot.scratch, { recursive: true, force: true });
+}
+
+function runSeparateCli(
+  argv: string[],
+  fixture: ReturnType<typeof candidate>,
+  options: { cancelQueued?: boolean; invocationId?: string; nonce?: string } = {},
+) {
+  mkdirSync(join(fixture.parent, 'state'), { recursive: true, mode: 0o700 });
+  chmodSync(join(fixture.parent, 'state'), 0o700);
+  const cliUrl = pathToFileURL(join(repository, 'scripts/check-run.ts')).href;
+  const settlementUrl = pathToFileURL(join(repository, 'scripts/check-run-settlement.ts')).href;
+  const source = `
+    import { runCheckRunCli } from ${JSON.stringify(cliUrl)};
+    const events = [];
+    const authenticated = [];
+    let transportedWorkspace = null;
+    const recordMessage = (line) => {
+      const message = JSON.parse(line);
+      events.push(message.type);
+      if (message.binding) authenticated.push({ type: message.type, binding: message.binding });
+    };
+    const dependencies = {
+      stateDirectory: ${JSON.stringify(join(fixture.parent, 'state'))},
+      receiptWriter: recordMessage,
+      settlementWriter: recordMessage,
+      transport: async (options) => {
+        transportedWorkspace = options.workspace;
+        const physical = { host: 'a', run: 'physical-run-prepared-cli' };
+        if (${options.cancelQueued === true}) {
+          const { cancelCheckRunInvocation } = await import(${JSON.stringify(settlementUrl)});
+          await cancelCheckRunInvocation(
+            options.cancellation.id,
+            process.env.REMOTE_CHECK_RECEIPT_NONCE,
+            15,
+            { stateDirectory: ${JSON.stringify(join(fixture.parent, 'state'))} },
+          );
+          try {
+            await options.allocated(physical);
+          } catch (error) {
+            events.push('allocation-fenced');
+            return 75;
+          }
+        } else {
+          await options.allocated(physical);
+        }
+        await options.spawnWithCustody(physical, () => ({ pid: process.pid }));
+        options.started('a');
+        const native = {
+          schema: 1,
+          host: 'a',
+          run: physical.run,
+          exitCode: 0,
+          lifetimeFailure: null,
+          resources: null,
+        };
+        await options.completed(native);
+        await options.settled({
+          schema: 1,
+          host: 'a',
+          run: physical.run,
+          native,
+          preparedInputs: {
+            schema: 1,
+            sourceSha256: options.expectedSourceSha256,
+            manifestSha256: 'a'.repeat(64),
+            fileCount: options.expectedSourceManifest.entries.length,
+            totalBytes: 0,
+          },
+          returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
+          cleanup: {
+            schema: 1,
+            host: 'a',
+            run: physical.run,
+            status: 'verified',
+            supervisorStopped: true,
+            commandGroupTerminal: true,
+            containersRemoved: true,
+            runDirectoryRemoved: true,
+            failures: [],
+          },
+          transportChildReaped: true,
+        });
+        events.push(options.command.includes('SECRET_TOKEN=prepared-secret') ? 'secret-used' : 'secret-missing');
+        return 0;
+      },
+    };
+    const argv = JSON.parse(process.env.CHECK_RUN_TEST_ARGS);
+    const code = await runCheckRunCli(argv, dependencies, process.env);
+    if (argv[0] === 'prepare' && (events.length !== 0 || transportedWorkspace !== null))
+      throw new Error('prepare invoked the transport or emitted an early receipt');
+    if (argv[0] !== 'prepare') {
+      process.stdout.write(JSON.stringify({ code, events, authenticated, transportedWorkspace }) + '\\n');
+    }
+    process.exitCode = code;
+  `;
+  const env = {
+    ...process.env,
+    CHECK_RUN_TEST_ARGS: JSON.stringify(argv),
+  };
+  if (options.invocationId) env.REMOTE_CHECK_INVOCATION_ID = options.invocationId;
+  else delete env.REMOTE_CHECK_INVOCATION_ID;
+  if (options.nonce) env.REMOTE_CHECK_RECEIPT_NONCE = options.nonce;
+  else delete env.REMOTE_CHECK_RECEIPT_NONCE;
+  if (options.invocationId && options.nonce) env.REMOTE_CHECK_RECEIPT_FD = '3';
+  else delete env.REMOTE_CHECK_RECEIPT_FD;
+  const result = spawnSync('bun', ['-e', source], {
+    cwd: repository,
+    env,
+    encoding: 'utf8',
+    timeout: 60_000,
+  });
+  if (result.error) throw result.error;
+  return result;
 }
 
 afterAll(() => {
@@ -676,4 +801,249 @@ test('native FD 3 write failure remains unknown on terminal replay without anoth
   } finally {
     if (retained) removeRetainedSnapshot(fixture, retained);
   }
+});
+
+test('separate prepare and run-prepared CLI processes consume one authenticated snapshot and settle in order', async () => {
+  const fixture = candidate();
+  mkdirSync(join(fixture.parent, 'state'), { mode: 0o700 });
+  const descriptorFile = join(fixture.parent, 'state', 'prepared.json');
+  const args = argsFor(fixture, ['bun', 'test', 'argument with spaces']);
+  writeFileSync(fixture.envFile, JSON.stringify({ SECRET_TOKEN: 'prepared-secret' }) + '\n', { mode: 0o600 });
+  chmodSync(fixture.envFile, 0o600);
+
+  const prepare = runSeparateCli(
+    [
+      'prepare',
+      '--descriptor',
+      descriptorFile,
+      '--hosts',
+      args.hosts,
+      '--workspace',
+      args.workspace,
+      '--cwd',
+      args.cwd,
+      '--source-revision',
+      args.sourceRevision,
+      '--env-file',
+      args.envFile,
+      '--',
+      ...args.command,
+    ],
+    fixture,
+  );
+  expect(prepare.status).toBe(0);
+  expect(prepare.stdout).not.toContain('prepared-secret');
+  expect(prepare.stderr).not.toContain('prepared-secret');
+  const descriptor = JSON.parse(prepare.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
+  expect(readCheckRunPreparedDescriptor(descriptorFile)).toEqual(descriptor);
+  expect(prepare.stdout).not.toContain('prepared-secret');
+  expect(descriptor.binding).toHaveProperty('preparationCommandsSha256');
+  expect(Object.keys(descriptor.binding)).toHaveLength(11);
+  const stateDirectory = join(fixture.parent, 'state');
+  const prepared = await getCheckRunStatus(descriptor.invocationId, { stateDirectory });
+  const originalSnapshot = prepared.snapshot?.workspace;
+  expect(prepared.phase).toBe('prepared');
+  expect(prepared.snapshotCustody).toBe('owned');
+  expect(prepared.binding).toEqual(descriptor.binding);
+  expect(JSON.stringify(prepared)).not.toContain('prepared-secret');
+
+  const execution = runSeparateCli(
+    ['run-prepared', '--descriptor', descriptorFile],
+    fixture,
+    { invocationId: descriptor.invocationId, nonce: descriptor.nonce },
+  );
+  expect(execution.status).toBe(0);
+  const observed = JSON.parse(execution.stdout.trim()) as {
+    code: number;
+    events: string[];
+    authenticated: Array<{ type: string; binding: typeof descriptor.binding }>;
+    transportedWorkspace?: string;
+  };
+  expect(observed.code).toBe(0);
+  expect(observed.events).toContain('secret-used');
+  expect(observed.transportedWorkspace).toBe(originalSnapshot);
+  expect(observed.events.indexOf('native-terminal')).toBeGreaterThanOrEqual(0);
+  expect(observed.events.indexOf('final-settlement')).toBeGreaterThan(observed.events.indexOf('native-terminal'));
+  expect(observed.authenticated).toEqual([
+    { type: 'native-terminal', binding: descriptor.binding },
+    { type: 'final-settlement', binding: descriptor.binding },
+  ]);
+  const settled = await getCheckRunStatus(descriptor.invocationId, { stateDirectory });
+  expect(settled.phase).toBe('settled');
+  expect(settled.final?.binding).toEqual(descriptor.binding);
+  expect(settled.final?.cleanup.disposition).toBe('settled');
+  expect(settled.final?.native?.exitCode).toBe(0);
+  expect(settled.snapshot?.workspace).toBe(originalSnapshot);
+  expect(settled.snapshotCustody).toBe('removed');
+
+  const replay = runSeparateCli(
+    ['run-prepared', '--descriptor', descriptorFile],
+    fixture,
+    { invocationId: descriptor.invocationId, nonce: descriptor.nonce },
+  );
+  expect(replay.status).not.toBe(0);
+  expect(JSON.parse(replay.stdout.trim()).events).toEqual([]);
+  expect((await getCheckRunStatus(descriptor.invocationId, { stateDirectory })).final).toEqual(settled.final);
+});
+
+test('descriptor tampering and foreign identity fail closed before transport', async () => {
+  const fixture = candidate();
+  mkdirSync(join(fixture.parent, 'state'), { mode: 0o700 });
+  const stateDirectory = join(fixture.parent, 'state');
+  const firstFile = join(stateDirectory, 'first.json');
+  const secondFile = join(stateDirectory, 'second.json');
+  const args = argsFor(fixture, ['bun', 'test', 'prepared']);
+  const prepare = (descriptorFile: string) =>
+    runSeparateCli(
+      [
+        'prepare',
+        '--descriptor',
+        descriptorFile,
+        '--hosts',
+        args.hosts,
+        '--workspace',
+        args.workspace,
+        '--cwd',
+        args.cwd,
+        '--source-revision',
+        args.sourceRevision,
+        '--env-file',
+        args.envFile,
+        '--',
+        ...args.command,
+      ],
+      fixture,
+    );
+  const firstResult = prepare(firstFile);
+  const secondResult = prepare(secondFile);
+  expect(firstResult.status).toBe(0);
+  expect(secondResult.status).toBe(0);
+  const first = JSON.parse(firstResult.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
+  const second = JSON.parse(secondResult.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
+  const foreign = runSeparateCli(
+    ['run-prepared', '--descriptor', secondFile],
+    fixture,
+    { invocationId: first.invocationId, nonce: first.nonce },
+  );
+  expect(foreign.status).not.toBe(0);
+  expect(JSON.parse(foreign.stdout.trim()).events).toEqual([]);
+
+  writeFileSync(firstFile, `${JSON.stringify({ ...first, binding: { ...first.binding, argvSha256: '9'.repeat(64) } })}\n`);
+  chmodSync(firstFile, 0o600);
+  const tampered = runSeparateCli(
+    ['run-prepared', '--descriptor', firstFile],
+    fixture,
+    { invocationId: first.invocationId, nonce: first.nonce },
+  );
+  expect(tampered.status).not.toBe(0);
+  expect(JSON.parse(tampered.stdout.trim()).events).toEqual([]);
+  expect((await getCheckRunStatus(first.invocationId, { stateDirectory })).phase).toBe('prepared');
+
+  for (const descriptor of [first, second])
+    await reconcileRegisteredCheckRun(descriptor.invocationId, undefined, { stateDirectory });
+  expect((await getCheckRunStatus(first.invocationId, { stateDirectory })).snapshotCustody).toBe('removed');
+  expect((await getCheckRunStatus(second.invocationId, { stateDirectory })).snapshotCustody).toBe('removed');
+});
+
+test('changed candidate inputs and cancellation cannot spawn late or replace the owned snapshot', async () => {
+  const changedFixture = candidate();
+  mkdirSync(join(changedFixture.parent, 'state'), { mode: 0o700 });
+  const changedState = join(changedFixture.parent, 'state');
+  const changedDescriptorFile = join(changedState, 'changed.json');
+  const args = argsFor(changedFixture, ['bun', 'test', 'prepared-input']);
+  const prepareArgs = (descriptorFile: string, checkArgs: CheckRunArguments) => [
+    'prepare',
+    '--descriptor',
+    descriptorFile,
+    '--hosts',
+    checkArgs.hosts,
+    '--workspace',
+    checkArgs.workspace,
+    '--cwd',
+    checkArgs.cwd,
+    '--source-revision',
+    checkArgs.sourceRevision,
+    '--env-file',
+    checkArgs.envFile,
+    '--',
+    ...checkArgs.command,
+  ];
+  const changedPrepare = runSeparateCli(prepareArgs(changedDescriptorFile, args), changedFixture);
+  expect(changedPrepare.status).toBe(0);
+  const changed = JSON.parse(changedPrepare.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
+  const original = (await getCheckRunStatus(changed.invocationId, { stateDirectory: changedState })).snapshot?.workspace;
+  writeFileSync(join(changedFixture.root, 'src/input.ts'), 'export const value = 8;\n');
+  const rejected = runSeparateCli(
+    ['run-prepared', '--descriptor', changedDescriptorFile],
+    changedFixture,
+    { invocationId: changed.invocationId, nonce: changed.nonce },
+  );
+  expect(rejected.status).toBe(75);
+  expect(JSON.parse(rejected.stdout.trim()).events).toEqual([]);
+  const changedRecord = await getCheckRunStatus(changed.invocationId, { stateDirectory: changedState });
+  expect(changedRecord.phase).toBe('cancelled');
+  expect(changedRecord.snapshot?.workspace).toBe(original);
+  expect(changedRecord.snapshotCustody).toBe('removed');
+  expect(existsSync(original!)).toBe(false);
+
+  const queuedFixture = candidate();
+  mkdirSync(join(queuedFixture.parent, 'state'), { mode: 0o700 });
+  const queuedState = join(queuedFixture.parent, 'state');
+  const queuedDescriptorFile = join(queuedState, 'queued.json');
+  const queuedArgs = argsFor(queuedFixture, ['bun', 'test', 'queued-prepared']);
+  const queuedPrepare = runSeparateCli(
+    prepareArgs(queuedDescriptorFile, queuedArgs),
+    queuedFixture,
+  );
+  expect(queuedPrepare.status).toBe(0);
+  const queued = JSON.parse(queuedPrepare.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
+  const queuedSnapshot = (await getCheckRunStatus(queued.invocationId, { stateDirectory: queuedState })).snapshot?.workspace;
+  const cancelled = runSeparateCli(
+    ['run-prepared', '--descriptor', queuedDescriptorFile],
+    queuedFixture,
+    { cancelQueued: true, invocationId: queued.invocationId, nonce: queued.nonce },
+  );
+  expect(cancelled.status).toBe(75);
+  const queuedResult = JSON.parse(cancelled.stdout.trim()) as { code: number; events: string[] };
+  expect(queuedResult.events).toContain('allocation-fenced');
+  expect(queuedResult.events).not.toContain('native-terminal');
+  const retained = await getCheckRunStatus(queued.invocationId, { stateDirectory: queuedState });
+  expect(retained.phase).toBe('unknown');
+  expect(retained.snapshot?.workspace).toBe(queuedSnapshot);
+  expect(retained.snapshotCustody).toBe('owned');
+  expect(existsSync(queuedSnapshot!)).toBe(true);
+  const reconciled = await reconcileRegisteredCheckRun(queued.invocationId, undefined, { stateDirectory: queuedState });
+  expect(reconciled.phase).toBe('cancelled');
+  expect(reconciled.snapshot?.workspace).toBe(queuedSnapshot);
+  expect(reconciled.snapshotCustody).toBe('removed');
+  expect(existsSync(queuedSnapshot!)).toBe(false);
+
+  const abandonedFixture = candidate();
+  mkdirSync(join(abandonedFixture.parent, 'state'), { mode: 0o700 });
+  const abandonedState = join(abandonedFixture.parent, 'state');
+  const abandonedDescriptorFile = join(abandonedState, 'abandoned.json');
+  const abandonedArgs = argsFor(abandonedFixture, ['bun', 'test', 'abandoned-prepared']);
+  const abandonedPrepare = runSeparateCli(
+    prepareArgs(abandonedDescriptorFile, abandonedArgs),
+    abandonedFixture,
+  );
+  expect(abandonedPrepare.status).toBe(0);
+  const abandoned = JSON.parse(abandonedPrepare.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
+  const abandonedSnapshot = (await getCheckRunStatus(abandoned.invocationId, { stateDirectory: abandonedState })).snapshot
+    ?.workspace;
+  await cancelCheckRunInvocation(abandoned.invocationId, abandoned.nonce, 15, { stateDirectory: abandonedState });
+  const noClaim = runSeparateCli(
+    ['run-prepared', '--descriptor', abandonedDescriptorFile],
+    abandonedFixture,
+    { invocationId: abandoned.invocationId, nonce: abandoned.nonce },
+  );
+  expect(noClaim.status).not.toBe(0);
+  expect(JSON.parse(noClaim.stdout.trim()).events).toEqual([]);
+  const abandonedResult = await reconcileRegisteredCheckRun(abandoned.invocationId, undefined, {
+    stateDirectory: abandonedState,
+  });
+  expect(abandonedResult.phase).toBe('cancelled');
+  expect(abandonedResult.snapshot?.workspace).toBe(abandonedSnapshot);
+  expect(abandonedResult.snapshotCustody).toBe('removed');
+  expect(existsSync(abandonedSnapshot!)).toBe(false);
 });
