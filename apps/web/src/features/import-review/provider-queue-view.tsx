@@ -196,7 +196,7 @@ export function ProviderQueue({
       <p className="text-sm text-muted-foreground">{m.prq_context_help()}</p>
       {page.state !== 'ready' ? (
         <ContentItemFrame
-          as="section"
+          as="div"
           aria-busy={page.state === 'loading' || page.state === 'preparing'}
           className="space-y-3 p-5"
         >
@@ -244,7 +244,7 @@ export function ProviderQueue({
             )}
           </div>
           {page.page.candidates.length === 0 && (
-            <ContentItemFrame as="section" className="p-5">
+            <ContentItemFrame as="div" className="p-5">
               <ContentItemHeading level={2} role="status">
                 {m.prq_empty()}
               </ContentItemHeading>
@@ -356,7 +356,7 @@ export function ProviderQueueView({
             {current.page.sourceLabel} · {current.page.contextLabel} · {current.page.statusLabel}
           </p>
           {!current.page.rows.length && (
-            <ContentItemFrame as="section" className="p-4">
+            <ContentItemFrame as="div" className="p-4">
               <ContentItemHeading level={2} role="status">
                 {m.provider_empty({}, o)}
               </ContentItemHeading>
@@ -364,13 +364,13 @@ export function ProviderQueueView({
           )}
         </>
       ) : current.reason === 'loading' ? (
-        <ContentItemFrame as="section" aria-busy className="p-4">
+        <ContentItemFrame as="div" aria-busy className="p-4">
           <ContentItemHeading level={2} role="status">
             {m.candidate_loading({}, o)}
           </ContentItemHeading>
         </ContentItemFrame>
       ) : (
-        <ContentItemFrame as="section" role="alert" className="space-y-3 p-4">
+        <ContentItemFrame as="div" role="alert" className="space-y-3 p-4">
           <ContentItemHeading level={2}>{providerOutcomeText(current, locale)}</ContentItemHeading>
           <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void retry()}>
             {m.provider_refresh({}, o)}

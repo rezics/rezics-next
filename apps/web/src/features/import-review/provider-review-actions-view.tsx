@@ -310,7 +310,7 @@ export function ProviderReviewActions({
           {visible.some((row) => !concealed(row)) && (
             <>
               <ContentItemFrame
-                as="section"
+                as="div"
                 className="flex flex-wrap items-center gap-2 p-3"
                 aria-label={m.provider_selection({}, o)}
               >
@@ -354,11 +354,12 @@ export function ProviderReviewActions({
               const checked = selected.includes(key);
               if (concealed(row))
                 return <ContentItem key={key} title={m.provider_missing({}, o)} headingLevel={3} role="status" />;
+              const href = destination(row);
               return (
                 <ContentItem
                   key={key}
                   title={row.label}
-                  href={destination(row)}
+                  {...(href ? { href } : {})}
                   context={row.propertyLabel}
                   metadata={
                     <>
@@ -455,7 +456,7 @@ export function ProviderReviewActions({
       </AlertDialog>
       {batch && (
         <ContentItemFrame
-          as="section"
+          as="div"
           className="space-y-3 p-4"
           aria-label={m.provider_results({}, o)}
           aria-busy={busy}
