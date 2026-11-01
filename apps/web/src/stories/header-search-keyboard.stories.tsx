@@ -91,6 +91,6 @@ export const SubjectDefaultCompositionNaming: Story = {
     await expect(trigger).toHaveAccessibleName(queryName);
     await expect(trigger).toHaveAttribute('aria-label', queryName);
     await expect(trigger).toHaveAccessibleDescription(m.header_search_keyboard_help());
-    await expect(canvas.getByRole('button', { name: queryName, exact: true })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: queryName })).toBeVisible();
   },
 };

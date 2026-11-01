@@ -139,7 +139,7 @@ export const ScopedAccessibleNaming: Story = {
     const input = owner?.querySelector<HTMLInputElement>('input[role="combobox"]');
     const help = owner?.querySelector<HTMLElement>('[id$="-keyboard-help"]');
     if (!owner || !trigger || !input || !help)
-      throw new Error('The scoped search naming surface is missing.');
+      throw new globalThis.Error('The scoped search naming surface is missing.');
 
     const visibleName = trigger.innerText.replace(/\s+/gu, ' ').trim();
     await expect(trigger).toHaveAccessibleName(visibleName);
@@ -156,7 +156,7 @@ export const ScopedAccessibleNaming: Story = {
       m.header_search_in_scope({ scope: scope.name }),
     );
     if (!input.getAttribute('aria-describedby')?.split(/\s+/u).includes(help.id)) {
-      throw new Error('The scoped search field lost its keyboard help description.');
+      throw new globalThis.Error('The scoped search field lost its keyboard help description.');
     }
 
     await userEvent.type(expandedInput, 'Scoped draft');
@@ -166,7 +166,7 @@ export const ScopedAccessibleNaming: Story = {
     await expect(trigger).toHaveAccessibleName(queryName);
     await expect(trigger).toHaveAttribute('aria-label', queryName);
     await expect(trigger).toHaveAccessibleDescription(m.header_search_keyboard_help());
-    await expect(canvas.getByRole('button', { name: queryName, exact: true })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: queryName })).toBeVisible();
   },
 };
 
