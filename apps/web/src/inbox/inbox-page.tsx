@@ -488,7 +488,7 @@ export function ViewerInboxPage({
                   {readable.items.length === 0 && !readable.next ? m.inbox_empty() : m.inbox_triage_no_unread_loaded()}
                 </p>
                 {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
-                {readable.next ? (
+                {readable.next && !failed ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -506,7 +506,7 @@ export function ViewerInboxPage({
                   {m.inbox_triage_no_loaded()}
                 </p>
                 {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
-                {readable.next ? (
+                {readable.next && !failed ? (
                   <Button
                     type="button"
                     variant="outline"

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView, InboxRows } from '../inbox/inbox-page';
 import { readInboxPage, type InboxPage, type ResolvedInboxPage } from '../inbox/inbox-read';
@@ -119,6 +119,174 @@ export const PaginationDenied: Story = {
     await expect(view.queryByRole('list')).toBeNull();
   },
 };
+
+const unreadContinuationCursor = 'opaque.signed+unread-filter/cursor==';
+const emptyContinuationCursor = 'opaque.signed+all-empty/cursor==';
+const emptyRetryCursor = 'opaque.signed+all-empty-retry/cursor==';
+
+function EmptyFilterContinuationCase({ mode }: { mode: 'unread' | 'all-empty' }) {
+  const [requestedCursors, setRequestedCursors] = useState<Array<string | null>>([]);
+  const loadPage = useMemo(() => {
+    let continuationAttempts = 0;
+    return async (cursor?: string): Promise<InboxPage> => {
+      await Promise.resolve();
+      setRequestedCursors((current) => [...current, cursor ?? null]);
+      if (mode === 'unread' && cursor === unreadContinuationCursor && continuationAttempts++ === 0)
+        return {
+          signedIn: true,
+          state: 'unavailable',
+          failure: { status: 503, code: 'dependency_unavailable', retryable: true },
+        };
+      if (mode === 'all-empty' && cursor === emptyRetryCursor && continuationAttempts++ === 0)
+        return {
+          signedIn: true,
+          state: 'unavailable',
+          failure: { status: 503, code: 'dependency_unavailable', retryable: true },
+        };
+
+      const source = await readInboxPage({ data: {} });
+      if (!source.signedIn || source.state !== 'ready') return source;
+      if (cursor === undefined) {
+        return mode === 'unread'
+          ? {
+              ...source,
+              items: source.items.slice(0, 1).map((item) => ({ ...item, unread: false })),
+              next: unreadContinuationCursor,
+            }
+          : { ...source, items: [], next: emptyContinuationCursor };
+      }
+      if (mode === 'all-empty' && cursor === emptyContinuationCursor)
+        return { ...source, items: [], next: emptyRetryCursor };
+
+      await expect(cursor).toBe(mode === 'unread' ? unreadContinuationCursor : emptyRetryCursor);
+      return mode === 'unread'
+        ? {
+            ...source,
+            items: source.items.slice(1, 2).map((item) => ({ ...item, unread: false })),
+            next: null,
+          }
+        : { ...source, next: null };
+    };
+  }, [mode]);
+
+  return (
+    <section
+      data-inbox-case={mode}
+      data-requested-cursors={JSON.stringify(requestedCursors)}
+      className="border-b border-border px-4 py-6 last:border-b-0 sm:px-6"
+    >
+      <h2 className="mb-3 font-display text-xl font-semibold">
+        {mode === 'unread' ? 'Unread filter recovery' : 'All-empty continuation'}
+      </h2>
+      <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
+        <InboxPageView loadPage={loadPage} />
+      </PatternStory>
+    </section>
+  );
+}
+
+function EmptyFilterContinuationExample() {
+  return (
+    <div className="mx-auto w-full max-w-3xl">
+      <EmptyFilterContinuationCase mode="unread" />
+      <EmptyFilterContinuationCase mode="all-empty" />
+    </div>
+  );
+}
+
+export const EmptyFilterContinuationRecovery: Story = {
+  render: () => <EmptyFilterContinuationExample />,
+  play: async ({ canvasElement }) => {
+    const unreadSection = canvasElement.querySelector<HTMLElement>('[data-inbox-case="unread"]')!;
+    const unread = within(unreadSection);
+    await unread.findByRole('list');
+    await waitFor(() => expect(unreadSection.dataset.requestedCursors).toBe('[null]'));
+    const originalList = within(unread.getByRole('list'));
+    const originalId = originalList.getByRole('listitem').getAttribute('data-notice-id');
+    await expect(originalId).not.toBeNull();
+
+    await userEvent.click(unread.getByRole('button', { name: m.inbox_triage_filter_unread() }));
+    await unread.findByText(m.inbox_triage_no_unread_loaded());
+    await unread.findByText(m.inbox_triage_older_pages());
+    await expect(unread.queryByText(m.inbox_empty())).toBeNull();
+    await expect(unread.queryByRole('button', { name: m.inbox_triage_mark() })).toBeNull();
+    await expect(unreadSection.dataset.requestedCursors).toBe('[null]');
+
+    await userEvent.click(unread.getByRole('button', { name: m.inbox_load_more() }));
+    await unread.findByText(m.inbox_unavailable());
+    await waitFor(() =>
+      expect(unreadSection.dataset.requestedCursors).toBe(JSON.stringify([null, unreadContinuationCursor])),
+    );
+    await unread.findByText(m.inbox_page_retry_hint());
+    await unread.findByText(m.inbox_triage_no_unread_loaded());
+    await unread.findByText(m.inbox_triage_older_pages());
+    await expect(unread.queryByText(m.inbox_empty())).toBeNull();
+    await expect(unread.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
+    const retry = unread.getByRole('button', { name: m.inbox_retry() });
+    await expect(retry).toBeEnabled();
+    await expect(unread.getByRole('button', { name: m.inbox_start_first_page() })).toBeEnabled();
+
+    await userEvent.click(unread.getByRole('button', { name: m.inbox_triage_filter_all() }));
+    const retainedRows = within(await unread.findByRole('list')).getAllByRole('listitem');
+    await expect(retainedRows).toHaveLength(1);
+    await expect(retainedRows[0]!).toHaveAttribute('data-notice-id', originalId!);
+    await expect(unread.queryByRole('button', { name: m.inbox_triage_mark() })).toBeNull();
+    await userEvent.click(unread.getByRole('button', { name: m.inbox_triage_filter_unread() }));
+    await userEvent.click(unread.getByRole('button', { name: m.inbox_retry() }));
+    await waitFor(() =>
+      expect(unreadSection.dataset.requestedCursors).toBe(
+        JSON.stringify([null, unreadContinuationCursor, unreadContinuationCursor]),
+      ),
+    );
+    await waitFor(() => expect(unread.queryByText(m.inbox_unavailable())).toBeNull());
+    await expect(unread.queryByText(m.inbox_triage_older_pages())).toBeNull();
+    await expect(unread.queryByText(m.inbox_empty())).toBeNull();
+    await userEvent.click(unread.getByRole('button', { name: m.inbox_triage_filter_all() }));
+    const recoveredRows = within(await unread.findByRole('list')).getAllByRole('listitem');
+    await expect(recoveredRows).toHaveLength(2);
+    await expect(recoveredRows[0]!).toHaveAttribute('data-notice-id', originalId!);
+    await expect(unread.queryByRole('button', { name: m.inbox_triage_mark() })).toBeNull();
+
+    const emptySection = canvasElement.querySelector<HTMLElement>('[data-inbox-case="all-empty"]')!;
+    const empty = within(emptySection);
+    await empty.findByText(m.inbox_triage_no_loaded());
+    await empty.findByText(m.inbox_triage_older_pages());
+    await expect(empty.queryByText(m.inbox_empty())).toBeNull();
+    await waitFor(() => expect(emptySection.dataset.requestedCursors).toBe('[null]'));
+    await userEvent.click(empty.getByRole('button', { name: m.inbox_load_more() }));
+    await waitFor(() =>
+      expect(emptySection.dataset.requestedCursors).toBe(JSON.stringify([null, emptyContinuationCursor])),
+    );
+    await expect(empty.queryByText(m.inbox_empty())).toBeNull();
+    await expect(empty.queryByRole('list')).toBeNull();
+    const continueEmpty = empty.getByRole('button', { name: m.inbox_load_more() });
+    await waitFor(() => expect(continueEmpty).toBeEnabled());
+    await userEvent.click(continueEmpty);
+    await empty.findByText(m.inbox_unavailable());
+    await waitFor(() =>
+      expect(emptySection.dataset.requestedCursors).toBe(
+        JSON.stringify([null, emptyContinuationCursor, emptyRetryCursor]),
+      ),
+    );
+    await empty.findByText(m.inbox_triage_no_loaded());
+    await empty.findByText(m.inbox_triage_older_pages());
+    await expect(empty.queryByText(m.inbox_empty())).toBeNull();
+    await expect(empty.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
+    await expect(empty.getByRole('button', { name: m.inbox_retry() })).toBeEnabled();
+    await userEvent.click(empty.getByRole('button', { name: m.inbox_retry() }));
+    await waitFor(() =>
+      expect(emptySection.dataset.requestedCursors).toBe(
+        JSON.stringify([null, emptyContinuationCursor, emptyRetryCursor, emptyRetryCursor]),
+      ),
+    );
+    await waitFor(() => expect(empty.queryByText(m.inbox_unavailable())).toBeNull());
+    const recoveredList = within(await empty.findByRole('list'));
+    await waitFor(() => expect(recoveredList.getAllByRole('listitem')).toHaveLength(3));
+    await expect(empty.queryByText(m.inbox_empty())).toBeNull();
+    await expect(empty.queryByText(m.inbox_triage_marked())).toBeNull();
+  },
+};
+
 export const NativeRows: Story = {
   render: () => <Example fixture="mixed" />,
   play: async ({ canvasElement }) => {
