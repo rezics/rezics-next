@@ -94,11 +94,7 @@ export type ThreadPageRefreshContinuation = {
   readonly client: QueryClient;
   readonly sourceId: string;
   isCurrent(): boolean;
-  runOwnedCacheBoundary<T>(
-    kind: 'cancel' | 'remove',
-    operation: () => T,
-    peers?: readonly ThreadPageCaller[],
-  ): T;
+  runOwnedCacheBoundary<T>(kind: 'cancel' | 'remove', operation: () => T, peers?: readonly ThreadPageCaller[]): T;
   beginOwnedPageRead(queryKey: QueryKey): void;
   markOwnedPageReadStarted(queryKey: QueryKey): void;
   recordOwnedPageResult(queryKey: QueryKey, value: unknown): void;
@@ -405,10 +401,7 @@ export class ThreadPageCaller {
       const refreshEvent = this.observeRefreshQueryEvent(event);
       const ownedResult = this.observeOwnedPageResultEvent(event);
       const currentKeyEvent = matchingKey(event.query.queryKey, this.queryKey);
-      if (
-        isRetiringQueryEvent(event) &&
-        (refreshEvent.external || (!refreshEvent.owned && !ownedResult))
-      ) {
+      if (isRetiringQueryEvent(event) && (refreshEvent.external || (!refreshEvent.owned && !ownedResult))) {
         if (currentKeyEvent) this.externalQueryMutation = event;
         if (refreshEvent.external || currentKeyEvent) this.retire();
       }
@@ -712,11 +705,7 @@ export class ThreadPageCaller {
     const query = event.query as object;
     if (!boundary.queries.has(query)) return false;
     if (boundary.kind === 'cancel') {
-      if (
-        event.type !== 'updated' ||
-        event.action?.type !== 'setState' ||
-        !this.source.isCancellationRevert(event)
-      )
+      if (event.type !== 'updated' || event.action?.type !== 'setState' || !this.source.isCancellationRevert(event))
         return false;
       const previous = boundary.cancelEvents.get(query);
       if (previous !== undefined) return previous === event;
@@ -1183,7 +1172,8 @@ export class ThreadPageCaller {
           !this.isRefreshContinuationCurrent({
             session: state.session,
             ...(state.requiresConnection ? { ticket: state.connectionGeneration } : {}),
-          }) || participants.some((participant) => !participant.canJoinRefreshBoundary(this, state))
+          }) ||
+          participants.some((participant) => !participant.canJoinRefreshBoundary(this, state))
         )
           throw new ThreadPageCallerRetired();
         const queries = new Set(
@@ -1244,7 +1234,13 @@ export class ThreadPageCaller {
       },
       recordOwnedPageCommit: (queryKey, result, committedData) => {
         const read = state.ownedPageRead;
-        if (!state.active || !read || !matchingKey(queryKey, read.queryKey) || !read.resultReady || read.result !== result)
+        if (
+          !state.active ||
+          !read ||
+          !matchingKey(queryKey, read.queryKey) ||
+          !read.resultReady ||
+          read.result !== result
+        )
           return;
         const query = this.source.queryStamp(queryKey);
         if (query && !read.query) read.query = query.query;

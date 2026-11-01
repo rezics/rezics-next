@@ -251,8 +251,7 @@ async function mountRoute({
   client.setQueryData(sessionQuery.queryKey, session);
   const knownSlug = rememberedThreadSlug(threadId);
   const expectedSlug = knownSlug === slugName ? undefined : slugName;
-  if (seedPage)
-    client.setQueryData(threadPageQuery(threadId, cursor, mode, expectedSlug).queryKey, seedPage);
+  if (seedPage) client.setQueryData(threadPageQuery(threadId, cursor, mode, expectedSlug).queryKey, seedPage);
   const parent = createRootRouteWithContext<{
     queryClient: InstanceType<typeof QueryClient>;
     credentialMode: Mode;
@@ -1627,7 +1626,9 @@ test('a nested default-shared success during the response notification retires t
     });
 
     await act(async () => {
-      pageReads[1]!.work.resolve(pageFor(threadId, { privateRead: true, body: 'Owned response before nested replacement' }));
+      pageReads[1]!.work.resolve(
+        pageFor(threadId, { privateRead: true, body: 'Owned response before nested replacement' }),
+      );
       await pageReads[1]!.work.promise;
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });

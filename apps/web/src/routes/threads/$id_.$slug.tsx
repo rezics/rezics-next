@@ -361,8 +361,9 @@ export function ThreadPage() {
     nextCaller.setRefreshGuard(() => routeIsCurrent() && (recovery || continuation.isCurrent()));
     try {
       if (recovery && !routeIsCurrent()) throw new ThreadPageCallerRetired();
-      await continuation.runOwnedCacheBoundary('cancel', () =>
-        queryClient.cancelQueries({ queryKey: ['thread-page', id] }),
+      await continuation.runOwnedCacheBoundary(
+        'cancel',
+        () => queryClient.cancelQueries({ queryKey: ['thread-page', id] }),
         boundaryPeers,
       );
       if (!current()) throw new Error('Thread reader changed');
