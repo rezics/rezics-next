@@ -147,7 +147,7 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
     pending !== null ||
     result?.kind === 'conflict' ||
     !currentRead ||
-    (owner && (!capture || !hasValidOwnerCsrfToken(capture.csrfToken)));
+    (!!owner && (!capture || !hasValidOwnerCsrfToken(capture.csrfToken)));
   async function refresh() {
     if (busy || pending) return;
     const admission = owner?.capture();
