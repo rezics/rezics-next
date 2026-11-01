@@ -108,12 +108,14 @@ test('the actual envelope names returned targets and carries the reader-prepared
       const call = new Request(input, init);
       calls.push(call);
       current.subject = 'different-if-reprepared';
-      if (new URL(call.url).searchParams.has('cursor'))
-        return Response.json({ code: 'stale_cursor' }, { status: 409 });
+      if (new URL(call.url).searchParams.has('cursor')) return Response.json({ code: 'stale_cursor' }, { status: 409 });
       return Response.json({
         follows: [
           {
-            targetId: 'stored-original', targetType: 'subject', state: 'following', reason: 'library',
+            targetId: 'stored-original',
+            targetType: 'subject',
+            state: 'following',
+            reason: 'library',
             target: { id: 'returned-canonical', type: 'Book', label: 'Actual supplied title' },
           },
           { targetId: 'hidden-space', targetType: 'space', state: 'following', reason: 'membership', target: null },
@@ -146,7 +148,9 @@ test('the actual envelope names returned targets and carries the reader-prepared
       { view: 'FULL', limit: '100', cursor: address },
       { view: 'FULL', limit: '100' },
     ]);
-    expect(calls.every((call) => call.headers.get('authorization') === 'Bearer opaque-not-a-decoded-identity')).toBe(true);
+    expect(calls.every((call) => call.headers.get('authorization') === 'Bearer opaque-not-a-decoded-identity')).toBe(
+      true,
+    );
     expect(calls.every((call) => call.cache === 'no-store' && call.redirect === 'manual')).toBe(true);
     const compatible = await actions.readMineFollowingPage({ data: { cursor: '' } });
     expect(Object.keys(compatible).sort()).toEqual(['follows', 'next', 'signedIn']);
@@ -159,38 +163,70 @@ test('the actual envelope names returned targets and carries the reader-prepared
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => { resolve = yes; });
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
   return { promise, resolve };
 }
-const loaded = (subject: string, cursor: string | null, title: string, next: string | null = `${subject}-next`): MineFollowingRead => ({
+const loaded = (
+  subject: string,
+  cursor: string | null,
+  title: string,
+  next: string | null = `${subject}-next`,
+): MineFollowingRead => ({
   subject,
   cursor,
   locale: 'en',
   page: {
     signedIn: true,
-    follows: [{
-      targetId: 'same-stored-target', targetType: 'subject', state: 'following',
-      reason: subject === 'A' ? 'library' : 'explicit', idempotencyKey: crypto.randomUUID(),
-      target: { id: `${subject}-canonical`, type: 'Book', types: ['Book'], label: title, typeLabel: `${subject} kind`, cover: null },
-    }],
+    follows: [
+      {
+        targetId: 'same-stored-target',
+        targetType: 'subject',
+        state: 'following',
+        reason: subject === 'A' ? 'library' : 'explicit',
+        idempotencyKey: crypto.randomUUID(),
+        target: {
+          id: `${subject}-canonical`,
+          type: 'Book',
+          types: ['Book'],
+          label: title,
+          typeLabel: `${subject} kind`,
+          cover: null,
+        },
+      },
+    ],
     next,
   },
 });
 
 test('the mounted default Following composition retires viewer, cursor and row lifetimes while current native removal remains usable', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: `${origin}/en/library/following`, width: 1280, height: 900 });
   window.document.documentElement.lang = 'en';
   const globals = {
-    window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, HTMLButtonElement: window.HTMLButtonElement,
-    Element: window.Element, Node: window.Node, NodeFilter: window.NodeFilter,
-    Document: window.Document, ShadowRoot: window.ShadowRoot, DocumentFragment: window.DocumentFragment,
-    MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
-    Event: window.Event, MouseEvent: window.MouseEvent, PointerEvent: window.PointerEvent,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
     scrollTo: window.scrollTo.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window), cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -198,7 +234,8 @@ test('the mounted default Following composition retires viewer, cursor and row l
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
   const { mineFollowingQuery } = await import('../src/library/mine-following-page');
   const { Route } = await import('../src/routes/library/following');
@@ -206,14 +243,19 @@ test('the mounted default Following composition retires viewer, cursor and row l
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale } = await import('../src/paraglide/runtime.js');
   const reads: (ReturnType<typeof deferred<MineFollowingRead>> & { cursor?: string })[] = [];
-  const writes: (ReturnType<typeof deferred<FollowWriteResult>> & { input: FollowWriteInput; csrf: string | null })[] = [];
+  const writes: (ReturnType<typeof deferred<FollowWriteResult>> & { input: FollowWriteInput; csrf: string | null })[] =
+    [];
   const read = spyOn(actions, 'readMineFollowingForViewer').mockImplementation(({ data }) => {
     const call = { ...deferred<MineFollowingRead>(), cursor: data.cursor };
     reads.push(call);
     return call.promise;
   });
   const write = spyOn(followActions, 'setFollow').mockImplementation(({ data, headers }) => {
-    const call = { ...deferred<FollowWriteResult>(), input: structuredClone(data), csrf: new Headers(headers).get('X-CSRF-Token') };
+    const call = {
+      ...deferred<FollowWriteResult>(),
+      input: structuredClone(data),
+      csrf: new Headers(headers).get('X-CSRF-Token'),
+    };
     writes.push(call);
     return call.promise;
   });
@@ -237,14 +279,28 @@ test('the mounted default Following composition retires viewer, cursor and row l
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
-  const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) => act(async () => { call.resolve(result); await tick(); });
+  const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) =>
+    act(async () => {
+      call.resolve(result);
+      await tick();
+    });
   const key = (cursor: string | null) => mineFollowingQuery('B', cursor, getLocale()).queryKey;
-  const refetch = (cursor: string | null) => act(async () => { void client.refetchQueries({ queryKey: key(cursor) }); await tick(); });
+  const refetch = (cursor: string | null) =>
+    act(async () => {
+      void client.refetchQueries({ queryKey: key(cursor) });
+      await tick();
+    });
   const remove = async () => {
-    await act(async () => { host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click(); await tick(); });
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+      await tick();
+    });
     const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
     expect(action?.textContent).toBe(m.library_follow_unfollow());
-    await act(async () => { action!.click(); await tick(); });
+    await act(async () => {
+      action!.click();
+      await tick();
+    });
   };
   const expectRetired = () => {
     expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
@@ -254,13 +310,23 @@ test('the mounted default Following composition retires viewer, cursor and row l
   };
   try {
     await router.load();
-    await act(async () => { root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); await tick(); });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+      await tick();
+    });
     expect(host.textContent).toContain('A private title');
     expect(reads).toHaveLength(1);
     await remove();
     const aRead = reads[0]!;
     const aRemoval = writes[0]!;
-    await act(async () => { client.setQueryData(sessionQuery.queryKey, viewer('B')); await tick(); });
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, viewer('B'));
+      await tick();
+    });
     expectRetired();
     expect(host.textContent).not.toContain('A private title');
     expect(host.textContent).not.toContain(m.library_follow_reason_library());
@@ -272,7 +338,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await remove();
     const uncertain = writes[1]!;
     expect(uncertain.input.idempotencyKey).toBe(b.page.follows[0]!.idempotencyKey);
-    await act(async () => { client.setQueryData(sessionQuery.queryKey, viewer('B', 'csrf-rotated')); await tick(); });
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, viewer('B', 'csrf-rotated'));
+      await tick();
+    });
     await refetch(null);
     await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
     expect(host.querySelector('[data-slot="follow-control"]')?.getAttribute('aria-busy')).toBe('true');
@@ -309,9 +378,15 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).toContain('B replacement row');
     expect(host.textContent).not.toContain(m.library_follow_removed());
 
-    await act(async () => { client.setQueryData(exposureQuery.queryKey, []); await tick(); });
+    await act(async () => {
+      client.setQueryData(exposureQuery.queryKey, []);
+      await tick();
+    });
     expectRetired();
-    await act(async () => { client.setQueryData(exposureQuery.queryKey, ['personal_library']); await tick(); });
+    await act(async () => {
+      client.setQueryData(exposureQuery.queryKey, ['personal_library']);
+      await tick();
+    });
     await settle(reads.at(-1)!, loaded('B', 'current/cursor+', 'B replacement row', 'bounded-more'));
     await remove();
     await settle(writes.at(-1)!, { ok: true, following: false });
@@ -321,7 +396,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.querySelector('[data-slot="empty"] a')?.getAttribute('href')).toBe('/en/search');
     const more = host.querySelector<HTMLAnchorElement>('nav a');
     expect(new URL(more!.href).searchParams.get('cursor')).toBe('bounded-more');
-    await act(async () => { client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null }); await tick(); });
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null });
+      await tick();
+    });
     expectRetired();
   } finally {
     await act(async () => root.unmount());
