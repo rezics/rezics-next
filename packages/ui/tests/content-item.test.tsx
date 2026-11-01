@@ -4,6 +4,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ContentItem } from '@rezics/ui/content-item';
 import { ShelfList, ShelfListRow } from '@rezics/ui/shelf-list';
 
+function assertPrimaryAnchorHasNoInteractiveDescendants(anchorMarkup: string) {
+  const openingTag = anchorMarkup.match(/^<a\b[^>]*data-slot="list-row-link"[^>]*>/)?.[0];
+  expect(openingTag).toBeDefined();
+  const closingTagStart = anchorMarkup.lastIndexOf('</a>');
+  expect(closingTagStart).toBeGreaterThanOrEqual(openingTag!.length);
+  expect(anchorMarkup.slice(openingTag!.length, closingTagStart)).not.toMatch(/<(?:a|button|input)\b/);
+}
+
 test('ContentItem composes its slots as one named heading, one stretched link and raised independent controls', () => {
   const title = 'A translated title';
   const html = renderToStaticMarkup(
@@ -54,7 +62,7 @@ test('ContentItem composes its slots as one named heading, one stretched link an
 
   const primaryLink = html.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
   expect(primaryLink).toBeDefined();
-  expect(primaryLink).not.toMatch(/<(?:a|button|input)\b/);
+  assertPrimaryAnchorHasNoInteractiveDescendants(primaryLink!);
 
   const slotOrder = ['visual', 'context', 'title', 'metadata', 'preview', 'state', 'actions', 'trailing'].map((slot) =>
     html.indexOf(`data-content-item-slot="${slot}"`),
@@ -119,7 +127,7 @@ test('ContentItem names supplied primary summaries without replacing the visible
   const summaryLink = primaryLink(summaryRow);
   expect(summaryLink).toContain(`aria-label="${summary}"`);
   expect(summaryLink).not.toContain('aria-labelledby=');
-  expect(summaryLink).not.toMatch(/<(?:a|button|input)\b/);
+  assertPrimaryAnchorHasNoInteractiveDescendants(summaryLink);
   expect(summaryRow).toContain('<h2');
   expect(summaryRow).toContain('A reply from Momo');
   expect(summaryRow).toContain('href="/people/momo"');
@@ -177,7 +185,7 @@ test('ShelfListRow preserves its selection controls, independent status link, co
   expect(html).toContain('style="aspect-ratio:5 / 7"');
   const primaryLink = html.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
   expect(primaryLink).toBeDefined();
-  expect(primaryLink).not.toMatch(/<(?:a|button|input)\b/);
+  assertPrimaryAnchorHasNoInteractiveDescendants(primaryLink!);
   expect(html).toContain('Progress unknown');
   expect(html).not.toContain('aria-label="Progress unknown"');
   expect(html).not.toContain('style="width:0%"');

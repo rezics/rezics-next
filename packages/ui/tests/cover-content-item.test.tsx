@@ -17,6 +17,17 @@ const qualifiedCredit: ReactNode = createElement(
   createElement('li', { key: 'character' }, 'Character: ', createElement('a', { href: '/credits/character' }, 'Mira')),
 );
 
+function assertPrimaryAnchorHasNoInteractiveDescendants(
+  anchorMarkup: string,
+  slot: 'cover-card-title' | 'list-row-link',
+) {
+  const openingTag = anchorMarkup.match(new RegExp(`^<a\\b[^>]*data-slot="${slot}"[^>]*>`))?.[0];
+  expect(openingTag).toBeDefined();
+  const closingTagStart = anchorMarkup.lastIndexOf('</a>');
+  expect(closingTagStart).toBeGreaterThanOrEqual(openingTag!.length);
+  expect(anchorMarkup.slice(openingTag!.length, closingTagStart)).not.toMatch(/<(?:a|button|input)\b/);
+}
+
 test('CoverCard adapts shared tile semantics in grids and rows while preserving ContentItem row behavior', () => {
   const html = renderToStaticMarkup(
     createElement(
@@ -112,5 +123,88 @@ test('CoverCard adapts shared tile semantics in grids and rows while preserving 
   expect(row).toContain('relative z-10');
   const rowPrimary = row.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
   expect(rowPrimary).toBeDefined();
-  expect(rowPrimary).not.toMatch(/<(?:a|button|input)\b/);
+  assertPrimaryAnchorHasNoInteractiveDescendants(rowPrimary!, 'list-row-link');
+});
+
+test(
+  'Nonselectable qualified credits stretch the existing primary destination while qualifiers and controls remain independent; descendant assertions exclude only their actual root',
+  () => {
+    const credit = createElement(
+      'ul',
+      null,
+      createElement('li', { key: 'source' }, 'Adapted from ', createElement('a', { href: '/sources/book' }, 'Source book')),
+      createElement('li', { key: 'writer' }, 'Writer: ', createElement('a', { href: '/credits/writer' }, 'A. Author')),
+      createElement('li', { key: 'character' }, 'Character: ', createElement('a', { href: '/credits/character' }, 'Mira')),
+    );
+    const html = renderToStaticMarkup(
+      createElement(CoverCard, {
+        href: '/works/credit',
+        link: RouterLink,
+        title: 'Qualified credit book',
+        cover,
+        essentialCredit: credit,
+        status: { label: 'In library', href: '/library/credit' },
+        onSelect: () => {},
+        menuEntries: [{ type: 'item', label: 'Edit credit', onSelect: () => {} }],
+      }),
+    );
+
+    const primary = html.match(/<a\b[^>]*data-slot="cover-card-title"[^>]*>[\s\S]*?<\/a>/)?.[0];
+    expect(primary).toBeDefined();
+    expect(html.match(/data-slot="cover-card-title"/g)).toHaveLength(1);
+    expect(primary).toContain('href="/works/credit"');
+    expect(primary).toContain('data-router-link="true"');
+    expect(primary).toContain("after:absolute after:inset-0 after:z-[1]");
+    assertPrimaryAnchorHasNoInteractiveDescendants(primary!, 'cover-card-title');
+
+    const creditControl = html.match(
+      /<div\b(?=[^>]*data-slot="list-row-control")(?=[^>]*class="[^"]*\bz-20\b[^"]*")[^>]*>[\s\S]*?data-slot="cover-card-essential-credit"[\s\S]*?<\/div>/,
+    )?.[0];
+    expect(creditControl).toBeDefined();
+    expect(creditControl).toContain('href="/sources/book"');
+    expect(creditControl).toContain('href="/credits/writer"');
+    expect(creditControl).toContain('href="/credits/character"');
+
+    const raisedControls = [
+      ...html.matchAll(
+        /<div\b(?=[^>]*data-slot="list-row-control")(?=[^>]*class="[^"]*\bz-20\b[^"]*")[^>]*>[\s\S]*?<\/div>/g,
+      ),
+    ].map(([control]) => control);
+    expect(raisedControls.some((control) => control.includes('href="/library/credit"'))).toBe(true);
+
+    const selection = html.match(
+      /<button\b(?=[^>]*role="checkbox")(?=[^>]*class="[^"]*\bz-20\b[^"]*")[^>]*>/,
+    )?.[0];
+    expect(selection).toContain('aria-label="Qualified credit book"');
+
+    const menu = html.match(
+      /<span\b(?=[^>]*data-slot="cover-card-actions")(?=[^>]*class="[^"]*\bz-20\b[^"]*")[^>]*>[\s\S]*?<\/span>/,
+    )?.[0];
+    expect(menu).toContain('aria-label="More actions for Qualified credit book"');
+  },
+);
+
+test('CoverCard keeps selectable and destination-free qualified titles out of the primary link layer', () => {
+  const selectable = renderToStaticMarkup(
+    createElement(CoverCard, {
+      href: '/works/selectable-credit',
+      title: 'Selectable credit book',
+      cover,
+      essentialCredit: qualifiedCredit,
+      selectable: true,
+      selected: true,
+    }),
+  );
+  expect(selectable).toContain('aria-pressed="true"');
+  expect(selectable).not.toMatch(/<a\b[^>]*href="\/works\/selectable-credit"/);
+
+  const noDestination = renderToStaticMarkup(
+    createElement(CoverCard, {
+      title: 'Credit without a destination',
+      cover,
+      essentialCredit: qualifiedCredit,
+    }),
+  );
+  expect(noDestination).toContain('Credit without a destination');
+  expect(noDestination).not.toMatch(/<a\b[^>]*data-slot="cover-card-title"/);
 });

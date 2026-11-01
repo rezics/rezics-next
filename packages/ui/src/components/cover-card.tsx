@@ -214,7 +214,6 @@ export function CoverCard({
               title={small ? title : undefined}
               onClick={onClick}
               data-slot="cover-card-title"
-              stretch={!credit}
               className={`${titleClass} outline-none ${credit ? 'underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring' : ''}`}
             >
               {title}
