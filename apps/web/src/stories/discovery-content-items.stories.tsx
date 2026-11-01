@@ -50,7 +50,7 @@ export const MixedAccountAndCatalogue: Story = {
       `[data-discovery-account="${discoveryExample.hits[1]!.key.id}"]`,
     )!;
     const title = within(account).getByRole('heading', { name: 'Mira', level: 2 });
-    const accountLink = within(account).getByRole('link', { name: 'Mira', exact: true });
+    const accountLink = within(account).getByRole('link', { name: 'Mira' });
     await expect(title).toBeVisible();
     await expect(accountLink).toHaveAttribute('href', `/${getLocale()}/@mira`);
 
@@ -65,6 +65,6 @@ export const MixedAccountAndCatalogue: Story = {
     )!;
     await expect(within(handleless).getByRole('heading', { name: 'Mira Reading Room', level: 2 })).toBeVisible();
     await expect(within(handleless).queryByRole('link')).toBeNull();
-    await expect(canvas.getByRole('link', { name: 'Mira’s Atlas', exact: true })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Mira’s Atlas' })).toBeVisible();
   },
 };

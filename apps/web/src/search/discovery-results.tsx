@@ -23,7 +23,7 @@ function AccountRow({ account, kind, locale }: { account: AccountDiscoverySummar
     <ContentItem
       data-discovery-account={account.id}
       title={title}
-      href={href}
+      {...(href !== undefined ? { href } : {})}
       visual={
         <div className="w-[72px] sm:w-24">
           <Cover
