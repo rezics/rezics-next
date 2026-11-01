@@ -31,10 +31,13 @@ function retire(client: QueryClient, entry: EditorEntry) {
 }
 
 export function useProfileEditor() {
-  const session = useSession();
+  useSession();
   const client = useQueryClient();
   const sessionState = client.getQueryState(sessionQuery.queryKey);
-  const observed = sessionState?.status === 'error' ? { state: 'unavailable', csrfToken: null } : session;
+  const observed =
+    sessionState?.status === 'success'
+      ? sessionState.data
+      : { state: sessionState?.status === 'error' ? 'unavailable' : 'unknown', csrfToken: null };
   let entry = editors.get(client);
   if (!entry || !entry.owner.matches(observed)) {
     if (entry) retire(client, entry);
@@ -52,7 +55,7 @@ export function useProfileEditor() {
         if (!current()) throw new Error('Profile unavailable');
         const profile = profileReadValue(await readProfile());
         if (!current()) throw new Error('Profile unavailable');
-        if (profile.accountId !== owner.actor?.subject) throw new Error('Profile account changed');
+        if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
         return profile;
       };
       return {
@@ -63,10 +66,11 @@ export function useProfileEditor() {
         },
         save: async (attempt) => {
           await client.cancelQueries({ queryKey: owner.key, exact: true });
-          if (!current()) throw new Error('Profile unavailable');
+          if (!current() || !owner.canWrite()) throw new Error('Profile unavailable');
           // Replay belongs to these original credentials, never an imperative transport's newer token.
           return saveProfile({ data: attempt, headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' } });
         },
+        canWrite: () => current() && owner.canWrite(),
         confirmed: (profile) => {
           if (current()) client.setQueryData(owner.key, profile);
         },
@@ -77,7 +81,8 @@ export function useProfileEditor() {
   }
   const { owner } = entry;
   const editor = owner.editor;
-  const writable = !!owner.actor && owner.isCurrent();
+  const readable = owner.canRead();
+  const writable = owner.canWrite();
   const isCurrent = useCallback(() => {
     const query = client.getQueryState(sessionQuery.queryKey);
     return (
@@ -88,14 +93,19 @@ export function useProfileEditor() {
     entry.users++;
     if (!entry.release) {
       const profileHash = hashKey(owner.key);
+      const sessionHash = hashKey(sessionQuery.queryKey);
       entry.release = client.getQueryCache().subscribe((event) => {
         if (event.query.queryHash === profileHash) {
+          if (event.type === 'removed') {
+            if (editors.get(client) === entry) retire(client, entry);
+            return;
+          }
           // Observe delivered query failures, never a cancelled request's later transport completion.
           if (event.type === 'updated' && event.action.type === 'error' && event.query.state.status === 'error')
             readUnavailable(entry, event.query.state.error);
           return;
         }
-        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        if (event.query.queryHash !== sessionHash) return;
         const query = client.getQueryState(sessionQuery.queryKey);
         if (query?.status !== 'success' || !owner.matches(query.data)) retire(client, entry);
       });
@@ -115,17 +125,17 @@ export function useProfileEditor() {
       if (!isCurrent()) throw new Error('Profile unavailable');
       const profile = profileReadValue(await readProfile());
       if (!isCurrent()) throw new Error('Profile unavailable');
-      if (profile.accountId !== owner.actor?.subject) throw new Error('Profile account changed');
+      if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
       return profile;
     },
-    enabled: personalRead.enabled && writable,
+    enabled: personalRead.enabled && readable,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
   useLayoutEffect(() => {
     if (query.isError) readUnavailable(entry, query.error);
-    else if (writable && query.data) editor.receive(query.data);
-  }, [editor, entry, query.data, query.isError, query.error, writable]);
-  return { editor, writable, isCurrent };
+    else if (readable && query.data) editor.receive(query.data);
+  }, [editor, entry, query.data, query.isError, query.error, readable]);
+  return { editor, readable, writable, isCurrent };
 }

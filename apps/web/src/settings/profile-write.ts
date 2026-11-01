@@ -21,6 +21,7 @@ export type ProfileEditorIO = {
   save: (attempt: ProfileAttempt) => Promise<ProfileSaveResult>;
   confirmed?: (profile: ProfileValues) => void;
   isCurrent?: () => boolean;
+  canWrite?: () => boolean;
 };
 export type ProfileEditorState = {
   known: ProfileValues | null;
@@ -124,6 +125,10 @@ export class ProfileEditor {
     if (this.active && this.io.isCurrent && !this.io.isCurrent()) this.retire();
     return this.active;
   }
+  /** Keep reader access independent from the current-token gate used by commands and drafts. */
+  canWrite() {
+    return this.current() && (this.io.canWrite?.() ?? true);
+  }
   /** End this observation lifetime; an old promise must never revive it or publish confirmed data. */
   retire() {
     if (!this.active) return;
@@ -173,7 +178,7 @@ export class ProfileEditor {
     });
   }
   edit(patch: Partial<ProfileValues>) {
-    if (!this.current() || !this.state.draft || this.state.readAuthority !== 'allowed') return;
+    if (!this.canWrite() || !this.state.draft || this.state.readAuthority !== 'allowed') return;
     this.update({
       draft: { ...this.state.draft, ...patch },
       phase: this.state.phase === 'saved' ? 'idle' : this.state.phase,
@@ -184,7 +189,7 @@ export class ProfileEditor {
     this.update({ phase: this.state.attempt ? 'uncertain' : 'idle' });
   }
   async submit(scope: ProfileScope) {
-    if (!this.current() || this.state.readAuthority !== 'allowed') return;
+    if (!this.canWrite() || this.state.readAuthority !== 'allowed') return;
     const { known, draft, attempt, phase } = this.state;
     if (this.pending || !known || !draft || attempt || ['saving', 'reloading', 'unavailable'].includes(phase)) return;
     const after: ProfileValues =
@@ -212,7 +217,7 @@ export class ProfileEditor {
     await this.send(false);
   }
   async retry() {
-    if (!this.current() || this.pending || !this.state.attempt || ['saving', 'reloading'].includes(this.state.phase))
+    if (!this.canWrite() || this.pending || !this.state.attempt || ['saving', 'reloading'].includes(this.state.phase))
       return;
     await this.send(true);
   }
@@ -326,6 +331,12 @@ export class ProfileEditor {
 
 type ProfileSession = { state: string; subject?: string | null; csrfToken: string | null };
 type ProfileActor = { subject: string; incarnation: string };
+type ProfileReader = { subject: string; csrfToken: string | null };
+function profileReader(session: ProfileSession | undefined): ProfileReader | null {
+  return session?.state === 'signed-in' && session.subject
+    ? { subject: session.subject, csrfToken: session.csrfToken }
+    : null;
+}
 function profileActor(session: ProfileSession | undefined): ProfileActor | null {
   return session?.state === 'signed-in' && session.subject && session.csrfToken
     ? { subject: session.subject, incarnation: session.csrfToken }
@@ -334,34 +345,47 @@ function profileActor(session: ProfileSession | undefined): ProfileActor | null 
 
 /** Exactly one observation, with no history to reuse after an interrupted or replaced session. */
 export class ProfileEditorSession {
+  readonly reader: ProfileReader | null;
   readonly actor: ProfileActor | null;
   readonly key: readonly ['settings', 'profile', string | null, string | null, string];
   readonly editor: ProfileEditor;
+  private readonly observedState: string;
+  private readonly observedSubject: string | null | undefined;
+  private readonly observedCsrfToken: string | null;
   private active = true;
   constructor(session: ProfileSession, createIO: (owner: ProfileEditorSession) => ProfileEditorIO) {
+    this.observedState = session.state;
+    this.observedSubject = session.subject;
+    this.observedCsrfToken = session.csrfToken;
+    this.reader = profileReader(session);
     this.actor = profileActor(session);
-    // routes.ts creates a fresh CSRF token per session; store.ts retains it across credential refreshes.
-    this.key = [
-      'settings',
-      'profile',
-      this.actor?.subject ?? null,
-      this.actor?.incarnation ?? null,
-      crypto.randomUUID(),
-    ];
+    // Keep the original CSRF identity in memory for writes; never put it in a query key.
+    this.key = ['settings', 'profile', this.reader?.subject ?? null, null, crypto.randomUUID()];
     const io = createIO(this);
-    this.editor = new ProfileEditor({ ...io, isCurrent: () => this.isCurrent() && (io.isCurrent?.() ?? true) });
-    if (!this.actor) this.editor.unavailable();
+    this.editor = new ProfileEditor({
+      ...io,
+      read: async () => {
+        if (!this.canRead()) throw new Error('Profile unavailable');
+        return io.read();
+      },
+      isCurrent: () => this.isActive() && (io.isCurrent?.() ?? true),
+      canWrite: () => this.canWrite() && (io.canWrite?.() ?? true),
+    });
+    if (!this.reader) this.editor.unavailable();
   }
   matches(session: ProfileSession | undefined) {
-    const actor = profileActor(session);
     return (
       this.active &&
-      (!this.actor || this.editor.isActive()) &&
-      this.actor?.subject === actor?.subject &&
-      this.actor?.incarnation === actor?.incarnation
+      this.editor.isActive() &&
+      this.observedState === session?.state &&
+      this.observedSubject === session?.subject &&
+      this.observedCsrfToken === session?.csrfToken
     );
   }
-  isCurrent = () => this.active && !!this.actor && this.editor.isActive();
+  isCurrent = () => this.active && !!this.reader && this.editor.isActive();
+  canRead = () => this.active && !!this.reader && this.editor.isActive();
+  canWrite = () => this.active && !!this.actor && this.editor.isActive();
+  private isActive = () => this.active && this.editor.isActive();
   retire() {
     this.active = false;
     this.editor.retire();

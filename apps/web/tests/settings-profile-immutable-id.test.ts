@@ -175,22 +175,42 @@ test('A new or unready actor never receives a prior private profile and an expli
   ]) {
     expect(original.matches(session)).toBe(false);
     let reads = 0;
+    let writes = 0;
     const next = new ProfileEditorSession(session, () => ({
       read: async () => {
         reads++;
         return source();
       },
-      save: async (attempt) => ({ ok: true, profile: attempt.after }),
+      save: async (attempt) => {
+        writes++;
+        return { ok: true, profile: attempt.after };
+      },
     }));
     expect(next.key).not.toEqual(original.key);
     expect(next.editor.snapshot().known).toBeNull();
     expect(next.editor.snapshot().draft).toBeNull();
     expect(next.editor.snapshot().attempt).toBeNull();
-    expect(reads).toBe(0);
-    if (!next.actor) {
+    if (session.state === 'signed-in' && session.subject === accountId && session.csrfToken === null) {
+      expect(next.reader?.subject).toBe(accountId);
+      expect(next.actor).toBeNull();
+      expect(next.canRead()).toBe(true);
+      expect(next.canWrite()).toBe(false);
+      await next.editor.reload();
+      expect(reads).toBe(1);
+      expect(next.editor.snapshot().known).toEqual(source());
+      next.editor.edit({ biography: 'Read-only mutation attempt' });
+      await next.editor.submit('profile');
+      await next.editor.retry();
+      expect(next.editor.snapshot().draft).toEqual(source());
+      expect(writes).toBe(0);
+    } else {
+      expect(reads).toBe(0);
+    }
+    if (!next.reader) {
       await next.editor.reload();
       await next.editor.submit('profile');
       expect(reads).toBe(0);
+      expect(writes).toBe(0);
     }
     next.retire();
   }
@@ -263,6 +283,15 @@ test('A new or unready actor never receives a prior private profile and an expli
     const hidden = renderToStaticMarkup(createElement(ProfileCard, { editor, writable: false }));
     expect(hidden).not.toContain('Retained unsent words');
     expect(hidden).not.toContain('<input');
+    const explicitlyReadable = renderToStaticMarkup(
+      createElement('div', null,
+        createElement(ProfileCard, { editor, writable: false, readable: true }),
+        createElement(PublicViewsCard, { editor, writable: false, readable: true }),
+      ),
+    );
+    expect(explicitlyReadable).toContain('Retained unsent words');
+    expect(explicitlyReadable).toContain('role="switch"');
+    expect(explicitlyReadable).toContain('disabled=""');
     editor.retire();
   }
 });

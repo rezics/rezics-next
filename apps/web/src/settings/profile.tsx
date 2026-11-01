@@ -36,13 +36,18 @@ export function ProfileFeedback({
   editor,
   scope,
   writable = true,
+  readable,
+  showReaderReload = false,
 }: {
   editor: ProfileEditor;
   scope: ProfileScope;
   writable?: boolean;
+  readable?: boolean;
+  showReaderReload?: boolean;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const waiting = usePreferenceRetry(state.failure);
+  const canRead = readable ?? writable;
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const denied = state.readAuthority === 'denied';
   const unavailable = state.readStatus === 'failed' || state.phase === 'unavailable' || denied;
@@ -106,7 +111,7 @@ export function ProfileFeedback({
                 type="button"
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                disabled={!writable || busy || waiting}
+                disabled={!canRead || busy || (writable && waiting)}
                 onClick={() => void editor.reload()}
               >
                 {m.settings_profile_reload_current()}
@@ -126,13 +131,24 @@ export function ProfileFeedback({
           </AlertDescription>
         </Alert>
       ) : null}
+      {showReaderReload && canRead && !writable && !unavailable && !failed ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+          disabled={busy}
+          onClick={() => void editor.reload()}
+        >
+          {m.settings_profile_reload_current()}
+        </Button>
+      ) : null}
     </div>
   );
 }
 
 export function ProfileSection() {
   const location = useLocation();
-  const { editor, writable, isCurrent } = useProfileEditor();
+  const { editor, readable, writable, isCurrent } = useProfileEditor();
   const previewActive = new URL(location.publicHref, 'https://rezics.local').hash === '#profile';
   return (
     <ProfileNavigation editor={editor} writable={writable} isCurrent={isCurrent}>
@@ -140,6 +156,7 @@ export function ProfileSection() {
         key={writable ? 'signed-in' : 'unavailable'}
         editor={editor}
         writable={writable}
+        readable={readable}
         previewActive={previewActive}
       />
     </ProfileNavigation>
@@ -149,19 +166,22 @@ export function ProfileSection() {
 export function ProfileCard({
   editor,
   writable = true,
+  readable,
   previewActive = false,
   avatarUpload,
   avatarResume,
 }: {
   editor: ProfileEditor;
   writable?: boolean;
+  readable?: boolean;
   previewActive?: boolean;
   avatarUpload?: AvatarUpload;
   avatarResume?: AvatarResume;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const waiting = usePreferenceRetry(state.failure);
-  const profile = writable && state.readAuthority === 'allowed' ? state.draft : null;
+  const canRead = readable ?? writable;
+  const profile = canRead && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
   const [validationAttempt, setValidationAttempt] = useState(0);
   const controls = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLDivElement | null>>({});
@@ -225,7 +245,7 @@ export function ProfileCard({
         <CardDescription>{m.settings_profile_save_help()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ProfileFeedback editor={editor} scope="profile" writable={writable} />
+        <ProfileFeedback editor={editor} scope="profile" writable={writable} readable={canRead} />
         <div role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
           {changed && !closed && !busy && !state.attempt && state.phase !== 'uncertain'
             ? m.settings_profile_unsaved()
@@ -372,7 +392,7 @@ export function ProfileCard({
                 type="button"
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                disabled={!writable || busy || waiting}
+                disabled={!canRead || busy || (writable && waiting)}
                 onClick={() => void editor.reload()}
               >
                 {m.settings_profile_reload_current()}
