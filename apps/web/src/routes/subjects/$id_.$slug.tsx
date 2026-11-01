@@ -282,7 +282,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(page.page), getLocale())),
       context.queryClient.ensureQueryData(subjectReactionsQuery(params.id, getLocale())),
       Promise.all(
-        RATING_SOURCES.map((source) => context.queryClient.ensureQueryData(subjectRatingQuery(params.id, getLocale(), source))),
+        RATING_SOURCES.map((source) =>
+          context.queryClient.ensureQueryData(subjectRatingQuery(params.id, getLocale(), source)),
+        ),
       ).then(([question, figure, global, statistics]): RatingSources => ({
         question: question!.question,
         figure: figure!.figure,
@@ -313,7 +315,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           realm: loaderData.realm,
           ...(loaderData.frame.label ? { typeLabel: loaderData.frame.label } : {}),
           ...(loaderData.frame.schemaOrgType ? { schemaOrgType: loaderData.frame.schemaOrgType } : {}),
-          ...(loaderData.ratings.figure.kind === 'ready' ? { ratings: { figure: loaderData.ratings.figure.value } } : {}),
+          ...(loaderData.ratings.figure.kind === 'ready'
+            ? { ratings: { figure: loaderData.ratings.figure.value } }
+            : {}),
         })
       : { meta: [{ title: m.not_found_heading() }] },
   component: SubjectRoute,
@@ -414,64 +418,74 @@ export function SubjectOverview({
       }}
     >
       <RatingsRecoveryContext.Provider value={retryRatingSource}>
-      <RatingPopulationsContext.Provider value={ratings.question.kind === 'ready' ?
-        <SubjectRatingPopulations subjectId={id} question={ratings.question.value} locale={locale}
-          session={browserSession} enabled={currentReader} /> : null}>
-      <RatingsContext.Provider value={ratings}>
-        <SubjectPage
-          page={page}
-          curation={realm ? undefined : <SubjectCandidateCuration id={id} locale={locale} />}
-          locale={getLocale()}
-          messages={subjectPageMessages()}
-          reader={reader}
-          {...(frame.label ? { typeLabel: frame.label } : {})}
-          {...(frame.ratio ? { ratio: frame.ratio } : {})}
-          relations={relations}
-          link={SubjectLink}
-          tabs={tabs}
-          tabLabels={viewTabLabels()}
-          invitation={m.subject_empty()}
-          {...(nonce !== undefined ? { nonce } : {})}
-          renderJsonLd={false}
-          actions={(subject) => (
-            <SubjectHeaderActions
-              id={subject.id}
-              reactions={reactions}
-              signedIn={session === 'signed-in'}
-              personalReady={session !== 'signed-in' || subjectReaction.ready}
-              reactionOrigin={subjectReaction.origin}
-              onPersonalChange={async (kind) => {
-                if (!subjectReaction.origin.isCurrent()) return;
-                subjectReaction.applyMutation(kind);
-                if (!subjectReaction.origin.isCurrent()) return;
-                await queryClient.invalidateQueries({ queryKey: ['subject-reactions', id, locale] });
-              }}
-              returnTo={returnTo}
-              verification={verification}
-            >
-              <SubjectLibrarySlot
-                subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
-                locale={subject.locale}
-                data={
-                  library ?? {
-                    session: 'signed-out',
-                    csrfToken: null,
-                    entryAvailable: false,
-                    entry: null,
-                    publicCollections: null,
-                    publicCollectionsNext: null,
-                    collectionsLoaded: false,
-                    collections: null,
-                    labels: null,
-                  }
-                }
-                {...(library && undoKey ? { data: { ...library, labelUndoKey: undoKey } } : {})}
+        <RatingPopulationsContext.Provider
+          value={
+            ratings.question.kind === 'ready' ? (
+              <SubjectRatingPopulations
+                subjectId={id}
+                question={ratings.question.value}
+                locale={locale}
+                session={browserSession}
+                enabled={currentReader}
               />
-            </SubjectHeaderActions>
-          )}
-        />
-      </RatingsContext.Provider>
-      </RatingPopulationsContext.Provider>
+            ) : null
+          }
+        >
+          <RatingsContext.Provider value={ratings}>
+            <SubjectPage
+              page={page}
+              curation={realm ? undefined : <SubjectCandidateCuration id={id} locale={locale} />}
+              locale={getLocale()}
+              messages={subjectPageMessages()}
+              reader={reader}
+              {...(frame.label ? { typeLabel: frame.label } : {})}
+              {...(frame.ratio ? { ratio: frame.ratio } : {})}
+              relations={relations}
+              link={SubjectLink}
+              tabs={tabs}
+              tabLabels={viewTabLabels()}
+              invitation={m.subject_empty()}
+              {...(nonce !== undefined ? { nonce } : {})}
+              renderJsonLd={false}
+              actions={(subject) => (
+                <SubjectHeaderActions
+                  id={subject.id}
+                  reactions={reactions}
+                  signedIn={session === 'signed-in'}
+                  personalReady={session !== 'signed-in' || subjectReaction.ready}
+                  reactionOrigin={subjectReaction.origin}
+                  onPersonalChange={async (kind) => {
+                    if (!subjectReaction.origin.isCurrent()) return;
+                    subjectReaction.applyMutation(kind);
+                    if (!subjectReaction.origin.isCurrent()) return;
+                    await queryClient.invalidateQueries({ queryKey: ['subject-reactions', id, locale] });
+                  }}
+                  returnTo={returnTo}
+                  verification={verification}
+                >
+                  <SubjectLibrarySlot
+                    subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
+                    locale={subject.locale}
+                    data={
+                      library ?? {
+                        session: 'signed-out',
+                        csrfToken: null,
+                        entryAvailable: false,
+                        entry: null,
+                        publicCollections: null,
+                        publicCollectionsNext: null,
+                        collectionsLoaded: false,
+                        collections: null,
+                        labels: null,
+                      }
+                    }
+                    {...(library && undoKey ? { data: { ...library, labelUndoKey: undoKey } } : {})}
+                  />
+                </SubjectHeaderActions>
+              )}
+            />
+          </RatingsContext.Provider>
+        </RatingPopulationsContext.Provider>
       </RatingsRecoveryContext.Provider>
     </RatingControlContext.Provider>
   );

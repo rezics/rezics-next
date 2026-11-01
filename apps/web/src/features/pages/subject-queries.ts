@@ -605,7 +605,9 @@ export const subjectRatingQuery = (id: string, locale: string, source?: RatingSo
     queryKey: ['subject-rating', id, locale, ...(source ? [source] : [])] as const,
     retry: false,
     queryFn: () =>
-      readSubjectRatings({ data: { id, locale, ...(source ? { source } : {}) } }).catch(() => failedRatingSources(source)),
+      readSubjectRatings({ data: { id, locale, ...(source ? { source } : {}) } }).catch(() =>
+        failedRatingSources(source),
+      ),
   });
 
 export type SubjectReactionQueryScope = {

@@ -369,13 +369,7 @@ export const GlobalScore: Story = {
 export const RealmsAndOwnVote: Story = {
   name: 'Realms and own vote',
   play: pageReady,
-  render: () => (
-    <PageStory
-      visitor="Signed In"
-      path={pagePaths.subject}
-      ratingsFixture="subject-ratings-realms"
-    />
-  ),
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-realms" />,
 };
 
 export const BelowThreshold: Story = {
@@ -564,7 +558,9 @@ export const RatingSourceFailure: Story = {
     await expect(await canvas.findByText(m.rating_population_choose())).toBeVisible();
     await expect(context.canvasElement.querySelector('[data-source="statistics"][data-state="failed"]')).not.toBeNull();
   },
-  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-statistics-failed" />,
+  render: () => (
+    <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-statistics-failed" />
+  ),
 };
 export const SparseRatingPopulations: Story = {
   name: 'Ratings / Sparse population page with next',
