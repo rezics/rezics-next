@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -10,6 +10,7 @@ import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { EllipsisIcon } from 'lucide-react';
 import { undoToast as UndoToast } from '@rezics/ui/undo-toast';
+import { toast } from '@rezics/ui/shadcn/toast';
 import { manageLabel } from './labels-actions';
 import { readLabelsPage } from './labels-read-route';
 import type { LabelInput, LabelsPage, LabelFeedback } from './labels-read';
@@ -55,32 +56,146 @@ function failedAction(page: LabelsPage): LabelAction | null {
     : null;
 }
 
-export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
+const alwaysCurrent = () => true;
+const sameInput = (a: LabelInput, b: LabelInput) =>
+  a.operation === b.operation &&
+  a.id === b.id &&
+  (a.operation === 'restore' || a.name === b.name) &&
+  a.revision === b.revision;
+type Attempt = { input: LabelInput; renderedKey: string; unresolved: boolean };
+
+export function LabelsPageView({
+  page: initial,
+  isCurrent = alwaysCurrent,
+  refresh,
+  cursor,
+  locale = getLocale(),
+}: {
+  page: LabelsPage;
+  isCurrent?: () => boolean;
+  refresh?: () => Promise<LabelsPage | null>;
+  cursor?: string;
+  locale?: string;
+}) {
   const [page, setPage] = useState(initial);
+  const [source, setSource] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [action, setAction] = useState<LabelAction | null>(() => failedAction(initial));
-  const locked = useRef(false);
+  const locked = useRef<object | null>(null);
+  const mounted = useRef(false);
+  const attempts = useRef(new Map<string, Attempt>());
+  const ownedToast = useRef<{ id: string; owner: string } | null>(null);
   const pageRef = useRef<HTMLElement>(null);
   const actionTriggers = useRef(new Map<string, HTMLButtonElement>());
   const latestPage = useRef(page);
-  latestPage.current = page;
-  const latestInitial = useRef(initial);
-  latestInitial.current = initial;
+  const path = `/${locale}/library/labels`;
+  const alive = () => mounted.current && isCurrent();
+  function retireToast() {
+    const owned = ownedToast.current;
+    ownedToast.current = null;
+    if (!owned) return;
+    // UndoToast uses a shared replaceable ID. A functional update scrubs only our installed entry.
+    toast.update(owned.id, (previous) =>
+      previous.data?.labelsOwner === owned.owner
+        ? {
+            title: '',
+            description: '',
+            actionProps: { disabled: true, children: null, onClick: undefined },
+            timeout: 1,
+          }
+        : {},
+    );
+  }
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      retireToast();
+    };
+  }, []);
   useEffect(() => setHydrated(true), []);
-  useEffect(() => {
-    setPage(initial);
-    setAction(failedAction(initial));
-  }, [initial]);
-  const path = `/${getLocale()}/library/labels`;
-  async function submit(input: LabelInput) {
-    if (locked.current) return;
-    locked.current = true;
+  function preserveAttempts(fresh: LabelsPage, previous: LabelsPage): LabelsPage {
+    let next = fresh;
+    for (const { input, unresolved } of attempts.current.values()) {
+      if (!unresolved) continue;
+      if (input.operation === 'create') next = { ...next, createKey: previous.createKey };
+      if (input.operation === 'rename' || input.operation === 'delete')
+        next = {
+          ...next,
+          labels: next.labels.map((label) => {
+            const old = previous.labels.find((item) => item.id === input.id);
+            return label.id === input.id && old
+              ? {
+                  ...label,
+                  ...(input.operation === 'delete' ? { name: old.name } : {}),
+                  revision: input.revision!,
+                  renameKey: old.renameKey,
+                  deleteKey: old.deleteKey,
+                }
+              : label;
+          }),
+        };
+      if (input.operation === 'restore' && previous.feedback?.undo)
+        next = { ...next, feedback: previous.feedback, undoKey: previous.undoKey };
+    }
+    return next;
+  }
+  // Reconcile during render: a loader replacement must never expose an effect-delayed old page.
+  if (source !== initial) {
+    const next = preserveAttempts(initial, page);
+    setSource(initial);
+    setPage(next);
+    setAction((selected) => {
+      if (!selected) return failedAction(next);
+      const label = next.labels.find((item) => item.id === selected.label.id);
+      return label ? { ...selected, label } : null;
+    });
+  }
+  latestPage.current = page;
+  function admitted(input: LabelInput) {
+    const current = latestPage.current;
+    return (
+      alive() &&
+      current.signedIn &&
+      (!current.state || current.state === 'loaded') &&
+      !!current.csrfToken &&
+      current.operations.includes('library_label.list') &&
+      current.operations.includes(`library_label.${input.operation === 'restore' ? 'delete' : input.operation}`)
+    );
+  }
+  async function submit(supplied: LabelInput) {
+    if (!admitted(supplied) || locked.current) return;
+    const slot = `${supplied.operation}:${supplied.id ?? ''}`;
+    const previous = attempts.current.get(slot);
+    const input =
+      previous &&
+      sameInput(previous.input, supplied) &&
+      (previous.unresolved ||
+        previous.renderedKey === supplied.idempotencyKey ||
+        previous.input.idempotencyKey === supplied.idempotencyKey)
+        ? previous.input
+        : {
+            ...supplied,
+            idempotencyKey:
+              previous &&
+              (previous.input.idempotencyKey === supplied.idempotencyKey ||
+                previous.renderedKey === supplied.idempotencyKey) &&
+              !sameInput(previous.input, supplied)
+                ? crypto.randomUUID()
+                : supplied.idempotencyKey,
+          };
+    const attempt: Attempt = { input, renderedKey: supplied.idempotencyKey, unresolved: true };
+    attempts.current.set(slot, attempt);
+    const lock = {};
+    locked.current = lock;
     setBusy(true);
     const page = latestPage.current;
-    const initialAtSubmit = latestInitial.current;
     try {
+      if (!admitted(input)) return;
       const result = await manageLabel({ data: input, headers: { 'X-CSRF-Token': page.csrfToken } });
+      if (!admitted(input)) return;
+      attempt.unresolved = !result.ok && result.reason === 'unavailable';
       const feedback: LabelFeedback = {
         ...result,
         operation: input.operation,
@@ -100,43 +215,52 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
           ? feedback
           : {
               ...feedback,
-              ...(page.feedback?.undo
-                ? {
-                    undo: page.feedback.undo,
-                    undoKey: page.feedback.undoKey ?? page.undoKey,
-                  }
-                : {}),
+              ...(previousUndo ? { undo: previousUndo, undoKey: page.feedback?.undoKey ?? page.undoKey } : {}),
             };
-      let current: LabelsPage;
+      let current: LabelsPage | null;
       try {
-        current = await readLabelsPage({ data: { query: page.query } });
+        if (!admitted(input)) return;
+        current = refresh ? await refresh() : await readLabelsPage({ data: { query: page.query, cursor } });
+        if (!admitted(input) || !current) return;
       } catch {
-        current = result.ok ? { ...page, state: 'unavailable' } : page;
+        if (!admitted(input)) return;
+        current = result.ok ? { ...page, state: 'unavailable' } : latestPage.current;
       }
+      if (!admitted(input)) return;
       // A failed refresh must not discard the form or its draft after a refused write.
-      if (!result.ok && (current.state === 'unavailable' || current.state === 'preparing')) current = page;
-      setPage((visible) => ({
-        ...(initialAtSubmit === latestInitial.current ? current : visible),
-        feedback: retained,
-        undoKey: retained.undoKey ?? visible.undoKey,
-      }));
+      if (!result.ok && (current.state === 'unavailable' || current.state === 'preparing'))
+        current = latestPage.current;
+      if (
+        !current.signedIn ||
+        !current.operations.includes('library_label.list') ||
+        (current.state && current.state !== 'loaded')
+      ) {
+        retireToast();
+        setPage(current);
+        setAction(null);
+        return;
+      }
+      current = preserveAttempts(current, latestPage.current);
+      setPage({ ...current, feedback: retained, undoKey: retained.undoKey ?? current.undoKey });
       if (input.operation === 'rename' || input.operation === 'delete') {
+        const label = current.labels.find((item) => item.id === input.id);
         setAction((selected) =>
           !selected || selected.label.id !== input.id
             ? selected
             : result.ok
               ? null
-              : {
-                  ...selected,
-                  label: current.labels.find((label) => label.id === input.id) ?? selected.label,
-                },
+              : { ...selected, label: label ?? selected.label },
         );
       }
-      if (feedback.undo) {
+      if (result.ok && input.operation === 'restore') retireToast();
+      if (feedback.undo && admitted(input)) {
         const undo = feedback.undo;
-        UndoToast(
+        retireToast();
+        const owner = crypto.randomUUID();
+        const id = UndoToast(
           m.library_label_deleted({ name: undo.name }),
           () => {
+            if (!admitted({ operation: 'restore', idempotencyKey: feedback.undoKey! })) return;
             void submit({
               operation: 'restore',
               id: undo.id,
@@ -146,19 +270,25 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
           },
           { undo: m.library_label_undo() },
         );
+        ownedToast.current = { id, owner };
+        toast.update(id, { data: { labelsOwner: owner } });
       }
     } catch {
+      if (!admitted(input)) return;
       setPage((current) => ({
         ...current,
         feedback: { ...current.feedback, ...input, ok: false, reason: 'unavailable' },
       }));
     } finally {
-      locked.current = false;
-      setBusy(false);
+      if (alive() && locked.current === lock) {
+        locked.current = null;
+        setBusy(false);
+      }
     }
   }
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!alive()) return;
     const form = new FormData(event.currentTarget);
     void submit({
       operation: String(form.get('operation')) as LabelInput['operation'],
@@ -186,7 +316,11 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
     </>
   );
   const feedback = page.feedback;
-  const mutationPath = page.query ? `${path}?${new URLSearchParams({ q: page.query })}` : path;
+  const search = new URLSearchParams({
+    ...(page.query !== undefined ? { q: page.query } : {}),
+    ...(cursor !== undefined ? { cursor } : {}),
+  });
+  const mutationPath = search.size ? `${path}?${search}` : path;
   const fieldError = (operation: string, id?: string) =>
     feedback && !feedback.ok && feedback.operation === operation && feedback.id === id;
   const error = (id: string) => (
@@ -213,7 +347,12 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
               disabled={busy}
               {...(fallback
                 ? { defaultValue: selected.name }
-                : { value: selected.name, onChange: (event) => setAction({ ...selected, name: event.target.value }) })}
+                : {
+                    value: selected.name,
+                    onChange: (event) => {
+                      if (alive() && !locked.current) setAction({ ...selected, name: event.target.value });
+                    },
+                  })}
               aria-invalid={invalid || undefined}
               aria-describedby={invalid ? errorId : undefined}
             />
@@ -233,7 +372,9 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
               variant="outline"
               className={actionClass}
               disabled={busy}
-              onClick={() => setAction(null)}
+              onClick={() => {
+                if (alive() && !locked.current) setAction(null);
+              }}
             >
               {m.action_cancel()}
             </Button>
@@ -369,18 +510,22 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
               entries.push({
                 type: 'item',
                 label: m.library_label_rename(),
-                onSelect: () => setAction({ operation: 'rename', label, name: label.name }),
+                onSelect: () => {
+                  if (alive() && !locked.current) setAction({ operation: 'rename', label, name: label.name });
+                },
               });
             if (page.operations.includes('library_label.delete'))
               entries.push({
                 type: 'destructive',
                 label: m.library_label_delete(),
-                onSelect: () => setAction({ operation: 'delete', label, name: label.name }),
+                onSelect: () => {
+                  if (alive() && !locked.current) setAction({ operation: 'delete', label, name: label.name });
+                },
               });
             return (
               <ListRow key={label.id} className="min-w-0 px-2 py-2">
                 <div className="flex min-w-0 items-center gap-3">
-                  <LabelShelfLink label={label} locale={getLocale()} />
+                  <LabelShelfLink label={label} locale={locale} />
                   {hydrated && entries.length ? (
                     <ListRowControl className="shrink-0">
                       <Menu
@@ -455,12 +600,12 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
         <Dialog
           open
           onOpenChange={(open) => {
-            if (!open && !busy) setAction(null);
+            if (alive() && !open && !locked.current) setAction(null);
           }}
         >
           <DialogContent
             showCloseButton={false}
-            finalFocus={() => actionTriggers.current.get(action.label.id) ?? pageRef.current}
+            finalFocus={() => (alive() ? (actionTriggers.current.get(action.label.id) ?? pageRef.current) : false)}
             className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto"
           >
             <DialogTitle className="break-words [overflow-wrap:anywhere]">

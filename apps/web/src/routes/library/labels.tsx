@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { readLabelsPage } from '../../library/labels-read-route';
-import { LabelsPageView } from '../../library/labels-page';
+import { readLabelsCurrent } from '../../library/labels-read-route';
+import { LabelsCurrent } from '../../library/labels-current';
+import { getLocale } from '../../paraglide/runtime.js';
 import { labelsFormPost } from '../../library/labels-actions';
 import { m } from '../../paraglide/messages.js';
 
@@ -13,8 +14,12 @@ export const Route = createFileRoute('/library/labels')({
     ...(typeof search.q === 'string' ? { q: search.q } : {}),
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor, query: search.q }),
-  loader: ({ deps }) => readLabelsPage({ data: { cursor: deps.cursor, query: deps.query } }),
+  loader: ({ deps }) => readLabelsCurrent({ data: { cursor: deps.cursor, query: deps.query } }),
   head: ({ match }) =>
     pageHead({ title: m.library_labels_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
-  component: () => <LabelsPageView page={Route.useLoaderData()} />,
+  component: LabelsRoute,
 });
+
+function LabelsRoute() {
+  return <LabelsCurrent initial={Route.useLoaderData()} search={Route.useSearch()} locale={getLocale()} />;
+}
