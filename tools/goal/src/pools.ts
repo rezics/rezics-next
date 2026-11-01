@@ -21,9 +21,12 @@ function positive(value: unknown, label: string, zero = false): number {
     throw new Error(`invalid ${label}`);
   return value;
 }
-function burnCeiling(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error('invalid maxBurnPerHour');
+function positiveRate(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error(`invalid ${label}`);
   return value;
+}
+function burnCeiling(value: unknown): number {
+  return positiveRate(value, 'maxBurnPerHour');
 }
 
 /** Parse only the pool section so a live reload cannot change other process settings. */
@@ -67,7 +70,7 @@ export function readPoolPolicies(value: unknown, localFile: string): Pool[] {
         maxAgeMs: positive(policy.maxAgeMs, 'maxAgeMs'),
         ...(policy.reservePerHour === undefined
           ? {}
-          : { reservePerHour: positive(policy.reservePerHour, 'reservePerHour') }),
+          : { reservePerHour: positiveRate(policy.reservePerHour, 'reservePerHour') }),
         ...(policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: burnCeiling(policy.maxBurnPerHour) }),
       },
     };
