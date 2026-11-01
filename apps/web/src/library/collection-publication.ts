@@ -3,11 +3,11 @@ import { isNotFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, requestCsrfToken, sessionSubject } from '../session/request';
+import { requestCsrfToken, sessionSubject } from '../session/request';
 import { personalRead } from '../kernel/query';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { readCollectionPage } from './collection-queries';
-import type { CollectionPageResult } from './collection-load';
+import { collectionResultMatches, type CollectionPageResult } from './collection-load';
 import type { DynamicCollectionPage } from './dynamic-collection';
 import { asSession, isRecord, writeSession } from './collection-records';
 
@@ -169,32 +169,47 @@ export const readCollectionPublication = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<PublicationPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     const { env } = await import('cloudflare:workers');
+    if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN)
+      return { viewer: null, address: data, source: { state: 'unavailable' } };
     const request = getRequest();
-    let viewer: PublicationViewer | null = null;
-    try {
-      const stale = await prepareSession(request, env as Partial<SessionEnv>);
-      const subject = sessionSubject(request);
-      const csrfToken = requestCsrfToken(request);
-      if (stale || !subject || !csrfToken) return { viewer, address: data, source: { state: 'denied' } };
-      viewer = { subject, csrfToken };
-      if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN)
-        return { viewer, address: data, source: { state: 'unavailable' } };
-      const page = await readCollectionPage({
+    return loadCollectionPublication(request, data, () =>
+      readCollectionPage({
         data: { ...data, credentialMode: 'session', editor: true, filterActive: false },
-      });
-      return { viewer, address: data, source: publicationSource(page, subject) };
-    } catch (error) {
-      return { viewer, address: data, source: { state: isNotFound(error) ? 'denied' : 'unavailable' } };
-    }
+      }),
+    );
   });
 
+/** Only the actual page reader prepares a session. Its provenance also binds empty/preparing pages. */
+export async function loadCollectionPublication(
+  request: Request,
+  address: PublicationAddress,
+  read: () => Promise<CollectionPageResult>,
+): Promise<PublicationPage> {
+  try {
+    const page = await read();
+    const subject = sessionSubject(request);
+    const csrfToken = requestCsrfToken(request);
+    if (!subject || !csrfToken || !collectionResultMatches(page, { ...address, editor: true }, 'session', subject))
+      return { viewer: null, address, source: { state: 'denied' } };
+    return { viewer: { subject, csrfToken }, address, source: publicationSource(page, subject) };
+  } catch (error) {
+    return { viewer: null, address, source: { state: isNotFound(error) ? 'denied' : 'unavailable' } };
+  }
+}
+
 /** No automatic retry, background refresh, SSR personal data, or cross-session result reuse. */
-export function collectionPublicationQuery(viewer: PublicationViewer, address: PublicationAddress) {
+export function collectionPublicationQuery(
+  viewer: PublicationViewer,
+  address: PublicationAddress,
+  isCurrent: () => boolean = () => true,
+) {
   return queryOptions({
     ...personalRead,
     queryKey: ['collection-publication', viewer.subject, viewer.csrfToken, address.id, address.cursor ?? null],
     queryFn: async ({ signal }): Promise<PublicationPage> => {
+      if (!isCurrent()) throw new Error('Retired publication read');
       const page = await readCollectionPublication({ data: address });
+      if (!isCurrent()) throw new Error('Retired publication read');
       signal.throwIfAborted();
       if (
         page.viewer?.subject !== viewer.subject ||

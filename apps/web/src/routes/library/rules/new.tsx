@@ -1,13 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { CollectionRuleEditor } from '../../../library/collection-rule-editor';
-import {
-  readCollectionRule,
-  readCollectionRuleChoices,
-  saveCollectionRule,
-} from '../../../library/collection-rule-actions';
+import { CollectionRuleCurrent } from '../../../library/collection-rule-current';
+import { readCollectionRule } from '../../../library/collection-rule-actions';
 import { requireSignedIn } from '../../../session/guard';
-import { exposureQuery, useSession } from '../../../session/query';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
 import { getLocale } from '../../../paraglide/runtime.js';
@@ -22,19 +16,10 @@ export const Route = createFileRoute('/library/rules/new')({
 });
 function NewRulePage() {
   const loaded = Route.useLoaderData();
-  const { state, subject, csrfToken } = useSession();
-  const { data: admitted } = useQuery({ ...exposureQuery, enabled: state === 'signed-in' });
-  const viewerId = state === 'signed-in' ? (subject ?? null) : null;
   return (
-    <CollectionRuleEditor
+    <CollectionRuleCurrent
       page={loaded}
-      viewerId={viewerId}
       collectionId={null}
-      admitted={admitted}
-      csrfToken={csrfToken ?? ''}
-      save={(data, csrf) => saveCollectionRule({ data, headers: { 'X-CSRF-Token': csrf } })}
-      reload={() => readCollectionRule({ data: undefined })}
-      labels={(q, cursor) => readCollectionRuleChoices({ data: { q, ...(cursor ? { cursor } : {}) } })}
       navigate={(id) => window.location.assign(`/${getLocale()}/collections/${encodeURIComponent(id)}`)}
     />
   );

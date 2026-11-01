@@ -20,10 +20,11 @@ export type RuleChoices = {
   labels: { state: ChoiceState; values: { id: string; name: string }[]; next: string | null };
 };
 export type RulePage =
-  | { state: 'new'; viewerId: string; choices: RuleChoices; intent: string }
+  | { state: 'new'; viewerId: string; choices: RuleChoices; intent: string; address?: { collectionId: string | null } }
   | {
       state: 'ready';
       viewerId: string;
+      address?: { collectionId: string | null };
       id: string;
       title: string;
       rule: SavedRule;
@@ -32,7 +33,7 @@ export type RulePage =
     }
   | { state: 'denied' | 'unavailable' };
 
-export type RuleChoicePage = { viewerId: string; choices: RuleChoices };
+export type RuleChoicePage = { viewerId: string; choices: RuleChoices; address?: { q: string; cursor: string | null } };
 
 const preparing = (problem: unknown): ChoiceState => {
   const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : undefined;
@@ -114,6 +115,7 @@ export async function loadCollectionRule(
       return {
         state: 'new',
         viewerId,
+        address: { collectionId: null },
         choices: await loadRuleChoices(client, authorization),
         intent: crypto.randomUUID(),
       };
@@ -125,6 +127,7 @@ export async function loadCollectionRule(
     return {
       state: 'ready',
       viewerId,
+      address: { collectionId: id },
       id,
       title: collection.data.collection.title ?? id,
       rule: { ...rule, filter: parseFilter(rule.filter) },
@@ -134,4 +137,23 @@ export async function loadCollectionRule(
   } catch {
     return { state: 'unavailable' };
   }
+}
+
+/** Even empty/preparing choices carry the identity of their one actual prepared read. */
+export async function loadCollectionRuleChoices(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  address: { q?: string; cursor?: string },
+): Promise<RuleChoicePage | null> {
+  if (await prepareSession(request, sessionEnv)) return null;
+  const authorization = viewerCredential(request);
+  const viewerId = sessionSubject(request);
+  return authorization && viewerId
+    ? {
+        viewerId,
+        address: { q: address.q ?? '', cursor: address.cursor ?? null },
+        choices: await loadRuleChoices(client, authorization, address),
+      }
+    : null;
 }

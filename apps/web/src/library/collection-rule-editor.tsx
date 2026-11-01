@@ -185,6 +185,8 @@ function OwnerFields({
   );
 }
 
+const alwaysCurrent = () => true;
+
 type EditorProps = {
   page: RulePage;
   viewerId: string | null;
@@ -194,6 +196,8 @@ type EditorProps = {
   reload(): Promise<RulePage>;
   labels?: ((q: string, cursor?: string) => Promise<RuleChoicePage | null>) | undefined;
   csrfToken: string;
+  isCurrent?: (() => boolean) | undefined;
+  currentCsrf?: (() => string | null) | undefined;
   navigate?: ((id: string) => void) | undefined;
 };
 
@@ -230,7 +234,7 @@ export function CollectionRuleEditor(props: EditorProps) {
     if (changedScope) for (const previous of boundary.seen) retired.add(previous);
     const seen = changedScope ? new Set<string>() : new Set(boundary.seen);
     if (owned && identity && !retired.has(identity)) seen.add(identity);
-    boundary = { scope, source: page, epoch: boundary.epoch + 1, retired, seen };
+    boundary = { scope, source: page, epoch: boundary.epoch + (changedScope ? 1 : 0), retired, seen };
     setBoundary(boundary);
   }
   return (
@@ -247,9 +251,15 @@ export function CollectionRuleEditor(props: EditorProps) {
 }
 
 // A synchronous lock and a mounted generation belong to this page, never to replacement IO.
-function useRuleWork(epoch: number) {
+function useRuleWork(epoch: number, isCurrent = alwaysCurrent) {
   const work = useRef({ active: true, locked: false });
   const [pending, setPending] = useState(false);
+  const previousEpoch = useRef(epoch);
+  if (previousEpoch.current !== epoch) {
+    work.current.active = false;
+    work.current = { active: true, locked: false };
+    previousEpoch.current = epoch;
+  }
   useLayoutEffect(() => {
     const current = { active: true, locked: false };
     work.current = current;
@@ -260,13 +270,13 @@ function useRuleWork(epoch: number) {
   }, [epoch]);
   function start() {
     const current = work.current;
-    if (!current.active || current.locked) return null;
+    if (!current.active || !isCurrent() || current.locked) return null;
     current.locked = true;
     setPending(true);
     return {
-      current: () => current.active,
+      current: () => current.active && isCurrent(),
       finish: () => {
-        if (!current.active) return;
+        if (!current.active || !isCurrent()) return;
         current.locked = false;
         setPending(false);
       },
@@ -288,10 +298,11 @@ function RuleLifetime({
 }: EditorProps & { authorized: boolean; canLabel: boolean; epoch: number; retired: Set<string>; seen: Set<string> }) {
   const [retried, setRetried] = useState<{ source: RulePage; page: RulePage } | null>(null);
   const current = retried?.source === page ? retried.page : page;
-  const work = useRuleWork(epoch);
+  const work = useRuleWork(epoch, actions.isCurrent);
   function accepts(value: RulePage): value is AvailablePage {
     return (
       authorized &&
+      (actions.isCurrent?.() ?? true) &&
       (value.state === 'ready' || value.state === 'new') &&
       value.viewerId === viewerId &&
       !retired.has(pageIdentity(value)!) &&
@@ -306,6 +317,7 @@ function RuleLifetime({
     const operation = work.start();
     if (!operation) return;
     try {
+      if (!operation.current()) return;
       const result = await actions.reload();
       if (!operation.current()) return;
       if (accepts(result)) remember(result);
@@ -350,6 +362,8 @@ function RuleForm({
   viewerId,
   epoch,
   canLabel,
+  isCurrent = alwaysCurrent,
+  currentCsrf,
   accepts,
   remember,
 }: Omit<EditorProps, 'page' | 'admitted'> & {
@@ -367,10 +381,15 @@ function RuleForm({
   );
   const [choices, setChoices] = useState(page.choices);
   const [query, setQuery] = useState('');
-  const { pending, start } = useRuleWork(epoch);
+  const { pending, start } = useRuleWork(epoch, isCurrent);
   const [feedback, setFeedback] = useState('');
   const [conflict, setConflict] = useState(false);
-  const [intent, setIntent] = useState<{ fingerprint: string; key: string } | null>(null);
+  const [intent, setIntent] = useState<RuleWrite | null>(null);
+  const captured = useRef<RuleWrite | null>(null);
+  const attempted = useRef(false);
+  const choiceAddress = useRef({ q: '', cursor: undefined as string | undefined, generation: 0 });
+  const choiceContext = useRef({ q: '', next: page.choices.labels.next });
+  const [choiceQuery, setChoiceQuery] = useState('');
   const [savedId, setSavedId] = useState<string | null>(null);
   const extension: ConditionExtension = {
     choices: [
@@ -385,7 +404,8 @@ function RuleForm({
   };
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!csrfToken || conflict || !filter || savedId) return;
+    const csrf = currentCsrf ? currentCsrf() : csrfToken;
+    if (!isCurrent() || !csrf || conflict || !filter || savedId) return;
     const operation = start();
     if (!operation) return;
     let parsed: FilterDocument;
@@ -401,13 +421,22 @@ function RuleForm({
       sort: 'id' as const,
       ...(base.state === 'ready' ? { id: base.id, revision: base.rule.revision } : { title, description }),
     };
-    const fingerprint = JSON.stringify(draft);
-    const key = intent?.fingerprint === fingerprint ? intent.key : intent === null ? base.intent : crypto.randomUUID();
-    setIntent({ fingerprint, key });
+    const input = captured.current ?? {
+      ...draft,
+      idempotencyKey: attempted.current ? crypto.randomUUID() : base.intent,
+    };
+    attempted.current = true;
+    captured.current = input;
+    setIntent(input);
     setFeedback('');
     try {
-      const result = await save({ ...draft, idempotencyKey: key }, csrfToken);
       if (!operation.current()) return;
+      const result = await save(input, csrf);
+      if (!operation.current()) return;
+      if (result.ok || result.reason !== 'unavailable') {
+        captured.current = null;
+        setIntent(null);
+      }
       if (result.ok) {
         setSavedId(result.id);
         if (operation.current()) navigate?.(result.id);
@@ -435,11 +464,15 @@ function RuleForm({
     const operation = start();
     if (!operation) return;
     try {
+      if (!operation.current()) return;
       const current = await reload();
       if (!operation.current()) return;
       if (accepts(current)) {
         remember(current);
-        setBase(current);
+        // An uncertain command retains its exact revision, filter, metadata and key across reads.
+        if (!captured.current) setBase(current);
+        choiceContext.current = { q: '', next: current.choices.labels.next };
+        setChoiceQuery('');
         setChoices(current.choices);
         setConflict(false);
         setSavedId(null);
@@ -453,16 +486,34 @@ function RuleForm({
     }
   }
   async function labelPage(cursor?: string) {
-    if (!labels || !canLabel) return;
+    if (
+      !isCurrent() ||
+      !labels ||
+      !canLabel ||
+      captured.current ||
+      query !== choiceAddress.current.q ||
+      (cursor !== undefined && (query !== choiceContext.current.q || cursor !== choiceContext.current.next))
+    )
+      return;
     const operation = start();
     if (!operation) return;
+    const requested = { q: query, cursor, generation: choiceAddress.current.generation + 1 };
+    choiceAddress.current = requested;
     try {
-      const result = await labels(query, cursor);
       if (!operation.current()) return;
-      if (result?.viewerId === viewerId) setChoices(result.choices);
-      else setFeedback(m.library_rule_unavailable());
+      const result = await labels(requested.q, requested.cursor);
+      if (!operation.current()) return;
+      if (choiceAddress.current !== requested) return;
+      if (
+        result?.viewerId === viewerId &&
+        (!result.address || (result.address.q === requested.q && result.address.cursor === (requested.cursor ?? null)))
+      ) {
+        choiceContext.current = { q: requested.q, next: result.choices.labels.next };
+        setChoiceQuery(requested.q);
+        setChoices(result.choices);
+      } else setFeedback(m.library_rule_unavailable());
     } catch {
-      if (operation.current()) setFeedback(m.library_rule_unavailable());
+      if (operation.current() && choiceAddress.current === requested) setFeedback(m.library_rule_unavailable());
     } finally {
       operation.finish();
     }
@@ -477,7 +528,7 @@ function RuleForm({
         </p>
       )}
       <form onSubmit={(event) => void submit(event)} className="flex min-w-0 flex-col gap-6">
-        <fieldset disabled={pending || !!savedId} className="min-w-0">
+        <fieldset disabled={pending || !!intent || !!savedId} className="min-w-0">
           <FieldGroup>
             {base.state === 'new' && (
               <>
@@ -488,7 +539,9 @@ function RuleForm({
                       required
                       maxLength={512}
                       value={title}
-                      onChange={(event) => setTitle(event.currentTarget.value)}
+                      onChange={(event) => {
+                        if (isCurrent() && !captured.current) setTitle(event.currentTarget.value);
+                      }}
                     />
                   </FieldLabel>
                 </Field>
@@ -498,7 +551,9 @@ function RuleForm({
                     <Input
                       value={description}
                       maxLength={20000}
-                      onChange={(event) => setDescription(event.currentTarget.value)}
+                      onChange={(event) => {
+                        if (isCurrent() && !captured.current) setDescription(event.currentTarget.value);
+                      }}
                     />
                   </FieldLabel>
                 </Field>
@@ -523,13 +578,25 @@ function RuleForm({
               <Field>
                 <FieldLabel>
                   {m.library_rule_label_search()}
-                  <Input value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
+                  <Input
+                    value={query}
+                    maxLength={1000}
+                    onChange={(event) => {
+                      if (!isCurrent() || captured.current) return;
+                      choiceAddress.current = {
+                        q: event.currentTarget.value,
+                        cursor: undefined,
+                        generation: choiceAddress.current.generation + 1,
+                      };
+                      setQuery(event.currentTarget.value);
+                    }}
+                  />
                 </FieldLabel>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={() => void labelPage()}>
                     {m.search_apply()}
                   </Button>
-                  {choices.labels.next && (
+                  {choices.labels.next && choiceQuery === query && (
                     <Button type="button" variant="outline" onClick={() => void labelPage(choices.labels.next!)}>
                       {m.library_label_more()}
                     </Button>
@@ -539,7 +606,9 @@ function RuleForm({
             )}
             <ConditionEditor
               value={filter}
-              onChange={setFilter}
+              onChange={(value) => {
+                if (isCurrent() && !captured.current) setFilter(value);
+              }}
               locale={getLocale()}
               metadata={choices.release.metadata ?? { types: {}, properties: {} }}
               extension={extension}

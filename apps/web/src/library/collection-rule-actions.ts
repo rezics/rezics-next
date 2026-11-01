@@ -5,7 +5,6 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import {
   asSession,
   fromKernel,
@@ -14,7 +13,7 @@ import {
   writeSession,
   type CollectionWriteResult,
 } from './collection-records';
-import { loadCollectionRule, loadRuleChoices } from './collection-rule-read';
+import { loadCollectionRule, loadCollectionRuleChoices } from './collection-rule-read';
 
 export type RuleWrite = {
   id?: string;
@@ -134,11 +133,5 @@ export const readCollectionRuleChoices = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    if (await prepareSession(request, env as Partial<SessionEnv>)) return null;
-    const authorization = viewerCredential(request);
-    const viewerId = sessionSubject(request);
-    return authorization && viewerId
-      ? { viewerId, choices: await loadRuleChoices(kernelClient(), authorization, data) }
-      : null;
+    return loadCollectionRuleChoices(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
