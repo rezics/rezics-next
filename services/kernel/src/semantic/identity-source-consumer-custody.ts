@@ -1264,11 +1264,9 @@ export async function lockIdentitySourceHistoryAuthority(
   )
     return null;
   return (
-    await tx.query<{ authority: IdentitySourceHistoryAuthority | null }>(historySQL.sql, [
-      serialized,
-      expectedJSON,
-    ])
-  ).rows[0]?.authority ?? null;
+    (await tx.query<{ authority: IdentitySourceHistoryAuthority | null }>(historySQL.sql, [serialized, expectedJSON]))
+      .rows[0]?.authority ?? null
+  );
 }
 
 /** Default owner composition on the genuine original Source command. Both phases
@@ -1343,13 +1341,15 @@ export async function lockIdentitySourceHistoryHandoff(
   // SDK owner cost, including its nested domain/fence locks and return SELECT.
   // Stale, pool, serialization and deadlock failures propagate: roll back the whole
   // command. Every repeated entry pre-reserves again in the SAME live frame.
-  if (!reserveHistoryWork(tx, {
-    rows: SDK_TRANSACTION_FENCE_COST.rows,
-    points: SDK_TRANSACTION_FENCE_COST.points,
-    statements: SDK_TRANSACTION_FENCE_COST.statements,
-    bytes: SDK_TRANSACTION_FENCE_COST.bytes,
-    engineRequests: SDK_TRANSACTION_FENCE_COST.engineWork,
-  }))
+  if (
+    !reserveHistoryWork(tx, {
+      rows: SDK_TRANSACTION_FENCE_COST.rows,
+      points: SDK_TRANSACTION_FENCE_COST.points,
+      statements: SDK_TRANSACTION_FENCE_COST.statements,
+      bytes: SDK_TRANSACTION_FENCE_COST.bytes,
+      engineRequests: SDK_TRANSACTION_FENCE_COST.engineWork,
+    })
+  )
     return pending('identity-source-history-funding-unavailable');
   let writer: SdkWriterState;
   try {

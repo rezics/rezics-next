@@ -395,16 +395,16 @@ that operation undispatched; earlier reservations remain spent. Retries and repe
 checks charge again. SQL/serialization failures propagate for whole-command rollback.
 There is no cached positive verdict, second frame, local ledger or engine request.
 
-| One dispatch / allowance | Rows | Points | Statements | Bytes | Engine |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| New native Source guard | 17 | 15 | 2 | 32768 | 0 |
-| History-only source/association recheck | 32 | 32 | 8 | 131072 | 0 |
-| Complete Source proof verification, independently reserved at its own entry | 100 | 100 | 22 | 139264 | 0 |
-| Existing subject Account verification, independently reserved | 64 | 64 | 15 | 65536 | 0 |
-| Real receiving binding, including native mapping, roles and barrier | 160 | 80 | 6 | 131072 | 0 |
-| Work current same-command lock | 4 | 2 | 4 | 8192 | 0 |
-| **One complete new composed call, conservative subject maximum** | **377** | **293** | **57** | **507904** | **0** |
-| Work released observation, separately dispatched by its owner | 3 | 2 | 1 | 8192 | 0 |
+| One dispatch / allowance                                                    |    Rows |  Points | Statements |      Bytes | Engine |
+| --------------------------------------------------------------------------- | ------: | ------: | ---------: | ---------: | -----: |
+| New native Source guard                                                     |      17 |      15 |          2 |      32768 |      0 |
+| History-only source/association recheck                                     |      32 |      32 |          8 |     131072 |      0 |
+| Complete Source proof verification, independently reserved at its own entry |     100 |     100 |         22 |     139264 |      0 |
+| Existing subject Account verification, independently reserved               |      64 |      64 |         15 |      65536 |      0 |
+| Real receiving binding, including native mapping, roles and barrier         |     160 |      80 |          6 |     131072 |      0 |
+| Work current same-command lock                                              |       4 |       2 |          4 |       8192 |      0 |
+| **One complete new composed call, conservative subject maximum**            | **377** | **293** |     **57** | **507904** |  **0** |
+| Work released observation, separately dispatched by its owner               |       3 |       2 |          1 |       8192 |      0 |
 
 The native guard's fifteen keyed inputs include the installed trigger catalogue row;
 its seventeen rows include the native and outer result. Two statements cover the
@@ -532,14 +532,14 @@ is reached, its own entry reserves 100/100/22/139264. A missing consumer handle
 stops before that entry; a copied handle spends it and returns false without SQL.
 The subsequent conservative subject prefixes are:
 
-| Last admitted operation | Cumulative rows / points / statements / bytes / engine |
-| --- | --- |
-| History-only verification | 32/32/8/131072/0 |
-| Independent Source verification | 132/132/30/270336/0 |
-| Current subject Account settlement verification | 196/196/45/335872/0 |
-| Receiving binding | 356/276/51/466944/0 |
-| Original Source native guard | 373/291/53/499712/0 |
-| Current SDK lock | 377/293/57/507904/0 |
+| Last admitted operation                         | Cumulative rows / points / statements / bytes / engine |
+| ----------------------------------------------- | ------------------------------------------------------ |
+| History-only verification                       | 32/32/8/131072/0                                       |
+| Independent Source verification                 | 132/132/30/270336/0                                    |
+| Current subject Account settlement verification | 196/196/45/335872/0                                    |
+| Receiving binding                               | 356/276/51/466944/0                                    |
+| Original Source native guard                    | 373/291/53/499712/0                                    |
+| Current SDK lock                                | 377/293/57/507904/0                                    |
 
 These are admitted-prefix maxima, not guaranteed work on every early failure.
 An insufficient next reservation dispatches none of that operation and leaves the
@@ -605,8 +605,7 @@ The existing final-frame composition owner must reconcile those actual call coun
 initial Source work, repeated Account checks, and the sole Library producer's final
 literal page/verifier/locked-plan/seal/current-plan SQL and failure/repeat/rollback/
 fence declaration before adopting fixed aggregate defaults, recognition and ceilings.
-No final funding is inferred from 577, 585, the earlier conditional subtotal 1198, or History's
-11588. Baseline configured/hard native limits remain 577/577/173/630784/0, so an
+No final funding is inferred from 577, 585, the earlier conditional subtotal 1198, or History's 11588. Baseline configured/hard native limits remain 577/577/173/630784/0, so an
 insufficient balance refuses. Directory parent 100/200/36/229376 and effective
 children 50/100/18/114688, Library child caps and the native 100-row page ceiling are
 unchanged. No extra local ledger creates Source funding.

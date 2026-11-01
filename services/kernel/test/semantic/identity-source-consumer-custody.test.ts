@@ -505,16 +505,10 @@ test('The original Source owner durably guards exact History readiness and closu
   const { newId } = await import('../../src/route/route.ts');
   const { createRealAccess } = await import('./real-access.ts');
   const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../src/access/bootstrap-governance.ts');
-  const {
-    createAgentVerificationCommands,
-    readAgentVerificationWorkflowRequest,
-    recordPendingAgentVerification,
-  } = await import('../../src/access/agent-verification.ts');
-  const {
-    lockIdentitySourceHistoryAuthority,
-    lockIdentitySourceHistoryHandoff,
-    IDENTITY_SOURCE_HISTORY_GUARD_COST,
-  } = await import('../../src/semantic/identity-source-consumer-custody.ts');
+  const { createAgentVerificationCommands, readAgentVerificationWorkflowRequest, recordPendingAgentVerification } =
+    await import('../../src/access/agent-verification.ts');
+  const { lockIdentitySourceHistoryAuthority, lockIdentitySourceHistoryHandoff, IDENTITY_SOURCE_HISTORY_GUARD_COST } =
+    await import('../../src/semantic/identity-source-consumer-custody.ts');
   const { readAgentIdentityRetirementStage } = await import('../../src/history/agent-identity-retirement.ts');
   const { readAgentIdentitySDKReceivingBinding } = await import('../../src/history/agent-identity-sdk-fence.ts');
   const { enqueueAgentIdentityVerification } = await import('../../src/history/agent-identity-work.ts');
@@ -555,9 +549,10 @@ test('The original Source owner durably guards exact History readiness and closu
   const receipt = { kind: 'account-agent.verify' as const, account: accounts.person, receipt: workflow.receiptId };
   const accepted = await readAccountIdentityUndo(f.pool, receipt);
   const erased = (
-    await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES(1,$1,1,now()) RETURNING at::text', [
-      accounts.person,
-    ])
+    await f.admin.query(
+      'INSERT INTO access.erasure(route,account_id,version,at) VALUES(1,$1,1,now()) RETURNING at::text',
+      [accounts.person],
+    )
   ).rows[0];
   const original: IdentitySourceConsumerReference = {
     receipt,
@@ -622,23 +617,35 @@ test('The original Source owner durably guards exact History readiness and closu
   const client = await createWorkClient(f.pool.options.connectionString!, f.pool);
   try {
     await client.registerQueue('workflows', {});
-    expect(await enqueueAgentIdentityVerification(f.pool, client, requested.value.id, workflow.receiptId)).toBe('admitted');
+    expect(await enqueueAgentIdentityVerification(f.pool, client, requested.value.id, workflow.receiptId)).toBe(
+      'admitted',
+    );
     const stage = await readAgentIdentityRetirementStage(f.pool, original, { deadline });
     if (!stage) throw new Error('Expected genuine original source association');
     const receiving = (
       await runCommand(f.pool, { partition: 0, deadline }, async (tx) =>
-        noEffect(await readAgentIdentitySDKReceivingBinding(tx, {
-          partition: 0,
-          locator: { artifactType: 'durable-work/v1', workId: stage.handoff.custodyId },
-          accounts: stage.handoff.source.accounts,
-        }, original.barrier)),
+        noEffect(
+          await readAgentIdentitySDKReceivingBinding(
+            tx,
+            {
+              partition: 0,
+              locator: { artifactType: 'durable-work/v1', workId: stage.handoff.custodyId },
+              accounts: stage.handoff.source.accounts,
+            },
+            original.barrier,
+          ),
+        ),
       )
     ).value;
     if (receiving.state !== 'observed') throw new Error('Expected genuine original receiver');
     const writer = await readSdkWorkflowWriterState(stage.handoff.source.workflowId, client);
     if (!writer) throw new Error('Expected original SDK writer state');
     await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
-      const call = (binding = receiving.binding, expectedWriter = writer, phase: 'readiness' | 'closure' = 'readiness') =>
+      const call = (
+        binding = receiving.binding,
+        expectedWriter = writer,
+        phase: 'readiness' | 'closure' = 'readiness',
+      ) =>
         runCommand(f.pool, { partition: 0, deadline }, async (tx) =>
           noEffect(await lockIdentitySourceHistoryHandoff(tx, stage, binding, expectedWriter, phase, client)),
         ).then((result) => result.value);
@@ -648,15 +655,20 @@ test('The original Source owner durably guards exact History readiness and closu
         { ...receiving.binding, custodyId: randomUUID() },
         { ...receiving.binding, barrier: { ...original.barrier, version: 2 } },
         { ...receiving.binding, receiver: { ...receiving.binding.receiver, generation: randomUUID() } },
-      ]) expect((await call(binding)).state).toBe('pending');
+      ])
+        expect((await call(binding)).state).toBe('pending');
       expect((await call(receiving.binding, { ...writer, workflowID: randomUUID() })).state).toBe('pending');
       expect((await call(receiving.binding, writer, 'closure')).state).toBe('pending');
       expect(identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline)).toEqual(before);
     });
     expect((await client.getWorkflowWriterState(writer.workflowID))?.generation).toBe('1');
-    expect((await f.admin.query('SELECT owner_ready,absence_verified,state FROM core.history_work WHERE work_id=$1', [
-      stage.handoff.custodyId,
-    ])).rows).toEqual([{ owner_ready: false, absence_verified: false, state: 'pending' }]);
+    expect(
+      (
+        await f.admin.query('SELECT owner_ready,absence_verified,state FROM core.history_work WHERE work_id=$1', [
+          stage.handoff.custodyId,
+        ])
+      ).rows,
+    ).toEqual([{ owner_ready: false, absence_verified: false, state: 'pending' }]);
   } finally {
     await client.close();
   }
