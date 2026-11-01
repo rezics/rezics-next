@@ -191,6 +191,9 @@ Nested Semantic validation transfers the remaining original reservation through 
 and accounts its returned work or settled failure receipt. A child with no valid failure receipt consumes the
 transferred remainder and poisons the frame. Queries reserved by the native owner suppress only duplicate
 observation of that already reserved query; they retain the same Pool/client/home/T and all native charging.
+Only a dispatched reservation can forward that one query; reuse before dispatch, after settlement or for a second
+query refuses. An already-live Core transaction is observed even when it predates pool instrumentation. Its bound
+client forwards without a second debit, and callbacks resume the active frame before any subsequent work.
 The enclosing frame cannot dispatch while transferred work is held or create a second allowance. Semantic literal plans in `identity-public-output-work.ts` account staged/committed validation, callbacks and
 closure attempts from this same finite frame. There is no aggregate sufficiency allowance: every repeated child
 first reserves its own complete literal vector. No declaration here certifies an external receiver closure.
