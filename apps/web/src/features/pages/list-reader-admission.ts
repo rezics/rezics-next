@@ -55,9 +55,7 @@ function sessionData(value: unknown): ListReaderSession | undefined {
   return {
     state: candidate.state,
     csrfToken: typeof candidate.csrfToken === 'string' ? candidate.csrfToken : null,
-    ...(typeof candidate.subject === 'string' || candidate.subject === null
-      ? { subject: candidate.subject }
-      : {}),
+    ...(typeof candidate.subject === 'string' || candidate.subject === null ? { subject: candidate.subject } : {}),
   };
 }
 
@@ -96,11 +94,11 @@ function readSessionSnapshot(queryClient: QueryClient): SessionSnapshot {
       ? 'error'
       : state.fetchStatus !== 'idle'
         ? 'pending'
-      : state.status === 'success' && parsed
-        ? 'success'
-        : state.status === 'success'
-          ? 'error'
-          : 'unobserved';
+        : state.status === 'success' && parsed
+          ? 'success'
+          : state.status === 'success'
+            ? 'error'
+            : 'unobserved';
   return {
     phase,
     query,
@@ -198,11 +196,7 @@ export function useListReaderAdmission(
   };
   const ownerRef = useRef<ListReaderOwner | null>(null);
   let owner = ownerRef.current;
-  if (
-    !owner ||
-    owner.privateReading !== options.privateReading ||
-    owner.observeSession !== options.observeSession
-  ) {
+  if (!owner || owner.privateReading !== options.privateReading || owner.observeSession !== options.observeSession) {
     if (owner) owner.active = false;
     owner = makeOwner(
       scope,

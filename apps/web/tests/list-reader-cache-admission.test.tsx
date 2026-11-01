@@ -90,9 +90,7 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
       get: (id: string) => ({
         credential: async () => {
           const reader = sessionReaders.get(id);
-          return reader
-            ? { ...credentials.get(id)!, signedIn: true }
-            : { status: 'absent' as const };
+          return reader ? { ...credentials.get(id)!, signedIn: true } : { status: 'absent' as const };
         },
       }),
     },
@@ -219,7 +217,10 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
     const document: CompositionDocument = {
       root: { props: {} },
       content: [
-        { type: 'TypeList', props: { id: node, types: ['schema:Book'], sort: 'name', limit: 24, title: { en: 'Books', ja: '本' } } },
+        {
+          type: 'TypeList',
+          props: { id: node, types: ['schema:Book'], sort: 'name', limit: 24, title: { en: 'Books', ja: '本' } },
+        },
       ],
     };
     const context = contextFor(target);
@@ -244,7 +245,10 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
             body: {
               subjects: [
                 {
-                  id: label === 'Public SSR' ? '0192f3a0-6c1e-7b2a-9d4e-000000000301' : '0192f3a0-6c1e-7b2a-9d4e-000000000302',
+                  id:
+                    label === 'Public SSR'
+                      ? '0192f3a0-6c1e-7b2a-9d4e-000000000301'
+                      : '0192f3a0-6c1e-7b2a-9d4e-000000000302',
                   type: 'schema:Book',
                   labels: { en: label, ja: label },
                   summary: null,
@@ -384,11 +388,7 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
         createElement(
           StrictMode,
           null,
-          createElement(
-            QueryClientProvider,
-            { client },
-            createElement(ErrorBoundary, null, createElement(Campaign)),
-          ),
+          createElement(QueryClientProvider, { client }, createElement(ErrorBoundary, null, createElement(Campaign))),
         ),
       );
     });
@@ -445,7 +445,9 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
     const firstRecovery = memberCalls().find((call) => !call.input.continuation)!;
     expect(firstRecovery.authorization).toBe('Bearer reader-a-token');
     expect(firstRecovery.input.target).toEqual({ account: 'member-a' });
-    await act(async () => firstRecovery.work.resolve(memberResponse(firstRecovery, [recording.members[0]!], 'recovery-next')));
+    await act(async () =>
+      firstRecovery.work.resolve(memberResponse(firstRecovery, [recording.members[0]!], 'recovery-next')),
+    );
     await flush();
 
     expect(host.textContent).toContain('Seed private rows');
@@ -478,7 +480,13 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
     ]);
     for (const call of firstContinuations) {
       await act(async () =>
-        call.work.resolve(memberResponse(call, [call.input.continuation?.node === 'members' ? recording.members[1]! : recording.members[2]!], 'next-current')),
+        call.work.resolve(
+          memberResponse(
+            call,
+            [call.input.continuation?.node === 'members' ? recording.members[1]! : recording.members[2]!],
+            'next-current',
+          ),
+        ),
       );
     }
     await flush();
@@ -522,7 +530,9 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
       client.setQueryData(sessionModule.sessionQuery.queryKey, session('reader-a'));
     });
     await until(
-      () => configuredCalls().length >= typeBase + 2 && memberCalls().filter((call) => !call.input.continuation).length >= 3,
+      () =>
+        configuredCalls().length >= typeBase + 2 &&
+        memberCalls().filter((call) => !call.input.continuation).length >= 3,
       'fresh same-reader reads after cache recreation',
     );
     const recreatedTypeReads = configuredCalls().slice(typeBase, typeBase + 2);
@@ -531,7 +541,9 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
       'Bearer reader-a-token',
       'Bearer reader-a-token',
     ]);
-    const recreatedMemberReads = memberCalls().slice(memberBase).filter((call) => !call.input.continuation);
+    const recreatedMemberReads = memberCalls()
+      .slice(memberBase)
+      .filter((call) => !call.input.continuation);
     expect(recreatedMemberReads).toHaveLength(2);
 
     // One mounted owner may unmount without cancelling the same-address owner's current query.
@@ -541,7 +553,9 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
     expect(host.querySelector('[data-owner="second"]')).not.toBeNull();
     await until(() => configuredCalls().length >= typeBase + 3, 'third same-address owner request');
     const transientRead = configuredCalls()[typeBase + 2]!;
-    await act(async () => recreatedTypeReads[1]!.work.resolve(configuredResponse(recreatedTypeReads[1]!, 'Surviving owner result')));
+    await act(async () =>
+      recreatedTypeReads[1]!.work.resolve(configuredResponse(recreatedTypeReads[1]!, 'Surviving owner result')),
+    );
     await until(
       () => host.querySelector('[data-owner="second"]')?.textContent?.includes('Surviving owner result') ?? false,
       'remaining same-address owner result',
@@ -555,7 +569,9 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
     await render();
     await until(() => configuredCalls().length >= typeBase + 4, 'fresh request for remounted owner');
     const remountedOwnerRead = configuredCalls()[typeBase + 3]!;
-    await act(async () => remountedOwnerRead.work.resolve(configuredResponse(remountedOwnerRead, 'Remounted owner result')));
+    await act(async () =>
+      remountedOwnerRead.work.resolve(configuredResponse(remountedOwnerRead, 'Remounted owner result')),
+    );
     await until(
       () => host.querySelector('[data-owner="first"]')?.textContent?.includes('Remounted owner result') ?? false,
       'remounted owner result',
@@ -612,9 +628,15 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
       recreatedTypeReads[0]!.work.resolve(configuredResponse(recreatedTypeReads[0]!, 'Unmounted owner result'));
       oldSuccess.work.resolve(memberResponse(oldSuccess, [recording.members[3]!], null));
       oldFailure.work.reject(new Error('retired member continuation failure'));
-      recreatedMemberReads[0]!.work.resolve(memberResponse(recreatedMemberReads[0]!, [recording.members[1]!], 'retired-next'));
-      recreatedMemberReads[1]!.work.resolve(memberResponse(recreatedMemberReads[1]!, [recording.members[1]!], 'retired-next'));
-      sameReaderMemberReads[0]!.work.resolve(memberResponse(sameReaderMemberReads[0]!, [recording.members[1]!], 'retired-next'));
+      recreatedMemberReads[0]!.work.resolve(
+        memberResponse(recreatedMemberReads[0]!, [recording.members[1]!], 'retired-next'),
+      );
+      recreatedMemberReads[1]!.work.resolve(
+        memberResponse(recreatedMemberReads[1]!, [recording.members[1]!], 'retired-next'),
+      );
+      sameReaderMemberReads[0]!.work.resolve(
+        memberResponse(sameReaderMemberReads[0]!, [recording.members[1]!], 'retired-next'),
+      );
       sameReaderMemberReads[1]!.work.reject(new Error('retired same-reader member failure'));
     });
     await flush();
@@ -683,19 +705,36 @@ test('Mounted lists retire old admissions across ABA, error and removal while fr
     await render();
     await until(() => configuredCalls().length >= typeCallsBeforeB + 2, 'replacement selected-Realm address');
     const readerBTypeCalls = configuredCalls().slice(typeCallsBeforeB);
-    expect(readerBTypeCalls.map((call) => ({
-      target: call.input.target,
-      continuation: call.input.continuation,
-      language: call.input.languages[0],
-      authorization: call.authorization,
-    }))).toEqual([
-      { target: { subject: subjectB, realm: realmB }, continuation: { node: 'books-b', cursor: cursorB }, language: 'ja', authorization: 'Bearer reader-b-token' },
-      { target: { subject: subjectB, realm: realmB }, continuation: { node: 'books-b', cursor: cursorB }, language: 'ja', authorization: 'Bearer reader-b-token' },
+    expect(
+      readerBTypeCalls.map((call) => ({
+        target: call.input.target,
+        continuation: call.input.continuation,
+        language: call.input.languages[0],
+        authorization: call.authorization,
+      })),
+    ).toEqual([
+      {
+        target: { subject: subjectB, realm: realmB },
+        continuation: { node: 'books-b', cursor: cursorB },
+        language: 'ja',
+        authorization: 'Bearer reader-b-token',
+      },
+      {
+        target: { subject: subjectB, realm: realmB },
+        continuation: { node: 'books-b', cursor: cursorB },
+        language: 'ja',
+        authorization: 'Bearer reader-b-token',
+      },
     ]);
-    await until(() => !!host.querySelector('[data-slot="member-list"][data-node="members-b"]'), 'replacement member node');
+    await until(
+      () => !!host.querySelector('[data-slot="member-list"][data-node="members-b"]'),
+      'replacement member node',
+    );
     const currentBTrigger = button('members-b');
     currentBTrigger.focus();
-    await act(async () => retiredAddressCall.work.resolve(memberResponse(retiredAddressCall, [recording.members[3]!], null)));
+    await act(async () =>
+      retiredAddressCall.work.resolve(memberResponse(retiredAddressCall, [recording.members[3]!], null)),
+    );
     await flush();
     expect(list('members-b').textContent).not.toContain('Kokoro');
     expect(window.document.activeElement).toBe(currentBTrigger);

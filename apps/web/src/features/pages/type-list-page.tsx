@@ -112,9 +112,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   if (selectedRealm) reader.registerQuery('configured-list', queryKey);
   const query = useQuery({
     ...options,
-    enabled:
-      mode !== 'initial-hydration' &&
-      (!selectedRealm || (reader.canRead && state !== 'unknown')),
+    enabled: mode !== 'initial-hydration' && (!selectedRealm || (reader.canRead && state !== 'unknown')),
     ...(loaderResult ? { initialData: loaderResult, initialDataUpdatedAt: Date.now() } : {}),
   });
 

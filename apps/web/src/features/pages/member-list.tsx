@@ -196,8 +196,7 @@ function MemberReader({
   const current = useQuery({
     ...personalRead,
     queryKey,
-    enabled:
-      personalRead.enabled && admission.canRead && (needsViewer || needsFreshPrivate) && !!target && !!node,
+    enabled: personalRead.enabled && admission.canRead && (needsViewer || needsFreshPrivate) && !!target && !!node,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
@@ -222,13 +221,14 @@ function MemberReader({
   });
   if ((needsViewer || needsFreshPrivate) && target && current.isPending)
     return <p role="status">{m.subject_relation_loading({}, { locale: value.locale as never })}</p>;
-  const section: Section = needsViewer || needsFreshPrivate
-    ? current.isError
-      ? { ok: false }
-      : (current.data ?? { ok: false })
-    : initialAllowed
-      ? initial
-      : { ok: false };
+  const section: Section =
+    needsViewer || needsFreshPrivate
+      ? current.isError
+        ? { ok: false }
+        : (current.data ?? { ok: false })
+      : initialAllowed
+        ? initial
+        : { ok: false };
   const continuationEnabled =
     value.cacheReader == null ||
     ((needsFreshPrivate || initialAllowed) &&
@@ -380,8 +380,7 @@ export function MemberList({
       if (!isCurrent()) return;
       if (!next.ok) {
         setError((previous) => (isCurrent() ? next : previous));
-        if ([401, 403, 404, 409].includes(next.status ?? 0))
-          setPages((previous) => (isCurrent() ? [next] : previous));
+        if ([401, 403, 404, 409].includes(next.status ?? 0)) setPages((previous) => (isCurrent() ? [next] : previous));
       } else {
         const visible = new Set(unique.keys());
         for (const item of memberItems(next, value)) visible.add(item.id);
