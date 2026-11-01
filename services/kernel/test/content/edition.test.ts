@@ -500,9 +500,12 @@ test('default edition metadata opt-in preserves closed shapes and never derives 
   expect(
     (await value<ContentEditionView>(metadataIdentity(f.token, base), 200)).identity?.revisionCreatedAt,
   ).toBeNull();
+  await value(wire(f.token, `${base}:unpublish`, 'POST', {}, '2'), 200);
+  const withdrawn = await value<ContentEditionView>(metadataIdentity(f.token, base), 200);
+  expect(withdrawn.state).toBe('withdrawn');
+  expect(withdrawn.identity?.revisionCreatedAt).toBe(await revisionDate(f));
   await seedResourceDenial(f.native.database.pool, f.route, f.post.id, f.author.actor.accountId, ['post:read']);
   expect((await wire(f.token, `${exactPath(f)}?editionIdentity=true`)).status).toBe(404);
-  await value(wire(f.token, `${base}:unpublish`, 'POST', {}, '2'), 200);
   expect((await wire(f.token, base)).status).toBe(404);
   expect((await metadataIdentity(f.token, base)).status).toBe(404);
 }, 60000);
@@ -693,3 +696,34 @@ for (const change of ['label edit', 'source denial', 'subject hide', 'edition de
     }
   }, 60000);
 }
+
+test('default exact identity returns the final native post envelope after source visibility changes', async () => {
+  const f = await fixture();
+  const observer = observeSql(f.native.database.pool);
+  const barrier = observer.hold({ statement: readIdentityLabels.sql }, 'after');
+  const pending = wire(f.token, `${exactPath(f)}?editionIdentity=true`);
+  try {
+    await Promise.race([
+      barrier.entered,
+      pending.then(async (response) => {
+        throw new Error(`Expected identity label boundary, received ${response.status}: ${await response.text()}`);
+      }),
+    ]);
+    const changed = await f.native.database.admin.query<{ security_revision: string }>(
+      `UPDATE content.post SET visibility='published',security_revision=security_revision+1
+       WHERE route=$1 AND post_id=$2 RETURNING security_revision::text`,
+      [f.route, f.post.id],
+    );
+    barrier.release();
+    const result = await value<ExactIdentityResponse>(pending, 200);
+    expect(result.post.visibility).toBe('published');
+    expect(result.post.securityRevision).toBe(changed.rows[0]!.security_revision);
+    expect(result.post.revisionId).toBe(f.post.revisionId);
+    expect(result.post.sha256).toBe(f.post.sha256);
+    expect(result.editionIdentity.sha256).toBe(f.post.sha256);
+  } finally {
+    barrier.release();
+    await pending;
+    await observer.close();
+  }
+}, 60000);

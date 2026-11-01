@@ -185,8 +185,8 @@ async function revisionDates(
   );
 }
 
-/** Prepare display authority before final native metadata checks. The returned
- * reader refreshes labels and exact dates only after those checks succeed. */
+/** Read exact revision metadata before final native source checks. The returned
+ * reader refreshes independently authorized subject labels after those checks. */
 export async function prepareEditionIdentities(
   deps: Dependencies,
   editions: readonly ContentEditionView[],
@@ -199,9 +199,9 @@ export async function prepareEditionIdentities(
     editions.map((edition) => edition.targetSubjectId),
     context,
   );
+  const dates = ordinarySource ? await revisionDates(deps, editions, context) : new Map<string, string>();
   return async (): Promise<Map<string, EditionIdentity>> => {
     const labels = await subjects();
-    const dates = ordinarySource ? await revisionDates(deps, editions, context) : new Map<string, string>();
     return new Map(
       editions.map((edition) => [
         edition.editionId,
