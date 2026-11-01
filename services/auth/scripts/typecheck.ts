@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareCompilerDatabase } from '../../../scripts/compiler-database.ts';
-import { runOnCheckHost } from '../../../scripts/stack-run.ts';
+import { compilerConfigArgs, compilerEnvironment, placeCompilerRun, type CompilerPlacementDependencies } from '../../../scripts/typecheck.ts';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repository = resolve(directory, '../..');
@@ -19,25 +19,26 @@ async function typecheck(env: NodeJS.ProcessEnv): Promise<number> {
 
 export async function runAuthTypecheck(
   env: NodeJS.ProcessEnv = process.env,
-  dependencies: {
-    place?: typeof runOnCheckHost;
+  dependencies: CompilerPlacementDependencies & {
     typecheck?: typeof typecheck;
     prepareCompilerDatabase?: typeof prepareCompilerDatabase;
   } = {},
+  args: readonly string[] = process.argv.slice(2),
 ): Promise<number> {
+  env = compilerEnvironment(env, args);
   const runCommands = dependencies.typecheck ?? typecheck;
-  if (env.DATABASE_URL) return runCommands(env);
-
-  const placed = await (dependencies.place ?? runOnCheckHost)(
+  const config = compilerConfigArgs(env, repository, [directory]);
+  const placed = await placeCompilerRun(
     {
       label: 'auth typecheck',
       root: repository,
       cwd: directory,
-      command: ['bun', 'scripts/typecheck.ts'],
+      command: ['bun', 'scripts/typecheck.ts', ...config],
     },
-    env,
+    directory, env, dependencies,
   );
   if (placed !== null) return placed;
+  if (env.DATABASE_URL) return runCommands(env);
 
   // Use the same compiler database as Auth's check: imported kernel SQL also needs its schema.
   const database = await (dependencies.prepareCompilerDatabase ?? prepareCompilerDatabase)();

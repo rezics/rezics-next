@@ -4,10 +4,10 @@ The kernel workspace owns the database records and adapters used by the service.
 
 ## Commands
 
-Run `bun run --cwd services/kernel typecheck` in any worker without starting a local database. With `DATABASE_URL`, it
-uses that migrated database here. Without it, the command places itself on a check host and runs TypeScript plus
-construct against one throwaway migrated database there; if no check host answers, it provisions the same database
-locally. TypeScript diagnostics and exit status are preserved.
+Run `bun run --cwd services/kernel typecheck` through the [compiler placement contract](../../docs/development/compiler-check-placement.md).
+The command runs TypeScript plus construct on an approved check host against one migrated compiler database.
+An explicit `DATABASE_URL` requires an already admitted physical run. Unavailable placement fails closed;
+TypeScript diagnostics and exit status are preserved.
 
 ## Development database
 

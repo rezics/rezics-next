@@ -10,14 +10,15 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { POSTGRES_IMAGE } from '../services/auth/scripts/database.ts';
 import { prepareCompilerDatabase } from './compiler-database.ts';
 import { affectedWorkspaces, typecheck, type StartedDatabase } from './typecheck.ts';
 
 function fixture(): { root: string; remove: () => void } {
-  const root = mkdtempSync(join(tmpdir(), 'rezics-typecheck-'));
+  const repository = join(import.meta.dir, '..');
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const root = mkdtempSync(join(repository, '.temp/typecheck-'));
   writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: `bun@${Bun.version}` }));
   mkdirSync(join(root, 'node_modules/.bin'), { recursive: true });
   symlinkSync(process.execPath, join(root, 'node_modules/.bin/bun'));
@@ -195,6 +196,9 @@ await Bun.write('database-url', url);
 
     const code = await typecheck({
       root,
+      env: {},
+      recognize: () => ({ outcome: 'admitted', runId: 'fixture', scope: 'fixture.scope', supervisor: { pid: 1, started: '1', group: 1 } }),
+      place: async () => { throw new Error('nested host admission'); },
       stdout: output.stdout,
       startDatabase: async () => {
         starts += 1;
@@ -325,7 +329,7 @@ test('a change checks the workspaces containing it and their dependents; a root 
   expect(names(undefined)).toHaveLength(4);
 });
 
-test('an explicit root DATABASE_URL reaches the selected compiler without provisioning a replacement', () => {
+test('an admitted explicit root DATABASE_URL reaches the selected compiler without provisioning a replacement', () => {
   const repository = join(import.meta.dir, '..');
   mkdirSync(join(repository, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(repository, '.temp/compiler-explicit-url-'));
@@ -344,6 +348,8 @@ Bun.spawn = (command, options) => {
 };
 assert.equal(await typecheck({
   root: ${JSON.stringify(repository)},
+  recognize: () => ({ outcome: 'admitted', runId: 'fixture', scope: 'fixture.scope', supervisor: { pid: 1, started: '1', group: 1 } }),
+  place: async () => { throw new Error('nested host admission'); },
   changedFiles: ['services/kernel/scripts/typecheck.ts'],
   stdout: { write() {} },
   startDatabase: async () => { throw new Error('must not replace a developer database'); },

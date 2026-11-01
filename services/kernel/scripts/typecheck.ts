@@ -2,7 +2,7 @@ import { statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withThrowawayDatabase } from './derived.ts';
-import { runOnCheckHost } from '../../../scripts/stack-run.ts';
+import { compilerConfigArgs, compilerEnvironment, placeCompilerRun, type CompilerPlacementDependencies } from '../../../scripts/typecheck.ts';
 import { schemaDumps, validateMigrationVersions } from './database.ts';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -20,13 +20,10 @@ function returnedPaths(
   emitClient: boolean,
   emitSchema: string | undefined,
 ): string[] | undefined {
-  // Client declarations are a complete import tree, larger than the bounded return
-  // contract. Leave returns undefined so StackRun retains every emitted file locally,
-  // including the selected schema when both emission modes are requested.
+  // Client declarations exceed the bounded return contract. Undefined makes relocation unavailable.
   if (emitClient) return undefined;
 
-  // Keep external Reylo projects local: their configuration and retained analyses are
-  // outside the workspace-relative placement contract, even though we do not return them.
+  // External projects cannot be represented by the workspace-relative placement contract.
   const projectDirectory = env.REYLO_CONFIG ? dirname(resolve(directory, env.REYLO_CONFIG)) : directory;
   if (workspacePath(resolve(projectDirectory, '.reylo')) === undefined) return undefined;
 
@@ -86,33 +83,24 @@ async function typecheck(env: NodeJS.ProcessEnv, emitClient: boolean, emitSchema
 
 export async function runKernelTypecheck(
   env: NodeJS.ProcessEnv = process.env,
-  dependencies: {
-    place?: typeof runOnCheckHost;
+  dependencies: CompilerPlacementDependencies & {
     typecheck?: typeof typecheck;
     withThrowawayDatabase?: typeof withThrowawayDatabase;
   } = {},
   args: readonly string[] = process.argv.slice(2),
 ): Promise<number> {
-  // The compiler database applies the same migrations as derived generation.
-  validateMigrationVersions(
-    Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory })),
-    new Date(),
-  );
+  env = compilerEnvironment(env, args);
   const emitClient = args.includes('--emit-client');
   const emitSchema = args.find((arg) => arg.startsWith('--emit-schema='))?.slice('--emit-schema='.length);
-  const runPlaced = dependencies.place ?? runOnCheckHost;
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
-  const compile = (databaseEnv: NodeJS.ProcessEnv) =>
-    emitSchema === undefined ? runCommands(databaseEnv, emitClient) : runCommands(databaseEnv, emitClient, emitSchema);
-  if (env.DATABASE_URL) return compile(env);
-
-  // Preserve default host discovery unless the caller explicitly opts out.
+  const compile = (databaseEnv: NodeJS.ProcessEnv) => {
+    const compilerEnv = env.REYLO_CONFIG === undefined ? databaseEnv : { ...databaseEnv, REYLO_CONFIG: env.REYLO_CONFIG };
+    return emitSchema === undefined ? runCommands(compilerEnv, emitClient) : runCommands(compilerEnv, emitClient, emitSchema);
+  };
+  const config = compilerConfigArgs(env, repository, [directory]);
   const returns = returnedPaths(env, emitClient, emitSchema);
-  const placed =
-    !env.GOAL_TASK_ID && env.REZICS_STACK_REMOTE === 'off'
-      ? null
-      : await runPlaced(
+  const placed = await placeCompilerRun(
           {
             label: 'kernel typecheck',
             root: repository,
@@ -122,14 +110,20 @@ export async function runKernelTypecheck(
               'scripts/typecheck.ts',
               ...(emitClient ? ['--emit-client'] : []),
               ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
+              ...config,
             ],
             keepsFiles: emitClient || emitSchema !== undefined || returns === undefined,
             ...(returns === undefined ? {} : { returns }),
           },
-          env,
+          directory, env, dependencies,
         );
   if (placed !== null) return placed;
-
+  // The compiler database applies the same migrations as derived generation, in admitted custody only.
+  validateMigrationVersions(
+    Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory })),
+    new Date(),
+  );
+  if (env.DATABASE_URL) return compile(env);
   return withDatabase(compile);
 }
 

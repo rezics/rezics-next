@@ -184,12 +184,10 @@ bun run --cwd services/auth check
 bun run --cwd services/auth typecheck
 ```
 
-The standalone typecheck uses `DATABASE_URL` here when set. Otherwise it follows the
-kernel typecheck's [check-host placement rule](../../scripts/README.md#check-hosts)
-and creates one throwaway compiler database on the chosen host. As in Auth's check,
-this database receives both the kernel and Auth migrations because the compiler
-also follows imports of kernel SQL. It falls back to a local database only when
-no check host answers, and returns tsc's status and diagnostics unchanged.
+The standalone typecheck follows the [compiler placement contract](../../docs/development/compiler-check-placement.md)
+and creates one throwaway compiler database on an approved check host. This database receives both kernel and Auth
+migrations because the compiler also follows imports of kernel SQL. An explicit `DATABASE_URL` requires an already
+admitted physical run. Unavailable placement fails closed; tsc's status and diagnostics are unchanged.
 
 The check always creates a throwaway **separate** database using the same pinned
 PostgreSQL 19 image as kernel. It never uses `DATABASE_URL`, `AUTH_DATABASE_URL`
