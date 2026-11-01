@@ -57,19 +57,24 @@ export async function readOwnedZones(
   input: ListInput,
   expected?: OwnerReadObservation,
 ): Promise<ListOutcome> {
-  return asViewer(request, env, async (authorization): Promise<ListOutcome> => {
-    const result = await client.zones.get({
-      query: {
-        limit: String(pageLimit),
-        deleted: String(input.deleted) as 'true' | 'false',
-        ...(input.cursor ? { cursor: input.cursor } : {}),
-      },
-      headers: { authorization },
-    });
-    return result.status === 200 && result.data
-      ? { kind: 'ready', page: result.data }
-      : failure(result.status, result.error?.value);
-  }, expected);
+  return asViewer(
+    request,
+    env,
+    async (authorization): Promise<ListOutcome> => {
+      const result = await client.zones.get({
+        query: {
+          limit: String(pageLimit),
+          deleted: String(input.deleted) as 'true' | 'false',
+          ...(input.cursor ? { cursor: input.cursor } : {}),
+        },
+        headers: { authorization },
+      });
+      return result.status === 200 && result.data
+        ? { kind: 'ready', page: result.data }
+        : failure(result.status, result.error?.value);
+    },
+    expected,
+  );
 }
 
 /** The retained command is replayed byte-for-byte after an uncertain response. */
@@ -81,17 +86,22 @@ export async function changeOwnedZone(
   expected?: OwnerReadObservation,
 ): Promise<CommandOutcome> {
   if (!validLifecycle(command)) return { kind: 'invalid' };
-  return asViewer(request, env, async (authorization): Promise<CommandOutcome> => {
-    const zone = client.zones({ id: command.id });
-    const headers = { authorization, 'if-match': `"${command.revision}"`, 'idempotency-key': command.key };
-    const result =
-      command.operation === 'delete'
-        ? await zone.delete(undefined, { headers })
-        : await zone.$restore.post({}, { headers });
-    return result.status === 200 && result.data
-      ? { kind: 'saved', zone: result.data.zone }
-      : failure(result.status, result.error?.value);
-  }, expected);
+  return asViewer(
+    request,
+    env,
+    async (authorization): Promise<CommandOutcome> => {
+      const zone = client.zones({ id: command.id });
+      const headers = { authorization, 'if-match': `"${command.revision}"`, 'idempotency-key': command.key };
+      const result =
+        command.operation === 'delete'
+          ? await zone.delete(undefined, { headers })
+          : await zone.$restore.post({}, { headers });
+      return result.status === 200 && result.data
+        ? { kind: 'saved', zone: result.data.zone }
+        : failure(result.status, result.error?.value);
+    },
+    expected,
+  );
 }
 
 export async function createOwnedZone(
@@ -106,16 +116,21 @@ export async function createOwnedZone(
   if (!configuration || !/^[0-9a-f-]{36}$/.test(command.key) || fields.length) return { kind: 'invalid', fields };
   configuration.labels = { ...command.labels };
   if (command.primaryLanguage !== undefined) configuration.primaryLanguage = command.primaryLanguage;
-  return asViewer(request, env, async (authorization): Promise<CommandOutcome> => {
-    const headers = { authorization, 'idempotency-key': command.key };
-    const result = await client.zones.post(
-      { configuration, mounts: [], visibility: 'private' },
-      {
-        headers,
-      },
-    );
-    return result.status === 201 && result.data
-      ? { kind: 'saved', zone: result.data.zone }
-      : failure(result.status, result.error?.value);
-  }, expected);
+  return asViewer(
+    request,
+    env,
+    async (authorization): Promise<CommandOutcome> => {
+      const headers = { authorization, 'idempotency-key': command.key };
+      const result = await client.zones.post(
+        { configuration, mounts: [], visibility: 'private' },
+        {
+          headers,
+        },
+      );
+      return result.status === 201 && result.data
+        ? { kind: 'saved', zone: result.data.zone }
+        : failure(result.status, result.error?.value);
+    },
+    expected,
+  );
 }

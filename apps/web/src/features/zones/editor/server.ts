@@ -22,7 +22,8 @@ function ownerRequest(value: OwnerRequest): OwnerRequest {
   const hasAdmission = value.admission !== undefined;
   if (
     hasReader !== hasAdmission ||
-    (hasReader && (typeof value.expectedReader !== 'string' || !value.expectedReader || value.expectedReader.length > 255)) ||
+    (hasReader &&
+      (typeof value.expectedReader !== 'string' || !value.expectedReader || value.expectedReader.length > 255)) ||
     (hasAdmission && (typeof value.admission !== 'string' || !/^\d+:\d+:[0-9a-f-]{36}$/.test(value.admission)))
   )
     throw new Error('Invalid Zone reader observation');
@@ -89,10 +90,7 @@ export const writeConfiguration = createServerFn({ method: 'POST' })
     try {
       prepared = await preparedReader(data);
       return prepared
-        ? observed(
-            await mutate(kernelClient(data.locale), prepared.authorization, data),
-            prepared.ownerObservation,
-          )
+        ? observed(await mutate(kernelClient(data.locale), prepared.authorization, data), prepared.ownerObservation)
         : denied;
     } catch (error) {
       return observed(caught(error), prepared?.ownerObservation);

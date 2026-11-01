@@ -121,7 +121,15 @@ const editorServer = {
     if (data.operation === 'save') {
       editorLoaded = {
         ...editorLoaded,
-        resource: { kind: 'ready', value: { ...saved, zone, configuration: structuredClone(data.body.configuration), mounts: [...data.body.mounts] } },
+        resource: {
+          kind: 'ready',
+          value: {
+            ...saved,
+            zone,
+            configuration: structuredClone(data.body.configuration),
+            mounts: [...data.body.mounts],
+          },
+        },
       };
     } else editorLoaded = { ...editorLoaded, resource: { kind: 'ready', value: { ...saved, zone } } };
     return { kind: 'ready', value: zone, ownerObservation: observation };
@@ -171,7 +179,8 @@ const {
   useLoaderData,
 } = await import('@tanstack/react-router');
 const { sessionQuery, useSession } = await import('../src/session/query');
-const { captureOwnerRead, OwnerLifetime, useOwnerLifetime } = await import('../src/features/zones/editor/owner-lifetime');
+const { captureOwnerRead, OwnerLifetime, useOwnerLifetime } =
+  await import('../src/features/zones/editor/owner-lifetime');
 const { ZoneEditorRoute, loadZoneEditor } = await import('../src/features/zones/editor/route');
 const { ZoneEditorSession } = await import('../src/features/zones/editor/model');
 const { ZonesOwnerWorkspace } = await import('../src/features/zones/manage/workspace');
@@ -226,7 +235,10 @@ async function readList(expected: OwnerReadObservation): Promise<ListOutcome> {
     expected,
   );
 }
-const lifecycleCalls: { command: import('../src/features/zones/manage/model').LifecycleCommand; capture?: OwnerReadObservation }[] = [];
+const lifecycleCalls: {
+  command: import('../src/features/zones/manage/model').LifecycleCommand;
+  capture?: OwnerReadObservation;
+}[] = [];
 async function changeZone(
   command: import('../src/features/zones/manage/model').LifecycleCommand,
   capture?: import('../src/features/zones/editor/owner-lifetime').OwnerCapture,
@@ -235,7 +247,10 @@ async function changeZone(
   if (!capture) return { kind: 'stale' };
   return changeOwnedZone(managed.client, request('POST', capture.csrfToken), sessionEnv, command, capture.observation);
 }
-const createCalls: { command: import('../src/features/zones/manage/model').CreateCommand; capture?: OwnerReadObservation }[] = [];
+const createCalls: {
+  command: import('../src/features/zones/manage/model').CreateCommand;
+  capture?: OwnerReadObservation;
+}[] = [];
 let delayedCreateOutcome: ReturnType<typeof deferred<CommandOutcome>> | undefined;
 async function createZone(
   command: import('../src/features/zones/manage/model').CreateCommand,
@@ -261,11 +276,10 @@ function ZonesListPage() {
     outcome: ListOutcome;
     requestedOwner: OwnerReadObservation | null;
   };
-  const { lifetime, snapshot } = useOwnerLifetime(
-    location.pathname + JSON.stringify(location.search),
-    requestedOwner,
-  );
-  const current = !!snapshot.capture && requestedOwner?.reader === snapshot.capture.observation.reader &&
+  const { lifetime, snapshot } = useOwnerLifetime(location.pathname + JSON.stringify(location.search), requestedOwner);
+  const current =
+    !!snapshot.capture &&
+    requestedOwner?.reader === snapshot.capture.observation.reader &&
     requestedOwner?.admission === snapshot.capture.observation.admission;
   const visible = current ? outcome : null;
   return (
@@ -364,7 +378,9 @@ function setInput(host: HTMLElement, selector: string, value: string) {
   const target = host.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
   if (!target) throw new Error(`Missing input: ${selector}`);
   target.value = value;
-  target.dispatchEvent(new window.Event(target instanceof window.HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
+  target.dispatchEvent(
+    new window.Event(target instanceof window.HTMLSelectElement ? 'change' : 'input', { bubbles: true }),
+  );
 }
 function signedIn(subject: string, csrfToken: string | null): Viewer {
   return { state: 'signed-in', subject, csrfToken };
@@ -387,13 +403,15 @@ test('mounted My Zones to publish journey keeps async state in its original read
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
-  await settle(() => root.render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </StrictMode>,
-  ));
+  await settle(() =>
+    root.render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </StrictMode>,
+    ),
+  );
   await until(() => host.textContent?.includes(m.zones_owner_title({}, { locale: 'en' })) ?? false);
 
   expect(listCalls).toHaveLength(1);
@@ -592,10 +610,13 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
           expect(readCalls).toBe(1);
         }
         if (retirement === 'error') {
-          client.getQueryCache().find({ queryKey: sessionQuery.queryKey })!.setState({
-            status: 'error',
-            error: new Error('session read failed'),
-          });
+          client
+            .getQueryCache()
+            .find({ queryKey: sessionQuery.queryKey })!
+            .setState({
+              status: 'error',
+              error: new Error('session read failed'),
+            });
         } else if (retirement === 'remove') client.removeQueries({ queryKey: sessionQuery.queryKey });
         else if (retirement === 'replace') client.setQueryData(sessionQuery.queryKey, signedIn('B', null));
         else if (retirement === 'aba') {
@@ -633,24 +654,19 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
           retire: () => freshLifetime.retire(freshCapture),
         });
         const freshState = freshSession.snapshot();
-        if (phase === 'load')
-          loading.resolve(
-            resultKind === 'success'
-              ? ready
-              : { ...ready, resource: failure },
-          );
+        if (phase === 'load') loading.resolve(resultKind === 'success' ? ready : { ...ready, resource: failure });
         else if (phase === 'write')
           writing.resolve(
             resultKind === 'success'
-              ? { kind: 'ready', value: ready.resource.kind === 'ready' ? ready.resource.value.zone : fixtureZone(), ownerObservation: capture.observation }
+              ? {
+                  kind: 'ready',
+                  value: ready.resource.kind === 'ready' ? ready.resource.value.zone : fixtureZone(),
+                  ownerObservation: capture.observation,
+                }
               : failure,
           );
         else if (phase === 'retry-read')
-          loading.resolve(
-            resultKind === 'success'
-              ? ready
-              : { ...ready, resource: failure },
-          );
+          loading.resolve(resultKind === 'success' ? ready : { ...ready, resource: failure });
         else if (phase === 'preview')
           previewing.resolve(
             resultKind === 'success'
@@ -660,7 +676,11 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
         else
           choosing.resolve(
             resultKind === 'success'
-              ? { kind: 'ready', value: { items: [{ id: 'old', title: 'Old private choice' }], next: null }, ownerObservation: capture.observation }
+              ? {
+                  kind: 'ready',
+                  value: { items: [{ id: 'old', title: 'Old private choice' }], next: null },
+                  ownerObservation: capture.observation,
+                }
               : failure,
           );
         await running;

@@ -175,4 +175,3 @@ export async function loadZoneEditor(
     : missingAdmissionData();
   return { initial, requestedOwner, loadedFor: { id, locale, search: JSON.stringify(search ?? {}) } };
 }
-

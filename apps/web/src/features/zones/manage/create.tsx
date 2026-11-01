@@ -69,9 +69,10 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
     inFlight.current = false;
     if (saved.kind === 'saved') {
       if (!owner || owner.isCurrent(admission)) onNavigate(zonePaths(locale, saved.zone.id).edit);
-    } else requestAnimationFrame(() => {
-      if (!owner || owner.isCurrent(admission)) alert.current?.focus();
-    });
+    } else
+      requestAnimationFrame(() => {
+        if (!owner || owner.isCurrent(admission)) alert.current?.focus();
+      });
   }
 
   function submit(event: FormEvent) {

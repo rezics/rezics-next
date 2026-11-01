@@ -24,9 +24,7 @@ function ZoneConfigurationRoute() {
   const location = useLocation();
   const { initial, requestedOwner, loadedFor } = Route.useLoaderData();
   const readMatchesRoute =
-    loadedFor.id === id &&
-    loadedFor.locale === locale &&
-    loadedFor.search === JSON.stringify(location.search ?? {});
+    loadedFor.id === id && loadedFor.locale === locale && loadedFor.search === JSON.stringify(location.search ?? {});
   return (
     <ZoneEditorRoute
       key={`${id}:${locale}`}

@@ -14,7 +14,8 @@ function ownerObservation(value: OwnerRequest | null | undefined): OwnerReadObse
   const hasAdmission = value.admission !== undefined;
   if (
     hasReader !== hasAdmission ||
-    (hasReader && (typeof value.expectedReader !== 'string' || !value.expectedReader || value.expectedReader.length > 255)) ||
+    (hasReader &&
+      (typeof value.expectedReader !== 'string' || !value.expectedReader || value.expectedReader.length > 255)) ||
     (hasAdmission && (typeof value.admission !== 'string' || !/^\d+:\d+:[0-9a-f-]{36}$/.test(value.admission)))
   )
     throw new Error('Invalid Zone reader observation');
@@ -51,13 +52,7 @@ export const changeMyZone = createServerFn({ method: 'POST', strict: false })
   }))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return changeOwnedZone(
-      kernelClient(),
-      getRequest(),
-      env as Partial<SessionEnv>,
-      data,
-      ownerObservation(data),
-    );
+    return changeOwnedZone(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, ownerObservation(data));
   });
 
 export const createMyZone = createServerFn({ method: 'POST', strict: false })
@@ -70,11 +65,5 @@ export const createMyZone = createServerFn({ method: 'POST', strict: false })
   }))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return createOwnedZone(
-      kernelClient(),
-      getRequest(),
-      env as Partial<SessionEnv>,
-      data,
-      ownerObservation(data),
-    );
+    return createOwnedZone(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, ownerObservation(data));
   });

@@ -108,8 +108,7 @@ export class OwnerLifetime {
         } else this.rotate(observed, replay);
         this.replayObservation = undefined;
         this.replaySignature = null;
-      }
-      else this.refresh(observed);
+      } else this.refresh(observed);
       this.hasSubscribed = true;
     }
     return () => {
