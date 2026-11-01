@@ -387,6 +387,9 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
            FROM semantic.public_filter_repair_step s
            JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
            WHERE b.state='adopted' AND b.consumer LIKE $1
+             AND EXISTS (SELECT 1 FROM semantic.public_filter_repair_step terminal
+               WHERE (terminal.partition_no,terminal.bootstrap,terminal.execution)=
+                 (s.partition_no,s.bootstrap,s.execution) AND terminal.complete)
            WINDOW w AS (PARTITION BY s.bootstrap,s.execution ORDER BY s.verified_ordinal)
          ) SELECT bootstrap::text,execution,count(*)::integer AS pages,
            count(*) FILTER (WHERE complete)::integer AS complete,
