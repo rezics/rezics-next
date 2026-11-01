@@ -96,7 +96,7 @@ test('short descriptions stay inline through the 420-character/two-paragraph bou
 });
 
 test('long fallback uses closed native disclosure, one exact full body, language and unchanged About ordering', () => {
-  const text = `  ${'Une histoire de voyage. '.repeat(28)}\r\n\r\nLa suite.\r\nUne autre ligne.  `;
+  const text = `  ${'Une histoire de voyage. '.repeat(28)}\n\nLa suite.\nUne autre ligne.  `;
   const body = render(reading(text, 'fr'));
   const details = body.querySelector('details')!;
   const summary = details.querySelector('summary')!;
@@ -140,9 +140,15 @@ test('excerpt preserves graphemes, paragraph boundaries, literal markup and unbr
   }
   for (const separator of ['\n\n', '\r\n\r\n', '\r\r', '\n \t\n']) {
     const text = `First\nline${separator}Second paragraph${separator}Third paragraph`;
-    const body = render(reading(text));
-    expect(body.querySelector('summary > span')?.textContent).toBe(`First\nline${separator}Second paragraph…`);
-    expect(body.querySelector('details > p')?.textContent).toBe(text);
+    const value = reading(text);
+    const body = render(value);
+    // HTML parsing may normalize CR/CRLF to LF; the serialized body still carries the original text.
+    const lines = (text: string) => text.replace(/\r\n?/g, '\n');
+    expect(lines(body.querySelector('summary > span')!.textContent)).toBe(
+      lines(`First\nline${separator}Second paragraph…`),
+    );
+    expect(lines(body.querySelector('details > p')!.textContent)).toBe(lines(text));
+    expect(renderToStaticMarkup(composition(value))).toContain(text);
   }
   const token = `https://example.test/${'x'.repeat(1000)}`;
   const text = `<script>alert('literal')</script> <a href="/private">plain text</a> ${token}`;
@@ -188,6 +194,7 @@ test('the actual spoiler gate reveals and hides by keyboard and resets for a dif
     'navigator',
     'HTMLElement',
     'HTMLButtonElement',
+    'HTMLInputElement',
     'Element',
     'Node',
     'Document',
