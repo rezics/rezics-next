@@ -477,6 +477,7 @@ test('plan extraction refuses overflow in row, block, relation and CTE accumulat
   expect(() =>
     costOf({
       statements: [],
+      plans: [],
       backgroundPlans: [
         { Plan: seqPlan(Number.MAX_VALUE) },
         { Plan: seqPlan(Number.MAX_VALUE) },

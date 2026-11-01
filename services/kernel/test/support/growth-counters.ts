@@ -95,7 +95,7 @@ export function medianCounted(repetitions: readonly CountedValues[]): CountedVal
     if (current.length !== expected.size || current.some((name) => !expected.has(name)))
       throw new TypeError(`Counted repetition ${index + 1} has missing or mismatched unit names`);
     for (const [name, value] of Object.entries(run))
-      if (!name || !Number.isSafeInteger(value) || value < 0)
+      if (!name || typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
         throw new TypeError(`Counted unit ${name || '<empty>'} at repetition ${index + 1} must be a non-negative safe integer`);
   });
   return Object.fromEntries(
