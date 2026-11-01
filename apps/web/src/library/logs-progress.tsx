@@ -7,7 +7,7 @@ import type { ProgressDetailOrigin } from './progress-session';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { publishProgressLog } from './logs-server';
-import type { PublishedLogPage } from './logs-read';
+import type { PublishedLogPage, PublishedLogWriteResult } from './logs-read';
 import type { ProgressSessionPage } from './progress-reads';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -39,6 +39,34 @@ export function RelativeTime({ value }: { value: string }) {
   );
 }
 
+type PublicationIntent = { sessionId: string; note?: string; idempotencyKey: string };
+type PublicationLifetime = {
+  sessionId: string;
+  note: string;
+  key: string;
+  intent?: PublicationIntent;
+  flight?: object;
+  success?: Extract<PublishedLogWriteResult, { ok: true }>;
+  error: string | null;
+  listeners: Set<() => void>;
+};
+// Private same-owner intent survives a retired read/operation view. This is never authority.
+const publications = new WeakMap<object, PublicationLifetime>();
+function publicationLifetime(sessionId: string, originating?: ProgressDetailOrigin): PublicationLifetime {
+  const key = originating?.lifetime ?? originating;
+  const retained = key ? publications.get(key) : undefined;
+  if (retained?.sessionId === sessionId) return retained;
+  const value: PublicationLifetime = {
+    sessionId,
+    note: '',
+    key: crypto.randomUUID(),
+    error: null,
+    listeners: new Set(),
+  };
+  if (key) publications.set(key, value);
+  return value;
+}
+
 function PublishLog({
   page,
   originating,
@@ -47,71 +75,87 @@ function PublishLog({
   originating?: ProgressDetailOrigin | undefined;
 }) {
   const router = useRouter();
-  const [note, setNote] = useState('');
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  type Lifetime = {
-    page: typeof page;
-    originating?: ProgressDetailOrigin | undefined;
-    pending: boolean;
-    intent?: { sessionId: string; note?: string; idempotencyKey: string };
-  };
-  const lifetime = useRef<Lifetime | null>({ page, originating, pending: false });
-  const [seenPage, setSeenPage] = useState(page);
-  const originChanged = lifetime.current !== null && lifetime.current.originating !== originating;
-  if (page !== seenPage || originChanged) {
-    setSeenPage(page);
-    if (!originating || originChanged) {
-      lifetime.current = { page, originating, pending: false };
-      setNote('');
-      setIdempotencyKey(crypto.randomUUID());
-      setPending(false);
-      setError(null);
-    }
-  }
-  useLayoutEffect(() => {
-    const origin = (lifetime.current ??= { page, originating, pending: false });
-    return () => {
-      if (lifetime.current === origin) lifetime.current = null;
-    };
-  }, [originating ?? page]);
+  const [, render] = useState(0);
+  const owner = useRef<{ page: typeof page; originating: typeof originating; value: PublicationLifetime } | null>(null);
+  if (!owner.current || owner.current.originating !== originating || (!originating && owner.current.page !== page))
+    owner.current = { page, originating, value: publicationLifetime(page.session.id, originating) };
+  const lifetime = owner.current.value;
+  const mounted = useRef(0);
+  const guard = originating?.capture?.('published_log.create');
+  const renderToken = {};
+  const currentView = useRef<{ token: object; current: () => boolean } | null>(null);
+  const isCurrent = () =>
+    mounted.current > 0 &&
+    owner.current?.value === lifetime &&
+    owner.current.originating === originating &&
+    (guard ? guard.isCurrent() : originating ? originating.isCurrent(true) : owner.current.page === page);
+  currentView.current = { token: renderToken, current: isCurrent };
+  const canHandle = () => currentView.current?.token === renderToken && isCurrent();
 
-  function isCurrent(origin: Lifetime | null): origin is Lifetime {
-    return Boolean(
-      origin &&
-      lifetime.current === origin &&
-      origin.originating === originating &&
-      (originating ? originating.isCurrent(true) : origin.page === page),
-    );
+  useLayoutEffect(() => {
+    mounted.current++;
+    const notify = () => {
+      // A retired completion may release its own physical latch. Only the current
+      // observing view can reflect that settlement in the UI, after checking authority.
+      if (owner.current?.value === lifetime && currentView.current?.current()) render((value) => value + 1);
+    };
+    lifetime.listeners.add(notify);
+    return () => {
+      mounted.current--;
+      lifetime.listeners.delete(notify);
+    };
+  }, [lifetime]);
+  function notify() {
+    lifetime.listeners.forEach((listener) => listener());
+  }
+  function navigate(id: string) {
+    if (isCurrent()) window.location.assign(router.buildLocation({ to: '/logs/$id', params: { id } }).href);
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const origin = lifetime.current;
-    if (!isCurrent(origin) || origin.pending) return;
-    const cleanNote = note.trim();
-    origin.intent ??= { sessionId: page.session.id, ...(cleanNote ? { note: cleanNote } : {}), idempotencyKey };
-    origin.pending = true;
-    setPending(true);
-    setError(null);
+    if (!canHandle() || lifetime.flight) return;
+    const headers = guard ? guard.headers() : csrfHeaders();
+    if (!headers) return;
+    // A success observed during an authority pause remains a success. Explicitly
+    // resuming it may navigate, but must never publish the same intent with a fresh key.
+    if (lifetime.success) {
+      navigate(lifetime.success.id);
+      return;
+    }
+    const cleanNote = lifetime.note.trim();
+    lifetime.intent ??= {
+      sessionId: lifetime.sessionId,
+      ...(cleanNote ? { note: cleanNote } : {}),
+      idempotencyKey: lifetime.key,
+    };
+    const intent = lifetime.intent;
+    const flight = {};
+    lifetime.flight = flight;
+    lifetime.error = null;
+    notify();
+    const currentAttempt = () => lifetime.flight === flight && isCurrent();
     try {
-      const result = await publishProgressLog({ data: origin.intent, headers: csrfHeaders() });
-      if (!isCurrent(origin)) return;
+      const result = await publishProgressLog({ data: intent, headers });
+      // Record the actual native outcome privately, even when this view has retired.
+      // No replacement viewer can acquire this lifetime or its result.
+      if (result.ok && lifetime.flight === flight) lifetime.success = result;
+      if (!currentAttempt()) return;
       if (!result.ok) {
-        setError(result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed());
+        lifetime.error = result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed();
+        notify();
         return;
       }
-      delete origin.intent;
-      setIdempotencyKey(crypto.randomUUID());
-      if (!isCurrent(origin)) return;
-      window.location.assign(router.buildLocation({ to: '/logs/$id', params: { id: result.id } }).href);
+      navigate(result.id);
     } catch {
-      if (!isCurrent(origin)) return;
-      setError(m.library_logs_write_failed());
+      if (!currentAttempt()) return;
+      lifetime.error = m.library_logs_write_failed();
+      notify();
     } finally {
-      if (isCurrent(origin)) {
-        origin.pending = false;
-        setPending(false);
+      // Authority is not the owner of physical completion. This cannot release a
+      // different lifetime's or a newer request's latch, and never retries a write.
+      if (lifetime.flight === flight) {
+        delete lifetime.flight;
+        notify();
       }
     }
   }
@@ -129,16 +173,20 @@ function PublishLog({
             <Textarea
               aria-label={m.library_logs_publish_note()}
               maxLength={1000}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
+              value={lifetime.note}
+              onChange={(event) => {
+                if (!canHandle()) return;
+                lifetime.note = event.target.value;
+                notify();
+              }}
             />
           </label>
-          {error ? (
+          {lifetime.error ? (
             <p role="alert" className="rounded-lg border border-border bg-card p-3">
-              {error}
+              {lifetime.error}
             </p>
           ) : null}
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={!!lifetime.flight}>
             {m.library_logs_publish()}
           </Button>
         </form>

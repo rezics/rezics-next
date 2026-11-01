@@ -512,3 +512,178 @@ describe('Complete progress detail and published log owner episodes preserves cu
     }
   });
 });
+
+// UNRUN: continuation cases for settlement custody and recovered explicit publication.
+test('publication records success during an unavailable observation without navigation or a second publication', async () => {
+  const navigation: string[] = [];
+  const assign = spyOn(window.location, 'assign').mockImplementation((url) => {
+    navigation.push(String(url));
+  });
+  const h = await mount();
+  try {
+    await h.fill(m.library_logs_publish_note(), '  original public note  ');
+    await h.click(m.library_logs_publish());
+    const first = writes[0]!;
+    pauseExposure = true;
+    await h.session('A', 'success-during-rotation');
+    await settle(() => first.work.resolve({ ok: true, id: 'known-publication' }));
+    expect(navigation).toEqual([]);
+    expect(writes).toHaveLength(1);
+    pauseExposure = false;
+    await settle(() => exposures.at(-1)!.resolve({ data: { admitted: ['reading_progress'] } }));
+    expect(h.button(m.library_logs_publish()).disabled).toBe(false);
+    expect((h.body.getByLabelText(m.library_logs_publish_note()) as HTMLTextAreaElement).value).toBe(
+      '  original public note  ',
+    );
+    expect(navigation).toEqual([]);
+    await h.click(m.library_logs_publish());
+    expect(writes).toHaveLength(1);
+    expect(navigation).toEqual(['/logs/known-publication']);
+  } finally {
+    await h.close();
+    assign.mockRestore();
+  }
+});
+
+test('publication A callbacks and completion cannot dispatch with B credentials or unlock B in flight', async () => {
+  const navigation: string[] = [];
+  const assign = spyOn(window.location, 'assign').mockImplementation((url) => {
+    navigation.push(String(url));
+  });
+  const h = await mount();
+  try {
+    await h.fill(m.library_logs_publish_note(), 'A note');
+    const oldSubmit = retained(h.host.querySelector('form')!, 'onSubmit');
+    const oldChange = retained(h.body.getByLabelText(m.library_logs_publish_note()), 'onChange');
+    await h.click(m.library_logs_publish());
+    const old = writes[0]!;
+    await act(async () => {
+      current = viewer('B');
+      h.cache.setQueryData(['session'], current);
+      oldSubmit({ preventDefault() {} });
+      oldChange({ target: { value: 'A callback into B' } });
+    });
+    expect(writes).toHaveLength(1);
+    await settle(() => reads.at(-1)!.work.resolve(detail('B', address, 20)));
+    expect((h.body.getByLabelText(m.library_logs_publish_note()) as HTMLTextAreaElement).value).toBe('');
+    await h.fill(m.library_logs_publish_note(), 'B note');
+    await h.click(m.library_logs_publish());
+    const newer = writes[1]!;
+    expect(newer.data).toMatchObject({ sessionId: address.id, note: 'B note' });
+    expect(newer.headers).toEqual({ 'x-csrf-token': 'B-csrf' });
+    await settle(() => old.work.resolve({ ok: true, id: 'A-publication' }));
+    expect(navigation).toEqual([]);
+    expect(h.button(m.library_logs_publish()).disabled).toBe(true);
+    expect((h.body.getByLabelText(m.library_logs_publish_note()) as HTMLTextAreaElement).value).toBe('B note');
+    await settle(() => oldSubmit({ preventDefault() {} }));
+    await h.click(m.library_logs_publish());
+    expect(writes).toHaveLength(2);
+    await settle(() => newer.work.reject(new Error('B uncertain publication')));
+    expect(h.button(m.library_logs_publish()).disabled).toBe(false);
+    await h.click(m.library_logs_publish());
+    expect(writes[2]!.data).toEqual(newer.data);
+  } finally {
+    await h.close();
+    assign.mockRestore();
+  }
+});
+
+test('equivalent scoped exposure replacement retires old publication callbacks while preserving the exact uncertain intent', async () => {
+  const h = await mount();
+  try {
+    await h.fill(m.library_logs_publish_note(), '  captured across replacement  ');
+    await h.click(m.library_logs_publish());
+    const first = writes[0]!;
+    const oldSubmit = retained(h.host.querySelector('form')!, 'onSubmit');
+    await act(async () => {
+      const key = h.scoped();
+      h.cache.removeQueries({ queryKey: key, exact: true });
+      h.cache.setQueryData(key, { subject: 'A', admitted: ['reading_progress'] });
+      oldSubmit({ preventDefault() {} });
+    });
+    await settle(() => first.work.reject(new Error('uncertain completion after scoped replacement')));
+    expect(writes).toHaveLength(1);
+    expect(reads.at(-1)!.data).toEqual(address);
+    await settle(() => reads.at(-1)!.work.resolve(detail('A', address, 18)));
+    expect(writes).toHaveLength(1);
+    expect(h.button(m.library_logs_publish()).disabled).toBe(false);
+    expect((h.body.getByLabelText(m.library_logs_publish_note()) as HTMLTextAreaElement).value).toBe(
+      '  captured across replacement  ',
+    );
+    await h.fill(m.library_logs_publish_note(), 'subsequently edited note');
+    await settle(() => oldSubmit({ preventDefault() {} }));
+    expect(writes).toHaveLength(1);
+    await h.click(m.library_logs_publish());
+    expect(writes[1]!.data).toEqual(first.data);
+    expect(writes[1]!.data.note).toBe('captured across replacement');
+  } finally {
+    await h.close();
+  }
+});
+
+test('sparse completed-unit recording retains the exact batch, revision and key across scoped observation churn', async () => {
+  const initial = detail();
+  Object.assign(initial.progress.session, {
+    mode: 'completed_units',
+    unit: 'track',
+    unitLabel: 'tracks',
+    total: null,
+    amount: null,
+    inputRules: { step: '1', total: 'forbidden' },
+    units: ['part/2', 'part/9'],
+  });
+  const h = await mount('progress', initial);
+  try {
+    expect(h.host.textContent).toContain('part/2');
+    expect(h.host.textContent).toContain('part/9');
+    expect(h.host.textContent).not.toContain('part/3');
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_add_units(), 'part/10\npart/42');
+    await h.click(m.library_progress_add_units());
+    const first = writes[0]!;
+    expect(first.data).toEqual({
+      sessionId: address.id,
+      revision: 7,
+      idempotencyKey: initial.progress.idempotencyKey,
+      add: ['part/10', 'part/42'],
+    });
+    pauseExposure = true;
+    await h.session('A', 'units-rotated-credential');
+    await settle(() => first.work.reject(new Error('uncertain sparse units')));
+    pauseExposure = false;
+    await settle(() => exposures.at(-1)!.resolve({ data: { admitted: ['reading_progress'] } }));
+    await h.fill(m.library_progress_add_units(), 'part/99');
+    await h.click(m.library_progress_add_units());
+    expect(writes[1]!.data).toEqual(first.data);
+    expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'units-rotated-credential' });
+  } finally {
+    await h.close();
+  }
+});
+
+test('publication uncertainty settles during healthy rotation and resumes explicitly with its original note and key', async () => {
+  const h = await mount();
+  try {
+    await h.fill(m.library_logs_publish_note(), '  exact uncertain note  ');
+    await h.click(m.library_logs_publish());
+    const first = writes[0]!;
+    pauseExposure = true;
+    await h.session('A', 'publication-rotated-credential');
+    await settle(() => first.work.reject(new Error('uncertain publication during rotation')));
+    expect(writes).toHaveLength(1);
+    pauseExposure = false;
+    await settle(() => exposures.at(-1)!.resolve({ data: { admitted: ['reading_progress'] } }));
+    expect(h.button(m.library_logs_publish()).disabled).toBe(false);
+    expect(writes).toHaveLength(1);
+    await h.fill(m.library_logs_publish_note(), 'a later draft');
+    await h.click(m.library_logs_publish());
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.data).toEqual(first.data);
+    expect(writes[1]!.data.note).toBe('exact uncertain note');
+    expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'publication-rotated-credential' });
+    await h.click(m.library_logs_publish());
+    expect(writes).toHaveLength(2);
+  } finally {
+    await h.close();
+  }
+});

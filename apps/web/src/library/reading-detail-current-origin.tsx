@@ -7,6 +7,7 @@ import { sessionQuery, useSession } from '../session/query';
 export type ReadingAdmission = { readonly id: string; readonly allowed: boolean; retired: boolean };
 type Snapshot = {
   viewer: string | null;
+  owner: string | null;
   identity: object;
   observation: ViewerObservation | undefined;
   ready: boolean;
@@ -27,6 +28,7 @@ class ReadingAuthority {
   private lastObservation: ViewerObservation | undefined;
   private snapshot: Snapshot = {
     viewer: null,
+    owner: null,
     identity: {},
     observation: undefined,
     ready: false,
@@ -50,6 +52,15 @@ class ReadingAuthority {
       session?.status === 'success' && data?.state === 'signed-in' && data.subject && data.csrfToken
         ? data.subject
         : null;
+    const previous = this.snapshot;
+    // Unavailable authority closes every old admission, but keeps private uncertainty
+    // for the last actual owner. A successful sign-out or different subject replaces it.
+    const owner =
+      session?.status === 'success' && data?.state === 'signed-out'
+        ? null
+        : session?.status === 'success' && data?.state === 'signed-in' && data.subject
+          ? data.subject
+          : previous.owner;
     const lifetime = viewerExposureLifetime(this.client).getSnapshot();
     const observation =
       viewer && lifetime.state === 'signed-in' && lifetime.observation.subject === viewer
@@ -61,8 +72,8 @@ class ReadingAuthority {
       : undefined;
     const state = this.client.getQueryState(options.queryKey);
     const ready = !!viewer && !!observation && state?.status === 'success' && state.data?.subject === viewer;
-    const previous = this.snapshot;
-    const identityChanged = viewer !== previous.viewer;
+    const identityChanged = owner !== previous.owner;
+    const authorityLost = !!previous.viewer && !viewer;
     const observationChanged = observation !== this.lastObservation;
     // Removing/replacing/erroring the enrolled query retires its operations synchronously.
     // A new healthy session observation first removes its old key; that is a pause, not a denial.
@@ -82,11 +93,12 @@ class ReadingAuthority {
       (previous.healthyPause || (observationChanged && previous.ready));
     let changed =
       identityChanged ||
+      viewer !== previous.viewer ||
       observation !== previous.observation ||
       ready !== previous.ready ||
       healthyPause !== previous.healthyPause;
     const admissions = new Map(previous.admissions);
-    if (identityChanged || invalidated) {
+    if (identityChanged || authorityLost || invalidated) {
       this.retire(admissions);
       changed = true;
     }
@@ -104,6 +116,7 @@ class ReadingAuthority {
     if (!changed) return;
     this.snapshot = {
       viewer,
+      owner,
       identity: identityChanged ? {} : previous.identity,
       observation,
       ready,

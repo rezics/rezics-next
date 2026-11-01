@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import { getLocale } from '../paraglide/runtime.js';
@@ -8,7 +8,13 @@ import type { PublishedLogCurrentRead, PublishedLogOwner } from './logs-read';
 import { useReadingAuthority, type ReadingAdmission } from './reading-detail-current-origin';
 
 const operations = ['published_log.delete', 'published_log.create'] as const;
-type Evidence = { lease: ReadingAdmission; owner: PublishedLogOwner };
+type Evidence = {
+  lease: ReadingAdmission;
+  owner: PublishedLogOwner;
+  query: object;
+  version: number;
+  retired: boolean;
+};
 type OwnerRead = { value: PublishedLogCurrentRead; removeId: string | null; restoreId: string | null };
 type Boundary = {
   signature: string;
@@ -38,7 +44,7 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
   const { client, browser, store, snapshot } = useReadingAuthority(operations);
   const viewer = browser ? snapshot.viewer : (loaded.owner?.sessionSubject ?? null);
   const locale = getLocale();
-  const signature = JSON.stringify([viewer, id, locale]);
+  const signature = JSON.stringify([browser ? snapshot.owner : viewer, id, locale]);
   const ref = useRef<Boundary | null>(null);
   const seeded = useRef(false);
   const mounted = useRef(0);
@@ -120,60 +126,96 @@ export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurren
       };
     },
   });
-  // Each operand retains the actual owner's complete point-read evidence. A read needed
-  // by the other admission cannot overwrite it, including with a different revision.
-  if (query.data && !query.isError && matches(query.data.value, viewer, id)) {
-    const owner = query.data.value.owner!;
-    if (remove && query.data.removeId === remove.id && currentAdmission(remove, 0) && boundary.remove?.lease !== remove)
-      boundary.remove = { lease: remove, owner };
-    if (
-      restore &&
-      query.data.restoreId === restore.id &&
-      currentAdmission(restore, 1) &&
-      boundary.restore?.lease !== restore
-    )
-      boundary.restore = { lease: restore, owner };
-  }
-  const [, renderRetired] = useState(0);
-  const evidence = useRef<{ key: typeof queryKey; query: object } | null>(null);
-  if (query.status === 'success' && matches(query.data?.value, viewer, id)) {
-    const actual = client.getQueryCache().find({ queryKey, exact: true });
-    if (actual && evidence.current?.query !== actual) evidence.current = { key: queryKey, query: actual };
-  }
-  useLayoutEffect(() => {
-    const observe = () => {
-      const accepted = evidence.current;
-      if (!boundary.active || !accepted) return;
-      const admissions = store.read().admissions;
+  const actualQuery = client.getQueryCache().find({ queryKey, exact: true });
+  const actualState = client.getQueryState<OwnerRead>(queryKey);
+  // Each operand retains its same actual point read. A read requested by the other
+  // admission cannot overwrite this evidence, including with a different revision.
+  if (actualQuery && actualState?.status === 'success' && query.data && matches(query.data.value, viewer, id)) {
+    const accept = (
+      name: 'remove' | 'restore',
+      lease: ReadingAdmission | undefined,
+      index: 0 | 1,
+      sourceId: string | null,
+    ) => {
+      const previous = boundary[name];
+      if (!lease || sourceId !== lease.id || !currentAdmission(lease, index)) return;
       if (
-        accepted.key[2] !== admissions.get(operations[0])?.id ||
-        accepted.key[3] !== admissions.get(operations[1])?.id
+        previous?.lease === lease &&
+        previous.query === actualQuery &&
+        previous.version === actualState.dataUpdateCount
       )
         return;
-      const actual = client.getQueryCache().find({ queryKey: accepted.key, exact: true });
-      const state = client.getQueryState<OwnerRead>(accepted.key);
-      // A key retired for an independent admission is not a revocation of the other's read.
-      if (actual === accepted.query && state?.status === 'success' && matches(state.data?.value, viewer, id)) return;
-      boundary.active = false;
-      renderRetired((value) => value + 1);
+      if (previous) previous.retired = true;
+      boundary[name] = {
+        lease,
+        owner: query.data!.value.owner!,
+        query: actualQuery,
+        version: actualState.dataUpdateCount,
+        retired: false,
+      };
+    };
+    accept('remove', remove, 0, query.data.removeId);
+    accept('restore', restore, 1, query.data.restoreId);
+  }
+  const [, renderRetired] = useState(0);
+  const evidenceIsCurrent = (value: Evidence) => {
+    if (value.retired) return false;
+    const admissions = store.read().admissions;
+    // The UI intentionally stops observing a key when one admission changes.
+    // Its other operand still owns its original successful point-read evidence.
+    if (
+      queryKey[2] !== admissions.get(operations[0])?.id ||
+      queryKey[3] !== admissions.get(operations[1])?.id ||
+      value.query !== actualQuery
+    )
+      return true;
+    const actual = client.getQueryCache().find({ queryKey, exact: true });
+    const state = client.getQueryState<OwnerRead>(queryKey);
+    if (
+      actual === value.query &&
+      state?.status === 'success' &&
+      state.dataUpdateCount === value.version &&
+      matches(state.data?.value, viewer, id)
+    )
+      return true;
+    value.retired = true;
+    return false;
+  };
+  useLayoutEffect(() => {
+    const observe = () => {
+      let retired = false;
+      for (const value of [boundary.remove, boundary.restore]) {
+        if (value && !value.retired && !evidenceIsCurrent(value)) retired = true;
+      }
+      if (retired) renderRetired((value) => value + 1);
     };
     const release = client.getQueryCache().subscribe(observe);
     observe();
     return release;
-  }, [boundary, client, remove, restore, viewer, id]);
+  }, [boundary, client, actualQuery, remove, restore, viewer, id]);
+  const removeObservation = useMemo(
+    () => ({ observation: snapshot.observation, evidence: boundary.remove }),
+    [snapshot.observation, boundary.remove, boundary.remove?.retired],
+  );
+  const restoreObservation = useMemo(
+    () => ({ observation: snapshot.observation, evidence: boundary.restore }),
+    [snapshot.observation, boundary.restore, boundary.restore?.retired],
+  );
   function operand(value: ReadingAdmission | undefined, index: 0 | 1) {
     const evidence = index === 0 ? boundary.remove : boundary.restore;
     const owner = evidence?.owner;
     const isCurrent = () =>
       mounted.current > 0 &&
+      !!evidence &&
       !!owner &&
-      evidence?.lease === value &&
+      evidence.lease === value &&
+      evidenceIsCurrent(evidence) &&
       (index === 0 ? boundary.remove : boundary.restore) === evidence &&
       currentAdmission(value, index) &&
       store.current(snapshot, [operations[index]], true);
     return {
       lifetime: value ?? boundary,
-      observation: snapshot.observation,
+      observation: index === 0 ? removeObservation : restoreObservation,
       isCurrent,
       headers: () => (isCurrent() ? store.headers(snapshot, [operations[index]]) : null),
     };

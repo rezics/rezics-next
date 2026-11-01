@@ -92,6 +92,8 @@ export type ProgressDetailOrigin = {
   refresh: () => Promise<ProgressSessionPage>;
   capture?: (operation?: GatedOperation) => ProgressCommandGuard;
   observation?: object | undefined;
+  /** Private intent custody survives admission/read replacement, never viewer or address replacement. */
+  lifetime?: object | undefined;
 };
 const detailReads = detailOperations.slice(0, 4);
 
@@ -100,6 +102,17 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
   const { client, browser, store, snapshot } = useReadingAuthority(detailOperations);
   const viewer = browser ? snapshot.viewer : loaded.viewer;
   const locale = getLocale();
+  const custodySignature = JSON.stringify([
+    browser ? snapshot.owner : viewer,
+    address.id,
+    address.changes,
+    address.units,
+    address.logs,
+    locale,
+  ]);
+  const custody = useRef<{ signature: string; identity: object; value: object } | null>(null);
+  if (custody.current?.signature !== custodySignature || custody.current.identity !== snapshot.identity)
+    custody.current = { signature: custodySignature, identity: snapshot.identity, value: {} };
   const readEpisode = detailReads.map((operation) => snapshot.admissions.get(operation)?.id);
   const signature = JSON.stringify([
     viewer,
@@ -159,33 +172,44 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
     refetchOnReconnect: false,
   });
   const [, renderRetired] = useState(0);
-  const evidence = useRef<{ boundary: Boundary; query: object } | null>(null);
+  const evidence = useRef<{ boundary: Boundary; query: object; version: number; retired: boolean } | null>(null);
   const checkEvidence = () => {
     const enrolled = evidence.current;
-    if (enrolled?.boundary !== boundary) return true;
+    if (!enrolled || enrolled.boundary !== boundary || enrolled.retired) return false;
     const query = client.getQueryCache().find({ queryKey, exact: true });
     const state = client.getQueryState<ProgressDetail>(queryKey);
-    if (query === enrolled.query && state?.status === 'success' && matchingDetail(state.data, viewer, address))
+    if (
+      query === enrolled.query &&
+      state?.status === 'success' &&
+      state.dataUpdateCount === enrolled.version &&
+      matchingDetail(state.data, viewer, address)
+    )
       return true;
-    boundary.active = false;
+    enrolled.retired = true;
     return false;
   };
+  const actualQuery = client.getQueryCache().find({ queryKey, exact: true });
+  const actualState = client.getQueryState<ProgressDetail>(queryKey);
   if (
-    query.status === 'success' &&
-    matchingDetail(query.data, viewer, address) &&
-    evidence.current?.boundary !== boundary
+    actualQuery &&
+    actualState?.status === 'success' &&
+    matchingDetail(actualState.data, viewer, address) &&
+    (evidence.current?.boundary !== boundary ||
+      evidence.current.query !== actualQuery ||
+      evidence.current.version !== actualState.dataUpdateCount)
   ) {
-    const actual = client.getQueryCache().find({ queryKey, exact: true });
-    if (actual) evidence.current = { boundary, query: actual };
+    if (evidence.current) evidence.current.retired = true;
+    evidence.current = { boundary, query: actualQuery, version: actualState.dataUpdateCount, retired: false };
   }
   useLayoutEffect(() => {
     const observe = () => {
-      if (boundary.active && !checkEvidence()) renderRetired((value) => value + 1);
+      const accepted = evidence.current;
+      if (accepted?.boundary === boundary && !accepted.retired && !checkEvidence()) renderRetired((value) => value + 1);
     };
     const release = client.getQueryCache().subscribe(observe);
     observe();
     return release;
-  }, [boundary, client, queryKey]);
+  }, [boundary, client, actualQuery]);
   const originRef = useRef<{ boundary: Boundary; value: ProgressDetailOrigin } | null>(null);
   if (originRef.current?.boundary !== boundary && viewer) {
     // These methods retain the owning viewer/address, while captures enroll a particular
@@ -201,13 +225,16 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
       value: {
         viewer,
         address,
+        lifetime: custody.current.value,
         isCurrent: (write = false) =>
           currentReads() && (!write || store.current(store.read(), ['published_log.create'])),
         capture: (operation) => {
           const enrolled = store.read();
+          const actualRead = evidence.current;
           const operations = operation ? [...detailReads, operation] : detailReads;
           const current = () =>
             owns() &&
+            actualRead === evidence.current &&
             checkEvidence() &&
             enrolled.identity === boundary.identity &&
             store.current(enrolled, operations, true);
@@ -218,8 +245,10 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
         },
         refresh: async () => {
           const enrolled = store.read();
+          const actualRead = evidence.current;
           const current = () =>
             owns() &&
+            actualRead === evidence.current &&
             checkEvidence() &&
             enrolled.identity === boundary.identity &&
             store.current(enrolled, detailReads, true);
@@ -231,8 +260,7 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
       },
     };
   }
-  if (query.isError && isCurrent()) throw query.error;
-  let detail = matchingDetail(query.data, viewer, address) ? query.data : undefined;
+  let detail = (!browser || checkEvidence()) && matchingDetail(query.data, viewer, address) ? query.data : undefined;
   if (
     detail &&
     matchingDetail(loaded, viewer, address) &&
@@ -280,19 +308,17 @@ type CapturedIntent =
 type EditorLifetime = {
   page: LoadedPage;
   originating?: ProgressDetailOrigin | undefined;
-  pending: boolean;
+  custody: EditorCustody;
   history: symbol | null;
-  retry?: CapturedIntent;
-  observation?: object | undefined;
-  attempt?: ProgressCommandGuard | undefined;
 };
-const editorLifetime = (page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime => ({
-  page,
-  originating,
-  pending: false,
-  history: null,
-  observation: originating?.observation,
-});
+type EditorCustody = { retry?: CapturedIntent; flight?: object };
+const editors = new WeakMap<object, EditorCustody>();
+function editorLifetime(page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime {
+  const key = originating?.lifetime ?? originating;
+  const custody = (key && editors.get(key)) || {};
+  if (key) editors.set(key, custody);
+  return { page, originating, history: null, custody };
+}
 
 function stateLabel(state: ProgressState): string {
   if (state === 'completed') return m.library_progress_state_completed();
@@ -330,16 +356,22 @@ function SessionEditor({
   logsCursor?: string | undefined;
   originating?: ProgressDetailOrigin | undefined;
 }) {
+  const lifetime = useRef<EditorLifetime | null>(null);
+  lifetime.current ??= editorLifetime(page, originating);
+  const retained = lifetime.current.custody.retry;
+  const retainedRecord = retained && retained.kind !== 'finish' ? retained.data : undefined;
   const [session, setSession] = useState(page.session);
   const [seenPage, setSeenPage] = useState(page);
-  const [key, setKey] = useState(page.idempotencyKey);
-  const [amount, setAmount] = useState('');
-  const [locator, setLocator] = useState('');
-  const [position, setPosition] = useState('');
-  const [addText, setAddText] = useState('');
-  const [removeText, setRemoveText] = useState('');
+  const [key, setKey] = useState(retained?.data.idempotencyKey ?? page.idempotencyKey);
+  const [amount, setAmount] = useState(retainedRecord?.amount ?? '');
+  const [locator, setLocator] = useState(retainedRecord?.locator ?? '');
+  const [position, setPosition] = useState(retainedRecord?.position ?? '');
+  const [addText, setAddText] = useState(retainedRecord?.add?.join('\n') ?? '');
+  const [removeText, setRemoveText] = useState(retainedRecord?.remove?.join('\n') ?? '');
   const [alert, setAlert] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
+  const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(
+    retained?.kind === 'finish' ? retained.data.action : null,
+  );
   const [editing, setEditing] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [readDenied, setReadDenied] = useState(false);
@@ -347,7 +379,6 @@ function SessionEditor({
   const abandonAllowed = exposure.useOperation('progress_session.abandon');
   const offered = !unsupported && session.meaning === 'known' && session.recordingState === 'supported';
   const [phone, setPhone] = useState(false);
-  const lifetime = useRef<EditorLifetime | null>(editorLifetime(page, originating));
   const addId = useId();
   const removeId = useId();
   const addHint = useId();
@@ -379,25 +410,24 @@ function SessionEditor({
     complete: originating?.capture?.('progress_session.complete'),
     abandon: originating?.capture?.('progress_session.abandon'),
   };
-  if (
-    lifetime.current &&
-    (lifetime.current.observation !== originating?.observation ||
-      (lifetime.current.attempt && !lifetime.current.attempt.isCurrent()))
-  ) {
-    lifetime.current.observation = originating?.observation;
-    lifetime.current.pending = false;
-    lifetime.current.attempt = undefined;
-    lifetime.current.history = null;
-  }
+  const renderToken = {};
+  const rendered = useRef(renderToken);
+  rendered.current = renderToken;
+  const canHandle = () => rendered.current === renderToken && canEdit();
   function edit(change: () => void) {
-    if (canEdit()) change();
+    if (canHandle()) change();
+  }
+  function editRecord(change: () => void) {
+    if (!commandGuards.record || commandGuards.record.isCurrent()) edit(change);
   }
 
   function openUpdate() {
-    if (!canEdit() || (commandGuards.record && !commandGuards.record.isCurrent())) return;
-    setAmount(session.amount ?? '');
-    setLocator(session.locator ?? '');
-    setPosition(session.position ?? '');
+    if (!canHandle() || (commandGuards.record && !commandGuards.record.isCurrent())) return;
+    const retry = lifetime.current?.custody.retry;
+    const recording = retry && retry.kind !== 'finish' ? retry.data : undefined;
+    setAmount(recording?.amount ?? session.amount ?? '');
+    setLocator(recording?.locator ?? session.locator ?? '');
+    setPosition(recording?.position ?? session.position ?? '');
     setEditing(true);
   }
 
@@ -415,7 +445,7 @@ function SessionEditor({
       setUnsupported(false);
       setReadDenied(false);
       setSession(page.session);
-      setKey(page.idempotencyKey);
+      setKey(lifetime.current.custody.retry?.data.idempotencyKey ?? page.idempotencyKey);
       setAmount('');
       setLocator('');
       setPosition('');
@@ -492,22 +522,22 @@ function SessionEditor({
       !isCurrent(origin) ||
       (guard && !guard.isCurrent()) ||
       (originating && !guard && !originating.isCurrent(true)) ||
-      origin.pending
+      origin.custody.flight
     )
       return;
     const headers = guard ? guard.headers() : csrfHeaders();
     if (!headers) return;
-    origin.retry ??= intent;
-    const captured = origin.retry;
+    origin.custody.retry ??= intent;
+    const captured = origin.custody.retry;
     if (
       captured.kind !== intent.kind ||
       (captured.kind === 'finish' && intent.kind === 'finish' && captured.data.action !== intent.data.action)
     )
       return;
     setAlert(null);
-    origin.pending = true;
-    origin.attempt = guard;
-    const currentAttempt = () => isCurrent(origin) && origin.attempt === guard && (!guard || guard.isCurrent());
+    const flight = {};
+    origin.custody.flight = flight;
+    const currentAttempt = () => isCurrent(origin) && origin.custody.flight === flight && (!guard || guard.isCurrent());
     origin.history = null;
     try {
       const result =
@@ -524,7 +554,7 @@ function SessionEditor({
         setReadDenied(true);
         return;
       }
-      delete origin.retry;
+      delete origin.custody.retry;
       setKey(crypto.randomUUID());
       if (captured.kind === 'record') {
         setAmount('');
@@ -544,13 +574,14 @@ function SessionEditor({
       if (!currentAttempt()) return;
       setAlert(m.library_progress_unavailable());
     } finally {
-      if (currentAttempt()) origin.pending = false;
+      // This physical latch belongs to the dispatched command, not an admission render.
+      if (origin.custody.flight === flight) delete origin.custody.flight;
     }
   }
 
   async function onRecord() {
     const origin = lifetime.current;
-    if (!isCurrent(origin) || session.state !== 'active' || !offered) return;
+    if (!canHandle() || !isCurrent(origin) || session.state !== 'active' || !offered) return;
     const intent =
       session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
     await dispatch(
@@ -561,9 +592,9 @@ function SessionEditor({
 
   async function onUnits(kind: 'add' | 'remove') {
     const origin = lifetime.current;
-    if (!isCurrent(origin) || origin.pending || session.state !== 'active' || !offered) return;
-    if (origin.retry) {
-      if (origin.retry.kind === kind) await dispatch(origin.retry, origin);
+    if (!canHandle() || !isCurrent(origin) || origin.custody.flight || session.state !== 'active' || !offered) return;
+    if (origin.custody.retry) {
+      if (origin.custody.retry.kind === kind) await dispatch(origin.custody.retry, origin);
       return;
     }
     const parsed = parseUnitBatch(kind === 'add' ? addText : removeText);
@@ -587,7 +618,7 @@ function SessionEditor({
 
   async function onFinish(action: 'complete' | 'abandon') {
     const origin = lifetime.current;
-    if (!isCurrent(origin) || session.state !== 'active') return;
+    if (!canHandle() || !isCurrent(origin) || session.state !== 'active') return;
     await dispatch(
       { kind: 'finish', data: { sessionId: session.id, action, revision: session.revision, idempotencyKey: key } },
       origin,
@@ -599,7 +630,12 @@ function SessionEditor({
       <article className="max-w-4xl space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
         <p role="alert">{m.library_progress_refused()}</p>
-        <Button variant="outline" onClick={() => void refreshHistory()}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            if (canHandle()) void refreshHistory();
+          }}
+        >
           {m.library_progress_retry()}
         </Button>
       </article>
@@ -663,7 +699,7 @@ function SessionEditor({
                     {...inputBounds}
                     aria-describedby={amountHint}
                     value={amount}
-                    onChange={(event) => edit(() => setAmount(event.target.value))}
+                    onChange={(event) => editRecord(() => setAmount(event.target.value))}
                   />
                 </label>
                 <p id={amountHint} className="text-sm text-muted-foreground">
@@ -684,7 +720,7 @@ function SessionEditor({
               <>
                 <label className="block space-y-1">
                   <span className="text-sm font-medium">{m.library_progress_locator()}</span>
-                  <Input value={locator} onChange={(event) => edit(() => setLocator(event.target.value))} />
+                  <Input value={locator} onChange={(event) => editRecord(() => setLocator(event.target.value))} />
                 </label>
                 <label className="block space-y-1">
                   <span className="text-sm font-medium">{m.library_progress_position()}</span>
@@ -692,7 +728,7 @@ function SessionEditor({
                     type="number"
                     {...inputBounds}
                     value={position}
-                    onChange={(event) => edit(() => setPosition(event.target.value))}
+                    onChange={(event) => editRecord(() => setPosition(event.target.value))}
                   />
                 </label>
               </>
@@ -710,7 +746,7 @@ function SessionEditor({
                 id={addId}
                 aria-describedby={addHint}
                 value={addText}
-                onChange={(event) => edit(() => setAddText(event.target.value))}
+                onChange={(event) => editRecord(() => setAddText(event.target.value))}
               />
               <p id={addHint} className="text-sm text-muted-foreground">
                 {m.library_progress_batch_limit()}
@@ -727,7 +763,7 @@ function SessionEditor({
                 id={removeId}
                 aria-describedby={removeHint}
                 value={removeText}
-                onChange={(event) => edit(() => setRemoveText(event.target.value))}
+                onChange={(event) => editRecord(() => setRemoveText(event.target.value))}
               />
               <p id={removeHint} className="text-sm text-muted-foreground">
                 {m.library_progress_batch_limit()}
@@ -848,7 +884,12 @@ function SessionEditor({
       ) : session.recordingState !== 'supported' ? (
         <div className="space-y-2">
           <p role="status">{m.library_progress_recording_unavailable()}</p>
-          <Button variant="outline" onClick={() => void refreshHistory()}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (canHandle()) void refreshHistory();
+            }}
+          >
             {m.library_progress_retry()}
           </Button>
         </div>
@@ -872,7 +913,7 @@ function SessionEditor({
                         type: 'item' as const,
                         label: m.library_progress_complete(),
                         onSelect: () => {
-                          if (commandGuards.complete?.isCurrent() ?? canEdit()) setConfirming('complete');
+                          if (canHandle() && (commandGuards.complete?.isCurrent() ?? true)) setConfirming('complete');
                         },
                       },
                     ]
@@ -883,7 +924,7 @@ function SessionEditor({
                         type: 'item' as const,
                         label: m.library_progress_abandon(),
                         onSelect: () => {
-                          if (commandGuards.abandon?.isCurrent() ?? canEdit()) setConfirming('abandon');
+                          if (canHandle() && (commandGuards.abandon?.isCurrent() ?? true)) setConfirming('abandon');
                         },
                       },
                     ]
