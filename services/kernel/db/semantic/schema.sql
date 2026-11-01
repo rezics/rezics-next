@@ -1972,7 +1972,7 @@ BEGIN
   JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
    AND p.write_state='active' AND p.moved_to IS NULL
    AND (p.position>=n.position OR (n.transaction_id=$6 AND n.position=p.position+1))
-  WHERE t.partition_no=$1 AND t.custody_key=$2 AND t.sequence=$3 AND t.state='transferred'
+  WHERE t.partition_no=$1 AND t.custody_key=$2 AND t.sequence=$3 AND t.state=CASE WHEN $4->>'erasedRole'='subject' THEN 'discharged' ELSE 'transferred' END
    AND r.receipt_key::jsonb=jsonb_build_array($4#>>'{receipt,kind}',$4#>>'{receipt,account}',$4#>>'{receipt,receipt}')
    AND r.source_digest=$4->>'sourceDigest' AND r.source_epoch::text=$4#>>'{source,epoch}'
    AND r.source_position::text=$4#>>'{source,position}' AND r.source_transaction_id::text=$4#>>'{source,transactionId}'
@@ -2177,11 +2177,9 @@ BEGIN
   AND r.barrier_at=(p_reference#>>'{barrier,at}')::timestamptz
   AND r.erased_role=p_reference->>'erasedRole'
   AND ((r.erased_role='subject' AND t.state='discharged' AND r.barrier_account_id=b.account_id)
-    OR (r.erased_role IN ('requester','decider') AND
-      ((c.receipt->>'kind'='account-agent.verify' AND t.state='transferred'
-        AND t.receiving_partition=0 AND t.receiving_epoch=p.epoch
-        AND t.receiving_position>0 AND t.receiving_transaction_id IS NOT NULL)
-       OR (c.receipt->>'kind'='account-agent.unverify' AND t.state='discharged'))))
+    OR (r.erased_role IN ('requester','decider') AND t.state='transferred'
+      AND t.receiving_partition=0 AND t.receiving_epoch=p.epoch
+      AND t.receiving_position>0 AND t.receiving_transaction_id IS NOT NULL))
  FOR UPDATE OF b FOR SHARE OF r,t,c,k,admission,undo,retained,terminal_commit,p,
    retained_role,terminal_role,retained_locator,terminal_locator;
 
