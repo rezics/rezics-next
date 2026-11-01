@@ -34,9 +34,17 @@ async function nonSquareImage(width: number, height: number, color: string, name
   context.fillStyle = color;
   context.fillRect(0, 0, width, height);
   context.fillStyle = '#f4cf49';
-  context.fillRect(Math.floor(width * 0.65), Math.floor(height * 0.65), Math.ceil(width * 0.25), Math.ceil(height * 0.25));
+  context.fillRect(
+    Math.floor(width * 0.65),
+    Math.floor(height * 0.65),
+    Math.ceil(width * 0.25),
+    Math.ceil(height * 0.25),
+  );
   const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((result) => (result ? resolve(result) : reject(new Error('Could not encode the local image fixture'))), 'image/png');
+    canvas.toBlob(
+      (result) => (result ? resolve(result) : reject(new Error('Could not encode the local image fixture'))),
+      'image/png',
+    );
   });
   return new File([blob], name, { type: 'image/png', lastModified: 1 });
 }
@@ -146,7 +154,9 @@ export const Default: Story = {
   play: async (context) => {
     await pageReady(context);
     await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
-    const profile = within(await within(context.canvasElement).findByRole('region', { name: m.settings_profile_heading() }));
+    const profile = within(
+      await within(context.canvasElement).findByRole('region', { name: m.settings_profile_heading() }),
+    );
     const avatar = within(profile.getByRole('group', { name: m.settings_profile_avatar() }));
     const name = profile.getByRole('textbox', { name: m.settings_profile_display_name() });
     await userEvent.clear(name);
@@ -186,12 +196,12 @@ export const Default: Story = {
     await userEvent.keyboard('{ArrowRight}');
     await expect(horizontal).toHaveValue('51');
     const viewportWidth = context.canvasElement.ownerDocument.defaultView?.innerWidth ?? 0;
-    await expect(crop.getByRole('slider', { name: m.settings_profile_crop_horizontal() }).getBoundingClientRect().width).toBeLessThanOrEqual(
-      viewportWidth,
-    );
-    await expect(crop.getByRole('button', { name: m.settings_profile_crop_apply() }).getBoundingClientRect().right).toBeLessThanOrEqual(
-      viewportWidth + 1,
-    );
+    await expect(
+      crop.getByRole('slider', { name: m.settings_profile_crop_horizontal() }).getBoundingClientRect().width,
+    ).toBeLessThanOrEqual(viewportWidth);
+    await expect(
+      crop.getByRole('button', { name: m.settings_profile_crop_apply() }).getBoundingClientRect().right,
+    ).toBeLessThanOrEqual(viewportWidth + 1);
     await expect(traffic.media).toHaveLength(0);
     await expect(traffic.profileWrites).toHaveLength(0);
     await expect(name).toHaveValue('Avery Crop Journey');

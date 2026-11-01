@@ -114,7 +114,9 @@ export function ProfileAvatar({
           <p
             id={`${id}-status`}
             role={
-              state.phase === 'error' || state.cropIssue === 'decode' || state.cropIssue === 'encode' ? 'alert' : 'status'
+              state.phase === 'error' || state.cropIssue === 'decode' || state.cropIssue === 'encode'
+                ? 'alert'
+                : 'status'
             }
           >
             {status}

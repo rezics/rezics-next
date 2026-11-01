@@ -36,7 +36,7 @@ export async function canCropAvatar(file: File): Promise<boolean> {
   try {
     const bytes = new DataView(await file.arrayBuffer());
     if (bytes.byteLength < 8) return true;
-    for (let offset = 8; offset + 12 <= bytes.byteLength; ) {
+    for (let offset = 8; offset + 12 <= bytes.byteLength;) {
       const size = bytes.getUint32(offset, false);
       const type = String.fromCharCode(
         bytes.getUint8(offset + 4),
