@@ -258,8 +258,7 @@ function queryReadIsCurrent(runtime: AdmissionRuntime) {
   if (read.signal.aborted) return false;
   const current = runtime.client.getQueryCache().find({ queryKey: read.queryKey, exact: true });
   if (current !== read.query) return false;
-  if (read.result === undefined)
-    return read.query.state.dataUpdateCount === read.baselineDataUpdateCount;
+  if (read.result === undefined) return read.query.state.dataUpdateCount === read.baselineDataUpdateCount;
   return (
     read.resultDataUpdateCount === read.baselineDataUpdateCount + 1 &&
     read.query.state.dataUpdateCount === read.resultDataUpdateCount &&
@@ -504,17 +503,17 @@ export function spacePageReadResultWasReplaced(admission: SpacePageAdmission, cl
   if (!runtime || runtime.client !== client || !read) return false;
   const current = client.getQueryCache().find({ queryKey: read.queryKey, exact: true });
   if (current !== read.query)
-    return !!current &&
-      (current.state.dataUpdateCount > 0 || current.state.data !== undefined || current.state.fetchStatus === 'fetching');
+    return (
+      !!current &&
+      (current.state.dataUpdateCount > 0 ||
+        current.state.data !== undefined ||
+        current.state.fetchStatus === 'fetching')
+    );
   if (read.result === undefined)
     return (
-      read.query.state.dataUpdateCount !== read.baselineDataUpdateCount ||
-      read.query.state.data !== read.baselineData
+      read.query.state.dataUpdateCount !== read.baselineDataUpdateCount || read.query.state.data !== read.baselineData
     );
-  return (
-    read.query.state.dataUpdateCount !== read.resultDataUpdateCount ||
-    read.query.state.data !== read.result
-  );
+  return read.query.state.dataUpdateCount !== read.resultDataUpdateCount || read.query.state.data !== read.result;
 }
 
 export function spacePageAdmissionIsCurrent(admission: SpacePageAdmission, client: QueryClient) {

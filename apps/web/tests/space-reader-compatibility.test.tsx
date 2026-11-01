@@ -1108,9 +1108,9 @@ test('actual route loaders recover after QueryClient subscribers retire committe
       expect(loaded.page.space.title).toBe('Connected Space');
       expect(loaded.admission.readerOrigin).toEqual({ kind: 'anonymous' });
       expect(nativeCalls.filter((call) => call.path === `/v1/spaceAddresses/${address}`)).toHaveLength(2);
-      expect(nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === null)).toBe(
-        true,
-      );
+      expect(
+        nativeCalls.filter((call) => call.path.startsWith('/v1/')).every((call) => call.authorization === null),
+      ).toBe(true);
     } finally {
       stop();
     }
@@ -1252,11 +1252,13 @@ test('Space pages and Realm 307 results cannot escape after route abort in the s
       }
     });
     try {
-      if (route === 'space') await expect(loadSpace(client, 'anonymous', abortController)).rejects.toThrow('obsolete visit');
+      if (route === 'space')
+        await expect(loadSpace(client, 'anonymous', abortController)).rejects.toThrow('obsolete visit');
       else await expect(loadRealm(client, 'session', abortController)).rejects.toThrow('obsolete visit');
       expect(aborted).toBe(true);
       expect(abortController.signal.aborted).toBe(true);
-      if (route === 'realm') expect(nativeCalls.filter((call) => call.path === `/v1/realms/${realmId}`)).toHaveLength(1);
+      if (route === 'realm')
+        expect(nativeCalls.filter((call) => call.path === `/v1/realms/${realmId}`)).toHaveLength(1);
     } finally {
       stop();
       nativeSpaceAddress = null;
