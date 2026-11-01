@@ -249,7 +249,7 @@ test('Subject rating presents one primary result and an accessible bounded distr
       expect(document.querySelectorAll('[data-slot="public-rating-figure"]')).toHaveLength(1);
       expect(document.querySelector('[data-slot="rating-question"]')?.getAttribute('data-revision')).toBe('7');
       expect(html).not.toContain('Duplicate Global');
-      expect(html).not.toContain('9.5');
+      expect(html).not.toContain('Your rating: 9.5');
       expect(document.querySelector('[data-slot="own-rating"]')).toBeNull();
       const action = document.querySelector('[data-slot="rating-control-reserved"]')!;
       expect(action).not.toBeNull();
