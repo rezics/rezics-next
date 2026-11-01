@@ -13,14 +13,12 @@ import type { HistoryBarrier } from '../history/registry.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { verifyHistoryReceivingReceipt } from '../history/receiving.ts';
 
-export type AgentIdentityCopyRetentionPending = Readonly<{
-  state: 'pending';
-  gaps: readonly string[];
-  native?: 'pending' | 'verified';
-}>;
+export type AgentIdentityCopyRetention =
+  | Readonly<{ state: 'pending'; gaps: readonly string[]; native?: 'pending' | 'verified' }>
+  | Readonly<{ state: 'received'; gaps: readonly []; native: 'verified' }>;
 export type PreparedAgentIdentityCopy = Awaited<ReturnType<typeof readAgentIdentityCopyReceiving>> & Readonly<{
   inventory: Awaited<ReturnType<typeof readAgentIdentityInventory>>;
-  sdkGap: string;
+  sdkGap: string | null;
 }>;
 
 /** Without a native inventory read, coverage is unknown. Once staged, report the original
@@ -29,12 +27,14 @@ export type PreparedAgentIdentityCopy = Awaited<ReturnType<typeof readAgentIdent
 export function agentIdentityCopyRetention(
   copy?: PreparedAgentIdentityCopy,
   verified?: AgentIdentityInventoryVerification,
-): AgentIdentityCopyRetentionPending {
+): AgentIdentityCopyRetention {
+  const gaps = copy
+    ? [...new Set([verified?.gap ?? copy.inventory.gap, copy.sdkGap].filter((gap): gap is string => gap !== null))]
+    : ['agent-identity-original-inventory-unsealed', 'agent-identity-sdk-recording-port-unavailable'];
+  if (gaps.length === 0) return Object.freeze({ state: 'received', gaps: Object.freeze([]), native: 'verified' });
   return Object.freeze({
     state: 'pending',
-    gaps: Object.freeze(copy
-      ? [...new Set([verified?.gap ?? copy.inventory.gap, copy.sdkGap])]
-      : ['agent-identity-original-inventory-unsealed', 'agent-identity-sdk-recording-port-unavailable']),
+    gaps: Object.freeze(gaps),
     ...(verified ? { native: verified.native } : {}),
   });
 }
