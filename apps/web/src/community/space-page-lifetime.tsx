@@ -67,7 +67,7 @@ type AdmissionRuntime = {
 
 type SpacePageQueryObject = {
   readonly queryKey: readonly unknown[];
-  readonly state: { readonly data: unknown; readonly dataUpdateCount: number };
+  readonly state: { readonly data: unknown; readonly dataUpdateCount: number; readonly fetchStatus?: string };
 };
 
 type SpacePageQueryRead = {
@@ -444,8 +444,9 @@ export function spacePageQueryResultIsCurrent(
 }
 
 /** Release only the request-abort listener owned by this loader attempt. */
-export function releaseSpacePageRead(admission: SpacePageAdmission) {
+export function releaseSpacePageRead(admission: SpacePageAdmission, retainRouteSignal = false) {
   const runtime = runtimes.get(admission);
+  if (retainRouteSignal) return;
   runtime?.stopRouteAbort?.();
   if (runtime) {
     delete runtime.stopRouteAbort;
@@ -503,7 +504,8 @@ export function spacePageReadResultWasReplaced(admission: SpacePageAdmission, cl
   if (!runtime || runtime.client !== client || !read) return false;
   const current = client.getQueryCache().find({ queryKey: read.queryKey, exact: true });
   if (current !== read.query)
-    return !!current && (current.state.dataUpdateCount > 0 || current.state.data !== undefined);
+    return !!current &&
+      (current.state.dataUpdateCount > 0 || current.state.data !== undefined || current.state.fetchStatus === 'fetching');
   if (read.result === undefined)
     return (
       read.query.state.dataUpdateCount !== read.baselineDataUpdateCount ||
@@ -713,6 +715,7 @@ export class SpacePageLifetime {
     if (activeAdmissions.get(this.admission) === this) activeAdmissions.delete(this.admission);
     this.stopWatching?.();
     this.stopWatching = undefined;
+    releaseSpacePageRead(this.admission);
     if (notify) this.publish();
     else this.revision++;
   };
@@ -794,6 +797,9 @@ export class SpacePageLifetime {
       };
       const stopSession = this.runtime.source.subscribe(onChange);
       const ownedQuery = this.runtime.queryRead?.query;
+      const routeSignal = this.runtime.routeSignal;
+      const onRouteAbort = () => this.retire();
+      routeSignal?.addEventListener('abort', onRouteAbort, { once: true });
       const stopQuery = ownedQuery
         ? this.runtime.client.getQueryCache().subscribe((event) => {
             if (event.query === ownedQuery) onChange();
@@ -802,6 +808,7 @@ export class SpacePageLifetime {
       this.stopWatching = () => {
         stopSession();
         stopQuery?.();
+        routeSignal?.removeEventListener('abort', onRouteAbort);
       };
       this.snapshot();
     }

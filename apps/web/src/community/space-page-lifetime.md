@@ -21,10 +21,11 @@ abort, Query object, result reference and data-update count. A synchronous cache
 removes and recreates the Query, or replaces its result retires the old attempt before the loader can return a page or
 throw the Realm's canonical 307.
 
-Router abort races only the route loader's wait; it does not cancel a shared QueryClient fetch. The attempt is
-permanently retired on abort, and its late transport result cannot become that loader's page or redirect. Query-owned
-cancellation or exact-query removal can receive one fresh eligible attempt while the route remains active. Recovery is
-bounded to one retry and required read errors pass through. Mounted route effects allow one invalidate/refetch for
+Router abort races the route loader's wait and remains attached to a successfully published page until its mounted
+lifetime retires; it does not cancel a shared QueryClient fetch. The attempt is permanently retired on abort, and its
+late transport result cannot become that loader's page or redirect. Query-owned cancellation or exact-query removal
+can receive one fresh eligible attempt while the route remains active. Recovery is bounded to one retry and required
+read errors pass through. Mounted route effects allow one invalidate/refetch for
 each current route and session observation. They check the current admission immediately before acting so an older
 effect cannot invalidate a successor.
 

@@ -63,7 +63,7 @@ export const Route = createFileRoute('/spaces/$address')({
           const data = { page: result.page, admission: result.admission } satisfies SpaceLoaderData;
           if (!spacePageQueryResultIsCurrent(original, context.queryClient, query.queryKey, result))
             throw new ObsoleteSpacePageReadError();
-          releaseSpacePageRead(original);
+          releaseSpacePageRead(original, true);
           return data;
         }
         throw new ObsoleteSpacePageReadError();

@@ -67,7 +67,7 @@ export const Route = createFileRoute('/realms/$id')({
         const data = { page: located.page, admission } satisfies RealmLoaderData;
         if (!spacePageQueryResultIsCurrent(original, context.queryClient, query.queryKey, result))
           throw new ObsoleteSpacePageReadError();
-        releaseSpacePageRead(original);
+        releaseSpacePageRead(original, true);
         return data;
       } catch (error) {
         const cancelled = spacePageReadWasCancelled(original, context.queryClient);

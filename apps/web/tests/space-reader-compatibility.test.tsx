@@ -1120,8 +1120,9 @@ test('actual route loaders recover after QueryClient subscribers retire committe
 test('a successor cache result survives predecessor completion and bounded recovery', async () => {
   setLocale('en', { reload: false });
   const { spaceQuery } = await import('../src/community/space-queries');
+  const { captureSpacePageAdmission } = await import('../src/community/space-page-lifetime');
 
-  for (const replacement of ['result', 'query'] as const) {
+  for (const replacement of ['result', 'query', 'fetching'] as const) {
     resetTransport();
     nativeSubject = subject;
     const client = newClient();
@@ -1129,6 +1130,7 @@ test('a successor cache result survives predecessor completion and bounded recov
     const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
     let installed = false;
     let originalQuery: unknown;
+    let successorPromise: Promise<SpacePageQueryResult> | undefined;
     const stop = client.getQueryCache().subscribe((event) => {
       if (
         installed ||
@@ -1140,6 +1142,16 @@ test('a successor cache result survives predecessor completion and bounded recov
         return;
       installed = true;
       originalQuery = event.query;
+      if (replacement === 'fetching') {
+        client.removeQueries({ queryKey, exact: true });
+        const successorAdmission = captureSpacePageAdmission(client, {
+          target: routeTarget(),
+          locale: 'en',
+          credentialMode: 'anonymous',
+        });
+        successorPromise = client.fetchQuery(spaceQuery(address, 'en', 'anonymous', successorAdmission));
+        return;
+      }
       const current = client.getQueryData<SpacePageQueryResult>(queryKey);
       if (!current) throw new Error('Missing committed page result');
       if (replacement === 'query') client.removeQueries({ queryKey, exact: true });
@@ -1153,11 +1165,17 @@ test('a successor cache result survives predecessor completion and bounded recov
     });
     try {
       await expect(loadSpace(client, 'anonymous')).rejects.toThrow('obsolete visit');
+      const fetchedSuccessor = successorPromise ? await successorPromise : undefined;
       const successor = client.getQueryData<SpacePageQueryResult>(queryKey);
       expect(installed).toBe(true);
-      expect(successor?.page.space.title).toBe(`Healthy ${replacement} successor`);
-      expect(nativeCalls.filter((call) => call.path === `/v1/spaceAddresses/${address}`)).toHaveLength(1);
-      if (replacement === 'query')
+      if (replacement === 'fetching') {
+        expect(fetchedSuccessor?.page.space.title).toBe('Connected Space');
+        expect(successor?.admission.readId).toBe(fetchedSuccessor?.admission.readId);
+      } else expect(successor?.page.space.title).toBe(`Healthy ${replacement} successor`);
+      expect(nativeCalls.filter((call) => call.path === `/v1/spaceAddresses/${address}`)).toHaveLength(
+        replacement === 'fetching' ? 2 : 1,
+      );
+      if (replacement === 'query' || replacement === 'fetching')
         expect(client.getQueryCache().find({ queryKey, exact: true })).not.toBe(originalQuery);
     } finally {
       stop();
