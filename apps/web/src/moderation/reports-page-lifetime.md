@@ -65,3 +65,11 @@ Implementation references read were the existing reports loader/page, queue/card
 current session query, delivered Appeals, Decision and Reporter consumers and route, recovered reply-context
 lifetime/reading-region pattern, target enrichment/presentation and the content owner's report contract.
 No external reference project was named for this surface, and no external source was ported.
+
+The implementation typing receipt is `bun run --cwd apps/web typecheck`, completed locally in the
+foreground with exit 0: `No type errors in 1,476 files` (729.81 ms compiler phase). Generation and route
+generation also completed. No acceptance assertions or other verification suites were executed.
+
+The adjacent change in `reports-view-card.tsx` only supplies the original owner's current/generation
+callbacks to its existing review controller. It is necessary to suppress late individual success/refresh
+callbacks and does not change card content, native transport or standalone public props.
