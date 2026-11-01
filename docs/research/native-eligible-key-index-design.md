@@ -41,13 +41,13 @@ The following launch authorities were read completely:
 `services/kernel/node_modules/@dbos-inc/dbos-sdk/dist/src/` of version `5.5.3-preview`.
 The actually inspected byte pins are:
 
-| Source | SHA-256 |
-| --- | --- |
-| Repository SDK patch, also inspected at pinned dev | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
-| `SDK/system_database.js` | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
-| `SDK/wfqueue.js` | `9be7bd806fb41bbb73d87b848a2c8ac1cb8bc8e615c6cadd7158bffb8b0698c5` |
-| `SDK/client.js` | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
-| `SDK/sysdb_migrations/internal/migrations.js` | `d187c8a19e4c3141392c73701899ca0005155febdabdfde481bf5782fe61daff` |
+| Source                                                   | SHA-256                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| Repository SDK patch, also inspected at pinned dev       | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
+| `SDK/system_database.js`                                 | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
+| `SDK/wfqueue.js`                                         | `9be7bd806fb41bbb73d87b848a2c8ac1cb8bc8e615c6cadd7158bffb8b0698c5` |
+| `SDK/client.js`                                          | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
+| `SDK/sysdb_migrations/internal/migrations.js`            | `d187c8a19e4c3141392c73701899ca0005155febdabdfde481bf5782fe61daff` |
 | `SDK/sysdb_migrations/internal/workflow_writer_fence.js` | `c386f618a5755655a57fde41c571ca30d3a61d7aa00d1871501892b82c4e6a0b` |
 
 Local bytes establish no installation receipt, migration coverage or runtime result. The launch
@@ -350,20 +350,20 @@ unrelated preflight or released receipt is insufficient.
 
 These are the unchanged `SDK_MAINTENANCE_DISPATCH` bounds, not new estimates:
 
-| Dispatch | Rows | Points | Statements | Returned content bytes | Engine requests |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| rollback, prepaid before checkout | 0 | 0 | 1 | 0 | 0 |
-| begin | 0 | 0 | 1 | 0 | 0 |
-| settings | 1 | 0 | 1 | 128 | 0 |
-| lock current native tuple/domain | 4 | 2 | 4 | 8192 | 0 |
-| retire | 8 | 5 | 9 | 32768 | 0 |
-| delete-workflow_input | 1 | 1 | 1 | 0 | 0 |
-| delete-workflow_output | 1 | 1 | 1 | 0 | 0 |
-| delete-operation_outputs | 64 | 1 | 1 | 0 | 0 |
-| delete-workflow_status, including four FK cascades | 73 | 5 | 5 | 0 | 0 |
-| commit | 0 | 0 | 1 | 0 | 0 |
-| Complete retire attempt, including rollback slot | **13** | **7** | **17** | **41088** | **0** |
-| Complete delete attempt, including rollback slot | **144** | **10** | **16** | **8320** | **0** |
+| Dispatch                                           |    Rows | Points | Statements | Returned content bytes | Engine requests |
+| -------------------------------------------------- | ------: | -----: | ---------: | ---------------------: | --------------: |
+| rollback, prepaid before checkout                  |       0 |      0 |          1 |                      0 |               0 |
+| begin                                              |       0 |      0 |          1 |                      0 |               0 |
+| settings                                           |       1 |      0 |          1 |                    128 |               0 |
+| lock current native tuple/domain                   |       4 |      2 |          4 |                   8192 |               0 |
+| retire                                             |       8 |      5 |          9 |                  32768 |               0 |
+| delete-workflow_input                              |       1 |      1 |          1 |                      0 |               0 |
+| delete-workflow_output                             |       1 |      1 |          1 |                      0 |               0 |
+| delete-operation_outputs                           |      64 |      1 |          1 |                      0 |               0 |
+| delete-workflow_status, including four FK cascades |      73 |      5 |          5 |                      0 |               0 |
+| commit                                             |       0 |      0 |          1 |                      0 |               0 |
+| Complete retire attempt, including rollback slot   |  **13** |  **7** |     **17** |              **41088** |           **0** |
+| Complete delete attempt, including rollback slot   | **144** | **10** |     **16** |               **8320** |           **0** |
 
 Status deletion is status1 + events8 + history64 =73; notifications/streams must be absent
 in this particular bounded identity custody. Input1 + output1 + operations64 +73 =139
@@ -430,17 +430,17 @@ does not authorize ignoring index work or inventing an aggregate refund.
 No candidate is complete merely because its SELECT looks bounded. This is the required
 native hook inventory for the eventual original delivery; no hooks are claimed installed:
 
-| Native source path | Required derived effect in the same transaction |
-| --- | --- |
+| Native source path                                                                                                                       | Required derived effect in the same transaction                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `initWorkflowStatus/insertWorkflowStatus`, ordinary/portable and caller-transaction enqueue, batched `enqueueWorkflows`, schedules/forks | Maintain exact old/new queue/key/application/version membership, original created/priority order and PENDING gate; preserve deduplication, reuse and input compatibility. An ON CONFLICT no-op must not double-count. |
-| Both native claim methods | ENQUEUED removal, PENDING addition, version assignment, unclaimed application adoption and head replacement; retain original conditional update/token/locks. |
-| `recordWorkflowOutput/Error`, one-statement outcome CTE and transactional fallback; `updateWorkflowStatus` | Owner-qualified PENDING departure, completion/retention entry and compatible head changes. A failed owner predicate changes nothing. |
-| `cancelWorkflows`, `cancelTimedOutWorkflows`, `deadLetterWorkflows` | Old queue/key veto departure even when NEW.queue_name becomes null; terminal status/completion metadata. Children=true remains actual native change-size work. |
-| `reenqueueWorkflowsForRecovery`, `resumeWorkflows`, `rewindWorkflow` | Remove prior PENDING gate, clear/reassign state and original queue/key; restore ENQUEUED ordering, clear completion/retention membership, preserve owner fencing and real rewind history operations. |
-| Delayed/debounced and suspended work, `transitionDelayedWorkflows`, suspend wake/re-enqueue, `setWorkflowDelay/Priority` | DELAYED/SUSPENDED are not ready. Maintain activation and priority/input/application changes without prematurely admitting them; wakeReceivers' due-time update alone does not make a ready membership. |
-| `renameApplication` including in-flight transaction and terminal batches; version/application assignment on insert/claim | Move exact component buckets and retention ownership atomically with each original native batch. Do not replicate into the applications of every worker. |
-| Original four-table delete body, both generic and paid single-attempt ports | Remove own derived copies, replace any affected heads, update old-key gate and retention metadata; preserve permanent native fences/domain and deleteChildren=false semantics. |
-| INSERT/UPDATE/COPY restore into live schema, input restoration and older executors' original SQL | Native ALWAYS hooks, not only new JavaScript wrappers; cover unchanged old SQL and refuse incompatible layouts before trusting coverage. |
+| Both native claim methods                                                                                                                | ENQUEUED removal, PENDING addition, version assignment, unclaimed application adoption and head replacement; retain original conditional update/token/locks.                                                          |
+| `recordWorkflowOutput/Error`, one-statement outcome CTE and transactional fallback; `updateWorkflowStatus`                               | Owner-qualified PENDING departure, completion/retention entry and compatible head changes. A failed owner predicate changes nothing.                                                                                  |
+| `cancelWorkflows`, `cancelTimedOutWorkflows`, `deadLetterWorkflows`                                                                      | Old queue/key veto departure even when NEW.queue_name becomes null; terminal status/completion metadata. Children=true remains actual native change-size work.                                                        |
+| `reenqueueWorkflowsForRecovery`, `resumeWorkflows`, `rewindWorkflow`                                                                     | Remove prior PENDING gate, clear/reassign state and original queue/key; restore ENQUEUED ordering, clear completion/retention membership, preserve owner fencing and real rewind history operations.                  |
+| Delayed/debounced and suspended work, `transitionDelayedWorkflows`, suspend wake/re-enqueue, `setWorkflowDelay/Priority`                 | DELAYED/SUSPENDED are not ready. Maintain activation and priority/input/application changes without prematurely admitting them; wakeReceivers' due-time update alone does not make a ready membership.                |
+| `renameApplication` including in-flight transaction and terminal batches; version/application assignment on insert/claim                 | Move exact component buckets and retention ownership atomically with each original native batch. Do not replicate into the applications of every worker.                                                              |
+| Original four-table delete body, both generic and paid single-attempt ports                                                              | Remove own derived copies, replace any affected heads, update old-key gate and retention metadata; preserve permanent native fences/domain and deleteChildren=false semantics.                                        |
+| INSERT/UPDATE/COPY restore into live schema, input restoration and older executors' original SQL                                         | Native ALWAYS hooks, not only new JavaScript wrappers; cover unchanged old SQL and refuse incompatible layouts before trusting coverage.                                                                              |
 
 `workflow_input/output`, operations, events/history, notifications and streams retain the
 existing eight-family ALWAYS writer guards even if they do not affect queue eligibility.
@@ -581,15 +581,15 @@ Do not manufacture a product lifecycle permission to demonstrate the conditional
 
 Also preserve all original controls:
 
-| Axis | Required original population/outcome |
-| --- | --- |
-| Retention inversion | 49,152 rows **per axis** at 1/4/16: created400/completed1, created200/completed90; warmup1000 at created202; fresh probe1000 at created201. Keep original 4000 full-batch index-probe allowance and immutable regression. |
-| Retention empty/short/full | d=0/10/1000; independent old/recent ineligible histories, later eligible backlog and shuffled completion order; creation ties without a new ordering authority. Measure selection independently and inclusive deletion O(d+c), all eight native families, descendants/unselected rows/fences preserved. |
-| Races and repeated polls | Two workers, same Session, fixed candidate recheck, SKIP LOCKED/NOWAIT behavior, advisory contention/collisions, owner token loss, rollback/retry, cancel/recover/reuse/delay/restore. Lost claims and repeated all-busy misses remain bounded; no refill scan. |
-| Fairness | Repeated actual native polls across arrivals/restart; continuously eligible keys progress while same-Session priority/creation order and mutual exclusion remain exact. No cross-Session global priority/randomness assertion. |
-| Migration | Supported old migrated native fixture, null/unclaimed/queued/delayed/terminal rows, interruption/restart, concurrent mutation on both sides of frontier, dirty repair and incompatible hook/layout/domain refusal; no fixture-only trust flag. Repeat hit/miss and ownership bounds afterward. |
-| Commerce and callers | Mounted real Session refresh and generic Work/maintenance callers, distinct and repeated Sessions, deterministic IDs, replay/input compatibility, exactly-once native outcomes and ordinary authorization; scheduler costs separate from original domain/provider work. No provider call in scheduler-only acceptance. |
-| Custody/accounting | All added copies inventoried and erased with original owner authority/transaction; permanent closures and restore semantics; failed/rollback work paid, original delete dispatch and every aggregate axis, no renewed allowance. |
+| Axis                       | Required original population/outcome                                                                                                                                                                                                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Retention inversion        | 49,152 rows **per axis** at 1/4/16: created400/completed1, created200/completed90; warmup1000 at created202; fresh probe1000 at created201. Keep original 4000 full-batch index-probe allowance and immutable regression.                                                                                              |
+| Retention empty/short/full | d=0/10/1000; independent old/recent ineligible histories, later eligible backlog and shuffled completion order; creation ties without a new ordering authority. Measure selection independently and inclusive deletion O(d+c), all eight native families, descendants/unselected rows/fences preserved.                |
+| Races and repeated polls   | Two workers, same Session, fixed candidate recheck, SKIP LOCKED/NOWAIT behavior, advisory contention/collisions, owner token loss, rollback/retry, cancel/recover/reuse/delay/restore. Lost claims and repeated all-busy misses remain bounded; no refill scan.                                                        |
+| Fairness                   | Repeated actual native polls across arrivals/restart; continuously eligible keys progress while same-Session priority/creation order and mutual exclusion remain exact. No cross-Session global priority/randomness assertion.                                                                                         |
+| Migration                  | Supported old migrated native fixture, null/unclaimed/queued/delayed/terminal rows, interruption/restart, concurrent mutation on both sides of frontier, dirty repair and incompatible hook/layout/domain refusal; no fixture-only trust flag. Repeat hit/miss and ownership bounds afterward.                         |
+| Commerce and callers       | Mounted real Session refresh and generic Work/maintenance callers, distinct and repeated Sessions, deterministic IDs, replay/input compatibility, exactly-once native outcomes and ordinary authorization; scheduler costs separate from original domain/provider work. No provider call in scheduler-only acceptance. |
+| Custody/accounting         | All added copies inventoried and erased with original owner authority/transaction; permanent closures and restore semantics; failed/rollback work paid, original delete dispatch and every aggregate axis, no renewed allowance.                                                                                       |
 
 The future complete kernel acceptance command remains `bun run --cwd services/kernel check`
 under its separately authorized supported placement. None of its original populations,
