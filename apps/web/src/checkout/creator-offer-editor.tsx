@@ -1,9 +1,11 @@
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
+import { useOperation } from '../kernel/exposure';
+import { useSession } from '../session/query';
 import { parseCreatorPrice } from './creator-price';
 import { formatMinorAmount } from './money';
 import type { ConfiguredSaleCurrencyRule } from './money-schema';
@@ -150,6 +152,55 @@ export function CreatorPriceFields({
 }
 
 export function CreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
+  const session = useSession();
+  // The existing owned-offer operation resolves the shared selling gate.
+  const selling = useOperation('offer.list');
+  const identity = JSON.stringify([
+    data.editor.kind === 'ready' ? data.editor.edition.editionId : data.editor.kind,
+    session.state,
+    session.subject ?? null,
+    selling,
+    data.selling,
+    Boolean(session.csrfToken),
+    Boolean(data.csrfToken),
+  ]);
+  const [lifetime, setLifetime] = useState(() => ({ identity, createKey: data.createKey }));
+  if (lifetime.identity !== identity) {
+    // Returning to a retired viewer/edition must not reuse a dispatched creation key.
+    setLifetime({ identity, createKey: crypto.randomUUID() });
+  }
+  const canSubmit =
+    session.state === 'signed-in' &&
+    Boolean(session.subject) &&
+    Boolean(session.csrfToken) &&
+    Boolean(data.csrfToken) &&
+    selling &&
+    data.selling;
+  return (
+    <CreatorOfferForm
+      key={identity}
+      data={data}
+      locale={locale}
+      createKey={lifetime.createKey}
+      csrfToken={session.csrfToken}
+      canSubmit={canSubmit}
+    />
+  );
+}
+
+function CreatorOfferForm({
+  data,
+  locale,
+  createKey,
+  csrfToken,
+  canSubmit,
+}: {
+  data: CreatorEditorPageData;
+  locale: string;
+  createKey: string;
+  csrfToken: string | null;
+  canSubmit: boolean;
+}) {
   const [intent, setIntent] = useState<CreatorPriceIntent>({ currency: '', text: '' });
   const { currency, text } = intent;
   const [title, setTitle] = useState('');
@@ -157,21 +208,37 @@ export function CreatorOfferEditor({ data, locale }: { data: CreatorEditorPageDa
   const [result, setResult] = useState<CreatorOfferResult | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef<CreatorOfferMutation | null>(null);
+  const submittedRules = useRef<readonly ConfiguredSaleCurrencyRule[] | null>(null);
   const locked = useRef(false);
-  const key = useRef(data.createKey);
+  const key = useRef(createKey);
+  const lifetime = useRef({ active: false });
+  useLayoutEffect(() => {
+    const current = { active: true };
+    lifetime.current = current;
+    return () => {
+      // The write can still commit; its completion belongs only to this form lifetime.
+      current.active = false;
+    };
+  }, []);
   const fieldId = useId();
   const editor = data.editor;
-  const rule =
-    editor.kind === 'ready'
-      ? editor.schema.configuredSaleCurrencies.find((row) => row.currency === currency)
-      : undefined;
+  const rules = submittedRules.current ?? (editor.kind === 'ready' ? editor.schema.configuredSaleCurrencies : []);
+  const rule = rules.find((row) => row.currency === currency);
   const amount = parsedPrice(text, rule);
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (locked.current || !data.selling || !data.csrfToken || editor.kind !== 'ready' || result?.kind === 'saved')
+    const current = lifetime.current;
+    if (
+      !current.active ||
+      locked.current ||
+      !canSubmit ||
+      !csrfToken ||
+      editor.kind !== 'ready' ||
+      result?.kind === 'saved'
+    )
       return;
     if (!pending.current) {
       if (amount === null || !rule || !title.trim() || !taxCode.trim()) return;
@@ -184,21 +251,28 @@ export function CreatorOfferEditor({ data, locale }: { data: CreatorEditorPageDa
         unitAmountMinor: amount,
         taxCode,
       };
+      submittedRules.current = rules;
     }
     locked.current = true;
     setBusy(true);
+    let saved = false;
     try {
-      const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': data.csrfToken } });
+      const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': csrfToken } });
+      if (!current.active) return;
+      saved = next.kind === 'saved';
       setResult(next);
       if (next.kind !== 'saved' && next.kind !== 'retry') {
         pending.current = null;
+        submittedRules.current = null;
         key.current = crypto.randomUUID();
       }
     } catch {
-      setResult({ kind: 'retry' });
+      if (current.active) setResult({ kind: 'retry' });
     } finally {
-      locked.current = false;
-      setBusy(false);
+      if (current.active) {
+        locked.current = saved;
+        setBusy(false);
+      }
     }
   }
 
@@ -260,13 +334,7 @@ export function CreatorOfferEditor({ data, locale }: { data: CreatorEditorPageDa
                 className="min-h-11"
               />
             </Field>
-            <CreatorPriceFields
-              rules={editor.schema.configuredSaleCurrencies}
-              intent={intent}
-              onChange={setIntent}
-              locale={locale}
-              disabled={frozen}
-            />
+            <CreatorPriceFields rules={rules} intent={intent} onChange={setIntent} locale={locale} disabled={frozen} />
             <Field>
               <FieldLabel htmlFor={`${fieldId}-tax`}>{m.creator_tax_code()}</FieldLabel>
               <Input
@@ -293,12 +361,7 @@ export function CreatorOfferEditor({ data, locale }: { data: CreatorEditorPageDa
               <Button
                 type="submit"
                 className="min-h-11"
-                disabled={
-                  busy ||
-                  !data.selling ||
-                  !data.csrfToken ||
-                  (!uncertain && (amount === null || !title.trim() || !taxCode.trim()))
-                }
+                disabled={busy || !canSubmit || (!uncertain && (amount === null || !title.trim() || !taxCode.trim()))}
               >
                 {busy ? m.creator_saving() : uncertain ? m.creator_retry() : m.creator_create()}
               </Button>
