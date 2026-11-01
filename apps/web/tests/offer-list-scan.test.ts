@@ -147,7 +147,8 @@ test('Creator scans offer price and status before expanding long titles', async 
     expect(subjectScan).toContain(m.creator_offers_active());
     const review = subjectRow.querySelector('a')!;
     expect(review.getAttribute('href')).toBe(`/en/offers/${subjectOfferFixture.id}`);
-    expect(review.textContent).toBe(
+    expect(review.textContent).toBe(subjectPage.kind === 'ready' ? subjectPage.offers[0]!.title : '');
+    expect(review.getAttribute('aria-label')).toBe(
       m.subject_purchase_review_offer({ title: subjectPage.kind === 'ready' ? subjectPage.offers[0]!.title : '' }),
     );
     subjectRow.querySelector('summary')!.click();

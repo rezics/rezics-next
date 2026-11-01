@@ -12,7 +12,7 @@ mock.module('@tanstack/react-start/server', () => import('../.storybook/react-st
 const { SubjectOffersView } = await import('../src/checkout/subject-offers-region');
 
 // UNRUN: composed assertions over the actual UI; native/browser/visual acceptance remains deferred.
-test('Shared subject offer summaries retain captured terms price and exact localized review destination', async () => {
+test('Shared subject offer summaries retain supplied visible title contextual accessible review name captured terms price and exact localized destination', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -80,6 +80,7 @@ test('Shared subject offer summaries retain captured terms price and exact local
       );
       expect(heading.classList.contains('line-clamp-2')).toBe(true);
       expect(links).toHaveLength(1);
+      expect(links[0]!.textContent).toBe(offer.title);
       expect(links[0]!.getAttribute('href')).toBe(`/fr/offers/${encodeURIComponent(offer.id)}`);
       expect(links[0]!.getAttribute('aria-label')).toBe(
         m.subject_purchase_review_offer({ title: offer.title }, { locale }),
