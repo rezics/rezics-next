@@ -1,3 +1,4 @@
+import type { CandidateWork } from '../../subject/candidate-lifetime';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickLanguage, pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
@@ -46,9 +47,10 @@ export type AuthoredReview = {
   current?: Extract<AuthoredRead, { ok: true }>;
 };
 export type AuthoredTransport = {
+  reader?: string;
   read: (property?: string, session?: string) => Promise<AuthoredRead>;
   propose: (command: AuthoredCommand) => Promise<ProposalResult>;
-  review: (property: string, candidate: string, cursor?: string, session?: string) => Promise<AuthoredReview>;
+  review: (property: string, candidate: string, cursor?: string, session?: string, work?: CandidateWork) => Promise<AuthoredReview>;
 };
 
 export function authoredProperties(release: Release, type: string): string[] {

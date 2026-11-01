@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ComponentProps } from 'react';
+import { useCandidateWork, type CandidateWork } from './candidate-lifetime';
 import { ContextComparisonView } from '../features/catalogue/context-curation-view';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -21,12 +22,21 @@ import {
 } from './candidates';
 
 export type CandidateTransport = {
-  read: (property?: string, cursor?: string, session?: string) => Promise<CandidateRead>;
-  confirm: (command: CandidateCommand) => Promise<CandidateResult>;
+  /** Explicit fixture observation; production inherits the prepared session boundary. */
+  reader?: string;
+  read: (property?: string, cursor?: string, session?: string, work?: CandidateWork) => Promise<CandidateRead>;
+  confirm: (command: CandidateCommand, work?: CandidateWork) => Promise<CandidateResult>;
 };
 
 /** A session-only region: the owning subject route mounts it only after sign-in hydration. */
-export function CandidateReview({
+export function CandidateReview(props: Omit<ComponentProps<typeof CandidateReviewLive>, 'work'>) {
+  const { id, locale, initialProperty, exactCandidate, context, slot } = props;
+  const work = useCandidateWork(JSON.stringify([id, locale, initialProperty, exactCandidate, context, slot?.target, slot?.sameAs, slot?.key]), props.transport.reader);
+  if (!work.live()) return null;
+  return <CandidateReviewLive key={work.generation} {...props} work={work} />;
+}
+
+function CandidateReviewLive({
   id,
   locale,
   transport,
@@ -35,7 +45,9 @@ export function CandidateReview({
   context,
   slot,
   documents,
+  work,
 }: {
+  work: CandidateWork;
   id: string;
   locale: string;
   transport: CandidateTransport;
@@ -103,7 +115,7 @@ export function CandidateReview({
         : m.candidate_accept({}, options);
 
   async function load(field = property, cursor?: string) {
-    if (running.current || request.current) return;
+    if (!work.live() || running.current || request.current) return;
     running.current = true;
     setOpened(true);
     setBusy(true);
@@ -112,7 +124,8 @@ export function CandidateReview({
     setCandidate(undefined);
     setResult(undefined);
     try {
-      const next = await transport.read(field || undefined, cursor, session.current);
+      const next = await transport.read(field || undefined, cursor, session.current, work);
+      if (!work.live()) return;
       if (!next.ok) {
         setRead(undefined);
         setFailure(next);
@@ -163,15 +176,18 @@ export function CandidateReview({
       if (exactCandidate)
         setCandidate(next.page?.candidates.find((item) => item.id === exactCandidate && item.retracted === null));
     } catch {
+      if (!work.live()) return;
       setRead(undefined);
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!work.live()) return;
       setBusy(false);
       running.current = false;
     }
   }
 
   useEffect(() => {
+    if (!work.live()) return;
     if (!target) {
       openedTarget.current = null;
       return;
@@ -185,6 +201,7 @@ export function CandidateReview({
   });
 
   useEffect(() => {
+    if (!work.live()) return;
     if (confirmation) confirmationRegion.current?.focus();
     else if (restoreConfirmationFocus.current) {
       restoreConfirmationFocus.current = false;
@@ -193,19 +210,20 @@ export function CandidateReview({
   }, [confirmation]);
 
   function openConfirmation(operation: CandidateCommand['operation'], trigger: HTMLButtonElement) {
-    if (locked || requiresReload || running.current || request.current) return;
+    if (!work.live() || locked || requiresReload || running.current || request.current) return;
     confirmationTrigger.current = trigger;
     setConfirmation(operation);
   }
 
   function cancelConfirmation() {
-    if (running.current || request.current) return;
+    if (!work.live() || running.current || request.current) return;
     restoreConfirmationFocus.current = true;
     setConfirmation(null);
   }
 
   async function confirm() {
     if (
+      !work.live() ||
       !current?.page ||
       !confirmation ||
       running.current ||
@@ -216,8 +234,9 @@ export function CandidateReview({
     running.current = true;
     setBusy(true);
     setFailure(undefined);
-    request.current ??= {
+    request.current ??= freezeCommand({
       id,
+      expectedReader: work.reader,
       property,
       // Adoption uses selection; candidate is retained for compatibility with existing scalar callers.
       candidate: candidate?.id ?? draft?.selection[0]?.candidate ?? id,
@@ -228,10 +247,12 @@ export function CandidateReview({
         ? { selection: context && mode !== 'replace' ? [] : structuredClone(draft!.selection) }
         : {}),
       ...(session.current ? { session: session.current } : {}),
-      ...(context ? { context, mode, ...(slot ? { slot } : {}) } : {}),
-    };
+      ...(slot ? { slot: structuredClone(slot) } : {}),
+      ...(context ? { context, mode } : {}),
+    });
     try {
-      const next = await transport.confirm(request.current);
+      const next = await transport.confirm(request.current, work);
+      if (!work.live()) return;
       if (!next.ok) {
         setFailure(next);
         // An uncertain retry keeps the exact payload, old heads and key. A conflict never retries itself.
@@ -257,15 +278,17 @@ export function CandidateReview({
         setRequiresReload(true);
       }
     } catch {
+      if (!work.live()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      if (!work.live()) return;
       setBusy(false);
       running.current = false;
     }
   }
 
   function edit(choice: string, rank: 'normal' | 'preferred' | null) {
-    if (locked || !draft) return;
+    if (!work.live() || locked || !draft) return;
     setDrafts((previous) => ({ ...previous, [property]: editCandidateDraft(previous[property]!, choice, rank) }));
   }
 
@@ -447,6 +470,7 @@ export function CandidateReview({
                   value={property}
                   disabled={locked || !!exactCandidate || !!slot}
                   onChange={(event) => {
+                  if (!work.live()) return;
                     setProperty(event.target.value);
                     void load(event.target.value);
                   }}
@@ -488,7 +512,7 @@ export function CandidateReview({
                                 variant="outline"
                                 className="min-h-11"
                                 disabled={locked || item.retracted !== null}
-                                onClick={() => setCandidate(item)}
+                                onClick={() => work.live() && setCandidate(item)}
                               >
                                 {m.candidate_review({}, options)}
                               </Button>
@@ -586,7 +610,7 @@ export function CandidateReview({
                             variant="outline"
                             className="min-h-11"
                             disabled={locked}
-                            onClick={() => setCandidate(undefined)}
+                            onClick={() => work.live() && setCandidate(undefined)}
                           >
                             {m.candidate_back({}, options)}
                           </Button>
@@ -611,7 +635,7 @@ export function CandidateReview({
                             value={mode}
                             disabled={locked || requiresReload}
                             onChange={(event) =>
-                              setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
+                              work.live() && setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
                             }
                           >
                             <NativeSelectOption value="replace">{m.context_replace({}, options)}</NativeSelectOption>
@@ -717,6 +741,7 @@ export function CandidateReview({
             className="min-h-11"
             disabled={locked}
             onClick={() => {
+              if (!work.live()) return;
               setOpened(false);
               setRead(undefined);
               setCandidate(undefined);
@@ -812,4 +837,14 @@ function CandidateProvenance({
         ))}
     </div>
   );
+}
+
+/** Frozen uncertain attempts never pick up a later continuity token, slot or selection. */
+function freezeCommand(command: CandidateCommand): CandidateCommand {
+  if (command.slot) Object.freeze(command.slot);
+  if (command.selection) {
+    for (const entry of command.selection) Object.freeze(entry);
+    Object.freeze(command.selection);
+  }
+  return Object.freeze(command);
 }

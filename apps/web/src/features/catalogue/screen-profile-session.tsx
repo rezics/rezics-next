@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -10,7 +11,7 @@ import { relationTargetSearch } from './relation-editor-search';
 import { createCatalogueScreen, loadScreenProfile } from './screen-profile-actions';
 import { ScreenProfile } from './screen-profile-view';
 
-export function ScreenProfileSession({ id, locale }: { id?: string; locale: string }) {
+function ScreenProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -34,22 +35,21 @@ export function ScreenProfileSession({ id, locale }: { id?: string; locale: stri
                 propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
               },
               review: (_property, initialSession) => {
-                let session = initialSession;
-                return {
-                  read: async (property, cursor) => {
+                        return {
+                  read: async (property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await readSubjectCandidates({
-                      data: { id, property, cursor, session },
+                      data: { expectedReader: work.reader, id, property, cursor, session },
                       headers: csrfHeaders(),
                     });
-                    if (result.ok) session = result.session ?? session;
                     return result;
                   },
-                  confirm: async (command) => {
+                  confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await confirmSubjectCandidate({
-                      data: { ...command, session },
+                      data: command,
                       headers: csrfHeaders(),
                     });
-                    if (result.ok) session = result.session ?? session;
                     return result;
                   },
                 };
@@ -66,3 +66,5 @@ export function ScreenProfileSession({ id, locale }: { id?: string; locale: stri
     />
   );
 }
+
+export const ScreenProfileSession = candidateSession(ScreenProfileSessionLive);

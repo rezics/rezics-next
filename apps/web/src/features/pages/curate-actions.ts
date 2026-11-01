@@ -1,3 +1,4 @@
+import { expectedCandidateReader } from '../../subject/candidate-admission';
 import { platformRegistry, validateProfile, type PresentationProfile } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -191,6 +192,7 @@ function candidateAddress(input: unknown) {
   if (value.session !== undefined && (typeof value.session !== 'string' || value.session.length > 8192))
     throw new Error('Invalid session continuity');
   return {
+    expectedReader: expectedCandidateReader(input),
     id: input.id,
     property: value.property as string | undefined,
     cursor: value.cursor as string | undefined,
@@ -203,8 +205,8 @@ function candidateAddress(input: unknown) {
 export const readSubjectCandidates = createServerFn({ method: 'POST', strict: false })
   .validator(candidateAddress)
   .handler(async ({ data }): Promise<CandidateRead> => {
-    const authorization = await sessionBearer();
-    if (!authorization) return { ok: false, reason: 'denied' };
+    const { authorization, reader } = await curationAdmission();
+    if (!authorization || reader !== data.expectedReader) return { ok: false, reason: 'denied' };
     try {
       const locale = (await import('../../kernel/client')).requestLocale() ?? 'en';
       const [release, result] = await Promise.all([
@@ -271,6 +273,7 @@ export const confirmSubjectCandidate = createServerFn({ method: 'POST', strict: 
     if (value.rank !== undefined && value.rank !== 'normal' && value.rank !== 'preferred')
       throw new Error('Invalid rank');
     return {
+      expectedReader: address.expectedReader,
       id: address.id,
       property: address.property,
       candidate: value.candidate,
@@ -284,7 +287,7 @@ export const confirmSubjectCandidate = createServerFn({ method: 'POST', strict: 
     };
   })
   .handler(async ({ data }): Promise<CandidateResult> => {
-    const authorization = await sessionBearer();
-    if (!authorization) return { ok: false, reason: 'denied' };
+    const { authorization, reader } = await curationAdmission();
+    if (!authorization || reader !== data.expectedReader) return { ok: false, reason: 'denied' };
     return selectCandidate(kernelClient(), authorization, data);
   });

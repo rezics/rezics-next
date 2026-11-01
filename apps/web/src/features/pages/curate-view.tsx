@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useLocation } from '@tanstack/react-router';
 import { useContext } from 'react';
 import { getLocale } from '../../paraglide/runtime';
@@ -17,7 +18,7 @@ const publicationTransport: PublicationTransport = {
 };
 
 /** The subject's private curation region shares the existing prepared BFF transport. */
-export function SubjectCandidateCuration({ id, locale }: { id: string; locale: string }) {
+function SubjectCandidateCurationLive({ id, locale }: { id: string; locale: string }) {
   const { state } = useSession();
   const field = new URLSearchParams(useLocation().searchStr).get('candidateField') ?? undefined;
   const initialProperty = field && field.length <= 256 ? field : undefined;
@@ -29,13 +30,15 @@ export function SubjectCandidateCuration({ id, locale }: { id: string; locale: s
       id={id}
       locale={locale}
       transport={{
-        read: (property, cursor, session) =>
-          readSubjectCandidates({ data: { id, property, cursor, session }, headers: csrfHeaders() }),
-        confirm: (data) => confirmSubjectCandidate({ data, headers: csrfHeaders() }),
+        read: (property, cursor, session, work) =>
+          !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : readSubjectCandidates({ data: { id, property, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
+        confirm: (data, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmSubjectCandidate({ data, headers: csrfHeaders() }),
       }}
     />
   );
 }
+
+export const SubjectCandidateCuration = candidateSession(SubjectCandidateCurationLive);
 
 /** Keep session/CSRF preparation at the existing BFF boundary; the editor owns only its local drafts. */
 export function CurationView({

@@ -244,6 +244,7 @@ export function candidateFixture(
   }) as typeof fetch;
   const client = createKernelClient('https://candidate.test', { fetch: fetcher });
   const transport: CandidateTransport = {
+    reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
     read: async (property, cursor, session): Promise<CandidateRead> => {
       const result = await readCandidates(client, 'Bearer fixture', id, property, cursor, undefined, session);
       return result.ok ? { ...result, fields, names: {} } : result;

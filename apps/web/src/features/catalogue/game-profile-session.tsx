@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -14,7 +15,7 @@ import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
 import { relationTargetSearch } from './relation-editor-search';
 
-export function GameProfileSession({ id, locale }: { id?: string; locale: string }) {
+function GameProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -48,43 +49,41 @@ export function GameProfileSession({ id, locale }: { id?: string; locale: string
           confirm: (data) => confirmSubjectRelation({ data, headers: csrfHeaders() }),
         },
         review: (property, initialSession) => {
-          let session = initialSession;
-          return {
-            read: async (_property, cursor) => {
+            return {
+            read: async (_property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await readCorrectionReview({
-                data: { id: id!, property, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) },
+                data: { expectedReader: work.reader, id: id!, property, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) },
                 headers: csrfHeaders(),
               });
-              if (result.ok) session = result.session ?? session;
               return result;
             },
-            confirm: async (command) => {
+            confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await confirmCorrection({
-                data: { ...command, ...(session ? { session } : {}) },
+                data: command,
                 headers: csrfHeaders(),
               });
-              if (result.ok) session = result.session ?? session;
               return result;
             },
           };
         },
         classificationReview: (property, initialSession) => {
-          let session = initialSession;
-          return {
-            read: async (_property, cursor) => {
+            return {
+            read: async (_property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await loadGameClassificationReview({
-                data: { id: id!, property, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) },
+                data: { expectedReader: work.reader, id: id!, property, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) },
                 headers: csrfHeaders(),
               });
-              if (result.ok) session = result.session ?? session;
               return result;
             },
-            confirm: async (command) => {
+            confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await confirmCorrection({
-                data: { ...command, ...(session ? { session } : {}) },
+                data: command,
                 headers: csrfHeaders(),
               });
-              if (result.ok) session = result.session ?? session;
               return result;
             },
           };
@@ -93,3 +92,5 @@ export function GameProfileSession({ id, locale }: { id?: string; locale: string
     />
   );
 }
+
+export const GameProfileSession = candidateSession(GameProfileSessionLive);

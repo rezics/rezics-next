@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -11,7 +12,7 @@ import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
 
-export function StoryArcProfileSession({
+function StoryArcProfileSessionLive({
   locale,
   realm,
   ...address
@@ -51,19 +52,18 @@ export function StoryArcProfileSession({
         propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
       })}
       review={(id, _property, initialSession) => {
-        let session = initialSession;
         return {
-          read: async (property, cursor) => {
+          read: async (property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
             const result = await readSubjectCandidates({
-              data: { id, property, cursor, session },
+              data: { expectedReader: work.reader, id, property, cursor, session },
               headers: csrfHeaders(),
             });
-            if (result.ok) session = result.session ?? session;
             return result;
           },
-          confirm: async (command) => {
-            const result = await confirmSubjectCandidate({ data: { ...command, session }, headers: csrfHeaders() });
-            if (result.ok) session = result.session ?? session;
+          confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
+            const result = await confirmSubjectCandidate({ data: command, headers: csrfHeaders() });
             return result;
           },
         };
@@ -77,3 +77,5 @@ export function StoryArcProfileSession({
     />
   );
 }
+
+export const StoryArcProfileSession = candidateSession(StoryArcProfileSessionLive);

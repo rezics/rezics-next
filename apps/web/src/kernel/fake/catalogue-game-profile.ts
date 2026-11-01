@@ -188,6 +188,7 @@ export function gameProfileFixture(
     }) as typeof fetch,
   });
   const review = (property: string): CandidateTransport => ({
+    reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
     read: async (_property, cursor, session) => {
       const result = await readCandidates(client, 'Bearer fixture', gameId, property, cursor, undefined, session);
       return result.ok

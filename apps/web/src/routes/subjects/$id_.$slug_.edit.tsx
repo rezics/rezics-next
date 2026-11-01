@@ -1,3 +1,4 @@
+import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../../features/pages/curate-actions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
@@ -70,7 +71,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
     }),
   head: () => ({ meta: [{ title: m.facts_title() }, { name: 'robots', content: 'noindex' }] }),
-  component: CorrectionRoute,
+  component: candidateSession(CorrectionRoute),
 });
 
 function CorrectionRoute() {
@@ -78,10 +79,11 @@ function CorrectionRoute() {
   const { id } = Route.useLoaderData();
   const { property, statement, reviewProperty, candidate } = Route.useSearch();
   const locale = getLocale();
+  const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const { state } = useSession();
   const read = () => readCorrection({ data: { id, property, statement }, headers: csrfHeaders() });
   const query = useQuery({
-    queryKey: ['statement-editor', id, property, statement, locale],
+    queryKey: ['statement-editor', id, property, statement, locale, candidateWork.generation],
     queryFn: read,
     enabled: state === 'signed-in',
     staleTime: 0,
@@ -120,19 +122,18 @@ function CorrectionRoute() {
         transport={{ read, propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }) }}
         initialReview={reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
         review={(_property, initialSession) => {
-          let session = initialSession;
-          return {
-            read: async (field, cursor) => {
+            return {
+            read: async (field, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
               const result = await readSubjectCandidates({
-                data: { id, property: field, cursor, session },
+                data: { expectedReader: work.reader, id, property: field, cursor, session },
                 headers: csrfHeaders(),
               });
-              if (result.ok && result.session) session = result.session;
               return result;
             },
-            confirm: async (command) => {
-              const result = await confirmSubjectCandidate({ data: { ...command, session }, headers: csrfHeaders() });
-              if (result.ok && result.session) session = result.session;
+            confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
+              const result = await confirmSubjectCandidate({ data: command, headers: csrfHeaders() });
               return result;
             },
           };
@@ -161,19 +162,18 @@ function CorrectionRoute() {
         });
       }}
       review={(initialSession) => {
-        let session = initialSession;
         return {
-          read: async (field, cursor) => {
+          read: async (field, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
             const result = await readCorrectionReview({
-              data: { id, property: field, cursor, session },
+              data: { expectedReader: work.reader, id, property: field, cursor, session },
               headers: csrfHeaders(),
             });
-            if (result.ok && result.session) session = result.session;
             return result;
           },
-          confirm: async (command) => {
-            const result = await confirmCorrection({ data: { ...command, session }, headers: csrfHeaders() });
-            if (result.ok && result.session) session = result.session;
+          confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
+            const result = await confirmCorrection({ data: command, headers: csrfHeaders() });
             return result;
           },
         };

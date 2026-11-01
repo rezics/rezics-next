@@ -36,6 +36,8 @@ export type CandidateRead =
       session?: string;
     };
 export type CandidateCommand = {
+  /** Browser mismatch guard, excluded from native payloads and receipts. */
+  expectedReader?: string;
   id: string;
   property: string;
   candidate: string;

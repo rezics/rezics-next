@@ -1,3 +1,4 @@
+import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -20,7 +21,7 @@ import {
 } from './authored-field-actions';
 import { EditorFailure } from './statement-editor-view';
 
-export function MangaProfileSession({ id, locale }: { id?: string; locale: string }) {
+function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -51,22 +52,21 @@ export function MangaProfileSession({ id, locale }: { id?: string; locale: strin
                 propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
               },
               review: (_property, initialSession) => {
-                let session = initialSession;
-                return {
-                  read: async (property, cursor) => {
+                        return {
+                  read: async (property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await readSubjectCandidates({
-                      data: { id, property, cursor, session },
+                      data: { expectedReader: work.reader, id, property, cursor, session },
                       headers: csrfHeaders(),
                     });
-                    if (result.ok) session = result.session ?? session;
                     return result;
                   },
-                  confirm: async (data) => {
+                  confirm: async (data, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await confirmSubjectCandidate({
-                      data: { ...data, session },
+                      data,
                       headers: csrfHeaders(),
                     });
-                    if (result.ok) session = result.session ?? session;
                     return result;
                   },
                 };
@@ -81,18 +81,20 @@ export function MangaProfileSession({ id, locale }: { id?: string; locale: strin
 }
 
 function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
+  const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const [open, setOpen] = useState(false);
   const o = { locale: locale as never };
   const read = (property = 'schema:abstract', session?: string) =>
     loadAuthoredField({ data: { id, property, session }, headers: csrfHeaders() });
   const query = useQuery({
-    queryKey: ['manga-authored', id, locale],
+    queryKey: ['manga-authored', id, locale, candidateWork.generation],
     queryFn: () => read(),
     enabled: open,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
+    gcTime: 0,
   });
   return (
     <div className="space-y-4">
@@ -113,12 +115,14 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
           transport={{
             read,
             propose: (data) => submitAuthoredField({ data, headers: csrfHeaders() }),
-            review: (property, candidate, cursor, session) =>
-              loadAuthoredReview({ data: { id, property, candidate, cursor, session }, headers: csrfHeaders() }),
+            review: (property, candidate, cursor, session, work) =>
+              !work?.live() ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null }) : loadAuthoredReview({ data: { id, property, candidate, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
           }}
-          confirm={(data) => confirmAuthoredField({ data, headers: csrfHeaders() })}
+          confirm={(data, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmAuthoredField({ data, headers: csrfHeaders() })}
         />
       )}
     </div>
   );
 }
+
+export const MangaProfileSession = candidateSession(MangaProfileSessionLive);

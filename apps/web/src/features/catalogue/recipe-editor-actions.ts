@@ -1,3 +1,4 @@
+import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -25,7 +26,7 @@ import {
   type CandidateSlot,
 } from '../../subject/candidates';
 
-type ReviewAddress = { id: string; property: string; slot?: CandidateSlot; cursor?: string; session?: string };
+type ReviewAddress = { expectedReader?: string; id: string; property: string; slot?: CandidateSlot; cursor?: string; session?: string };
 function reviewAddress(input: ReviewAddress): ReviewAddress {
   if (
     !input ||
@@ -41,6 +42,7 @@ function reviewAddress(input: ReviewAddress): ReviewAddress {
   )
     throw new Error('Invalid recipe review');
   return {
+    expectedReader: expectedCandidateReader(input),
     id: input.id,
     property: input.property,
     ...(input.slot ? { slot: input.slot } : {}),
@@ -48,17 +50,10 @@ function reviewAddress(input: ReviewAddress): ReviewAddress {
     ...(input.session ? { session: input.session } : {}),
   };
 }
-async function authorization() {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  return viewerCredential(request);
-}
-
 export const loadRecipeReview = createServerFn({ method: 'POST', strict: false })
   .validator(reviewAddress)
   .handler(async ({ data }): Promise<CandidateRead> => {
-    const bearer = await authorization();
+    const bearer = await candidateAuthorization(data.expectedReader);
     if (!bearer) return { ok: false, reason: 'denied' };
     const client = kernelClient();
     const [editor, candidates] = await Promise.all([
@@ -107,7 +102,7 @@ export const confirmRecipeReview = createServerFn({ method: 'POST', strict: fals
     };
   })
   .handler(async ({ data }): Promise<CandidateResult> => {
-    const bearer = await authorization();
+    const bearer = await candidateAuthorization(data.expectedReader);
     if (!bearer) return { ok: false, reason: 'denied' };
     return selectCandidate(kernelClient(), bearer, data);
   });

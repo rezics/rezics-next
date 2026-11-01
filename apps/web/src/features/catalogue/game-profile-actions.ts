@@ -1,3 +1,4 @@
+import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -74,7 +75,7 @@ export const proposeGameClassification = createServerFn({ method: 'POST', strict
     return proposeFact(kernelClient(), authorization, data);
   });
 export const loadGameClassificationReview = createServerFn({ method: 'POST', strict: false })
-  .validator((input: { id: string; property: string; cursor?: string; session?: string }) => {
+  .validator((input: { id: string; property: string; cursor?: string; session?: string; expectedReader?: string }) => {
     if (
       !input ||
       typeof input.id !== 'string' ||
@@ -85,10 +86,10 @@ export const loadGameClassificationReview = createServerFn({ method: 'POST', str
       (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384))
     )
       throw new Error('Invalid classification review');
-    return input;
+    return { ...input, expectedReader: expectedCandidateReader(input) };
   })
   .handler(async ({ data }): Promise<CandidateRead> => {
-    const authorization = await bearer();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     const client = kernelClient();
     const [read, candidates] = await Promise.all([

@@ -204,8 +204,9 @@ export function storyArcProfileFixture(scenario: StoryArcScenario = 'ready', loc
       propose: (command) => proposeFact(client, 'Bearer fixture', command),
     }),
     review: (_id, property) => ({
-      read: async (_property, cursor) => {
-        const read = await readCandidates(client, 'Bearer fixture', storyArcProfileId, property, cursor);
+      reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
+      read: async (_property, cursor, session) => {
+        const read = await readCandidates(client, 'Bearer fixture', storyArcProfileId, property, cursor, undefined, session);
         return read.ok
           ? {
               ...read,

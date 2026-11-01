@@ -1,10 +1,7 @@
+import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
 import type { Release } from '@rezics/definitions';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import { prepareSession, viewerCredential } from '../../session/request';
-import type { SessionEnv } from '../../session/client';
 import { readRelease } from '../../subject/definitions';
 import type { CandidateCommand, CandidateRead, CandidateResult } from '../../subject/candidates';
 import { readContextCuration, confirmContextCuration, type ContextAddress } from './context-curation';
@@ -14,7 +11,7 @@ function record(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid Context request');
   return input as Record<string, unknown>;
 }
-export function contextAddress(input: unknown): ContextAddress {
+export function contextAddress(input: unknown): ContextAddress & { expectedReader: string } {
   const value = record(input);
   if (
     typeof value.id !== 'string' ||
@@ -47,7 +44,7 @@ export function contextAddress(input: unknown): ContextAddress {
       throw new Error('Invalid exact slot');
     slot = raw as ContextAddress['slot'];
   }
-  return {
+  return { expectedReader: expectedCandidateReader(input),
     id: value.id,
     context: value.context,
     ...(typeof value.property === 'string' ? { property: value.property } : {}),
@@ -101,16 +98,10 @@ function command(input: unknown): CandidateCommand & { context: string } {
     ...(selection ? { selection } : {}),
   };
 }
-async function session() {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  return viewerCredential(request);
-}
 export const readSubjectContext = createServerFn({ method: 'POST', strict: false })
   .validator(contextAddress)
   .handler(async ({ data }): Promise<CandidateRead> => {
-    const authorization = await session();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     return readContextCuration(
       kernelClient(),
@@ -123,7 +114,7 @@ export const readSubjectContext = createServerFn({ method: 'POST', strict: false
 export const confirmSubjectContext = createServerFn({ method: 'POST', strict: false })
   .validator(command)
   .handler(async ({ data }): Promise<CandidateResult> => {
-    const authorization = await session();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     return confirmContextCuration(
       kernelClient(),

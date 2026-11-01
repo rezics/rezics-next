@@ -1,10 +1,11 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { EditorialContextSession } from './editorial-context-session';
 import { CandidateReview } from '../../subject/candidate-review';
 import type { CandidateSlot } from '../../subject/candidates';
 import { csrfHeaders } from '../../threads/composer';
 import { readSubjectContext, confirmSubjectContext } from './context-curation-actions';
 
-export function ContextCurationSession({
+function ContextCurationSessionLive({
   id,
   context,
   property,
@@ -29,12 +30,14 @@ export function ContextCurationSession({
           initialProperty={property}
           slot={slot}
           transport={{
-            read: (property, cursor, session) =>
-              readSubjectContext({ data: { id, context, property, slot, cursor, session }, headers: csrfHeaders() }),
-            confirm: (command) => confirmSubjectContext({ data: command, headers: csrfHeaders() }),
+            read: (property, cursor, session, work) =>
+              !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : readSubjectContext({ data: { id, context, property, slot, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
+            confirm: (command, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmSubjectContext({ data: command, headers: csrfHeaders() }),
           }}
         />
       )}
     </EditorialContextSession>
   );
 }
+
+export const ContextCurationSession = candidateSession(ContextCurationSessionLive);

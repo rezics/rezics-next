@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback, useMemo } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { useSession } from '../../session/query';
@@ -11,7 +12,7 @@ import { readCorrection, readCorrectionReview, confirmCorrection } from './state
 import { submitFactCorrection } from './subject-facts-actions';
 import type { AlbumTransport } from './album-profile';
 
-export function AlbumProfileSession({ id, locale }: { id?: string; locale: string }) {
+function AlbumProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
   const { state } = useSession();
   const router = useRouter();
   const search = useCallback(
@@ -35,22 +36,21 @@ export function AlbumProfileSession({ id, locale }: { id?: string; locale: strin
               propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
             },
             review: (property, initialSession) => {
-              let session = initialSession;
-              return {
-                read: async (_property, cursor) => {
+                    return {
+                read: async (_property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
                   const result = await readCorrectionReview({
-                    data: { id, property, cursor, session },
+                    data: { expectedReader: work.reader, id, property, cursor, session },
                     headers: csrfHeaders(),
                   });
-                  if (result.ok) session = result.session ?? session;
                   return result;
                 },
-                confirm: async (command) => {
+                confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
                   const result = await confirmCorrection({
-                    data: { ...command, ...(session ? { session } : {}) },
+                    data: command,
                     headers: csrfHeaders(),
                   });
-                  if (result.ok) session = result.session ?? session;
                   return result;
                 },
               };
@@ -77,3 +77,5 @@ export function AlbumProfileSession({ id, locale }: { id?: string; locale: strin
     />
   );
 }
+
+export const AlbumProfileSession = candidateSession(AlbumProfileSessionLive);

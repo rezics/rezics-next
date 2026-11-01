@@ -115,8 +115,9 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
     propose: (command: Parameters<typeof proposeStatement>[2]) => proposeStatement(client, 'Bearer fixture', command),
   };
   const review: CandidateTransport = {
-    read: async (property = address.property, cursor): Promise<CandidateRead> => {
-      const result = await readCandidates(client, 'Bearer fixture', base.id, property, cursor);
+    reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
+    read: async (property = address.property, cursor, session): Promise<CandidateRead> => {
+      const result = await readCandidates(client, 'Bearer fixture', base.id, property, cursor, undefined, session);
       return result.ok
         ? {
             ...result,

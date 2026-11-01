@@ -249,6 +249,7 @@ export function recipeFixture(scenario: RecipeScenario = 'ready', locale = 'en')
     read: (id) => readCreatedSubject(client, id, locale),
   };
   const review = (property: string): CandidateTransport => ({
+    reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
     read: async (_property, cursor, session) => {
       const read = await readCandidates(client, 'Bearer fixture', recipeId, property, cursor, undefined, session);
       return read.ok

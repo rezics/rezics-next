@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { readCorrection } from './statement-editor-actions';
@@ -5,7 +6,7 @@ import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
 import { IdentifiersProfile, type IdentifiersProfileProps } from './identifiers-profile-view';
 
-export function IdentifiersProfileSession({
+function IdentifiersProfileSessionLive({
   id,
   locale,
   initialReview,
@@ -23,19 +24,18 @@ export function IdentifiersProfileSession({
         propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }),
       }}
       review={(_property, initialSession) => {
-        let session = initialSession;
         return {
-          read: async (property, cursor) => {
+          read: async (property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
             const result = await readSubjectCandidates({
-              data: { id, property, cursor, session },
+              data: { expectedReader: work.reader, id, property, cursor, session },
               headers: csrfHeaders(),
             });
-            if (result.ok) session = result.session ?? session;
             return result;
           },
-          confirm: async (command) => {
-            const result = await confirmSubjectCandidate({ data: { ...command, session }, headers: csrfHeaders() });
-            if (result.ok) session = result.session ?? session;
+          confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
+            const result = await confirmSubjectCandidate({ data: command, headers: csrfHeaders() });
             return result;
           },
         };
@@ -43,3 +43,5 @@ export function IdentifiersProfileSession({
     />
   );
 }
+
+export const IdentifiersProfileSession = candidateSession(IdentifiersProfileSessionLive);

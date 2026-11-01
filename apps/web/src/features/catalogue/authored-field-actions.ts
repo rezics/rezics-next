@@ -1,3 +1,4 @@
+import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -89,6 +90,7 @@ export const loadAuthoredReview = createServerFn({ method: 'POST', strict: false
     )
       throw new Error('Invalid authored review');
     return {
+      expectedReader: expectedCandidateReader(value),
       ...base,
       property: base.property,
       candidate: input.candidate,
@@ -96,7 +98,7 @@ export const loadAuthoredReview = createServerFn({ method: 'POST', strict: false
     };
   })
   .handler(async ({ data }): Promise<AuthoredReview> => {
-    const authorization = await credential();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { comparison: { ok: false, reason: 'denied' }, body: null };
     return readAuthoredReview(kernelClient(), authorization, data, requestLocale() ?? 'en');
   });
@@ -132,6 +134,7 @@ export const confirmAuthoredField = createServerFn({ method: 'POST', strict: fal
         throw new Error('Invalid selection');
     }
     return {
+      expectedReader: expectedCandidateReader(value),
       ...base,
       property: base.property,
       candidate: input.candidate,
@@ -142,7 +145,7 @@ export const confirmAuthoredField = createServerFn({ method: 'POST', strict: fal
     };
   })
   .handler(async ({ data }): Promise<CandidateResult> => {
-    const authorization = await credential();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     return selectCandidate(kernelClient(), authorization, data);
   });

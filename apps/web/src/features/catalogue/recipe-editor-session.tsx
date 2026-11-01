@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
@@ -12,7 +13,7 @@ import {
 } from './recipe-editor-actions';
 import { readCreatedCatalogueSubject } from './create-subject-actions';
 
-export function RecipeEditorSession({ id, locale }: { id?: string; locale: string }) {
+function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }) {
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -31,11 +32,11 @@ export function RecipeEditorSession({ id, locale }: { id?: string; locale: strin
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       review={(property, slot, initialSession) => {
-        let session = initialSession;
         return {
-          read: async (_property, cursor) => {
+          read: async (_property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
             const result = await loadRecipeReview({
-              data: {
+              data: { expectedReader: work.reader,
                 id: id!,
                 property,
                 ...(slot ? { slot } : {}),
@@ -44,15 +45,14 @@ export function RecipeEditorSession({ id, locale }: { id?: string; locale: strin
               },
               headers: csrfHeaders(),
             });
-            if (result.ok) session = result.session ?? session;
             return result;
           },
-          confirm: async (command) => {
+          confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
             const result = await confirmRecipeReview({
-              data: { ...command, ...(slot ? { slot } : {}), ...(session ? { session } : {}) },
+              data: command,
               headers: csrfHeaders(),
             });
-            if (result.ok) session = result.session ?? session;
             return result;
           },
         };
@@ -60,3 +60,5 @@ export function RecipeEditorSession({ id, locale }: { id?: string; locale: strin
     />
   );
 }
+
+export const RecipeEditorSession = candidateSession(RecipeEditorSessionLive);

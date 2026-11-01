@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useCandidateWork, type CandidateWork } from '../../subject/candidate-lifetime';
+import { useEffect, useReducer, useRef, useState, type ComponentProps } from 'react';
 import { RichTextEditor } from '@rezics/ui';
 import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -64,12 +65,22 @@ function Body({ body, locale }: { body: AuthoredBody | null | undefined; locale:
 }
 
 /** Always composes a new original work; existing rich documents and candidates remain intact. */
-export function AuthoredField({
+export function AuthoredField(props: Omit<ComponentProps<typeof AuthoredFieldLive>, 'work'>) {
+  const subject = useRef<string | undefined>(undefined);
+  if (props.initial.ok) subject.current = props.initial.public.subject.id;
+  const work = useCandidateWork(JSON.stringify([subject.current, props.locale]), props.transport.reader);
+  if (!work.live()) return null;
+  return <AuthoredFieldLive key={work.generation} {...props} work={work} />;
+}
+
+function AuthoredFieldLive({
   initial,
   locale,
   transport,
   confirm,
+  work,
 }: {
+  work: CandidateWork;
   initial: AuthoredRead;
   locale: string;
   transport: AuthoredTransport;
@@ -93,7 +104,7 @@ export function AuthoredField({
   const session = useRef(initial.ok ? initial.session : undefined);
   const requestedProperty = useRef(initial.ok ? initial.property : '');
   useEffect(() => {
-    if (initial.ok) session.current = initial.session ?? session.current;
+    if (work.live() && initial.ok) session.current = initial.session ?? session.current;
   }, [initial]);
   // A metadata refresh replaces read authority without remounting or discarding the submission state.
   if (metadata !== initial) {
@@ -119,13 +130,13 @@ export function AuthoredField({
   const title = current ? pageText(current.public.subject.labels, locale).text : '';
   const id = current?.public.subject.id;
   const update = (change: Partial<AuthoredDraft>) => {
-    if (locked || running.current || !draft) return;
+    if (!work.live() || locked || running.current || !draft) return;
     dispatch({ type: 'edit', property, change });
     setErrors([]);
   };
 
-  async function refresh(nextProperty = property, reviewDraft = false, readingOnly = false) {
-    if (running.current || (command && !reviewDraft)) return;
+  async function refresh(nextProperty = property, reviewDraft = false, readingOnly = false, origin: CandidateWork = work) {
+    if (!work.live() || !origin.live() || running.current || (command && !reviewDraft)) return;
     requestedProperty.current = nextProperty;
     running.current = true;
     setBusy(true);
@@ -136,12 +147,14 @@ export function AuthoredField({
       // public text and leaves an independently authorized comparison intact while it remains readable.
       const comparison =
         !readingOnly && proposed && reviewing && nextProperty === property
-          ? await transport.review(property, proposed.candidate, undefined, session.current)
+          ? await transport.review(property, proposed.candidate, undefined, session.current, origin)
           : undefined;
+      if (!work.live() || !origin.live()) return;
       const next: AuthoredRead = comparison
         ? (comparison.current ??
           (comparison.comparison.ok ? { ok: false, reason: 'unavailable' } : comparison.comparison))
         : await transport.read(nextProperty || undefined, session.current);
+      if (!work.live() || !origin.live()) return;
       if (comparison) {
         setProposalBody(comparison.body);
         if (comparison.comparison.ok) session.current = comparison.comparison.session ?? session.current;
@@ -157,25 +170,29 @@ export function AuthoredField({
         session.current = next.session ?? session.current;
       }
     } catch {
+      if (!work.live() || !origin.live()) return;
       setCurrent(undefined);
       setProposalBody(undefined);
       setReviewing(false);
       setReadFailure('unavailable');
       dispatch({ type: 'read', read: { ok: false, reason: 'unavailable' }, reviewDraft });
     } finally {
+      if (!work.live() || !origin.live()) return;
       running.current = false;
       setBusy(false);
       setReading(false);
     }
   }
 
-  async function rereadAfterDenial() {
+  async function rereadAfterDenial(origin: CandidateWork = work) {
+    if (!work.live() || !origin.live()) return;
     // A write denial clears private comparison data. Only a fresh public read may restore selected text.
     setCurrent(undefined);
     setProposalBody(undefined);
     setReviewing(false);
     try {
       const next = await transport.read(property || undefined, session.current);
+      if (!work.live() || !origin.live()) return;
       if (next.ok) {
         session.current = next.session ?? session.current;
         setCurrent(next);
@@ -186,7 +203,7 @@ export function AuthoredField({
   }
 
   async function submit() {
-    if (running.current || proposed || !current || !draft || failure === 'stale' || failure === 'denied') return;
+    if (!work.live() || running.current || proposed || !current || !draft || failure === 'stale' || failure === 'denied') return;
     let request = command;
     if (!request) {
       const statement = authoredStatement(property, draft.document, draft.language, draft.licence, draft.citation);
@@ -207,6 +224,7 @@ export function AuthoredField({
     dispatch({ type: 'submit', command: request });
     try {
       const result = await transport.propose(request);
+      if (!work.live()) return;
       dispatch({ type: 'result', result });
       if (result.ok) {
         session.current = result.session ?? session.current;
@@ -214,8 +232,10 @@ export function AuthoredField({
         if (result.reason === 'denied') await rereadAfterDenial();
       }
     } catch {
+      if (!work.live()) return;
       dispatch({ type: 'result', result: { ok: false, reason: 'unavailable' } });
     } finally {
+      if (!work.live()) return;
       running.current = false;
       setBusy(false);
     }
@@ -239,25 +259,30 @@ export function AuthoredField({
     document: m.authored_text({}, o),
   };
   const review: CandidateTransport = {
-    read: async (field, cursor) => {
+    reader: work.reader,
+    read: async (field, cursor, continuity, origin = work) => {
+      if (!work.live() || !origin.live()) return { ok: false, reason: 'denied' };
       if (!proposed || !id || field !== property) return { ok: false, reason: 'invalid' };
       setProposalBody(undefined);
-      const result = await transport.review(property, proposed.candidate, cursor, session.current);
+      const result = await transport.review(property, proposed.candidate, cursor, continuity ?? session.current, origin);
+      if (!work.live() || !origin.live()) return { ok: false, reason: 'denied' };
       if (result.comparison.ok) session.current = result.comparison.session ?? session.current;
       if (result.current) setCurrent(result.current);
       setProposalBody(result.body);
       return result.comparison;
     },
-    confirm: async (input) => {
-      const result = await confirm({ ...input, ...(session.current ? { session: session.current } : {}) });
+    confirm: async (input, origin = work) => {
+      if (!work.live() || !origin.live()) return { ok: false, reason: 'denied' };
+      const result = await confirm(input, origin);
+      if (!work.live() || !origin.live()) return result;
       setProposalBody(undefined);
       if (result.ok) {
         session.current = result.session ?? session.current;
         // Read the actual public statement and its authorized body, never the submission or decision receipt.
-        await refresh();
+        await refresh(property, false, false, origin);
       } else if (result.reason === 'denied') {
         dispatch({ type: 'denied' });
-        await rereadAfterDenial();
+        await rereadAfterDenial(origin);
       }
       return result;
     },
@@ -499,7 +524,7 @@ export function AuthoredField({
           {proposed && id && current && (
             <section className="space-y-4">
               {!reviewing ? (
-                <Button variant="outline" className={actionClassName} onClick={() => setReviewing(true)}>
+                <Button variant="outline" className={actionClassName} onClick={() => work.live() && setReviewing(true)}>
                   {m.correction_review({}, o)}
                 </Button>
               ) : (

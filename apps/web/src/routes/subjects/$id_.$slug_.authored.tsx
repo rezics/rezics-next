@@ -1,3 +1,4 @@
+import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
@@ -63,18 +64,19 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/authored')({
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
     }),
   head: () => ({ meta: [{ title: m.authored_title() }, { name: 'robots', content: 'noindex' }] }),
-  component: AuthoredRoute,
+  component: candidateSession(AuthoredRoute),
 });
 
 function AuthoredRoute() {
   const { id } = Route.useLoaderData();
   const { property } = Route.useSearch();
   const locale = getLocale();
+  const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const { state } = useSession();
   const read = (field = property, session?: string) =>
     loadAuthoredField({ data: { id, property: field, session }, headers: csrfHeaders() });
   const query = useQuery({
-    queryKey: ['authored-field', id, property, locale],
+    queryKey: ['authored-field', id, property, locale, candidateWork.generation],
     queryFn: () => read(),
     enabled: state === 'signed-in',
     staleTime: 0,
@@ -112,10 +114,10 @@ function AuthoredRoute() {
       transport={{
         read,
         propose: (data) => submitAuthoredField({ data, headers: csrfHeaders() }),
-        review: (field, candidate, cursor, session) =>
-          loadAuthoredReview({ data: { id, property: field, candidate, cursor, session }, headers: csrfHeaders() }),
+        review: (field, candidate, cursor, session, work) =>
+          !work?.live() ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null }) : loadAuthoredReview({ data: { id, property: field, candidate, cursor, session, expectedReader: work.reader }, headers: csrfHeaders() }),
       }}
-      confirm={(data) => confirmAuthoredField({ data, headers: csrfHeaders() })}
+      confirm={(data, work) => !work?.live() ? Promise.resolve({ ok: false, reason: 'denied' }) : confirmAuthoredField({ data, headers: csrfHeaders() })}
     />
   );
 }

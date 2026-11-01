@@ -144,6 +144,7 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
   }) as typeof fetch;
   const client = createKernelClient('https://authored.test', { fetch: fetcher });
   const transport: AuthoredTransport = {
+    reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
     read: (property, session) =>
       readAuthoredField(
         client,

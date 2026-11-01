@@ -1,3 +1,4 @@
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
@@ -8,7 +9,7 @@ import { loadPeopleProfile, createCataloguePeopleProfile } from './people-profil
 import { PeopleProfileEditor } from './people-profile-view';
 import type { PeopleAddress } from './people-profile';
 
-export function PeopleProfileSession({ id, work, locale }: PeopleAddress & { locale: string }) {
+function PeopleProfileSessionLive({ id, work, locale }: PeopleAddress & { locale: string }) {
   const { state } = useSession();
   return (
     <PeopleProfileEditor
@@ -23,19 +24,18 @@ export function PeopleProfileSession({ id, work, locale }: PeopleAddress & { loc
       }}
       propose={(data) => submitFactCorrection({ data, headers: csrfHeaders() })}
       review={(_property, initialSession) => {
-        let session = initialSession;
         return {
-          read: async (property, cursor) => {
+          read: async (property, cursor, session = initialSession, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
             const result = await readSubjectCandidates({
-              data: { id: id!, property, cursor, session },
+              data: { expectedReader: work.reader, id: id!, property, cursor, session },
               headers: csrfHeaders(),
             });
-            if (result.ok) session = result.session ?? session;
             return result;
           },
-          confirm: async (command) => {
-            const result = await confirmSubjectCandidate({ data: { ...command, session }, headers: csrfHeaders() });
-            if (result.ok) session = result.session ?? session;
+          confirm: async (command, work) => {
+            if (!work?.live()) return { ok: false, reason: 'denied' };
+            const result = await confirmSubjectCandidate({ data: command, headers: csrfHeaders() });
             return result;
           },
         };
@@ -45,3 +45,5 @@ export function PeopleProfileSession({ id, work, locale }: PeopleAddress & { loc
     />
   );
 }
+
+export const PeopleProfileSession = candidateSession(PeopleProfileSessionLive);

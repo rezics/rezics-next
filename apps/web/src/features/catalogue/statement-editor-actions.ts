@@ -1,3 +1,4 @@
+import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -73,6 +74,7 @@ export const readCorrectionReview = createServerFn({ method: 'POST', strict: fal
     )
       throw new Error('Invalid correction review');
     return {
+      expectedReader: expectedCandidateReader(value),
       ...address,
       property: address.property,
       cursor: input.cursor as string | undefined,
@@ -80,7 +82,7 @@ export const readCorrectionReview = createServerFn({ method: 'POST', strict: fal
     };
   })
   .handler(async ({ data }): Promise<CandidateRead> => {
-    const authorization = await bearer();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     const client = kernelClient();
     const [result, form] = await Promise.all([
@@ -139,6 +141,7 @@ export const confirmCorrection = createServerFn({ method: 'POST', strict: false 
         throw new Error('Invalid selection');
     }
     return {
+      expectedReader: expectedCandidateReader(value),
       id: address.id,
       property: address.property,
       candidate: input.candidate,
@@ -150,7 +153,7 @@ export const confirmCorrection = createServerFn({ method: 'POST', strict: false 
     };
   })
   .handler(async ({ data }): Promise<CandidateResult> => {
-    const authorization = await bearer();
+    const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     return selectCandidate(kernelClient(), authorization, data);
   });

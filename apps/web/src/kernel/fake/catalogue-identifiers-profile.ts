@@ -213,9 +213,9 @@ export function identifiersProfileFixture(scenario: IdentifiersScenario = 'ready
     propose: (command) => proposeFact(client, 'Bearer synthetic', command),
   };
   const review = (property: string, initialSession?: string): CandidateTransport => {
-    let session = initialSession;
     return {
-      read: async (_property, cursor) => {
+      reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
+      read: async (_property, cursor, session = initialSession) => {
         const result = await readCandidates(
           client,
           'Bearer synthetic',
@@ -226,7 +226,6 @@ export function identifiersProfileFixture(scenario: IdentifiersScenario = 'ready
           session,
         );
         if (!result.ok) return result;
-        session = result.session ?? session;
         return {
           ...result,
           fields: identifierProperties(release, result.public.subject.type).map((id) => ({
@@ -240,11 +239,7 @@ export function identifiersProfileFixture(scenario: IdentifiersScenario = 'ready
         };
       },
       confirm: async (command) => {
-        const result = await selectCandidate(client, 'Bearer synthetic', {
-          ...command,
-          ...(session ? { session } : {}),
-        });
-        if (result.ok) session = result.session ?? session;
+        const result = await selectCandidate(client, 'Bearer synthetic', command);
         return result;
       },
     };
