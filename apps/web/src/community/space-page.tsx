@@ -216,13 +216,18 @@ export function RealmShelf({
     },
     transport?.publications ?? ((input) => readRealmPublications({ data: { realmId: realm.id, ...input } })),
   );
+  const sendPublication = useCallback<PublicationSend>(
+    (input) =>
+      transport?.change
+        ? transport.change(input)
+        : csrfToken
+          ? changeRealmPublication({ data: input, headers: { 'X-CSRF-Token': csrfToken } })
+          : Promise.resolve({ kind: 'denied' }),
+    [transport?.change, csrfToken],
+  );
   const control = usePublicationControls(
     realm.id,
-    transport?.change ??
-      ((input) =>
-        csrfToken
-          ? changeRealmPublication({ data: input, headers: { 'X-CSRF-Token': csrfToken } })
-          : Promise.resolve({ kind: 'denied' })),
+    sendPublication,
     (input, target, head) =>
       publications.update((previous) => ({
         ...previous,

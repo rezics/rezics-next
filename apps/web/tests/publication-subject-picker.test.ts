@@ -225,3 +225,57 @@ test('Search failure, late queries and retired Realm or reader drafts cannot dis
   await next.change('publish');
   expect(writes).toBe(1);
 });
+
+test('retirement is irreversible and duplicate explicit actions cross transport once', async () => {
+  const reply = deferred<PublicationOutcome>();
+  let writes = 0;
+  let saved = 0;
+  const draft = createPublicationDraft(
+    id(2),
+    async () => {
+      writes += 1;
+      return reply.promise;
+    },
+    () => {
+      saved += 1;
+    },
+    () => [],
+  );
+  draft.choose(target());
+  const pending = draft.change('publish');
+  await draft.change('publish');
+  expect(writes).toBe(1);
+  draft.retire();
+  draft.activate();
+  reply.resolve({ kind: 'saved', head: id(51) });
+  await pending;
+  await draft.change('publish');
+  draft.choose(target());
+  expect(writes).toBe(1);
+  expect(saved).toBe(0);
+  expect(draft.getSnapshot()).toEqual({ target: null, outcome: null, busy: false });
+});
+
+test('a caller retired during the busy publication boundary never reaches transport', async () => {
+  let valid = true;
+  let writes = 0;
+  const draft = createPublicationDraft(
+    id(2),
+    async () => {
+      writes += 1;
+      return { kind: 'saved', head: id(51) };
+    },
+    () => {},
+    () => [],
+    true,
+    { current: () => valid },
+  );
+  draft.choose(target());
+  const unsubscribe = draft.subscribe(() => {
+    if (draft.getSnapshot().busy) valid = false;
+  });
+  await draft.change('publish');
+  unsubscribe();
+  expect(writes).toBe(0);
+  expect(draft.getSnapshot()).toEqual({ target: null, outcome: null, busy: false });
+});

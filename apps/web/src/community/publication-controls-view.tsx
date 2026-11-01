@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Cover } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -13,8 +14,68 @@ import {
 } from './publication-subject-picker';
 import type { PublicationChange } from './publication-controls';
 import type { PublishedSubject } from './space';
+import { sessionQuery, useSession } from '../session/query';
 
 export type { PublicationSend, PublicationTarget } from './publication-subject-picker';
+
+type SessionRecord = { state: string; subject?: string | null; csrfToken?: string | null };
+type PublicationSessionSource = {
+  readonly id: number;
+  read: () => SessionRecord | undefined;
+  dataUpdateCount: () => number;
+  dataUpdatedAt: () => number;
+  snapshot: () => number;
+  subscribe: (listener: () => void) => () => void;
+};
+
+const publicationSessionSources = new WeakMap<QueryClient, PublicationSessionSource>();
+let nextPublicationSessionSourceId = 0;
+
+function publicationSessionSource(client: QueryClient): PublicationSessionSource {
+  const existing = publicationSessionSources.get(client);
+  if (existing) return existing;
+  const read = () => client.getQueryData<SessionRecord>(sessionQuery.queryKey);
+  const dataUpdateCount = () => client.getQueryState(sessionQuery.queryKey)?.dataUpdateCount ?? 0;
+  const dataUpdatedAt = () => client.getQueryState(sessionQuery.queryKey)?.dataUpdatedAt ?? 0;
+  const identity = () => {
+    const value = read();
+    return JSON.stringify([
+      value?.state ?? 'unknown',
+      value?.subject ?? null,
+      value?.csrfToken ?? null,
+      dataUpdateCount(),
+      dataUpdatedAt(),
+    ]);
+  };
+  let previous = identity();
+  let revision = 0;
+  const listeners = new Set<() => void>();
+  client.getQueryCache().subscribe(({ query }) => {
+    if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+    const next = identity();
+    if (next === previous) return;
+    previous = next;
+    revision++;
+    for (const listener of listeners) listener();
+  });
+  const source: PublicationSessionSource = {
+    id: ++nextPublicationSessionSourceId,
+    read,
+    dataUpdateCount,
+    dataUpdatedAt,
+    snapshot: () => revision,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  publicationSessionSources.set(client, source);
+  return source;
+}
+
+const noSessionSubscribe = () => () => {};
+const noSessionRevision = () => 0;
+const usePublicationLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 export function usePublicationControls(
   realmId: string,
@@ -25,33 +86,89 @@ export function usePublicationControls(
   reader = '',
 ) {
   const locale = getLocale();
-  const bindings = useRef({ send, saved, currentSubjects });
-  bindings.current = { send, saved, currentSubjects };
-  const draft = useMemo(
-    () =>
-      createPublicationDraft(
-        realmId,
-        (input) => bindings.current.send(input),
-        (input, subject, head) => bindings.current.saved(input, subject, head),
-        () => bindings.current.currentSubjects,
-        enabled,
-      ),
-    [realmId, enabled, reader, locale],
+  const queryClient = useContext(QueryClientContext) ?? null;
+  const session = useSession();
+  const source = queryClient ? publicationSessionSource(queryClient) : null;
+  const revision = useSyncExternalStore(
+    source?.subscribe ?? noSessionSubscribe,
+    source?.snapshot ?? noSessionRevision,
+    source?.snapshot ?? noSessionRevision,
   );
-  useEffect(() => {
-    if (enabled) draft.activate();
-    else draft.retire();
-    return () => draft.retire();
-  }, [draft, enabled]);
+  const cached = source?.read();
+  const dataUpdateCount = source?.dataUpdateCount() ?? 0;
+  const dataUpdatedAt = source?.dataUpdatedAt() ?? 0;
+  const cacheIdentity = JSON.stringify([
+    cached?.state ?? 'unknown',
+    cached?.subject ?? null,
+    cached?.csrfToken ?? null,
+  ]);
+  const sessionIdentity = JSON.stringify([session.state, session.subject ?? null, session.csrfToken]);
+  const ready =
+    !!source &&
+    cached?.state === session.state &&
+    (cached?.subject ?? null) === (session.subject ?? null) &&
+    (cached?.csrfToken ?? null) === session.csrfToken &&
+    session.state === 'signed-in' &&
+    typeof session.subject === 'string' &&
+    session.subject.length > 0 &&
+    typeof session.csrfToken === 'string' &&
+    session.csrfToken.length > 0;
+  const identity = JSON.stringify([
+    realmId,
+    reader,
+    locale,
+    enabled,
+    ready,
+    sessionIdentity,
+    source?.id ?? null,
+    revision,
+    dataUpdateCount,
+    dataUpdatedAt,
+    cacheIdentity,
+  ]);
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
+  const subjects = useRef(currentSubjects);
+  subjects.current = currentSubjects;
+  const draft = useMemo(
+    () => {
+      const current = () => {
+        const live = source?.read();
+        return (
+          currentIdentity.current === identity &&
+          getLocale() === locale &&
+          !!queryClient &&
+          !!source &&
+          publicationSessionSource(queryClient) === source &&
+          source.snapshot() === revision &&
+          source.dataUpdateCount() === dataUpdateCount &&
+          source.dataUpdatedAt() === dataUpdatedAt &&
+          JSON.stringify([live?.state ?? 'unknown', live?.subject ?? null, live?.csrfToken ?? null]) === cacheIdentity
+        );
+      };
+      return createPublicationDraft(realmId, send, saved, () => subjects.current, enabled, {
+        current,
+        watch: source?.subscribe,
+        startDisconnected: true,
+      });
+    },
+    [realmId, identity],
+  );
+  const previousDraft = useRef(draft);
+  usePublicationLayoutEffect(() => {
+    if (previousDraft.current !== draft) {
+      previousDraft.current.retire();
+      previousDraft.current = draft;
+    }
+    return draft.connect();
+  }, [draft]);
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
+  const actions = draft.bind();
   return {
     ...state,
-    locked: !enabled || state.busy || state.outcome?.kind === 'unavailable',
-    choose: draft.choose,
-    change: draft.change,
-    retry: draft.retry,
-    review: draft.review,
-    scope: `${realmId}:${reader}:${locale}`,
+    locked: !enabled || !draft.current() || state.busy || state.outcome?.kind === 'unavailable',
+    ...actions,
+    scope: `${realmId}:${reader}:${locale}:${source?.id ?? 'no-session-cache'}:${revision}:${draft.id}`,
   };
 }
 
