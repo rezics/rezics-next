@@ -103,11 +103,25 @@ export function createHomeFeedWindow(
   let generation = 0;
   let pending: AbortController | undefined;
   const listeners = new Set<() => void>();
+  const selectionListeners = new Set<() => void>();
+  let selectionIdentity = JSON.stringify(['home', null, null, null]);
   const emit = () => {
+    const { stream, kind, spaceId, ratingQuestionId } = snapshot.input;
+    const nextIdentity = JSON.stringify([stream, kind ?? null, spaceId ?? null, ratingQuestionId ?? null]);
+    if (nextIdentity !== selectionIdentity) {
+      selectionIdentity = nextIdentity;
+      for (const listener of selectionListeners) listener();
+    }
     for (const listener of listeners) listener();
   };
   return {
     snapshot: () => snapshot,
+    onSelectionChange: (listener: () => void) => {
+      selectionListeners.add(listener);
+      return () => {
+        selectionListeners.delete(listener);
+      };
+    },
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => {

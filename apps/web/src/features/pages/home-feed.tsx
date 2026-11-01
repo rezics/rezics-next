@@ -293,6 +293,15 @@ export function HomeFeedConsumer({
       void window.load({ ...selection, ...(space ? { spaceId: space.spaceId } : {}) });
     }),
   )[0];
+  // Every dimension, including the independently received question control, retires pending point/choice work.
+  useEffect(
+    () =>
+      window.onSelectionChange(() => {
+        spaces.retire();
+        choices.retire();
+      }),
+    [window, spaces, choices],
+  );
   const spaceSnapshot = useSyncExternalStore(spaces.subscribe, spaces.snapshot, spaces.snapshot);
   useEffect(() => () => spaces.retire(), [spaces]);
   const kinds = useSyncExternalStore(choices.subscribe, choices.snapshot, choices.snapshot);

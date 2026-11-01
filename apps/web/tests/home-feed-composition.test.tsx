@@ -471,6 +471,8 @@ test('Default Home resolves one exact Space and carries its identity through pub
     '/spaces/room/extra',
     '//other.example/spaces/room',
     '/spaces/room%2Fextra',
+    '/other/../spaces/room',
+    '/spaces/room/../other',
   ]) {
     await selection.lookup(address, 'https://rezics.example');
     expect(selection.snapshot().status).toBe('invalid');
@@ -533,6 +535,13 @@ test('Default Home resolves one exact Space and carries its identity through pub
     expect(reads.filter((call) => new URL(call.url).pathname === '/v1/feedItems')).toHaveLength(1);
     expect(query().has('cursor')).toBe(false);
   }
+  // A normal address lookup can also observe the selected carrier changing, without a new head.
+  space.realmId = '01a1a000-0000-7000-8000-000000000825';
+  await selection.lookup('home-reading-room', 'https://rezics.example');
+  await applied;
+  expect(selection.snapshot().selected?.realmId).toBe(space.realmId);
+  expect(selection.snapshot().changed).toBe(true);
+  expect(query().has('cursor')).toBe(false);
   // An unreadable carrier at the same head cannot broaden the selected feed.
   space.realmId = null;
   before = calls.length;
