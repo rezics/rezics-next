@@ -84,9 +84,7 @@ test('Shared label items preserve shelf navigation progressive phone forms and i
     for (const [index, operation] of (['rename', 'delete'] as const).entries()) {
       const control = controls[index]!;
       const form = control.querySelector('form')!;
-      const fields = Object.fromEntries(
-        [...form.querySelectorAll('input')].map((input) => [input.name, input.value]),
-      );
+      const fields = Object.fromEntries([...form.querySelectorAll('input')].map((input) => [input.name, input.value]));
       expect(fields).toMatchObject({
         operation,
         id: label.id,
