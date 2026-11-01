@@ -42,6 +42,19 @@ export type ContainerLifecycleAdapter = Readonly<{
   destination: (target: ContainerTarget, contextId: string | null) => Promise<LifecycleDestination>;
 }>;
 
+/** Optional mounted-caller authority supplied by the browser composition. */
+export type LifecycleCallerOwnership = Readonly<{
+  current: () => boolean;
+  ticket: () => number;
+  owns: (ticket: number) => boolean;
+}>;
+
+const unboundOwnership: LifecycleCallerOwnership = {
+  current: () => true,
+  ticket: () => 0,
+  owns: (ticket) => ticket === 0,
+};
+
 /** Explicit unavailable fixture; production controls compose the native adapter. */
 export const unavailableLifecycleAdapter: ContainerLifecycleAdapter = {
   read: async () => ({ kind: 'unavailable' }),
@@ -89,6 +102,7 @@ export function createContainerLifecycle(
   target: ContainerTarget,
   adapter: ContainerLifecycleAdapter,
   key: () => string = () => crypto.randomUUID(),
+  ownership: LifecycleCallerOwnership = unboundOwnership,
 ) {
   const anchor = Object.freeze({ ...target });
   let state: LifecycleState = {
@@ -102,40 +116,75 @@ export function createContainerLifecycle(
     reviewed: false,
   };
   const listeners = new Set<() => void>();
-  function update(change: Partial<LifecycleState>) {
-    state = { ...state, ...change };
-    for (const listener of listeners) listener();
+  let operationTicket: number | null = null;
+
+  function normalizeStaleBusy() {
+    if (
+      state.busy &&
+      operationTicket !== null &&
+      ownership.current() &&
+      !ownership.owns(operationTicket)
+    ) {
+      state = { ...state, busy: false };
+      operationTicket = null;
+    }
   }
-  async function read(): Promise<LifecycleRead> {
+
+  function update(change: Partial<LifecycleState>, ticket?: number) {
+    if (!ownership.current() || (ticket !== undefined && !ownership.owns(ticket))) return false;
+    state = { ...state, ...change };
+    for (const listener of listeners) {
+      if (!ownership.current() || (ticket !== undefined && !ownership.owns(ticket))) break;
+      listener();
+    }
+    return true;
+  }
+  async function read(ticket: number): Promise<LifecycleRead> {
+    // Adapters may be reached through queued transports; retirement wins before the request starts.
+    await Promise.resolve();
+    if (!ownership.owns(ticket)) return { kind: 'unavailable' };
     try {
       const observedContextId =
         state.intent?.contextId ?? (state.read.kind === 'ready' ? state.read.snapshot.contextId : null);
       const result = await adapter.read(anchor, observedContextId);
+      if (!ownership.owns(ticket)) return { kind: 'unavailable' };
       if (result.kind === 'ready' && (!sameTarget(anchor, result.snapshot.target) || !result.snapshot.head))
         return { kind: 'unavailable' };
       return result;
     } catch {
+      if (!ownership.owns(ticket)) return { kind: 'unavailable' };
       return { kind: 'unavailable' };
     }
   }
   async function refresh() {
-    if (state.busy) return;
-    update({ busy: true, destination: null });
-    const result = await read();
-    const destination =
-      state.outcome === 'confirmed' && state.intent ? await destinationFor(state.intent, result) : null;
-    update({ read: result, destination, busy: false, reviewed: result.kind === 'ready' });
+    normalizeStaleBusy();
+    if (!ownership.current() || state.busy) return;
+    const ticket = ownership.ticket();
+    operationTicket = ticket;
+    if (!update({ busy: true, destination: null }, ticket)) return;
+    const result = await read(ticket);
+    if (!ownership.owns(ticket)) return;
+    const destination = state.outcome === 'confirmed' && state.intent
+      ? await destinationFor(state.intent, result, ticket)
+      : null;
+    if (!ownership.owns(ticket)) return;
+    operationTicket = null;
+    update({ read: result, destination, busy: false, reviewed: result.kind === 'ready' }, ticket);
   }
-  async function destinationFor(intent: LifecycleIntent, current: LifecycleRead): Promise<string | null> {
+  async function destinationFor(intent: LifecycleIntent, current: LifecycleRead, ticket: number): Promise<string | null> {
     if (
+      !ownership.owns(ticket) ||
       intent.action !== 'restore' ||
       current.kind !== 'ready' ||
       current.snapshot.state !== 'active' ||
       current.snapshot.contextId !== intent.contextId
     )
       return null;
+    await Promise.resolve();
+    if (!ownership.owns(ticket)) return null;
     try {
       const link = await adapter.destination(anchor, intent.contextId);
+      if (!ownership.owns(ticket)) return null;
       if (
         link.kind === 'available' &&
         sameTarget(anchor, link.target) &&
@@ -146,18 +195,40 @@ export function createContainerLifecycle(
       )
         return link.href;
     } catch {
+      if (!ownership.owns(ticket)) return null;
       // An independently unavailable Context never substitutes Global or an old link.
     }
     return null;
   }
-  async function send(intent: LifecycleIntent) {
-    update({ busy: true, outcome: 'sending', problem: null, destination: null, reviewed: false });
+  async function send(intent: LifecycleIntent, isNewIntent = false) {
+    normalizeStaleBusy();
+    if (!ownership.current() || state.busy) return;
+    const ticket = ownership.ticket();
+    operationTicket = ticket;
+    if (
+      !update(
+        {
+          ...(isNewIntent ? { intent } : {}),
+          busy: true,
+          outcome: 'sending',
+          problem: null,
+          destination: null,
+          reviewed: false,
+        },
+        ticket,
+      )
+    )
+      return;
+    // Confirm ownership again at the transport boundary after synchronous listeners have run.
+    await Promise.resolve();
+    if (!ownership.owns(ticket)) return;
     let result: LifecycleResult;
     try {
       result = await adapter.change(intent);
     } catch {
       result = { kind: 'unavailable' };
     }
+    if (!ownership.owns(ticket)) return;
     if (
       result.kind === 'confirmed' &&
       (!sameTarget(anchor, result.target) ||
@@ -167,26 +238,38 @@ export function createContainerLifecycle(
     )
       result = { kind: 'unavailable' };
     if (result.kind === 'unavailable') {
-      update({ busy: false, outcome: 'uncertain' });
+      operationTicket = null;
+      update({ busy: false, outcome: 'uncertain' }, ticket);
       return;
     }
     if (result.kind === 'refused') {
-      update({
-        busy: false,
-        outcome: result.status === 409 || result.status === 412 ? 'conflict' : 'refused',
-        problem: result,
-        read: result,
-      });
+      operationTicket = null;
+      update(
+        {
+          busy: false,
+          outcome: result.status === 409 || result.status === 412 ? 'conflict' : 'refused',
+          problem: result,
+          read: result,
+        },
+        ticket,
+      );
       return;
     }
     // A command acknowledgement confirms its effect, but does not authorize a restored link or another command.
-    update({ outcome: 'confirmed' });
-    const current = await read();
-    const destination = await destinationFor(intent, current);
-    update({ read: current, busy: false, destination, reviewed: current.kind === 'ready' });
+    update({ outcome: 'confirmed' }, ticket);
+    if (!ownership.owns(ticket)) return;
+    const current = await read(ticket);
+    if (!ownership.owns(ticket)) return;
+    const destination = await destinationFor(intent, current, ticket);
+    if (!ownership.owns(ticket)) return;
+    operationTicket = null;
+    update({ read: current, busy: false, destination, reviewed: current.kind === 'ready' }, ticket);
   }
   return {
-    getSnapshot: () => state,
+    getSnapshot: () => {
+      normalizeStaleBusy();
+      return state;
+    },
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -195,10 +278,12 @@ export function createContainerLifecycle(
     },
     refresh,
     setReason(reason: string) {
-      if (!state.busy && !state.intent) update({ reason });
+      normalizeStaleBusy();
+      if (ownership.current() && !state.busy && !state.intent) update({ reason });
     },
     async submit(action: LifecycleAction) {
-      if (!offeredActions(state).includes(action) || state.read.kind !== 'ready') return;
+      normalizeStaleBusy();
+      if (!ownership.current() || !offeredActions(state).includes(action) || state.read.kind !== 'ready') return;
       if (action === 'remove' && !state.reason.trim()) return;
       const snapshot = state.read.snapshot;
       const intent: LifecycleIntent = Object.freeze({
@@ -210,14 +295,16 @@ export function createContainerLifecycle(
         reason: state.reason,
         contextId: snapshot.contextId,
       });
-      update({ intent });
-      await send(intent);
+      await send(intent, true);
     },
     async retry() {
-      if (mayRetryLifecycle(state) && state.intent) await send(state.intent);
+      normalizeStaleBusy();
+      if (ownership.current() && mayRetryLifecycle(state) && state.intent) await send(state.intent);
     },
     review() {
+      normalizeStaleBusy();
       if (
+        !ownership.current() ||
         state.busy ||
         !state.reviewed ||
         state.read.kind !== 'ready' ||

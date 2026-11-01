@@ -4,7 +4,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { safeParse } from 'valibot';
 import { m } from '../paraglide/messages.js';
-import { sessionCsrfToken, useSession } from '../session/query';
+import { useSession } from '../session/query';
 import {
   createContainerLifecycle,
   mayRetryLifecycle,
@@ -16,19 +16,26 @@ import {
 } from './container-lifecycle';
 import { readContainerLifecycle, changeContainerLifecycle, readContainerLifecycleDestination } from './space-actions';
 import { lifecycleCommandSchema } from './container-lifecycle-native';
+import {
+  useDefaultContainerLifecycleCaller,
+  useInjectedContainerLifecycleCaller,
+  type ContainerLifecycleCallerLifetime,
+} from './container-lifecycle-caller-lifetime';
 
-const liveLifecycleAdapter: ContainerLifecycleAdapter = {
-  read: (target, contextId) => readContainerLifecycle({ data: { target, contextId } }),
-  change: (intent) => {
-    const command = safeParse(lifecycleCommandSchema, intent);
-    if (!command.success) return Promise.resolve({ kind: 'refused', status: 400, code: 'invalid_request' });
-    return changeContainerLifecycle({
-      data: command.output,
-      headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' },
-    });
-  },
-  destination: (target, contextId) => readContainerLifecycleDestination({ data: { target, contextId } }),
-};
+function createLiveLifecycleAdapter(csrfToken: string): ContainerLifecycleAdapter {
+  return {
+    read: (target, contextId) => readContainerLifecycle({ data: { target, contextId } }),
+    change: (intent) => {
+      const command = safeParse(lifecycleCommandSchema, intent);
+      if (!command.success) return Promise.resolve({ kind: 'refused', status: 400, code: 'invalid_request' });
+      return changeContainerLifecycle({
+        data: command.output,
+        headers: { 'X-CSRF-Token': csrfToken },
+      });
+    },
+    destination: (target, contextId) => readContainerLifecycleDestination({ data: { target, contextId } }),
+  };
+}
 
 function readMessage(state: LifecycleState) {
   if (state.read.kind === 'loading') return m.container_lifecycle_loading();
@@ -43,36 +50,50 @@ function readMessage(state: LifecycleState) {
   }
 }
 
-/** A lifecycle region has no shadcn equivalent; fields and confirmation use existing shadcn controls. */
-export function ContainerLifecycleControls({
-  target,
-  title,
-  adapter = liveLifecycleAdapter,
-  onRestriction,
-}: {
+type ContainerLifecycleControlsProps = {
   target: ContainerTarget;
   title: string;
   adapter?: ContainerLifecycleAdapter;
   onRestriction?: (restriction: 'removed' | 'orphaned') => void;
-}) {
+};
+
+type Caller = {
+  lifetime: ContainerLifecycleCallerLifetime;
+  connectionRevision: number;
+  ready: boolean;
+};
+
+/** A lifecycle region has no shadcn equivalent; fields and confirmation use existing shadcn controls. */
+function LifecycleControlsView({
+  target,
+  title,
+  adapter,
+  caller,
+  onRestriction,
+}: ContainerLifecycleControlsProps & { adapter: ContainerLifecycleAdapter; caller: Caller }) {
   const id = useId();
-  const control = useMemo(() => createContainerLifecycle(target, adapter), [target.kind, target.id, adapter]);
+  const control = useMemo(
+    () => createContainerLifecycle(target, adapter, undefined, caller.lifetime),
+    [target.kind, target.id, adapter, caller.lifetime],
+  );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   const [confirmation, setConfirmation] = useState<LifecycleAction | null>(null);
   useEffect(() => {
     setConfirmation(null);
-    void control.refresh();
-  }, [control]);
+    if (caller.ready && caller.lifetime.current()) void control.refresh();
+  }, [control, caller.lifetime, caller.connectionRevision, caller.ready]);
   useEffect(() => {
+    if (!caller.ready || !caller.lifetime.current()) return;
     if (state.outcome === 'confirmed' && state.intent?.action === 'remove') onRestriction?.('removed');
     else if (state.read.kind === 'ready' && state.read.snapshot.state !== 'active')
       onRestriction?.(state.read.snapshot.state);
-  }, [state, onRestriction]);
+  }, [state, onRestriction, caller.lifetime, caller.connectionRevision, caller.ready]);
   const actions = offeredActions(state);
   const readOnly =
     state.read.kind === 'ready' && state.read.snapshot.state !== 'orphaned' && state.read.snapshot.actions.length === 0;
   const problem = state.problem ?? (state.read.kind === 'refused' ? state.read : null);
   const locked = state.busy || state.intent !== null;
+  if (!caller.ready || !caller.lifetime.current()) return null;
   return (
     <section aria-labelledby={`${id}-heading`} className="space-y-4 rounded-2xl border bg-card p-5 sm:p-6">
       <header className="space-y-1">
@@ -199,8 +220,31 @@ export function ContainerLifecycleControls({
   );
 }
 
+function DefaultLifecycleControls(props: ContainerLifecycleControlsProps) {
+  const caller = useDefaultContainerLifecycleCaller(props.target);
+  const adapter = useMemo(
+    () => createLiveLifecycleAdapter(caller.csrfToken ?? ''),
+    [caller.lifetime, caller.csrfToken],
+  );
+  return <LifecycleControlsView {...props} adapter={adapter} caller={caller} />;
+}
+
+function InjectedLifecycleControls(props: ContainerLifecycleControlsProps & { adapter: ContainerLifecycleAdapter }) {
+  const caller = useInjectedContainerLifecycleCaller(props.target, props.adapter);
+  return <LifecycleControlsView {...props} caller={caller} />;
+}
+
+/** Default callers bind credentials and cache revision; injected adapters keep their isolated fixture contract. */
+export function ContainerLifecycleControls(props: ContainerLifecycleControlsProps) {
+  return props.adapter ? (
+    <InjectedLifecycleControls {...props} adapter={props.adapter} />
+  ) : (
+    <DefaultLifecycleControls {...props} />
+  );
+}
+
 /** Session presence allows preparation only; it conveys no lifecycle permission. */
-export function ContainerLifecyclePanel(props: Parameters<typeof ContainerLifecycleControls>[0]) {
+export function ContainerLifecyclePanel(props: ContainerLifecycleControlsProps) {
   const { state } = useSession();
   return state === 'signed-in' ? <ContainerLifecycleControls {...props} /> : null;
 }
