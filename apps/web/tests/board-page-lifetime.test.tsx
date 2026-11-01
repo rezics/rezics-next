@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
 import type { ReadCredentialMode } from '../src/kernel/credential';
 import type { CommunityBoardPage } from '../src/threads/board-feed-data';
+import type { BoardPageRead } from '../src/threads/reads';
 import boardRecording from '../src/kernel/recorded/board.json';
 import threadsRecording from '../src/kernel/recorded/board-threads.json';
 import accountsRecording from '../src/kernel/recorded/accounts.json';
@@ -31,8 +32,10 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-type ReadCall = { input: BoardReadInput; result: Deferred<CommunityBoardPage> };
+type Session = { state: 'signed-in' | 'signed-out'; subject?: string; csrfToken: string | null };
+type ReadCall = { input: BoardReadInput; session: Session | undefined; result: Deferred<BoardPageRead> };
 const calls: ReadCall[] = [];
+let mockReaderSession: Session | undefined;
 
 mock.module('@tanstack/react-start', () => startApi);
 mock.module('@tanstack/react-start/server', () => ({
@@ -45,8 +48,8 @@ const existingReads = await import('../src/threads/reads');
 mock.module('../src/threads/reads', () => ({
   ...existingReads,
   readBoardPage: ({ data }: { data: BoardReadInput }) => {
-    const result = deferred<CommunityBoardPage>();
-    calls.push({ input: data, result });
+    const result = deferred<BoardPageRead>();
+    calls.push({ input: data, session: mockReaderSession, result });
     return result.promise;
   },
 }));
@@ -92,7 +95,6 @@ const { sessionQuery } = await import('../src/session/query');
 const { Route } = await import('../src/routes/boards/$id');
 const { loadBoardPageWithAuthors } = await import('../src/identity/page-loaders');
 
-type Session = { state: 'signed-in' | 'signed-out'; subject?: string; csrfToken: string | null };
 type RouterMode = {
   id: string;
   mode: ReadCredentialMode;
@@ -105,8 +107,21 @@ const boardA = boardRecording.board.id;
 const boardB = '0192f3a0-6c1e-7b2a-9d4e-000000000099';
 const accountId = accountsRecording.accounts[0]!.id;
 
+async function csrfFingerprint(token: string | null): Promise<string> {
+  const value = token === null ? 'null\u0000' : `token\u0000${token}`;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function makeQueryClient(session: Session) {
+  mockReaderSession = session;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const setQueryData = client.setQueryData.bind(client);
+  client.setQueryData = ((key: readonly unknown[], value: unknown, options?: unknown) => {
+    const result = setQueryData(key as never, value as never, options as never);
+    if (key.length === 1 && key[0] === 'session') mockReaderSession = value as Session;
+    return result;
+  }) as typeof client.setQueryData;
   client.setQueryData(sessionQuery.queryKey, session);
   return client;
 }
@@ -175,7 +190,7 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
             ...boardRecording.board,
             id: input.id,
             title: `${label} Board`,
-            visibility: 'protected',
+            visibility: input.credentialMode === 'session' ? 'protected' : 'public',
           },
         });
       if (pathname === `/v1/boards/${input.id}/threads`)
@@ -207,7 +222,11 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
   );
   return {
     ...loaded,
-    board: { ...loaded.board, title: `${label} Board`, visibility: 'protected' },
+    board: {
+      ...loaded.board,
+      title: `${label} Board`,
+      visibility: input.credentialMode === 'session' ? 'protected' : 'public',
+    },
     threads: {
       ...loaded.threads,
       threads: loaded.threads.threads.map((thread) => ({
@@ -221,7 +240,19 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
 
 async function resolveRead(index: number, label: string) {
   const call = calls[index]!;
-  call.result.resolve(await pageFor(call.input, label));
+  const page = await pageFor(call.input, label);
+  const session = call.session;
+  const readerOrigin =
+    call.input.credentialMode === 'anonymous'
+      ? { kind: 'anonymous' as const }
+      : session?.state === 'signed-in' && session.subject
+        ? {
+            kind: 'session' as const,
+            subject: session.subject,
+            csrfFingerprint: await csrfFingerprint(session.csrfToken),
+          }
+        : { kind: 'anonymous' as const };
+  call.result.resolve({ page, readerOrigin });
   await call.result.promise;
   await act(async () => {
     await Promise.resolve();

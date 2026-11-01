@@ -47,16 +47,19 @@ export const Route = createFileRoute('/boards/$id')({
       abortController.signal,
     );
     try {
-      const page = await context.queryClient.ensureQueryData(
+      const read = await context.queryClient.ensureQueryData(
         caller.queryOptions(boardPageQuery(params.id, deps.cursor, deps.sort, context.credentialMode)),
       );
       caller.assertLoadCurrent();
-      for (const thread of page.threads.threads) {
+      for (const thread of read.page.threads.threads) {
         caller.assertLoadCurrent();
         rememberThreadSlug(thread.id, threadTitle(thread));
       }
       caller.assertLoadCurrent();
-      return caller.resultFor(page, deps.cursor === undefined && page.threads.threads.length > 0);
+      return await caller.resultFor(
+        read,
+        deps.cursor === undefined && read.page.threads.threads.length > 0,
+      );
     } catch (error) {
       caller.captureError(error);
       throw error;

@@ -1,16 +1,21 @@
 # My Realms caller lifetime
 
 The private My Realms route captures one visit from the route QueryClient before it starts the existing collection
-read. The visit binds the route target, native cursor, locale, session credential mode, original signed-in subject,
-CSRF fingerprint, session readiness, QueryClient session revision and the prior `['my-realms', cursor]` cache revision.
-The query key remains exactly `['my-realms', cursor ?? '']`.
+read. The visit binds the route target, native cursor, locale, session credential mode, expected signed-in subject,
+CSRF fingerprint, session readiness, original QueryClient session revision and the prior `['my-realms', cursor]` cache
+revision. Those revision values describe that source only; they are not compared with counters in a separately hydrated
+browser QueryClient. The query key remains exactly `['my-realms', cursor ?? '']`.
 
 The existing query function checks that visit before and after the deferred `space-actions` import, before and after
-the BFF read, and before returning the result to React Query. Session-cache changes advance a monotonic source revision
-from QueryCache notifications, including same-account CSRF replacement and batched away/back changes. Retirement
-cancels the exact query and removes its owned cache entry. The loader accepts a result only after the same caller,
-query object and a newer cache revision are observed. The route host accepts either that caller-tagged query result
-or the exact loader envelope that completed the read. A retained loader fallback cannot restore a retired visit.
+the BFF read, and before returning the result to React Query. The server reader records the subject and CSRF fingerprint
+from the same prepared request and credential used for the native read. Session-cache success, error and removal events
+advance a monotonic source revision; ordinary fetch-state and observer events do not. A successful replacement retires
+the visit even when its data is equal, and a batched away/back sequence advances once for each observed replacement.
+The caller also owns the exact page-query object: its first tagged success is accepted, while a later success, error or
+removal retires the ready result. Retirement cancels the exact query and removes its owned cache entry. The loader
+accepts a result only after the same caller, query object and newer local cache revision are observed. The route host
+accepts either that caller-tagged query result or the exact serialized loader envelope that completed the read. A
+retained loader fallback cannot restore a retired visit.
 
 The route abort signal, route address, cursor, locale, session readiness, QueryClient and mounted connection all fence
 the caller. A disconnected component invalidates its callbacks immediately; final cancellation is deferred to a
@@ -22,16 +27,16 @@ retain their existing cache keys, signatures and behavior.
 
 ## Hydration boundary
 
-The server loader and browser may use separate QueryClient objects. The loader therefore serializes only the session
-state, subject, readiness, SHA-256 CSRF fingerprint and source/cache revision metadata with its page; it does not
-serialize the raw CSRF token. The browser adopts that envelope only after its session-cache revision and CSRF
-fingerprint match, then keeps observing the browser QueryClient for later transitions.
+The server loader and browser may use separate QueryClient objects. The serialized page therefore carries two distinct
+facts: the expected session and source observation captured before the read, and the actual reader origin captured from
+the same prepared request and credential as the native read. It also carries a caller/route binding. The envelope has no
+bearer, token, raw CSRF or authentication seal. The browser validates that the actual origin matches the server's
+expected reader, then compares its current signed-in subject and SHA-256 CSRF fingerprint with that origin. Once
+adopted, it observes the browser QueryClient's own monotonic source generation and page-query object.
 
-One transition remains unobservable by this route: if an account or CSRF change happens after the server snapshot but
-before the browser creates its QueryCache observer, and the final hydrated QueryClient has lost the intervening cache
-revision, a signed-in A-to-B-to-A sequence cannot be distinguished from no transition. React also uses the server
-snapshot for the first hydration render, so the exact server loader markup can remain visible until browser adoption
-finishes. Detecting both cases requires a monotonic session revision that survives server-to-browser hydration, or a
-shared hydration admission hook that can withhold this private page before React hydrates it. Neither authority is
-available to this route. The implementation fails closed as soon as the browser observer or fingerprint check can
-establish a change; it does not treat the final signed-in tuple alone as proof of the original caller.
+The server's revision and the browser's revision belong to independent QueryClients and are never compared. A matching
+current subject/fingerprint establishes which reader produced the serialized result and that the current reader has the
+same identity; it does not claim to reconstruct an unobserved account or credential history between caches. Changes
+observed after browser adoption, including same-account credential replacement and observed batched away/back changes,
+retire the page monotonically. If the actual origin or current identity is missing or mismatched, the browser withholds
+the serialized private list and requires a fresh route read.

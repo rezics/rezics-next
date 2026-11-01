@@ -4,7 +4,7 @@ import { notFound } from '@tanstack/react-router';
 import { isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
 import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
 import { readRealmHomePresentation, type RealmHomePresentation } from './realm-home-presentation-native';
 import { nativeMembershipEffect, nativeRealmLeaveOwnerReason } from './realm-leave-recovery';
@@ -86,7 +86,26 @@ export async function namePublishedTypes(page: SpacePageData, locale: string): P
 }
 
 export type RealmLink = { realmId: string; name: string; description?: string | null };
-export type MyRealmsPage = { signedIn: boolean; realms: RealmLink[]; next: string | null };
+export type MyRealmsReaderOrigin =
+  | { kind: 'session'; subject: string; csrfFingerprint: string }
+  | { kind: 'anonymous' }
+  | { kind: 'unavailable' };
+
+export type MyRealmsPage = {
+  signedIn: boolean;
+  realms: RealmLink[];
+  next: string | null;
+  /** Same-prepared-read provenance. It contains no credential or raw CSRF value. */
+  readerOrigin?: MyRealmsReaderOrigin;
+  /** A serializable binding added by the query caller before React Query publishes the result. */
+  readerAdmission?: {
+    callerId: string;
+    routeKey: string;
+    sourceRevision: number;
+    sessionCacheRevision: { dataUpdateCount: number; dataUpdatedAt: number };
+    readerOrigin: MyRealmsReaderOrigin;
+  };
+};
 
 export type Located = { kind: 'page'; page: SpacePageData } | { kind: 'redirect'; address: string };
 
@@ -379,7 +398,15 @@ export async function loadMyRealms(
   input: { cursor?: string },
 ): Promise<MyRealmsPage> {
   const { signedIn, auth } = await session(request, sessionEnv, 'session');
-  if (!signedIn) return { signedIn: false, realms: [], next: null };
+  const authorization = 'headers' in auth ? auth.headers.authorization : null;
+  const subject = sessionSubject(request);
+  const csrfToken = requestCsrfToken(request);
+  const readerOrigin: MyRealmsReaderOrigin = authorization
+    ? subject
+      ? { kind: 'session', subject, csrfFingerprint: await csrfFingerprint(csrfToken) }
+      : { kind: 'unavailable' }
+    : { kind: 'anonymous' };
+  if (!signedIn) return { signedIn: false, realms: [], next: null, readerOrigin };
   const read = async (cursor?: string) => client.me.realms.get({ query: cursor ? { cursor } : {}, ...auth });
   let result = await read(input.cursor);
   if (input.cursor && statusOf(result) === 409) result = await read();
@@ -392,7 +419,14 @@ export async function loadMyRealms(
       description: (item as typeof item & { description?: string | null }).description ?? null,
     })),
     next: page.next,
+    readerOrigin,
   };
+}
+
+async function csrfFingerprint(token: string | null): Promise<string> {
+  const value = token === null ? 'null\u0000' : `token\u0000${token}`;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export type MembershipOutcome = 'accepted' | 'closed' | 'refused';

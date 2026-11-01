@@ -16,6 +16,7 @@ import { sessionQuery } from '../session/query';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { BoardCommunityStatus } from './board-community';
 import type { CommunityBoardPage } from './board-feed-data';
+import type { BoardPageRead, BoardPageReaderOrigin } from './reads';
 
 export type BoardPageCallerInput = {
   id: string;
@@ -38,6 +39,20 @@ type SessionCapture = {
   tuple: string;
 };
 
+type BoardExpectedReader = {
+  state: string;
+  subject: string;
+  ready: true;
+  csrfFingerprint: string;
+};
+
+type BoardReaderObservation = {
+  sourceId: number;
+  revision: number;
+  dataUpdateCount: number;
+  dataUpdatedAt: number;
+};
+
 type SessionSource = {
   id: number;
   read: () => SessionValue | undefined;
@@ -52,6 +67,10 @@ export type BoardPageCallerReceipt = {
   sessionSourceId: number | null;
   routeKey: string;
   publicTransfer: boolean;
+  expectedReader: BoardExpectedReader | null;
+  readerOrigin: BoardPageReaderOrigin;
+  originalObservation: BoardReaderObservation;
+  queryKey: readonly unknown[];
 };
 
 export type BoardPageLoadResult = CommunityBoardPage & {
@@ -64,14 +83,40 @@ type LiveBinding = {
   input: BoardPageCallerInput;
 };
 
-type RetireReason = 'session' | 'input' | 'navigation' | 'reload' | 'aborted' | 'unmount' | 'missing' | 'manual';
+type RetireReason =
+  | 'session'
+  | 'input'
+  | 'navigation'
+  | 'reload'
+  | 'aborted'
+  | 'unmount'
+  | 'missing'
+  | 'cache'
+  | 'manual';
 
 const sessionSources = new WeakMap<QueryClient, SessionSource>();
 const clientVisits = new WeakMap<QueryClient, Map<string, BoardPageCaller>>();
 const errorOwners = new WeakMap<object, BoardPageCaller>();
-const consumedPublicTransfers = new WeakSet<BoardPageLoadResult>();
+const boardReadOwners = new WeakMap<object, BoardPageCaller>();
+const retiredResults = new WeakSet<BoardPageLoadResult>();
+const consumedResultTransfers = new WeakSet<BoardPageLoadResult>();
 let nextSourceId = 0;
 let nextVisitId = 0;
+
+async function csrfFingerprint(token: string | null | undefined): Promise<string> {
+  const value = token == null ? 'null\u0000' : `token\u0000${token}`;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function sameReader(left: BoardPageReaderOrigin, right: BoardExpectedReader | null): boolean {
+  return (
+    !!right &&
+    left.kind === 'session' &&
+    left.subject === right.subject &&
+    left.csrfFingerprint === right.csrfFingerprint
+  );
+}
 
 function sessionTuple(value: SessionValue | undefined): string {
   return JSON.stringify([
@@ -90,10 +135,16 @@ function sessionSource(client: QueryClient): SessionSource {
   const state = () => client.getQueryState(sessionQuery.queryKey);
   let revision = 0;
   const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe(({ query }) => {
+  client.getQueryCache().subscribe((event) => {
+    const { query } = event;
     if (
       query.queryKey.length !== sessionQuery.queryKey.length ||
       query.queryKey.some((part: unknown, index: number) => part !== sessionQuery.queryKey[index])
+    )
+      return;
+    if (
+      event.type !== 'removed' &&
+      !(event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error'))
     )
       return;
     revision++;
@@ -181,9 +232,13 @@ export class BoardPageCaller {
   readonly source: SessionSource;
   readonly sourceCapture: SessionCapture;
   readonly input: BoardPageCallerInput;
+  private readonly expectedSession: SessionValue | undefined;
   private readonly signal: AbortSignal | undefined;
   private binding: () => LiveBinding;
   private queryKey?: readonly unknown[];
+  private pageQuery: object | undefined;
+  private queryDataUpdateCount?: number;
+  private stopQueryWatching: (() => void) | undefined;
   private result?: BoardPageLoadResult;
   private retired = false;
   private connected = false;
@@ -196,6 +251,9 @@ export class BoardPageCaller {
   private stopLoad: (() => void) | undefined;
   private readonly abortListener: () => void;
   private readonly createdOnServer: boolean;
+  private readonly transferReceipt: BoardPageCallerReceipt | undefined;
+  private transferVerified: boolean;
+  private transferVerificationStarted = false;
   private registryKey: string;
 
   constructor(
@@ -203,15 +261,19 @@ export class BoardPageCaller {
     input: BoardPageCallerInput,
     signal?: AbortSignal,
     transferredPublic = false,
+    transferReceipt?: BoardPageCallerReceipt,
   ) {
     this.id = `${++nextVisitId}`;
     this.registryKey = this.id;
     this.source = sessionSource(client);
+    this.expectedSession = this.source.read();
     this.sourceCapture = this.source.capture();
     this.input = input;
     this.signal = signal;
     this.binding = () => ({ client: this.client, input: this.input });
     this.transferredPublic = transferredPublic;
+    this.transferReceipt = transferReceipt;
+    this.transferVerified = input.credentialMode === 'anonymous' || !transferReceipt;
     this.createdOnServer = typeof window === 'undefined';
     this.abortListener = () => this.retire('aborted');
     visitsFor(client).set(this.id, this);
@@ -226,17 +288,16 @@ export class BoardPageCaller {
   }
 
   private sessionMatches(): boolean {
-    if (this.input.credentialMode === 'anonymous') return true;
     const value = this.source.read();
     const capture = this.source.capture();
-    const ready = value?.state === 'signed-in' && typeof value.subject === 'string' && value.subject.length > 0;
-    return (
-      ready &&
+    const observationMatches =
       this.source.snapshot() === this.sourceCapture.revision &&
       capture.dataUpdateCount === this.sourceCapture.dataUpdateCount &&
       capture.dataUpdatedAt === this.sourceCapture.dataUpdatedAt &&
-      capture.tuple === this.sourceCapture.tuple
-    );
+      capture.tuple === this.sourceCapture.tuple;
+    if (this.input.credentialMode === 'anonymous') return observationMatches;
+    const ready = value?.state === 'signed-in' && typeof value.subject === 'string' && value.subject.length > 0;
+    return ready && observationMatches;
   }
 
   private inputMatches(): boolean {
@@ -275,12 +336,15 @@ export class BoardPageCaller {
     this.connection++;
     this.connected = false;
     this.stopWatching?.();
+    this.stopQueryWatching?.();
     this.stopNavigation?.();
     this.stopLoad?.();
     this.stopWatching = undefined;
+    this.stopQueryWatching = undefined;
     this.stopNavigation = undefined;
     this.stopLoad = undefined;
     this.signal?.removeEventListener('abort', this.abortListener);
+    if (this.result) retiredResults.add(this.result);
     const visits = visitsFor(this.client);
     if (visits.get(this.registryKey) === this) visits.delete(this.registryKey);
     if (this.input.credentialMode === 'session' && this.queryKey) {
@@ -298,13 +362,18 @@ export class BoardPageCaller {
     const queryKey =
       this.input.credentialMode === 'session' ? [...options.queryKey, 'board-page-caller', this.id] : options.queryKey;
     this.queryKey = queryKey;
-    const original = options.queryFn as unknown as (context: unknown) => Promise<CommunityBoardPage>;
+    const original = options.queryFn as unknown as (context: unknown) => Promise<BoardPageRead>;
+    const existing = this.client.getQueryCache().find({ queryKey, exact: true });
+    this.pageQuery = existing;
+    if (existing) this.queryDataUpdateCount = this.client.getQueryState(queryKey)?.dataUpdateCount;
+    this.watchQueryUpdates(queryKey, true);
     const queryFn = async (context: unknown) => {
       this.assertLoadCurrent();
       try {
-        const page = await original(context);
+        const read = await original(context);
         this.assertLoadCurrent();
-        return page;
+        if (read && typeof read === 'object') boardReadOwners.set(read, this);
+        return read;
       } catch (error) {
         this.assertLoadCurrent();
         throw error;
@@ -313,14 +382,52 @@ export class BoardPageCaller {
     return { ...options, queryKey, queryFn } as T;
   }
 
-  resultFor(page: CommunityBoardPage, indexable: boolean): BoardPageLoadResult {
+  async resultFor(read: BoardPageRead, indexable: boolean): Promise<BoardPageLoadResult> {
     this.assertLoadCurrent();
+    let expectedReader: BoardExpectedReader | null = null;
+    if (this.input.credentialMode === 'session') {
+      const expected = this.expectedSession;
+      if (expected?.state !== 'signed-in' || typeof expected.subject !== 'string' || !expected.subject) {
+        this.retire('session');
+        throw new Error('Board page caller has no expected signed-in reader');
+      }
+      expectedReader = {
+        state: expected.state,
+        subject: expected.subject,
+        ready: true,
+        csrfFingerprint: await csrfFingerprint(expected.csrfToken),
+      };
+      this.assertLoadCurrent();
+      if (!sameReader(read.readerOrigin, expectedReader)) {
+        this.retire('session');
+        throw new Error('Board page reader did not match its expected session');
+      }
+    } else if (read.readerOrigin.kind !== 'anonymous') {
+      this.retire('session');
+      throw new Error('Anonymous Board page read did not use an anonymous reader');
+    }
+    const page = read.page;
+    const query = this.client.getQueryCache().find({ queryKey: this.queryKey ?? [], exact: true });
+    const queryState = query ? this.client.getQueryState<BoardPageRead>(this.queryKey ?? []) : undefined;
+    if (queryState?.data === read) {
+      this.queryDataUpdateCount ??= queryState.dataUpdateCount;
+    }
     const receipt: BoardPageCallerReceipt = {
       id: this.id,
       credentialMode: this.input.credentialMode,
       sessionSourceId: this.input.credentialMode === 'session' ? this.source.id : null,
       routeKey: currentPageKey(this.input),
-      publicTransfer: this.createdOnServer && this.input.credentialMode === 'anonymous',
+      publicTransfer:
+        this.createdOnServer && this.input.credentialMode === 'anonymous' && read.readerOrigin.kind === 'anonymous',
+      expectedReader,
+      readerOrigin: read.readerOrigin,
+      originalObservation: {
+        sourceId: this.source.id,
+        revision: this.sourceCapture.revision,
+        dataUpdateCount: this.sourceCapture.dataUpdateCount,
+        dataUpdatedAt: this.sourceCapture.dataUpdatedAt,
+      },
+      queryKey: [...(this.queryKey ?? [])],
     };
     const result = { ...page, indexable, caller: receipt };
     this.result = result;
@@ -329,7 +436,11 @@ export class BoardPageCaller {
   }
 
   ownsResult(result: BoardPageLoadResult): boolean {
-    return this.result === result && this.input.id === result.board.id && this.check('input');
+    return this.result === result && this.input.id === result.board.id && this.isCurrent();
+  }
+
+  ownsReceipt(result: BoardPageLoadResult): boolean {
+    return this.result === result && this.input.id === result.board.id;
   }
 
   captureError(error: unknown) {
@@ -338,7 +449,11 @@ export class BoardPageCaller {
   }
 
   isCurrent(): boolean {
-    return !this.retired && this.check('input');
+    return (
+      !this.retired &&
+      this.check('input') &&
+      (!this.transferReceipt || this.input.credentialMode === 'anonymous' || this.transferVerified)
+    );
   }
 
   currentRetry(ticket: number, callback: () => void): boolean {
@@ -351,12 +466,24 @@ export class BoardPageCaller {
     return this.connection;
   }
 
-  adoptTransferredPublicResult(result: BoardPageLoadResult, receiptId: string) {
+  adoptTransferredResult(result: BoardPageLoadResult, receiptId: string) {
     this.result = result;
+    this.queryKey = result.caller.queryKey;
+    this.pageQuery = this.client.getQueryCache().find({ queryKey: this.queryKey, exact: true });
+    if (this.pageQuery) this.queryDataUpdateCount = this.client.getQueryState(this.queryKey)?.dataUpdateCount;
+    this.watchQueryUpdates(this.queryKey, false);
     const visits = visitsFor(this.client);
     if (visits.get(this.registryKey) === this) visits.delete(this.registryKey);
     this.registryKey = receiptId;
     visits.set(receiptId, this);
+  }
+
+  get isTransferPending(): boolean {
+    return !!this.transferReceipt && this.input.credentialMode === 'session' && !this.transferVerified;
+  }
+
+  get isTransferredResult(): boolean {
+    return !!this.transferReceipt;
   }
 
   get retiredReason(): RetireReason | undefined {
@@ -388,6 +515,7 @@ export class BoardPageCaller {
     });
     this.stopLoad = router.subscribe('onBeforeLoad', () => this.retire('reload'));
     this.check('input');
+    if (this.transferReceipt && this.input.credentialMode === 'session') void this.verifyTransferredResult();
     this.publish();
     return () => {
       if (ticket !== this.connection || !this.connected) return;
@@ -409,6 +537,73 @@ export class BoardPageCaller {
   get canDisplayTransferredPublic(): boolean {
     return this.transferredPublic && this.input.credentialMode === 'anonymous' && this.isCurrent();
   }
+
+  private async verifyTransferredResult(): Promise<void> {
+    if (this.transferVerificationStarted || this.retired || !this.transferReceipt) return;
+    this.transferVerificationStarted = true;
+    try {
+      const expected = this.transferReceipt.expectedReader;
+      const origin = this.transferReceipt.readerOrigin;
+      const current = this.source.read();
+      if (!expected || !sameReader(origin, expected) || current?.state !== 'signed-in' || !current.subject) {
+        this.retire('session');
+        return;
+      }
+      const fingerprint = await csrfFingerprint(current.csrfToken);
+      if (
+        !this.sessionMatches() ||
+        current.subject !== origin.subject ||
+        fingerprint !== origin.csrfFingerprint ||
+        !this.check('input')
+      ) {
+        this.retire('session');
+        return;
+      }
+      this.transferVerified = true;
+      this.publish();
+    } catch {
+      this.retire('session');
+    }
+  }
+
+  private watchQueryUpdates(queryKey: readonly unknown[], acceptFirstRead: boolean): void {
+    this.stopQueryWatching?.();
+    this.stopQueryWatching = this.client.getQueryCache().subscribe((event) => {
+      if (
+        event.query.queryKey.length !== queryKey.length ||
+        event.query.queryKey.some((part, index) => part !== queryKey[index])
+      )
+        return;
+      if (event.type === 'added') {
+        if (!this.pageQuery) this.pageQuery = event.query;
+        return;
+      }
+      if (this.pageQuery && event.query !== this.pageQuery) return;
+      if (event.type === 'removed') {
+        this.retire('cache');
+        return;
+      }
+      if (event.type !== 'updated') return;
+      if (event.action.type === 'success') {
+        const data = event.query.state.data;
+        if (
+          acceptFirstRead &&
+          !this.result &&
+          this.queryDataUpdateCount === undefined &&
+          data &&
+          typeof data === 'object' &&
+          boardReadOwners.get(data) === this
+        ) {
+          this.pageQuery = event.query;
+          this.queryDataUpdateCount = event.query.state.dataUpdateCount;
+          return;
+        }
+        this.retire('cache');
+      } else if (event.action.type === 'error' && (this.queryDataUpdateCount !== undefined || this.result)) {
+        this.retire('cache');
+      }
+    });
+  }
 }
 
 export function createBoardPageCaller(
@@ -423,19 +618,25 @@ function findCaller(client: QueryClient, id: string): BoardPageCaller | undefine
   return visitsFor(client).get(id);
 }
 
-function transferredPublicCaller(
+function transferredResultCaller(
   client: QueryClient,
   input: BoardPageCallerInput,
   result: BoardPageLoadResult,
   receipt: BoardPageCallerReceipt | undefined,
 ): BoardPageCaller | undefined {
-  if (receipt?.credentialMode !== 'anonymous' || input.credentialMode !== 'anonymous') return undefined;
-  if (!receipt.publicTransfer || receipt.routeKey !== currentPageKey(input) || consumedPublicTransfers.has(result))
+  if (!receipt || receipt.credentialMode !== input.credentialMode || retiredResults.has(result)) return undefined;
+  if (receipt.routeKey !== currentPageKey(input) || consumedResultTransfers.has(result)) return undefined;
+  if (input.credentialMode === 'anonymous' && (!receipt.publicTransfer || receipt.readerOrigin.kind !== 'anonymous'))
     return undefined;
-  const caller = new BoardPageCaller(client, input, undefined, true);
-  consumedPublicTransfers.add(result);
-  // Preserve the server marker for this one public transfer so later mounts cannot revive a retired session result.
-  caller.adoptTransferredPublicResult(result, receipt.id);
+  if (
+    input.credentialMode === 'session' &&
+    (!receipt.expectedReader || !sameReader(receipt.readerOrigin, receipt.expectedReader))
+  )
+    return undefined;
+  const caller = new BoardPageCaller(client, input, undefined, input.credentialMode === 'anonymous', receipt);
+  consumedResultTransfers.add(result);
+  // Preserve the originating receipt for this one transfer; the browser separately verifies its current reader.
+  caller.adoptTransferredResult(result, receipt.id);
   return caller;
 }
 
@@ -445,13 +646,14 @@ function currentCallerForResult(
   input: BoardPageCallerInput,
 ): BoardPageCaller | undefined {
   const caller = result.caller ? findCaller(client, result.caller.id) : undefined;
-  if (caller && caller.ownsResult(result)) return caller;
+  if (caller && caller.ownsReceipt(result)) return caller;
   if (
-    result.caller?.credentialMode === 'anonymous' &&
+    result.caller &&
+    result.caller.credentialMode === input.credentialMode &&
     result.caller.routeKey === currentPageKey(input) &&
     result.board.id === input.id
   )
-    return transferredPublicCaller(client, input, result, result.caller);
+    return transferredResultCaller(client, input, result, result.caller);
   return undefined;
 }
 
@@ -475,6 +677,7 @@ function callerForError(error: unknown): BoardPageCaller | undefined {
 
 const noSubscribe = () => () => {};
 const noSnapshot = () => 0;
+const browserHydration = { subscribe: () => () => {}, getSnapshot: () => true, getServerSnapshot: () => false };
 const useCallerLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 export type BoardPageCallerLifecycle = {
@@ -522,6 +725,11 @@ function BoardPageVisit({
   const router = useRouter();
   const [caller] = useState(() => (client ? currentCallerForResult(client, result, input) : undefined));
   const lifecycle = useCallerLifecycle(caller, input);
+  const hydrated = useSyncExternalStore(
+    browserHydration.subscribe,
+    browserHydration.getSnapshot,
+    browserHydration.getServerSnapshot,
+  );
   const reloadFor = useRef<string | undefined>(undefined);
 
   useEffect(() => {
@@ -533,6 +741,14 @@ function BoardPageVisit({
     void router.invalidate();
   }, [caller, lifecycle.current, lifecycle.reason, result.caller?.id, router]);
 
+  if (
+    !lifecycle.current &&
+    !hydrated &&
+    caller?.isTransferPending &&
+    caller.isTransferredResult &&
+    caller.ownsReceipt(result)
+  )
+    return children(result);
   if (!lifecycle.current || !caller || (!caller.ownsResult(result) && !caller.canDisplayTransferredPublic))
     return createElement(BoardCommunityStatus, { state: 'loading' });
   return children(result);

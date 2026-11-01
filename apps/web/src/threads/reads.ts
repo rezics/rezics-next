@@ -7,11 +7,10 @@ import { env } from 'cloudflare:workers';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
 import { kernelClient } from '../kernel/client';
 import { threadTitle } from './thread-href';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
-import { sessionSubject } from '../session/request';
 import type { PageAuthors } from '../identity/read';
 import { readPageAuthors } from '../identity/read';
 import { readDocumentMentions } from '../kernel/mentions';
@@ -37,6 +36,16 @@ type PostResource = ReturnType<KernelClient['posts']>;
 type PostRevisionPage = NonNullable<Awaited<ReturnType<PostResource['revisions']['get']>>['data']>;
 type PostRevision = PostRevisionPage['revisions'][number];
 export type { ThreadPost };
+
+export type BoardPageReaderOrigin =
+  | { kind: 'session'; subject: string; csrfFingerprint: string }
+  | { kind: 'anonymous' }
+  | { kind: 'unavailable' };
+
+export type BoardPageRead = {
+  page: Awaited<ReturnType<typeof loadBoardPageWithAuthors>>;
+  readerOrigin: BoardPageReaderOrigin;
+};
 
 export const readReplyParent = createServerFn({ method: 'GET' })
   .validator(validateReplyParentInput)
@@ -106,19 +115,37 @@ function checkRead<T>(result: { error?: unknown; status?: number; data?: T | nul
 
 export const readBoardPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<BoardPageRead> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
     let authorization: string | null = null;
+    let preparationCompleted = data.credentialMode !== 'session';
     if (data.credentialMode === 'session') {
       try {
-        await prepareSession(getRequest(), env as Partial<SessionEnv>);
-        authorization = viewerCredential(getRequest());
+        await prepareSession(request, env as Partial<SessionEnv>);
+        authorization = viewerCredential(request);
+        preparationCompleted = true;
       } catch {
         authorization = null;
       }
     }
-    return loadBoardPageWithAuthors(kernelClient(), data, authorization);
+    const subject = data.credentialMode === 'session' && preparationCompleted ? sessionSubject(request) : undefined;
+    const csrfToken = data.credentialMode === 'session' && preparationCompleted ? requestCsrfToken(request) : null;
+    const readerOrigin: BoardPageReaderOrigin =
+      authorization === null
+        ? { kind: 'anonymous' }
+        : subject
+          ? { kind: 'session', subject, csrfFingerprint: await pageReadCsrfFingerprint(csrfToken) }
+          : { kind: 'unavailable' };
+    const page = await loadBoardPageWithAuthors(kernelClient(), data, authorization);
+    return { page, readerOrigin };
   });
+
+async function pageReadCsrfFingerprint(token: string | null): Promise<string> {
+  const value = token === null ? 'null\u0000' : `token\u0000${token}`;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 export const readNewThreadPage = createServerFn({ method: 'GET' })
   .validator(validateNewThreadPageInput)

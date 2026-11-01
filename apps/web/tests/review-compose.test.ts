@@ -296,6 +296,7 @@ test('review writing adds one current vote read and one paged My Realms read', a
     signedIn: true,
     realms: [{ realmId: id(6), name: 'Reading realm', description: null }],
     next: null,
+    readerOrigin: { kind: 'unavailable' },
   });
   expect(calls).toEqual([
     `GET /v1/subjects/${subjectId}/ratings/${STANDARD_QUESTION_ID}/vote Bearer reader`,

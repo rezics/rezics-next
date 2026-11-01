@@ -61,9 +61,9 @@ export const myRealmsQuery = (cursor?: string, caller?: MyRealmsCaller) =>
         operation.assertCurrent();
         const page = await readMyRealmsPage({ data: cursor ? { cursor } : {} });
         operation.assertCurrent();
-        operation.publish(page);
+        const admitted = operation.publish(page);
         operation.assertCurrent();
-        return page;
+        return admitted;
       } finally {
         operation.finish();
       }

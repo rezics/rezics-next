@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -31,6 +32,11 @@ type ReadInput = { cursor?: string };
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(error: Error): void };
 const readCalls: ReadInput[] = [];
 let readPage: (input: ReadInput) => Promise<MyRealmsPage> = async () => page('Current account realm');
+let mockReaderSession: { state: string; subject: string | null; csrfToken: string | null } = {
+  state: 'signed-in',
+  subject: 'realm-owner',
+  csrfToken: 'csrf-original',
+};
 
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
@@ -43,10 +49,21 @@ function deferred<T>(): Deferred<T> {
 }
 
 function page(name: string, next: string | null = null): MyRealmsPage {
+  const readerOrigin =
+    mockReaderSession.state === 'signed-in' && mockReaderSession.subject
+      ? {
+          kind: 'session' as const,
+          subject: mockReaderSession.subject,
+          csrfFingerprint: createHash('sha256')
+            .update(mockReaderSession.csrfToken === null ? 'null\u0000' : `token\u0000${mockReaderSession.csrfToken}`)
+            .digest('hex'),
+        }
+      : { kind: 'anonymous' as const };
   return {
     signedIn: true,
     realms: [{ realmId: '0192f3a0-6c1e-7b2a-9d4e-000000000201', name, description: `Private description for ${name}` }],
     next,
+    readerOrigin,
   };
 }
 
@@ -100,6 +117,7 @@ async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: stri
   const locale = options.locale ?? 'en';
   await setLocale(locale, { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  mockReaderSession = signedIn();
   client.setQueryData(sessionQuery.queryKey, signedIn());
   const rootRoute = createRootRouteWithContext<{
     queryClient: QueryClient;
@@ -171,6 +189,7 @@ async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: stri
   ) {
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, value);
+        mockReaderSession = value;
     });
   }
 
