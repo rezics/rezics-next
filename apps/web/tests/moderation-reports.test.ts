@@ -764,3 +764,50 @@ test('default native read distinguishes stale selection, denied queue and unavai
     expect(markup).not.toContain(m.moderation_queue_end());
   }
 });
+
+test('simultaneous default report readers keep private viewers, credentials and continuations isolated', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readModerationReportPage } = await import('../src/moderation/reports-read');
+  const received: Request[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const transport = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      received.push(request);
+      if (!new URL(request.url).pathname.endsWith('/reports')) throw new Error('Unexpected evidence read');
+      if (request.headers.get('authorization') === 'Bearer first') {
+        await gate;
+        return Response.json({ reports: [], next: 'first-private-continuation' });
+      }
+      return Response.json({ code: 'not_found' }, { status: 404 });
+    },
+    { preconnect() {} },
+  );
+  const input = { boardId: id(1), status: 'pending' as const, targetKind: 'post' as const, order: 'oldest' as const };
+  const firstRead = readModerationReportPage(
+    createKernelClient('https://kernel.test', { fetch: transport }),
+    input,
+    'Bearer first',
+    id(900),
+  );
+  const second = await readModerationReportPage(
+    createKernelClient('https://kernel.test', { fetch: transport }),
+    input,
+    'Bearer second',
+    id(901),
+  );
+  expect(second.state).toBe('denied');
+  expect(second.viewerId).toBe(id(901));
+  expect(second.next).toBeNull();
+  release();
+  const first = await firstRead;
+  expect(first.state).toBe('ready');
+  expect(first.viewerId).toBe(id(900));
+  expect(first.next).toBe('first-private-continuation');
+  expect(second.next).toBeNull();
+  expect(received.map((request) => request.headers.get('authorization'))).toEqual(['Bearer first', 'Bearer second']);
+  expect(received.every((request) => request.cache === 'no-store')).toBe(true);
+});
