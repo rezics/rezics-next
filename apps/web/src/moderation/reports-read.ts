@@ -73,7 +73,12 @@ function reportResult(result: {
 }): ReportPage {
   if (result.error) {
     const { status, value } = result.error;
-    if (status === 400 && value && typeof value === 'object' && 'code' in value && value.code === 'invalid_cursor')
+    if (
+      value &&
+      typeof value === 'object' &&
+      'code' in value &&
+      ((status === 400 && value.code === 'invalid_cursor') || (status === 409 && value.code === 'stale_cursor'))
+    )
       throw new ReportReadFailure('stale');
     throw new ReportReadFailure([401, 403, 404].includes(status) ? 'denied' : 'error');
   }

@@ -739,6 +739,7 @@ test('default native read distinguishes stale selection, denied queue and unavai
   const { m } = await import('../src/paraglide/messages.js');
   for (const [status, code, expected, message] of [
     [400, 'invalid_cursor', 'stale', m.moderation_queue_stale()],
+    [409, 'stale_cursor', 'stale', m.moderation_queue_stale()],
     [404, 'not_found', 'denied', m.moderation_queue_read_denied()],
     [503, 'dependency_unavailable', 'error', m.moderation_queue_error()],
   ] as const) {
