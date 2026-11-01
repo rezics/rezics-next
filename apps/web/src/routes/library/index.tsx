@@ -184,6 +184,8 @@ function LibraryRoute() {
   const search = validateShelfSearch(Route.useSearch());
   const data = Route.useLoaderData();
   if (!('page' in data))
-    return <CurrentLabelShelf initial={data} locale={getLocale()} display={shelfDisplay(search)} read={readLabelShelf} />;
+    return (
+      <CurrentLabelShelf initial={data} locale={getLocale()} display={shelfDisplay(search)} read={readLabelShelf} />
+    );
   return <PersonalLibraryCurrent initial={data} search={search} locale={getLocale()} display={shelfDisplay(search)} />;
 }

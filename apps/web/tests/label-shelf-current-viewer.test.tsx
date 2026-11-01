@@ -37,11 +37,20 @@ test('The actual named-label Library renders private FULL assignments and remove
   const admitted = ['personal_library', 'reading_progress', 'library_label.assignment_list', 'library_label.unassign'];
   let credentialSubject = A;
   let credentials = 0;
-  const tokens = new Map([[A, 'credential-a'], [B, 'credential-b'], [C, 'credential-c']]);
+  const tokens = new Map([
+    [A, 'credential-a'],
+    [B, 'credential-b'],
+    [C, 'credential-c'],
+  ]);
   const csrf = (subject: string) => (subject === A ? 'a' : subject === B ? 'b' : 'c').repeat(22);
   const credential = async () => {
     credentials++;
-    return { status: 'active', subject: credentialSubject, accessToken: tokens.get(credentialSubject), csrfToken: csrf(credentialSubject) };
+    return {
+      status: 'active',
+      subject: credentialSubject,
+      accessToken: tokens.get(credentialSubject),
+      csrfToken: csrf(credentialSubject),
+    };
   };
   const sessionEnv = {
     KERNEL_ORIGIN: 'https://kernel.test',
@@ -64,9 +73,10 @@ test('The actual named-label Library renders private FULL assignments and remove
     labelResult: 'label-restore-stale',
   });
   let address = `/en/library?${parameters}`;
-  const request = () => new Request(`https://site.test${address}`, {
-    headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
-  });
+  const request = () =>
+    new Request(`https://site.test${address}`, {
+      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+    });
   const start = await import('../.storybook/react-start');
   mock.module('@tanstack/react-start', () => start);
   const cacheHeaders: string[] = [];
@@ -78,10 +88,17 @@ test('The actual named-label Library renders private FULL assignments and remove
   }));
   mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
   const reads: Request[] = [];
-  const held: { subject: string; cursor: string | null; resolve: (response: Response) => void; reject: (error: Error) => void; response: Response }[] = [];
+  const held: {
+    subject: string;
+    cursor: string | null;
+    resolve: (response: Response) => void;
+    reject: (error: Error) => void;
+    response: Response;
+  }[] = [];
   let hold: string | 'all' | null = null;
   let serial = 0;
-  const name = (subject: string) => subject === A ? 'A private shelf' : subject === B ? 'B private shelf' : 'C private shelf';
+  const name = (subject: string) =>
+    subject === A ? 'A private shelf' : subject === B ? 'B private shelf' : 'C private shelf';
   globalThis.fetch = (async (input, init) => {
     const req = new Request(input, init);
     const url = new URL(req.url);
@@ -98,20 +115,43 @@ test('The actual named-label Library renders private FULL assignments and remove
       label: { id: label, name: name(subject), revision: 3 },
       assignments: [
         {
-          id: id(11), labelId: label, subjectId: id(2), revision: 7,
-          subject: { id: id(2), type: 'schema:Book', types: ['schema:Book'], label: { value: `${name(subject)} entry`, language: 'en' }, cover: null },
-          libraryEntry: { state: 'in_progress', activeProgressSession: { mode: 'cumulative', unit: 'percent', dimension: 'percent', amount: '42', total: '100', completedUnitCount: 0, locator: null } },
+          id: id(11),
+          labelId: label,
+          subjectId: id(2),
+          revision: 7,
+          subject: {
+            id: id(2),
+            type: 'schema:Book',
+            types: ['schema:Book'],
+            label: { value: `${name(subject)} entry`, language: 'en' },
+            cover: null,
+          },
+          libraryEntry: {
+            state: 'in_progress',
+            activeProgressSession: {
+              mode: 'cumulative',
+              unit: 'percent',
+              dimension: 'percent',
+              amount: '42',
+              total: '100',
+              completedUnitCount: 0,
+              locator: null,
+            },
+          },
         },
         { id: id(12), labelId: label, subjectId: id(3), revision: 8, subject: null, libraryEntry: null },
       ],
       next: `private-next-${subject}-${sequence}`,
     });
     if (hold === 'all' || hold === subject)
-      return await new Promise<Response>((resolve, reject) => held.push({ subject, cursor: url.searchParams.get('cursor'), resolve, reject, response }));
+      return await new Promise<Response>((resolve, reject) =>
+        held.push({ subject, cursor: url.searchParams.get('cursor'), resolve, reject, response }),
+      );
     return response;
   }) as typeof fetch;
   const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
   const { loadCurrentLabelShelfPage, loadLabelShelfPage } = await import('../src/library/label-shelf-read');
   const { kernelClient } = await import('../src/kernel/client');
@@ -127,7 +167,8 @@ test('The actual named-label Library renders private FULL assignments and remove
   const base = createRootRouteWithContext<{ queryClient: typeof client }>()({ component: Outlet });
   Route.update({ id: '/library/', path: '/library/', getParentRoute: () => base } as never);
   const router = createRouter({
-    routeTree: base.addChildren([Route]), context: { queryClient: client },
+    routeTree: base.addChildren([Route]),
+    context: { queryClient: client },
     history: createMemoryHistory({ initialEntries: [address.replace('/en/', '/')] }),
   });
   const host = window.document.createElement('div') as unknown as HTMLDivElement;
@@ -135,12 +176,17 @@ test('The actual named-label Library renders private FULL assignments and remove
   const tree = () => createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }));
   let root: ReturnType<typeof hydrateRoot> | undefined;
   const input = {
-    labelId, limit: 100, cursor: 'source-one', undoKey, labelResult: 'label-restore-stale',
+    labelId,
+    limit: 100,
+    cursor: 'source-one',
+    undoKey,
+    labelResult: 'label-restore-stale',
     undo: { labelId, subjectId: id(1), assignmentId: id(10), revision: 9 },
   };
-  const fields = () => Array.from(host.querySelectorAll('form')).map((form) => Object.fromEntries(
-    Array.from(form.querySelectorAll('input')).map((field) => [field.name, field.value]),
-  ));
+  const fields = () =>
+    Array.from(host.querySelectorAll('form')).map((form) =>
+      Object.fromEntries(Array.from(form.querySelectorAll('input')).map((field) => [field.name, field.value])),
+    );
   const absent = () => {
     expect(host.textContent).not.toContain('private shelf');
     expect(host.textContent).not.toContain('42%');
@@ -154,28 +200,65 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(host.textContent).toContain(`${name(subject)} entry`);
     expect(host.textContent).toContain('42%');
     expect(host.querySelector(`a[href*="private-next-${subject}"]`)).not.toBeNull();
-    expect(fields().find((form) => form.intent === 'restore')).toMatchObject({ assignmentId: id(10), revision: '9', idempotencyKey: undoKey, csrf_token: csrf(subject) });
-    expect(fields().find((form) => form.intent === 'unassign')).toMatchObject({ assignmentId: id(12), revision: '8', csrf_token: csrf(subject) });
+    expect(fields().find((form) => form.intent === 'restore')).toMatchObject({
+      assignmentId: id(10),
+      revision: '9',
+      idempotencyKey: undoKey,
+      csrf_token: csrf(subject),
+    });
+    expect(fields().find((form) => form.intent === 'unassign')).toMatchObject({
+      assignmentId: id(12),
+      revision: '8',
+      csrf_token: csrf(subject),
+    });
   };
   const observe = (state: string, subject: string | null, token = subject ? csrf(subject) : null) => {
     flushSync(() => client.setQueryData(sessionQuery.queryKey, { state, subject, csrfToken: token }));
   };
-  const settle = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
-  const currentQuery = () => client.getQueryCache().findAll({ queryKey: ['library', 'label-shelf'] }).find((query) => query.getObserversCount() > 0)!;
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
+  const currentQuery = () =>
+    client
+      .getQueryCache()
+      .findAll({ queryKey: ['library', 'label-shelf'] })
+      .find((query) => query.getObserversCount() > 0)!;
   const navigate = (values: URLSearchParams) => {
     address = `/en/library?${values}`;
     return router.navigate({ href: address.replace('/en/', '/') });
   };
   try {
-    const envelope = await loadCurrentLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, input);
+    const envelope = await loadCurrentLabelShelfPage(
+      kernelClient(),
+      request(),
+      sessionEnv as unknown as SessionEnv,
+      input,
+    );
     expect(envelope.state).toBe('loaded');
-    expect(envelope.provenance).toEqual({ subject: A, locale: 'en', source: { labelId, cursor: 'source-one', undo: input.undo, undoKey, labelResult: input.labelResult } });
+    expect(envelope.provenance).toEqual({
+      subject: A,
+      locale: 'en',
+      source: { labelId, cursor: 'source-one', undo: input.undo, undoKey, labelResult: input.labelResult },
+    });
     expect(envelope).not.toHaveProperty('page');
     expect(JSON.stringify(envelope)).not.toContain('credential-a');
     expect(credentials).toBe(1);
-    expect(reads.map((req) => new URL(req.url).pathname)).toEqual(['/v1/platform/exposure', '/v1/libraryLabelAssignments']);
-    expect(reads.map((req) => req.headers.get('authorization'))).toEqual(['Bearer credential-a', 'Bearer credential-a']);
-    expect(Object.fromEntries(new URL(reads[1]!.url).searchParams)).toEqual({ labelId, view: 'FULL', limit: '100', cursor: 'source-one' });
+    expect(reads.map((req) => new URL(req.url).pathname)).toEqual([
+      '/v1/platform/exposure',
+      '/v1/libraryLabelAssignments',
+    ]);
+    expect(reads.map((req) => req.headers.get('authorization'))).toEqual([
+      'Bearer credential-a',
+      'Bearer credential-a',
+    ]);
+    expect(Object.fromEntries(new URL(reads[1]!.url).searchParams)).toEqual({
+      labelId,
+      view: 'FULL',
+      limit: '100',
+      cursor: 'source-one',
+    });
     const old = await loadLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, input);
     expect(old).not.toHaveProperty('provenance');
     expect(old.state).toBe('loaded');
@@ -186,12 +269,15 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(old.undoKey).toBe(undoKey);
     expect(old.undo).toEqual(input.undo);
     credentialSubject = '';
-    expect((await loadCurrentLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, input)).state).toBe('unavailable');
+    expect(
+      (await loadCurrentLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, input)).state,
+    ).toBe('unavailable');
     expect(reads).toHaveLength(4);
     credentialSubject = A;
 
     await router.load();
-    const initial = router.state.matches.find((match) => match.routeId === '/library/')!.loaderData as CurrentLabelShelfData;
+    const initial = router.state.matches.find((match) => match.routeId === '/library/')!
+      .loaderData as CurrentLabelShelfData;
     expect(initial.provenance.subject).toBe(A);
     expect(cacheHeaders).toContain('private, no-store');
     const beforeHydration = serial;
@@ -199,13 +285,19 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(host.textContent).toContain('A private shelf entry');
     expect(host.textContent).toContain('42%');
     expect(host.querySelector('a[href*="private-next-"]')).not.toBeNull();
-    await act(async () => { root = hydrateRoot(host, tree()); });
+    await act(async () => {
+      root = hydrateRoot(host, tree());
+    });
     visible(A);
     expect(serial).toBe(beforeHydration); // Matching SSR does not repeat the FULL page read.
     const originalForms = fields();
     const display = new URLSearchParams(parameters);
-    display.set('layout', 'list'); display.set('size', 'l'); display.set('columns', 'title');
-    await act(async () => { await navigate(display); });
+    display.set('layout', 'list');
+    display.set('size', 'l');
+    display.set('columns', 'title');
+    await act(async () => {
+      await navigate(display);
+    });
     expect(serial).toBe(beforeHydration);
     expect(fields()).toEqual(originalForms);
     observe('signed-in', A, 'z'.repeat(22));
@@ -214,7 +306,9 @@ test('The actual named-label Library renders private FULL assignments and remove
     // A's old IO is still pending when B becomes independently healthy.
     hold = A;
     let oldIO!: Promise<void>;
-    await act(async () => { oldIO = client.invalidateQueries({ queryKey: ['library', 'label-shelf'] }); });
+    await act(async () => {
+      oldIO = client.invalidateQueries({ queryKey: ['library', 'label-shelf'] });
+    });
     expect(held).toHaveLength(1);
     credentialSubject = B;
     observe('signed-in', B);
@@ -222,63 +316,101 @@ test('The actual named-label Library renders private FULL assignments and remove
     await settle();
     visible(B);
     const bForms = fields();
-    await act(async () => { const pending = held.shift()!; pending.resolve(pending.response); await oldIO; });
+    await act(async () => {
+      const pending = held.shift()!;
+      pending.resolve(pending.response);
+      await oldIO;
+    });
     visible(B);
     expect(fields()).toEqual(bForms);
     hold = null;
 
-    observe('unknown', null); absent();
-    observe('signed-in', B); absent();
-    await settle(); visible(B);
-    observe('signed-out', null); absent();
-    observe('signed-in', B); absent();
-    await settle(); visible(B);
+    observe('unknown', null);
+    absent();
+    observe('signed-in', B);
+    absent();
+    await settle();
+    visible(B);
+    observe('signed-out', null);
+    absent();
+    observe('signed-in', B);
+    absent();
+    await settle();
+    visible(B);
     for (const group of admitted.slice(0, 3)) {
-      flushSync(() => client.setQueryData(exposureQuery.queryKey, admitted.filter((value) => value !== group)));
+      flushSync(() =>
+        client.setQueryData(
+          exposureQuery.queryKey,
+          admitted.filter((value) => value !== group),
+        ),
+      );
       absent();
       flushSync(() => client.setQueryData(exposureQuery.queryKey, admitted));
       absent();
-      await settle(); visible(B);
+      await settle();
+      visible(B);
     }
 
     // Actual C credentials cannot authorize B's browser observation, even with the right address.
     observe('unknown', null);
     credentialSubject = C;
     observe('signed-in', B);
-    await settle(); absent();
+    await settle();
+    absent();
     expect(host.textContent).not.toContain(name(C));
     credentialSubject = B;
-    observe('unknown', null); observe('signed-in', B);
-    await settle(); visible(B);
+    observe('unknown', null);
+    observe('signed-in', B);
+    await settle();
+    visible(B);
     const current = currentQuery();
     const matching = current.state.data as CurrentLabelShelfData;
-    const other = await loadCurrentLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, { ...input, labelId: id(899) });
+    const other = await loadCurrentLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, {
+      ...input,
+      labelId: id(899),
+    });
     flushSync(() => client.setQueryData(current.queryKey, other));
     absent(); // Even a genuinely read envelope is unusable at a different label address.
     flushSync(() => client.setQueryData(current.queryKey, matching));
     visible(B);
     address = address.replace('/en/', '/ja/');
-    const japanese = await loadCurrentLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, input);
+    const japanese = await loadCurrentLabelShelfPage(
+      kernelClient(),
+      request(),
+      sessionEnv as unknown as SessionEnv,
+      input,
+    );
     address = address.replace('/ja/', '/en/');
     expect(japanese.provenance.locale).toBe('ja');
-    flushSync(() => client.setQueryData(current.queryKey, japanese)); absent();
-    flushSync(() => client.setQueryData(current.queryKey, matching)); visible(B);
+    flushSync(() => client.setQueryData(current.queryKey, japanese));
+    absent();
+    flushSync(() => client.setQueryData(current.queryKey, matching));
+    visible(B);
 
     // Pending cursor/Undo replacement retires retained route data; returning to the original address is a new lifetime.
     hold = 'all';
     const changed = new URLSearchParams(display);
-    changed.set('cursor', 'source-two'); changed.set('undoKey', id(802)); changed.set('labelResult', 'label-restore-expired');
+    changed.set('cursor', 'source-two');
+    changed.set('undoKey', id(802));
+    changed.set('labelResult', 'label-restore-expired');
     let away!: Promise<void>;
-    await act(async () => { away = navigate(changed); });
+    await act(async () => {
+      away = navigate(changed);
+    });
     absent();
     let back!: Promise<void>;
-    await act(async () => { back = navigate(display); });
+    await act(async () => {
+      back = navigate(display);
+    });
     absent();
     expect(currentQuery().state.data).toBeUndefined();
     const returning = held.filter((pending) => pending.cursor === 'source-one');
     expect(returning.length).toBeGreaterThan(0);
     await act(async () => {
-      for (const pending of returning) { held.splice(held.indexOf(pending), 1); pending.resolve(pending.response); }
+      for (const pending of returning) {
+        held.splice(held.indexOf(pending), 1);
+        pending.resolve(pending.response);
+      }
       await back;
     });
     visible(B);
@@ -286,23 +418,32 @@ test('The actual named-label Library renders private FULL assignments and remove
       bForms.find((form) => form.intent === 'unassign')?.idempotencyKey,
     );
     const returnedForms = fields();
-    await act(async () => { for (const pending of held.splice(0)) pending.resolve(pending.response); await away; });
-    visible(B); expect(fields()).toEqual(returnedForms);
+    await act(async () => {
+      for (const pending of held.splice(0)) pending.resolve(pending.response);
+      await away;
+    });
+    visible(B);
+    expect(fields()).toEqual(returnedForms);
     hold = null;
 
     // Replacing only Undo intent also retires the whole private population, without a cursor change.
     hold = 'all';
     const undoOnly = new URLSearchParams(display);
     undoOnly.set('undoKey', id(803));
-    await act(async () => { away = navigate(undoOnly); });
+    await act(async () => {
+      away = navigate(undoOnly);
+    });
     absent();
-    await act(async () => { back = navigate(display); });
+    await act(async () => {
+      back = navigate(display);
+    });
     absent();
     expect(currentQuery().state.data).toBeUndefined();
     // Both addresses have the same native keyset; settle the current route/query before its old loader.
     await act(async () => {
       for (const pending of held.splice(0)) pending.resolve(pending.response);
-      await back; await away;
+      await back;
+      await away;
     });
     visible(B);
     expect(fields().find((form) => form.intent === 'restore')?.idempotencyKey).toBe(undoKey);
@@ -310,18 +451,30 @@ test('The actual named-label Library renders private FULL assignments and remove
 
     // A late failure/finally from a retired B lifetime cannot clear a newer matching B result.
     hold = B;
-    await act(async () => { oldIO = client.invalidateQueries({ queryKey: ['library', 'label-shelf'] }); });
-    observe('unknown', null); absent();
+    await act(async () => {
+      oldIO = client.invalidateQueries({ queryKey: ['library', 'label-shelf'] });
+    });
+    observe('unknown', null);
+    absent();
     hold = null;
     observe('signed-in', B);
-    await settle(); visible(B);
+    await settle();
+    visible(B);
     const finalForms = fields();
-    await act(async () => { for (const pending of held.splice(0)) pending.reject(new Error('late old read')); await oldIO; });
-    visible(B); expect(fields()).toEqual(finalForms);
-    expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments').every((req) => {
-      const query = new URL(req.url).searchParams;
-      return query.get('limit') === '100' && query.get('view') === 'FULL';
-    })).toBe(true);
+    await act(async () => {
+      for (const pending of held.splice(0)) pending.reject(new Error('late old read'));
+      await oldIO;
+    });
+    visible(B);
+    expect(fields()).toEqual(finalForms);
+    expect(
+      reads
+        .filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')
+        .every((req) => {
+          const query = new URL(req.url).searchParams;
+          return query.get('limit') === '100' && query.get('view') === 'FULL';
+        }),
+    ).toBe(true);
   } finally {
     hold = null;
     for (const pending of held.splice(0)) pending.resolve(pending.response);

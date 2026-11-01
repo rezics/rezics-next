@@ -92,7 +92,11 @@ export function CurrentLabelShelf({
   display: ShelfDisplay;
   read: ReadShelf;
 }) {
-  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  const hydrated = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
   const session = useSession();
   const search = useLocation({ select: (location) => location.search });
   const source = sourceAt(search);
