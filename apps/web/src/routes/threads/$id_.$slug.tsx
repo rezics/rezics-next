@@ -296,7 +296,8 @@ export function ThreadPage() {
     const currentTicket = callbackTicket;
     const read = currentRead.current;
     const sequence = ++read.sequence;
-    read.operation?.retire();
+    if (read.operation?.accepted) read.operation.invalidate();
+    else read.operation?.retire();
     const mode = session === 'signed-in' ? 'session' : 'anonymous';
     const query = threadPageQuery(id, cursor, mode);
     const nextIdentity: ThreadPageRouteIdentity = {
@@ -352,6 +353,7 @@ export function ThreadPage() {
       router.state.location.pathname === location.pathname &&
       JSON.stringify(router.state.location.search) === routeSearch;
     const sourceSession = recovery ? nextCaller.admission.session : currentTicket!.session;
+    const boundaryPeers = recovery ? [] : [nextCaller];
     const current = () =>
       routeIsCurrent() &&
       continuation.isCurrent() &&
@@ -361,10 +363,15 @@ export function ThreadPage() {
       if (recovery && !routeIsCurrent()) throw new ThreadPageCallerRetired();
       await continuation.runOwnedCacheBoundary('cancel', () =>
         queryClient.cancelQueries({ queryKey: ['thread-page', id] }),
+        boundaryPeers,
       );
       if (!current()) throw new Error('Thread reader changed');
       // Retire pre-command pages as well as in-flight reads, so navigation cannot reuse their old bodies.
-      continuation.runOwnedCacheBoundary('remove', () => queryClient.removeQueries({ queryKey: ['thread-page', id] }));
+      continuation.runOwnedCacheBoundary(
+        'remove',
+        () => queryClient.removeQueries({ queryKey: ['thread-page', id] }),
+        boundaryPeers,
+      );
       if (!current()) throw new Error('Thread reader changed');
       continuation.handoffQueryAuthority(!recovery);
       const updated = await runThreadPageQuery(

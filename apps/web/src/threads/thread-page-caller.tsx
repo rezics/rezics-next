@@ -1,4 +1,4 @@
-import { QueryClientContext, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { QueryClientContext, replaceEqualDeep, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { getLocale } from '../paraglide/runtime.js';
@@ -60,23 +60,26 @@ type OwnedPageRead = {
   query: object | undefined;
   dataUpdateCount: number;
   errorUpdateCount: number;
-  previousData: unknown;
   result: unknown;
+  committedData: unknown;
   error: unknown;
   started: boolean;
   resultReady: boolean;
+  commitReady: boolean;
+  commitObserved: boolean;
   errorReady: boolean;
 };
 
 type RefreshCacheBoundary = {
   kind: 'cancel' | 'remove';
   queries: Set<object>;
-  cancelledQueries: Set<object>;
+  continuation: RefreshContinuationState | undefined;
+  cancelEvents: Map<object, object>;
+  removeEvents: Map<object, object>;
 };
 
 type RefreshContinuationState = {
   active: boolean;
-  boundary: RefreshCacheBoundary | undefined;
   identity: ThreadPageRouteIdentity;
   session: SessionStamp;
   connectionOwner: object;
@@ -91,10 +94,15 @@ export type ThreadPageRefreshContinuation = {
   readonly client: QueryClient;
   readonly sourceId: string;
   isCurrent(): boolean;
-  runOwnedCacheBoundary<T>(kind: 'cancel' | 'remove', operation: () => T): T;
+  runOwnedCacheBoundary<T>(
+    kind: 'cancel' | 'remove',
+    operation: () => T,
+    peers?: readonly ThreadPageCaller[],
+  ): T;
   beginOwnedPageRead(queryKey: QueryKey): void;
   markOwnedPageReadStarted(queryKey: QueryKey): void;
   recordOwnedPageResult(queryKey: QueryKey, value: unknown): void;
+  recordOwnedPageCommit(queryKey: QueryKey, result: unknown, committedData: unknown): void;
   recordOwnedPageError(queryKey: QueryKey, error: unknown): void;
   handoffQueryAuthority(preserveCaller?: boolean): void;
   invalidate(): void;
@@ -375,6 +383,7 @@ export class ThreadPageCaller {
   private personalSequence = 0;
   private personalAttemptRevision = 0;
   private readonly refreshContinuations = new Set<RefreshContinuationState>();
+  private readonly synchronousCacheBoundaries = new Set<RefreshCacheBoundary>();
   private refreshGuard: (() => boolean) | undefined;
   private readonly personalResults = new WeakMap<object, PersonalReadAttempt>();
   private readonly personalCacheOwners = new Map<string, PersonalCacheOwner>();
@@ -396,7 +405,10 @@ export class ThreadPageCaller {
       const refreshEvent = this.observeRefreshQueryEvent(event);
       const ownedResult = this.observeOwnedPageResultEvent(event);
       const currentKeyEvent = matchingKey(event.query.queryKey, this.queryKey);
-      if (isRetiringQueryEvent(event) && !refreshEvent.owned && !ownedResult) {
+      if (
+        isRetiringQueryEvent(event) &&
+        (refreshEvent.external || (!refreshEvent.owned && !ownedResult))
+      ) {
         if (currentKeyEvent) this.externalQueryMutation = event;
         if (refreshEvent.external || currentKeyEvent) this.retire();
       }
@@ -482,6 +494,21 @@ export class ThreadPageCaller {
   private retire(notify = true) {
     if (this.retired) return;
     this.retired = true;
+    const abandonedRead = this.ownedPageRead;
+    if (
+      abandonedRead?.started &&
+      abandonedRead.query &&
+      (this.externalQueryMutation?.query === abandonedRead.query ||
+        (!this.publicResult && !sameSession(this.ownerSession, this.source.readSession())))
+    ) {
+      const current = this.source.queryStamp(abandonedRead.queryKey);
+      if (current !== undefined && current.query === abandonedRead.query && current.fetchStatus !== 'idle') {
+        const query = abandonedRead.query as {
+          cancel?: (options: { revert: boolean; silent: boolean }) => unknown;
+        };
+        query.cancel?.({ revert: false, silent: true });
+      }
+    }
     const refreshQueries = [...this.refreshContinuations]
       .map((continuation) => continuation.sourceQuery)
       .filter((query): query is QueryStamp => query !== undefined);
@@ -518,6 +545,43 @@ export class ThreadPageCaller {
       this.client.removeQueries({ queryKey: this.queryKey, exact: true });
     this.clearPersonalCache();
     if (notify) this.notify();
+  }
+
+  private canJoinRefreshBoundary(owner: ThreadPageCaller, state: RefreshContinuationState) {
+    return (
+      !this.retired &&
+      this.client === owner.client &&
+      this.source === owner.source &&
+      isThreadPageFor(this.queryKey, state.identity.id) &&
+      sameIdentity(this.currentAdmission.identity, state.identity) &&
+      sameIdentity(this.currentIdentity, state.identity) &&
+      sameSession(this.currentAdmission.session, state.session) &&
+      sameSession(this.source.readSession(), state.session) &&
+      getLocale() === state.identity.locale &&
+      (this !== owner ||
+        !state.requiresConnection ||
+        (this.connection.connected &&
+          !this.connection.retired &&
+          this.connection.owner === state.connectionOwner &&
+          this.connection.generation === state.connectionGeneration))
+    );
+  }
+
+  private runOwnedPreparationBoundary<T>(queryKey: QueryKey, operation: () => T) {
+    const query = this.source.queryStamp(queryKey)?.query;
+    const boundary: RefreshCacheBoundary = {
+      kind: 'remove',
+      queries: query ? new Set([query]) : new Set(),
+      continuation: undefined,
+      cancelEvents: new Map(),
+      removeEvents: new Map(),
+    };
+    this.synchronousCacheBoundaries.add(boundary);
+    try {
+      return operation();
+    } finally {
+      this.synchronousCacheBoundaries.delete(boundary);
+    }
   }
 
   retireFromRouteChange() {
@@ -615,27 +679,19 @@ export class ThreadPageCaller {
   private observeRefreshQueryEvent(event: QueryCacheEvent) {
     let owned = false;
     let external = false;
+    const ownedContinuations = new Set<RefreshContinuationState>();
+    for (const boundary of this.synchronousCacheBoundaries) {
+      if (!this.ownsBoundaryEvent(boundary, event)) continue;
+      owned = true;
+      if (boundary.continuation?.active) ownedContinuations.add(boundary.continuation);
+      if (matchingKey(event.query.queryKey, this.queryKey))
+        this.queryState = this.source.queryStamp(this.queryKey) ?? null;
+    }
     for (const continuation of this.refreshContinuations) {
       if (!continuation.active || !isThreadPageFor(event.query.queryKey, continuation.identity.id)) continue;
-      const boundary = continuation.boundary;
-      const capturedByBoundary = boundary?.queries.has(event.query) === true;
-      const ownCancelEvent =
-        boundary?.kind === 'cancel' &&
-        capturedByBoundary &&
-        !boundary.cancelledQueries.has(event.query) &&
-        event.type === 'updated' &&
-        event.action?.type === 'setState' &&
-        this.source.isCancellationRevert(event);
-      const ownRemoveEvent = boundary?.kind === 'remove' && capturedByBoundary && event.type === 'removed';
-      if (ownCancelEvent || ownRemoveEvent) {
-        owned = true;
-        if (matchingKey(event.query.queryKey, this.queryKey))
-          this.queryState = this.source.queryStamp(this.queryKey) ?? null;
-        if (ownCancelEvent) boundary.cancelledQueries.add(event.query);
-        continue;
-      }
+      if (ownedContinuations.has(continuation)) continue;
       if (this.isOwnedPageEvent(continuation.ownedPageRead, event)) {
-        continuation.ownedPageRead = undefined;
+        continuation.ownedPageRead!.commitObserved = true;
         owned = true;
         continue;
       }
@@ -652,12 +708,36 @@ export class ThreadPageCaller {
     return { owned, external };
   }
 
+  private ownsBoundaryEvent(boundary: RefreshCacheBoundary, event: QueryCacheEvent) {
+    const query = event.query as object;
+    if (!boundary.queries.has(query)) return false;
+    if (boundary.kind === 'cancel') {
+      if (
+        event.type !== 'updated' ||
+        event.action?.type !== 'setState' ||
+        !this.source.isCancellationRevert(event)
+      )
+        return false;
+      const previous = boundary.cancelEvents.get(query);
+      if (previous !== undefined) return previous === event;
+      boundary.cancelEvents.set(query, event);
+      return true;
+    }
+    if (event.type !== 'removed') return false;
+    const previous = boundary.removeEvents.get(query);
+    if (previous !== undefined) return previous === event;
+    boundary.removeEvents.set(query, event);
+    return true;
+  }
+
   private isOwnedPageEvent(read: OwnedPageRead | undefined, event: QueryCacheEvent) {
     if (
       event.type !== 'updated' ||
       event.action?.type !== 'success' ||
       event.action.manual === true ||
-      !read?.resultReady
+      !read?.resultReady ||
+      !read.commitReady ||
+      read.commitObserved
     )
       return false;
     if (!matchingKey(event.query.queryKey, read.queryKey)) return false;
@@ -667,7 +747,7 @@ export class ThreadPageCaller {
       current?.query === event.query &&
       read.query === event.query &&
       current.data === event.action.data &&
-      (event.action.data === read.result || event.action.data === read.previousData) &&
+      event.action.data === read.committedData &&
       current.dataUpdateCount === read.dataUpdateCount + 1 &&
       current.errorUpdateCount === read.errorUpdateCount
     );
@@ -698,7 +778,7 @@ export class ThreadPageCaller {
     if (!read) return false;
     if (this.isOwnedPageEvent(read, event)) {
       this.queryOwnSuccessObserved = true;
-      this.ownedPageRead = undefined;
+      read!.commitObserved = true;
       return true;
     }
     if (this.isOwnedPageFailure(read, event)) {
@@ -824,7 +904,7 @@ export class ThreadPageCaller {
       sameQuery(stamp.query, cached);
     if (reusable) return;
     if (this.currentAdmission.identity.credentialMode === 'session') {
-      this.client.removeQueries({ queryKey, exact: true });
+      this.runOwnedPreparationBoundary(queryKey, () => this.client.removeQueries({ queryKey, exact: true }));
       this.assertReadCurrent();
     }
   }
@@ -832,13 +912,35 @@ export class ThreadPageCaller {
   finishQuery(queryKey: QueryKey, result: unknown, before: QueryStamp | undefined, beforeTerminalRevision: number) {
     this.assertReadCurrent();
     const current = this.source.queryStamp(queryKey);
+    const ownedRead = this.ownedPageRead;
+    const ownCommit =
+      ownedRead?.resultReady === true &&
+      ownedRead.result === result &&
+      ownedRead.commitReady &&
+      ownedRead.commitObserved &&
+      current !== undefined &&
+      ownedRead.query === current?.query &&
+      current.data === ownedRead.committedData &&
+      current.dataUpdateCount === ownedRead.dataUpdateCount + 1 &&
+      current.errorUpdateCount === ownedRead.errorUpdateCount;
+    const unchangedCacheHit =
+      ownedRead?.resultReady !== true &&
+      before !== undefined &&
+      before.status === 'success' &&
+      result === before.data &&
+      current !== undefined &&
+      current.query === before.query &&
+      current.data === before.data &&
+      current.dataUpdateCount === before.dataUpdateCount &&
+      current.errorUpdateCount === before.errorUpdateCount &&
+      before.terminalRevision === beforeTerminalRevision;
     if (
       !current ||
       current.status !== 'success' ||
-      current.data !== result ||
+      (!ownCommit && !unchangedCacheHit) ||
       (before && current.query !== before.query) ||
       current.terminalRevision !== beforeTerminalRevision ||
-      current.dataUpdateCount > (before?.dataUpdateCount ?? 0) + 1
+      (ownCommit && current.dataUpdateCount !== (before?.dataUpdateCount ?? 0) + 1)
     )
       throw new ThreadPageCallerRetired();
     const page = result && typeof result === 'object' && 'thread' in result ? (result as LoadedThreadPage) : undefined;
@@ -886,11 +988,13 @@ export class ThreadPageCaller {
       query: query?.query,
       dataUpdateCount: query?.dataUpdateCount ?? 0,
       errorUpdateCount: query?.errorUpdateCount ?? 0,
-      previousData: query?.data,
       result: undefined,
+      committedData: undefined,
       error: undefined,
       started: false,
       resultReady: false,
+      commitReady: false,
+      commitObserved: false,
       errorReady: false,
     };
   }
@@ -911,6 +1015,16 @@ export class ThreadPageCaller {
     if (query && this.ownedPageRead.query !== query.query) throw new ThreadPageCallerRetired();
     this.ownedPageRead.result = value;
     this.ownedPageRead.resultReady = true;
+  }
+
+  recordOwnedPageCommit(queryKey: QueryKey, result: unknown, committedData: unknown) {
+    const read = this.ownedPageRead;
+    if (!read || !matchingKey(queryKey, read.queryKey) || !read.resultReady || read.result !== result) return;
+    const query = this.source.queryStamp(queryKey);
+    if (query && !read.query) read.query = query.query;
+    if (query && read.query !== query.query) return;
+    read.committedData = committedData;
+    read.commitReady = true;
   }
 
   recordOwnedPageError(queryKey: QueryKey, error: unknown) {
@@ -1027,7 +1141,6 @@ export class ThreadPageCaller {
       throw new ThreadPageCallerRetired();
     const state: RefreshContinuationState = {
       active: true,
-      boundary: undefined,
       identity: { ...this.currentAdmission.identity },
       session: { ...ticket.session },
       connectionOwner: this.connection.owner ?? this,
@@ -1059,20 +1172,38 @@ export class ThreadPageCaller {
           !state.queryRetired
         );
       },
-      runOwnedCacheBoundary: <T,>(kind: 'cancel' | 'remove', operation: () => T) => {
+      runOwnedCacheBoundary: <T,>(
+        kind: 'cancel' | 'remove',
+        operation: () => T,
+        peers: readonly ThreadPageCaller[] = [],
+      ) => {
         if (!state.active) throw new ThreadPageCallerRetired();
-        const previousBoundary = state.boundary;
+        const participants = [...new Set([this, ...peers])];
+        if (
+          !this.isRefreshContinuationCurrent({
+            session: state.session,
+            ...(state.requiresConnection ? { ticket: state.connectionGeneration } : {}),
+          }) || participants.some((participant) => !participant.canJoinRefreshBoundary(this, state))
+        )
+          throw new ThreadPageCallerRetired();
         const queries = new Set(
           this.client
             .getQueryCache()
             .findAll({ queryKey: ['thread-page', state.identity.id] })
             .map((query) => query as object),
         );
-        state.boundary = { kind, queries, cancelledQueries: new Set() };
+        const boundary: RefreshCacheBoundary = {
+          kind,
+          queries,
+          continuation: state,
+          cancelEvents: new Map(),
+          removeEvents: new Map(),
+        };
+        for (const participant of participants) participant.synchronousCacheBoundaries.add(boundary);
         try {
           return operation();
         } finally {
-          state.boundary = previousBoundary;
+          for (const participant of participants) participant.synchronousCacheBoundaries.delete(boundary);
         }
       },
       beginOwnedPageRead: (queryKey) => {
@@ -1083,11 +1214,13 @@ export class ThreadPageCaller {
           query: query?.query,
           dataUpdateCount: query?.dataUpdateCount ?? 0,
           errorUpdateCount: query?.errorUpdateCount ?? 0,
-          previousData: query?.data,
           result: undefined,
+          committedData: undefined,
           error: undefined,
           started: false,
           resultReady: false,
+          commitReady: false,
+          commitObserved: false,
           errorReady: false,
         };
       },
@@ -1108,6 +1241,16 @@ export class ThreadPageCaller {
         if (query && read.query !== query.query) throw new ThreadPageCallerRetired();
         read.result = value;
         read.resultReady = true;
+      },
+      recordOwnedPageCommit: (queryKey, result, committedData) => {
+        const read = state.ownedPageRead;
+        if (!state.active || !read || !matchingKey(queryKey, read.queryKey) || !read.resultReady || read.result !== result)
+          return;
+        const query = this.source.queryStamp(queryKey);
+        if (query && !read.query) read.query = query.query;
+        if (query && read.query !== query.query) return;
+        read.committedData = committedData;
+        read.commitReady = true;
       },
       recordOwnedPageError: (queryKey, error) => {
         const read = state.ownedPageRead;
@@ -1195,25 +1338,38 @@ export async function runThreadPageQuery<T extends { queryKey: QueryKey }, TResu
   const beforeTerminalRevision = source.queryTerminalRevision(query.queryKey);
   const original = (query as T & { queryFn?: unknown }).queryFn;
   if (typeof original !== 'function') throw new Error('Thread page query has no reader');
+  const configuredSharing = client.defaultQueryOptions(query as never).structuralSharing;
   caller.beginQuery(query.queryKey);
   continuation?.beginOwnedPageRead(query.queryKey);
   const guarded = {
     ...query,
+    structuralSharing: (previous: unknown | undefined, next: unknown) => {
+      const committed =
+        configuredSharing === false
+          ? next
+          : typeof configuredSharing === 'function'
+            ? configuredSharing(previous, next)
+            : replaceEqualDeep(previous, next);
+      caller.recordOwnedPageCommit(query.queryKey, next, committed);
+      continuation?.recordOwnedPageCommit(query.queryKey, next, committed);
+      return committed;
+    },
     queryFn: async (context: unknown) => {
+      caller.assertReadCurrent();
+      caller.markOwnedPageReadStarted(query.queryKey);
+      continuation?.markOwnedPageReadStarted(query.queryKey);
+      let value: unknown;
       try {
-        caller.assertReadCurrent();
-        caller.markOwnedPageReadStarted(query.queryKey);
-        continuation?.markOwnedPageReadStarted(query.queryKey);
-        const value = await (original as (context: unknown) => unknown)(context);
-        caller.assertReadCurrent();
-        caller.recordOwnedPageResult(query.queryKey, value);
-        continuation?.recordOwnedPageResult(query.queryKey, value);
-        return value;
+        value = await (original as (context: unknown) => unknown)(context);
       } catch (error) {
         caller.recordOwnedPageError(query.queryKey, error);
         continuation?.recordOwnedPageError(query.queryKey, error);
         throw error;
       }
+      caller.assertReadCurrent();
+      caller.recordOwnedPageResult(query.queryKey, value);
+      continuation?.recordOwnedPageResult(query.queryKey, value);
+      return value;
     },
   } as T;
   try {
