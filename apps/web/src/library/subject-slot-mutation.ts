@@ -65,7 +65,7 @@ export async function applySubjectLibraryMutation(
       if (saved.reason === 'unsupported_library_profile') return { result: 'unsupported_library_profile' };
       return { result: saved.reason === 'closed' ? 'closed' : 'unavailable' };
     }
-    await prepareSession(request, sessionEnv);
+    if (await prepareSession(request, sessionEnv)) return { result: 'unavailable' };
     const authorization = viewerCredential(request);
     if (!authorization) return { result: 'unavailable' };
     const client = kernelClient();
@@ -73,7 +73,10 @@ export async function applySubjectLibraryMutation(
     if (!input.collectionId) return { result: 'unavailable' };
     const added = await client
       .collections({ collectionId: input.collectionId })
-      .members.post({ subjectId: input.subjectId }, { headers: headers as never });
+      .members.post(
+        { subjectId: input.subjectId },
+        { headers: headers as never, fetch: { cache: 'no-store', redirect: 'manual' } },
+      );
     if (added.error) {
       if (isPlatformClosedProblem(added.status, added.error.value)) return { result: 'closed' };
       if (added.status === 409 && problemCode(added.error) === 'collection_full') return { result: 'collection-full' };

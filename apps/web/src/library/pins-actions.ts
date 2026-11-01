@@ -44,7 +44,7 @@ export async function putLibraryPin(
       .libraryPins({ collectionId })
       .put(
         { revision, ...(after === undefined ? {} : { after }) },
-        { headers: headers(authorization, idempotencyKey) },
+        { headers: headers(authorization, idempotencyKey), fetch: { cache: 'no-store', redirect: 'manual' } },
       );
     const status = statusOf(result);
     if (status === 409) return { ok: false, reason: codeOf(result.error) === 'collection_full' ? 'full' : 'conflict' };
@@ -68,6 +68,7 @@ export async function deleteLibraryPin(
     const result = await client.libraryPins({ collectionId }).delete(undefined, {
       query: { revision },
       headers: headers(authorization, idempotencyKey),
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     const status = statusOf(result);
     if (status === 409) return { ok: false, reason: 'conflict' };
@@ -112,7 +113,7 @@ function validateInput(input: unknown): {
 
 async function submit(action: 'put' | 'delete', data: ReturnType<typeof validateInput>): Promise<PinMutation> {
   const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
+  if (await prepareSession(request, env as Partial<SessionEnv>)) return { ok: false, reason: 'signed-out' };
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'signed-out' };
   const client = kernelClient();
