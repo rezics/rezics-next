@@ -283,9 +283,7 @@ function PublicationIntentView({ page, submit, onReload }: PublicationViewProps)
                 disabled={locked}
                 onChange={(event) => {
                   const confirmed = event.target.checked;
-                  update((previous) =>
-                    previous.busy || previous.attempt ? previous : { ...previous, confirmed },
-                  );
+                  update((previous) => (previous.busy || previous.attempt ? previous : { ...previous, confirmed }));
                 }}
               />
               <span>
@@ -373,18 +371,24 @@ function CurrentPublicationPage({
     data.address.id === id &&
     data.address.cursor === cursor;
   const page: PublicationPage =
-    !query.isFetching && !query.isError && matches
-      ? data
-      : { viewer, address, source: { state: 'unavailable' } };
+    !query.isFetching && !query.isError && matches ? data : { viewer, address, source: { state: 'unavailable' } };
   return (
     <>
-      {query.isFetching ? <div role="status" className="p-6">{m.library_publication_loading()}</div> : null}
+      {query.isFetching ? (
+        <div role="status" className="p-6">
+          {m.library_publication_loading()}
+        </div>
+      ) : null}
       <CollectionPublicationPageView
         page={page}
         submit={(input) => publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrfToken } })}
         {...(query.isFetching
           ? {}
-          : { onReload: () => { void query.refetch().catch(() => undefined); } })}
+          : {
+              onReload: () => {
+                void query.refetch().catch(() => undefined);
+              },
+            })}
       />
     </>
   );

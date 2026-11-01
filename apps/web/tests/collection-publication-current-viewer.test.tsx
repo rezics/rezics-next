@@ -22,7 +22,8 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const reads: { address: PublicationAddress; work: ReturnType<typeof deferred<PublicationPage>> }[] = [];
-const writes: { input: PublicationInput; csrf: string | null; work: ReturnType<typeof deferred<PublicationResult>> }[] = [];
+const writes: { input: PublicationInput; csrf: string | null; work: ReturnType<typeof deferred<PublicationResult>> }[] =
+  [];
 
 // Intercept only the two server functions at the existing validator boundary. Keep the production
 // collectionPublicationQuery queryFn, including its actual viewer/token/address validation, installed.
@@ -70,7 +71,11 @@ type Session = {
   subject: string | null;
   csrfToken: string | null;
 };
-const viewer = (subject = 'story-viewer', csrfToken = 'csrf-one'): Session => ({ state: 'signed-in', subject, csrfToken });
+const viewer = (subject = 'story-viewer', csrfToken = 'csrf-one'): Session => ({
+  state: 'signed-in',
+  subject,
+  csrfToken,
+});
 const address: PublicationAddress = { id: 'publication-example' };
 const complete = (input: PublicationInput): PublicationResult => ({
   ok: true,
@@ -101,8 +106,10 @@ async function mount() {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } = await import('@tanstack/react-router');
-  const { CollectionPublicationPage, CollectionPublicationPageView } = await import('../src/library/collection-publication-page');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+    await import('@tanstack/react-router');
+  const { CollectionPublicationPage, CollectionPublicationPageView } =
+    await import('../src/library/collection-publication-page');
   const { collectionPublicationQuery, publicationCandidates } = await import('../src/library/collection-publication');
   const { publicationExample } = await import('../src/kernel/fake/collection-publication');
   const { sessionQuery } = await import('../src/session/query');
@@ -122,7 +129,11 @@ async function mount() {
   });
   await router.load();
   const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
-  const flush = (work: () => void) => act(async () => { work(); await tick(); });
+  const flush = (work: () => void) =>
+    act(async () => {
+      work();
+      await tick();
+    });
   let session = viewer();
   let currentAddress = address;
   const ready = (revision = 7, members = exampleSource.page.members): PublicationPage => ({
@@ -139,53 +150,75 @@ async function mount() {
       <RouterContextProvider router={router}>{node}</RouterContextProvider>
     </QueryClientProvider>
   );
-  const show = (nextSession = session, nextAddress = currentAddress) => flush(() => {
-    session = nextSession;
-    currentAddress = nextAddress;
-    client.setQueryData(sessionQuery.queryKey, session);
-    root.render(tree(<CollectionPublicationPage address={currentAddress} />));
-  });
+  const show = (nextSession = session, nextAddress = currentAddress) =>
+    flush(() => {
+      session = nextSession;
+      currentAddress = nextAddress;
+      client.setQueryData(sessionQuery.queryKey, session);
+      root.render(tree(<CollectionPublicationPage address={currentAddress} />));
+    });
   const button = (label: string) => {
     const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === label);
     expect(node).toBeDefined();
     return node!;
   };
-  const click = (label: string, twice = false) => flush(() => {
-    const node = button(label);
-    // Dispatch both clicks before React can commit disabled=true.
-    node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-    if (twice) node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  });
+  const click = (label: string, twice = false) =>
+    flush(() => {
+      const node = button(label);
+      // Dispatch both clicks before React can commit disabled=true.
+      node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      if (twice) node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    });
   const checkboxes = () => [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
   const choose = async (indices = [0]) => {
     for (const index of indices) await flush(() => checkboxes()[index]!.click());
     await flush(() => checkboxes().at(-1)!.click());
   };
-  const settle = <T,>(work: ReturnType<typeof deferred<T>>, outcome: T | Error) => flush(() => {
-    if (outcome instanceof Error) work.reject(outcome);
-    else work.resolve(outcome);
-  });
-  const refresh = () => flush(() => {
-    void client.refetchQueries({
-      queryKey: collectionPublicationQuery(session as PublicationViewer, currentAddress).queryKey,
-      exact: true,
+  const settle = <T,>(work: ReturnType<typeof deferred<T>>, outcome: T | Error) =>
+    flush(() => {
+      if (outcome instanceof Error) work.reject(outcome);
+      else work.resolve(outcome);
     });
-  });
+  const refresh = () =>
+    flush(() => {
+      void client.refetchQueries({
+        queryKey: collectionPublicationQuery(session as PublicationViewer, currentAddress).queryKey,
+        exact: true,
+      });
+    });
   return {
-    host, m, ready, show, choose, click, button, checkboxes, settle, refresh,
+    host,
+    m,
+    ready,
+    show,
+    choose,
+    click,
+    button,
+    checkboxes,
+    settle,
+    refresh,
     ids: publicationCandidates(exampleSource.page).map((member) => member.subject!.id),
     members: exampleSource.page.members,
     hide: () => flush(() => root.render(tree(null))),
-    view: (page: PublicationPage) => flush(() => root.render(tree(
-      <CollectionPublicationPageView page={page} submit={(input) => {
-        const call = { input, csrf: page.viewer?.csrfToken ?? null, work: deferred<PublicationResult>() };
-        writes.push(call);
-        return call.work.promise;
-      }} />,
-    ))),
-    seed: (page: PublicationPage, credential: PublicationViewer) => flush(() => {
-      client.setQueryData(collectionPublicationQuery(credential, currentAddress).queryKey, page);
-    }),
+    view: (page: PublicationPage) =>
+      flush(() =>
+        root.render(
+          tree(
+            <CollectionPublicationPageView
+              page={page}
+              submit={(input) => {
+                const call = { input, csrf: page.viewer?.csrfToken ?? null, work: deferred<PublicationResult>() };
+                writes.push(call);
+                return call.work.promise;
+              }}
+            />,
+          ),
+        ),
+      ),
+    seed: (page: PublicationPage, credential: PublicationViewer) =>
+      flush(() => {
+        client.setQueryData(collectionPublicationQuery(credential, currentAddress).queryKey, page);
+      }),
     async dispose() {
       await act(async () => root.unmount());
       client.clear();
@@ -201,7 +234,11 @@ async function mount() {
 }
 async function mounted(run: (page: Awaited<ReturnType<typeof mount>>) => Promise<void>) {
   const page = await mount();
-  try { await run(page); } finally { await page.dispose(); }
+  try {
+    await run(page);
+  } finally {
+    await page.dispose();
+  }
 }
 
 test('Uncertain selected publication retains its exact native intent across current-viewer credential refresh', async () => {
@@ -222,8 +259,10 @@ test('Uncertain selected publication retains its exact native intent across curr
     expect(reads).toHaveLength(2);
     expect(page.checkboxes()).toHaveLength(0);
     // Even an old source injected at the new key cannot become ready while its required read is pending.
-    await page.seed({ ...page.ready(), viewer: { subject: 'story-viewer', csrfToken: 'csrf-one' } },
-      { subject: 'story-viewer', csrfToken: 'csrf-two' });
+    await page.seed(
+      { ...page.ready(), viewer: { subject: 'story-viewer', csrfToken: 'csrf-one' } },
+      { subject: 'story-viewer', csrfToken: 'csrf-two' },
+    );
     expect(page.checkboxes()).toHaveLength(0);
     await page.settle(reads[1]!.work, page.ready(12, page.members.slice(1)));
     expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
@@ -275,69 +314,87 @@ test('Uncertain selected publication retains its exact native intent across curr
 
 for (const boundary of ['viewer', 'collection', 'cursor', 'authority', 'unmount'] as const) {
   test(`Old publication success, failure and completion cannot paint or unlock a replacement ${boundary} lifetime`, async () => {
-    for (const outcome of ['complete', 'denied', 'throw'] as const) await mounted(async (page) => {
-      const original = page.ready();
-      if (original.source.state !== 'ready') throw new Error('Ready fixture');
-      await page.view(original);
-      await page.choose();
-      await page.click(page.m.library_publication_publish(), true);
-      const old = writes[0]!;
-      if (boundary === 'unmount') await page.hide();
-      if (boundary === 'authority') {
-        await page.view({ ...original, viewer: { subject: 'story-viewer', csrfToken: '' } });
-        expect(page.checkboxes()).toHaveLength(0);
-      }
-      const replacementAddress = boundary === 'collection' ? { id: 'replacement-collection' }
-        : boundary === 'cursor' ? { ...address, cursor: 'replacement-page' } : address;
-      const subject = boundary === 'viewer' ? 'replacement-viewer' : 'story-viewer';
-      await page.view({
-        ...original,
-        viewer: { subject, csrfToken: 'current-csrf' },
-        address: replacementAddress,
-        source: { ...original.source, page: { ...original.source.page, id: replacementAddress.id, curatorAccountId: subject } },
+    for (const outcome of ['complete', 'denied', 'throw'] as const)
+      await mounted(async (page) => {
+        const original = page.ready();
+        if (original.source.state !== 'ready') throw new Error('Ready fixture');
+        await page.view(original);
+        await page.choose();
+        await page.click(page.m.library_publication_publish(), true);
+        const old = writes[0]!;
+        if (boundary === 'unmount') await page.hide();
+        if (boundary === 'authority') {
+          await page.view({ ...original, viewer: { subject: 'story-viewer', csrfToken: '' } });
+          expect(page.checkboxes()).toHaveLength(0);
+        }
+        const replacementAddress =
+          boundary === 'collection'
+            ? { id: 'replacement-collection' }
+            : boundary === 'cursor'
+              ? { ...address, cursor: 'replacement-page' }
+              : address;
+        const subject = boundary === 'viewer' ? 'replacement-viewer' : 'story-viewer';
+        await page.view({
+          ...original,
+          viewer: { subject, csrfToken: 'current-csrf' },
+          address: replacementAddress,
+          source: {
+            ...original.source,
+            page: { ...original.source.page, id: replacementAddress.id, curatorAccountId: subject },
+          },
+        });
+        // The replacement is usable while the old native operation is still outstanding.
+        await page.choose([]);
+        await page.click(page.m.library_publication_publish(), true);
+        expect(writes).toHaveLength(2);
+        await page.settle(
+          old.work,
+          outcome === 'complete'
+            ? complete(old.input)
+            : outcome === 'denied'
+              ? { ok: false, reason: 'denied' }
+              : new Error('Old response failed'),
+        );
+        expect(page.host.querySelector('[aria-busy="true"]')).not.toBeNull();
+        expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
+        expect(page.host.textContent).not.toContain(page.m.library_publication_complete_one({ count: '1' }));
+        expect(page.host.textContent).not.toContain(page.m.library_publication_denied());
+        expect(page.host.textContent).not.toContain(page.m.library_publication_unknown());
+        await page.settle(writes[1]!.work, complete(writes[1]!.input));
+        expect(page.host.textContent).toContain(page.m.library_publication_complete({ count: '0' }));
+        expect(page.checkboxes().at(-1)!.checked).toBe(false);
+        expect(reads).toHaveLength(0);
       });
-      // The replacement is usable while the old native operation is still outstanding.
-      await page.choose([]);
-      await page.click(page.m.library_publication_publish(), true);
-      expect(writes).toHaveLength(2);
-      await page.settle(old.work, outcome === 'complete' ? complete(old.input)
-        : outcome === 'denied' ? { ok: false, reason: 'denied' } : new Error('Old response failed'));
-      expect(page.host.querySelector('[aria-busy="true"]')).not.toBeNull();
-      expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
-      expect(page.host.textContent).not.toContain(page.m.library_publication_complete_one({ count: '1' }));
-      expect(page.host.textContent).not.toContain(page.m.library_publication_denied());
-      expect(page.host.textContent).not.toContain(page.m.library_publication_unknown());
-      await page.settle(writes[1]!.work, complete(writes[1]!.input));
-      expect(page.host.textContent).toContain(page.m.library_publication_complete({ count: '0' }));
-      expect(page.checkboxes().at(-1)!.checked).toBe(false);
-      expect(reads).toHaveLength(0);
-    });
   });
 }
 
 test('Retired reload success and failure cannot reset a replacement viewer or address selection', async () => {
-  for (const boundary of ['viewer', 'address'] as const) for (const fail of [false, true]) await mounted(async (page) => {
-    await page.show();
-    await page.settle(reads[0]!.work, page.ready());
-    await page.choose();
-    await page.click(page.m.library_collection_reload());
-    expect(reads).toHaveLength(2);
-    const oldReload = reads[1]!;
-    const oldSource = page.ready(99);
-    await page.show(boundary === 'viewer' ? viewer('replacement-viewer') : viewer(),
-      boundary === 'address' ? { id: 'replacement-collection' } : address);
-    expect(reads).toHaveLength(3);
-    await page.settle(reads[2]!.work, page.ready(9));
-    await page.choose();
-    await page.settle(oldReload.work, fail ? new Error('Old reload failed') : oldSource);
-    expect(page.checkboxes()[0]!.checked).toBe(true);
-    expect(page.checkboxes().at(-1)!.checked).toBe(true);
-    expect(page.button(page.m.library_publication_publish()).disabled).toBe(false);
-    await page.click(page.m.library_publication_publish(), true);
-    expect(writes).toHaveLength(1);
-    expect(writes[0]!.input.revision).toBe(9);
-    await page.settle(writes[0]!.work, complete(writes[0]!.input));
-  });
+  for (const boundary of ['viewer', 'address'] as const)
+    for (const fail of [false, true])
+      await mounted(async (page) => {
+        await page.show();
+        await page.settle(reads[0]!.work, page.ready());
+        await page.choose();
+        await page.click(page.m.library_collection_reload());
+        expect(reads).toHaveLength(2);
+        const oldReload = reads[1]!;
+        const oldSource = page.ready(99);
+        await page.show(
+          boundary === 'viewer' ? viewer('replacement-viewer') : viewer(),
+          boundary === 'address' ? { id: 'replacement-collection' } : address,
+        );
+        expect(reads).toHaveLength(3);
+        await page.settle(reads[2]!.work, page.ready(9));
+        await page.choose();
+        await page.settle(oldReload.work, fail ? new Error('Old reload failed') : oldSource);
+        expect(page.checkboxes()[0]!.checked).toBe(true);
+        expect(page.checkboxes().at(-1)!.checked).toBe(true);
+        expect(page.button(page.m.library_publication_publish()).disabled).toBe(false);
+        await page.click(page.m.library_publication_publish(), true);
+        expect(writes).toHaveLength(1);
+        expect(writes[0]!.input.revision).toBe(9);
+        await page.settle(writes[0]!.work, complete(writes[0]!.input));
+      });
 });
 
 test('Missing current authority and mismatched current source refuse starts; a fresh valid read enables a healthy retry', async () => {
@@ -355,14 +412,18 @@ test('Missing current authority and mismatched current source refuse starts; a f
     await page.show(viewer());
     for (const mismatch of ['subject', 'csrf', 'collection', 'cursor', 'source', 'unavailable'] as const) {
       const valid = page.ready();
-      const invalid: PublicationPage = mismatch === 'subject'
-        ? { ...valid, viewer: { ...valid.viewer!, subject: 'foreign-viewer' } }
-        : mismatch === 'csrf' ? { ...valid, viewer: { ...valid.viewer!, csrfToken: 'old-csrf' } }
-        : mismatch === 'collection' ? { ...valid, address: { id: 'foreign-collection' } }
-        : mismatch === 'cursor' ? { ...valid, address: { ...address, cursor: 'foreign-page' } }
-        : mismatch === 'source' && valid.source.state === 'ready'
-          ? { ...valid, source: { ...valid.source, page: { ...valid.source.page, id: 'foreign-source' } } }
-        : { ...valid, source: { state: 'unavailable' } };
+      const invalid: PublicationPage =
+        mismatch === 'subject'
+          ? { ...valid, viewer: { ...valid.viewer!, subject: 'foreign-viewer' } }
+          : mismatch === 'csrf'
+            ? { ...valid, viewer: { ...valid.viewer!, csrfToken: 'old-csrf' } }
+            : mismatch === 'collection'
+              ? { ...valid, address: { id: 'foreign-collection' } }
+              : mismatch === 'cursor'
+                ? { ...valid, address: { ...address, cursor: 'foreign-page' } }
+                : mismatch === 'source' && valid.source.state === 'ready'
+                  ? { ...valid, source: { ...valid.source, page: { ...valid.source.page, id: 'foreign-source' } } }
+                  : { ...valid, source: { state: 'unavailable' } };
       await page.settle(reads.at(-1)!.work, invalid);
       expect(page.checkboxes()).toHaveLength(0);
       expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
