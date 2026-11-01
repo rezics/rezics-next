@@ -174,7 +174,8 @@ and references, independently of today's thread references or vote.
 
 Vote routes require an authenticated account with `rating:vote` behind the `personal_library` gate. Vote reads are
 private to the authenticated account; the target and question identify a vote but never select its owner. Aggregate,
-population, question and source-statistics reads are public under subject and Realm read rules.
+population and source-statistics reads are public under subject and Realm read rules. Question point and directory
+reads use current Global `definitions:read`, including its native anonymous public floor and authenticated denials.
 
 - `PUT /v1/subjects/{id}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
   requires an `Idempotency-Key`. It returns `{ "units", "revision", "at" }` for the caller's current vote.
@@ -187,6 +188,27 @@ population, question and source-statistics reads are public under subject and Re
   `scale` contains integer `min`, `max` and `displayStep` values in stored units. The standard question therefore has
   a scale of `0` through `20` in steps of `1`; its display maps two stored units to one point on the `0` through `10`
   scale.
+- `GET /v1/rating-questions?limit=1..20&cursor=<opaque>` returns exactly
+  `{ ratingQuestions: RatingQuestion[], next: string | null }`, with default limit 20. Every entry uses the same
+  current stored-unit metadata as the point route. UUID identity ascending is the only ordering. The primary-key
+  seek consumes at most `limit` entries and probes one unconsumed lookahead; the signed continuation starts after
+  the last consumed key. Every page rechecks Global authority before reading question rows. Denial preserves the
+  point route's `404`; unavailable authority or data reads retain ordinary problem responses, never empty choices.
+  The cursor binds the directory operation, limit and native viewer/credential authority, with the existing
+  4,096-character cap and 15-minute expiry. Expired or mismatched tokens return `invalid_cursor`.
+  Unknown, repeated and invalid query fields are rejected. There are no text, grain or selected-id filters, totals,
+  votes or population statistics. Clients request each page explicitly.
+  Choices are metadata, not feed membership, candidate eligibility or Source readiness. The cursor retains only
+  a position and does not freeze question revisions or hydrate entries. Selected identity can be refreshed through
+  the unchanged point route; separate requests do not certify a shared snapshot. This installed directory adds no
+  feed predicate, Source, Home consumer or generated client declarations.
+
+  Operation Cost:
+  - **Touches:** one metadata page through `rating.question_pkey (id)`, plus the existing Global authority probes.
+  - **Bound:** one indexed seek, at most 21 examined question rows and 20 returned rows, independent of catalogue
+    size; B-tree descent grows logarithmically. No alternate catalogue or ownership-derived authority.
+  - **Growth check:** native growth execution is deferred. The mounted paging/authority regression in
+    `test/rating/public-reads.test.ts` is authored but unrun; workspace typing alone is not native or feed proof.
 - `GET /v1/subjects/{id}/figure` is public under `subject:read`, with `404` for an unknown or unreadable subject.
   It returns `200 { figure }` using the reusable OpenAPI `PublicFigure` component:
   `{ questionId, populationId, scale: { min, max, displayStep }, count, state, mean, score }`.

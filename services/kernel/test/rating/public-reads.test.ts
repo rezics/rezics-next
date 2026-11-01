@@ -28,6 +28,8 @@ const reader: AccountActor = {
 };
 let database: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
+let clockOffset = 0;
+let readerCredential: (clientId: string, scope: string) => Promise<string>;
 
 function request(method: string, path: string, as: Persona = 'anonymous', body?: unknown) {
   const key = randomUUID();
@@ -150,6 +152,15 @@ beforeAll(async () => {
   await bootstrapRelease(database.pool, bundledRelease);
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'rating-public-reads', alg: 'ES256' };
+  readerCredential = (clientId, scope) =>
+    new SignJWT({ client_id: clientId, scope, authn_epoch: 1, auth_time: Math.floor(Date.now() / 1000), amr: ['pwd'] })
+      .setProtectedHeader({ alg: 'ES256', kid: 'rating-public-reads', typ: 'at+jwt' })
+      .setIssuer('https://auth.example.test')
+      .setAudience('https://api.rezics.test')
+      .setSubject(accountIds.reader)
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(signing.privateKey);
   app = createKernel({
     pool: database.pool,
     writeRate: createWriteRateLimiter({
@@ -158,7 +169,7 @@ beforeAll(async () => {
     }),
     ratePeer: () => '127.0.0.1',
     routeKey,
-    clock: () => new Date(),
+    clock: () => new Date(Date.now() + clockOffset),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(24)]]) },
     access: (config) =>
       createAccess({
@@ -361,5 +372,133 @@ test('each vote route requires an account with rating:vote', async () => {
   for (const [method, path, body] of calls) {
     expect((await request(method, path, 'anonymous', body)).status).toBe(401);
     expect((await request(method, path, 'reader', body)).status).toBe(403);
+  }
+});
+
+test('The mounted rating-question directory returns bounded current native metadata with an authority-bound signed keyset and preserves exact point-read authority and identity', async () => {
+  const standard = {
+    id: standardQuestion,
+    revision: 1,
+    label: 'How much did you like this work?',
+    grain: 'work',
+    scale: { min: 0, max: 20, displayStep: 1 },
+  };
+  const grains = ['work', 'release', 'episode', 'character'] as const;
+  const questions = Array.from({ length: 24 }, (_, index) => ({
+    id: `fffe0000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`,
+    revision: index + 2,
+    // Reverse labels deliberately: ordering follows identity, never labels or grain.
+    label: `Question ${24 - index}`,
+    grain: grains[index % grains.length]!,
+    scale: { min: 2, max: 14, displayStep: 2 },
+  }));
+  const denial = randomUUID();
+  const directory = '/v1/rating-questions';
+  const pagePath = (cursor: string, limit = 20) => `${directory}?limit=${limit}&cursor=${encodeURIComponent(cursor)}`;
+  const credentialRead = (path: string, token: string) => app.handle(new Request(`http://kernel.test${path}`, {
+    headers: { authorization: `Bearer ${token}` },
+  }));
+  const problem = async (response: Response, status: number, code: string) => {
+    expect(response.headers.get('content-type')).toContain('application/problem+json');
+    expect(await json(response, status)).toMatchObject({ status, code, type: `https://rezics.com/problems/${code}` });
+  };
+  try {
+    for (const question of questions)
+      await database.admin.query(
+        `INSERT INTO rating.question (id, owner_id, revision, label, grain, minimum_units, maximum_units, step_units)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [question.id, accountIds.reader, question.revision, question.label, question.grain,
+          question.scale.min, question.scale.max, question.scale.displayStep],
+      );
+
+    const operation = openApiDocument(app).paths[directory]?.get;
+    expect(operation?.['x-action']).toBe('definitions:read');
+    expect(operation?.['x-exposure']).toBe('public');
+    expect(operation?.security).toEqual([{ bearerAuth: [] }, {}]);
+    expect(app.routes.filter((route) => route.path === directory && route.method === 'GET')).toHaveLength(1);
+
+    const expectedFirst = [standard, ...questions.slice(0, 19)];
+    const first = await json(await request('GET', directory));
+    expect(Object.keys(first).sort()).toEqual(['next', 'ratingQuestions']);
+    expect(first.ratingQuestions).toEqual(expectedFirst);
+    expect(typeof first.next).toBe('string');
+    expect(first.next.length).toBeLessThanOrEqual(4096);
+    for (const persona of ['reader', 'outsider'] as const) {
+      const page = await json(await request('GET', directory, persona));
+      expect(page.ratingQuestions).toEqual(expectedFirst);
+      expect(await json(await request('GET', `/v1/rating-questions/${questions[0]!.id}`, persona))).toEqual(questions[0]);
+    }
+    expect(await json(await request('GET', `/v1/rating-questions/${standardQuestion}`))).toEqual(standard);
+    await problem(await request('GET', `/v1/rating-questions/${newId(0)}`), 404, 'not_found');
+
+    const single = await json(await request('GET', `${directory}?limit=1`));
+    expect(single.ratingQuestions).toEqual([standard]);
+    const nextSingle = await json(await request('GET', pagePath(single.next, 1)));
+    expect(nextSingle.ratingQuestions).toEqual([questions[0]]);
+
+    // Metadata changes do not invalidate directory positions or freeze later revisions.
+    const changed = questions[20]!;
+    changed.revision += 1;
+    changed.label = 'Current revised episode question';
+    changed.grain = 'episode';
+    changed.scale = { min: 4, max: 28, displayStep: 4 };
+    await database.admin.query(
+      `UPDATE rating.question SET revision=$2, label=$3, grain=$4, minimum_units=$5, maximum_units=$6, step_units=$7 WHERE id=$1`,
+      [changed.id, changed.revision, changed.label, changed.grain,
+        changed.scale.min, changed.scale.max, changed.scale.displayStep],
+    );
+    const last = await json(await request('GET', pagePath(first.next)));
+    expect(last).toEqual({ ratingQuestions: questions.slice(19), next: null });
+    expect(await json(await request('GET', `/v1/rating-questions/${changed.id}`))).toEqual(changed);
+    expect(new Set([...first.ratingQuestions, ...last.ratingQuestions].map((row: { id: string }) => row.id)).size).toBe(25);
+
+    for (const query of [
+      'limit=0', 'limit=21', 'limit=-1', 'limit=1.5', 'limit=no', 'limit=',
+      'limit=1&limit=1', 'cursor=a&cursor=b', 'cursor=', `cursor=${'a'.repeat(4097)}`,
+      'query=Question', 'grain=work', `selectedId=${standardQuestion}`, 'total=true',
+    ]) await problem(await request('GET', `${directory}?${query}`), 400, 'invalid_request');
+    await problem(await request('GET', `${directory}?cursor=malformed`), 400, 'invalid_cursor');
+    const tampered = `${first.next.slice(0, -1)}${first.next.endsWith('a') ? 'b' : 'a'}`;
+    await problem(await request('GET', pagePath(tampered)), 400, 'invalid_cursor');
+    await problem(await request('GET', pagePath(first.next, 1)), 400, 'invalid_cursor');
+    await problem(await request('GET', pagePath(first.next), 'reader'), 400, 'invalid_cursor');
+    const readerPage = await json(await request('GET', directory, 'reader'));
+    await problem(await request('GET', pagePath(readerPage.next)), 400, 'invalid_cursor');
+    await problem(await request('GET', pagePath(readerPage.next), 'outsider'), 400, 'invalid_cursor');
+    for (const [client, scope] of [
+      ['rating-public-reads-other', 'subject:read realm:read'],
+      ['rating-public-reads', 'subject:read'],
+    ]) {
+      const token = await readerCredential(client!, scope!);
+      expect((await credentialRead(directory, token)).status).toBe(200);
+      await problem(await credentialRead(pagePath(readerPage.next), token), 400, 'invalid_cursor');
+    }
+
+    clockOffset = 16 * 60_000;
+    try {
+      await problem(await request('GET', pagePath(first.next)), 400, 'invalid_cursor');
+    } finally {
+      clockOffset = 0;
+    }
+
+    // The owner of every fixture question is still denied by current Global authority.
+    await database.admin.query(
+      `INSERT INTO access.resource_denial (route, resource_id, subject_id, action, reason, valid, transaction_id)
+       VALUES (0, $1, $2, 'definitions:read', 'resource', '(,)'::tstzrange, $3)`,
+      [GLOBAL_CONTEXT.id, accountIds.reader, denial],
+    );
+    await problem(await request('GET', directory, 'reader'), 404, 'not_found');
+    await problem(await request('GET', pagePath(readerPage.next), 'reader'), 404, 'not_found');
+    await problem(await request('GET', `/v1/rating-questions/${questions[0]!.id}`, 'reader'), 404, 'not_found');
+    expect((await request('GET', directory)).status).toBe(200);
+    await database.admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+    expect((await request('GET', pagePath(readerPage.next), 'reader')).status).toBe(200);
+
+    await database.admin.query('DELETE FROM rating.question WHERE id = ANY($1::uuid[])', [questions.slice(19).map((q) => q.id)]);
+    expect(await json(await request('GET', pagePath(first.next)))).toEqual({ ratingQuestions: [], next: null });
+  } finally {
+    clockOffset = 0;
+    await database.admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+    await database.admin.query('DELETE FROM rating.question WHERE id = ANY($1::uuid[])', [questions.map((q) => q.id)]);
   }
 });

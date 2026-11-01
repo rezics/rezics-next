@@ -35,6 +35,22 @@ export const RatingQuestionResponseSchema = t.Object(
   closed,
 );
 
+export const RatingQuestionDirectoryQuerySchema = t.Object(
+  {
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1, default: 20 })),
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  },
+  closed,
+);
+
+export const RatingQuestionDirectoryResponseSchema = t.Object(
+  {
+    ratingQuestions: t.Array(RatingQuestionResponseSchema, { maxItems: 20 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
+
 const RatingFreshnessSchema = t.Object(
   {
     asOf: t.Union([t.String({ format: 'date-time' }), t.Null()]),

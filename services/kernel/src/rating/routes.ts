@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -19,12 +20,15 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { LibraryNotFoundError } from '../library/command-support.ts';
 import questionRead from './question-read.sql';
+import { readRatingQuestionDirectory } from './question-directory.ts';
 import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
 import { createVoteCommands, RatingQuestionNotFoundError, VoteInvalidError, VOTE_SCOPE, type Vote } from './votes.ts';
 import { readAggregateFigure, readRatingPopulationPage, readRatingQuestion } from './aggregate-read.ts';
 import {
   RatingAggregateResponseSchema,
   RatingPopulationPageResponseSchema,
+  RatingQuestionDirectoryQuerySchema,
+  RatingQuestionDirectoryResponseSchema,
   RatingQuestionResponseSchema,
   RatingVoteInputSchema,
   RatingVoteResponseSchema,
@@ -323,6 +327,72 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         );
         if (!result || result.units === null) throw new ProblemError('not_found');
         return voteView(result);
+      },
+    )
+    .get(
+      '/v1/rating-questions',
+      {
+        query: RatingQuestionDirectoryQuerySchema,
+        transform: ({ request }) => {
+          const parameters = new URL(request.url).searchParams;
+          for (const name of parameters.keys())
+            if (!['limit', 'cursor'].includes(name) || parameters.getAll(name).length !== 1)
+              throw new ProblemError('invalid_request');
+        },
+        response: { 200: RatingQuestionDirectoryResponseSchema, ...aggregateFailures },
+        detail: publicReadDetail('rating.question_list', 'definitions:read'),
+      },
+      async ({ actor, query, authorize, admission, job }) => {
+        const check = await authorize({
+          route: 0,
+          id: GLOBAL_CONTEXT.id,
+          eligibility: globalReadEligibility('definitions:read'),
+        });
+        return admission.run('normal', job, async () => {
+          const limit = query.limit ?? 20;
+          // Bind every verified credential-authority field, with scopes treated as a set.
+          const authority =
+            actor.kind === 'anonymous' ? actor : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
+          const binding: CursorBinding = {
+            operation: 'rating.question-directory',
+            parameters: { limit, authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex') },
+          };
+          let after: string | null = null;
+          if (query.cursor !== undefined) {
+            const decoded = decodeCursor(
+              dependencies.tokens,
+              binding,
+              query.cursor,
+              (dependencies.clock?.() ?? new Date()).getTime(),
+            );
+            if (
+              !decoded.ok ||
+              decoded.epoch !== 1 ||
+              decoded.after.length !== 1 ||
+              typeof decoded.after[0] !== 'string' ||
+              !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(decoded.after[0])
+            )
+              throw new ProblemError('invalid_cursor');
+            after = decoded.after[0];
+          }
+          const page = await withConnection(dependencies.pool, async (client) => {
+            const bounded = deadlineClient(client, job.deadline);
+            if (!(await check(bounded))) throw new ProblemError('not_found');
+            return readRatingQuestionDirectory(bounded, { after, limit });
+          });
+          return {
+            ratingQuestions: page.ratingQuestions,
+            next:
+              page.hasMore && page.after !== null
+                ? encodeCursor(
+                    dependencies.tokens,
+                    binding,
+                    { epoch: 1, after: [page.after] },
+                    (dependencies.clock?.() ?? new Date()).getTime(),
+                  )
+                : null,
+          };
+        });
       },
     )
     .get(
