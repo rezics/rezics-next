@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverRow, type CoverDensity } from '@rezics/ui/cover-card';
@@ -146,7 +146,7 @@ export function useContinuePreparation(
   const attempts = useRef(0);
   useEffect(() => {
     attempts.current = 0;
-  }, [scope]);
+  }, [refresh, scope]);
   useEffect(() => {
     if (!result) return;
     const delay = continueRetryDelay(result, attempts.current);
@@ -165,21 +165,37 @@ export function useContinueRefresh(
   read: () => Promise<ContinueResult>,
   scope: string,
 ) {
-  const [snapshot, setSnapshot] = useState({ initial, scope, result: initial, busy: false });
-  const current = snapshot.initial === initial && snapshot.scope === scope;
+  const lifetime = useMemo(() => ({ active: false, latestRequest: 0 }), [initial, scope]);
+  useLayoutEffect(() => {
+    lifetime.active = true;
+    return () => {
+      lifetime.active = false;
+    };
+  }, [lifetime]);
+  const [snapshot, setSnapshot] = useState(() => ({ lifetime, result: initial, busy: false }));
+  const current = snapshot.lifetime === lifetime;
   const result = (current ? snapshot.result : initial) ?? { state: 'unknown' as const };
   const busy = current && snapshot.busy;
   const refresh = useCallback(async () => {
-    setSnapshot({ initial, scope, result: { state: 'unknown' }, busy: true });
+    // A timeout or callback retained by a replaced view must not start another native read.
+    if (!lifetime.active) return { state: 'unavailable' } as const;
+    const request = ++lifetime.latestRequest;
+    setSnapshot({ lifetime, result: { state: 'unknown' }, busy: true });
     let result: ContinueResult;
     try {
       result = await read();
     } catch {
       result = { state: 'unavailable' };
     }
-    setSnapshot({ initial, scope, result, busy: false });
+    if (lifetime.active && lifetime.latestRequest === request) {
+      setSnapshot((previous) =>
+        previous.lifetime === lifetime && lifetime.latestRequest === request
+          ? { lifetime, result, busy: false }
+          : previous,
+      );
+    }
     return result;
-  }, [initial, read, scope]);
+  }, [lifetime, read]);
   useContinuePreparation(result, refresh, scope);
   return { result, busy, refresh };
 }
