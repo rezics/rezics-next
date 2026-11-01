@@ -173,7 +173,8 @@ function ActualSessionPage() {
         <button
           type="button"
           onClick={() => {
-            const current = original.current;
+            const current = client.getQueryData(sessionQuery.queryKey);
+            if (!current || current.state !== 'signed-in') return;
             // Retained signed-in data is deliberately unchanged; error then success happen in one event.
             client
               .getQueryCache()

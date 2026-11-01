@@ -128,7 +128,14 @@ export function verificationRecoveryIO(
     withdraw: (accountId: string, input: { idempotencyKey: string }, token: string) =>
       withdrawVerificationAction({ data: { ...input, accountId }, headers: { 'X-CSRF-Token': token } }),
   },
+  isCurrent: () => boolean = owner.isCurrent,
 ): VerificationRecoveryIO {
+  const guard = async <T,>(dispatch: (token: string) => Promise<T>): Promise<T> => {
+    if (!isCurrent()) throw new Error('Settings viewer unavailable');
+    const result = await owner.guard(dispatch);
+    if (!isCurrent()) throw new Error('Settings viewer changed');
+    return result;
+  };
   const key = verificationQueryKey(owner.subject);
   // This subscription owns only the original query, and runs synchronously on retirement.
   const release = owner.subscribe(() => {
@@ -139,13 +146,13 @@ export function verificationRecoveryIO(
   });
   return {
     read: (accountId) =>
-      owner.guard(async () => {
+      guard(async () => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
         return client.fetchQuery({
           ...personalRead,
           queryKey: key,
           queryFn: () =>
-            owner.guard(async () => {
+            guard(async () => {
               const result = await transport.read(accountId);
               if (result.accountId !== owner.subject) throw new Error('Verification account changed');
               return result;
@@ -155,12 +162,12 @@ export function verificationRecoveryIO(
         });
       }),
     request: (accountId, input) =>
-      owner.guard((token) => {
+      guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
         return transport.request(accountId, input, token);
       }),
     withdraw: (accountId, input) =>
-      owner.guard((token) => {
+      guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
         return transport.withdraw(accountId, input, token);
       }),
@@ -170,8 +177,10 @@ export function verificationRecoveryIO(
 function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfToken: string | null }) {
   const queryClient = useQueryClient();
   const owner = useSettingsSessionOwner(csrfToken, accountId)!;
+  const isCurrent = useSettingsLiveness(owner.isCurrent);
   const [controller] = useState(
-    () => new VerificationRecovery(accountId, verificationRecoveryIO(owner, queryClient), owner.isCurrent),
+    () =>
+      new VerificationRecovery(accountId, verificationRecoveryIO(owner, queryClient, undefined, isCurrent), isCurrent),
   );
   const dispose = useCallback(() => controller.deactivate(), [controller]);
   useSettingsDisposal(dispose);

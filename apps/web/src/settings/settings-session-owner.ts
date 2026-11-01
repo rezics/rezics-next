@@ -1,5 +1,5 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, createContext, useContext, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { sessionQuery } from '../session/query';
 
 /** A credential belongs to one successful installed observation, never to retained query data alone. */
@@ -100,7 +100,22 @@ export function useSettingsSessionOwner(token: string | null, subject?: string |
 
 export function useSettingsCurrent(token: string | null, standalone = false) {
   const owner = useSettingsSessionOwner(token, undefined, standalone);
-  return owner?.isCurrent ?? (standalone ? standaloneCurrent : unavailable);
+  return useSettingsLiveness(owner?.isCurrent ?? (standalone ? standaloneCurrent : unavailable));
+}
+
+/** Close an individual editor immediately during cleanup, and permanently after a real unmount. */
+export function useSettingsLiveness(current: () => boolean) {
+  const [lifetime] = useState(() => ({ active: true, retired: false, current }));
+  useLayoutEffect(() => {
+    lifetime.active = true;
+    return () => {
+      lifetime.active = false;
+      queueMicrotask(() => {
+        if (!lifetime.active) lifetime.retired = true;
+      });
+    };
+  }, [lifetime]);
+  return useCallback(() => lifetime.active && !lifetime.retired && lifetime.current(), [lifetime]);
 }
 
 /** Dispose after real teardown, without cancelling an in-flight operation during StrictMode effect replay. */

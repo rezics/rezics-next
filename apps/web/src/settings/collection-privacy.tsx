@@ -73,7 +73,7 @@ export function CollectionRow({ collection, io }: { collection: OwnedCollection;
   const canSave = useOperation('collection.update');
   const canRead = useOperation('collection.get');
   const owner = useSettingsSessionOwner(csrfToken, undefined, !!io);
-  const isCurrent = owner?.isCurrent ?? (() => !!io);
+  const isCurrent = useSettingsLiveness(owner?.isCurrent ?? (() => !!io));
   const [editor] = useState(
     () => new CollectionPrivacyEditor(collection, io ?? collectionPrivacyIO(owner!), isCurrent),
   );
@@ -271,7 +271,7 @@ export function CollectionPrivacyView({
 }) {
   const { csrfToken } = useSession();
   const owner = useSettingsSessionOwner(csrfToken, undefined, !!io || read !== nativePageRead);
-  const isCurrent = owner?.isCurrent ?? (() => read !== nativePageRead);
+  const isCurrent = useSettingsLiveness(owner?.isCurrent ?? (() => read !== nativePageRead));
   const [pager] = useState(
     () => new CollectionPrivacyPager((cursor) => (owner ? owner.guard(() => read(cursor)) : read(cursor)), isCurrent),
   );
@@ -328,7 +328,7 @@ export function CollectionPrivacyView({
           <ListRestartContext.Provider value={pager}>
             <ul className="space-y-3">
               {state.collections.map((collection) => (
-                <CollectionRow key={collection.id} collection={collection} io={io} />
+                <CollectionRow key={collection.id} collection={collection} {...(io ? { io } : {})} />
               ))}
             </ul>
           </ListRestartContext.Provider>
