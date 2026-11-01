@@ -292,10 +292,7 @@ export function GameClassifications({
           ]);
         };
         return (
-          <section
-            key={property}
-            className="min-w-0 max-w-full space-y-4 rounded-xl border border-border bg-card p-4"
-          >
+          <section key={property} className="min-w-0 max-w-full space-y-4 rounded-xl border border-border bg-card p-4">
             <h3
               className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans font-semibold"
               lang={label.lang ?? undefined}
@@ -304,10 +301,7 @@ export function GameClassifications({
             </h3>
             {!selected.length && <p>{m.facts_no_value({}, o)}</p>}
             {selected.map((statement) => (
-              <div
-                key={statement.id}
-                className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]"
-              >
+              <div key={statement.id} className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]">
                 <PartValue part={statement} read={context} locale={locale} />
                 {statement.qualifiers.map((part, i) => (
                   <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
