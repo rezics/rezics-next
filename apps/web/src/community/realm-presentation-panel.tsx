@@ -31,7 +31,7 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
     }),
     [csrfToken],
   );
-  const caller = useRealmAppearanceCaller(realmId, adapter, { state, csrfToken, subject });
+  const caller = useRealmAppearanceCaller(realmId, adapter, { state, csrfToken, subject: subject ?? null });
   // Base subject namespace retained for compatibility: queryKey: ['realm-appearance', realmId, viewer]
   const queryKey = ['realm-appearance', realmId, viewer] as const;
   const { data, isError } = useQuery({

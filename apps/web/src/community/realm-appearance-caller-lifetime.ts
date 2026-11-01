@@ -284,7 +284,7 @@ export function useRealmAppearanceCaller(
       dataUpdateCount,
       dataUpdatedAt,
       subject: callerSession.subject ?? null,
-      csrfToken: callerSession.csrfToken,
+      csrfToken: callerSession.csrfToken ?? null,
       locale,
       ready,
       adapter,
