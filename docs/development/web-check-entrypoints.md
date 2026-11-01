@@ -104,6 +104,9 @@ No claim of runtime release, all-launcher closure, or whole-Goal completion foll
 The integrated producer CLI, prepared-input/return verification and physical host admission remain Performance/CP
 receiving obligations. The verifier's durable pre-spawn acquire/bind/release interface is not the existing post-spawn
 ProcessCustody helper; this slice neither invents that ABI nor changes its consumers.
+Direct `apps/web/scripts/isolated.ts` and shared `stack-run.ts` receiving remain Performance-owned: their historical
+fallback is not repaired by changing Web's package wrapper. This slice guards the Web package route and its own
+check/browser workers, and makes no claim that a direct invocation of that other owner's isolated script is closed.
 
 Direct test launchers still need sequential receiving work under Web ownership. Package placement protects a test
 started through these packages, but a raw `bun test <file>` can reach a direct launcher without visiting a package
