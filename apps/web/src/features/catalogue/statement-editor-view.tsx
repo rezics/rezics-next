@@ -44,6 +44,27 @@ export type StatementFieldsRead = ScalarRead & {
 };
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 
+// Caller sizing keeps native controls usable on phones and coarse pointers, with dense fine-pointer desktops.
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+// NativeSelect's className belongs to its wrapper; the target is the select itself.
+const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
+const linkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center underline underline-offset-4 md:pointer-fine:min-h-8';
+// Scope the composed review/recovery controls here without changing the other review callers.
+const reviewControlsClassName = [
+  'min-w-0 space-y-4',
+  '[&_[data-slot=button]]:h-auto [&_[data-slot=button]]:min-h-11 [&_[data-slot=button]]:min-w-11',
+  '[&_[data-slot=button]]:max-w-full [&_[data-slot=button]]:whitespace-normal [&_[data-slot=button]]:py-2',
+  'md:pointer-fine:[&_[data-slot=button]]:min-h-8 md:pointer-fine:[&_[data-slot=button]]:py-1',
+  '[&_[data-slot=native-select-wrapper]]:w-full [&_[data-slot=native-select-wrapper]]:min-w-0',
+  '[&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8 [&_label]:min-w-0 [&_label]:flex-wrap',
+  '[&_[role=status]_a]:inline-flex [&_[role=status]_a]:min-h-11 [&_[role=status]_a]:min-w-11',
+  '[&_[role=status]_a]:max-w-full [&_[role=status]_a]:items-center md:pointer-fine:[&_[role=status]_a]:min-h-8',
+].join(' ');
+
 export { ScalarControl };
 
 export function EditorFailure({ reason, locale }: { reason: string; locale: string }) {
@@ -124,9 +145,12 @@ function ScalarControl({
     update: (value: string) => void,
     type = 'text',
   ) => (
-    <Field>
-      <FieldLabel htmlFor={id(key)}>{label}</FieldLabel>
+    <Field className="min-w-0">
+      <FieldLabel className={labelClassName} htmlFor={id(key)}>
+        {label}
+      </FieldLabel>
       <Input
+        className={inputClassName}
         {...(key === 'year' || key === 'month' || key === 'day' ? { id: id(key), ...invalid('date') } : control(key))}
         aria-label={label}
         type={type}
@@ -173,11 +197,14 @@ function ScalarControl({
       aria-label={m.correction_value({}, o)}
       tabIndex={-1}
       {...invalid('value')}
-      className="space-y-3"
+      className="min-w-0 space-y-3"
     >
-      <Field>
-        <FieldLabel htmlFor={id('state')}>{m.correction_value_state({}, o)}</FieldLabel>
+      <Field className="min-w-0">
+        <FieldLabel className={labelClassName} htmlFor={id('state')}>
+          {m.correction_value_state({}, o)}
+        </FieldLabel>
         <NativeSelect
+          className={selectClassName}
           {...control('state')}
           aria-label={m.correction_value_state({}, o)}
           value={part.value.type}
@@ -210,9 +237,12 @@ function ScalarControl({
               typeof record.amount === 'string' ? record.amount : '',
               (value) => patch('amount', value),
             )}
-            <Field>
-              <FieldLabel htmlFor={id('unit')}>{m.correction_unit({}, o)}</FieldLabel>
+            <Field className="min-w-0">
+              <FieldLabel className={labelClassName} htmlFor={id('unit')}>
+                {m.correction_unit({}, o)}
+              </FieldLabel>
               <NativeSelect
+                className={selectClassName}
                 {...control('unit')}
                 aria-label={m.correction_unit({}, o)}
                 value={typeof record.unit === 'string' ? record.unit : ''}
@@ -260,9 +290,12 @@ function ScalarControl({
             <p id={id('date-label')} className="font-medium">
               {m.correction_date({}, o)}
             </p>
-            <Field>
-              <FieldLabel htmlFor={id('precision')}>{m.correction_precision({}, o)}</FieldLabel>
+            <Field className="min-w-0">
+              <FieldLabel className={labelClassName} htmlFor={id('precision')}>
+                {m.correction_precision({}, o)}
+              </FieldLabel>
               <NativeSelect
+                className={selectClassName}
                 id={id('precision')}
                 {...invalid('date')}
                 aria-label={m.correction_precision({}, o)}
@@ -353,7 +386,7 @@ function PartEditor({
   onChange: (value: SnakInput['value']) => void;
 }) {
   return (
-    <div className="space-y-2 rounded-lg border border-border p-3">
+    <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
       <p className="font-medium">
         {pageText(read.release.properties[part.property.id]?.labels, locale).text ||
           m.subject_value_unlabelled({}, { locale: locale as never })}
@@ -397,9 +430,14 @@ function AddPart({
   if (!choices.length) return null;
   return (
     <div className="flex flex-wrap items-end gap-3">
-      <Field className="min-w-0 flex-1">
-        <FieldLabel>{label}</FieldLabel>
-        <NativeSelect aria-label={label} value={property} onChange={(event) => setProperty(event.target.value)}>
+      <Field className="min-w-0 flex-1 basis-full sm:basis-48">
+        <FieldLabel className={labelClassName}>{label}</FieldLabel>
+        <NativeSelect
+          className={selectClassName}
+          aria-label={label}
+          value={property}
+          onChange={(event) => setProperty(event.target.value)}
+        >
           <NativeSelectOption value="">{m.correction_choose({}, { locale: locale as never })}</NativeSelectOption>
           {choices.map(({ id, name }) => (
             <NativeSelectOption key={id} value={id}>
@@ -409,6 +447,7 @@ function AddPart({
         </NativeSelect>
       </Field>
       <Button
+        className={actionClassName}
         type="button"
         variant="outline"
         disabled={!property}
@@ -451,7 +490,7 @@ export function StatementFields({
   const scalarFeedback = (address: string) => (feedback ? { ...feedback, address } : undefined);
   return (
     <>
-      <section {...section('fact')} className="space-y-3 rounded-xl border border-border bg-card p-4">
+      <section {...section('fact')} className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
         <Heading className="font-semibold">{m.correction_replacement({}, o)}</Heading>
         <DefinitionGuideLink
           locale={locale}
@@ -516,7 +555,7 @@ export function StatementFields({
         <Heading className="font-semibold">{m.correction_references({}, o)}</Heading>
         <p className="text-sm text-muted-foreground">{m.correction_citation_hint({}, o)}</p>
         {draft.references.map((reference, index) => (
-          <fieldset key={index} className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <fieldset key={index} className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
             <legend className="px-1 text-sm font-medium">
               {m.correction_references({}, o)} {index + 1}
             </legend>
@@ -560,6 +599,7 @@ export function StatementFields({
           </fieldset>
         ))}
         <Button
+          className={actionClassName}
           type="button"
           variant="outline"
           disabled={draft.references.length >= 16}
@@ -680,12 +720,12 @@ export function StatementEditor({
     }
   }
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6" aria-busy={busy}>
+    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6" aria-busy={busy}>
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{m.correction_title({}, o)}</h1>
         {subject && (
           <p>
-            <a className="underline underline-offset-4" href={href}>
+            <a className={linkClassName} href={href}>
               {label || m.subject_value_unlabelled({}, o)}
             </a>
             <span className="ms-2 text-muted-foreground">
@@ -706,7 +746,7 @@ export function StatementEditor({
               {feedback.errors.map((error) => (
                 <li key={error.id} id={error.id}>
                   <a
-                    className="font-medium underline underline-offset-4"
+                    className={`${linkClassName} font-medium`}
                     href={`#${error.target}`}
                     onClick={(event) => {
                       event.preventDefault();
@@ -726,18 +766,20 @@ export function StatementEditor({
       )}
       {busy && <p role="status">{m.correction_saving({}, o)}</p>}
       {result ? (
-        <section className="space-y-4">
+        <section className={reviewControlsClassName}>
           {!cleared && <p role="status">{m.correction_proposed({}, o)}</p>}
-          {!cleared && (
-            <Button type="button" onClick={() => setReviewing(true)}>
-              {m.correction_review({}, o)}
-            </Button>
-          )}
-          {submitted?.href && (
-            <a className={`${buttonVariants({ variant: 'outline' })} ms-2`} href={submitted.href}>
-              {m.candidate_view_public({}, o)}
-            </a>
-          )}
+          <div className="flex flex-wrap gap-3">
+            {!cleared && (
+              <Button className={actionClassName} type="button" onClick={() => setReviewing(true)}>
+                {m.correction_review({}, o)}
+              </Button>
+            )}
+            {submitted?.href && (
+              <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={submitted.href}>
+                {m.candidate_view_public({}, o)}
+              </a>
+            )}
+          </div>
           {lifecycle && submitted && (
             <ContributionLifecycle
               address={submitted.address}
@@ -769,14 +811,14 @@ export function StatementEditor({
           id={`${feedbackId}-fields`}
           tabIndex={-1}
           aria-label={m.correction_title({}, o)}
-          className="space-y-6"
+          className="min-w-0 space-y-6"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
           {current.source && (
-            <section className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+            <section className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/30 p-4">
               <h2 className="font-semibold">
                 {m.candidate_current({}, o)} · {pageText(definition?.labels, locale).text}
               </h2>
@@ -802,7 +844,7 @@ export function StatementEditor({
               ))}
             </section>
           )}
-          <fieldset disabled={busy || !!pending.current} className="space-y-6">
+          <fieldset disabled={busy || !!pending.current} className="min-w-0 space-y-6">
             <StatementFields
               draft={draft}
               current={current}
@@ -813,16 +855,22 @@ export function StatementEditor({
             />
           </fieldset>
           <div className="flex flex-wrap gap-3">
-            <Button type="submit" disabled={busy}>
+            <Button className={actionClassName} type="submit" disabled={busy}>
               {pending.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
             </Button>
             {!pending.current && (
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
+              <Button
+                className={actionClassName}
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void reload()}
+              >
                 {m.correction_reload({}, o)}
               </Button>
             )}
             {href && (
-              <a className={buttonVariants({ variant: 'ghost' })} href={`${href}/details`}>
+              <a className={buttonVariants({ variant: 'ghost', className: actionClassName })} href={`${href}/details`}>
                 {m.correction_back({}, o)}
               </a>
             )}
@@ -832,11 +880,17 @@ export function StatementEditor({
         <div className="space-y-3">
           <p>{m.correction_empty({}, o)}</p>
           {href && (
-            <a className="underline" href={`${href}/details`}>
+            <a className={linkClassName} href={`${href}/details`}>
               {m.correction_back({}, o)}
             </a>
           )}
-          <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
+          <Button
+            className={actionClassName}
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void reload()}
+          >
             {m.correction_reload({}, o)}
           </Button>
         </div>
