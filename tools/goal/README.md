@@ -1038,8 +1038,11 @@ session while keeping its manager history and budget. An already-running provide
 that handoff; the host does not edit a live process environment. A resident supermanager remains an external session
 and is never launched or resumed by host recovery. Codex managers use a goal budget. Claude uses its configured
 executable and configuration directory, interactive window and turn-accounting hooks.
-Codex manager recovery and turn-race rejoins forward the manager's configured effort and `compactTokens` through
-`thread/resume.config`, as thread creation does. Forwarding the threshold does not prove that compaction occurred.
+Every Codex manager `turn/start` pins `gpt-6.1-sol` and the manager's configured effort, including the opening,
+idle inbox wakes, and renewed continuation threads. The app-server `turn/steer` request accepts input and an
+`expectedTurnId`, but no model or effort override, so steering keeps the active turn's pinned settings. Recovery and
+turn-race rejoins pass the same model plus the manager's effort and `compactTokens` through `thread/resume`. Forwarding
+the threshold does not prove that compaction occurred.
 
 The host listens before it resumes persisted managers, and recovers managers independently so one provider request
 cannot prevent another manager from using the socket. Commands from a recorded manager session store a deduplicated
