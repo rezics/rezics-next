@@ -64,8 +64,10 @@ export function ZoneEditorRoute({
   }, [admitted, capture, invalidationKey, lifetime, readMatchesRoute, requestedCurrent, router]);
 
   if (!capture || !admitted) {
-    const refusedRead =
-      capture && requestedCurrent && initial.resource.kind === 'failure' && !initial.ownerObservation;
+    const refusedFailure =
+      capture && requestedCurrent && initial.resource.kind === 'failure' && !initial.ownerObservation
+        ? initial.resource
+        : undefined;
     return (
       <section className="space-y-3" aria-label={m.zone_editor_heading()}>
         {sessionState === 'signed-out' ? (
@@ -78,8 +80,8 @@ export function ZoneEditorRoute({
               {m.zones_owner_sign_in({}, { locale: locale as never })}
             </a>
           </>
-        ) : refusedRead ? (
-          <EditorFailure failure={initial.resource} />
+        ) : refusedFailure ? (
+          <EditorFailure failure={refusedFailure} />
         ) : (
           <EditorLoading />
         )}
