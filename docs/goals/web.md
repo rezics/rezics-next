@@ -28,8 +28,9 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 Includes `apps/web` and `apps/auth`, shared UI/document components, BFF/media transport, product routes, library
 pages and SEO. Follow [public scope](../scope.md), [subject pages](../subject-pages.md) and [SEO](../seo.md).
-Do not turn deferred feeds, recommendations or personal saved queries into implicit requirements. Backend contracts
-stay with their product owners; preparation and privacy changes must remain visible in the interface.
+The adopted mixed Home journey below is in scope; personalized recommendations and personal saved queries remain
+deferred. Backend contracts stay with their product owners; preparation and privacy changes must remain visible
+in the interface.
 
 ## Ownership
 
@@ -121,6 +122,55 @@ The shared patterns are `Patterns/Navigation/Contributions` (public leaf, privat
 locale/path) and `Patterns/Subjects/Purchase entry slot` (empty, populated, private pending). They use the delivered
 components and recorded public subject composition; the owner-region fixture makes no business claim. These
 patterns and source integration do not establish native journey acceptance or full page/visual review.
+
+## Mixed Home delivery
+
+Home is one bounded mixed stream of public discovery, Following and Continue, with one renderer. Kind, Space and
+rating-question Context select candidates conjunctively on the same primary item; they do not create separate
+sections. [Home and Following feeds](../feeds.md) owns the wire, producer semantics, disclosure, lifecycle and
+candidate/frontier bounds. Native kind selection is delivered. Space and question Context are adopted requirements
+whose native dependencies remain undelivered; neither is an installed Home capability. Preserve kind and actual
+Space delivery independently of Context.
+
+Question Context means one exact native rating-question identity. A Subject qualifies through at least one live,
+currently readable review of that exact Subject, whose currently readable opening revision has an immutable citation
+of the selected question. A review thread requires its own current opening citation and a readable reviewed Subject;
+a post or reply requires that qualifying review thread and its own current disclosure. Catalogue Agents use Subject
+membership. Native Accounts, Collections and ordinary discussions have no membership in this version. A Subject's
+Space witness and question-review witness may be different threads; selection does not assert that its cited review
+was posted in the selected Space. Private votes, aggregates, question grain/applicability, Realm populations and
+editorial Contexts are not substitutes for these witnesses. The adopted future request-only `ratingQuestion.id`
+shape is not an installed API, stored-reference predicate, permission or rating threshold. Detailed producer
+admission belongs to the feed owner, rather than a Web-derived membership rule.
+
+Before a dependent consumer promises completion, preflight the complete positive DEFAULT call graph, including:
+
+- The actual retained native Source, all three default public-filter readers and privacy reduction, current candidate
+  coverage, current eligibility and lifecycle/refusal behavior, including carried Realm and Zone authority. A factory,
+  point read, declared dependency or safe unavailable response alone does not establish positive membership.
+- The installed native request literal and current feed/review-witness/question-choice admission, preserving native
+  candidate and examined-frontier bounds rather than filtering a downloaded page in the browser.
+- Bounded real choices under current definitions authority: `definitions:read` before question enumeration, current
+  metadata and signed choice keysets. A downloaded-first-page directory or selectable placeholder supplies no choice
+  or membership capability.
+- Cursor binding to the exact selection, revision and current viewer/credential authority, plus real default
+  composition and generated client wiring through the existing Home consumer. An injected adapter or helper alone
+  does not complete that path.
+
+Search owns the retained Source, scoped Search and Space journey; Content owns feed admission, current review
+witnesses and question-choice admission. Web owns the sole existing Home consumer and its launch-locale, phone and
+keyboard states. Adapt that consumer only to actual installed owner contracts; do not duplicate the Source, feed
+producer, directory or renderer. Preserve private no-store reads, honest preparation/unavailable states, usable
+independent ready sources and current disclosure. A selection change resets cursors and retires old rows and stale
+request generations; late responses cannot restore a previous selection or viewer's content. Missing authority must
+remain fail closed rather than becoming known empty, an all-candidate fallback or fake browser filtering.
+
+The [integrated quality review](../research/terra-period-quality-review.md) supports retaining useful mixed-feed work,
+safe refusals and corrected UI, including edition admission, optional naming, qualified credits, phone controls and
+typography. It is limited source evidence, not a causal model benchmark. Adopted meaning, installed source,
+integration, authored regression, native proof, visual review and public delivery are separate facts. This owning
+document establishes neither native/browser proof nor the contents of a current deployment; the Goal's original
+acceptance and promoted-source obligations remain intact.
 
 ## Dependencies
 
