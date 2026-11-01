@@ -1,0 +1,405 @@
+import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, createElement, Fragment, StrictMode, type ReactNode } from 'react';
+import * as start from '../.storybook/react-start';
+
+type SessionResult = {
+  state: 'signed-in' | 'signed-out' | 'unavailable';
+  subject?: string | null;
+  csrfToken: string | null;
+};
+type Session = SessionResult | { state: 'unknown'; subject?: string | null; csrfToken: null };
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+
+let sessionReader: () => Promise<SessionResult> = async () => ({ state: 'unavailable', csrfToken: null, subject: null });
+let sessionReads = 0;
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/session/state', () => ({
+  readSessionState: async () => {
+    sessionReads += 1;
+    return sessionReader();
+  },
+}));
+
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://site.test/en/settings', width: 1280, height: 900 });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLFormElement: window.HTMLFormElement,
+  Element: window.Element,
+  Node: window.Node,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(
+  [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+
+const { createRoot, hydrateRoot } = await import('react-dom/client');
+const { renderToString } = await import('react-dom/server');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { sessionQuery, useSession, AnonymousSessionContext, sessionCsrfToken } = await import('../src/session/query');
+const { uploadAvatar } = await import('../src/threads/upload');
+
+function SessionProbe({ name }: { name: string }) {
+  const session = useSession();
+  return <output data-session={name}>{JSON.stringify(session)}</output>;
+}
+
+function viewer(subject = 'reader-one', csrfToken = 'csrf-one'): SessionResult {
+  return { state: 'signed-in', subject, csrfToken };
+}
+
+async function captureUploadToken(): Promise<string | null> {
+  let sent: Headers | undefined;
+  const previousFetch = Object.getOwnPropertyDescriptor(globalThis, 'fetch');
+  const fakeFetch: typeof fetch = async (_input, init) => {
+    sent = new Headers(init?.headers);
+    return new Response(null, { status: 503 });
+  };
+  Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fakeFetch });
+  try {
+    await uploadAvatar(
+      'account-one',
+      new Blob([new Uint8Array([1])], { type: 'image/png' }) as File,
+      new AbortController().signal,
+    );
+  } catch {
+    // The fake reservation refusal ends the real uploader at its first HTTP dispatch.
+  } finally {
+    if (previousFetch) Object.defineProperty(globalThis, 'fetch', previousFetch);
+    else Reflect.deleteProperty(globalThis, 'fetch');
+  }
+  return sent?.get('X-CSRF-Token') ?? null;
+}
+
+async function forceSessionError(client: InstanceType<typeof QueryClient>): Promise<void> {
+  await client
+    .fetchQuery({
+      ...sessionQuery,
+      queryFn: async () => {
+        throw new Error('session read failed');
+      },
+      staleTime: 0,
+    })
+    .catch(() => undefined);
+}
+
+async function createUi() {
+  const host = window.document.createElement('div') as unknown as HTMLElement;
+  window.document.body.append(host as unknown as Node);
+  let root: ReturnType<typeof createRoot> | undefined;
+  const clients = new Set<InstanceType<typeof QueryClient>>();
+  const client = () => {
+    const next = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    clients.add(next);
+    return next;
+  };
+  const tree = (queryClient: InstanceType<typeof QueryClient>, children: ReactNode, strict = false) => {
+    const provider = createElement(QueryClientProvider, { client: queryClient }, children);
+    return strict ? createElement(StrictMode, null, provider) : provider;
+  };
+  const render = async (queryClient: InstanceType<typeof QueryClient>, children: ReactNode, strict = false) =>
+    act(async () => {
+      root ??= createRoot(host);
+      root.render(tree(queryClient, children, strict));
+      await Promise.resolve();
+    });
+  const hydrate = async (queryClient: InstanceType<typeof QueryClient>, children: ReactNode) =>
+    act(async () => {
+      root = hydrateRoot(host, tree(queryClient, children));
+      await Promise.resolve();
+    });
+  const flush = async () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await Promise.resolve();
+    });
+  const session = (name: string) => {
+    const node = host.querySelector(`[data-session="${name}"]`);
+    expect(node).toBeDefined();
+    return JSON.parse(node!.textContent || '{}') as Session;
+  };
+  const close = async () => {
+    const mounted = root;
+    root = undefined;
+    if (mounted) await act(async () => mounted.unmount());
+    for (const queryClient of clients) queryClient.clear();
+    host.remove();
+  };
+  return { host, client, render, hydrate, flush, session, close };
+}
+
+async function withUi(run: (ui: Awaited<ReturnType<typeof createUi>>) => Promise<void>) {
+  const ui = await createUi();
+  try {
+    await run(ui);
+  } finally {
+    await ui.close();
+  }
+}
+
+test('session hydration stays private on the server and guard-seeded data becomes current only after browser hydration', async () => {
+  await withUi(async (ui) => {
+    const client = ui.client();
+    sessionReads = 0;
+    sessionReader = async () => viewer();
+    const { requireSignedIn } = await import('../src/session/guard');
+    await requireSignedIn({ context: { queryClient: client }, location: { publicHref: '/en/settings' } });
+    expect(sessionReads).toBe(1);
+    const content = createElement(SessionProbe, { name: 'main' });
+    const serverTree = createElement(QueryClientProvider, { client }, content);
+
+    const markup = renderToString(serverTree);
+    expect(markup).toContain('"state":"unknown"');
+    expect(sessionCsrfToken()).toBeNull();
+
+    ui.host.innerHTML = markup;
+    await ui.hydrate(client, content);
+    await ui.flush();
+
+    expect(ui.session('main')).toEqual(viewer());
+    expect(await captureUploadToken()).toBe('csrf-one');
+  });
+});
+
+test('failed retained data, recovery, transitions, malformed observations, and removal govern the real upload dispatch token', async () => {
+  await withUi(async (ui) => {
+    const client = ui.client();
+    client.setQueryData(sessionQuery.queryKey, viewer());
+    await ui.render(client, createElement(SessionProbe, { name: 'main' }));
+    expect(await captureUploadToken()).toBe('csrf-one');
+
+    await forceSessionError(client);
+    await ui.flush();
+    expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
+    expect(client.getQueryData(sessionQuery.queryKey)).toEqual(viewer());
+    expect(ui.session('main').state).toBe('unknown');
+    expect(await captureUploadToken()).toBe('');
+
+    const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+    expect(query).toBeDefined();
+    await act(async () => {
+      query!.setState({ status: 'error', error: new Error('synchronous failure') });
+      expect(sessionCsrfToken()).toBeNull();
+      client.setQueryData(sessionQuery.queryKey, viewer('reader-one', 'csrf-recovered'));
+      expect(sessionCsrfToken()).toBe('csrf-recovered');
+    });
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-one', 'csrf-recovered'));
+    expect(await captureUploadToken()).toBe('csrf-recovered');
+
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-two', 'csrf-two'));
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-two', 'csrf-two'));
+    expect(await captureUploadToken()).toBe('csrf-two');
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-two', 'csrf-refreshed'));
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-two', 'csrf-refreshed'));
+    expect(await captureUploadToken()).toBe('csrf-refreshed');
+
+    for (const invalid of [
+      { state: 'signed-out', subject: 'ignored', csrfToken: 'must-not-lend' },
+      { state: 'unavailable', subject: 'ignored', csrfToken: 'must-not-lend' },
+      { state: 'signed-in', subject: null, csrfToken: 'missing-subject' },
+      { state: 'signed-in', subject: 'reader-two', csrfToken: null },
+      { state: 'signed-in', subject: ' ', csrfToken: 'blank-subject' },
+      { state: 'signed-in', subject: 'reader-two', csrfToken: ' ' },
+    ]) {
+      client.setQueryData(sessionQuery.queryKey, invalid);
+      await ui.flush();
+      expect(await captureUploadToken()).toBe('');
+      expect(ui.session('main').state).not.toBe('signed-in');
+    }
+    expect(ui.session('main').state).toBe('unavailable');
+
+    client.setQueryData(sessionQuery.queryKey, viewer());
+    expect(await captureUploadToken()).toBe('csrf-one');
+    client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+    expect(sessionCsrfToken()).toBeNull();
+    await ui.flush();
+    expect(ui.session('main').state).toBe('unknown');
+    expect(await captureUploadToken()).toBe('');
+
+    client.setQueryData(sessionQuery.queryKey, viewer());
+    expect(await captureUploadToken()).toBe('csrf-one');
+    client.clear();
+    expect(sessionCsrfToken()).toBeNull();
+    await ui.flush();
+    expect(ui.session('main').state).toBe('unknown');
+    expect(await captureUploadToken()).toBe('');
+  });
+});
+
+test('one shared client read and bounded cache subscription serve multiple consumers and release on unmount', async () => {
+  await withUi(async (ui) => {
+    sessionReads = 0;
+    sessionReader = async () => viewer();
+    const client = ui.client();
+    const cache = client.getQueryCache();
+    const originalSubscribe = cache.subscribe.bind(cache);
+    let subscriptions = 0;
+    let unsubscriptions = 0;
+    cache.subscribe = (listener) => {
+      subscriptions += 1;
+      const unsubscribe = originalSubscribe(listener);
+      return () => {
+        unsubscriptions += 1;
+        unsubscribe();
+      };
+    };
+
+    await ui.render(
+      client,
+      createElement(Fragment, null, createElement(SessionProbe, { name: 'first' }), createElement(SessionProbe, { name: 'second' })),
+    );
+    await ui.flush();
+
+    expect(sessionReads).toBe(1);
+    expect(subscriptions).toBe(1);
+    expect(ui.session('first')).toEqual(viewer());
+    expect(ui.session('second')).toEqual(viewer());
+    expect(await captureUploadToken()).toBe('csrf-one');
+
+    await ui.close();
+    expect(unsubscriptions).toBe(1);
+  });
+});
+
+test('replacement clients, delayed old results, abandoned renders, and anonymous nested hosts cannot displace the current owner', async () => {
+  await withUi(async (ui) => {
+    const oldClient = ui.client();
+    const currentClient = ui.client();
+    oldClient.setQueryData(sessionQuery.queryKey, viewer('old-reader', 'old-csrf'));
+    const oldResult = deferred<SessionResult>();
+
+    await ui.render(oldClient, createElement(SessionProbe, { name: 'main' }));
+    expect(await captureUploadToken()).toBe('old-csrf');
+    const lateOldQuery = oldClient
+      .fetchQuery({ ...sessionQuery, queryFn: () => oldResult.promise, staleTime: 0 })
+      .catch(() => undefined);
+
+    const currentResult = deferred<SessionResult>();
+    sessionReader = () => currentResult.promise;
+    await ui.render(currentClient, createElement(SessionProbe, { name: 'main' }));
+    expect(sessionCsrfToken()).toBeNull();
+    expect(ui.session('main').state).toBe('unknown');
+
+    currentResult.resolve(viewer('current-reader', 'current-csrf'));
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('current-reader', 'current-csrf'));
+    expect(await captureUploadToken()).toBe('current-csrf');
+
+    const abandonedClient = ui.client();
+    abandonedClient.setQueryData(sessionQuery.queryKey, viewer('abandoned', 'abandoned-csrf'));
+    const abandoned = createElement(
+      QueryClientProvider,
+      { client: abandonedClient },
+      createElement(SessionProbe, { name: 'abandoned' }),
+    );
+    expect(renderToString(abandoned)).toContain('"state":"unknown"');
+    expect(sessionCsrfToken()).toBe('current-csrf');
+
+    oldResult.resolve(viewer('late-old-reader', 'late-old-csrf'));
+    await act(async () => {
+      await lateOldQuery;
+    });
+    expect(oldClient.getQueryData(sessionQuery.queryKey)).toEqual(viewer('late-old-reader', 'late-old-csrf'));
+    expect(await captureUploadToken()).toBe('current-csrf');
+
+    const anonymousClient = ui.client();
+    sessionReader = async () => viewer('anonymous-private-reader', 'anonymous-private-csrf');
+    const nested = createElement(
+      Fragment,
+      null,
+      createElement(SessionProbe, { name: 'curator' }),
+      createElement(
+        QueryClientProvider,
+        { client: anonymousClient },
+        createElement(
+          AnonymousSessionContext.Provider,
+          { value: true },
+          createElement(SessionProbe, { name: 'anonymous' }),
+        ),
+      ),
+    );
+    await ui.render(currentClient, nested);
+    await ui.flush();
+
+    expect(anonymousClient.getQueryData(sessionQuery.queryKey)).toEqual(
+      viewer('anonymous-private-reader', 'anonymous-private-csrf'),
+    );
+    expect(ui.session('anonymous').state).toBe('signed-out');
+    expect(ui.session('curator')).toEqual(viewer('current-reader', 'current-csrf'));
+    expect(await captureUploadToken()).toBe('current-csrf');
+
+    await forceSessionError(anonymousClient);
+    expect(anonymousClient.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
+    expect(ui.session('anonymous').state).toBe('signed-out');
+    expect(await captureUploadToken()).toBe('current-csrf');
+  });
+});
+
+test('StrictMode setup and cleanup preserve the mounted owner and release its cache listener on final unmount', async () => {
+  await withUi(async (ui) => {
+    sessionReads = 0;
+    sessionReader = async () => viewer();
+    const client = ui.client();
+    const cache = client.getQueryCache();
+    const originalSubscribe = cache.subscribe.bind(cache);
+    let subscriptions = 0;
+    let unsubscriptions = 0;
+    cache.subscribe = (listener) => {
+      subscriptions += 1;
+      const unsubscribe = originalSubscribe(listener);
+      return () => {
+        unsubscriptions += 1;
+        unsubscribe();
+      };
+    };
+
+    await ui.render(client, createElement(SessionProbe, { name: 'strict' }), true);
+    await ui.flush();
+    expect(sessionReads).toBe(1);
+    expect(ui.session('strict')).toEqual(viewer());
+    expect(await captureUploadToken()).toBe('csrf-one');
+    expect(subscriptions).toBe(2);
+    expect(unsubscriptions).toBe(1);
+
+    await ui.close();
+    expect(unsubscriptions).toBe(2);
+    expect(sessionCsrfToken()).toBeNull();
+  });
+});
+
+afterAll(async () => {
+  await window.happyDOM.close();
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  mock.restore();
+});

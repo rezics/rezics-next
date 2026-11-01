@@ -1,11 +1,21 @@
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { queryOptions, useQueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn, createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { useSyncExternalStore } from 'react';
-import { createContext, useContext } from 'react';
+import { useCallback, useContext, useSyncExternalStore } from 'react';
 import { personalRead } from '../kernel/query';
 import type { SessionEnv } from './client';
+import {
+  normalizeSessionObservation,
+  ownedSessionCsrfToken,
+  sessionQueryKey,
+  sessionStateSnapshot,
+  signedOutSession,
+  subscribeBrowserSession,
+  unknownSession,
+} from './browser-state';
 import { readSessionState, type SessionState } from './state';
+
+type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null; subject?: string | null };
 
 const readSession = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
@@ -14,21 +24,15 @@ const readSession = createServerFn({ method: 'GET' }).handler(async () => {
   return { state, csrfToken, subject: subject ?? null };
 });
 
-// Imperative transports (including image uploads) share the browser query's token.
-// This value is never populated during a server render.
-let browserCsrfToken: string | null = null;
+// Imperative transports read the current browser client's successful session observation.
 export function sessionCsrfToken(): string | null {
-  return typeof window === 'undefined' ? null : browserCsrfToken;
+  return typeof window === 'undefined' ? null : ownedSessionCsrfToken();
 }
 
 export const sessionQuery = queryOptions({
   ...personalRead,
-  queryKey: ['session'],
-  queryFn: async () => {
-    const session = await readSession();
-    if (typeof window !== 'undefined') browserCsrfToken = session.csrfToken;
-    return session;
-  },
+  queryKey: sessionQueryKey,
+  queryFn: () => readSession(),
   // Document sign-in/out starts a fresh client that reads the new session state.
   staleTime: Infinity,
   gcTime: Infinity,
@@ -62,25 +66,25 @@ export const exposureQuery = queryOptions({
   refetchOnReconnect: false,
 });
 
-const subscribe = () => () => {};
-type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null; subject?: string | null };
-
 /** Read-only registry hosts use an isolated client seeded with an anonymous session. */
 export const AnonymousSessionContext = createContext(false);
 
 function useBrowserSession(): ClientSession {
   const anonymous = useContext(AnonymousSessionContext);
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
+  const client = useQueryClient();
+  const read = useCallback(() => client.ensureQueryData(sessionQuery), [client]);
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      subscribeBrowserSession(client, listener, personalRead.enabled ? read : undefined, !anonymous),
+    [anonymous, client, read],
   );
-  const { data } = useQuery({ ...sessionQuery, enabled: personalRead.enabled && hydrated });
-  // An isolated anonymous host must not clear the surrounding curator's imperative CSRF token.
-  if (anonymous) return { state: 'signed-out', csrfToken: null, subject: null };
-  // A guard can seed the server cache, so hydration also initializes imperative transports.
-  if (hydrated && data) browserCsrfToken = data.csrfToken;
-  return hydrated && data ? data : { state: 'unknown', csrfToken: null };
+  const getSnapshot = useCallback(() => (anonymous ? undefined : sessionStateSnapshot(client)), [anonymous, client]);
+  const queryState = useSyncExternalStore(subscribe, getSnapshot, () => undefined);
+
+  // Anonymous preview clients still perform their isolated session read, but cannot own or lend it.
+  if (anonymous) return signedOutSession;
+  if (!queryState || queryState.status !== 'success') return unknownSession;
+  return normalizeSessionObservation(queryState.data);
 }
 
 export const useSession = createIsomorphicFn()

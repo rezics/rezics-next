@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { redirect } from '@tanstack/react-router';
+import { normalizeSessionObservation } from './browser-state';
 import { sessionQuery } from './query';
 
 type GuardContext = {
@@ -36,7 +37,17 @@ export function isSignedInPath(pathname: string): boolean {
 
 /** Run before a personal page's loader, sharing the shell's session cache. */
 export async function requireSignedIn({ context, location }: GuardContext): Promise<void> {
-  const session = await context.queryClient.ensureQueryData(sessionQuery);
+  try {
+    await context.queryClient.ensureQueryData(sessionQuery);
+  } catch {
+    throw new Error('Session unavailable');
+  }
+
+  // ensureQueryData intentionally returns retained data after a failed fetch. Only the
+  // successful current cache observation may authorize a personal route loader.
+  const queryState = context.queryClient.getQueryState(sessionQuery.queryKey);
+  if (!queryState || queryState.status !== 'success') throw new Error('Session unavailable');
+  const session = normalizeSessionObservation(queryState.data);
   if (session.state === 'unavailable') throw new Error('Session unavailable');
   if (session.state === 'signed-out') {
     const url = new URL(location.publicHref, 'https://site.invalid');
