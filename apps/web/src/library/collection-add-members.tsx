@@ -2,23 +2,43 @@ import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useOperation } from '../kernel/exposure';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
+import { useSession } from '../session/query';
 import { searchContentSubjects } from '../threads/content-subject-search';
-import { csrfHeaders } from '../threads/composer';
 import { addCollectionMember } from './collection-edit';
 
-/** Each explicit add creates an occurrence, including when the subject is already a member. */
-export function CollectionAddMembers({
-  collectionId,
-  onAdded,
-  onClose,
-}: {
+type CollectionAddMembersProps = {
   collectionId: string;
   onAdded: () => Promise<void>;
   onClose: () => void;
-}) {
+};
+
+/** Each explicit add creates an occurrence, including when the subject is already a member. */
+export function CollectionAddMembers(props: CollectionAddMembersProps) {
+  const { state, subject, csrfToken } = useSession();
+  const admitted = useOperation('collection_member.create');
+  if (state !== 'signed-in' || !subject || !csrfToken || !admitted || !props.collectionId) return null;
+  // Losing admission unmounts the draft; returning to the same viewer starts a new lifetime.
+  // An ordinary refresh or nonempty CSRF rotation preserves the captured intent.
+  return (
+    <CollectionAddMembersForm key={JSON.stringify([subject, props.collectionId])} {...props} csrfToken={csrfToken} />
+  );
+}
+
+type AddReceipt = {
+  data: { collectionId: string; subjectId: string; note: string | null; idempotencyKey: string };
+  accepted: boolean;
+};
+
+function CollectionAddMembersForm({
+  collectionId,
+  onAdded,
+  onClose,
+  csrfToken,
+}: CollectionAddMembersProps & { csrfToken: string }) {
   const noteId = useId();
   const [selected, setSelected] = useState<EntityPickerSubject[]>([]);
   const [note, setNote] = useState('');
@@ -26,23 +46,35 @@ export function CollectionAddMembers({
   const [accepted, setAccepted] = useState(false);
   const [failure, setFailure] = useState('');
   const locked = useRef(false);
-  const receipt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const receipt = useRef<AddReceipt | null>(null);
+  const lifetime = useRef({ active: false });
+  useLayoutEffect(() => {
+    const current = { active: true };
+    lifetime.current = current;
+    return () => {
+      // A dispatched write can still commit; only its UI completion is retired.
+      current.active = false;
+    };
+  }, []);
 
   async function add(event: FormEvent) {
     event.preventDefault();
-    if (locked.current || !selected[0]) return;
+    const current = lifetime.current;
+    if (!current.active || locked.current || !selected[0]) return;
     locked.current = true;
     setPending(true);
     setFailure('');
     try {
-      if (!accepted) {
-        const data = { collectionId, subjectId: selected[0].id, note: note || null };
-        const fingerprint = JSON.stringify(data);
-        if (receipt.current?.fingerprint !== fingerprint) receipt.current = { fingerprint, key: crypto.randomUUID() };
+      const captured = (receipt.current ??= {
+        data: { collectionId, subjectId: selected[0].id, note: note || null, idempotencyKey: crypto.randomUUID() },
+        accepted: false,
+      });
+      if (!captured.accepted) {
         const result = await addCollectionMember({
-          data: { ...data, idempotencyKey: receipt.current.key },
-          headers: csrfHeaders(),
+          data: captured.data,
+          headers: { 'X-CSRF-Token': csrfToken },
         });
+        if (!current.active) return;
         if (!result.ok) {
           setFailure(
             result.reason === 'full'
@@ -53,15 +85,19 @@ export function CollectionAddMembers({
           );
           return;
         }
+        captured.accepted = true;
         setAccepted(true);
       }
       await onAdded();
+      if (!current.active) return;
       onClose();
     } catch {
-      setFailure(m.error_message());
+      if (current.active) setFailure(m.error_message());
     } finally {
-      locked.current = false;
-      setPending(false);
+      if (current.active) {
+        locked.current = false;
+        setPending(false);
+      }
     }
   }
 
@@ -77,7 +113,11 @@ export function CollectionAddMembers({
         search={searchContentSubjects}
         src={coverSrc}
         value={selected}
-        onValueChange={setSelected}
+        onValueChange={(value) => {
+          if (locked.current || receipt.current?.accepted) return;
+          receipt.current = null;
+          setSelected(value);
+        }}
         disabled={pending || accepted}
       />
       {selected.length ? (
@@ -90,7 +130,11 @@ export function CollectionAddMembers({
               value={note}
               maxLength={20_000}
               disabled={pending || accepted}
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => {
+                if (locked.current || receipt.current?.accepted) return;
+                receipt.current = null;
+                setNote(event.target.value);
+              }}
             />
           </Field>
         </details>
