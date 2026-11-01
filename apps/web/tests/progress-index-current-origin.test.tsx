@@ -456,6 +456,20 @@ test('late A read, choice, native outcome and finally cannot mutate or unlock us
       expect(h.host.querySelector('[role="alert"]')).toBeNull();
       await tick(() => dChoice.work.resolve(profile));
       expect(h.host.querySelector('form')).not.toBeNull();
+      const staleFinish = await h.prepare(kind === 'abandon' ? 'abandon' : 'complete');
+      const stable = h.indexQuery().state.data as CurrentViewerProgressIndex;
+      const changed = structuredClone(stable);
+      changed.page.sessions[0]!.revision++;
+      const count = writes.length;
+      await tick(() => {
+        h.client.setQueryData(h.indexQuery().queryKey, changed);
+        h.client.setQueryData(h.indexQuery().queryKey, stable);
+        staleFinish(); // A native row ABA must retire even before a row render.
+      });
+      expect(writes).toHaveLength(count);
+      expect(h.host.querySelector('form')).not.toBeNull(); // Independent creation draft survives.
+      const freshFinish = await h.start(kind === 'abandon' ? 'abandon' : 'complete');
+      expect(freshFinish.data).toMatchObject({ sessionId: id(20), revision: 7 });
     } finally {
       await h.close();
     }

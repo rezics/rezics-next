@@ -2,6 +2,7 @@ import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { operationIsAdmitted, type GatedOperation } from '../kernel/exposure';
 import type { useSession } from '../session/query';
+import type { ProgressIndex } from './progress-reads';
 
 type Session = ReturnType<typeof useSession>;
 type Operation = Extract<GatedOperation, `progress_session.${string}`>;
@@ -32,7 +33,28 @@ export type ProgressAuthority = {
   isCurrent: () => boolean;
   permits: (operation: Operation, rendered: boolean) => boolean;
   headers: () => { 'x-csrf-token': string } | null;
+  rowCurrent: (row: ProgressIndex['sessions'][number]) => boolean;
 };
+
+/** Stored native context, independently of current summary labels and covers. */
+export function progressRowContext(row: ProgressIndex['sessions'][number]) {
+  return JSON.stringify([
+    row.id,
+    row.subjectId,
+    row.versionSubjectId,
+    row.revision,
+    row.mode,
+    row.unit,
+    row.total,
+    row.amount,
+    row.locator,
+    row.position,
+    row.completedUnitCount,
+    row.state,
+    row.startedAt,
+    row.completedAt,
+  ]);
+}
 
 export type ProgressEpisode = {
   identity: unknown;
@@ -42,11 +64,12 @@ export type ProgressEpisode = {
   revoked: boolean;
   mounted: boolean;
   validate: () => boolean;
+  admissionLost: () => boolean;
   isCurrent: () => boolean;
 };
 
 /** Cache events retire monotonically, including away/back events before React commits. */
-export function useProgressEpisode(identity: unknown, validate: () => boolean) {
+export function useProgressEpisode(identity: unknown, validate: () => boolean, admissionLost = () => !validate()) {
   const client = useContext(QueryClientContext);
   const latest = useRef<ProgressEpisode | null>(null);
   const [, render] = useState(0);
@@ -58,13 +81,15 @@ export function useProgressEpisode(identity: unknown, validate: () => boolean) {
       generation: (previous?.generation ?? 0) + 1,
       pending: false,
       retired: !validate(),
-      revoked: !validate(),
+      revoked: admissionLost(),
       mounted: previous?.mounted ?? false,
       validate,
+      admissionLost,
       isCurrent: () => {
         if (latest.current !== episode || episode.retired || !episode.mounted) return false;
         if (!episode.validate()) {
-          episode.retired = episode.revoked = true;
+          episode.retired = true;
+          episode.revoked ||= episode.admissionLost();
           render((value) => value + 1);
           return false;
         }
@@ -75,14 +100,19 @@ export function useProgressEpisode(identity: unknown, validate: () => boolean) {
   }
   const episode = latest.current;
   episode.validate = validate;
-  if (!validate()) episode.retired = episode.revoked = true;
+  episode.admissionLost = admissionLost;
+  if (!validate()) {
+    episode.retired = true;
+    episode.revoked ||= admissionLost();
+  }
   useLayoutEffect(() => {
     // Strict effects can reattach a mounted operand, but never unretire it.
     latest.current!.mounted = true;
     const observe = () => {
       const current = latest.current!;
       if (!current.retired && !current.validate()) {
-        current.retired = current.revoked = true;
+        current.retired = true;
+        current.revoked ||= current.admissionLost();
         render((value) => value + 1);
       }
     };
@@ -102,8 +132,14 @@ export function useProgressAction(
   operation: Operation,
   admitted: boolean,
   context: unknown,
+  contextCurrent: () => boolean = () => true,
 ) {
   const allowed = authority ? authority.permits(operation, admitted) : true;
   const identity = useMemo(() => ({ parent: authority?.key, context, allowed }), [authority?.key, context, allowed]);
-  return useProgressEpisode(identity, () => (authority ? authority.permits(operation, admitted) : true));
+  const permits = () => (authority ? authority.permits(operation, admitted) : true);
+  return useProgressEpisode(
+    identity,
+    () => permits() && contextCurrent(),
+    () => !permits(),
+  );
 }

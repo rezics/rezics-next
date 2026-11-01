@@ -55,11 +55,13 @@ export function ProgressPicker({
   onValueChange,
   label = m.library_progress_subject(),
   isCurrent = publicChoice,
+  disabled,
 }: {
   value: readonly ProgressPickerSubject[];
   onValueChange: (value: ProgressPickerSubject[]) => void;
   label?: string;
   isCurrent?: () => boolean;
+  disabled?: boolean;
 }) {
   const guardedSearch = useCallback(
     (text: string, signal: AbortSignal) => search(text, signal, isCurrent),
@@ -68,6 +70,7 @@ export function ProgressPicker({
   return (
     <EntityPicker
       label={label}
+      disabled={disabled}
       search={guardedSearch}
       src={coverSrc}
       value={value}

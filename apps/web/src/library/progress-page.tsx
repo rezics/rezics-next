@@ -19,6 +19,7 @@ import { personalRead } from '../kernel/query';
 import {
   progressIndexAdmission,
   progressIndexSession,
+  progressRowContext,
   useProgressAction,
   useProgressEpisode,
   type ProgressAuthority,
@@ -162,16 +163,21 @@ export function CurrentViewerProgressIndexPage({
   const result = hydrated ? latest.current.result : loader;
   // A cache delivery can replace provenance before React commits its notification.
   // Retire the page operand without automatically replaying the bounded list read.
+  const currentResult = () => {
+    const state = client.getQueryState<CurrentViewerProgressIndex>(queryKey);
+    return state?.data !== query.data ? state?.data : result;
+  };
   const source = useProgressEpisode(origin, () => {
     const state = client.getQueryState<CurrentViewerProgressIndex>(queryKey);
-    const delivered = state?.data !== query.data ? state?.data : result;
-    return !origin.retired && origin.validate() && state?.status !== 'error' && matches(delivered);
+    return !origin.retired && origin.validate() && state?.status !== 'error' && matches(currentResult());
   });
   const authority: ProgressAuthority = {
     key: source,
     isCurrent: () => origin.isCurrent() && source.isCurrent(),
     permits: (operation, rendered) =>
       !source.retired && source.validate() && hydrated && progressIndexAdmission(client, operation, rendered),
+    rowCurrent: (row) =>
+      currentResult()?.page.sessions.some((actual) => progressRowContext(actual) === progressRowContext(row)) ?? false,
     headers: () => {
       if (!origin.isCurrent() || !source.isCurrent() || !hydrated) return null;
       const now = progressIndexSession(client, renderedSession);
@@ -351,6 +357,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
               <ProgressPicker
                 key={episode.generation}
                 isCurrent={draftCurrent}
+                disabled={pending}
                 value={chosen}
                 onValueChange={async (value) => {
                   if (!draftCurrent() || episode.pending) return;
@@ -402,6 +409,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                   <ProgressPicker
                     key={episode.generation}
                     isCurrent={draftCurrent}
+                    disabled={pending}
                     label={m.library_progress_version()}
                     value={version}
                     onValueChange={(value) => {
@@ -429,6 +437,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                   <FieldLegend variant="label">{m.library_current_choices()}</FieldLegend>
                   <RadioGroup
                     name="progress-mode"
+                    disabled={pending}
                     value={mode}
                     onValueChange={(value) => {
                       changeDraft(() => setMode(value as ProgressMode));
@@ -451,6 +460,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                     <NativeSelect
                       id="progress-unit"
                       name="unit"
+                      disabled={pending}
                       value={unit}
                       onChange={(event) => {
                         const value = event.currentTarget.value;
@@ -470,6 +480,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                       <Input
                         id="progress-total"
                         name="total"
+                        disabled={pending}
                         type="number"
                         min={pair?.min}
                         max={pair?.max}
@@ -531,8 +542,20 @@ function SessionRow({
   admission.current = { completable, abandonable };
   // Only a meaningful fresh row invalidates a completion within an observed viewer lifetime.
   const identity = authority ? JSON.stringify(initial) : sourcePage;
-  const complete = useProgressAction(authority, 'progress_session.complete', completable, identity);
-  const abandon = useProgressAction(authority, 'progress_session.abandon', abandonable, identity);
+  const complete = useProgressAction(
+    authority,
+    'progress_session.complete',
+    completable,
+    identity,
+    () => authority?.rowCurrent(initial) !== false,
+  );
+  const abandon = useProgressAction(
+    authority,
+    'progress_session.abandon',
+    abandonable,
+    identity,
+    () => authority?.rowCurrent(initial) !== false,
+  );
   const row = useProgressEpisode(identity, () => true);
   const current = (action?: 'complete' | 'abandon') =>
     row.isCurrent() &&
