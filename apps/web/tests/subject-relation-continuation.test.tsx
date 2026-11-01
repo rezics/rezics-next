@@ -118,21 +118,28 @@ test('Make independent Subject relation continuation usable with keyboard and as
     await more.focus();
     await page.keyboard.press('Enter');
     await first.getByRole('link', { name: 'Side story added', exact: true }).waitFor();
-    await page.waitForFunction(() => document.querySelector('#side-stories-status')?.textContent?.includes('New visible items in Side stories: 1'));
+    await page.waitForFunction(() =>
+      document.querySelector('#side-stories-status')?.textContent?.includes('New visible items in Side stories: 1'),
+    );
     expect(await more.evaluate((element) => element === document.activeElement)).toBe(true);
     expect(await first.getByRole('link', { name: 'Side story added', exact: true }).count()).toBe(1);
-    expect(await first.getByRole('status').textContent()).toBe('New visible items in Side stories: 1. You can load more.');
+    expect(await first.getByRole('status').textContent()).toBe(
+      'New visible items in Side stories: 1. You can load more.',
+    );
     expect(await first.getByRole('status').getAttribute('aria-live')).toBe('polite');
     expect(await first.getByRole('status').textContent()).not.toContain('Side story added');
     expect(await first.textContent()).not.toContain('Withheld title');
     expect(await other.getByRole('status').textContent()).toBe('');
-    expect(await page.evaluate(() => (window as typeof window & { continuationReads?: unknown[] }).continuationReads))
-      .toEqual([{ node: 'side-stories', cursor: 'accessible-next' }]);
+    expect(
+      await page.evaluate(() => (window as typeof window & { continuationReads?: unknown[] }).continuationReads),
+    ).toEqual([{ node: 'side-stories', cursor: 'accessible-next' }]);
 
     // A successful empty page reports zero and stays continuable, independently of the populated stream.
     await otherMore.focus();
     await page.keyboard.press('Enter');
-    await page.waitForFunction(() => document.querySelector('#adaptations-status')?.textContent?.includes('New visible items in Adaptations: 0'));
+    await page.waitForFunction(() =>
+      document.querySelector('#adaptations-status')?.textContent?.includes('New visible items in Adaptations: 0'),
+    );
     expect(await otherMore.evaluate((element) => element === document.activeElement)).toBe(true);
     expect(await more.getAttribute('href')).toContain('cursor=accessible-end');
 
@@ -149,18 +156,21 @@ test('Make independent Subject relation continuation usable with keyboard and as
     await page.keyboard.press('Enter');
     const end = first.locator('[data-slot="relation-stream-end"]');
     await end.waitFor();
-    expect(await first.getByRole('status').textContent()).toBe('New visible items in Side stories: 0. End of this list.');
+    expect(await first.getByRole('status').textContent()).toBe(
+      'New visible items in Side stories: 0. End of this list.',
+    );
     expect(await more.count()).toBe(0);
     expect(await end.evaluate((element) => element === document.activeElement)).toBe(true);
     expect(await first.getByRole('link', { name: 'Side story added', exact: true }).count()).toBe(1);
 
-    expect(await page.evaluate(() => (window as typeof window & { continuationReads?: unknown[] }).continuationReads))
-      .toEqual([
-        { node: 'side-stories', cursor: 'accessible-next' },
-        { node: 'adaptations', cursor: 'accessible-next' },
-        { node: 'adaptations', cursor: 'accessible-end' },
-        { node: 'side-stories', cursor: 'accessible-end' },
-      ]);
+    expect(
+      await page.evaluate(() => (window as typeof window & { continuationReads?: unknown[] }).continuationReads),
+    ).toEqual([
+      { node: 'side-stories', cursor: 'accessible-next' },
+      { node: 'adaptations', cursor: 'accessible-next' },
+      { node: 'adaptations', cursor: 'accessible-end' },
+      { node: 'side-stories', cursor: 'accessible-end' },
+    ]);
 
     // Retire a pending section through ordinary route navigation, then focus a different, fresh stream.
     await page.goto(url);
@@ -169,14 +179,22 @@ test('Make independent Subject relation continuation usable with keyboard and as
     await more.focus();
     await page.keyboard.press('Enter');
     await held(page);
-    await page.locator('[data-slot="view-tabs"]').getByRole('link', { name: /^Overview/ }).click();
+    await page
+      .locator('[data-slot="view-tabs"]')
+      .getByRole('link', { name: /^Overview/ })
+      .click();
     await page.waitForFunction(() => !document.querySelector('[data-slot="relation-stream"]'));
-    await page.locator('[data-slot="view-tabs"]').getByRole('link', { name: /^Relations/ }).click();
+    await page
+      .locator('[data-slot="view-tabs"]')
+      .getByRole('link', { name: /^Relations/ })
+      .click();
     await otherMore.waitFor();
     await otherMore.focus();
     await release(page);
     // Wait for React's queued completion to settle without triggering another read.
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
     expect(await first.getByRole('status').textContent()).toBe('');
     expect(await first.getByRole('link', { name: 'Side story added', exact: true }).count()).toBe(0);
     expect(await otherMore.evaluate((element) => element === document.activeElement)).toBe(true);
