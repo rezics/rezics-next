@@ -12,7 +12,7 @@ import { CalendarDays } from 'lucide-react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
@@ -210,19 +210,27 @@ export function CopyForm({
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const deleteStarted = useRef<number | null>(null);
-  const deleting = useRef(false);
+  const active = useRef(true);
+  const busy = useRef(false);
   const title = copy ? m.library_copy_edit() : m.library_copy_add();
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
-  useEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
       lookup.current += 1;
-    },
-    [],
-  );
+    };
+  }, []);
+  function close() {
+    active.current = false;
+    lookup.current += 1;
+    onClose();
+  }
 
   async function chooseEdition(subject: EntityPickerSubject | null) {
+    if (!active.current || busy.current) return;
     const current = ++lookup.current;
     binding.current = null;
     setEdition(subject);
@@ -233,7 +241,7 @@ export function CopyForm({
     if (!subject) return;
     try {
       const result = await readCopySubject({ data: subject.id });
-      if (current !== lookup.current) return;
+      if (!active.current || current !== lookup.current) return;
       // A point read for a different subject cannot certify this selected edition.
       if (result.state === 'ready' && result.subject.id !== subject.id) {
         setEditionProfile({ state: 'unavailable' });
@@ -247,16 +255,17 @@ export function CopyForm({
         change('status', first?.statuses[0]?.id ?? '');
       }
     } catch {
-      if (current === lookup.current) setEditionProfile({ state: 'unavailable' });
+      if (active.current && current === lookup.current) setEditionProfile({ state: 'unavailable' });
     }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !editable) return;
+    if (!active.current || busy.current || !editable) return;
     const editionBinding = binding.current;
     if (!copy && !subjectId && (!edition || editionBinding?.subject.id !== edition.id)) return;
     if (!copy && !selected?.statuses.some((status) => status.id === draft.status)) return;
+    busy.current = true;
     setPending(true);
     setFailure(null);
     try {
@@ -277,6 +286,7 @@ export function CopyForm({
           data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey, ...status, ...fields },
           headers: csrfHeaders(),
         });
+        if (!active.current) return;
         if (!result.ok) {
           setFailure(
             result.reason === 'conflict'
@@ -318,6 +328,7 @@ export function CopyForm({
           },
           headers: csrfHeaders(),
         });
+        if (!active.current) return;
         if (!result.ok) {
           setFailure(
             result.reason === 'conflict'
@@ -349,17 +360,20 @@ export function CopyForm({
         });
         onKey(crypto.randomUUID());
       }
-      onClose();
+      close();
     } catch {
-      setFailure(m.library_copy_failure());
+      if (active.current) setFailure(m.library_copy_failure());
     } finally {
-      setPending(false);
+      if (active.current) {
+        busy.current = false;
+        setPending(false);
+      }
     }
   }
 
   async function remove() {
-    if (!copy || !editable || pending || deleting.current) return;
-    deleting.current = true;
+    if (!active.current || !copy || !editable || busy.current) return;
+    busy.current = true;
     setPending(true);
     setFailure(null);
     try {
@@ -368,26 +382,31 @@ export function CopyForm({
         data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey },
         headers: csrfHeaders(),
       });
+      if (!active.current) return;
       if (!result.ok) {
         setFailure(result.reason === 'conflict' ? m.library_copy_conflict() : m.library_copy_failure());
         setConfirming(false);
         return;
       }
       onRemoved(copy.id, result, deleteStarted.current + 30_000);
-      onClose();
+      close();
     } catch {
-      setFailure(m.library_copy_failure());
-      setConfirming(false);
+      if (active.current) {
+        setFailure(m.library_copy_failure());
+        setConfirming(false);
+      }
     } finally {
-      deleting.current = false;
-      setPending(false);
+      if (active.current) {
+        busy.current = false;
+        setPending(false);
+      }
     }
   }
 
   const content: ReactNode = !readable ? (
     <div className="space-y-4">
       <p role="alert">{m.library_copy_detail_forbidden()}</p>
-      <button type="button" className={quiet} onClick={onClose}>
+      <button type="button" className={quiet} onClick={close}>
         {m.library_copy_cancel()}
       </button>
     </div>
@@ -563,7 +582,7 @@ export function CopyForm({
             {m.library_copy_delete()}
           </button>
         ) : null}
-        <button type="button" className={quiet} onClick={onClose}>
+        <button type="button" className={quiet} onClick={close}>
           {m.library_copy_cancel()}
         </button>
       </div>
@@ -574,11 +593,11 @@ export function CopyForm({
   return (
     <Exposure operation={copy ? 'copy.update' : 'copy.create'}>
       {mobile ? (
-        <BottomSheet open onOpenChange={(open) => !open && onClose()} title={title}>
+        <BottomSheet open onOpenChange={(open) => !open && close()} title={title}>
           {content}
         </BottomSheet>
       ) : (
-        <Dialog open onOpenChange={(open) => !open && onClose()}>
+        <Dialog open onOpenChange={(open) => !open && close()}>
           <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
@@ -694,18 +713,39 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
 }
 
 export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: string | undefined }) {
+  const [loaded, setLoaded] = useState({ page, generation: 0 });
+  // Reset the whole page lifetime before rendering replacement loader data, including editors and Undo.
+  if (loaded.page !== page) setLoaded({ page, generation: loaded.generation + 1 });
+  return <LoadedCopiesPage key={loaded.generation} page={page} failure={failure} />;
+}
+
+function LoadedCopiesPage({ page, failure }: { page: CopiesPageData; failure?: string | undefined }) {
   const [copies, setCopies] = useState(page.copies);
   const [addKey, setAddKey] = useState(page.addKey);
   const [removed, setRemoved] = useState<{ copy: CopyItem; result: CopyRemoved; deadline: number } | null>(null);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
   const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden'>('ready');
   const inspection = useRef(0);
+  const active = useRef(true);
+  const latestRemoval = useRef(removed);
+  const [editorKey, setEditorKey] = useState(0);
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      inspection.current += 1;
+    };
+  }, []);
+  const currentEditor = () => active.current && editorKey === inspection.current;
   const closeEditor = () => {
+    if (!currentEditor()) return;
     inspection.current += 1;
     setEditing(undefined);
   };
   async function inspect(copy: CopyItem) {
+    if (!active.current) return;
     const current = ++inspection.current;
+    setEditorKey(current);
     setEditing({
       ...copy,
       kindLabel: undefined,
@@ -718,7 +758,7 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
     setDetailState('loading');
     try {
       const result = await readCopyDetail({ data: { id: copy.id } });
-      if (current !== inspection.current) return;
+      if (!active.current || current !== inspection.current) return;
       if (result.ok) {
         setEditing(result.copy);
         setDetailState('ready');
@@ -744,15 +784,9 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
         }
       }
     } catch {
-      if (current === inspection.current) setDetailState('unavailable');
+      if (active.current && current === inspection.current) setDetailState('unavailable');
     }
   }
-  useEffect(() => {
-    setCopies(page.copies);
-    setAddKey(page.addKey);
-    inspection.current += 1;
-    setEditing(undefined);
-  }, [page]);
   const filteredLabel = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
   const filteredTitle = filteredLabel ? displayLibraryTitle(filteredLabel, locale()).text : undefined;
   return (
@@ -764,7 +798,7 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
             type="button"
             className={button}
             onClick={() => {
-              inspection.current += 1;
+              setEditorKey(++inspection.current);
               setDetailState('ready');
               setEditing(null);
             }}
@@ -837,24 +871,28 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
           operation="copy.update"
           failure={m.library_copy_failure()}
           restore={async (idempotencyKey) => {
-            if (!removed.result.undo) return false;
+            if (!active.current || latestRemoval.current !== removed || !removed.result.undo) return false;
             const result = await undoCopy({
               data: { id: removed.copy.id, ...removed.result.undo, idempotencyKey },
               headers: csrfHeaders(),
             });
-            if (!result.ok) return false;
+            if (!active.current || !result.ok) return false;
             setCopies((current) => [
               { ...removed.copy, ...result.copy, idempotencyKey: crypto.randomUUID() },
               ...current,
             ]);
-            setRemoved(null);
+            // A newer same-page deletion keeps its own Undo even if this restore finishes later.
+            if (latestRemoval.current === removed) {
+              latestRemoval.current = null;
+              setRemoved(null);
+            }
             return true;
           }}
         />
       ) : null}
       {editing !== undefined ? (
         <CopyForm
-          key={editing ? `${editing.id}:${editing.revision}:${detailState}` : 'add'}
+          key={`${editorKey}:${detailState}`}
           detailState={detailState}
           {...(editing ? { copy: editing } : {})}
           profile={editing ? undefined : page.profile}
@@ -862,8 +900,11 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
           subjectId={page.subjectId}
           addKey={addKey}
           onClose={closeEditor}
-          onKey={setAddKey}
-          onCreated={(copy) =>
+          onKey={(key) => {
+            if (currentEditor()) setAddKey(key);
+          }}
+          onCreated={(copy) => {
+            if (!currentEditor()) return;
             setCopies((current) => [
               ...current,
               {
@@ -871,12 +912,18 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
                 subject: copy.subject ?? current.find((item) => item.subject?.id === page.subjectId)?.subject ?? null,
                 idempotencyKey: crypto.randomUUID(),
               },
-            ])
-          }
-          onSaved={(next) => setCopies((current) => current.map((item) => (item.id === next.id ? next : item)))}
+            ]);
+          }}
+          onSaved={(next) => {
+            if (currentEditor()) setCopies((current) => current.map((item) => (item.id === next.id ? next : item)));
+          }}
           onRemoved={(id, result, deadline) => {
+            if (!currentEditor()) return;
             const copy = copies.find((item) => item.id === id);
-            if (copy) setRemoved({ copy, result, deadline });
+            if (copy) {
+              latestRemoval.current = { copy, result, deadline };
+              setRemoved(latestRemoval.current);
+            }
             setCopies((current) => current.filter((item) => item.id !== id));
           }}
         />
