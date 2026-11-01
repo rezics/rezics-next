@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ListRow } from '@rezics/ui/list-row';
-import { useState, useRef } from 'react';
+import { useLayoutEffect, useState, useRef } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
@@ -37,26 +37,79 @@ function resultText(reason: Extract<PublicationResult, { ok: false }>['reason'])
   return m.library_publication_unavailable();
 }
 
-/** A source read is selection context; only a complete native command response is a publication result. */
-export function CollectionPublicationPageView({
-  page,
-  submit,
-  onReload,
-}: {
+type PublicationViewProps = {
   page: PublicationPage;
   submit: PublicationSubmit;
   onReload?: () => void;
-}) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const [confirmed, setConfirmed] = useState(false);
-  const [attempt, setAttempt] = useState<PublicationInput | null>(null);
-  const [result, setResult] = useState<PublicationResult | null>(null);
-  const [complete, setComplete] = useState<PublicationComplete | null>(null);
-  const [busy, setBusy] = useState(false);
-  const sending = useRef(false);
+};
+
+/** Credentials authorize a fresh source read; their strings do not identify the originating intent. */
+export function CollectionPublicationPageView(props: PublicationViewProps) {
+  const { page } = props;
+  const credential = !!page.viewer?.subject && !!page.viewer.csrfToken;
+  const authorityLost = page.source.state === 'denied' || page.source.state === 'unsupported';
+  return (
+    <PublicationIntentView
+      key={JSON.stringify([page.viewer?.subject, page.address.id, page.address.cursor, credential, authorityLost])}
+      {...props}
+      page={
+        credential && (page.source.state !== 'ready' || page.source.page.id === page.address.id)
+          ? page
+          : { ...page, source: { state: 'unavailable' } }
+      }
+    />
+  );
+}
+
+type IntentState = {
+  sourceKey: string | null;
+  selected: string[];
+  confirmed: boolean;
+  attempt: { input: PublicationInput; sourceKey: string | null } | null;
+  result: PublicationResult | null;
+  complete: PublicationComplete | null;
+  busy: boolean;
+};
+
+/** A source read is selection context; only a complete native command response is a publication result. */
+function PublicationIntentView({ page, submit, onReload }: PublicationViewProps) {
   const source = page.source;
   const ready = source.state === 'ready';
   const candidates = ready ? publicationCandidates(source.page) : [];
+  const sourceKey = ready ? JSON.stringify([source.revision, candidates.map((member) => member.subject!.id)]) : null;
+  const [state, setState] = useState<IntentState>({
+    sourceKey,
+    selected: [],
+    confirmed: false,
+    attempt: null,
+    result: null,
+    complete: null,
+    busy: false,
+  });
+  // Events and completions share the same synchronous gate, including before React renders again.
+  const current = useRef(state);
+  const active = useRef(true);
+  function update(change: (previous: IntentState) => IntentState) {
+    if (!active.current) return;
+    current.current = change(current.current);
+    setState(current.current);
+  }
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (!sourceKey || current.current.sourceKey === sourceKey) return;
+    update((previous) => ({
+      ...previous,
+      sourceKey,
+      // A new read cannot replace a dispatched command, even when its selected IDs disappear.
+      ...(previous.attempt ? {} : { selected: [], confirmed: false, result: null }),
+    }));
+  }, [sourceKey]);
+  const { selected, confirmed, result, complete, busy } = state;
   const ratio = rowRatio(candidates.map((member) => member.subject));
   const unknown = result?.ok === false && result.reason === 'unknown';
   const refused = result?.ok === false && !unknown;
@@ -64,37 +117,63 @@ export function CollectionPublicationPageView({
   const base = `/${getLocale()}/collections/${encodeURIComponent(page.address.id)}`;
 
   async function publish() {
-    if (!ready || !confirmed || sending.current || refused || (unknown && !attempt)) return;
+    const origin = current.current;
+    const uncertain = origin.result?.ok === false && origin.result.reason === 'unknown';
+    if (
+      !active.current ||
+      !ready ||
+      !origin.confirmed ||
+      origin.busy ||
+      (origin.result?.ok === false && !uncertain) ||
+      (uncertain && !origin.attempt)
+    )
+      return;
     const input =
-      unknown && attempt
-        ? attempt
+      uncertain && origin.attempt
+        ? origin.attempt.input
         : {
             collectionId: page.address.id,
-            revision: complete?.collection.revision ?? source.revision,
-            subjectIds: [...selected],
+            revision: Math.max(origin.complete?.collection.revision ?? 0, source.revision),
+            subjectIds: [...origin.selected],
             idempotencyKey: crypto.randomUUID(),
           };
-    sending.current = true;
-    setBusy(true);
-    setAttempt(input);
+    update((previous) => ({
+      ...previous,
+      busy: true,
+      attempt: previous.attempt ?? { input, sourceKey: origin.sourceKey },
+    }));
     let outcome: PublicationResult;
     try {
       outcome = await submit(input);
     } catch {
       outcome = { ok: false, reason: 'unknown' };
     }
-    setResult(outcome);
-    if (outcome.ok) {
-      setComplete(outcome);
-      setAttempt(null);
-      setConfirmed(false);
-    }
-    sending.current = false;
-    setBusy(false);
+    update((previous) => ({
+      ...previous,
+      result: outcome,
+      busy: false,
+      ...(outcome.ok
+        ? {
+            complete: outcome,
+            attempt: null,
+            confirmed: false,
+            selected: previous.sourceKey === previous.attempt?.sourceKey ? previous.selected : [],
+          }
+        : {}),
+    }));
+  }
+
+  function reload() {
+    const previous = current.current;
+    if (!active.current || previous.busy) return;
+    // Recover an unavailable read without turning an uncertain write into a fresh selection.
+    if (!(previous.result?.ok === false && previous.result.reason === 'unknown'))
+      update((value) => ({ ...value, selected: [], confirmed: false, attempt: null, result: null }));
+    onReload?.();
   }
 
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 text-foreground sm:py-8">
+    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 text-foreground sm:py-8" aria-busy={busy}>
       <header className="space-y-3">
         <a className="text-primary underline" href={base}>
           {m.library_publication_back()}
@@ -122,6 +201,7 @@ export function CollectionPublicationPageView({
           {m.library_publication_view()}
         </a>
       </section>
+      {result?.ok === false ? <p role="alert">{resultText(result.reason)}</p> : null}
       {!ready ? (
         <div role="alert" className="space-y-3">
           <p>
@@ -136,8 +216,8 @@ export function CollectionPublicationPageView({
           <Button type="button" disabled>
             {m.library_publication_publish()}
           </Button>
-          {onReload ? (
-            <Button type="button" variant="outline" onClick={onReload}>
+          {onReload && !busy ? (
+            <Button type="button" variant="outline" onClick={reload}>
               {m.library_collection_reload()}
             </Button>
           ) : null}
@@ -168,11 +248,15 @@ export function CollectionPublicationPageView({
                         })}
                         disabled={locked || (!checked && selected.length >= 100)}
                         onChange={() => {
-                          setSelected((current) =>
-                            checked ? current.filter((value) => value !== id) : [...current, id],
-                          );
-                          setConfirmed(false);
-                          setResult(null);
+                          update((previous) => {
+                            if (previous.busy || previous.attempt) return previous;
+                            const selected = previous.selected.includes(id)
+                              ? previous.selected.filter((value) => value !== id)
+                              : previous.selected.length < 100
+                                ? [...previous.selected, id]
+                                : previous.selected;
+                            return { ...previous, selected, confirmed: false, result: null };
+                          });
                         }}
                       />
                       <div className="min-w-0 flex-1 space-y-2">
@@ -197,7 +281,12 @@ export function CollectionPublicationPageView({
                 className="mt-1 size-5 shrink-0 accent-primary"
                 checked={confirmed}
                 disabled={locked}
-                onChange={(event) => setConfirmed(event.target.checked)}
+                onChange={(event) => {
+                  const confirmed = event.target.checked;
+                  update((previous) =>
+                    previous.busy || previous.attempt ? previous : { ...previous, confirmed },
+                  );
+                }}
               />
               <span>
                 {selected.length
@@ -206,13 +295,12 @@ export function CollectionPublicationPageView({
               </span>
             </label>
             <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_privacy()}</p>
-            {result?.ok === false ? <p role="alert">{resultText(result.reason)}</p> : null}
             <div className="flex flex-wrap gap-3">
               <Button type="button" disabled={!confirmed || busy || refused} onClick={() => void publish()}>
                 {unknown ? m.library_publication_retry() : m.library_publication_publish()}
               </Button>
               {onReload && !busy && !unknown ? (
-                <Button type="button" variant="outline" onClick={onReload}>
+                <Button type="button" variant="outline" onClick={reload}>
                   {m.library_collection_reload()}
                 </Button>
               ) : null}
@@ -234,27 +322,70 @@ export function CollectionPublicationPageView({
 
 export function CollectionPublicationPage({ address }: { address: PublicationAddress }) {
   const session = useSession();
-  const viewer = { subject: session.subject ?? '', csrfToken: session.csrfToken ?? '' };
-  const query = useQuery({
-    ...collectionPublicationQuery(viewer, address),
-    enabled: session.state === 'signed-in' && !!viewer.subject && !!viewer.csrfToken,
-  });
-  const [version, setVersion] = useState(0);
-  const page: PublicationPage = query.data ?? { viewer: null, address, source: { state: 'unavailable' } };
-  if (session.state === 'unknown' || (session.state === 'signed-in' && query.isFetching))
+  if (session.state === 'unknown')
     return (
       <div role="status" className="p-6">
         {m.library_publication_loading()}
       </div>
     );
+  if (session.state !== 'signed-in' || !session.subject || !session.csrfToken)
+    return (
+      <CollectionPublicationPageView
+        page={{ viewer: null, address, source: { state: 'denied' } }}
+        submit={async () => ({ ok: false, reason: 'denied' })}
+      />
+    );
   return (
-    <CollectionPublicationPageView
-      key={`${viewer.subject}:${viewer.csrfToken}:${address.id}:${address.cursor ?? ''}:${version}`}
-      page={page}
-      submit={(input) => publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': viewer.csrfToken } })}
-      onReload={() => {
-        void query.refetch().then(() => setVersion((value) => value + 1));
-      }}
+    <CurrentPublicationPage
+      key={JSON.stringify([session.subject, address.id, address.cursor])}
+      subject={session.subject}
+      csrfToken={session.csrfToken}
+      id={address.id}
+      {...(address.cursor === undefined ? {} : { cursor: address.cursor })}
     />
+  );
+}
+
+function CurrentPublicationPage({
+  subject,
+  csrfToken,
+  id,
+  cursor,
+}: {
+  subject: string;
+  csrfToken: string;
+  id: string;
+  cursor?: string;
+}) {
+  const viewer = { subject, csrfToken };
+  const address = { id, ...(cursor === undefined ? {} : { cursor }) };
+  const query = useQuery({
+    ...collectionPublicationQuery(viewer, address),
+    enabled: true,
+    // A credential's previously cached source cannot authorize its replacement lifetime.
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+  const data = query.data;
+  const matches =
+    data?.viewer?.subject === subject &&
+    data.viewer.csrfToken === csrfToken &&
+    data.address.id === id &&
+    data.address.cursor === cursor;
+  const page: PublicationPage =
+    !query.isFetching && !query.isError && matches
+      ? data
+      : { viewer, address, source: { state: 'unavailable' } };
+  return (
+    <>
+      {query.isFetching ? <div role="status" className="p-6">{m.library_publication_loading()}</div> : null}
+      <CollectionPublicationPageView
+        page={page}
+        submit={(input) => publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrfToken } })}
+        {...(query.isFetching
+          ? {}
+          : { onReload: () => { void query.refetch().catch(() => undefined); } })}
+      />
+    </>
   );
 }
