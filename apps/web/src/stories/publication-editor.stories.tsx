@@ -258,7 +258,7 @@ export const UncertainRetry: Story = {
           [m.catalogue_create_language(), 'en'],
           [m.correction_value(), '978-0-140-44430-8'],
           [m.relation_citation(), 'https://publisher.example/edition'],
-        ]) {
+        ] as const) {
           const control = canvas.getByRole('textbox', { name });
           await expect(control).toBeDisabled();
           await expect(control).toHaveValue(value);
