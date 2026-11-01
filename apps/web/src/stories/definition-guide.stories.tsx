@@ -78,10 +78,73 @@ export const Denied: Story = { args: { scenario: 'denied' } };
 export const InvalidRelease: Story = { args: { scenario: 'invalid' } };
 export const UnavailableRetry: Story = {
   args: { scenario: 'unavailable' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: actual read-only guide recovery and navigation at 390px measure Back, Retry, the native type picker, release disclosure and field links, including rendered label and page containment. Existing recovery behavior is retained. Browser, native and visual verification are deferred.',
+      },
+    },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.guide_unavailable());
+    const document = canvasElement.ownerDocument;
+    const guide = canvas.getByRole('article');
+    await expect(document.documentElement.clientWidth).toBe(390);
+    const phoneGeometry = async () => {
+      const bounds = guide.getBoundingClientRect();
+      await expect(bounds.width).toBeGreaterThan(0);
+      await expect(bounds.left).toBeGreaterThanOrEqual(0);
+      await expect(bounds.right).toBeLessThanOrEqual(390);
+      await expect(guide.scrollWidth).toBeLessThanOrEqual(guide.clientWidth + 1);
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+      for (const target of guide.querySelectorAll<HTMLElement>('button, a, select, summary')) {
+        const rect = target.getBoundingClientRect();
+        await expect(rect.height).toBeGreaterThanOrEqual(44);
+        await expect(rect.width).toBeGreaterThanOrEqual(44);
+        await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+        await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+      }
+      for (const label of guide.querySelectorAll<HTMLElement>('h1, h2, h3, p, label, button, a, summary')) {
+        const box = label.getBoundingClientRect();
+        const walker = document.createTreeWalker(label, 4 /* SHOW_TEXT */);
+        while (walker.nextNode()) {
+          if (!walker.currentNode.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(walker.currentNode);
+          for (const line of range.getClientRects()) {
+            await expect(line.left).toBeGreaterThanOrEqual(box.left - 1);
+            await expect(line.right).toBeLessThanOrEqual(box.right + 1);
+          }
+        }
+      }
+    };
+    await phoneGeometry();
     await userEvent.click(canvas.getByRole('button', { name: m.guide_retry() }));
     expect(await canvas.findByRole('combobox', { name: m.catalogue_create_type() })).toBeVisible();
+    await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+    await phoneGeometry();
+    const releaseSummary = canvas.getByText(m.guide_active()).closest('summary')!;
+    releaseSummary.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(releaseSummary.parentElement).toHaveAttribute('open');
+    await expect(canvas.getByText(definitions.digest)).toBeVisible();
+    await phoneGeometry();
+    await userEvent.keyboard('{Enter}');
+    await expect(releaseSummary.parentElement).not.toHaveAttribute('open');
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Recipe');
+    const name = definitionText(definitions.release.properties['schema:cookTime'].labels, getLocale()).text;
+    const field = await canvas.findByRole('link', { name });
+    await expect(field).toHaveAttribute(
+      'href',
+      `/${getLocale()}/catalogue/definitions?type=schema%3ARecipe&property=schema%3AcookTime&returnTo=${encodeURIComponent(`/${getLocale()}/catalogue/new`)}`,
+    );
+    await expect(canvas.getByRole('link', { name: m.guide_back() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/catalogue/new`,
+    );
+    await phoneGeometry();
   },
 };

@@ -19,6 +19,11 @@ import {
   type GuideTransport,
 } from './definition-guide';
 
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+// Keep native summary display and its disclosure marker, including keyboard activation.
+const summaryClassName = 'min-h-11 min-w-11 cursor-pointer py-3 md:pointer-fine:min-h-0 md:pointer-fine:py-0';
+
 function Kind({ datatype, locale }: { datatype: string; locale: string }) {
   const o = { locale: locale as never };
   const labels: Record<string, () => string> = {
@@ -37,7 +42,7 @@ function Kind({ datatype, locale }: { datatype: string; locale: string }) {
 
 function Constraint({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="space-y-1">
+    <div className="min-w-0 space-y-1">
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd>{children}</dd>
     </div>
@@ -84,7 +89,7 @@ function Constraints({
                   <Meaning values={release.types[target]?.labels} locale={locale} />
                   {!definitionText(release.types[target]?.labels, locale).text && (
                     <details className="text-sm">
-                      <summary>{m.guide_identifier({}, o)}</summary>
+                      <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
                       <code className="break-all">{target}</code>
                     </details>
                   )}
@@ -105,7 +110,7 @@ function Constraints({
                       : (unitSymbols[unit] ?? m.guide_unknown_unit({}, o))}
                   {unit !== '1' && unit !== '*' && (
                     <details className="text-sm text-muted-foreground">
-                      <summary>{m.guide_identifier({}, o)}</summary>
+                      <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
                       <code className="break-all">{unit}</code>
                     </details>
                   )}
@@ -162,7 +167,7 @@ function Constraints({
               const qualifier = release.properties[id];
               return (
                 <details key={id} className="rounded-lg border border-border p-3">
-                  <summary className="cursor-pointer">
+                  <summary className={summaryClassName}>
                     <Meaning values={qualifier?.labels} locale={locale} />
                   </summary>
                   {qualifier && (
@@ -228,11 +233,11 @@ export function DefinitionGuideContent({
   const property = selected === address.type ? address.property : undefined;
   const field = property && release?.properties[property];
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
+    <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-3">
         <PageHeading>{m.guide_title({}, o)}</PageHeading>
         <p className="text-muted-foreground">{m.guide_intro({}, o)}</p>
-        <a className={buttonVariants({ variant: 'outline' })} href={back}>
+        <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={back}>
           {m.guide_back({}, o)}
         </a>
       </header>
@@ -249,7 +254,7 @@ export function DefinitionGuideContent({
                   : m.guide_unavailable({}, o)}
           </p>
           {(read.reason === 'unavailable' || read.reason === 'denied') && (
-            <Button variant="outline" onClick={retry}>
+            <Button variant="outline" className={actionClassName} onClick={retry}>
               {m.guide_retry({}, o)}
             </Button>
           )}
@@ -258,7 +263,7 @@ export function DefinitionGuideContent({
       {read?.ok && release && (
         <>
           <details className="text-sm text-muted-foreground">
-            <summary className="cursor-pointer">
+            <summary className={summaryClassName}>
               {read.pin === 'active' ? m.guide_active({}, o) : m.guide_pinned({}, o)}
             </summary>
             <p className="mt-2 break-all">
@@ -267,7 +272,7 @@ export function DefinitionGuideContent({
           </details>
           {read.pin === 'pinned' && (
             <a
-              className="inline-flex min-h-11 items-center text-sm underline"
+              className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal text-sm underline"
               href={definitionGuideHref(locale, { ...address, release: undefined })}
             >
               {m.guide_active({}, o)}
@@ -277,8 +282,15 @@ export function DefinitionGuideContent({
             <p role="status">{m.guide_empty({}, o)}</p>
           ) : (
             <Field>
-              <FieldLabel htmlFor="guide-type">{m.catalogue_create_type({}, o)}</FieldLabel>
-              <NativeSelect id="guide-type" value={selected} onChange={(event) => setSelected(event.target.value)}>
+              <FieldLabel className="min-w-0 max-w-full flex-wrap" htmlFor="guide-type">
+                {m.catalogue_create_type({}, o)}
+              </FieldLabel>
+              <NativeSelect
+                className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 md:pointer-fine:[&_select]:min-h-8"
+                id="guide-type"
+                value={selected}
+                onChange={(event) => setSelected(event.target.value)}
+              >
                 <NativeSelectOption value="">{m.catalogue_create_choose_type({}, o)}</NativeSelectOption>
                 {types.map((entry) => (
                   <NativeSelectOption key={entry.id} value={entry.id}>
@@ -313,11 +325,11 @@ export function DefinitionGuideContent({
                     {field.disclosure === 'sourceOrConsent' ? m.guide_consent({}, o) : m.guide_references({}, o)}
                   </p>
                   <details className="text-sm text-muted-foreground">
-                    <summary>{m.guide_identifier({}, o)}</summary>
+                    <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
                     <code className="break-all">{property}</code>
                   </details>
                   <a
-                    className="inline-flex min-h-11 items-center underline"
+                    className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline"
                     href={definitionGuideHref(locale, { ...address, type: selected, property: undefined })}
                   >
                     {m.guide_fields({}, o)}
@@ -334,7 +346,7 @@ export function DefinitionGuideContent({
                         <li key={id}>
                           {release.properties[id] ? (
                             <a
-                              className="inline-flex min-h-11 items-center underline underline-offset-4"
+                              className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4"
                               href={definitionGuideHref(locale, { ...address, type: selected, property: id })}
                             >
                               <Meaning values={release.properties[id]?.labels} locale={locale} />
@@ -370,7 +382,7 @@ export function DefinitionGuideLink({
   const o = { locale: locale as never };
   return (
     <a
-      className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+      className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal text-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere]"
       href={definitionGuideHref(locale, address)}
       target="_blank"
       rel="noopener noreferrer"
