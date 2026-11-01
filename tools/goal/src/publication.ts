@@ -505,14 +505,15 @@ export class PublicationController {
       const reference = assertSingleDocument(row.document_refs ? parseJson(row.document_refs, 'owner decision document refs') : undefined);
       const initial = readRegularFile(this.options.mainCheckout, reference.path);
       const authority = parseAuthority(initial.text);
-      if (!validDocPath(String(authority.slotUtc), reference.path))
+      const slotUtc = String(authority.slotUtc);
+      if (!validDocPath(slotUtc, reference.path))
         throw new Error('owner decision document path does not match its UTC slot provenance');
       if (existing) {
-        if (existing.id !== initial.hash || existing.slot_utc !== authority.slotUtc)
+        if (existing.id !== initial.hash || existing.slot_utc !== slotUtc)
           throw new Error('this durable inbox message was already received with different authority bytes');
         return { id: existing.id, slotUtc: existing.slot_utc, state: existing.state, replay: true };
       }
-      const slotClaim = this.db.query('SELECT id FROM publication_authorities WHERE slot_utc=?').get(authority.slotUtc) as { id: string } | null;
+      const slotClaim = this.db.query('SELECT id FROM publication_authorities WHERE slot_utc=?').get(slotUtc) as { id: string } | null;
       if (slotClaim) throw new Error(`publication slot already has a retained authority: ${slotClaim.id}`);
       const storedBody = JSON.stringify({
         messageId,
@@ -529,10 +530,10 @@ export class PublicationController {
           (id, slot_utc, message_id, owner_session, document_path, document_hash, document, body, received_at,
            received_by, received_session, state)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received')`)
-          .run(initial.hash, authority.slotUtc, messageId, ownerSession, reference.path, initial.hash, initial.text,
+          .run(initial.hash, slotUtc, messageId, ownerSession, reference.path, initial.hash, initial.text,
             storedBody, now, actor.id, actor.sessionId);
       }).immediate();
-      return { id: initial.hash, slotUtc: String(authority.slotUtc), state: 'received', replay: false };
+      return { id: initial.hash, slotUtc, state: 'received', replay: false };
     } finally {
       lease.release();
     }
@@ -1068,6 +1069,7 @@ export class PublicationController {
         return;
       }
       let identity: ProcessIdentity | null = null;
+      let spawnEventSeen = false;
       let visibilityFailure: string | undefined;
       let monitor: ReturnType<typeof setInterval> | undefined;
       const observe = () => {
@@ -1086,6 +1088,7 @@ export class PublicationController {
         this.recordMembers(invocation.id, group.members);
       };
       child.once('spawn', () => {
+        spawnEventSeen = true;
         closeLog();
         if (!child.pid) {
           visibilityFailure = 'spawn event had no original child PID';
@@ -1107,7 +1110,7 @@ export class PublicationController {
       child.once('error', (error) => {
         closeLog();
         if (monitor) clearInterval(monitor);
-        if (!identity && !child.spawned) {
+        if (!identity && !spawnEventSeen) {
           this.completeSpawnFailure(this.invocation(invocation.id), error);
           void this.deliverReceipt(invocation.id).catch(() => {});
           resolvePromise(this.status(invocation.id));

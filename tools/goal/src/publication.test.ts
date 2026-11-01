@@ -422,7 +422,7 @@ async function invokeWithManagerHintOnly(fixture: Fixture, argv: string[]): Prom
   }
 }
 
-function stateRow<T extends Record<string, unknown>>(fixture: Fixture, sql: string, ...params: unknown[]): T | null {
+function stateRow<T extends Record<string, unknown>>(fixture: Fixture, sql: string, ...params: (string | number)[]): T | null {
   const db = openDb(fixture.dbPath);
   try {
     return db.query(sql).get(...params) as T | null;
