@@ -761,9 +761,8 @@ The native SDK producer publishes `WorkflowWriterFence` exactly as
 `retireWorkflow(workflowID)` and `getWorkflowWriterFence(workflowID)`. Its original Kernel wrapper is
 `work/sdk-retirement-fence.ts`: `retireSdkWorkflowWriters(actualWorkflowId, sdk)` and
 `readSdkWorkflowRetirement(actualWorkflowId, sdk)`. The consumer passes the configured real `WorkClient`, never the
-wrapper's default static SDK. Until normal producer-first integration provides both that module and the real client's
-methods, the consumer refuses native I/O. Its temporary type-only adapter repeats exactly this published interface;
-it supplies no implementation, alternate method, SDK SQL or new receipt domain.
+wrapper's default static SDK. The producer module and client methods are integrated. History imports their original
+types and implementation; it supplies no alternate method, SDK SQL or new receipt domain.
 
 The SDK producer owns installation and current coverage of its permanent native writer guards, including enqueue,
 resume/restart, old owner-token writers, parent/fork lineage, output/step/event/history, notification and stream writes.
@@ -777,9 +776,10 @@ fence never supplies consumer, Source or Account-root cleanup authority.
 `history/agent-identity-sdk-fence.ts` defines the Kernel consumer entry point
 `retireAgentIdentitySDKWork(pool, client, stage, context)`. It first verifies the original source home and releases
 that command before entering the receiver or SDK. Retained or missing Semantic evidence stops before SDK retirement.
-After the durable Source terminal verifier and original SDK writer fence both pass, it records the exact SDK receipt
-and calls `settleHistoryWork` for that receiving owner. The ordinary History readiness/minimization path then clears
-the request payload and deletes only the mapped workflow after independent before/after receipt checks.
+It then revalidates Source and locks the current SDK writer state in the same Source command. The durable native
+Source-to-History handoff is unavailable, so this command remains pending without retiring SDK writers, recording
+a receipt, settling History work or authorizing physical deletion. The current interface and charge are detailed
+under guarded identity History readiness below.
 
 The receiving binding is `access.agent-identity.sdk-retirement/v1`:
 `{ kind, custodyId, workflowId, requestDigest, source, receiver: { partition: 0, epoch, generation, writerVersion: 1 },
@@ -790,12 +790,11 @@ foreign UUID, changed roles and a changed barrier. Its `observed` result grants 
 
 The exact first consumer receipt binding for Source and original-row minimization is
 `AgentIdentitySDKRetirementReceipt = { binding, sourceGeneration, fence }`. `fence` is the unmodified original SDK
-receipt, with generation exactly `"2"`. After genuine source discharge and independent receiver admission, the consumer
-calls the original retirement wrapper, rereads the native receipt and requires identical workflow ID, generation,
-closure ID and closure time. It rechecks source and receiver on released checkouts before capturing this immutable
-metadata in `core.agent_identity_work.sdk_retirement_receipt`. Only this transaction settles the exact History owner
-handoff, after the Source terminal discharge/transfer and SDK writer fence have both been rechecked. That receipt
-cannot minimize the original Account source bytes or replace the independent Account root and generated-copy proofs.
+receipt, with generation exactly `"2"`. It describes technical closure metadata, not authority to settle the original
+History owner. Genuine durable Source discharge and independent current receiver admission remain prerequisites to
+any future receipt write. A copied exact receipt cannot authorize readiness, minimize the original Account source
+bytes or replace the independent Account root and generated-copy proofs. The original database guard continues to
+refuse those state transitions without the missing native handoff.
 
 `readAgentIdentitySDKFence` independently rereads the actual SDK through the original wrapper and rechecks the current
 receiving binding before and after that call. It returns only an observation. Caller fields, cached receipt shape,
