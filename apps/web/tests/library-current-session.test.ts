@@ -207,7 +207,10 @@ test('current credentials keep bounded keyset reads, restrictive transport, exac
     types: [{ type: 'schema:Book' }],
     next: 'signed/types+cursor',
   });
-  expect(Object.fromEntries(new URL(calls[3]!.url).searchParams)).toEqual({ limit: '20', cursor: 'signed/types+cursor' });
+  expect(Object.fromEntries(new URL(calls[3]!.url).searchParams)).toEqual({
+    limit: '20',
+    cursor: 'signed/types+cursor',
+  });
   expect(await changePersonalLibraryEntry(client, explicit, {}, change)).toMatchObject({
     ok: true,
     entry: { revision: 9 },
@@ -238,7 +241,9 @@ test('current credentials keep bounded keyset reads, restrictive transport, exac
     reason: 'occupied',
     entry: { revision: 7 },
   });
-  expect(calls.filter((call) => call.method === 'GET' && new URL(call.url).pathname.endsWith(subjectId))).toHaveLength(3);
+  expect(calls.filter((call) => call.method === 'GET' && new URL(call.url).pathname.endsWith(subjectId))).toHaveLength(
+    3,
+  );
   conflict = false;
   expect(calls.every((call) => call.headers.get('authorization') === 'Bearer explicit-viewer')).toBe(true);
 
@@ -261,9 +266,13 @@ test('current credentials keep bounded keyset reads, restrictive transport, exac
   expect(await restored.text()).toContain('data-entry-revision="9"');
   expect(current.reads).toBe(2);
   expect(await calls.at(-1)!.json()).toEqual({ deletionId, revision: 8 });
-  expect(calls.slice(formStart).every((call) => call.headers.get('authorization') === 'Bearer current-viewer')).toBe(true);
+  expect(calls.slice(formStart).every((call) => call.headers.get('authorization') === 'Bearer current-viewer')).toBe(
+    true,
+  );
   expect(
-    calls.filter((call) => call.method === 'GET').every((call) => call.cache === 'no-store' && call.redirect === 'manual'),
+    calls
+      .filter((call) => call.method === 'GET')
+      .every((call) => call.cache === 'no-store' && call.redirect === 'manual'),
   ).toBe(true);
 
   for (const [status, code, readState] of [
