@@ -16,8 +16,8 @@ Savings and the cause of individual waits remain unproved.
 bun tools/goal/src/cli.ts report --flow --since 2026-10-31T00:00:00.000Z --json
 ```
 
-The complete JSON response is `commandOutput` in the committed
-[flow evidence](daily-step-audit-2026-10-31.flow.json), alongside the bounded daily aggregates and event census.
+The complete JSON response, the bounded daily aggregates and the event census are machine evidence kept in the Goal
+state directory, not in Git.
 It was extracted through the production report handler against the private backup, bypassing the CLI's orphan
 recovery and manager-command recording. This is research evidence extraction, not the deferred acceptance run.
 The handler returned 0; source is pinned below. Its lifecycle `asOf` is 2026-11-01T00:22:18.063Z.
@@ -117,8 +117,7 @@ Source licence: [AGPL-3.0-only](../package.json), [full licence](../../../LICENS
 was needed: this question concerns REZICS's recorded delivery path, not an unchosen external design.
 
 Decisions: UTC October 31 is the previous day; the specific report placement supersedes generic `docs/research/`.
-The companion `.flow.json` is the sole tracked file outside the declared Markdown paths, required to include the
-complete command response while keeping this report concise. Machine identifiers stay in that raw evidence;
+Machine identifiers stay in the raw evidence in the state directory;
 private allowance/account configuration is excluded. Local extraction scripts and backup remain under `.temp/`.
 Existing `tools/goal/src/flow.test.ts` supplies the named acceptance tests and is unchanged. Original acceptance,
 native and browser verification are deferred by launch policy; only local Goal workspace typing is permitted.
