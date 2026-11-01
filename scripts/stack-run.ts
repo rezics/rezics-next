@@ -36,7 +36,13 @@ import {
   validateArtifactDeclarations,
   writeArtifactCatalog,
 } from './check-artifacts.ts';
-import { isCheckHostRun, performanceHosts } from './check-placement.ts';
+import {
+  isCheckHostRun,
+  isCheckHostRunCandidate,
+  performanceHosts,
+  recognizeCheckHostRun,
+  type CheckHostRecognitionDisposition,
+} from './check-placement.ts';
 
 export type StackRun = {
   label: string;
@@ -163,12 +169,16 @@ export async function runOnCheckHost(
   run: StackRun,
   env: Environment = process.env,
   runRemote: (options: RemoteCheck, signal: AbortSignal) => Promise<number> = remoteCheck,
+  recognize: (cwd: string) => CheckHostRecognitionDisposition = recognizeCheckHostRun,
 ): Promise<number | null> {
   validateEstimateMs(run.estimateMs);
-  if (onCheckHost(run.cwd)) {
+  const recognition = recognize(run.cwd);
+  if (recognition.outcome === 'admitted') {
     console.error(`stack-run: ${run.label} already on an approved remote-check run`);
     return null;
   }
+  if (isCheckHostRunCandidate(run.cwd))
+    console.error(`stack-run: ${run.label} physical run recognition refused (${recognition.reason})`);
   const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
   const cancelled = () => executionCancellation(cancellation);
   const intent = cancelled();

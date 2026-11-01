@@ -31,7 +31,11 @@ export type CheckPlacement = {
 };
 
 export function checkHostScopeUnitName(runId: string): string {
-  return `rezics-check-${runId}.scope`;
+  return `${checkHostScopeUnitStem(runId)}.scope`;
+}
+
+export function checkHostScopeUnitStem(runId: string): string {
+  return `rezics-check-${runId}`;
 }
 
 export function checkHostSliceUnitName(runId: string): string {
@@ -669,8 +673,7 @@ export function recognizeCheckHostRun(
     const runId = inside.split(sep)[0] ?? '';
     if (!/^[a-z0-9-]{1,128}$/i.test(runId)) return refusal('run-id-invalid');
     const runDirectory = join(CHECK_HOST_RUNS_ROOT, runId);
-    if (!insidePath(runDirectory, absolute) || resolve(runDirectory) === absolute)
-      return refusal('cwd-not-confined');
+    if (!insidePath(runDirectory, absolute)) return refusal('cwd-not-confined');
 
     const runs = reader.inspect(CHECK_HOST_RUNS_ROOT);
     if (runs.status !== 'ok') return refusal('runs-root-unavailable');
@@ -684,8 +687,7 @@ export function recognizeCheckHostRun(
     const current = reader.inspect(absolute);
     if (current.status !== 'ok') return refusal('cwd-unavailable');
     if (current.kind !== 'directory') return refusal('cwd-unavailable');
-    // The caller's lexical path and run-directory identity are checked here. Physical cwd confinement is added
-    // separately so the refusal can distinguish a symlink escape from an ordinary out-of-run path.
+    if (!insidePath(run.realPath, current.realPath)) return refusal('cwd-not-confined');
 
     const cgroup = reader.read('/proc/self/cgroup', MAX_CHECK_HOST_PROC_BYTES);
     if (cgroup.status === 'missing' || cgroup.status === 'unavailable') return refusal('cgroup-unavailable');

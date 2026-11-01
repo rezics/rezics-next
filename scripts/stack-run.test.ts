@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { onCheckHost, runOnCheckHost } from './stack-run.ts';
-import { ROOT, requestExecutionCancellation } from './remote-check.ts';
+import { ROOT, requestExecutionCancellation, type RemoteCheckSettlement } from './remote-check.ts';
 import { runWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
 
@@ -125,6 +125,10 @@ if (script.includes('MemAvailable')) {
   console.log('BASE -\\nAGE -\\nZSTD 0');
 } else if (script.includes('REMOTE_CHECK_BASE_REFRESH') && !script.includes('systemd-run')) {
   log({ kind: 'base-refresh' });
+} else if (script.includes('REMOTE_CHECK_PREPARED_INPUTS')) {
+  log({ kind: 'prepared-inputs' });
+  if (config.preparedInputs) console.log(JSON.stringify(config.preparedInputs));
+  else process.exit(4);
 } else if (script.includes('REMOTE_CHECK_SLOT_')) {
   const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
   const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
@@ -186,9 +190,14 @@ if (script.includes('MemAvailable')) {
   } else process.exit(config.exit ?? 0);
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
   log({ kind: 'returns', script, slotHeld: slotHeld() });
-  for (const path of [...script.matchAll(/^# PATH (.+)$/gm)]) console.log('PRESENT ' + path[1]);
+  for (const path of [...script.matchAll(/^# PATH (.+)$/gm)]) console.log('ABSENT ' + path[1]);
+  console.log('MANIFEST ' + Buffer.from('[]').toString('base64'));
 } else if (script.includes('REMOTE_CHECK_PHYSICAL_RESOURCES')) {
   // This fixture has no owned native cgroup counters.
+} else if (script.includes('CLEANED')) {
+  const run = script.match(/^run_id='([^']+)'/m)?.[1] ?? 'unknown';
+  log({ kind: 'cleanup', script, slotHeld: slotHeld() });
+  console.log('CLEANED ' + run);
 } else {
   log({ kind: 'cleanup', script, slotHeld: slotHeld() });
 }
@@ -424,6 +433,48 @@ async function stack(
   return { code, stdout, stderr, directory };
 }
 
+async function missingGenericEvidenceRun(environment: Record<string, string>, directory: string) {
+  const source = `const { remoteCheck } = await import(${JSON.stringify(join(repository, 'scripts/remote-check.ts'))});
+let settlement;
+let outcome;
+try {
+  const code = await remoteCheck({
+    hosts: [{ name: 'a', address: 'ops@a.test', identity: '/keys/a', memoryMaxGiB: 16,
+      cpuQuotaPercent: 800, slots: 2, processorsPerSlot: 8 }],
+    workspace: process.env.TEST_WORKSPACE,
+    command: ['true'],
+    expectedSourceSha256: '${'a'.repeat(64)}',
+    returns: ['missing-output.txt'],
+    settled: (receipt) => { settlement = receipt; },
+  }, new AbortController().signal);
+  outcome = { kind: 'returned', code };
+} catch (error) {
+  outcome = { kind: 'error', message: error instanceof Error ? error.message : String(error) };
+}
+process.stdout.write(JSON.stringify({ outcome, settlement }) + '\\n');
+`;
+  const child = Bun.spawn([process.execPath, '--eval', source], {
+    cwd: repository,
+    env: { ...environment, TEST_WORKSPACE: directory },
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(code, stderr).toBe(0);
+  return {
+    ...(JSON.parse(stdout.trim()) as {
+      outcome: { kind: string; code?: number; message?: string };
+      settlement: RemoteCheckSettlement;
+    }),
+    stderr,
+  };
+}
+
 const local = ['sh', '-c', 'echo "local slot=$REZICS_STACK_SLOT"; exit 3'];
 
 test("a stack run goes to a free check host and returns the command's exit code", async () => {
@@ -452,6 +503,46 @@ test("a stack run goes to a free check host and returns the command's exit code"
   expect(releaseAt).toBeLessThan(cleanupAt);
   expect(existsSync(lease)).toBe(false);
 }, 30_000);
+
+test('ordinary remote transport keeps the native outcome and declared returns/cleanup without generic prepared evidence', async () => {
+  const fixture = scenario({ a: { available: 20e9, exit: 7 } });
+  const directory = workspace();
+  const result = await stack(fixture.env, ['true'], ['--returns', 'missing-output.txt'], directory);
+  expect(result.code, result.stderr).toBe(7);
+  const events = fixture.events();
+  expect(events.some((event) => event.kind === 'prepared-inputs')).toBe(false);
+  const runIndex = events.findIndex((event) => event.kind === 'run');
+  const releaseIndex = events.findIndex((event) => event.kind === 'release');
+  const returnsIndex = events.findIndex((event) => event.kind === 'returns');
+  const cleanupIndex = events.findIndex((event) => event.kind === 'cleanup');
+  expect(runIndex).toBeGreaterThanOrEqual(0);
+  expect(releaseIndex).toBeGreaterThan(runIndex);
+  expect(returnsIndex).toBeGreaterThan(releaseIndex);
+  expect(cleanupIndex).toBeGreaterThan(returnsIndex);
+  expect(String(events[returnsIndex]!.script)).toContain('# PATH missing-output.txt');
+  expect(events[cleanupIndex]!.script).toContain('CLEANED');
+});
+
+test('generic remote transport still requires explicitly requested prepared source evidence', async () => {
+  const fixture = scenario({ a: { available: 20e9, exit: 7 } });
+  const result = await missingGenericEvidenceRun(fixture.env, workspace());
+  expect(result.outcome).toEqual({
+    kind: 'error',
+    message: 'remote-check: prepared source/generated input evidence is unavailable',
+  });
+  expect(result.settlement.native).toMatchObject({ host: 'a', exitCode: 7 });
+  expect(result.settlement.preparedInputs).toBeNull();
+  expect(result.settlement.returns).toMatchObject({ status: 'missing', missing: ['missing-output.txt'] });
+  expect(result.settlement.cleanup).toMatchObject({ status: 'verified', runDirectoryRemoved: true });
+  expect(result.settlement.transportChildReaped).toBe(true);
+  const events = fixture.events();
+  const evidenceIndex = events.findIndex((event) => event.kind === 'prepared-inputs');
+  const returnsIndex = events.findIndex((event) => event.kind === 'returns');
+  const cleanupIndex = events.findIndex((event) => event.kind === 'cleanup');
+  expect(evidenceIndex).toBeGreaterThan(events.findIndex((event) => event.kind === 'run'));
+  expect(returnsIndex).toBeGreaterThan(evidenceIndex);
+  expect(cleanupIndex).toBeGreaterThan(returnsIndex);
+});
 
 test('stack-run passes --estimate-ms through to remote placement and refuses invalid values', async () => {
   const valid = scenario({ a: { available: 20e9, slots: 2 } });

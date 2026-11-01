@@ -51,7 +51,11 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { stageCheckGit } from './check-git.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
-import { PERFORMANCE_HOST_NAMES } from './check-placement.ts';
+import {
+  checkHostRunSliceUnitName,
+  checkHostScopeUnitStem,
+  PERFORMANCE_HOST_NAMES,
+} from './check-placement.ts';
 
 export type Host = {
   name: string;
@@ -1268,7 +1272,7 @@ cat >/dev/null`;
 const dockerWrapper = readFileSync(join(import.meta.dir, 'check-host/docker'), 'utf8');
 
 function runSlice(id: string): string {
-  return `rezics-check-${id.replaceAll('-', '_')}.slice`;
+  return checkHostRunSliceUnitName(id);
 }
 
 // A run can still be refreshing its base before entering systemd. Stop its identity-recorded host monitor first;
@@ -2515,7 +2519,7 @@ systemd_script=${quote(systemdScript)}
 # (842 failed runs from 10-28 18:36 UTC); older systemd has no such flag and does not expand.
 expand_environment=
 if systemd-run --help 2>/dev/null | grep -q -- '--expand-environment'; then expand_environment=--expand-environment=no; fi
-exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlice(id)} --unit=rezics-check-${id} \\
+exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlice(id)} --unit=${checkHostScopeUnitStem(id)} \\
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} supervise ${preparationTimeoutMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} \\
   sh -c "$systemd_script" sh ${[cwd, ...command].map(quote).join(' ')}`;
   const executable = (command[0]?.split('/').at(-1) ?? 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '?').slice(0, 64);
@@ -4975,8 +4979,9 @@ async function runLeased(
       resources,
     };
     native = physical;
-    preparedInputs = await recoverPreparedInputs(prepared);
-    if (!preparedInputs) {
+    preparedInputs =
+      options.expectedSourceSha256 === undefined ? null : await recoverPreparedInputs(prepared);
+    if (options.expectedSourceSha256 !== undefined && !preparedInputs) {
       primaryFailure ??= new Error('remote-check: prepared source/generated input evidence is unavailable');
     }
     try {
