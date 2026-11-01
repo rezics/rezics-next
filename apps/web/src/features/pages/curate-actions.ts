@@ -142,8 +142,7 @@ export const publishCuration = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<PublishResult> => {
     const { authorization, reader } = await curationAdmission();
     if (!authorization) return { ok: false, reason: 'forbidden', admissionChanged: true };
-    if (!reader || reader !== data.expectedReader)
-      return { ok: false, reason: 'forbidden', admissionChanged: true };
+    if (!reader || reader !== data.expectedReader) return { ok: false, reason: 'forbidden', admissionChanged: true };
     if ('ok' in data.intent) return data.intent;
     return publishProfile(kernelClient(), { ...data.intent, authorization });
   });

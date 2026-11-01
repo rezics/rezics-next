@@ -433,7 +433,9 @@ test('reader replacement and ABA retire delayed reload, publication and preview 
       kind.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
     await act(async () => {
-      const address = host.querySelector('#presentation-preview-address') as InstanceType<typeof window.HTMLInputElement>;
+      const address = host.querySelector('#presentation-preview-address') as InstanceType<
+        typeof window.HTMLInputElement
+      >;
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(address, route);
       address.dispatchEvent(new window.Event('input', { bubbles: true }));
     });

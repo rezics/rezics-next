@@ -158,7 +158,15 @@ export class CurationPublication {
   /** Explicit review resolves a CAS refusal; inspecting a matching digest never confirms a write. */
   reconcile(profile: PresentationProfile, choice: 'keep' | 'discard'): ActiveCuration | null {
     const { active, result, busy } = this.state;
-    if (!this.active || busy || !active || active.reader !== this.reader || !result || result.ok || result.reason !== 'stale')
+    if (
+      !this.active ||
+      busy ||
+      !active ||
+      active.reader !== this.reader ||
+      !result ||
+      result.ok ||
+      result.reason !== 'stale'
+    )
       return null;
     const reviewed = { ...active, profile: choice === 'keep' ? profile : active.profile };
     this.update({ intent: null, result: null, active: null, readFailure: null });
@@ -167,12 +175,7 @@ export class CurationPublication {
 
   /** Validation refusal is terminal. A revised body requires a deliberate new intent. */
   async replaceInvalid(profile: PresentationProfile, expectedHead: number) {
-    if (
-      !this.active ||
-      this.state.busy ||
-      this.state.result?.ok !== false ||
-      this.state.result.reason !== 'invalid'
-    )
+    if (!this.active || this.state.busy || this.state.result?.ok !== false || this.state.result.reason !== 'invalid')
       return null;
     // Keep the original refusal and its profile until the revised draft is locally valid.
     if (validateProfile(platformRegistry, profile).length) return null;

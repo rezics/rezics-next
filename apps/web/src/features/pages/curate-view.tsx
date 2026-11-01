@@ -13,8 +13,7 @@ import { readPresentationPreview } from './curate-actions';
 
 const publicationTransport: PublicationTransport = {
   read: (expectedReader) => readCuration({ data: { expectedReader }, headers: csrfHeaders() }),
-  publish: (intent, expectedReader) =>
-    publishCuration({ data: { intent, expectedReader }, headers: csrfHeaders() }),
+  publish: (intent, expectedReader) => publishCuration({ data: { intent, expectedReader }, headers: csrfHeaders() }),
 };
 
 /** The subject's private curation region shares the existing prepared BFF transport. */

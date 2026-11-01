@@ -632,9 +632,7 @@ function AdmittedPresentationViewEditor({
           </Button>
           <Button
             variant="outline"
-            onClick={() =>
-              isCurrent() && (!pendingPublication && dirty ? setConfirm('reload') : void reload())
-            }
+            onClick={() => isCurrent() && (!pendingPublication && dirty ? setConfirm('reload') : void reload())}
           >
             {m.curation_reload()}
           </Button>
