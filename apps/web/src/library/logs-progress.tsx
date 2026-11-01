@@ -44,7 +44,7 @@ function PublishLog({
   originating,
 }: {
   page: Extract<ProgressSessionPage, { signedIn: true }>;
-  originating?: ProgressDetailOrigin;
+  originating?: ProgressDetailOrigin | undefined;
 }) {
   const router = useRouter();
   const [note, setNote] = useState('');
@@ -53,7 +53,7 @@ function PublishLog({
   const [error, setError] = useState<string | null>(null);
   type Lifetime = {
     page: typeof page;
-    originating?: ProgressDetailOrigin;
+    originating?: ProgressDetailOrigin | undefined;
     pending: boolean;
     intent?: { sessionId: string; note?: string; idempotencyKey: string };
   };
@@ -101,7 +101,7 @@ function PublishLog({
         setError(result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed());
         return;
       }
-      origin.intent = undefined;
+      delete origin.intent;
       setIdempotencyKey(crypto.randomUUID());
       if (!isCurrent(origin)) return;
       window.location.assign(router.buildLocation({ to: '/logs/$id', params: { id: result.id } }).href);
@@ -236,7 +236,7 @@ export function ProgressLogs({
   progress: ProgressSessionPage;
   logs: PublishedLogPage;
   search: { changes?: string; units?: string; logs?: string };
-  originating?: ProgressDetailOrigin;
+  originating?: ProgressDetailOrigin | undefined;
 }) {
   const page = progress as Extract<ProgressSessionPage, { signedIn: true }>;
   return (

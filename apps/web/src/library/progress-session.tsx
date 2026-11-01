@@ -124,7 +124,13 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
     hydrated && Boolean(observed.csrfToken),
   ]);
   const [instance] = useState(() => crypto.randomUUID());
-  type Boundary = { signature: string; active: boolean; hydrated: boolean; epoch: number; seed?: ProgressDetail };
+  type Boundary = {
+    signature: string;
+    active: boolean;
+    hydrated: boolean;
+    epoch: number;
+    seed: ProgressDetail | undefined;
+  };
   const boundaryRef = useRef<Boundary | null>(null);
   const [, renderRetired] = useState(0);
   const seeded = useRef<ProgressDetail | null>(null);
@@ -139,7 +145,7 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
     if (seed) seeded.current = seed;
     boundaryRef.current = { signature, active: true, hydrated, epoch: (previous?.epoch ?? 0) + 1, seed };
   }
-  const boundary = boundaryRef.current;
+  const boundary = boundaryRef.current!;
   useLayoutEffect(() => {
     boundary.active = true;
     const observe = () => {
@@ -243,7 +249,7 @@ type CapturedIntent =
   | { kind: 'finish'; data: ProgressFinishInput };
 type EditorLifetime = {
   page: LoadedPage;
-  originating?: ProgressDetailOrigin;
+  originating?: ProgressDetailOrigin | undefined;
   pending: boolean;
   history: symbol | null;
   retry?: CapturedIntent;
@@ -270,7 +276,7 @@ export function ProgressSessionPage({
   page: ProgressSessionPage;
   children?: ReactNode;
   logsCursor?: string | undefined;
-  originating?: ProgressDetailOrigin;
+  originating?: ProgressDetailOrigin | undefined;
 }) {
   if (!page.signedIn) return null;
   return (
@@ -289,7 +295,7 @@ function SessionEditor({
   page: LoadedPage;
   children?: ReactNode;
   logsCursor?: string | undefined;
-  originating?: ProgressDetailOrigin;
+  originating?: ProgressDetailOrigin | undefined;
 }) {
   const [session, setSession] = useState(page.session);
   const [seenPage, setSeenPage] = useState(page);
@@ -321,7 +327,7 @@ function SessionEditor({
     return () => {
       if (lifetime.current === origin) lifetime.current = null;
     };
-  }, [originating ? originating : page]);
+  }, [originating ?? page]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px), (pointer: coarse)');
@@ -449,7 +455,7 @@ function SessionEditor({
         setReadDenied(true);
         return;
       }
-      origin.retry = undefined;
+      delete origin.retry;
       setKey(crypto.randomUUID());
       if (captured.kind === 'record') {
         setAmount('');
