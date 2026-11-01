@@ -174,12 +174,14 @@ test('healthy Following preserves current authorization, restrictive bounded rea
     following: false,
   });
   expect(
-    calls.slice(3).map((call) => [
-      call.method,
-      new URL(call.url).pathname,
-      call.headers.get('idempotency-key'),
-      call.headers.get('authorization'),
-    ]),
+    calls
+      .slice(3)
+      .map((call) => [
+        call.method,
+        new URL(call.url).pathname,
+        call.headers.get('idempotency-key'),
+        call.headers.get('authorization'),
+      ]),
   ).toEqual([
     ['DELETE', `/v1/follows/${targetId}`, input.idempotencyKey, 'Bearer current-delete-viewer'],
     ['DELETE', `/v1/follows/${targetId}`, input.idempotencyKey, 'Bearer explicit-viewer'],
@@ -193,6 +195,8 @@ test('healthy Following preserves current authorization, restrictive bounded rea
   await expect(loadMineFollowingPage(client, request(), env, { cursor: staleCursor })).rejects.toThrow('stale_cursor');
   expect(calls.length - beforeRetry).toBe(2);
   expect(
-    calls.filter((call) => call.method === 'GET').every((call) => call.cache === 'no-store' && call.redirect === 'manual'),
+    calls
+      .filter((call) => call.method === 'GET')
+      .every((call) => call.cache === 'no-store' && call.redirect === 'manual'),
   ).toBe(true);
 });
