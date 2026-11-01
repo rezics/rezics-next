@@ -10,8 +10,12 @@ import type { SubjectReactionKind } from '../src/features/pages/subject-reaction
 import type { ZoneSubjectPersonalTransport } from '../src/zones/zone-shell';
 
 // UNRUN: the connected native-read and actual Zone owner journey is authored; current verification is Web typing only.
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
-const window = new Window({ url: 'https://site.test/en/zones/0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11/subjects/0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01' });
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({
+  url: 'https://site.test/en/zones/0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11/subjects/0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01',
+});
 const globals = {
   window,
   document: window.document,
@@ -29,7 +33,9 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -75,7 +81,10 @@ let holdPersonalCalls = new Set<number>();
 const sessionStore = {
   signedIn: () => {
     browserSessionReadCount++;
-    return browserSessionPending?.promise ?? Promise.resolve({ signedIn: true, subject: preparedReader, csrfToken: preparedCsrf });
+    return (
+      browserSessionPending?.promise ??
+      Promise.resolve({ signedIn: true, subject: preparedReader, csrfToken: preparedCsrf })
+    );
   },
   credential: async (): Promise<SessionCredential> => ({
     status: 'active',
@@ -113,10 +122,7 @@ const fakeKernelClient = {
         const next = ownReadQueue.shift();
         return next ? next() : { status: 200, data: { kind: null } };
       },
-      put: async (
-        input: { kind: SubjectReactionKind },
-        options: { headers?: { authorization?: string } },
-      ) => {
+      put: async (input: { kind: SubjectReactionKind }, options: { headers?: { authorization?: string } }) => {
         nativeWrites.push({ id, method: 'put', kind: input.kind, authorization: options.headers?.authorization });
         return { status: 200, data: { kind: input.kind } };
       },
@@ -183,7 +189,8 @@ mock.module('../src/kernel/client', () => ({ kernelClient: () => fakeKernelClien
 
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+  await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { loadSubjectReactions, readOwnReaction } = await import('../src/features/pages/subject-reactions');
 const { ZoneSubjectPage, loadZoneSubjectPersonal } = await import('../src/zones/zone-shell');
@@ -279,9 +286,9 @@ function personalTransport(input: Parameters<ZoneSubjectPersonalTransport>[0]) {
     ...(gate ? { gate } : {}),
   };
   call.actual = loadZoneSubjectPersonal(input).then((value) => {
-      call.result = value;
-      return value;
-    });
+    call.result = value;
+    return value;
+  });
   call.response = call.actual.then((value) => (gate ? gate.promise.then(() => value) : value));
   personalCalls.push(call);
   return call.response;
@@ -352,7 +359,9 @@ async function clickKind(kind: SubjectReactionKind) {
       expect(trigger).toBeDefined();
       trigger!.click();
       const choice = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent?.trim() === (kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad()),
+        (button) =>
+          button.textContent?.trim() ===
+          (kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad()),
       );
       expect(choice).toBeDefined();
       choice!.click();
@@ -475,7 +484,13 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(ownReads).toHaveLength(readsBeforeMismatch);
 
   queueNativeRead({ status: 503 });
-  const publicWithUnavailableOwn = await loadSubjectReactions(native, directRequest(), sessionEnv, subjectId, 'reader-one');
+  const publicWithUnavailableOwn = await loadSubjectReactions(
+    native,
+    directRequest(),
+    sessionEnv,
+    subjectId,
+    'reader-one',
+  );
   expect(publicWithUnavailableOwn).toMatchObject({ counts: { like: 2 }, value: null });
   expect(publicWithUnavailableOwn).not.toHaveProperty('reader');
   expect(countReads).toContain(subjectId);
@@ -498,7 +513,9 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   holdPersonalCalls = new Set([1, 2, 5]);
   const firstOutcome = zoneOutcome(subjectId);
   await paint(firstOutcome);
-  await until(() => browserSessionReadCount > 0 && personalCalls.length === 1 && personalCalls[0]!.result !== undefined);
+  await until(
+    () => browserSessionReadCount > 0 && personalCalls.length === 1 && personalCalls[0]!.result !== undefined,
+  );
 
   const firstPersonal = personalCalls[0]!.result!;
   expect(personalCalls[0]!.input.data).toEqual({
@@ -538,7 +555,9 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   );
   expect(moreActions).toBeDefined();
   await flush(() => moreActions!.click());
-  expect([...window.document.querySelectorAll('button')].some((button) => button.textContent?.trim() === m.report_action())).toBe(true);
+  expect(
+    [...window.document.querySelectorAll('button')].some((button) => button.textContent?.trim() === m.report_action()),
+  ).toBe(true);
   expect(preferenceReads).toContain('reader-one');
   expect(libraryEntryReads).toContain(subjectId);
 
@@ -568,17 +587,34 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
 
   await clickKind('like');
   await until(() => nativeWrites.length === 1 && chip('like').getAttribute('aria-pressed') === 'true');
-  expect(nativeWrites[0]).toMatchObject({ id: subjectId, method: 'put', kind: 'like', authorization: 'Bearer token-reader-one' });
+  expect(nativeWrites[0]).toMatchObject({
+    id: subjectId,
+    method: 'put',
+    kind: 'like',
+    authorization: 'Bearer token-reader-one',
+  });
   await clickKind('like');
-  await until(() => nativeWrites.length === 2 && chips().every((button) => button.getAttribute('aria-pressed') !== 'true'));
-  expect(nativeWrites[1]).toMatchObject({ id: subjectId, method: 'delete', kind: null, authorization: 'Bearer token-reader-one' });
+  await until(
+    () => nativeWrites.length === 2 && chips().every((button) => button.getAttribute('aria-pressed') !== 'true'),
+  );
+  expect(nativeWrites[1]).toMatchObject({
+    id: subjectId,
+    method: 'delete',
+    kind: null,
+    authorization: 'Bearer token-reader-one',
+  });
 
   const secondId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';
   const oldSecondOwnRead = deferred<NativeReactionRead>();
   queueNativeRead(oldSecondOwnRead);
   const secondOutcome = zoneOutcome(secondId);
   await paint(secondOutcome);
-  await until(() => personalCalls.length === 2 && personalCalls[1]!.result !== undefined && ownReads.length === ownReadsBeforeMount + 3);
+  await until(
+    () =>
+      personalCalls.length === 2 &&
+      personalCalls[1]!.result !== undefined &&
+      ownReads.length === ownReadsBeforeMount + 3,
+  );
   expect(personalCalls[1]!.input.data.id).toBe(secondId);
   expect(personalCalls[1]!.gate).toBeDefined();
   const oldSecondPersonal = personalCalls[1]!.result!;
@@ -587,7 +623,12 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   const thirdId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e07';
   queueNativeRead({ status: 200, data: { kind: null } });
   await paint(zoneOutcome(thirdId));
-  await until(() => personalCalls.length === 3 && personalCalls[2]!.result !== undefined && ownReads.length === ownReadsBeforeMount + 4);
+  await until(
+    () =>
+      personalCalls.length === 3 &&
+      personalCalls[2]!.result !== undefined &&
+      ownReads.length === ownReadsBeforeMount + 4,
+  );
   expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
   personalCalls[1]!.gate!.resolve();
   await flush(() => oldSecondOwnRead.resolve({ status: 503 }));
@@ -603,13 +644,21 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   const oldProviderRead = deferred<NativeReactionRead>();
   queueNativeRead(oldProviderRead);
   await paint(zoneOutcome(fourthId));
-  await until(() => personalCalls.length === 4 && personalCalls[3]!.result !== undefined && ownReads.length === ownReadsBeforeMount + 5);
+  await until(
+    () =>
+      personalCalls.length === 4 &&
+      personalCalls[3]!.result !== undefined &&
+      ownReads.length === ownReadsBeforeMount + 5,
+  );
   const oldProviderClient = client;
   replacementClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   replacementClient.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 200, data: { kind: null } });
   await paint(zoneOutcome(fourthId), replacementClient);
-  await until(() => ownReads.length === ownReadsBeforeMount + 6 && chips().length > 0 && chips().some((button) => !button.disabled));
+  await until(
+    () =>
+      ownReads.length === ownReadsBeforeMount + 6 && chips().length > 0 && chips().some((button) => !button.disabled),
+  );
   const combinedCountBeforeOldResponse = personalCalls.length;
   oldProviderRead.resolve({ status: 200, data: { kind: 'love' } });
   await tick();

@@ -56,9 +56,7 @@ export async function readOwnReaction(
 /** `GET /v1/subjects/{id}/reaction`, which the generated client declarations do not carry yet. */
 type OwnReactionRoute = {
   reaction: {
-    get(options: {
-      headers: { authorization: string };
-    }): Promise<{ status: number; data?: unknown }>;
+    get(options: { headers: { authorization: string } }): Promise<{ status: number; data?: unknown }>;
   };
 };
 
