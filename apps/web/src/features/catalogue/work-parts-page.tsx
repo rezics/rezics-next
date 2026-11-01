@@ -27,6 +27,13 @@ type Correction = {
   session?: string | undefined;
 };
 
+const actionClassName =
+  'h-auto min-h-8 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1.5 max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+const summaryClassName =
+  'cursor-pointer rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+const linkClassName =
+  'block w-fit max-w-full font-sans font-semibold underline max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+
 /** Each opened assertion owns the existing editor's independent draft, request key and exact-slot review. */
 export function WorkPartsPage({
   id,
@@ -134,7 +141,10 @@ export function WorkPartsPage({
           ? m.candidate_invalid({}, o)
           : m.candidate_unavailable({}, o);
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6" aria-busy={busy || query.isPending}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
+      aria-busy={busy || query.isPending}
+    >
       <ViewHeading label={m.work_parts_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.work_parts_intro({}, o)}</p>
       {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
@@ -143,7 +153,7 @@ export function WorkPartsPage({
         {read && (
           <>
             <a
-              className="font-sans text-xl font-semibold underline"
+              className={`${linkClassName} text-xl`}
               lang={title.lang ?? undefined}
               href={subjectHref({ id, label: title.text }, locale).href}
             >
@@ -156,6 +166,7 @@ export function WorkPartsPage({
                   <FieldLabel htmlFor="work-parts-stream">{m.work_parts_relation({}, o)}</FieldLabel>
                   <NativeSelect
                     id="work-parts-stream"
+                    className="min-w-0 max-w-full max-md:[&_select]:min-h-11 max-md:[&_select]:min-w-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_select]:min-w-11"
                     value={stream.key}
                     disabled={busy}
                     onChange={(event) => void load(event.target.value)}
@@ -190,7 +201,7 @@ export function WorkPartsPage({
                         <a
                           lang={row.summary.label?.language}
                           href={subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}
-                          className="font-sans text-lg font-semibold underline"
+                          className={`${linkClassName} text-lg`}
                         >
                           {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
                         </a>
@@ -246,7 +257,7 @@ export function WorkPartsPage({
                             )}
                           </section>
                           {partCorrection(row, stream) && (
-                            <Button variant="outline" onClick={() => open(row, stream)}>
+                            <Button className={actionClassName} variant="outline" onClick={() => open(row, stream)}>
                               {m.work_parts_correct({}, o)}
                             </Button>
                           )}
@@ -255,7 +266,7 @@ export function WorkPartsPage({
                         <p>{m.work_parts_assertion_unavailable({}, o)}</p>
                       )}
                       <details className="rounded-lg border border-border p-3 text-sm">
-                        <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+                        <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
                         <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
                           <div>
                             <dt>{m.work_parts_holder({}, o)}</dt>
@@ -282,6 +293,7 @@ export function WorkPartsPage({
                 <div className="flex flex-wrap gap-2">
                   {read.next && (
                     <Button
+                      className={actionClassName}
                       variant="outline"
                       disabled={busy}
                       onClick={() => void load(stream.key, read.next ?? undefined)}
@@ -289,7 +301,12 @@ export function WorkPartsPage({
                       {m.work_parts_more({}, o)}
                     </Button>
                   )}
-                  <Button variant="outline" disabled={busy} onClick={() => void load(stream.key)}>
+                  <Button
+                    className={actionClassName}
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void load(stream.key)}
+                  >
                     {m.work_parts_restart({}, o)}
                   </Button>
                 </div>
@@ -302,14 +319,14 @@ export function WorkPartsPage({
                     value={part}
                     onValueChange={setPart}
                   />
-                  <Button variant="outline" disabled={!part.length} onClick={add}>
+                  <Button className={actionClassName} variant="outline" disabled={!part.length} onClick={add}>
                     {m.work_parts_draft({}, o)}
                   </Button>
                 </section>
               </>
             )}
             <details className="rounded-lg border border-border p-4 text-sm">
-              <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+              <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
               <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
                 <div>
                   <dt>{m.creator_editions_subject({}, o)}</dt>
@@ -332,7 +349,7 @@ export function WorkPartsPage({
         {drafts.map((draft) => (
           <section key={draft.key} className="space-y-3 border-t border-border pt-6">
             <details className="text-sm">
-              <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+              <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
               <p className="mt-3 break-all">
                 {m.work_parts_holder({}, o)}: <code>{draft.id}</code>
               </p>
@@ -349,7 +366,12 @@ export function WorkPartsPage({
         ))}
       </div>
       {(read || concealed) && (
-        <Button variant="outline" disabled={busy} onClick={() => void load(stream?.key, cursor.current)}>
+        <Button
+          className={actionClassName}
+          variant="outline"
+          disabled={busy}
+          onClick={() => void load(stream?.key, cursor.current)}
+        >
           {m.candidate_reload({}, o)}
         </Button>
       )}
