@@ -286,7 +286,6 @@ test('The default My Collections route immediately retires private collections a
     return entry;
   };
   const settle = async (index: number, value: MineCollectionsViewerPage) => {
-    menus.length = 0;
     await act(async () => pendingReads[index]!.resolve(value));
     // Query notifications use the installed scheduler.
     await act(async () => {
@@ -302,6 +301,9 @@ test('The default My Collections route immediately retires private collections a
     for (const text of [`Private ${subject}`, `Preview ${subject}`, `Pinned ${subject}`, `Navigation ${subject}`])
       expect(host.textContent).not.toContain(text);
     expect(host.querySelector(`a[href="/en/collections/pin-${subject}"]`)).toBeNull();
+    expect([...host.querySelectorAll('a')].some((link) => link.getAttribute('href')?.includes(`next-${subject}`))).toBe(
+      false,
+    );
   };
   try {
     await show(session('A'));
@@ -327,7 +329,10 @@ test('The default My Collections route immediately retires private collections a
     expect(host.textContent).not.toContain(m.error_message());
     await show(session('B', 'rotated-nonempty-csrf'));
     expect(pin().disabled).toBe(true);
-    await refetch();
+    initial = response('B'); // An ordinary loader refresh must also keep this native attempt alive.
+    await show(session('B', 'rotated-nonempty-csrf'));
+    expect(pin().disabled).toBe(true);
+    expect(pendingReads).toHaveLength(3);
     await settle(2, response('B'));
     await act(async () => writes[1]!.work.reject(new Error('Uncertain current write')));
     await act(async () => pin().onSelect());
