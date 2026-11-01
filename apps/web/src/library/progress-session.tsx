@@ -175,7 +175,8 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
     refetchOnReconnect: false,
   });
   function isCurrent(write = false) {
-    if (boundaryRef.current !== boundary || !boundary.active || !viewer || !allowed) return false;
+    if (boundaryRef.current !== boundary || !boundary.active || !viewer || !allowed || getLocale() !== locale)
+      return false;
     if (!hydrated) return !write;
     const now = client.getQueryData(sessionQuery.queryKey);
     const groups = client.getQueryData(exposureQuery.queryKey);
@@ -205,6 +206,7 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
       },
     };
   }
+  if (query.isError && isCurrent()) throw query.error;
   let detail = matchingDetail(query.data, viewer, address) ? query.data : undefined;
   if (
     detail &&
