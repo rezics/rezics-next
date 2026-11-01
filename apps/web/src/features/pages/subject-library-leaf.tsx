@@ -4,7 +4,8 @@ import { useLocation } from '@tanstack/react-router';
 import { useOperation } from '../../kernel/exposure';
 import { subjectSlotReturnTo } from '../../library/subject-slot-return-context';
 import type { SubjectLibrarySlotData } from '../../library/subject-slot';
-import { SubjectLibrarySlot, useSubjectLibraryObservation } from '../../library/subject-slot-view';
+import { SubjectLibrarySlot } from '../../library/subject-slot-view';
+import { useSubjectLibraryObservation } from '../../library/subject-library-current-origin';
 import type { useSession } from '../../session/query';
 import type { SubjectFrameData } from './subject-frame';
 import { subjectLibraryQuery } from './subject-queries';
@@ -48,7 +49,9 @@ export function subjectLibraryLeafQuery(
         data.provenance?.subjectId === frame.id &&
         data.provenance?.csrfToken === session.csrfToken &&
         !!data.provenance?.readId)) &&
-    (!data.entry || data.entry.subjectId === frame.id)
+    (!data.entry || data.entry.subjectId === frame.id) &&
+    (!data.undo || data.undo.subjectId === frame.id) &&
+    (!data.restore || !('entry' in data.restore) || !data.restore.entry || data.restore.entry.subjectId === frame.id)
       ? data
       : {
           ...unavailable,
@@ -111,6 +114,7 @@ export function SubjectLibraryLeaf({
   const signature = JSON.stringify([
     addressScope,
     admitted,
+    session.csrfToken,
     observation.value.entry,
     observation.value.labels,
     observation.value.collections,
@@ -124,7 +128,6 @@ export function SubjectLibraryLeaf({
   const credential = useRef(session.csrfToken);
   credential.current = session.csrfToken;
   useEffect(() => {
-    lifetime.active = true;
     return () => {
       lifetime.active = false;
     };
@@ -136,6 +139,11 @@ export function SubjectLibraryLeaf({
       const current = observation.read();
       return (
         lifetime.active &&
+        observation.isMounted() &&
+        current.sessionReady &&
+        current.viewer === session.subject &&
+        current.credential === session.csrfToken &&
+        current.entryAdmitted &&
         credential.current === session.csrfToken &&
         current.scope === observation.value.scope &&
         current.entry === observation.value.entry &&

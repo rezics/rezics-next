@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { SubjectLabelNotice } from './subject-labels.tsx';
@@ -40,7 +40,14 @@ import type {
   SubjectLibrarySlotData,
 } from './subject-slot';
 import { normalizeLibraryLabelName } from './subject-label-name';
-import type { LibraryLabelSummary, SubjectLabel } from './subject-labels.ts';
+import type {
+  LibraryLabelSummary,
+  SubjectLabel,
+  SubjectLabelMutationInput,
+  SubjectLabelMutationResult,
+} from './subject-labels.ts';
+import { useSubjectLibraryObservation, type SlotLifetime } from './subject-library-current-origin';
+export { useSubjectLibraryObservation } from './subject-library-current-origin';
 
 type SubjectSlotProps = {
   subject: SubjectReference;
@@ -55,103 +62,14 @@ const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
 const removeValue = 'remove';
 const otherStateValue = '__library_other__';
 const subscribe = () => () => {};
-type SlotLifetime = { active: boolean; current: () => boolean };
 type SlotAdmission = {
   signature: string;
   lifetime: SlotLifetime;
   seen: Set<string>;
   retired: Set<string>;
-  accepted?: string;
+  accepted?: { readId: string; csrfToken: string };
+  episode?: string;
 };
-
-/** Remember actual cache/address transitions, including replacements React batches into an ABA render. */
-export function useSubjectLibraryObservation(subject: SubjectReference, locale: string) {
-  const client = useQueryClient();
-  const router = useRouter();
-  const observation = useMemo(() => {
-    let address = subjectSlotReturnTo(router.state.location.publicHref, subject, locale);
-    let value = {
-      scope: 0,
-      entry: 0,
-      labels: 0,
-      collections: 0,
-      sessionReady: false,
-      entryAdmitted: false,
-      labelsAdmitted: false,
-      collectionsAdmitted: false,
-    };
-    let previous: string[] | undefined;
-    const read = () => {
-      const session = client.getQueryState<ReturnType<typeof useSession>>(['session']);
-      const exposure = client.getQueryState<string[]>(['exposure', 'viewer']);
-      const viewer = session?.data;
-      const sessionReady =
-        session?.status === 'success' && viewer?.state === 'signed-in' && !!viewer.subject && !!viewer.csrfToken;
-      const admitted = sessionReady && exposure?.status === 'success' ? exposure.data : undefined;
-      const allowed = (operation: Parameters<typeof operationIsAdmitted>[0]) =>
-        operationIsAdmitted(operation, admitted);
-      const next = [
-        JSON.stringify([address, session?.status, viewer?.state, viewer?.subject, !!viewer?.csrfToken]),
-        JSON.stringify(
-          ['library_entry.get', 'library_entry.put', 'library_entry.delete', 'library_entry.restore'].map((op) =>
-            allowed(op as Parameters<typeof allowed>[0]),
-          ),
-        ),
-        JSON.stringify(
-          [
-            'library_label.assignment_list',
-            'library_label.list',
-            'library_label.assign',
-            'library_label.create',
-            'library_label.unassign',
-          ].map((op) => allowed(op as Parameters<typeof allowed>[0])),
-        ),
-        JSON.stringify([allowed('collection.list'), allowed('collection_member.create')]),
-      ];
-      if (!previous || next.some((key, index) => key !== previous![index])) {
-        value = {
-          scope: value.scope + (previous && next[0] !== previous[0] ? 1 : 0),
-          entry: value.entry + (previous && next[1] !== previous[1] ? 1 : 0),
-          labels: value.labels + (previous && next[2] !== previous[2] ? 1 : 0),
-          collections: value.collections + (previous && next[3] !== previous[3] ? 1 : 0),
-          sessionReady,
-          entryAdmitted: allowed('library_entry.get'),
-          labelsAdmitted: allowed('library_label.assignment_list'),
-          collectionsAdmitted: allowed('collection.list') && allowed('collection_member.create'),
-        };
-        previous = next;
-      }
-      return value;
-    };
-    const server = value;
-    return {
-      owner: crypto.randomUUID(),
-      read,
-      server: () => server,
-      subscribe: (notify: () => void) => {
-        read();
-        const cache = client.getQueryCache().subscribe(({ query }) => {
-          if (query.queryKey[0] !== 'session' && query.queryKey[0] !== 'exposure') return;
-          const before = value;
-          if (read() !== before) notify();
-        });
-        const navigation = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
-          const next = subjectSlotReturnTo(toLocation.publicHref, subject, locale);
-          if (address === next) return;
-          address = next;
-          read();
-          notify();
-        });
-        return () => {
-          cache();
-          navigation();
-        };
-      },
-    };
-  }, [client, router, subject.id, subject.type, locale]);
-  const value = useSyncExternalStore(observation.subscribe, observation.read, observation.server);
-  return { ...observation, value };
-}
 
 /** The shared owner observes the browser even when a direct Subject or Zone host retains its old props. */
 export function SubjectLibrarySlot(props: SubjectSlotProps) {
@@ -166,17 +84,9 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
   const currentHref = useLocation({ select: (location) => location.publicHref });
   const returnTo = subjectSlotReturnTo(currentHref, props.subject, props.locale);
   const entryGet = useOperation('library_entry.get');
-  const entryPut = useOperation('library_entry.put');
-  const entryDelete = useOperation('library_entry.delete');
-  const entryRestore = useOperation('library_entry.restore');
   const assignments = useOperation('library_label.assignment_list');
-  const labelList = useOperation('library_label.list');
-  const labelAssign = useOperation('library_label.assign');
-  const labelCreate = useOperation('library_label.create');
-  const labelUnassign = useOperation('library_label.unassign');
   const collectionList = useOperation('collection.list');
   const memberCreate = useOperation('collection_member.create');
-  const mounted = useRef(true);
   const admissions = useRef<Partial<Record<'entry' | 'labels' | 'collections', SlotAdmission>>>({});
   const scope = JSON.stringify([
     props.subject.id,
@@ -197,6 +107,8 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
     !browser ||
     (observation.value.sessionReady &&
       session.state === 'signed-in' &&
+      observation.value.viewer === session.subject &&
+      observation.value.credential === session.csrfToken &&
       !!session.subject &&
       !!session.csrfToken &&
       data.session === 'signed-in' &&
@@ -213,18 +125,18 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
   const families = {
     entry: {
       admitted: entryGet && data.entryAvailable && (!browser || observation.value.entryAdmitted),
-      operations: [entryGet, entryPut, entryDelete, entryRestore],
       revision: observation.value.entry,
+      seed: observation.value.entrySeed,
     },
     labels: {
       admitted: assignments && data.labels !== null && (!browser || observation.value.labelsAdmitted),
-      operations: [assignments, labelList, labelAssign, labelCreate, labelUnassign],
       revision: observation.value.labels,
+      seed: observation.value.labelsSeed,
     },
     collections: {
       admitted: collectionList && memberCreate && (!browser || observation.value.collectionsAdmitted),
-      operations: [collectionList, memberCreate],
       revision: observation.value.collections,
+      seed: observation.value.collectionsSeed,
     },
   };
   const ready = { entry: false, labels: false, collections: false };
@@ -232,26 +144,33 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
     let observed = admissions.current[family];
     const credentialMatches =
       !browser ||
-      (provenance?.csrfToken === session.csrfToken && data.csrfToken === session.csrfToken) ||
-      (!!provenance && observed?.accepted === provenance.readId);
+      (!!provenance &&
+        data.csrfToken === provenance.csrfToken &&
+        (provenance.csrfToken === session.csrfToken ||
+          (observed?.accepted?.readId === provenance.readId && observed.accepted.csrfToken === provenance.csrfToken)));
     const revision = families[family].revision;
-    const isCurrent = () => {
+    const isCurrent = (...operations: Parameters<SlotLifetime['current']>) => {
       const current = observation.read();
-      return mounted.current && (!browser || (current.scope === observedScope && current[family] === revision));
+      return (
+        !browser ||
+        (observation.isMounted() &&
+          current.sessionReady &&
+          current.scope === observedScope &&
+          current[family] === revision &&
+          operations.every((operation) => operationIsAdmitted(operation, current.admitted)))
+      );
     };
-    const signature = JSON.stringify([
-      scope,
-      families[family].operations,
-      families[family].admitted,
-      browser ? revision : 0,
-      actualIdentity && credentialMatches,
-    ]);
+    const signature = JSON.stringify([scope, browser ? families[family].seed : 0]);
     if (!observed || observed.signature !== signature) {
-      if (observed) observed.lifetime.active = false;
       const retired = observed?.retired ?? new Set<string>();
       for (const id of observed?.seen ?? []) retired.add(id);
-      const lifetime: SlotLifetime = { active: false, current: () => isCurrent() && lifetime.active };
-      observed = { signature, lifetime, seen: new Set(), retired };
+      if (observed) observed.lifetime.active = false;
+      observed = {
+        signature,
+        lifetime: { seed: signature, active: false, current: () => false },
+        seen: new Set(),
+        retired,
+      };
       admissions.current[family] = observed;
     }
     const accepted =
@@ -259,21 +178,23 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       credentialMatches &&
       families[family].admitted &&
       (!browser || (!!provenance && !observed.retired.has(provenance.readId)));
-    if (accepted !== observed.lifetime.active) {
+    // The dispatch episode changes on every actual observation. Private read retirement is independent
+    // of healthy credential/admission refreshes so uncertain native intent is not silently replaced.
+    const episode = `${signature}:${revision}:${accepted}:${provenance?.readId}`;
+    if (observed.episode !== episode) {
       observed.lifetime.active = false;
-      const lifetime: SlotLifetime = { active: accepted, current: () => isCurrent() && lifetime.active };
+      const lifetime = {
+        seed: signature,
+        active: accepted,
+        current: (...operations: Parameters<SlotLifetime['current']>) => lifetime.active && isCurrent(...operations),
+      };
+      observed.episode = episode;
       observed.lifetime = lifetime;
     }
     if (provenance) observed.seen.add(provenance.readId);
-    if (accepted && provenance) observed.accepted = provenance.readId;
+    if (accepted && provenance) observed.accepted = { readId: provenance.readId, csrfToken: provenance.csrfToken };
     ready[family] = accepted;
   }
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
   const memberResult = data.result === 'added' || data.result === 'collection-full';
   const current: SubjectLibrarySlotData = !browser
     ? data
@@ -401,7 +322,23 @@ function SubjectLibrarySlotView({
   const memberFlight = useRef(false);
   const pickerFlight = useRef(false);
   const labelFlight = useRef(false);
-  const uncertainEntry = useRef<{ input: SubjectLibraryMutation; previous: string } | null>(null);
+  const uncertainEntry = useRef<{
+    input: SubjectLibraryMutation;
+    previous: string;
+    running: boolean;
+    response?: SubjectLibraryMutationResponse | undefined;
+  } | null>(null);
+  const uncertainMember = useRef<{
+    input: SubjectLibraryMutation;
+    running: boolean;
+    response?: SubjectLibraryMutationResponse | undefined;
+  } | null>(null);
+  const uncertainLabel = useRef<{
+    input: SubjectLabelMutationInput;
+    label?: LibraryLabelSummary | SubjectLabel;
+    running: boolean;
+    response?: SubjectLabelMutationResult | undefined;
+  } | null>(null);
   const initialEntry =
     data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
   const [entry, setEntry] = useState(initialEntry);
@@ -411,13 +348,16 @@ function SubjectLibrarySlotView({
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
   const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [entryUndo, setEntryUndo] = useState(data.undo);
+  const uncertainRestore = useRef<{
+    receipt: { deletionId: string; revision: number };
+    running: boolean;
+    response?: Awaited<ReturnType<typeof restoreSubjectLibrarySlot>> | undefined;
+  } | null>(null);
   const restoreAdmitted = useOperation('library_entry.restore');
   const entryPutAdmitted = useOperation('library_entry.put');
   const entryDeleteAdmitted = useOperation('library_entry.delete');
   const labelListAdmitted = useOperation('library_label.list');
-  const labelAssignAdmitted = useOperation('library_label.assign');
-  const labelCreateAdmitted = useOperation('library_label.create');
-  const labelUnassignAdmitted = useOperation('library_label.unassign');
   const [labels, setLabels] = useState(data.labels ?? []);
   const [labelQuery, setLabelQuery] = useState('');
   const [labelNext, setLabelNext] = useState<string | null>(null);
@@ -433,6 +373,7 @@ function SubjectLibrarySlotView({
   const [labelUndo, setLabelUndo] = useState(data.labelUndo);
   const labelUndoKeys = useRef(new Map<string, string>());
   const restoredLabelEpisodes = useRef(new Set<string>());
+  const usedLabelKeys = useRef(new Set<string>());
   const labelEpisode = (assignmentId: string, revision: number) => `${assignmentId}:${revision}`;
   function labelUndoKeyFor(assignmentId: string, revision: number) {
     const episode = labelEpisode(assignmentId, revision);
@@ -456,16 +397,21 @@ function SubjectLibrarySlotView({
   const [collectionOrigin, setCollectionOrigin] = useState(collectionLifetime);
   // Render-time retirement prevents a stale private value from surviving even one committed replacement render.
   if (entryOrigin !== entryLifetime) {
+    if (entryOrigin.seed !== entryLifetime.seed) setEntryUndo(undefined);
     setEntryOrigin(entryLifetime);
     setEntry(initialEntry);
     setSelectedState(initialEntry?.state ?? '');
     setPending(false);
     setActionResult(undefined);
     setRestoreMessage(null);
-    uncertainEntry.current = null;
     entryFlight.current = false;
   }
   if (labelOrigin !== labelLifetime) {
+    if (labelOrigin.seed !== labelLifetime.seed) {
+      setLabelUndo(undefined);
+      labelUndoKeys.current.clear();
+      restoredLabelEpisodes.current.clear();
+    }
     setLabelOrigin(labelLifetime);
     setLabels(data.labels ?? []);
     setLabelPickerOpen(false);
@@ -477,9 +423,6 @@ function SubjectLibrarySlotView({
     setLabelSearchState('idle');
     setLabelPending(false);
     setLabelNotice(undefined);
-    setLabelUndo(undefined);
-    labelUndoKeys.current.clear();
-    restoredLabelEpisodes.current.clear();
     labelFlight.current = false;
   }
   if (collectionOrigin !== collectionLifetime) {
@@ -494,15 +437,23 @@ function SubjectLibrarySlotView({
   const stateOptions = (data.stateOptions ?? []).map(({ id, label }) => [id, label.text] as const);
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
+    if (!entryLifetime.current()) return;
     const loadedEntry =
       data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
     setEntry(loadedEntry);
     setSelectedState(loadedEntry?.state ?? '');
+    if (data.undo) setEntryUndo(data.undo);
+  }, [data.entry, data.restore, data.undo, entryLifetime]);
+  useEffect(() => {
+    if (!collectionLifetime.current()) return;
     setCollections(data.collections);
     setCollectionsLoaded(data.collectionsLoaded);
-  }, [data.entry, data.restore, data.collections, data.collectionsLoaded]);
-  useEffect(() => setLabels(data.labels ?? []), [data.labels]);
+  }, [data.collections, data.collectionsLoaded, collectionLifetime]);
   useEffect(() => {
+    if (labelLifetime.current()) setLabels(data.labels ?? []);
+  }, [data.labels, labelLifetime]);
+  useEffect(() => {
+    if (!labelLifetime.current()) return;
     setLabelNotice(data.labelResult);
     if (
       data.labelUndo &&
@@ -511,12 +462,21 @@ function SubjectLibrarySlotView({
       return;
     if (!data.labelUndo && labelUndo) return;
     setLabelUndo(data.labelUndo);
-  }, [data.labelResult, data.labelUndo]);
+  }, [data.labelResult, data.labelUndo, labelLifetime]);
   useEffect(() => {
-    if (!hydrated || !labelPickerOpen || !labelListAdmitted || !labelLifetime.current()) return;
+    if (
+      !hydrated ||
+      !labelPickerOpen ||
+      !labelListAdmitted ||
+      !labelLifetime.current('library_label.assignment_list', 'library_label.list')
+    )
+      return;
     let current = true;
     const query = labelQuery;
-    const currentSearch = () => current && labelLifetime.current() && searchOrigin.current.sequence === searchSequence;
+    const currentSearch = () =>
+      current &&
+      labelLifetime.current('library_label.assignment_list', 'library_label.list') &&
+      searchOrigin.current.sequence === searchSequence;
     setLabelNext(null);
     setLabelChoices([]);
     setLabelSearchState('idle');
@@ -531,7 +491,8 @@ function SubjectLibrarySlotView({
             response.provenance?.viewer !== data.provenance?.viewer ||
             !response.provenance ||
             response.provenance.csrfToken !== credential ||
-            response.provenance.query !== query
+            response.provenance.query !== query ||
+            response.provenance.cursor !== undefined
           ) {
             setLabelSearchState('unavailable');
             return;
@@ -575,15 +536,32 @@ function SubjectLibrarySlotView({
                     : null;
 
   async function restoreEntry(receipt: { deletionId: string; revision: number }) {
-    if (!hydrated || !entryLifetime.current() || !restoreAdmitted) return;
+    if (!hydrated || !entryLifetime.current('library_entry.get', 'library_entry.restore') || !restoreAdmitted) return;
+    const operation: NonNullable<typeof uncertainRestore.current> = uncertainRestore.current ?? {
+      receipt,
+      running: false,
+    };
+    if (operation.running) return;
+    uncertainRestore.current = operation;
+    operation.running = true;
     try {
-      const restored = await restoreSubjectLibrarySlot({
-        data: { subjectId: subject.id, ...receipt },
-        headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
-      });
+      const restored =
+        operation.response ??
+        (await restoreSubjectLibrarySlot({
+          data: { subjectId: subject.id, ...operation.receipt },
+          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+        }));
+      operation.response =
+        restored.ok ||
+        (restored.reason !== 'unavailable' && restored.reason !== 'closed' && restored.reason !== 'signed-out')
+          ? restored
+          : undefined;
       if (!entryLifetime.current()) return;
+      if ('entry' in restored && restored.entry && restored.entry.subjectId !== subject.id) return;
       void queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
+      if (operation.response) uncertainRestore.current = null;
       if (restored.ok) {
+        setEntryUndo(undefined);
         setEntry(restored.entry);
         setSelectedState(restored.entry.state);
         setActionResult('saved');
@@ -600,11 +578,13 @@ function SubjectLibrarySlotView({
       else setRestoreMessage(m.library_subject_unavailable());
     } catch {
       if (entryLifetime.current()) setRestoreMessage(m.library_subject_unavailable());
+    } finally {
+      operation.running = false;
     }
   }
 
   function applyEntryResult(response: SubjectLibraryMutationResponse, previous: string) {
-    if (!entryLifetime.current()) return;
+    if (!entryLifetime.current() || (response.entry && response.entry.subjectId !== subject.id)) return;
     if (response.result === 'saved' && response.entry) {
       setEntry(response.entry);
       setSelectedState(response.entry.state);
@@ -615,12 +595,13 @@ function SubjectLibrarySlotView({
       setEntry(null);
       setSelectedState('');
       setActionResult('cleared');
+      if (response.undo) setEntryUndo({ subjectId: subject.id, ...response.undo });
       if (response.undo && restoreAdmitted) {
         const receipt = response.undo;
         undoToast(
           m.library_removed(),
           () => {
-            if (!entryLifetime.current() || !restoreAdmitted) return;
+            if (!entryLifetime.current('library_entry.get', 'library_entry.restore') || !restoreAdmitted) return;
             void restoreEntry(receipt);
           },
           { undo: m.editor_undo() },
@@ -640,22 +621,39 @@ function SubjectLibrarySlotView({
 
   async function writeEntry(input: SubjectLibraryMutation, previous: string) {
     if (
-      !entryLifetime.current() ||
+      !entryLifetime.current(
+        'library_entry.get',
+        input.action === 'clear' ? 'library_entry.delete' : 'library_entry.put',
+      ) ||
       entryFlight.current ||
+      uncertainEntry.current?.running ||
       (input.action === 'clear' ? !entryDeleteAdmitted : !entryPutAdmitted)
     )
       return;
     entryFlight.current = true;
-    uncertainEntry.current = { input, previous };
+    const operation: NonNullable<typeof uncertainEntry.current> = uncertainEntry.current ?? {
+      input,
+      previous,
+      running: false,
+    };
+    uncertainEntry.current = operation;
+    operation.running = true;
     setPending(true);
     try {
-      const response = await mutateSubjectLibrarySlot({
-        data: input,
-        headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
-      });
+      const response =
+        operation.response ??
+        (await mutateSubjectLibrarySlot({
+          data: operation.input,
+          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+        }));
+      operation.response = response.result === 'unavailable' || response.result === 'closed' ? undefined : response;
       if (!entryLifetime.current()) return;
-      if (response.result !== 'unavailable') uncertainEntry.current = null;
-      applyEntryResult(response, previous);
+      if (response.entry && response.entry.subjectId !== subject.id) {
+        setActionResult('unavailable');
+        return;
+      }
+      if (operation.response) uncertainEntry.current = null;
+      applyEntryResult(response, operation.previous);
       if (
         response.result === 'saved' ||
         response.result === 'cleared' ||
@@ -676,6 +674,7 @@ function SubjectLibrarySlotView({
       setSelectedState(previous);
       setActionResult('unavailable');
     } finally {
+      operation.running = false;
       if (entryLifetime.current()) {
         entryFlight.current = false;
         setPending(false);
@@ -684,7 +683,13 @@ function SubjectLibrarySlotView({
   }
 
   function choose(value: string) {
-    if (!hydrated || pending || !value || !entryLifetime.current()) return;
+    if (
+      !hydrated ||
+      pending ||
+      !value ||
+      !entryLifetime.current('library_entry.get', value === 'remove' ? 'library_entry.delete' : 'library_entry.put')
+    )
+      return;
     if (uncertainEntry.current) {
       void writeEntry(uncertainEntry.current.input, uncertainEntry.current.previous);
       return;
@@ -726,24 +731,43 @@ function SubjectLibrarySlotView({
   }
 
   async function mutate(input: SubjectLibraryMutation) {
-    if (!hydrated || !collectionLifetime.current() || memberFlight.current) return;
+    if (
+      !hydrated ||
+      !collectionLifetime.current('collection.list', 'collection_member.create') ||
+      memberFlight.current ||
+      uncertainMember.current?.running
+    )
+      return;
     memberFlight.current = true;
+    const operation: NonNullable<typeof uncertainMember.current> = uncertainMember.current ?? { input, running: false };
+    uncertainMember.current = operation;
+    operation.running = true;
     try {
-      const response = await mutateSubjectLibrarySlot({
-        data: input,
-        headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
-      });
+      const response =
+        operation.response ??
+        (await mutateSubjectLibrarySlot({
+          data: operation.input,
+          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+        }));
+      operation.response = response.result === 'unavailable' || response.result === 'closed' ? undefined : response;
       if (!collectionLifetime.current()) return;
+      if (operation.response) uncertainMember.current = null;
       setMemberResult(response.result);
       await queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
     } catch {
       if (collectionLifetime.current()) setMemberResult('unavailable');
     } finally {
+      operation.running = false;
       if (collectionLifetime.current()) memberFlight.current = false;
     }
   }
 
   function addToCollection(collectionId: string) {
+    if (
+      !collectionLifetime.current('collection.list', 'collection_member.create') ||
+      !collections?.some((row) => row.id === collectionId)
+    )
+      return;
     return mutate({
       subjectId: subject.id,
       intent: 'member',
@@ -754,7 +778,7 @@ function SubjectLibrarySlotView({
 
   async function loadCollections(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (!hydrated || !collectionLifetime.current() || pickerFlight.current) return;
+    if (!hydrated || !collectionLifetime.current('collection.list') || pickerFlight.current) return;
     pickerFlight.current = true;
     const credential = data.csrfToken;
     try {
@@ -794,92 +818,107 @@ function SubjectLibrarySlotView({
     else setLabelNotice('unavailable');
   }
 
-  async function writeLabel(input: {
-    intent: 'assign' | 'create-and-assign' | 'restore';
-    label?: LibraryLabelSummary | SubjectLabel;
-    name?: string;
-    assignment?: SubjectLabel;
-    revision?: number;
-  }) {
-    if (
-      !hydrated ||
-      !labelLifetime.current() ||
-      labelFlight.current ||
-      !labelAssignAdmitted ||
-      (input.intent === 'create-and-assign' && (!labelCreateAdmitted || !labelListAdmitted))
-    )
-      return;
+  async function performLabel(command: SubjectLabelMutationInput, label?: LibraryLabelSummary | SubjectLabel) {
+    const operation: NonNullable<typeof uncertainLabel.current> = uncertainLabel.current ?? {
+      input: command,
+      ...(label ? { label } : {}),
+      running: false,
+    };
+    let input = operation.input;
+    const allowed =
+      input.intent === 'unassign'
+        ? labelLifetime.current('library_label.assignment_list', 'library_label.unassign')
+        : input.intent === 'create-and-assign'
+          ? labelLifetime.current(
+              'library_label.assignment_list',
+              'library_label.list',
+              'library_label.create',
+              'library_label.assign',
+            )
+          : labelLifetime.current('library_label.assignment_list', 'library_label.assign');
+    if (!hydrated || !allowed || labelFlight.current || operation.running) return;
+    if (!uncertainLabel.current && input.intent !== 'restore') {
+      const freshKey = (preferred: string) => {
+        const key = usedLabelKeys.current.has(preferred) ? crypto.randomUUID() : preferred;
+        usedLabelKeys.current.add(key);
+        return key;
+      };
+      input = {
+        ...input,
+        idempotencyKey: freshKey(input.idempotencyKey),
+        ...(input.intent === 'create-and-assign' && input.createKey ? { createKey: freshKey(input.createKey) } : {}),
+      };
+      operation.input = input;
+    }
+    uncertainLabel.current = operation;
+    operation.running = true;
     labelFlight.current = true;
     setLabelPending(true);
     setLabelNotice(undefined);
     try {
-      const headers = { 'X-CSRF-Token': data.csrfToken ?? '' };
       const response =
-        input.intent === 'create-and-assign'
-          ? await mutateSubjectLabelAction({
-              data: {
-                intent: 'create-and-assign',
-                subjectId: subject.id,
-                name: input.name ?? '',
-                createKey: crypto.randomUUID(),
-                ...(data.labelCreateKey ? { createKey: data.labelCreateKey } : {}),
-                idempotencyKey: crypto.randomUUID(),
-                ...(data.labelAssignKey ? { idempotencyKey: data.labelAssignKey } : {}),
-              },
-              headers,
-            })
-          : input.intent === 'assign'
-            ? await mutateSubjectLabelAction({
-                data: {
-                  intent: 'assign',
-                  subjectId: subject.id,
-                  labelId:
-                    input.label && 'labelId' in input.label && typeof input.label.labelId === 'string'
-                      ? input.label.labelId
-                      : (input.label?.id ?? ''),
-                  idempotencyKey: crypto.randomUUID(),
-                  ...(data.labelAssignKey ? { idempotencyKey: data.labelAssignKey } : {}),
-                },
-                headers,
-              })
-            : await mutateSubjectLabelAction({
-                data: {
-                  intent: 'restore',
-                  subjectId: subject.id,
-                  labelId:
-                    input.label && 'labelId' in input.label && typeof input.label.labelId === 'string'
-                      ? input.label.labelId
-                      : (input.label?.id ?? ''),
-                  assignmentId: input.assignment?.id ?? '',
-                  revision: input.revision ?? 0,
-                  idempotencyKey: crypto.randomUUID(),
-                  ...(input.assignment && input.revision !== undefined
-                    ? { idempotencyKey: labelUndoKeyFor(input.assignment.id, input.revision) }
-                    : {}),
-                },
-                headers,
-              });
+        operation.response ??
+        (await mutateSubjectLabelAction({
+          data: input,
+          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+        }));
+      // Keep a dispatched native outcome even if its originating UI episode has since retired.
+      operation.response =
+        !response.ok &&
+        (response.reason === 'unavailable' || response.reason === 'closed' || response.reason === 'signed-out')
+          ? undefined
+          : response;
       if (!labelLifetime.current()) return;
       if (!response.ok) {
+        if (operation.response) uncertainLabel.current = null;
         labelFailure(response.reason);
         return;
       }
-      setLabelUndo(undefined);
-      if (input.intent === 'restore' && input.assignment && input.revision !== undefined)
-        restoredLabelEpisodes.current.add(labelEpisode(input.assignment.id, input.revision));
-      if (input.intent !== 'restore') setLabelUndo(labelUndo);
-      const label = response.label ?? input.label;
-      if (label?.name) {
-        const labelId = 'labelId' in label && typeof label.labelId === 'string' ? label.labelId : label.id;
-        setLabels((current) => [
-          ...current.filter((row) => row.labelId !== labelId),
-          { id: response.assignment.id, labelId, name: label.name, revision: response.assignment.revision },
-        ]);
+      uncertainLabel.current = null;
+      if (input.intent === 'unassign') {
+        setLabels((current) => current.filter((row) => row.id !== input.assignmentId));
+        const revision = response.restoreRevision;
+        if (revision === undefined) {
+          setLabelNotice('unavailable');
+          return;
+        }
+        setLabelUndo({ labelId: input.labelId, assignmentId: input.assignmentId, revision });
+        undoToast(
+          m.library_subject_label_removed({ name: operation.label?.name ?? '' }),
+          () => {
+            if (!labelLifetime.current('library_label.assignment_list', 'library_label.assign')) return;
+            void performLabel(
+              {
+                intent: 'restore',
+                subjectId: subject.id,
+                labelId: input.labelId,
+                assignmentId: input.assignmentId,
+                revision,
+                idempotencyKey: labelUndoKeyFor(input.assignmentId, revision),
+              },
+              operation.label,
+            );
+          },
+          { undo: m.library_subject_label_undo() },
+        );
+      } else {
+        if (input.intent === 'restore') {
+          restoredLabelEpisodes.current.add(labelEpisode(input.assignmentId, input.revision));
+          setLabelUndo(undefined);
+        }
+        const applied = response.label ?? operation.label;
+        if (applied?.name) {
+          const labelId = 'labelId' in applied && typeof applied.labelId === 'string' ? applied.labelId : applied.id;
+          setLabels((current) => [
+            ...current.filter((row) => row.labelId !== labelId),
+            { id: response.assignment.id, labelId, name: applied.name, revision: response.assignment.revision },
+          ]);
+        }
+        setLabelPickerOpen(false);
+        setLabelQuery('');
+        latestLabelQuery.current = '';
+        setLabelChoices([]);
       }
-      setLabelPickerOpen(false);
-      setLabelQuery('');
-      latestLabelQuery.current = '';
-      setLabelChoices([]);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
         router.invalidate(),
@@ -887,6 +926,7 @@ function SubjectLibrarySlotView({
     } catch {
       if (labelLifetime.current()) setLabelNotice('unavailable');
     } finally {
+      operation.running = false;
       if (labelLifetime.current()) {
         labelFlight.current = false;
         setLabelPending(false);
@@ -894,10 +934,51 @@ function SubjectLibrarySlotView({
     }
   }
 
+  async function writeLabel(input: {
+    intent: 'assign' | 'create-and-assign' | 'restore';
+    label?: LibraryLabelSummary | SubjectLabel;
+    name?: string;
+    assignment?: SubjectLabel;
+    revision?: number;
+  }) {
+    if (!labelLifetime.current()) return;
+    const labelId = input.label && 'labelId' in input.label ? input.label.labelId : (input.label?.id ?? '');
+    const command: SubjectLabelMutationInput =
+      input.intent === 'create-and-assign'
+        ? {
+            intent: input.intent,
+            subjectId: subject.id,
+            name: input.name ?? '',
+            createKey: data.labelCreateKey ?? crypto.randomUUID(),
+            idempotencyKey: data.labelAssignKey ?? crypto.randomUUID(),
+          }
+        : input.intent === 'assign'
+          ? {
+              intent: input.intent,
+              subjectId: subject.id,
+              labelId,
+              idempotencyKey: data.labelAssignKey ?? crypto.randomUUID(),
+            }
+          : {
+              intent: input.intent,
+              subjectId: subject.id,
+              labelId,
+              assignmentId: input.assignment?.id ?? '',
+              revision: input.revision ?? 0,
+              idempotencyKey: labelUndoKeyFor(input.assignment?.id ?? '', input.revision ?? 0),
+            };
+    await performLabel(command, input.label);
+  }
+
   async function submitLabelName(event: FormEvent<HTMLFormElement>) {
     if (!hydrated) return;
     event.preventDefault();
-    if (!labelLifetime.current() || !labelListAdmitted || labelSearchState !== 'loaded') return;
+    if (
+      !labelLifetime.current('library_label.assignment_list', 'library_label.list') ||
+      !labelListAdmitted ||
+      labelSearchState !== 'loaded'
+    )
+      return;
     const name = normalizeLibraryLabelName(labelQuery);
     if (!name) return;
     const existing = labelChoices.find((candidate) => normalizeLibraryLabelName(candidate.name) === name);
@@ -906,58 +987,17 @@ function SubjectLibrarySlotView({
   }
 
   async function removeLabel(label: SubjectLabel) {
-    if (!hydrated || !labelLifetime.current() || labelFlight.current || !labelUnassignAdmitted) return;
-    labelFlight.current = true;
-    setLabelPending(true);
-    try {
-      const response = await mutateSubjectLabelAction({
-        data: {
-          intent: 'unassign',
-          subjectId: subject.id,
-          labelId: label.labelId,
-          assignmentId: label.id,
-          revision: label.revision,
-          idempotencyKey: crypto.randomUUID(),
-          ...(data.labelRemoveKeys?.[label.id] ? { idempotencyKey: data.labelRemoveKeys[label.id] } : {}),
-        },
-        headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
-      });
-      if (!labelLifetime.current()) return;
-      if (!response.ok) {
-        labelFailure(response.reason);
-        return;
-      }
-      setLabels((current) => current.filter((row) => row.id !== label.id));
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
-        router.invalidate(),
-      ]);
-      if (!labelLifetime.current()) return;
-      const restoreRevision = response.restoreRevision;
-      if (restoreRevision === undefined) {
-        setLabelNotice('unavailable');
-        return;
-      }
-      setLabelUndo({ labelId: label.labelId, assignmentId: label.id, revision: restoreRevision });
-      undoToast(
-        m.library_subject_label_removed({ name: label.name }),
-        () =>
-          void writeLabel({
-            intent: 'restore',
-            label: { id: label.labelId, name: label.name, revision: 1 },
-            assignment: label,
-            revision: restoreRevision,
-          }),
-        { undo: m.library_subject_label_undo() },
-      );
-    } catch {
-      if (labelLifetime.current()) setLabelNotice('unavailable');
-    } finally {
-      if (labelLifetime.current()) {
-        labelFlight.current = false;
-        setLabelPending(false);
-      }
-    }
+    await performLabel(
+      {
+        intent: 'unassign',
+        subjectId: subject.id,
+        labelId: label.labelId,
+        assignmentId: label.id,
+        revision: label.revision,
+        idempotencyKey: data.labelRemoveKeys?.[label.id] ?? crypto.randomUUID(),
+      },
+      label,
+    );
   }
 
   function onRemoveForm(event: FormEvent<HTMLFormElement>, label: SubjectLabel) {
@@ -968,15 +1008,15 @@ function SubjectLibrarySlotView({
 
   return (
     <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
-      {data.undo ? (
+      {entryUndo && data.entryAvailable ? (
         <div
           onSubmit={(event) => {
             if (!hydrated) return;
             event.preventDefault();
-            if (data.undo && data.undo.subjectId === subject.id) void restoreEntry(data.undo);
+            if (entryUndo.subjectId === subject.id) void restoreEntry(entryUndo);
           }}
         >
-          <EntryUndoForm undo={data.undo} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
+          <EntryUndoForm undo={entryUndo} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
         </div>
       ) : null}
       {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}
@@ -1046,6 +1086,18 @@ function SubjectLibrarySlotView({
           onClick={() => {
             const original = uncertainEntry.current;
             if (original && entryLifetime.current()) void writeEntry(original.input, original.previous);
+          }}
+        >
+          {m.library_selection_retry()}
+        </button>
+      ) : null}
+
+      {hydrated && collectionLifetime.current() && uncertainMember.current ? (
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => {
+            if (collectionLifetime.current() && uncertainMember.current) void mutate(uncertainMember.current.input);
           }}
         >
           {m.library_selection_retry()}
@@ -1321,7 +1373,7 @@ function SubjectLibrarySlotView({
                       query={labelQuery}
                       next={labelNext}
                       isCurrent={() =>
-                        labelLifetime.current() &&
+                        labelLifetime.current('library_label.assignment_list', 'library_label.list') &&
                         searchOrigin.current.sequence === searchSequence &&
                         searchOrigin.current.open
                       }
@@ -1393,6 +1445,19 @@ function SubjectLibrarySlotView({
               </details>
             </Exposure>
             <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
+            {uncertainLabel.current ? (
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={labelPending}
+                onClick={() => {
+                  if (labelLifetime.current() && uncertainLabel.current)
+                    void performLabel(uncertainLabel.current.input);
+                }}
+              >
+                {m.library_selection_retry()}
+              </button>
+            ) : null}
             {labelUndo ? (
               <form
                 data-label-undo
