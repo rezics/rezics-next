@@ -1,7 +1,9 @@
 import {
   KIND_CONSENT_ENROLLMENT_MAX_DURATION_MS,
+  KIND_CONSENT_ENROLLMENT_KERNEL_CONTROL_MAX_BYTES,
   KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES,
   KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES,
+  kindConsentEnrollmentVerifiedBound,
   kindConsentEnrollmentResultValid,
   kindConsentOperationBound,
   kindConsentTransportActual,
@@ -22,10 +24,20 @@ type Invocation = Readonly<{
   work: KindConsentWorkDeclaration;
   requestBytes: number;
   responseBytes: number;
+  kernelControlBytes: number;
   deadline: number;
 }>;
 
 const unavailable = (): KindConsentEnrollmentResult => Object.freeze({ status: 'unavailable' });
+const byteLength = (value: string): number => new TextEncoder().encode(value).byteLength;
+
+function requestControlBytes(target: string, headers: Headers): number {
+  return (
+    byteLength(target) +
+    byteLength('POST') +
+    [...headers].reduce((sum, [name, value]) => sum + byteLength(name) + byteLength(value), 0)
+  );
+}
 
 function exactRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -49,10 +61,13 @@ function privateEnrollmentUrl(config: AuthConsentConfig): string {
     source.search ||
     source.hash ||
     !/^[\x21-\x7e]{1,1024}$/.test(config.serviceTokenId) ||
-    !/^[\x21-\x7e]{1,1024}$/.test(config.serviceTokenSecret)
+    !/^[\x21-\x7e]{1,1024}$/.test(config.serviceTokenSecret) ||
+    config.url.length > 2048
   )
     throw new Error('Invalid Auth consent configuration');
-  return new URL('/internal/v1/kind-consents:enroll', source.origin).href;
+  const target = new URL('/internal/v1/kind-consents:enroll', source.origin).href;
+  if (target.length > 2048) throw new Error('Invalid Auth consent configuration');
+  return target;
 }
 
 async function responseBody(response: Response, signal: AbortSignal): Promise<{ value: unknown; bytes: number }> {
@@ -117,6 +132,14 @@ export function createKindConsentParticipantTransport(
     if (!bound || !Number.isSafeInteger(deadline) || Date.now() >= deadline) return unavailable();
     let request: string;
     let requestBytes: number;
+    const headers = new Headers({
+      'content-type': 'application/json',
+      'CF-Access-Client-Id': config.serviceTokenId,
+      'CF-Access-Client-Secret': config.serviceTokenSecret,
+      'X-Rezics-Kind-Deadline': String(deadline),
+    });
+    const kernelControlBytes = requestControlBytes(target, headers);
+    if (kernelControlBytes > KIND_CONSENT_ENROLLMENT_KERNEL_CONTROL_MAX_BYTES) return unavailable();
     try {
       request = JSON.stringify({ input, deadline });
       requestBytes = new TextEncoder().encode(request).byteLength;
@@ -142,11 +165,7 @@ export function createKindConsentParticipantTransport(
         redirect: 'error',
         cache: 'no-store',
         signal: controller.signal,
-        headers: {
-          'content-type': 'application/json',
-          'CF-Access-Client-Id': config.serviceTokenId,
-          'CF-Access-Client-Secret': config.serviceTokenSecret,
-        },
+        headers,
         body: request,
       });
       response = await Promise.race([pending, expired]);
@@ -163,14 +182,14 @@ export function createKindConsentParticipantTransport(
         return unavailable();
       const resultValue = envelope.value.result;
       const nativeWork = envelope.value.work;
-      const nativeBound = kindConsentOperationBound(input);
+      const verifiedBound = kindConsentEnrollmentVerifiedBound(input);
       if (
-        !nativeBound ||
+        !verifiedBound ||
         !kindConsentEnrollmentResultValid(input, resultValue) ||
-        !kindConsentWorkWithin(nativeWork, nativeBound)
+        !kindConsentWorkWithin(nativeWork, verifiedBound)
       )
         return unavailable();
-      const measured = kindConsentTransportActual(input, nativeWork, requestBytes, envelope.bytes);
+      const measured = kindConsentTransportActual(input, nativeWork, requestBytes, envelope.bytes, kernelControlBytes);
       if (!measured || !kindConsentWorkWithin(measured, bound)) return unavailable();
       const result = freezeResult(resultValue);
       invocations.set(result, {
@@ -178,6 +197,7 @@ export function createKindConsentParticipantTransport(
         work: nativeWork,
         requestBytes,
         responseBytes: envelope.bytes,
+        kernelControlBytes,
         deadline,
       });
       return result;
@@ -198,17 +218,23 @@ export function createKindConsentParticipantTransport(
         const invocation = invocations.get(result);
         if (!invocation) return undefined;
         invocations.delete(result);
-        const nativeBound = kindConsentOperationBound(input);
+        const verifiedBound = kindConsentEnrollmentVerifiedBound(input);
         if (
           invocation.input !== input ||
           invocation.deadline !== deadline ||
           Date.now() >= deadline ||
           !kindConsentEnrollmentResultValid(input, result) ||
-          !nativeBound ||
-          !kindConsentWorkWithin(invocation.work, nativeBound)
+          !verifiedBound ||
+          !kindConsentWorkWithin(invocation.work, verifiedBound)
         )
           return undefined;
-        return kindConsentTransportActual(input, invocation.work, invocation.requestBytes, invocation.responseBytes);
+        return kindConsentTransportActual(
+          input,
+          invocation.work,
+          invocation.requestBytes,
+          invocation.responseBytes,
+          invocation.kernelControlBytes,
+        );
       },
     }),
   };

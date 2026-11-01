@@ -104,6 +104,88 @@ export const KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES = 90_000;
 /** Includes the original bounded scopes, opaque reference, and native charge. */
 export const KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES = 80_000;
 export const KIND_CONSENT_ENROLLMENT_MAX_DURATION_MS = 3_000;
+/** The Access assertion is checked before the enrollment body is read. */
+export const KIND_CONSENT_ENROLLMENT_ACCESS_TOKEN_MAX_BYTES = 16_384;
+/** Fixed request, including the trusted JWKS URL and its bounded headers. */
+export const KIND_CONSENT_ENROLLMENT_JWKS_REQUEST_MAX_BYTES = 4_096;
+/** Maximum streamed JWKS JSON received during a cache miss or refresh. */
+export const KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES = 65_536;
+/** Auth-side HTTP control and header ceiling, excluding the separately bounded Access JWT. */
+export const KIND_CONSENT_ENROLLMENT_HTTP_CONTROL_MAX_BYTES = 8_192;
+/** Kernel-side private request URL, method and explicit headers. */
+export const KIND_CONSENT_ENROLLMENT_KERNEL_CONTROL_MAX_BYTES = 8_192;
+export const KIND_CONSENT_ENROLLMENT_VERIFICATION_MAX_BYTES =
+  KIND_CONSENT_ENROLLMENT_ACCESS_TOKEN_MAX_BYTES +
+  KIND_CONSENT_ENROLLMENT_JWKS_REQUEST_MAX_BYTES +
+  KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES +
+  KIND_CONSENT_ENROLLMENT_HTTP_CONTROL_MAX_BYTES;
+
+/** Maximum database result rows along one admitted enrollment path. */
+export const KIND_CONSENT_ENROLLMENT_MAX_STATEMENTS = 11;
+export const KIND_CONSENT_ENROLLMENT_MAX_POINTS = 4;
+export const KIND_CONSENT_ENROLLMENT_MAX_WITNESSES = 3;
+export const KIND_CONSENT_ENROLLMENT_MAX_EMPTY_SEEKS = 3;
+export const KIND_CONSENT_ENROLLMENT_MAX_NATIVE_ROWS = 2;
+
+const encoder = new TextEncoder();
+const byteLength = (value: string): number => encoder.encode(value).byteLength;
+const jsonByteLength = (value: unknown): number => byteLength(JSON.stringify(value) ?? '');
+const maxScopeArray = Object.freeze(Array.from({ length: MAX_CONSENTED_SCOPES }, () => 'x'.repeat(128)));
+const maxIdentifier = '\\'.repeat(1024);
+const maxCurrentRowBytes = jsonByteLength({
+  client_id: maxIdentifier,
+  client_scopes: maxScopeArray,
+  first_party: true,
+  ready: true,
+  reducing: true,
+  consent_scopes: maxScopeArray,
+  pending_scopes: maxScopeArray,
+  revision: '9'.repeat(19),
+});
+const maxExistingRowBytes = jsonByteLength({
+  reference_id: 'f'.repeat(36),
+  account_id: maxIdentifier,
+  client_id: maxIdentifier,
+  requested_scopes: maxScopeArray,
+  effective_scopes: maxScopeArray,
+  consumer_route: maxIdentifier,
+  owner_account_id: maxIdentifier,
+  collection_id: maxIdentifier,
+  preparation_id: maxIdentifier,
+  origin_id: maxIdentifier,
+  active: true,
+});
+const maxInsertRowBytes = jsonByteLength({ reference_id: 'f'.repeat(36) });
+const emptyRowsBytes = jsonByteLength([]);
+const maxNativeReturnedBytes = Math.max(
+  // New insert: frontier and duplicate lookups are empty; current and insert return one row.
+  2 * emptyRowsBytes + maxCurrentRowBytes + maxInsertRowBytes,
+  // A suppressed INSERT RETURNING row adds one empty result to the same path.
+  3 * emptyRowsBytes + maxCurrentRowBytes,
+  // Duplicate, inactive or refused consumer: current and existing metadata return one row each.
+  emptyRowsBytes + maxCurrentRowBytes + maxExistingRowBytes,
+  // A closed frontier stops before client/consent metadata is read.
+  jsonByteLength([{ '?column?': 1 }]),
+);
+/** Canonical JSON bytes of the largest admitted metadata result path. */
+export const KIND_CONSENT_ENROLLMENT_NATIVE_RESULT_MAX_BYTES = maxNativeReturnedBytes;
+
+export type KindConsentEnrollmentNativeUsage = Readonly<{
+  candidateKeys: number;
+  nativeRows: number;
+  emptySeeks: number;
+  nativePoints: number;
+  witnessKeys: number;
+  statements: number;
+  returnedMetadataBytes: number;
+}>;
+
+export type KindConsentEnrollmentVerificationUsage = Readonly<{
+  accessTokenBytes: number;
+  jwksRequestBytes: number;
+  jwksResponseBytes: number;
+  httpControlBytes: number;
+}>;
 
 const identifier = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 1024 && /^[\x21-\x7e]+$/.test(value);
@@ -126,8 +208,23 @@ function exactRecord(value: unknown, keys: readonly string[]): value is Record<s
   return Object.keys(record).length === keys.length && keys.every((key) => Object.hasOwn(record, key));
 }
 
-/** Pure canonical bound for the installed Auth native enrollment. */
-export function kindConsentOperationBound(input: KindConsentEnrollmentInput): KindConsentWorkDeclaration | undefined {
+function enrollmentInputBytes(input: KindConsentEnrollmentInput): number {
+  return (
+    128 +
+    [
+      input.accountId,
+      input.clientId,
+      input.consumer.route,
+      input.consumer.ownerAccountId,
+      input.consumer.collectionId,
+      input.consumer.preparationId,
+      input.consumer.originId,
+      ...input.requestedScopes,
+    ].reduce((sum, value) => sum + byteLength(value), 0)
+  );
+}
+
+function enrollmentInputValid(input: KindConsentEnrollmentInput): boolean {
   if (
     !exactRecord(input, ['accountId', 'clientId', 'requestedScopes', 'consumer']) ||
     !identifier(input.accountId) ||
@@ -143,46 +240,144 @@ export function kindConsentOperationBound(input: KindConsentEnrollmentInput): Ki
     !identifier(input.consumer.collectionId) ||
     !identifier(input.consumer.preparationId) ||
     !identifier(input.consumer.originId)
-  )
-    return undefined;
+  ) return false;
+  return enrollmentInputBytes(input) <= KIND_CONSENT_ENROLLMENT_INPUT_MAX_BYTES;
+}
 
-  const inputBytes =
-    128 +
-    [
-      input.accountId,
-      input.clientId,
-      input.consumer.route,
-      input.consumer.ownerAccountId,
-      input.consumer.collectionId,
-      input.consumer.preparationId,
-      input.consumer.originId,
-      ...input.requestedScopes,
-    ].reduce((sum, value) => sum + new TextEncoder().encode(value).byteLength, 0);
-  if (inputBytes > KIND_CONSENT_ENROLLMENT_INPUT_MAX_BYTES) return undefined;
-
-  // One keyed owner/client closure plus the exact dependency insert. These are
-  // the installed Auth producer's established Source/Access axes.
-  const bytes = inputBytes + input.requestedScopes.length * 128;
+/** Pure canonical bound for every installed Auth enrollment path. */
+export function kindConsentOperationBound(input: KindConsentEnrollmentInput): KindConsentWorkDeclaration | undefined {
+  if (!enrollmentInputValid(input)) return undefined;
+  const bytes = enrollmentInputBytes(input) + maxNativeReturnedBytes;
   return Object.freeze({
     source: Object.freeze({
       candidateKeys: 1,
-      nativeRows: 3,
+      nativeRows: KIND_CONSENT_ENROLLMENT_MAX_NATIVE_ROWS,
       identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 2,
-      witnessKeys: 1,
-      statements: 9,
-      bytes: bytes + 128,
+      emptySeeks: KIND_CONSENT_ENROLLMENT_MAX_EMPTY_SEEKS,
+      nativePoints: KIND_CONSENT_ENROLLMENT_MAX_POINTS,
+      witnessKeys: KIND_CONSENT_ENROLLMENT_MAX_WITNESSES,
+      statements: KIND_CONSENT_ENROLLMENT_MAX_STATEMENTS,
+      bytes,
     }),
-    access: Object.freeze({ keys: 1, points: 4, witnesses: 1, rows: 4, bytes: bytes + 128, emptySeeks: 1 }),
+    access: Object.freeze({
+      keys: 1,
+      points: KIND_CONSENT_ENROLLMENT_MAX_POINTS,
+      witnesses: KIND_CONSENT_ENROLLMENT_MAX_WITNESSES,
+      rows: KIND_CONSENT_ENROLLMENT_MAX_NATIVE_ROWS,
+      bytes,
+      emptySeeks: KIND_CONSENT_ENROLLMENT_MAX_EMPTY_SEEKS,
+    }),
   });
+}
+
+/** One-use charge from the Auth query trace after a committed native attempt. */
+export function kindConsentOperationActual(
+  input: KindConsentEnrollmentInput,
+  usage: KindConsentEnrollmentNativeUsage,
+): KindConsentWorkDeclaration | undefined {
+  const bound = kindConsentOperationBound(input);
+  if (
+    !bound ||
+    !usage ||
+    !Number.isSafeInteger(usage.candidateKeys) ||
+    !Number.isSafeInteger(usage.nativeRows) ||
+    !Number.isSafeInteger(usage.emptySeeks) ||
+    !Number.isSafeInteger(usage.nativePoints) ||
+    !Number.isSafeInteger(usage.witnessKeys) ||
+    !Number.isSafeInteger(usage.statements) ||
+    !Number.isSafeInteger(usage.returnedMetadataBytes) ||
+    usage.candidateKeys < 0 ||
+    usage.nativeRows < 0 ||
+    usage.emptySeeks < 0 ||
+    usage.nativePoints < 0 ||
+    usage.witnessKeys < 0 ||
+    usage.statements < 0 ||
+    usage.returnedMetadataBytes < 0
+  )
+    return undefined;
+  const bytes = enrollmentInputBytes(input) + usage.returnedMetadataBytes;
+  const work: KindConsentWorkDeclaration = Object.freeze({
+    source: Object.freeze({
+      candidateKeys: usage.candidateKeys,
+      nativeRows: usage.nativeRows,
+      identityMetadataRows: 0,
+      emptySeeks: usage.emptySeeks,
+      nativePoints: usage.nativePoints,
+      witnessKeys: usage.witnessKeys,
+      statements: usage.statements,
+      bytes,
+    }),
+    access: Object.freeze({
+      keys: usage.candidateKeys,
+      points: usage.nativePoints,
+      witnesses: usage.witnessKeys,
+      rows: usage.nativeRows,
+      bytes,
+      emptySeeks: usage.emptySeeks,
+    }),
+  });
+  return kindConsentWorkWithin(work, bound) ? work : undefined;
+}
+
+/** Auth's verified receipt adds the bounded verifier and HTTP control it owned. */
+export function kindConsentEnrollmentVerifiedBound(
+  input: KindConsentEnrollmentInput,
+): KindConsentWorkDeclaration | undefined {
+  const native = kindConsentOperationBound(input);
+  if (!native) return undefined;
+  const bytes = native.source.bytes + KIND_CONSENT_ENROLLMENT_VERIFICATION_MAX_BYTES;
+  return Object.freeze({
+    source: Object.freeze({ ...native.source, bytes }),
+    access: Object.freeze({ ...native.access, bytes }),
+  });
+}
+
+/** Exact Auth-side verifier and incoming/outgoing control charge for one call. */
+export function kindConsentEnrollmentVerifiedActual(
+  input: KindConsentEnrollmentInput,
+  native: unknown,
+  usage: KindConsentEnrollmentVerificationUsage,
+): KindConsentWorkDeclaration | undefined {
+  const nativeBound = kindConsentOperationBound(input);
+  const verifiedBound = kindConsentEnrollmentVerifiedBound(input);
+  if (
+    !nativeBound ||
+    !verifiedBound ||
+    !kindConsentWorkWithin(native, nativeBound) ||
+    !usage ||
+    !Number.isSafeInteger(usage.accessTokenBytes) ||
+    usage.accessTokenBytes < 0 ||
+    usage.accessTokenBytes > KIND_CONSENT_ENROLLMENT_ACCESS_TOKEN_MAX_BYTES ||
+    !Number.isSafeInteger(usage.jwksRequestBytes) ||
+    usage.jwksRequestBytes < 0 ||
+    usage.jwksRequestBytes > KIND_CONSENT_ENROLLMENT_JWKS_REQUEST_MAX_BYTES ||
+    !Number.isSafeInteger(usage.jwksResponseBytes) ||
+    usage.jwksResponseBytes < 0 ||
+    usage.jwksResponseBytes > KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES ||
+    !Number.isSafeInteger(usage.httpControlBytes) ||
+    usage.httpControlBytes < 0 ||
+    usage.httpControlBytes > KIND_CONSENT_ENROLLMENT_HTTP_CONTROL_MAX_BYTES
+  )
+    return undefined;
+  const verifierBytes =
+    usage.accessTokenBytes + usage.jwksRequestBytes + usage.jwksResponseBytes + usage.httpControlBytes;
+  const bytes = native.source.bytes + verifierBytes;
+  const actual: KindConsentWorkDeclaration = Object.freeze({
+    source: Object.freeze({ ...native.source, bytes }),
+    access: Object.freeze({ ...native.access, bytes }),
+  });
+  return kindConsentWorkWithin(actual, verifiedBound) ? actual : undefined;
 }
 
 /** Complete reservation for one private request and its bounded Auth call. */
 export function kindConsentTransportBound(input: KindConsentEnrollmentInput): KindConsentWorkDeclaration | undefined {
   const native = kindConsentOperationBound(input);
   if (!native) return undefined;
-  const transportBytes = KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES + KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES;
+  const transportBytes =
+    KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES +
+    KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES +
+    KIND_CONSENT_ENROLLMENT_VERIFICATION_MAX_BYTES +
+    KIND_CONSENT_ENROLLMENT_KERNEL_CONTROL_MAX_BYTES;
   return Object.freeze({
     source: Object.freeze({ ...native.source, bytes: native.source.bytes + transportBytes }),
     access: Object.freeze({ ...native.access, bytes: native.access.bytes + transportBytes }),
@@ -237,27 +432,33 @@ export function kindConsentEnrollmentResultValid(
 /** Add measured wire-body bytes to the native receipt without changing axes. */
 export function kindConsentTransportActual(
   input: KindConsentEnrollmentInput,
-  native: unknown,
+  verified: unknown,
   requestBytes: number,
   responseBytes: number,
+  kernelControlBytes: number,
 ): KindConsentWorkDeclaration | undefined {
-  const nativeBound = kindConsentOperationBound(input);
+  const verifiedBound = kindConsentEnrollmentVerifiedBound(input);
   if (
-    !nativeBound ||
-    !kindConsentWorkWithin(native, nativeBound) ||
+    !verifiedBound ||
+    !kindConsentWorkWithin(verified, verifiedBound) ||
     !Number.isSafeInteger(requestBytes) ||
     requestBytes < 0 ||
     requestBytes > KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES ||
     !Number.isSafeInteger(responseBytes) ||
     responseBytes < 0 ||
-    responseBytes > KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES
+    responseBytes > KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES ||
+    !Number.isSafeInteger(kernelControlBytes) ||
+    kernelControlBytes < 0 ||
+    kernelControlBytes > KIND_CONSENT_ENROLLMENT_KERNEL_CONTROL_MAX_BYTES
   )
     return undefined;
-  const bytes = requestBytes + responseBytes;
-  return Object.freeze({
-    source: Object.freeze({ ...native.source, bytes: native.source.bytes + bytes }),
-    access: Object.freeze({ ...native.access, bytes: native.access.bytes + bytes }),
+  const bytes = requestBytes + responseBytes + kernelControlBytes;
+  const actual: KindConsentWorkDeclaration = Object.freeze({
+    source: Object.freeze({ ...verified.source, bytes: verified.source.bytes + bytes }),
+    access: Object.freeze({ ...verified.access, bytes: verified.access.bytes + bytes }),
   });
+  const bound = kindConsentTransportBound(input);
+  return bound && kindConsentWorkWithin(actual, bound) ? actual : undefined;
 }
 
 /** A callable operation also carries pure declaration and exact actual-charge

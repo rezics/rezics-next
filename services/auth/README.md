@@ -1792,25 +1792,66 @@ participant at `POST /internal/v1/kind-consents:enroll`. Set
 on `host.handler` and returns 503 before host start or after shutdown. Host
 start/stop gates the handler and owns the existing Auth pool and the one
 `service.internal.kindConsentParticipant` instance. The listener does not make
-a second participant or pool. Kernel sends exactly `{ input, deadline }`, where
-`input` is the canonical enrollment input and `deadline` is the caller's
-absolute millisecond deadline. Auth validates the exact canonical shape before
-dispatch and returns the bounded `{ result, work }` envelope only when the
-participant's one-use actual declaration is valid; timeout, dispatched failure
-or missing charge returns an unavailable envelope without a reusable charge.
-Enrollment request bodies are bounded at 90,000 bytes for the 80,000-byte
-canonical input, and response bodies at 80,000 bytes. The separate
-`/consents:read` body keeps its existing 16,384-byte ceiling.
+a second participant or pool. Kernel keeps the exact JSON `{ input, deadline }`
+and adds only the enrollment-specific `X-Rezics-Kind-Deadline` header with the
+same original integer deadline. The header is resource/deadline input, never
+service identity or admission authority. Auth reads and strictly parses it
+before JWT verification or body I/O, requires canonical positive-integer text
+and exact equality with the JSON number, and then fixes one cutoff at
+`min(originalDeadline, arrival+3000ms)`. That cutoff bounds verification, body,
+native pool checkout, transaction, response and rollback; there are no renewed
+per-stage windows. Owned JWKS/body streams and the native connection are aborted
+or cancelled at the cutoff. A detached raced promise is not used.
 
-Auth holds the same frontier, client and account-consent locks around the
-enrollment. The supplied deadline bounds pool checkout and the transaction;
-Auth installs statement and lock timeouts inside that transaction. Enrollment
-uses the canonical shared operation bound, including its input, keyed lookup,
-insert and control work. Its actual callable returns the associated native
-declaration once; an uncertain retry uses the same consumer identity and a new
-caller reservation. This private transport does not implement Source
-invalidation/verification, same-home adoption fences, restore recovery or
-consent-erasure receiving.
+Enrollment request bodies stay bounded at 90,000 bytes for the 80,000-byte
+canonical input; response bodies are bounded at 80,000 bytes. The JWT is limited
+to 16,384 bytes, JWKS request to 4,096 bytes and streamed JWKS response to
+65,536 bytes. Auth control input (URL, method and headers other than the
+separately charged JWT), JWKS response headers and the fixed Auth response
+headers share an 8,192-byte ceiling. The separate `/consents:read` route keeps
+its existing fixed verification/body behavior and 16,384-byte body ceiling.
+
+The canonical native Source bound is candidateKeys=1, nativeRows=2,
+identityMetadataRows=0, emptySeeks=3, nativePoints=4, witnessKeys=3 and
+statements=11; Access is keys=1, rows=2, emptySeeks=2, points=4 and witnesses=3.
+Literal successful new enrollment uses BEGIN + timeout configuration + three
+locks + frontier + current client/consent + existing consumer + INSERT + COMMIT
+(10 statements). Duplicate enrollment stops before INSERT (9); closed-frontier
+refusal stops after the frontier query (7); current-client refusal is 8. The
+ceiling's 11 includes attempted COMMIT and ROLLBACK after a failure. A pool wait
+executes no SQL. A failure or uncertain commit has no reusable actual charge,
+so the caller retains its full reservation. The producer traces each literal
+statement, lock, returned row, empty seek and JSON-serialized metadata result;
+the native actual is tied to the exact input/result and can be consumed once.
+
+For admitted input, `I = 128 + UTF8(accountId, clientId, route, ownerAccountId,
+collectionId, preparationId, originId, requestedScopes)`. The native byte
+ceiling is `I + max(2*JSON([])+currentRow+insertRow,
+3*JSON([])+currentRow, JSON([])+currentRow+existingRow,
+JSON([{ "?column?": 1 }]))`. Each row is its
+literal SQL projection serialized as JSON. The current query returns at most
+three stored scope arrays; duplicate/inactive lookup returns both requested and
+effective arrays even when the new requested scope list is empty. Each array is
+bounded at 512 scopes of 128 ASCII bytes (67,073 JSON bytes); visible
+identifiers are bounded at 1,024 bytes and charged at their JSON-escaped
+maximum. The `max` accounts for mutually exclusive new, duplicate/refused and
+closed-frontier paths without summing their rows. A suppressed `INSERT RETURNING`
+row is the three-empty-result new path and commits an unavailable result.
+
+Auth's verified actual adds the measured JWT, JWKS request/response and Auth
+control bytes to the traced native work. Kernel's actual adds the measured
+90,000-byte-bounded request body, 80,000-byte-bounded response body and
+8,192-byte-bounded URL/method/explicit headers. Both Source and Access byte
+reservations therefore add at most 272,400 transport/verifier bytes to the
+native input-plus-metadata ceiling. Auth returns `{ result, work }` only when
+the one-use native actual and measured verification work fit that declaration;
+Kernel validates every axis and consumes its invocation-bound actual once.
+Absent, malformed, late, dispatched-failure and repeated receipts leave the
+full same-frame reservation spent; a retry uses the same consumer identity and
+a new caller reservation. No parent allowance, ledger or child refund is added;
+a consumer parent without this complete declaration remains unavailable.
+This private transport does not implement Source invalidation/verification,
+same-home adoption fences, restore recovery or consent-erasure receiving.
 
 The Cost table derives the standalone exact current-consent reader and cites its
 native growth series. The private listener adds one bounded HTTP request/response

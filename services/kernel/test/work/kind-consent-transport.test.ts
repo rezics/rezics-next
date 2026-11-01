@@ -25,6 +25,8 @@ let privateServer: ReturnType<typeof Bun.serve>;
 let accessToken: string;
 let deadlineSeen: Promise<number>;
 let resolveDeadlineSeen!: (deadline: number) => void;
+let deadlineHeaderSeen: Promise<string | null>;
+let resolveDeadlineHeaderSeen!: (deadline: string | null) => void;
 
 const unused = async (): Promise<never> => {
   throw new Error('Unexpected account workflow access');
@@ -101,6 +103,9 @@ beforeAll(async () => {
   deadlineSeen = new Promise<number>((resolve) => {
     resolveDeadlineSeen = resolve;
   });
+  deadlineHeaderSeen = new Promise<string | null>((resolve) => {
+    resolveDeadlineHeaderSeen = resolve;
+  });
   privateServer = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -110,6 +115,8 @@ beforeAll(async () => {
           .clone()
           .json()
           .then((body: { deadline: number }) => resolveDeadlineSeen(body.deadline));
+      if (new URL(request.url).pathname === '/internal/v1/kind-consents:enroll')
+        resolveDeadlineHeaderSeen(request.headers.get('X-Rezics-Kind-Deadline'));
       return host.privateConsentHandler!(request);
     },
   });
@@ -208,6 +215,7 @@ test('default Work composition enrolls the original Kind consumer through privat
   const observed = JSON.parse(output) as { deadline: number; bound: unknown; actual: unknown };
   expect(observed.deadline).toBe(deadline);
   expect(await deadlineSeen).toBe(deadline);
+  expect(await deadlineHeaderSeen).toBe(String(deadline));
   expect(observed.actual).toBeDefined();
   expect(observed.bound).toBeDefined();
 }, 60_000);

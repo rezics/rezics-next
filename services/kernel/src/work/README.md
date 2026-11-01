@@ -203,17 +203,58 @@ continues to name `POST /internal/v1/consents:read`; enrollment derives the fixe
 Auth runtime, Pool or signing key enters Kernel.
 
 The returned Auth-contract participant closes over the same absolute deadline.
-Its `enroll.bound(input)` reserves the canonical Auth operation plus the maximum
-90,000-byte request and 80,000-byte response on both existing Source and Access
-byte axes. It does not create a local ledger. `enroll(input)` sends only the exact
-`{ input, deadline }` envelope with the configured Cloudflare Access service
-token, redirects disabled, bounded streamed JSON and the original deadline. Its
-one-use `enroll.actual(input, result)` checks the returned result and every native
-work axis, then adds the observed request and response body bytes. The Auth
-response's serialized work is descriptive; only this invocation association and
-the consumer's existing reservation settle the operation. Missing, malformed,
-late, dispatched-failure and repeated-call receipts return no actual charge, so
-the full reservation remains spent and a repeat must reserve again.
+Kernel sends the unchanged `{ input, deadline }` JSON and adds the enrollment-only
+`X-Rezics-Kind-Deadline` header whose value is exactly `String(deadline)`. That
+header carries only the caller's resource deadline; it is not identity or
+admission authority. Auth requires its canonical positive integer form and exact
+equality with the JSON number before native dispatch. Auth reads it before JWT
+verification or body I/O, then uses one cutoff, `min(originalDeadline,
+arrival+3000ms)`, through JWKS, body, pool checkout, transaction, rollback and
+response. No stage renews a window. Owned JWKS fetch/body streams and the
+transaction are cancelled at that cutoff; a raced promise alone is not used.
+
+The shared declaration is derived from the literal native query trace. Source is
+candidateKeys=1, nativeRows=2, identityMetadataRows=0, emptySeeks=3,
+nativePoints=4, witnessKeys=3 and statements=11. Access is keys=1, rows=2,
+emptySeeks=2, points=4 and witnesses=3. A new insert is 10 SQL statements;
+duplicate enrollment is 9; a closed-frontier refusal is 7; a current-client
+refusal is 8. The full 11-statement ceiling includes attempted COMMIT and
+ROLLBACK after a late failure. It counts BEGIN, the one combined timeout
+configuration statement, each of the three frontier/client/consent locks,
+no-open-transition, current client/consent metadata, existing consumer lookup,
+INSERT and transaction completion. Pool wait has no SQL. Dispatched failures or
+uncertain commit effects have no reusable actual receipt and retain the full
+reservation.
+
+Let `I = 128 + UTF8(accountId, clientId, route, ownerAccountId, collectionId,
+preparationId, originId, requestedScopes)`. For one admitted input, the native
+byte ceiling is `I + max(2*JSON([])+currentRow+insertRow,
+3*JSON([])+currentRow, JSON([])+currentRow+existingRow,
+JSON([{ "?column?": 1 }]))`, where each row is
+the literal query projection serialized as JSON. The current row has three
+scope arrays; the existing-consumer row has both requested and effective scope
+arrays even when the new request is empty. Each stored array admits at most 512
+scopes of 128 ASCII bytes, so its maximum JSON size is 67,073 bytes. Visible
+identifier fields admit 1,024 bytes and are charged at their JSON-escaped
+maximum. This max selects mutually exclusive insert, duplicate/refusal and
+frontier paths instead of adding their rows together. A successful new insert
+has two empty results; a suppressed `INSERT RETURNING` has three and returns an
+unavailable result from the committed transaction.
+
+Auth's verified actual adds the exact Access JWT bytes, JWKS request bytes, JWKS
+response body bytes and Auth-side HTTP control bytes (incoming URL/method/headers
+except the separately counted JWT, JWKS response headers and Auth response
+headers). Their ceilings are 16,384, 4,096, 65,536 and 8,192 bytes. Kernel's
+one-use `enroll.actual(input, result)` adds the measured JSON request/response
+bodies, bounded at 90,000 and 80,000 bytes, and its measured private URL/method/
+explicit-header control, bounded at 8,192 bytes. Thus both byte axes reserve
+`I + maxNativeReturnedMetadata + 16,384 + 4,096 + 65,536 + 8,192 + 90,000 +
+80,000 + 8,192` (native plus 272,400 transport/verifier bytes). It validates
+the Auth receipt against every native and verifier axis and consumes that
+invocation once. Missing, malformed, late, dispatched-failure and repeated-call
+receipts leave the full existing reservation spent; a retry needs another paid
+reservation. No child refund, local ledger or guessed parent allowance is added.
+Any consumer parent that lacks this complete declaration remains unavailable.
 
 This composes only the private Auth enrollment leg. Source invalidation and
 verification, Library adoption and restore fences, and native consent-erasure

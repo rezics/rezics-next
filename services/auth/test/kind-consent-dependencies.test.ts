@@ -6,7 +6,7 @@ import type {
   KindConsentWorkDeclaration,
 } from '@rezics/auth-contract';
 import { testDatabase } from '../scripts/database.ts';
-import { createKindConsentParticipant } from '../src/kind-consent.ts';
+import { createKindConsentParticipant, withKindConsentEnrollmentDeadline } from '../src/kind-consent.ts';
 
 test('a native enrolled Kind consumer is fenced before consent/client authority changes and concurrent or restored enrollment cannot escape', async () => {
   const fixture = testDatabase();
@@ -90,15 +90,118 @@ test('a native enrolled Kind consumer is fenced before consent/client authority 
         ('kind-owner','kind-consent-client',ARRAY['read','write']),('kind-owner','kind-client-client',ARRAY['read']);
     `);
 
-    const enrolled = await participant.enroll({
+    const enrollmentInput = {
       accountId: 'kind-owner',
       clientId: 'kind-consent-client',
       requestedScopes: ['read'],
       consumer: consumer('consent-preparation'),
-    });
+    };
+    const enrolled = await withKindConsentEnrollmentDeadline(
+      Date.now() + 3_000,
+      () => participant.enroll(enrollmentInput),
+      new AbortController().signal,
+    );
     expect(enrolled.status).toBe('enrolled');
     if (enrolled.status !== 'enrolled') throw new Error('Kind enrollment refused');
     expect(enrolled.effectiveScopes).toEqual(['read']);
+    const successWork = participant.enroll.actual(enrollmentInput, enrolled);
+    expect(successWork).toMatchObject({
+      source: { candidateKeys: 1, nativeRows: 2, emptySeeks: 2, nativePoints: 4, witnessKeys: 3, statements: 10 },
+      access: { keys: 1, rows: 2, emptySeeks: 2, points: 4, witnesses: 3 },
+    });
+    expect(successWork?.source.bytes).toBe(successWork?.access.bytes);
+    expect(participant.enroll.actual(enrollmentInput, enrolled)).toBeUndefined();
+
+    const duplicate = await withKindConsentEnrollmentDeadline(
+      Date.now() + 3_000,
+      () => participant.enroll(enrollmentInput),
+      new AbortController().signal,
+    );
+    expect(duplicate.status).toBe('enrolled');
+    const duplicateWork = participant.enroll.actual(enrollmentInput, duplicate);
+    expect(duplicateWork).toMatchObject({
+      source: { candidateKeys: 1, nativeRows: 2, emptySeeks: 1, nativePoints: 3, witnessKeys: 3, statements: 9 },
+      access: { keys: 1, rows: 2, emptySeeks: 1, points: 3, witnesses: 3 },
+    });
+
+    const emptyRetryInput = { ...enrollmentInput, requestedScopes: [] as string[] };
+    const emptyRetry = await withKindConsentEnrollmentDeadline(
+      Date.now() + 3_000,
+      () => participant.enroll(emptyRetryInput),
+      new AbortController().signal,
+    );
+    expect(emptyRetry).toEqual({ status: 'unavailable' });
+    const emptyRetryWork = participant.enroll.actual(emptyRetryInput, emptyRetry);
+    expect(emptyRetryWork).toMatchObject({
+      source: { candidateKeys: 1, nativeRows: 2, emptySeeks: 1, nativePoints: 3, witnessKeys: 3, statements: 9 },
+    });
+    const emptyRetryInputBytes =
+      128 +
+      [
+        emptyRetryInput.accountId,
+        emptyRetryInput.clientId,
+        emptyRetryInput.consumer.route,
+        emptyRetryInput.consumer.ownerAccountId,
+        emptyRetryInput.consumer.collectionId,
+        emptyRetryInput.consumer.preparationId,
+        emptyRetryInput.consumer.originId,
+      ].reduce((sum, value) => sum + Buffer.byteLength(value), 0);
+    expect(emptyRetryWork?.source.bytes).toBeGreaterThan(emptyRetryInputBytes);
+
+    const emptyRequestInput = {
+      ...enrollmentInput,
+      requestedScopes: [] as string[],
+      consumer: consumer('empty-request-preparation'),
+    };
+    const emptyRequest = await withKindConsentEnrollmentDeadline(
+      Date.now() + 3_000,
+      () => participant.enroll(emptyRequestInput),
+      new AbortController().signal,
+    );
+    expect(emptyRequest).toMatchObject({ status: 'enrolled', effectiveScopes: [] });
+    const emptyRequestWork = participant.enroll.actual(emptyRequestInput, emptyRequest);
+    const emptyRequestInputBytes =
+      128 +
+      [
+        emptyRequestInput.accountId,
+        emptyRequestInput.clientId,
+        emptyRequestInput.consumer.route,
+        emptyRequestInput.consumer.ownerAccountId,
+        emptyRequestInput.consumer.collectionId,
+        emptyRequestInput.consumer.preparationId,
+        emptyRequestInput.consumer.originId,
+      ].reduce((sum, value) => sum + Buffer.byteLength(value), 0);
+    expect(emptyRequestWork?.source.bytes).toBeGreaterThan(emptyRequestInputBytes);
+
+    const failedStatements: string[] = [];
+    const failingDatabase = {
+      async connect() {
+        const connection = await database.connect();
+        return {
+          async query(sql: string, values?: unknown[]) {
+            const statement = sql.trim().replace(/\s+/g, ' ').toUpperCase();
+            failedStatements.push(statement);
+            if (statement === 'COMMIT') throw new Error('simulated uncertain commit');
+            return connection.query(sql, values as never[]);
+          },
+          release(error?: Error) {
+            connection.release(error);
+          },
+        } as unknown as import('pg').PoolClient;
+      },
+    } as unknown as Pool;
+    const failingParticipant = createKindConsentParticipant({ database: failingDatabase }).participant;
+    const failedInput = { ...enrollmentInput, consumer: consumer('commit-failure-preparation') };
+    const failedResult = await withKindConsentEnrollmentDeadline(
+      Date.now() + 3_000,
+      () => failingParticipant.enroll(failedInput),
+      new AbortController().signal,
+    );
+    expect(failedResult).toEqual({ status: 'unavailable' });
+    expect(failedStatements).toHaveLength(11);
+    expect(failedStatements.slice(-2)).toEqual(['COMMIT', 'ROLLBACK']);
+    expect(failingParticipant.enroll.actual(failedInput, failedResult)).toBeUndefined();
+
     const holdConsent = pauseNext();
     let appliedAfterVerified = false;
     const consentChange = {
@@ -134,14 +237,22 @@ test('a native enrolled Kind consumer is fenced before consent/client authority 
         )
       ).rows[0]?.scopes,
     ).toEqual(['read', 'write']);
-    expect(
-      await participant.enroll({
-        accountId: 'kind-owner',
-        clientId: 'kind-consent-client',
-        requestedScopes: ['read'],
-        consumer: consumer('racing-consent-preparation'),
-      }),
-    ).toEqual({ status: 'unavailable' });
+    const refusedInput = {
+      accountId: 'kind-owner',
+      clientId: 'kind-consent-client',
+      requestedScopes: ['read'],
+      consumer: consumer('racing-consent-preparation'),
+    };
+    const refused = await withKindConsentEnrollmentDeadline(
+      Date.now() + 3_000,
+      () => participant.enroll(refusedInput),
+      new AbortController().signal,
+    );
+    expect(refused).toEqual({ status: 'unavailable' });
+    expect(participant.enroll.actual(refusedInput, refused)).toMatchObject({
+      source: { candidateKeys: 0, nativeRows: 1, emptySeeks: 0, nativePoints: 1, witnessKeys: 3, statements: 7 },
+      access: { keys: 0, rows: 1, emptySeeks: 0, points: 1, witnesses: 3 },
+    });
     holdConsent.resume();
     let consentResult = await firstConsent;
     while (consentResult.status === 'pending') consentResult = await writer.change(consentChange);
@@ -231,3 +342,47 @@ test('a native enrolled Kind consumer is fenced before consent/client authority 
     fixture.close();
   }
 }, 60_000);
+
+test('short original deadline aborts native pool acquisition and releases a late connection', async () => {
+  let resolveConnection!: (connection: import('pg').PoolClient) => void;
+  let releaseError: Error | undefined;
+  let queryCount = 0;
+  const database = {
+    connect: () =>
+      new Promise<import('pg').PoolClient>((resolve) => {
+        resolveConnection = resolve;
+      }),
+  } as unknown as Pool;
+  const participant = createKindConsentParticipant({ database }).participant;
+  const input = {
+    accountId: 'short-deadline-account',
+    clientId: 'short-deadline-client',
+    requestedScopes: [],
+    consumer: {
+      route: 'collection-kind',
+      ownerAccountId: 'short-deadline-account',
+      collectionId: 'short-deadline-collection',
+      preparationId: 'short-deadline-preparation',
+      originId: 'short-deadline-origin',
+    },
+  };
+  const controller = new AbortController();
+  const deadline = Date.now() + 40;
+  const abortTimer = setTimeout(() => controller.abort(), Math.max(0, deadline - Date.now()));
+  const result = await withKindConsentEnrollmentDeadline(deadline, () => participant.enroll(input), controller.signal);
+  clearTimeout(abortTimer);
+  expect(result).toEqual({ status: 'unavailable' });
+  expect(participant.enroll.actual(input, result)).toBeUndefined();
+  resolveConnection({
+    async query() {
+      queryCount++;
+      throw new Error('late pool checkout must not query');
+    },
+    release(error?: Error) {
+      releaseError = error;
+    },
+  } as unknown as import('pg').PoolClient);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(queryCount).toBe(0);
+  expect(releaseError).toBeInstanceOf(Error);
+});

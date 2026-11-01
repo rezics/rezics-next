@@ -1,9 +1,15 @@
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { kindConsentOperationBound } from '@rezics/auth-contract';
+import {
+  KIND_CONSENT_ENROLLMENT_NATIVE_RESULT_MAX_BYTES,
+  MAX_CONSENTED_SCOPES,
+  kindConsentOperationActual,
+  kindConsentOperationBound,
+} from '@rezics/auth-contract';
 import type {
   KindConsentConsumer,
   KindConsentEnrollmentInput,
+  KindConsentEnrollmentNativeUsage,
   KindConsentEnrollmentResult,
   KindConsentInvalidationInput,
   KindConsentInvalidationReceiver,
@@ -12,7 +18,7 @@ import type {
   KindConsentReference,
   KindConsentWorkDeclaration,
 } from '@rezics/auth-contract';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 export const KIND_CONSENT_PAGE_SIZE = 100;
 
@@ -80,7 +86,126 @@ export interface KindConsentWriter {
 
 const identifier = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 1024 && /^[\x21-\x7e]+$/.test(value);
-const enrollmentDeadline = new AsyncLocalStorage<number>();
+type EnrollmentDeadline = Readonly<{ deadline: number; signal?: AbortSignal }>;
+const enrollmentDeadline = new AsyncLocalStorage<EnrollmentDeadline>();
+
+type EnrollmentQueryKind = 'control' | 'lock' | 'frontier' | 'point' | 'candidate';
+type EnrollmentTrace = {
+  candidateKeys: number;
+  nativeRows: number;
+  emptySeeks: number;
+  nativePoints: number;
+  witnessKeys: number;
+  statements: number;
+  returnedMetadataBytes: number;
+};
+
+function createEnrollmentTrace(): EnrollmentTrace {
+  return {
+    candidateKeys: 0,
+    nativeRows: 0,
+    emptySeeks: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    returnedMetadataBytes: 0,
+  };
+}
+
+async function enrollmentQuery<Row extends QueryResultRow>(
+  connection: PoolClient,
+  trace: EnrollmentTrace | undefined,
+  kind: EnrollmentQueryKind,
+  sql: string,
+  values: readonly unknown[] = [],
+): Promise<QueryResult<Row>> {
+  if (!trace) return connection.query<Row>(sql, [...values]);
+  trace.statements++;
+  if (kind === 'lock') trace.witnessKeys++;
+  if (kind === 'frontier' || kind === 'point' || kind === 'candidate') trace.nativePoints++;
+  if (kind === 'candidate') trace.candidateKeys = 1;
+  const result = await connection.query<Row>(sql, [...values]);
+  if (kind === 'frontier' || kind === 'point' || kind === 'candidate') {
+    if (result.rows.length > 1 || result.rows.some((row) => !boundedEnrollmentMetadata(row, kind, sql)))
+      throw new Error('Kind enrollment metadata exceeded its native ceiling');
+    trace.nativeRows += result.rows.length;
+    if (!result.rows.length) trace.emptySeeks++;
+    const returnedBytes = Buffer.byteLength(JSON.stringify(result.rows) ?? '');
+    if (trace.returnedMetadataBytes + returnedBytes > KIND_CONSENT_ENROLLMENT_NATIVE_RESULT_MAX_BYTES)
+      throw new Error('Kind enrollment metadata exceeded its native ceiling');
+    trace.returnedMetadataBytes += returnedBytes;
+  }
+  return result;
+}
+
+const enrollmentScope = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= 128 && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(value);
+
+function boundedEnrollmentMetadata(
+  value: QueryResultRow,
+  kind: EnrollmentQueryKind,
+  sql: string,
+): boolean {
+  const record = value as Record<string, unknown>;
+  const exact = (keys: readonly string[]) =>
+    Object.keys(record).length === keys.length && keys.every((key) => Object.hasOwn(record, key));
+  const identifierValue = (field: unknown) =>
+    typeof field === 'string' && field.length > 0 && field.length <= 1024 && /^[\x21-\x7e]+$/.test(field);
+  const scopeArray = (field: unknown) =>
+    Array.isArray(field) && field.length <= MAX_CONSENTED_SCOPES && field.every(enrollmentScope);
+  if (kind === 'frontier') return exact(['?column?']) && record['?column?'] === 1;
+  if (kind === 'point') {
+    return (
+      exact([
+        'client_id',
+        'client_scopes',
+        'first_party',
+        'ready',
+        'reducing',
+        'consent_scopes',
+        'pending_scopes',
+        'revision',
+      ]) &&
+      identifierValue(record.client_id) &&
+      scopeArray(record.client_scopes) &&
+      typeof record.first_party === 'boolean' &&
+      typeof record.ready === 'boolean' &&
+      typeof record.reducing === 'boolean' &&
+      (record.consent_scopes === null || scopeArray(record.consent_scopes)) &&
+      (record.pending_scopes === null || scopeArray(record.pending_scopes)) &&
+      (record.revision === null || (typeof record.revision === 'string' && /^\d{1,19}$/.test(record.revision)))
+    );
+  }
+  if (sql.trimStart().startsWith('INSERT'))
+    return exact(['reference_id']) && typeof record.reference_id === 'string' && /^[\x21-\x7e]{1,36}$/.test(record.reference_id);
+  return (
+    exact([
+      'reference_id',
+      'account_id',
+      'client_id',
+      'requested_scopes',
+      'effective_scopes',
+      'consumer_route',
+      'owner_account_id',
+      'collection_id',
+      'preparation_id',
+      'origin_id',
+      'active',
+    ]) &&
+    typeof record.reference_id === 'string' &&
+    /^[\x21-\x7e]{1,36}$/.test(record.reference_id) &&
+    identifierValue(record.account_id) &&
+    identifierValue(record.client_id) &&
+    scopeArray(record.requested_scopes) &&
+    scopeArray(record.effective_scopes) &&
+    identifierValue(record.consumer_route) &&
+    identifierValue(record.owner_account_id) &&
+    identifierValue(record.collection_id) &&
+    identifierValue(record.preparation_id) &&
+    identifierValue(record.origin_id) &&
+    typeof record.active === 'boolean'
+  );
+}
 
 function consumerOf(row: Dependency): KindConsentConsumer {
   return Object.freeze({
@@ -192,17 +317,28 @@ export function kindConsentTransitionPageBound(): KindConsentWorkDeclaration {
   });
 }
 
-async function connectByDeadline(database: Pool, deadline?: number): Promise<PoolClient> {
-  if (deadline === undefined) return database.connect();
-  const remaining = deadline - Date.now();
-  if (remaining <= 0) throw new Error('Kind consent enrollment deadline expired');
+async function connectByDeadline(database: Pool, deadline?: number, signal?: AbortSignal): Promise<PoolClient> {
+  if (signal?.aborted) throw new Error('Kind consent enrollment deadline expired');
+  if (deadline === undefined && !signal) return database.connect();
+  const remaining = deadline === undefined ? undefined : deadline - Date.now();
+  if (remaining !== undefined && remaining <= 0) throw new Error('Kind consent enrollment deadline expired');
   let timer: ReturnType<typeof setTimeout> | undefined;
   const pending = database.connect();
-  const expired = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error('Kind consent enrollment deadline expired')), remaining);
-  });
+  let onAbort: (() => void) | undefined;
+  const cancelled = signal
+    ? new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(new Error('Kind consent enrollment deadline expired'));
+        signal.addEventListener('abort', onAbort, { once: true });
+      })
+    : undefined;
+  const expired =
+    remaining === undefined
+      ? undefined
+      : new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error('Kind consent enrollment deadline expired')), remaining);
+        });
   try {
-    return await Promise.race([pending, expired]);
+    return await Promise.race([pending, ...(cancelled ? [cancelled] : []), ...(expired ? [expired] : [])]);
   } catch (error) {
     void pending
       .then((connection) => connection.release(new Error('Kind consent enrollment deadline expired')))
@@ -210,6 +346,7 @@ async function connectByDeadline(database: Pool, deadline?: number): Promise<Poo
     throw error;
   } finally {
     clearTimeout(timer);
+    if (signal && onAbort) signal.removeEventListener('abort', onAbort);
   }
 }
 
@@ -217,8 +354,10 @@ async function withTransaction<T>(
   database: Pool,
   run: (connection: PoolClient) => Promise<T>,
   deadline?: number,
+  signal?: AbortSignal,
+  trace?: EnrollmentTrace,
 ): Promise<T> {
-  const connection = await connectByDeadline(database, deadline);
+  const connection = await connectByDeadline(database, deadline, signal);
   let released = false;
   const expire = () => {
     if (released) return;
@@ -226,51 +365,72 @@ async function withTransaction<T>(
     connection.release(new Error('Kind consent enrollment deadline expired'));
   };
   const checkDeadline = () => {
-    if (deadline !== undefined && Date.now() >= deadline) {
+    if (signal?.aborted || (deadline !== undefined && Date.now() >= deadline)) {
       expire();
       throw new Error('Kind consent enrollment deadline expired');
     }
   };
   const timer = deadline === undefined ? undefined : setTimeout(expire, Math.max(0, deadline - Date.now()));
+  signal?.addEventListener('abort', expire, { once: true });
   try {
     checkDeadline();
-    await connection.query('BEGIN');
+    await enrollmentQuery(connection, trace, 'control', 'BEGIN');
     if (deadline !== undefined) {
       checkDeadline();
       const remaining = Math.max(1, deadline - Date.now());
-      await connection.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true)", [
+      await enrollmentQuery(
+        connection,
+        trace,
+        'control',
+        "SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true)",
+        [
         `${remaining}ms`,
         `${remaining}ms`,
-      ]);
+        ],
+      );
     }
     const result = await run(connection);
     checkDeadline();
-    await connection.query('COMMIT');
+    await enrollmentQuery(connection, trace, 'control', 'COMMIT');
     return result;
   } catch (error) {
-    if (!released) await connection.query('ROLLBACK').catch(() => {});
+    if (!released) await enrollmentQuery(connection, trace, 'control', 'ROLLBACK').catch(() => {});
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', expire);
     if (!released) connection.release();
   }
 }
 
 /** Bind an absolute caller deadline to the installed native participant without
  * changing its public enrollment callable signature. */
-export function withKindConsentEnrollmentDeadline<T>(deadline: number, run: () => Promise<T>): Promise<T> {
+export function withKindConsentEnrollmentDeadline<T>(
+  deadline: number,
+  run: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
   if (!Number.isSafeInteger(deadline)) return Promise.reject(new Error('Invalid Kind consent enrollment deadline'));
-  return enrollmentDeadline.run(deadline, run);
+  return enrollmentDeadline.run({ deadline, ...(signal ? { signal } : {}) }, run);
 }
 
-async function lockChange(connection: PoolClient, clientId: string, accountId?: string) {
+async function lockChange(
+  connection: PoolClient,
+  clientId: string,
+  accountId?: string,
+  trace?: EnrollmentTrace,
+) {
   // Close/snapshot operations share this short lock with enrollments. No foreign
   // Source call happens while this transaction lock is held.
-  await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['auth-kind-consent-frontier']);
+  await enrollmentQuery(connection, trace, 'lock', 'SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+    'auth-kind-consent-frontier',
+  ]);
   // Keep the existing client lock before the exact consent lock.
-  await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-client:${clientId}`]);
+  await enrollmentQuery(connection, trace, 'lock', 'SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+    `auth-client:${clientId}`,
+  ]);
   if (accountId)
-    await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+    await enrollmentQuery(connection, trace, 'lock', 'SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
       `auth-consent:${accountId}:${clientId}`,
     ]);
 }
@@ -310,15 +470,23 @@ export function createKindConsentParticipant(input: {
 }): Readonly<{ participant: KindConsentParticipant; writer: KindConsentWriter }> {
   const { database, receiver } = input;
 
-  async function noOpenTransition(connection: PoolClient, clientId: string, accountId?: string) {
-    const result = await connection.query(
+  async function noOpenTransition(
+    connection: PoolClient,
+    clientId: string,
+    accountId?: string,
+    trace?: EnrollmentTrace,
+  ) {
+    const result = await enrollmentQuery(
+      connection,
+      trace,
+      'frontier',
       `SELECT 1 FROM auth_kind_consent_transition
        WHERE state<>'applied' AND (transition_kind='restore' OR
          (client_id=$1 AND (account_id IS NULL OR account_id=$2)))
        LIMIT 1`,
       [clientId, accountId ?? null],
     );
-    return result.rowCount === 0;
+    return result.rows.length === 0;
   }
 
   const enrollmentCharges = new WeakMap<
@@ -333,15 +501,18 @@ export function createKindConsentParticipant(input: {
     }
     const requestedScopes = [...raw.requestedScopes];
     const effectiveRequest = [...new Set(requestedScopes)].sort();
+    const deadline = enrollmentDeadline.getStore();
+    const trace = createEnrollmentTrace();
+    let committed = false;
     let result: KindConsentEnrollmentResult;
     try {
       result = await withTransaction(
         database,
         async (connection) => {
-          await lockChange(connection, raw.clientId, raw.accountId);
-          if (!(await noOpenTransition(connection, raw.clientId, raw.accountId))) return { status: 'unavailable' };
+          await lockChange(connection, raw.clientId, raw.accountId, trace);
+          if (!(await noOpenTransition(connection, raw.clientId, raw.accountId, trace))) return { status: 'unavailable' };
           const current = (
-            await connection.query<{
+            await enrollmentQuery<{
               client_id: string;
               client_scopes: string[];
               first_party: boolean;
@@ -351,6 +522,9 @@ export function createKindConsentParticipant(input: {
               pending_scopes: string[] | null;
               revision: string | null;
             }>(
+              connection,
+              trace,
+              'point',
               `SELECT c.client_id,c.scopes AS client_scopes,c.first_party,v.ready,
                 EXISTS(SELECT 1 FROM auth_client_reduction r WHERE r.client_id=c.client_id) AS reducing,
                 a.scopes AS consent_scopes,a.pending_scopes,a.revision::text AS revision
@@ -365,7 +539,7 @@ export function createKindConsentParticipant(input: {
 
           const digest = consumerHash(raw.consumer);
           const existing = (
-            await connection.query<{
+            await enrollmentQuery<{
               reference_id: string;
               account_id: string;
               client_id: string;
@@ -378,6 +552,9 @@ export function createKindConsentParticipant(input: {
               origin_id: string;
               active: boolean;
             }>(
+              connection,
+              trace,
+              'candidate',
               `SELECT reference_id,account_id,client_id,requested_scopes,effective_scopes,
                 consumer_route,owner_account_id,collection_id,preparation_id,origin_id,active
                FROM auth_kind_consent_dependency
@@ -413,7 +590,10 @@ export function createKindConsentParticipant(input: {
             (scope) => client.has(scope) && stored.has(scope) && (pending === null || pending.has(scope)),
           );
           const row = (
-            await connection.query<{ reference_id: string }>(
+            await enrollmentQuery<{ reference_id: string }>(
+              connection,
+              trace,
+              'candidate',
               `INSERT INTO auth_kind_consent_dependency
                 (consumer_key_hash,account_id,client_id,requested_scopes,effective_scopes,consent_revision,client_scopes,client_first_party,
                  consumer_route,owner_account_id,collection_id,preparation_id,origin_id)
@@ -439,8 +619,11 @@ export function createKindConsentParticipant(input: {
           if (!row) return { status: 'unavailable' };
           return { status: 'enrolled', reference: referenceOf(row.reference_id), effectiveScopes };
         },
-        enrollmentDeadline.getStore(),
+        deadline?.deadline,
+        deadline?.signal,
+        trace,
       );
+      committed = true;
     } catch {
       // Native coverage gaps, restore uncertainty and serialization failures
       // are unavailable; they never become empty or a negative verdict.
@@ -450,7 +633,10 @@ export function createKindConsentParticipant(input: {
       result.status === 'enrolled'
         ? Object.freeze({ ...result, effectiveScopes: Object.freeze([...result.effectiveScopes]) })
         : Object.freeze(result);
-    enrollmentCharges.set(result, { input: raw, work: bound });
+    if (committed) {
+      const work = kindConsentOperationActual(raw, trace satisfies KindConsentEnrollmentNativeUsage);
+      if (work) enrollmentCharges.set(result, { input: raw, work });
+    }
     return result;
   }
   const enrollOperation: KindConsentOperation<KindConsentEnrollmentInput, KindConsentEnrollmentResult> = Object.assign(
