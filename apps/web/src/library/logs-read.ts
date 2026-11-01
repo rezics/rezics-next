@@ -60,15 +60,17 @@ export async function loadPublishedLog(
   sessionEnv: Partial<SessionEnv>,
   input: { id: string },
 ): Promise<{ log: PublishedLog; isOwner: boolean; revision?: number }> {
-  await prepareSession(request, sessionEnv);
-  const authorization = viewerCredential(request);
+  const refused = await prepareSession(request, sessionEnv);
+  const authorization = refused ? null : viewerCredential(request);
   const result = await client.publishedLogs({ logId: input.id }).get({
     query: libraryFullQuery(),
+    fetch: { cache: 'no-store', redirect: 'manual' },
     ...(authorization ? { headers: { authorization } } : {}),
   });
   const log = readLibraryResult(result).publishedLog;
   if ('deleted' in log) throw notFound();
-  const isOwner = Boolean(sessionSubject(request) && sessionSubject(request) === log.accountId);
+  const accountId = refused ? undefined : sessionSubject(request);
+  const isOwner = Boolean(accountId && accountId === log.accountId);
   const revision = isOwner ? nativeRevision(result.response.headers.get('Library-Published-Log-Revision')) : undefined;
   return { log: present(log), isOwner, ...(revision === undefined ? {} : { revision }) };
 }
@@ -77,6 +79,7 @@ async function readLogPage(client: KernelClient, accountId: string, authorizatio
   const result = await client.publishedLogs.get({
     query: { ...libraryListQuery(cursor, LIBRARY_PAGE_LIMIT), accountId },
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   const status = result.response.status;
   if (status === 202) throw new PublishedLogListError('preparing');
@@ -93,7 +96,7 @@ export async function loadMyPublishedLogs(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<PublishedLogPage> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { signedIn: false, logs: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, logs: [], next: null };
@@ -163,7 +166,7 @@ export async function publishProgressLog(
   sessionEnv: Partial<SessionEnv>,
   input: { sessionId: string; note?: string; idempotencyKey: string },
 ): Promise<PublishedLogWriteResult> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { ok: false, reason: 'forbidden' };
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   const note = input.note?.trim();
@@ -196,7 +199,7 @@ export async function deletePublishedLog(
   sessionEnv: Partial<SessionEnv>,
   input: { id: string; revision?: number; idempotencyKey: string },
 ): Promise<PublishedLogWriteResult> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { ok: false, reason: 'forbidden' };
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   if (
@@ -239,7 +242,7 @@ export async function restorePublishedLog(
     input.revision > 2147483646
   )
     return { ok: false, reason: 'invalid' };
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { ok: false, reason: 'forbidden' };
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   try {
