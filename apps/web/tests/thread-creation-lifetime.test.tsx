@@ -366,6 +366,41 @@ test('ordinary discussion composition preserves a dirty composer when its board 
   }
 });
 
+test('ordinary discussion submission keeps its ordered preset and current success side effects', async () => {
+  const page = await mountPage({
+    boardId: id(25),
+    purpose: 'discussion',
+    presetSubject: id(26),
+    presetSubjectTitle: 'Ordered discussion reference',
+    key: id(27),
+    visible: true,
+  });
+  try {
+    await page.render();
+    await page.settle(() => !!page.editor() && page.host.textContent?.includes('Ordered discussion reference') === true);
+    await page.fill('An ordinary discussion', 'The selected reference stays ordered in the command.');
+    await page.submit();
+    await page.settle(() => page.writes.length === 1);
+    expect(page.writes[0]!.data).toMatchObject({
+      boardId: id(25),
+      title: 'An ordinary discussion',
+      subjectIds: [id(26)],
+    });
+    expect(page.writes[0]!.data).not.toHaveProperty('voteCitation');
+    expect(page.voteReads).toHaveLength(0);
+
+    await page.resolveWrite(0, {
+      ok: true,
+      thread: { id: id(28), title: 'An ordinary discussion' },
+    } as Awaited<ReturnType<typeof startThread>>);
+    await page.settle(() => page.navigation.length === 1);
+    expect(page.navigation).toEqual([`/en/threads/${id(28)}/an-ordinary-discussion`]);
+    expect(page.window.document.cookie).toContain(`rezics_draft_key=${id(28)}.${page.writes[0]!.data.idempotencyKey}`);
+  } finally {
+    await page.dispose();
+  }
+});
+
 test('same-account CSRF replacement retires the route without clearing its composer or sending with the new token', async () => {
   const page = await mountPage({
     boardId: id(31),
@@ -433,10 +468,11 @@ test('caller revisions reject retained callbacks after same-value cache replacem
   const originalTicket = lifetime.connectionTicket;
   const retainedSelection = () => lifetime.isEditable(originalTicket);
   expect(retainedSelection()).toBe(true);
+  const queuedSelection = Promise.resolve().then(retainedSelection);
 
   client.setQueryData(sessionQuery.queryKey, { ...owner });
   expect(source.snapshot()).toBe(1);
-  expect(retainedSelection()).toBe(false);
+  expect(await queuedSelection).toBe(false);
   disconnect();
 
   const replayClient = new QueryClient();
