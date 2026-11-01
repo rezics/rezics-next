@@ -5,8 +5,11 @@ import { fromPlainText } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import type { ContentEditionRevisionView, ContentEditionView } from '../../src/content/edition-model.ts';
+import { readEditionSourceIdentity } from '../../src/content/edition-reads.ts';
+import readIdentityLabels from '../../src/semantic/read-related.sql';
+import { observeSql } from './support/sql-observer.ts';
 import { readContentEditionSaleAuthority } from '../../src/content/edition-sale.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import { seedGovernanceAuthority, seedResourceDenial } from './support/disclosure-fixtures.ts';
@@ -356,3 +359,337 @@ test('edition target requires an existing readable association in the selected o
     ),
   ).toBeNull();
 });
+
+const identityOptIn = { 'rezics-edition-identity': 'true' };
+type ExactIdentityResponse = Awaited<ReturnType<typeof readEditionSourceIdentity>>['value'];
+const exactPath = (f: Awaited<ReturnType<typeof fixture>>) => `/v1/posts/${f.post.id}/revisions/${f.post.revisionId}`;
+function metadataIdentity(token: string, path: string) {
+  return wire(token, path, 'GET', undefined, undefined, randomUUID(), identityOptIn);
+}
+async function revisionDate(f: Awaited<ReturnType<typeof fixture>>) {
+  const result = await f.native.database.pool.query<{ recorded_at: Date }>(
+    'SELECT recorded_at FROM content.revision WHERE route=$1 AND revision_id=$2',
+    [f.route, f.post.revisionId],
+  );
+  return result.rows[0]!.recorded_at.toISOString();
+}
+
+test('default exact revision HTTP preserves legacy query admission and validates only the edition opt-in', async () => {
+  const f = await fixture();
+  const path = exactPath(f);
+  const plain = await value<{ post: unknown }>(wire(f.token, path), 200);
+  expect(Object.keys(plain)).toEqual(['post']);
+  expect(await value(wire(f.token, `${path}?unrelated=value`), 200)).toEqual(plain);
+  const response = await wire(f.token, `${path}?editionIdentity=true`);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(response.headers.get('rezics-session-token')).toBeString();
+  const opted = (await response.json()) as ExactIdentityResponse;
+  expect(Object.keys(opted).sort()).toEqual(['editionIdentity', 'post']);
+  expect(opted.post).toEqual(plain.post);
+  expect(opted.editionIdentity).toEqual({
+    postId: f.post.id,
+    revisionId: f.post.revisionId,
+    sha256: f.post.sha256,
+    revisionCreatedAt: await revisionDate(f),
+    subjects: [{ id: f.targetSubjectId, kind: 'available', label: { value: 'Edition source', language: 'en' } }],
+  });
+  // Supplied unrelated IDs are still admitted, but confer no associations or authority.
+  expect(
+    await value(
+      wire(f.token, `${path}?unrelated=value&targetSubjectId=${f.unassociatedSubjectId}&editionIdentity=true`),
+      200,
+    ),
+  ).toEqual(opted);
+  for (const malformed of ['false', 'True', '1', '']) {
+    expect((await wire(f.token, `${path}?editionIdentity=${malformed}`)).status).toBe(400);
+    expect((await wire(f.token, `${path}?unrelated=value&editionIdentity=${malformed}`)).status).toBe(400);
+  }
+  expect((await wire(f.buyer.bearer, path)).status).toBe(404);
+  expect((await wire(f.buyer.bearer, `${path}?editionIdentity=true`)).status).toBe(404);
+  await seedGovernanceAuthority(f.native.database.pool, f.route, f.post.id, f.buyer.actor.accountId, ['post:read']);
+  expect((await wire(f.buyer.bearer, path)).status).toBe(200);
+  // Ordinary source reading alone does not turn a noncreator into the edition author.
+  expect((await wire(f.buyer.bearer, `${path}?editionIdentity=true`)).status).toBe(404);
+}, 60000);
+
+test('default exact identity pins the old immutable revision, digest and associations after a new head', async () => {
+  const f = await fixture();
+  const path = `${exactPath(f)}?editionIdentity=true`;
+  const original = await value<ExactIdentityResponse>(wire(f.token, path), 200);
+  const revised = await value<{ post: { revisionId: string } }>(
+    wire(
+      f.token,
+      `/v1/posts/${f.post.id}/revisions`,
+      'POST',
+      {
+        body: fromPlainText('Different head and association'),
+        subjectIds: [f.unassociatedSubjectId],
+      },
+      f.post.revisionId,
+    ),
+    201,
+  );
+  const pinned = await value<ExactIdentityResponse>(wire(f.token, path), 200);
+  expect(pinned.editionIdentity).toEqual(original.editionIdentity);
+  expect(pinned.post.body).toEqual(f.body);
+  expect(pinned.post.revisionId).toBe(f.post.revisionId);
+  expect(pinned.post.sha256).toBe(f.post.sha256);
+  const head = await value<ExactIdentityResponse>(
+    wire(f.token, `/v1/posts/${f.post.id}/revisions/${revised.post.revisionId}?editionIdentity=true`),
+    200,
+  );
+  expect(head.editionIdentity.revisionId).toBe(revised.post.revisionId);
+  expect(head.editionIdentity.sha256).not.toBe(f.post.sha256);
+  expect(head.editionIdentity.subjects).toEqual([
+    { id: f.unassociatedSubjectId, kind: 'available', label: { value: 'Edition topics', language: 'en' } },
+  ]);
+  const reply = await value<{ post: { id: string; revisionId: string } }>(
+    wire(f.token, `/v1/threads/${f.thread.id}/posts`, 'POST', {
+      body: fromPlainText('Another exact post'),
+      licence: 'CC0-1.0',
+      subjectIds: [],
+    }),
+    201,
+  );
+  expect(
+    (await wire(f.token, `/v1/posts/${f.post.id}/revisions/${reply.post.revisionId}?editionIdentity=true`)).status,
+  ).toBe(404);
+  expect(
+    (await wire(f.token, `/v1/posts/${reply.post.id}/revisions/${f.post.revisionId}?editionIdentity=true`)).status,
+  ).toBe(404);
+}, 60000);
+
+test('default edition metadata opt-in preserves closed shapes and never derives ordinary dates from publication ownership', async () => {
+  const f = await fixture();
+  const base = `/v1/contentEditions/${f.draft.editionId}`;
+  const plain = await value<ContentEditionView>(wire(f.token, base), 200);
+  expect(plain).not.toHaveProperty('identity');
+  const draft = await value<ContentEditionView>(metadataIdentity(f.token, base), 200);
+  expect(draft).toEqual({
+    ...plain,
+    identity: {
+      subject: { id: f.targetSubjectId, kind: 'available', label: { value: 'Edition source', language: 'en' } },
+      revisionCreatedAt: await revisionDate(f),
+    },
+  });
+  expect((await metadataIdentity(f.token, base)).headers.get('cache-control')).toBe('private, no-store');
+  expect((await metadataIdentity(f.buyer.bearer, base)).status).toBe(404);
+  expect(
+    (
+      await wire(f.token, base, 'GET', undefined, undefined, randomUUID(), {
+        'rezics-edition-identity': 'false',
+      })
+    ).status,
+  ).toBe(400);
+  await value(wire(f.token, `${base}:publish`, 'POST', {}, '1'), 200);
+  await seedGovernanceAuthority(f.native.database.pool, f.route, f.draft.editionId, f.buyer.actor.accountId, [
+    'edition:read',
+  ]);
+  const published = await value<ContentEditionView>(wire(f.buyer.bearer, base), 200);
+  expect(published).not.toHaveProperty('identity');
+  const recognized = await value<ContentEditionView>(metadataIdentity(f.buyer.bearer, base), 200);
+  expect(recognized).toEqual({ ...published, identity: { ...draft.identity!, revisionCreatedAt: null } });
+  expect(recognized).not.toHaveProperty('postId');
+  expect(recognized).not.toHaveProperty('threadId');
+  expect(recognized).not.toHaveProperty('body');
+  expect(
+    (await wire(f.buyer.bearer, `${exactPath(f)}?editionIdentity=true&editionId=${f.draft.editionId}`)).status,
+  ).toBe(404);
+  // Published metadata retains its native authority rather than borrowing source permission.
+  expect(
+    (await value<ContentEditionView>(metadataIdentity(f.token, base), 200)).identity?.revisionCreatedAt,
+  ).toBeNull();
+  await seedResourceDenial(f.native.database.pool, f.route, f.post.id, f.author.actor.accountId, ['post:read']);
+  expect((await wire(f.token, `${exactPath(f)}?editionIdentity=true`)).status).toBe(404);
+  await value(wire(f.token, `${base}:unpublish`, 'POST', {}, '2'), 200);
+  expect((await wire(f.token, base)).status).toBe(404);
+  expect((await metadataIdentity(f.token, base)).status).toBe(404);
+}, 60000);
+
+for (const state of ['hidden', 'taken_down', 'redirected', 'denied'] as const) {
+  test(`default exact identity withholds a ${state} subject without replacing its pinned ID`, async () => {
+    const f = await fixture();
+    if (state === 'redirected') {
+      await f.native.database.admin.query(
+        'INSERT INTO semantic.redirect(route,subject_id,sequence,target,recorded_transaction_id) VALUES ($1,$2,1,$3,$2)',
+        [routeOf(f.targetSubjectId), f.targetSubjectId, f.unassociatedSubjectId],
+      );
+    } else if (state === 'denied') {
+      await seedResourceDenial(
+        f.native.database.pool,
+        routeOf(f.targetSubjectId)!,
+        f.targetSubjectId,
+        f.author.actor.accountId,
+        ['subject:read'],
+      );
+    } else {
+      await f.native.database.admin.query(
+        'UPDATE semantic.subject SET visibility=$3,security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2',
+        [routeOf(f.targetSubjectId), f.targetSubjectId, state],
+      );
+    }
+    const plain = await value<{ post: unknown }>(wire(f.token, exactPath(f)), 200);
+    const result = await value<ExactIdentityResponse>(wire(f.token, `${exactPath(f)}?editionIdentity=true`), 200);
+    expect(result.post).toEqual(plain.post);
+    expect(result.editionIdentity.subjects).toEqual([{ id: f.targetSubjectId, kind: 'withheld', label: null }]);
+    expect(result.editionIdentity.revisionCreatedAt).toBe(await revisionDate(f));
+    expect((await metadataIdentity(f.token, `/v1/contentEditions/${f.draft.editionId}`)).status).toBe(404);
+  }, 60000);
+}
+
+test('default exact identity distinguishes an unlabelled subject and a deleted subject', async () => {
+  const f = await fixture();
+  const subject = newId(routeOf(f.targetSubjectId)!);
+  // A bare native subject has no contributions or label; deletion leaves the exact
+  // authored revision's reference intact. This setup grants no read permission.
+  await f.native.database.admin.query(
+    "INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id) VALUES ($1,$2,'schema:Book',$2)",
+    [routeOf(subject), subject],
+  );
+  const revised = await value<{ post: { revisionId: string } }>(
+    wire(
+      f.token,
+      `/v1/posts/${f.post.id}/revisions`,
+      'POST',
+      { body: f.body, subjectIds: [subject] },
+      f.post.revisionId,
+    ),
+    201,
+  );
+  const path = `/v1/posts/${f.post.id}/revisions/${revised.post.revisionId}?editionIdentity=true`;
+  expect((await value<ExactIdentityResponse>(wire(f.token, path), 200)).editionIdentity.subjects).toEqual([
+    { id: subject, kind: 'missing', label: null },
+  ]);
+  await f.native.database.admin.query('DELETE FROM semantic.subject WHERE route=$1 AND subject_id=$2', [
+    routeOf(subject),
+    subject,
+  ]);
+  expect((await value<ExactIdentityResponse>(wire(f.token, path), 200)).editionIdentity.subjects).toEqual([
+    { id: subject, kind: 'withheld', label: null },
+  ]);
+}, 60000);
+
+for (const change of ['subject denial', 'source denial', 'subject redirect'] as const) {
+  test(`default exact identity fences a ${change} committed during label composition`, async () => {
+    const f = await fixture();
+    const observer = observeSql(f.native.database.pool);
+    const barrier = observer.hold({ statement: readIdentityLabels.sql }, 'after');
+    const pending = wire(f.token, `${exactPath(f)}?editionIdentity=true`);
+    try {
+      await Promise.race([
+        barrier.entered,
+        pending.then(async (response) => {
+          throw new Error(`Expected identity label boundary, received ${response.status}: ${await response.text()}`);
+        }),
+      ]);
+      if (change === 'subject denial') {
+        await seedResourceDenial(
+          f.native.database.pool,
+          routeOf(f.targetSubjectId)!,
+          f.targetSubjectId,
+          f.author.actor.accountId,
+          ['subject:read'],
+        );
+      } else if (change === 'source denial') {
+        await seedResourceDenial(f.native.database.pool, f.route, f.post.id, f.author.actor.accountId, ['post:read']);
+      } else {
+        await f.native.database.admin.query(
+          'INSERT INTO semantic.redirect(route,subject_id,sequence,target,recorded_transaction_id) VALUES ($1,$2,1,$3,$2)',
+          [routeOf(f.targetSubjectId), f.targetSubjectId, f.unassociatedSubjectId],
+        );
+      }
+      barrier.release();
+      if (change === 'source denial') {
+        const response = await pending;
+        expect(response.status).toBe(404);
+        expect(await response.text()).not.toContain('Exact authored edition snapshot');
+      } else {
+        const result = await value<ExactIdentityResponse>(pending, 200);
+        expect(result.editionIdentity.subjects).toEqual([{ id: f.targetSubjectId, kind: 'withheld', label: null }]);
+      }
+    } finally {
+      barrier.release();
+      await pending;
+      await observer.close();
+    }
+  }, 60000);
+}
+
+test('default exact and edition identity never disclose unavailable revision metadata or conditional stale bodies', async () => {
+  const f = await fixture();
+  const path = `${exactPath(f)}?editionIdentity=true`;
+  expect((await wire(f.token, path)).status).toBe(200);
+  await value(wire(f.token, `/v1/posts/${f.post.id}`, 'DELETE'), 200);
+  for (const target of [exactPath(f), path, `/v1/contentEditions/${f.draft.editionId}`]) {
+    const response = await wire(f.token, target, 'GET', undefined, undefined, randomUUID(), {
+      ...identityOptIn,
+      'if-none-match': JSON.stringify(f.post.sha256),
+    });
+    expect(response.status).toBe(404);
+    const text = await response.text();
+    expect(text).not.toContain('revisionCreatedAt');
+    expect(text).not.toContain('Exact authored edition snapshot');
+  }
+}, 60000);
+
+for (const change of ['label edit', 'source denial', 'subject hide', 'edition denial'] as const) {
+  test(`default edition metadata fences a ${change} during identity composition`, async () => {
+    const f = await fixture();
+    const base = `/v1/contentEditions/${f.draft.editionId}`;
+    const observer = observeSql(f.native.database.pool);
+    const barrier = observer.hold({ statement: readIdentityLabels.sql }, 'after');
+    const pending = metadataIdentity(f.token, base);
+    try {
+      await Promise.race([
+        barrier.entered,
+        pending.then(async (response) => {
+          throw new Error(`Expected identity label boundary, received ${response.status}: ${await response.text()}`);
+        }),
+      ]);
+      if (change === 'label edit') {
+        await value(
+          wire(
+            f.token,
+            `/v1/subjects/${f.targetSubjectId}/terms`,
+            'PATCH',
+            { labels: { en: 'Current edition label' } },
+            '1',
+          ),
+          200,
+        );
+      } else if (change === 'subject hide') {
+        await f.native.database.admin.query(
+          "UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
+          [routeOf(f.targetSubjectId), f.targetSubjectId],
+        );
+      } else {
+        const source = change === 'source denial';
+        await seedResourceDenial(
+          f.native.database.pool,
+          f.route,
+          source ? f.post.id : f.draft.editionId,
+          f.author.actor.accountId,
+          [source ? 'post:read' : 'edition:read'],
+        );
+      }
+      barrier.release();
+      if (change === 'label edit') {
+        const result = await value<ContentEditionView>(pending, 200);
+        expect(result.identity?.subject).toEqual({
+          id: f.targetSubjectId,
+          kind: 'available',
+          label: { value: 'Current edition label', language: 'en' },
+        });
+      } else {
+        const result = await pending;
+        expect(result.status).toBe(404);
+        expect(await result.text()).not.toContain('Edition source');
+      }
+    } finally {
+      barrier.release();
+      await pending;
+      await observer.close();
+    }
+  }, 60000);
+}

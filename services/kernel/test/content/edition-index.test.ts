@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
+import readIdentityLabels from '../../src/semantic/read-related.sql';
+import { observeSql } from './support/sql-observer.ts';
 import type { ContentEditionView } from '../../src/content/edition-model.ts';
 import {
   createCreatorEditionIndexEffect,
@@ -306,3 +308,134 @@ test('creator inventory preserves current source denial and retryable partition 
     ),
   ).rejects.toBeInstanceOf(CommandUnavailableError);
 }, 60000);
+
+const identityOptIn = { 'rezics-edition-identity': 'true' };
+function identityList(token: string, path: string) {
+  return wire(token, path, 'GET', undefined, undefined, randomUUID(), identityOptIn);
+}
+
+test('default creator inventory opt-in preserves ordinary shapes, immutable pins and cursor admission', async () => {
+  const f = await fixture();
+  await project(f, f.draft.editionId);
+  const path = `/v1/accounts/${f.author.actor.accountId}/editions`;
+  const ordinary = await value<CreatorEditionPage>(wire(f.token, path), 200);
+  expect(ordinary.editions[0]).not.toHaveProperty('identity');
+  const response = await identityList(f.token, path);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(response.headers.get('rezics-session-token')).toBeString();
+  const opted = (await response.json()) as CreatorEditionPage;
+  const date = await f.native.database.pool.query<{ recorded_at: Date }>(
+    'SELECT recorded_at FROM content.revision WHERE route=$1 AND revision_id=$2',
+    [f.route, f.post.revisionId],
+  );
+  const identity = {
+    subject: { id: f.targetSubjectId, kind: 'available', label: { value: 'Edition source', language: 'en' } },
+    revisionCreatedAt: date.rows[0]!.recorded_at.toISOString(),
+  };
+  expect(opted).toEqual({ editions: [{ ...ordinary.editions[0]!, identity }], next: null });
+  expect((await identityList(f.buyer.bearer, path)).status).toBe(404);
+  expect((await identityList(f.token, `/v1/accounts/${f.buyer.actor.accountId}/editions`)).status).toBe(404);
+  expect(
+    (
+      await wire(f.token, path, 'GET', undefined, undefined, randomUUID(), {
+        'rezics-edition-identity': 'false',
+      })
+    ).status,
+  ).toBe(400);
+  await value(wire(f.token, `/v1/contentEditions/${f.draft.editionId}:publish`, 'POST', {}, '1'), 200);
+  await value(
+    wire(
+      f.token,
+      `/v1/posts/${f.post.id}/revisions`,
+      'POST',
+      {
+        body: fromPlainText('New head cannot replace an inventoried exact binding'),
+        subjectIds: [f.unassociatedSubjectId],
+      },
+      f.post.revisionId,
+    ),
+    201,
+  );
+  const published = await value<CreatorEditionPage>(identityList(f.token, path), 200);
+  expect(published.editions[0]).toMatchObject({
+    editionId: f.draft.editionId,
+    state: 'published',
+    revisionId: f.post.revisionId,
+    sha256: f.post.sha256,
+    identity,
+  });
+  // The header changes only decoration, so signed continuations keep their old binding.
+  const first = await value<CreatorEditionPage>(identityList(f.token, `${path}?limit=1`), 200);
+  expect(first.next).toBeString();
+  expect(await value(wire(f.token, `${path}?limit=1&cursor=${encodeURIComponent(first.next!)}`), 200)).toEqual({
+    editions: [],
+    next: null,
+  });
+  expect((await identityList(f.token, `${path}?limit=2&cursor=${encodeURIComponent(first.next!)}`)).status).toBe(400);
+  await seedResourceDenial(f.native.database.pool, f.route, f.post.id, f.author.actor.accountId, ['post:read']);
+  const hidden = await value<CreatorEditionPage>(identityList(f.token, `${path}?limit=1`), 200);
+  expect(hidden.editions).toEqual([]);
+  expect(hidden.next).toBeString();
+}, 60000);
+
+for (const change of ['label edit', 'source denial', 'subject hide', 'edition denial'] as const) {
+  test(`default creator inventory fences a ${change} during identity composition`, async () => {
+    const f = await fixture();
+    await project(f, f.draft.editionId);
+    const path = `/v1/accounts/${f.author.actor.accountId}/editions?limit=1`;
+    const observer = observeSql(f.native.database.pool);
+    const barrier = observer.hold({ statement: readIdentityLabels.sql }, 'after');
+    const pending = identityList(f.token, path);
+    try {
+      await Promise.race([
+        barrier.entered,
+        pending.then(async (response) => {
+          throw new Error(`Expected identity label boundary, received ${response.status}: ${await response.text()}`);
+        }),
+      ]);
+      if (change === 'label edit') {
+        await value(
+          wire(
+            f.token,
+            `/v1/subjects/${f.targetSubjectId}/terms`,
+            'PATCH',
+            { labels: { en: 'Current inventoried label' } },
+            '1',
+          ),
+          200,
+        );
+      } else if (change === 'subject hide') {
+        await f.native.database.admin.query(
+          "UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
+          [routeOf(f.targetSubjectId), f.targetSubjectId],
+        );
+      } else {
+        const source = change === 'source denial';
+        await seedResourceDenial(
+          f.native.database.pool,
+          f.route,
+          source ? f.post.id : f.draft.editionId,
+          f.author.actor.accountId,
+          [source ? 'post:read' : 'edition:read'],
+        );
+      }
+      barrier.release();
+      const result = await value<CreatorEditionPage>(pending, 200);
+      expect(result.next).toBeString();
+      if (change === 'label edit') {
+        expect(result.editions[0]?.identity?.subject).toEqual({
+          id: f.targetSubjectId,
+          kind: 'available',
+          label: { value: 'Current inventoried label', language: 'en' },
+        });
+      } else {
+        expect(result.editions).toEqual([]);
+      }
+    } finally {
+      barrier.release();
+      await pending;
+      await observer.close();
+    }
+  }, 60000);
+}

@@ -903,7 +903,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/posts/:id/revisions/:revisionId',
       {
         params: t.Object({ id: t.String(), revisionId: t.String() }, { additionalProperties: false }),
-        query: t.Object({ editionIdentity: t.Optional(t.Literal('true')) }, { additionalProperties: false }),
+        // This route historically admitted arbitrary query keys. Only the opt-in is constrained.
+        query: t.Object({ editionIdentity: t.Optional(t.Literal('true')) }, { additionalProperties: true }),
         response: {
           200: withHeaders(
             strictContentSchema(
@@ -927,17 +928,14 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
-            const post = await exactPost(await containingThread(id, context), id, context, revisionId);
-            session.record(sessionComponent(post.anchor));
             if (query.editionIdentity === 'true') {
               set.headers['cache-control'] = 'private, no-store';
-              const editionIdentity = await readEditionSourceIdentity(
-                dependencies,
-                { postId: id, revisionId },
-                context,
-              );
-              return { post: post.value, editionIdentity };
+              const result = await readEditionSourceIdentity(dependencies, { postId: id, revisionId }, context);
+              session.record(sessionComponent(result.anchor));
+              return result.value;
             }
+            const post = await exactPost(await containingThread(id, context), id, context, revisionId);
+            session.record(sessionComponent(post.anchor));
             return { post: post.value };
           }),
         ),

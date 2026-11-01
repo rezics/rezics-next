@@ -9,7 +9,7 @@ import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { ContentEditionView } from './edition-model.ts';
-import { readCreatorContentEdition, readEditionIdentities } from './edition-reads.ts';
+import { readCreatorContentEdition, prepareEditionIdentities } from './edition-reads.ts';
 import { editionRow, editionSnapshot } from './edition-store.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { lockErasureFence } from './erasure-fence.ts';
@@ -94,7 +94,7 @@ export async function readCreatorEditions(
     if (current) readable.push(current);
   }
   const identities = input.identity
-    ? await readEditionIdentities(deps, readable, { actor, deadline: context.deadline })
+    ? await prepareEditionIdentities(deps, readable, { actor, deadline: context.deadline })
     : null;
   // Keep the existing final native pass after composition. A fresh refusal drops
   // both edition metadata and its independently authorized identity; never refill.
@@ -103,11 +103,10 @@ export async function readCreatorEditions(
     const current = await read(candidate.editionId);
     if (current) editions.push(current);
   }
+  const labels = identities ? await identities() : null;
   const last = candidates.value.at(-1);
   return {
-    editions: identities
-      ? editions.map((edition) => ({ ...edition, identity: identities.get(edition.editionId)! }))
-      : editions,
+    editions: labels ? editions.map((edition) => ({ ...edition, identity: labels.get(edition.editionId)! })) : editions,
     next:
       last && candidates.value.length === limit
         ? await encodeListCursor(ring, binding, { epoch: candidates.anchor.epoch, after: [last.edition_id] }, now)

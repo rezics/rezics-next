@@ -1,4 +1,4 @@
-import { readEditionSubjectIdentities } from './edition-subject.ts';
+import { prepareEditionSubjectIdentities } from './edition-subject.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
 import readRevisionBatch from './read-revision-batch.sql';
@@ -86,10 +86,15 @@ async function readEditionMetadata(
     if (!(await guard.final())) throw new ContentNotFoundError();
     const result = await checked();
     if (!identity) return result;
-    const identities = await readEditionIdentities(deps, [result.value], context, creator || row.state !== 'published');
+    const identities = await prepareEditionIdentities(
+      deps,
+      [result.value],
+      context,
+      creator || row.state !== 'published',
+    );
     if (!(await guard.final())) throw new ContentNotFoundError();
     const final = await checked();
-    return { ...final, value: { ...final.value, identity: identities.get(id)! } };
+    return { ...final, value: { ...final.value, identity: (await identities()).get(id)! } };
   });
 }
 
@@ -180,28 +185,33 @@ async function revisionDates(
   );
 }
 
-export async function readEditionIdentities(
+/** Prepare display authority before final native metadata checks. The returned
+ * reader refreshes labels and exact dates only after those checks succeed. */
+export async function prepareEditionIdentities(
   deps: Dependencies,
   editions: readonly ContentEditionView[],
   context: ReadContext,
   ordinarySource = true,
-): Promise<Map<string, EditionIdentity>> {
+) {
   if (editions.length > 100) throw new RangeError('Edition identity accepts at most 100 editions');
-  const subjects = await readEditionSubjectIdentities(
+  const subjects = await prepareEditionSubjectIdentities(
     deps,
     editions.map((edition) => edition.targetSubjectId),
     context,
   );
-  const dates = ordinarySource ? await revisionDates(deps, editions, context) : new Map<string, string>();
-  return new Map(
-    editions.map((edition) => [
-      edition.editionId,
-      {
-        subject: subjects.get(edition.targetSubjectId)!,
-        revisionCreatedAt: dates.get(edition.revisionId) ?? null,
-      },
-    ]),
-  );
+  return async (): Promise<Map<string, EditionIdentity>> => {
+    const labels = await subjects();
+    const dates = ordinarySource ? await revisionDates(deps, editions, context) : new Map<string, string>();
+    return new Map(
+      editions.map((edition) => [
+        edition.editionId,
+        {
+          subject: labels.get(edition.targetSubjectId)!,
+          revisionCreatedAt: dates.get(edition.revisionId) ?? null,
+        },
+      ]),
+    );
+  };
 }
 
 /** Ordinary exact document authority owns both candidate associations and date.
@@ -231,25 +241,36 @@ export async function readEditionSourceIdentity(
     post.subjectIds.length > 128
   )
     throw new ContentNotFoundError();
-  const subjects = await readEditionSubjectIdentities(deps, post.subjectIds, context);
+  const subjects = await prepareEditionSubjectIdentities(deps, post.subjectIds, context);
   const dates = await revisionDates(
     deps,
     [{ revisionId: post.revisionId, sha256: post.sha256, licence: post.licence }],
     context,
   );
-  const final = (await readPost(deps, thread.thread_id, input.postId, context, input.revisionId)).value;
+  const final = await readPost(deps, thread.thread_id, input.postId, context, input.revisionId);
+  const current = final.value;
   if (
-    !final ||
-    final.availability !== 'available' ||
-    final.revisionId !== post.revisionId ||
-    final.sha256 !== post.sha256
+    !current ||
+    current.availability !== 'available' ||
+    current.revisionId !== post.revisionId ||
+    current.sha256 !== post.sha256 ||
+    current.licence !== post.licence ||
+    current.authorId !== post.authorId ||
+    !['published', 'protected'].includes(current.visibility) ||
+    JSON.stringify(current.subjectIds) !== JSON.stringify(post.subjectIds)
   )
     throw new ContentNotFoundError();
   return {
-    postId: post.id,
-    revisionId: post.revisionId,
-    sha256: post.sha256,
-    revisionCreatedAt: dates.get(post.revisionId) ?? null,
-    subjects: [...subjects.values()],
+    ...final,
+    value: {
+      post: current,
+      editionIdentity: {
+        postId: current.id,
+        revisionId: current.revisionId,
+        sha256: current.sha256,
+        revisionCreatedAt: dates.get(current.revisionId) ?? null,
+        subjects: [...(await subjects()).values()],
+      },
+    },
   };
 }

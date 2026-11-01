@@ -44,14 +44,14 @@ export async function prepareEditionSubject(
   return (await final()) ? { final } : null;
 }
 
-/** One bounded set of native label probes, with ordinary subject Access prepared
- * before checkout and re-evaluated on the same snapshot that reads the labels.
- * A redirect is withheld rather than substituting another publication target. */
-export async function readEditionSubjectIdentities(
+/** Two bounded label observations share ordinary subject Access preparation.
+ * Call the returned reader after native source fences to refresh grants and labels
+ * in one snapshot. Redirects never substitute another publication target. */
+export async function prepareEditionSubjectIdentities(
   deps: Readonly<{ pool: Pool; access: Access }>,
   ids: readonly string[],
   context: ReadContext,
-): Promise<Map<string, EditionSubjectIdentity>> {
+) {
   if (ids.length > 128) throw new RangeError('Edition identity accepts at most 128 subjects');
   const keys = [...new Set(ids)];
   const checks = new Map<string, AccessCheck>();
@@ -73,33 +73,42 @@ export async function readEditionSubjectIdentities(
       ),
     );
   }
-  return withReadTransaction(
-    deps.pool,
-    async (client) => {
-      const partitions = [...new Set(keys.map((id) => partitionOf(routeOf(id)!)))];
-      await partitionReadClients(client, partitions);
-      const result = new Map<string, EditionSubjectIdentity>();
-      for (const partition of partitions) {
-        const group = keys.filter((id) => partitionOf(routeOf(id)!) === partition);
-        const labels = await readLabels.run(client, {
-          partition_no: partition,
-          routes: group.map((id) => routeOf(id)!),
-          subject_ids: group,
-        });
-        const found = new Map(labels.map((row) => [row.id, row]));
-        for (const id of group) {
-          if (!(await checks.get(id)!(client)) || found.get(id)?.redirect || found.get(id)?.visibility !== 'visible') {
-            result.set(id, { id, kind: 'withheld', label: null });
-            continue;
+  const read = () =>
+    withReadTransaction(
+      deps.pool,
+      async (client) => {
+        const partitions = [...new Set(keys.map((id) => partitionOf(routeOf(id)!)))];
+        await partitionReadClients(client, partitions);
+        const result = new Map<string, EditionSubjectIdentity>();
+        for (const partition of partitions) {
+          const group = keys.filter((id) => partitionOf(routeOf(id)!) === partition);
+          const labels = await readLabels.run(client, {
+            partition_no: partition,
+            routes: group.map((id) => routeOf(id)!),
+            subject_ids: group,
+          });
+          const found = new Map(labels.map((row) => [row.id, row]));
+          for (const id of group) {
+            if (
+              !(await checks.get(id)!(client)) ||
+              found.get(id)?.redirect ||
+              found.get(id)?.visibility !== 'visible'
+            ) {
+              result.set(id, { id, kind: 'withheld', label: null });
+              continue;
+            }
+            const row = found.get(id);
+            const label = row ? chooseLabel(row.labels as Record<string, string>, []) : null;
+            // The original target stays pinned, including when a redirect exists.
+            result.set(id, { id, kind: label ? 'available' : 'missing', label });
           }
-          const row = found.get(id);
-          const label = row ? chooseLabel(row.labels as Record<string, string>, []) : null;
-          // The original target stays pinned, including when a redirect exists.
-          result.set(id, { id, kind: label ? 'available' : 'missing', label });
         }
-      }
-      return result;
-    },
-    context.deadline,
-  );
+        return result;
+      },
+      context.deadline,
+    );
+  // Prepare Access before native source fences, then refresh labels and grants
+  // after composition without preparing another authority in between.
+  await read();
+  return read;
 }
