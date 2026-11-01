@@ -301,6 +301,27 @@ for (const kind of ['following', 'logs'] as const) {
     if (kind === 'following') await settle(follows.at(-1)!, following('B', null, true));
     else await settle(logs.at(-1)!, history('B', null, true));
     expect(host.textContent).toContain(kind === 'following' ? m.library_following_empty() : m.library_logs_empty());
+    await act(async () => {
+      void client.refetchQueries({ queryKey: prefix, type: 'active' });
+      await tick();
+    });
+    await act(async () => {
+      (kind === 'following' ? follows.at(-1)! : logs.at(-1)!).reject(new Error('Retain viewer retry'));
+      await tick();
+    });
+    const viewerRetry = retainedClick(button(m.library_follow_retry()));
+    const beforeViewerABA = follows.length + logs.length;
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, viewer('A'));
+      client.setQueryData(sessionQuery.queryKey, viewer('B'));
+      viewerRetry();
+      expect(follows.length + logs.length).toBe(beforeViewerABA);
+      await tick();
+    });
+    expect(follows.length + logs.length).toBe(beforeViewerABA + 1);
+    expect(host.textContent).not.toContain(kind === 'following' ? m.library_following_empty() : m.library_logs_empty());
+    if (kind === 'following') await settle(follows.at(-1)!, following('B', null, true));
+    else await settle(logs.at(-1)!, history('B', null, true));
     if (kind === 'logs') {
       initialLogs = structuredClone(initialLogs);
       await paint(page()); // Loader refresh may refetch, never stamp its retained A payload as viewer B.
@@ -322,52 +343,64 @@ for (const kind of ['following', 'logs'] as const) {
 }
 
 test('observed suspended address/target ABA cannot revive retained callers or populate the replacement cache', async () => {
-  const initial = history('A', null, true);
-  const page = (cursor: string | undefined, paused = false) => (
-    <Suspense fallback={<p>Pending navigation</p>}>
-      <MyLogsCurrentViewer initial={initial} cursor={cursor} />
-      <Pause active={paused} />
-    </Suspense>
-  );
-  await paint(page(undefined));
-  await act(async () => {
-    logs.at(-1)!.reject(new Error('Retry'));
-    await tick();
-  });
-  const retry = retainedClick(button(m.library_my_logs_retry()));
-  await act(async () => {
-    retry();
-    await tick();
-  });
-  const old = logs.at(-1)!;
-  const count = logs.length;
-  await act(async () => {
-    startTransition(() => root.render(tree(page('next+/address=', true))));
-    await tick();
-  });
-  await act(async () => {
-    retry();
-    expect(logs).toHaveLength(count);
-  });
-  await paint(page(undefined));
-  expect(logs).toHaveLength(count + 1);
-  expect(host.textContent).not.toContain(m.library_logs_empty()); // Retained empty loader cannot seed the ABA return.
-  await settle(old, history('A'));
-  expect(host.textContent).not.toContain('A history');
-  await settle(logs.at(-1)!, history('A'));
-  expect(host.textContent).toContain('A history');
-
-  const beforeLocale = logs.length;
-  await act(async () => {
-    setLocale('ja', { reload: false });
-    startTransition(() => root.render(tree(page(undefined, true))));
-    await tick();
-  });
-  setLocale('en', { reload: false });
-  await paint(page(undefined));
-  expect(logs).toHaveLength(beforeLocale + 1);
-  expect(host.textContent).not.toContain('A history');
-  await settle(logs.at(-1)!, history('A'));
+  for (const kind of ['following', 'logs'] as const) {
+    const initialLogs = history('A', null, true);
+    const initialFollowing = following('A', null, true);
+    const calls = kind === 'following' ? follows : logs;
+    const complete = (call: (typeof calls)[number]) =>
+      kind === 'following'
+        ? settle(call as (typeof follows)[number], following('A'))
+        : settle(call as (typeof logs)[number], history('A'));
+    const emptyLabel = kind === 'following' ? m.library_following_empty() : m.library_logs_empty();
+    const page = (cursor: string | undefined, paused = false) => (
+      <Suspense fallback={<p>Pending navigation</p>}>
+        {kind === 'following' ? (
+          <CurrentViewerMineFollowingPage initial={initialFollowing} cursor={cursor} />
+        ) : (
+          <MyLogsCurrentViewer initial={initialLogs} cursor={cursor} />
+        )}
+        <Pause active={paused} />
+      </Suspense>
+    );
+    await paint(page(undefined));
+    await act(async () => {
+      calls.at(-1)!.reject(new Error('Retry'));
+      await tick();
+    });
+    const retry = retainedClick(button(m.library_follow_retry()));
+    await act(async () => {
+      retry();
+      await tick();
+    });
+    const old = calls.at(-1)!;
+    const count = calls.length;
+    await act(async () => {
+      startTransition(() => root.render(tree(page('next+/address=', true))));
+      await tick();
+    });
+    await act(async () => {
+      retry();
+      expect(calls).toHaveLength(count);
+    });
+    await paint(page(undefined));
+    expect(calls).toHaveLength(count + 1);
+    expect(host.textContent).not.toContain(emptyLabel); // Retained empty loader cannot seed the ABA return.
+    await complete(old);
+    expect(host.textContent).not.toContain('A history');
+    await complete(calls.at(-1)!);
+    expect(host.textContent).toContain('A history');
+    const beforeLocale = calls.length;
+    await act(async () => {
+      setLocale('ja', { reload: false });
+      startTransition(() => root.render(tree(page(undefined, true))));
+      await tick();
+    });
+    setLocale('en', { reload: false });
+    await paint(page(undefined));
+    expect(calls).toHaveLength(beforeLocale + 1);
+    expect(host.textContent).not.toContain('A history');
+    await complete(calls.at(-1)!);
+  }
 
   const target = (id: string, paused = false) => (
     <Suspense fallback={<p>Pending target</p>}>
