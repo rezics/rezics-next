@@ -801,6 +801,7 @@ export class ThreadPageCaller {
       throw new ThreadPageCallerRetired();
     const state: RefreshContinuationState = {
       active: true,
+      boundary: undefined,
       identity: { ...this.currentAdmission.identity },
       session: { ...ticket.session },
       connectionOwner: this.connection.owner ?? this,
