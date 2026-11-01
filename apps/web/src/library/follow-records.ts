@@ -26,7 +26,11 @@ export async function readFollowRecord(
   authorization: string,
 ): Promise<FollowState> {
   try {
-    const result = await client.follows({ targetId }).get({ query: { view: 'BASIC' }, headers: { authorization } });
+    const result = await client.follows({ targetId }).get({
+      query: { view: 'BASIC' },
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
     if (result.status === 404) return { state: 'ready', following: false };
     if (result.status === 401 || result.status === 403) return { state: 'forbidden' };
@@ -45,7 +49,7 @@ export async function loadFollowState(
   targetId: string,
 ): Promise<FollowState> {
   try {
-    await prepareSession(request, sessionEnv);
+    if (await prepareSession(request, sessionEnv)) return { state: 'signed-out' };
     const authorization = viewerCredential(request);
     return authorization ? readFollowRecord(client, targetId, authorization) : { state: 'signed-out' };
   } catch {

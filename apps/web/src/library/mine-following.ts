@@ -46,7 +46,7 @@ export async function loadMineFollowingPage(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<MineFollowingPage> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { signedIn: false, follows: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, follows: [], next: null };
@@ -54,6 +54,7 @@ export async function loadMineFollowingPage(
     const result = await client.follows.get({
       query: libraryListQuery(cursor, LIBRARY_PAGE_LIMIT),
       headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     return readLibraryResult(result);
   };
@@ -74,7 +75,7 @@ export async function unfollowFollow(
   sessionEnv: Partial<SessionEnv>,
   input: { targetId: string; idempotencyKey: string },
 ): Promise<boolean> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return false;
   const authorization = viewerCredential(request);
   if (!authorization) return false;
   const result = await client.follows({ targetId: input.targetId }).delete(undefined, {
