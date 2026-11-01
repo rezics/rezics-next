@@ -47,11 +47,7 @@ test('mounted ContentActions report and delete operations keep their original li
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       )
       .sort();
-    expect(outcomes).toEqual([
-      'Menu Keyboard: passed',
-      'Menu Open Phone: passed',
-      'Owner Actions: passed',
-    ]);
+    expect(outcomes).toEqual(['Menu Keyboard: passed', 'Menu Open Phone: passed', 'Owner Actions: passed']);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

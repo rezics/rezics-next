@@ -179,12 +179,7 @@ export function ReportDialog({
       if (closeTimer.current !== null) clearTimeout(closeTimer.current);
       closeTimer.current = setTimeout(() => {
         closeTimer.current = null;
-        if (
-          mounted.current &&
-          openRef.current &&
-          incarnation.current === operationIncarnation &&
-          successRef.current
-        )
+        if (mounted.current && openRef.current && incarnation.current === operationIncarnation && successRef.current)
           onOpenChangeRef.current(false);
       }, 900);
     } catch (error) {
