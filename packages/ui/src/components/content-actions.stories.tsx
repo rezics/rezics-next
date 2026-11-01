@@ -59,7 +59,7 @@ const ownerActions = {
   edit: fn(),
   delete: fn(async () => undefined),
   pin: fn(),
-  report: fn(async () => undefined),
+  report: fn(async (_report: ReportSubmission) => undefined),
   reportOpenChange: fn(),
   deleteRequests: [] as DeferredResult[],
   reportRequests: [] as { report: ReportSubmission; result: DeferredResult }[],
