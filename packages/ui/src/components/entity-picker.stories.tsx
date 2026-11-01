@@ -454,7 +454,9 @@ export const ConnectedSelectionLifetime: Story = {
     const response = async (query: string, action: 'resolve' | 'reject' = 'resolve') => {
       await userEvent.clear(responseInput);
       await userEvent.type(responseInput, query);
-      await userEvent.click(canvas.getByRole('button', { name: action === 'resolve' ? 'Resolve search' : 'Reject search' }));
+      await userEvent.click(
+        canvas.getByRole('button', { name: action === 'resolve' ? 'Resolve search' : 'Reject search' }),
+      );
     };
     const typeQuery = async (query: string) => {
       await userEvent.clear(queryInput());

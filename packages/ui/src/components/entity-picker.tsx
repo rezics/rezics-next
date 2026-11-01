@@ -154,8 +154,7 @@ export function EntityPicker({
 
   // Keep controlled label changes visible without treating fresh but equivalent parent objects as changes.
   const textBoundaryChanged =
-    boundary.current.multiple !== multiple ||
-    (!multiple && boundary.current.selectionKey !== selectedKey);
+    boundary.current.multiple !== multiple || (!multiple && boundary.current.selectionKey !== selectedKey);
   const inputText = textBoundaryChanged ? (multiple ? '' : (selected[0]?.title ?? '')) : text;
 
   useIsomorphicLayoutEffect(() => {
@@ -289,9 +288,7 @@ export function EntityPicker({
           const selectedIds = new Set(selected.map((subject) => subject.id));
           const additions = value.filter((subject) => !selectedIds.has(subject.id));
           const eligibleSubjects =
-            currentResults.phase === 'done'
-              ? new Set(currentResults.items)
-              : new Set<EntityPickerSubject>();
+            currentResults.phase === 'done' ? new Set(currentResults.items) : new Set<EntityPickerSubject>();
 
           // Only a current, completed result may add a selection; removals and an explicit clear remain available.
           if (additions.some((subject) => !eligibleSubjects.has(subject))) return;
@@ -365,11 +362,7 @@ export function EntityPicker({
                 size="sm"
                 className="h-auto whitespace-normal py-1"
                 onClick={() => {
-                  if (
-                    isDisabled ||
-                    currentResults.phase !== 'failed' ||
-                    currentResults.query !== inputText.trim()
-                  )
+                  if (isDisabled || currentResults.phase !== 'failed' || currentResults.query !== inputText.trim())
                     return;
                   run(currentResults.query, 0);
                 }}
