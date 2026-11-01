@@ -982,6 +982,7 @@ test('Default Home keeps question details optional and recovers partial, refused
     await click(m.home_question_refresh());
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(m.home_questions_lost());
     expect(host.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(2);
     expect(host.textContent).not.toContain(m.home_feed_unavailable());
     expect(selected.textContent).toContain(question.label);
     await click(m.home_question_clear());

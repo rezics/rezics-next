@@ -2,12 +2,15 @@ import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, useSyncExternalStore } from 'react';
-import { HomeFeed, type HomeFeedResult } from '../src/features/pages/home-feed';
+import { HomeFeed } from '../src/features/pages/home-feed';
 import { HomeFeedKindControl } from '../src/features/pages/home-feed-kind-control';
 import { createHomeKindChoices, homeKindChoice } from '../src/features/pages/home-feed-kinds';
 import { homeFeedDestination, homeFeedResume, homeFeedTitle } from '../src/features/pages/home-feed-destination';
+import { continueProgress } from '../src/library/continue-source';
+import { progressView } from '../src/library/progress-label';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
+import type { HomeFeedResult } from '../src/features/pages/home-feed-read';
 import { homeFeedStoryPage, homeKindStoryPage } from '../src/kernel/fake/home-feed-stories';
 
 test('Home composes ordered ContentItems and keeps bounded filters accessible in one compact disclosure', async () => {
@@ -61,7 +64,15 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
   }));
   const mixed: HomeFeedResult = { state: 'ready', page: homeFeedStoryPage('en', true, 'mixed') };
 
-  function ComposedHome({ result }: { result: HomeFeedResult }) {
+  function ComposedHome({
+    result,
+    stream = 'home',
+    onSelect,
+  }: {
+    result: HomeFeedResult;
+    stream?: 'home' | 'following';
+    onSelect?: (stream: 'home' | 'following') => void;
+  }) {
     const snapshot = useSyncExternalStore(choices.subscribe, choices.snapshot, choices.snapshot);
     const activeFilters = snapshot.selected
       ? [`${m.home_kind_label()}: ${snapshot.selected.text || m.home_kind_unnamed()}`]
@@ -71,6 +82,8 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
         result={result}
         locale="en"
         signedIn
+        stream={stream}
+        onSelect={onSelect}
         activeFilters={activeFilters}
         kindControl={
           <HomeFeedKindControl
@@ -92,6 +105,11 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     const page = mixed.state === 'ready' ? mixed.page : undefined;
     expect(page).toBeDefined();
     const rows = [...host.querySelectorAll<HTMLLIElement>('ol > li[data-feed-id]')];
+    const resultsRegion = host.querySelector('section[aria-label]');
+    expect(host.querySelectorAll('main')).toHaveLength(1);
+    expect(resultsRegion?.getAttribute('aria-label')).toBe(m.nav_home());
+    expect(resultsRegion?.querySelector('main')).toBeNull();
+    expect(resultsRegion?.querySelector('ol')?.getAttribute('aria-label')).toBe(m.nav_home());
     expect(rows.map((row) => row.getAttribute('data-feed-id'))).toEqual(page!.feedItems.map((item) => item.id));
     expect(rows.length).toBeLessThanOrEqual(20);
     expect(host.querySelectorAll('h1')).toHaveLength(1);
@@ -110,9 +128,32 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
         expect([...row.querySelectorAll('a')].filter((link) => link.getAttribute('href') === resume)).toHaveLength(1);
       }
     }
+    const continued = page!.feedItems.find((item) => item.source === 'continue')!;
+    const continuedRow = rows.find((row) => row.getAttribute('data-feed-id') === continued.id)!;
+    expect(continuedRow.querySelector('[data-content-item-slot="state"]')?.textContent).toBe(
+      progressView(continueProgress(continued.continue.activeProgressSession), 'en')?.text,
+    );
+    expect(continuedRow.querySelector('[data-content-item-slot="actions"] a')?.getAttribute('href')).toBe(
+      homeFeedResume(continued, 'en'),
+    );
+    const subject = page!.feedItems.find((item) => 'label' in item.summary)!;
+    const subjectRow = rows.find((row) => row.getAttribute('data-feed-id') === subject.id)!;
+    expect(subjectRow.querySelector('[data-content-item-slot="visual"]')).not.toBeNull();
+    expect(subjectRow.querySelector('img')).toBeNull();
+    const thread = page!.feedItems.find((item) => 'title' in item.summary)!;
+    const threadRow = rows.find((row) => row.getAttribute('data-feed-id') === thread.id)!;
+    expect(threadRow.querySelector('[data-content-item-slot="visual"]')).toBeNull();
     expect(host.textContent).not.toContain('2,000 references');
     expect(host.textContent).not.toContain('Ready');
     expect(host.querySelectorAll('li[data-feed-source-state]')).toHaveLength(0);
+
+    const originalRows = [...rows];
+    const sameOccurrences: HomeFeedResult = {
+      state: 'ready',
+      page: { ...page!, feedItems: page!.feedItems.map((item) => ({ ...item })) },
+    };
+    await act(async () => root.render(<ComposedHome result={sameOccurrences} />));
+    expect([...host.querySelectorAll<HTMLLIElement>('ol > li[data-feed-id]')]).toEqual(originalRows);
 
     const filterButton = host.querySelector<HTMLButtonElement>('button[aria-controls]')!;
     const disclosure = window.document.getElementById(filterButton.getAttribute('aria-controls')!)!;
@@ -165,6 +206,37 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     expect(host.querySelector('[data-feed-source-state]')?.getAttribute('data-feed-source-state')).toContain(
       'following:preparing',
     );
+
+    const empty: HomeFeedResult = { state: 'ready', page: homeFeedStoryPage('en', true, 'empty') };
+    await act(async () => root.render(<ComposedHome result={empty} />));
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_feed_empty());
+    expect(host.querySelector(`a[href="/en/search"]`)?.textContent).toBe(m.search_heading());
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.home_feed_discovery())).toBe(
+      false,
+    );
+
+    const followingSparse: HomeFeedResult = {
+      state: 'ready',
+      page: {
+        ...homeFeedStoryPage('en', true, 'following'),
+        feedItems: [],
+        next: 'opaque-following-cursor',
+      },
+    };
+    let selectedStream: 'home' | 'following' | undefined;
+    await act(async () =>
+      root.render(
+        <ComposedHome result={followingSparse} stream="following" onSelect={(stream) => (selectedStream = stream)} />,
+      ),
+    );
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_feed_sparse());
+    expect(host.querySelector(`a[href="/en/search"]`)?.textContent).toBe(m.search_heading());
+    const discovery = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.home_feed_discovery(),
+    );
+    expect(discovery).not.toBeUndefined();
+    await act(async () => discovery!.click());
+    expect(selectedStream).toBe('home');
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {

@@ -1,13 +1,9 @@
 import { useEffect, useId, useState, useSyncExternalStore } from 'react';
-import { ContentItem } from '@rezics/ui/content-item';
-import { Cover } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
-import { coverSrc } from '../../media/cover-src';
-import { coverOf, coverSubject } from '../../media/summary';
-import { continueProgress } from '../../library/continue-source';
-import { progressView } from '../../library/progress-label';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
+import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
+import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { createHomeKindChoices, type HomeKindsReader } from './home-feed-kinds';
 import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spaces';
 import { HomeFeedSpaceControl } from './home-feed-space-control';
@@ -20,7 +16,6 @@ import {
   type HomeQuestionReader,
 } from './home-feed-questions';
 import type { ReactNode } from 'react';
-import { homeFeedDestination, homeFeedResume, homeFeedTitle } from './home-feed-destination';
 import {
   createHomeFeedWindow,
   type FeedInput,
@@ -28,68 +23,6 @@ import {
   type FeedStream,
   type HomeFeedResult,
 } from './home-feed-read';
-
-function FeedRow({ item, locale }: { item: FeedItem; locale: string }) {
-  const options = { locale: locale as Locale };
-  const title = homeFeedTitle(item, locale);
-  const href = homeFeedDestination(item, locale);
-  const resume = homeFeedResume(item, locale);
-  const summary = item.summary;
-  const progress =
-    item.source === 'continue' ? progressView(continueProgress(item.continue.activeProgressSession), locale) : null;
-  let visual: ReactNode | undefined;
-  if ('label' in summary) {
-    visual = (
-      <div className="w-20 shrink-0 sm:w-24">
-        <Cover
-          subject={coverSubject(summary.id, title, summary)}
-          cover={coverOf(summary)}
-          size="fill"
-          src={coverSrc}
-          decorative
-        />
-      </div>
-    );
-  } else if ('avatar' in summary && summary.avatar) {
-    visual = (
-      <div className="w-16 shrink-0">
-        <Cover
-          subject={{ id: summary.id, title, types: [] }}
-          cover={{ ...summary.avatar, variants: [...summary.avatar.variants] }}
-          ratio="1:1"
-          size="fill"
-          src={coverSrc}
-          decorative
-        />
-      </div>
-    );
-  }
-  const titleLang = 'label' in summary ? summary.label?.language : undefined;
-  const preview = 'description' in summary ? summary.description : undefined;
-  return (
-    <ContentItem
-      data-feed-id={item.id}
-      data-feed-source={item.source}
-      title={title}
-      {...(href === undefined ? {} : { href })}
-      {...(titleLang === undefined ? {} : { titleLang })}
-      headingLevel={2}
-      visual={visual}
-      preview={preview || undefined}
-      state={progress?.text}
-      actions={
-        resume ? (
-          <a
-            href={resume}
-            className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
-          >
-            {m.home_continue_label({ title }, options)}
-          </a>
-        ) : undefined
-      }
-    />
-  );
-}
 
 export function HomeFeed({
   result,
@@ -129,15 +62,35 @@ export function HomeFeed({
   const page = result.state === 'ready' ? result.page : undefined;
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
   const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
-  const messages = {
-    loading: m.home_feed_loading,
-    request: m.home_feed_request,
-    auth: m.home_feed_auth,
-    denied: m.home_feed_denied,
-    closed: m.home_feed_closed,
-    cursor: m.home_feed_cursor,
-    deadline: m.home_feed_deadline,
-    unavailable: m.home_feed_unavailable,
+  const results: FeedResultsResult<FeedItem> = page
+    ? {
+        state: 'ready',
+        items: page.feedItems,
+        hasNext: page.next !== null,
+        availability: {
+          state: hasPreparing || hasUnavailable ? 'partial' : 'complete',
+          sources: page.sources,
+        },
+      }
+    : result.state === 'loading'
+      ? { state: 'loading', code: result.code }
+      : { state: result.state, code: result.code };
+  const resultMessages = {
+    loading: m.home_feed_loading({}, options),
+    partial: m.home_presentation_partial({}, options),
+    empty: stream === 'following' ? m.home_feed_following_empty({}, options) : m.home_feed_empty({}, options),
+    sparse: m.home_feed_sparse({}, options),
+    retry: m.library_follow_retry({}, options),
+    restart: m.home_feed_restart({}, options),
+    failure: {
+      request: m.home_feed_request({}, options),
+      auth: m.home_feed_auth({}, options),
+      denied: m.home_feed_denied({}, options),
+      closed: m.home_feed_closed({}, options),
+      cursor: m.home_feed_cursor({}, options),
+      deadline: m.home_feed_deadline({}, options),
+      unavailable: m.home_feed_unavailable({}, options),
+    },
   };
   return (
     <main
@@ -206,44 +159,20 @@ export function HomeFeed({
         {spaceControl}
         {questionControl}
       </div>
-      {busy && !suppressResultMessage ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.home_feed_loading({}, options)}
-        </p>
-      ) : null}
-      {page ? (
-        <>
-          <ol className="list-none" aria-label={m.nav_home({}, options)}>
-            {page.feedItems.map((item) => (
-              <FeedRow key={item.id} item={item} locale={locale} />
-            ))}
-          </ol>
-          {hasPreparing || hasUnavailable ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.home_presentation_partial({}, options)}
-            </p>
-          ) : null}
-          {!page.feedItems.length &&
-          Object.values(page.sources).every((state) => state === 'ready' || state === 'not_requested') ? (
-            <p role="status">
-              {page.next
-                ? m.home_feed_sparse({}, options)
-                : stream === 'following'
-                  ? m.home_feed_following_empty({}, options)
-                  : m.home_feed_empty({}, options)}
-            </p>
-          ) : null}
-          {!page.feedItems.length ? (
-            <a href={`/${locale}/search`} className="inline-block text-sm text-primary underline underline-offset-4">
-              {m.search_heading({}, options)}
-            </a>
-          ) : null}
-          {(hasPreparing || hasUnavailable) && onRetry ? (
-            <Button variant="outline" disabled={busy} onClick={onRetry}>
-              {m.library_follow_retry({}, options)}
-            </Button>
-          ) : null}
-          {onNext ? (
+      <FeedResults
+        regionLabel={m.nav_home({}, options)}
+        itemHeadingLevel={2}
+        listAs="ol"
+        result={results}
+        busy={busy}
+        messages={resultMessages}
+        getItemKey={(item) => item.id}
+        itemPresentation={(item) => homeFeedItemPresentation(item, locale)}
+        onRetry={onRetry}
+        onRestart={onRestart}
+        suppressResultMessage={suppressResultMessage}
+        nextControl={
+          page && onNext ? (
             <Button
               variant="outline"
               disabled={busy || !page.next}
@@ -253,30 +182,21 @@ export function HomeFeed({
             >
               {m.library_next_page({}, options)}
             </Button>
-          ) : null}
-          {stream === 'following' && !page.feedItems.length ? (
-            <Button variant="outline" disabled={busy} onClick={() => onSelect?.('home')}>
-              {m.home_feed_discovery({}, options)}
-            </Button>
-          ) : null}
-        </>
-      ) : suppressResultMessage ? null : (
-        <div
-          role={result.state === 'loading' ? 'status' : 'alert'}
-          className="space-y-3 rounded-lg border border-border p-5"
-        >
-          <p>{messages[result.state as keyof typeof messages]({}, options)}</p>
-          {result.state === 'cursor' && onRestart ? (
-            <Button variant="outline" disabled={busy} onClick={onRestart}>
-              {m.home_feed_restart({}, options)}
-            </Button>
-          ) : onRetry && result.state !== 'loading' ? (
-            <Button variant="outline" disabled={busy} onClick={onRetry}>
-              {m.library_follow_retry({}, options)}
-            </Button>
-          ) : null}
-        </div>
-      )}
+          ) : undefined
+        }
+        emptyActions={
+          <>
+            <a href={`/${locale}/search`} className="inline-block text-sm text-primary underline underline-offset-4">
+              {m.search_heading({}, options)}
+            </a>
+            {stream === 'following' ? (
+              <Button variant="outline" disabled={busy} onClick={() => onSelect?.('home')}>
+                {m.home_feed_discovery({}, options)}
+              </Button>
+            ) : null}
+          </>
+        }
+      />
     </main>
   );
 }
@@ -396,9 +316,20 @@ export function HomeFeedConsumer({
       </span>,
     );
   }
-  const filterOwnsResultMessage =
-    (Boolean(spaceSnapshot.selected) && !spaceSnapshot.available) ||
-    (Boolean(questionSnapshot.selected) && questionSnapshot.selection !== 'ready');
+  const currentResult = snapshot.result;
+  const spaceOwnsResultMessage =
+    Boolean(spaceSnapshot.selected) &&
+    !spaceSnapshot.available &&
+    currentResult.state === 'unavailable' &&
+    currentResult.code === 'space_unavailable';
+  const questionFailure = questionSnapshot.failure ? questionFeedFailure(questionSnapshot.failure) : undefined;
+  const questionOwnsResultMessage =
+    Boolean(questionSnapshot.selected) &&
+    ((questionSnapshot.selection === 'loading' && currentResult.state === 'loading') ||
+      (questionFailure !== undefined &&
+        currentResult.state === questionFailure.state &&
+        currentResult.code === questionFailure.code));
+  const filterOwnsResultMessage = spaceOwnsResultMessage || questionOwnsResultMessage;
   return (
     <HomeFeed
       result={snapshot.result}

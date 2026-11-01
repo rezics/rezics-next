@@ -10,7 +10,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Default Home route and consumer. Illustrative feed envelopes composed from recorded native owner summaries; these stories are not native feed acceptance evidence. Locale, theme and phone/desktop viewport use the catalogue globals.',
+          'Default Home route and consumer using the shared FeedResults region. Illustrative feed envelopes composed from recorded native owner summaries; these stories are not native feed acceptance evidence. Locale, theme and phone/desktop viewport use the catalogue globals.',
       },
     },
   },
@@ -26,6 +26,9 @@ export const SignedIn: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
     await expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull();
+    await expect(canvas.getByRole('region', { name: m.nav_home() })).toBeVisible();
+    await expect(canvas.getByRole('list', { name: m.nav_home() })).toBeVisible();
+    await expect(context.canvasElement.querySelector('main main')).toBeNull();
   },
 };
 export const SignedOut: Story = {
