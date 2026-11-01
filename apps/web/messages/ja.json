@@ -3964,5 +3964,8 @@
   "home_space_invalid": "正確な Space のアドレスか、対応する同一オリジンの URL を入力してください。",
   "home_space_unavailable": "この Space または閲覧可能な Realm を利用できません。更新するか選択を解除してください。",
   "home_space_changed": "Space の識別情報が変わりました。フィードを新しいページから開始します。",
-  "home_feed_sparse": "このページに項目はありません。次のページに進んでください。"
+  "home_feed_sparse": "このページに項目はありません。次のページに進んでください。",
+  "subject_relation_completed_more": "{label}：新しく表示された項目は{count}件です。さらに読み込めます。",
+  "subject_relation_completed_end": "{label}：新しく表示された項目は{count}件です。このリストの末尾です。",
+  "subject_relation_end": "{label}の末尾です。"
 }

@@ -3965,5 +3965,8 @@
   "home_space_invalid": "请输入准确的 Space 地址或受支持的同源 Space 网址。",
   "home_space_unavailable": "此 Space 或其可读 Realm 不可用。请刷新或清除选择。",
   "home_space_changed": "Space 身份信息已变更。信息流将从新页面开始。",
-  "home_feed_sparse": "本页没有条目。请继续下一页。"
+  "home_feed_sparse": "本页没有条目。请继续下一页。",
+  "subject_relation_completed_more": "{label}：新增可见条目 {count} 个。可以继续加载。",
+  "subject_relation_completed_end": "{label}：新增可见条目 {count} 个。已到达此列表末尾。",
+  "subject_relation_end": "已到达{label}末尾。"
 }

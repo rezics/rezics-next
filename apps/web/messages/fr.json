@@ -3964,5 +3964,8 @@
   "home_space_invalid": "Saisissez une adresse exacte ou une URL de Space prise en charge de même origine.",
   "home_space_unavailable": "Ce Space ou son Realm lisible est indisponible. Actualisez ou effacez la sélection.",
   "home_space_changed": "L’identité du Space a changé. Le flux reprend sur une nouvelle page.",
-  "home_feed_sparse": "Aucun élément sur cette page. Passez à la suivante."
+  "home_feed_sparse": "Aucun élément sur cette page. Passez à la suivante.",
+  "subject_relation_completed_more": "{label} : nouveaux éléments visibles : {count}. Vous pouvez en charger davantage.",
+  "subject_relation_completed_end": "{label} : nouveaux éléments visibles : {count}. Fin de cette liste.",
+  "subject_relation_end": "Fin de {label}."
 }
