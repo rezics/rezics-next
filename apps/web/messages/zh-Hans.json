@@ -1201,6 +1201,7 @@
   "thread_media_remove": "移除图片",
   "settings_sections_label": "设置分区",
   "settings_privacy_current": "上次确认的可见性：{visibility}",
+  "settings_privacy_read_failed_title": "无法读取收藏集的当前可见范围",
   "settings_privacy_reading": "正在读取当前可见性…",
   "settings_privacy_closed": "合集设置当前未开放。",
   "settings_privacy_forbidden": "你已无权读取或更改这些合集。",

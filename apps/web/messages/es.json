@@ -1200,6 +1200,7 @@
   "thread_media_remove": "Quitar imagen",
   "settings_sections_label": "Secciones de ajustes",
   "settings_privacy_current": "Última visibilidad confirmada: {visibility}",
+  "settings_privacy_read_failed_title": "No se pudo leer la visibilidad actual de la colección",
   "settings_privacy_reading": "Leyendo la visibilidad actual…",
   "settings_privacy_closed": "Los ajustes de colecciones están cerrados en este momento.",
   "settings_privacy_forbidden": "Ya no tienes permiso para leer o cambiar estas colecciones.",

@@ -1200,6 +1200,7 @@
   "thread_media_remove": "Bild entfernen",
   "settings_sections_label": "Einstellungsbereiche",
   "settings_privacy_current": "Zuletzt bestätigte Sichtbarkeit: {visibility}",
+  "settings_privacy_read_failed_title": "Die aktuelle Sichtbarkeit der Sammlung konnte nicht gelesen werden",
   "settings_privacy_reading": "Aktuelle Sichtbarkeit wird geladen…",
   "settings_privacy_closed": "Die Sammlungseinstellungen sind derzeit geschlossen.",
   "settings_privacy_forbidden": "Du darfst diese Sammlungen nicht mehr lesen oder ändern.",

@@ -1225,6 +1225,7 @@
   "thread_write_uncertain_changed": "The original post’s outcome is unknown. Restore its draft and reply target before retrying with the original key.",
   "settings_sections_label": "Settings sections",
   "settings_privacy_current": "Last confirmed visibility: {visibility}",
+  "settings_privacy_read_failed_title": "Could not read current Collection visibility",
   "settings_privacy_reading": "Reading current visibility…",
   "settings_privacy_closed": "Collection settings are currently closed.",
   "settings_privacy_forbidden": "You no longer have permission to read or change these Collections.",

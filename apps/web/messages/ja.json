@@ -1200,6 +1200,7 @@
   "thread_media_remove": "画像を削除",
   "settings_sections_label": "設定のセクション",
   "settings_privacy_current": "最後に確認した公開範囲：{visibility}",
+  "settings_privacy_read_failed_title": "コレクションの現在の公開範囲を読み込めませんでした",
   "settings_privacy_reading": "現在の公開範囲を読み込み中…",
   "settings_privacy_closed": "コレクション設定は現在利用できません。",
   "settings_privacy_forbidden": "これらのコレクションを閲覧または変更する権限がありません。",

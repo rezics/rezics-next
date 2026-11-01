@@ -91,7 +91,9 @@ export function CollectionRow({
       <ListRow className="py-3">
         <ListRowControl className="min-w-0 max-w-full">
           <Alert variant="destructive" aria-live="polite">
-            <AlertTitle>{state.attempt ? m.settings_privacy_uncertain_title() : m.settings_failed_title()}</AlertTitle>
+            <AlertTitle>
+              {state.attempt ? m.settings_privacy_uncertain_title() : m.settings_privacy_read_failed_title()}
+            </AlertTitle>
             <AlertDescription className="space-y-3">
               <p>{failureText(state.failure ?? state.readRefusal)}</p>
               <p>{m.settings_privacy_reload_after_refusal()}</p>

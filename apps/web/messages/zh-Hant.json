@@ -1200,6 +1200,7 @@
   "thread_media_remove": "移除圖片",
   "settings_sections_label": "設定區段",
   "settings_privacy_current": "上次確認的可見性：{visibility}",
+  "settings_privacy_read_failed_title": "無法讀取此收藏集目前的可見範圍",
   "settings_privacy_reading": "正在讀取目前的可見性…",
   "settings_privacy_closed": "集合設定目前未開放。",
   "settings_privacy_forbidden": "你已無權讀取或變更這些集合。",

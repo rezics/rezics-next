@@ -1200,6 +1200,7 @@
   "thread_media_remove": "Supprimer l’image",
   "settings_sections_label": "Sections des paramètres",
   "settings_privacy_current": "Dernière visibilité confirmée : {visibility}",
+  "settings_privacy_read_failed_title": "Impossible de lire la visibilité actuelle de la collection",
   "settings_privacy_reading": "Lecture de la visibilité actuelle…",
   "settings_privacy_closed": "Les paramètres des collections sont actuellement fermés.",
   "settings_privacy_forbidden": "Vous n’avez plus l’autorisation de lire ou de modifier ces collections.",
