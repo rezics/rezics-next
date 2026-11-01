@@ -5,7 +5,13 @@ import { isPlatformClosedError } from '../../kernel/platform-closed';
 export type FeedPage = NonNullable<Awaited<ReturnType<KernelClient['feedItems']['get']>>['data']>;
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedStream = 'home' | 'following';
-export type FeedInput = { stream: FeedStream; cursor?: string; kind?: string };
+export type FeedInput = {
+  stream: FeedStream;
+  cursor?: string;
+  kind?: string;
+  spaceId?: string;
+  ratingQuestionId?: string;
+};
 export type FeedFailure = 'request' | 'auth' | 'denied' | 'closed' | 'cursor' | 'deadline' | 'unavailable';
 export type HomeFeedResult = { state: 'ready'; page: FeedPage } | { state: FeedFailure | 'loading'; code: string };
 export const HOME_FEED_LIMIT = 20;
@@ -67,10 +73,21 @@ export async function readHomeFeedPage(
 }
 
 /** Public loader and browser continuation deliberately never inspect a session. */
-export function loadPublicHomeFeed(client: KernelClient, cursor?: string, kind?: string, signal?: AbortSignal) {
+export function loadPublicHomeFeed(
+  client: KernelClient,
+  cursor?: string,
+  kind?: string,
+  signal?: AbortSignal,
+  selection: Pick<FeedInput, 'spaceId' | 'ratingQuestionId'> = {},
+) {
   return readHomeFeedPage(
     client,
-    { stream: 'home', ...(cursor === undefined ? {} : { cursor }), ...(kind === undefined ? {} : { kind }) },
+    {
+      ...selection,
+      stream: 'home',
+      ...(cursor === undefined ? {} : { cursor }),
+      ...(kind === undefined ? {} : { kind }),
+    },
     undefined,
     signal,
   );
@@ -103,6 +120,13 @@ export function createHomeFeedWindow(
       snapshot = { result: initial, busy: false, input: { stream: 'home' } };
       emit();
     },
+    retire: (result: HomeFeedResult = { state: 'loading', code: 'loading' }, input: FeedInput = snapshot.input) => {
+      generation++;
+      pending?.abort();
+      const { cursor: _cursor, ...selection } = input;
+      snapshot = { result, busy: false, input: selection };
+      emit();
+    },
     async load(input: FeedInput) {
       const current = ++generation;
       pending?.abort();
@@ -110,7 +134,10 @@ export function createHomeFeedWindow(
       pending = controller;
       snapshot = {
         result:
-          input.stream === snapshot.input.stream && input.kind === snapshot.input.kind
+          input.stream === snapshot.input.stream &&
+          input.kind === snapshot.input.kind &&
+          input.spaceId === snapshot.input.spaceId &&
+          input.ratingQuestionId === snapshot.input.ratingQuestionId
             ? snapshot.result
             : { state: 'loading', code: 'loading' },
         busy: true,

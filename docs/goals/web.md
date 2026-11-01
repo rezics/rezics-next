@@ -129,7 +129,8 @@ Home is one bounded mixed stream of public discovery, Following and Continue, wi
 rating-question Context select candidates conjunctively on the same primary item; they do not create separate
 sections. [Home and Following feeds](../feeds.md) owns the wire, producer semantics, disclosure, lifecycle and
 candidate/frontier bounds. Native kind selection is delivered. Space and question Context are adopted requirements
-whose native dependencies remain undelivered; neither is an installed Home capability. Preserve kind and actual
+whose producer installation and positive default journeys require independent evidence. Consumer implementation against
+settled interfaces is authorized in parallel; source presence, generated receiving and native proof remain separate. Preserve kind and actual
 Space delivery independently of Context.
 
 Question Context means one exact native rating-question identity. A Subject qualifies through at least one live,
@@ -159,7 +160,8 @@ Before a dependent consumer promises completion, preflight the complete positive
 
 Search owns the retained Source, scoped Search and Space journey; Content owns feed admission, current review
 witnesses and question-choice admission. Web owns the sole existing Home consumer and its launch-locale, phone and
-keyboard states. Adapt that consumer only to actual installed owner contracts; do not duplicate the Source, feed
+keyboard states. Implement that consumer against settled owner contracts now, then receive actual producer source and its normally
+generated client closure through controller integration; do not duplicate the Source, feed
 producer, directory or renderer. Preserve private no-store reads, honest preparation/unavailable states, usable
 independent ready sources and current disclosure. A selection change resets cursors and retires old rows and stale
 request generations; late responses cannot restore a previous selection or viewer's content. Missing authority must
@@ -171,6 +173,71 @@ typography. It is limited source evidence, not a causal model benchmark. Adopted
 integration, authored regression, native proof, visual review and public delivery are separate facts. This owning
 document establishes neither native/browser proof nor the contents of a current deployment; the Goal's original
 acceptance and promoted-source obligations remain intact.
+
+### Exact Home Space consumer
+
+Home owns a labelled exact-address lookup, one reviewed result, explicit selection, current-identity refresh, clear
+and retry. It calls `spaceAddresses({address}).get` once, then `spaces({spaceId}).get` once; refresh uses only the
+latter. Supported same-origin `/spaces/<address>` URLs are admitted before network work; external origins, unrelated
+paths and extra segments are rejected. Address normalization stays native. Former reserved claims are not forwarding
+results. No Space page loader, directory, follows enumeration or per-option reads supply this choice.
+
+The selection retains the actual Space id, title/current address, head revision and independently viewer-derived
+Realm id. Realm-backed Space is a genuine scope. A null or unreadable Realm makes the selected scope unavailable;
+it never becomes Global, unselected success or known empty. The schema has no Zone id: native carried-Zone
+association/read/lifecycle is still a Semantic seam, not a browser mapping from Space or Realm. Choice metadata
+supplies no membership or authority. The [feed contract](../feeds.md) retains native currentness, original/terminal
+binding and authority/witness/cost obligations.
+
+The exact optional `spaceId` travels through the same mixed public/private feed request as kind and question,
+including next/retry/restart; clear omits it. Head and Realm observations are compared independently of ETag.
+Selection/currentness changes synchronously retire displayed rows and cursor and abort/fence earlier feed and point
+work. Locale and viewer/session/CSRF changes remount the consumer; selected metadata and private rows remain outside
+shared caches, SSR hydration, URLs and persistent storage. Sparse empty pages with a next frontier remain continuable.
+
+The authored Home composition regression extends the actual consumer/read/server seams for exact bounded lookup,
+carrier refusal, conjunctive selectors, generation changes and late private results. It is unexecuted source under
+the current implementation policy. The interactive `pages-discovery-home--space-selection`,
+`pages-discovery-home--space-unavailable` and `pages-discovery-home--space-identity-changed` stories mount the actual
+PageStory/default Home with explicitly illustrative native-format data. They are neither native recordings nor
+visual review. Producer receipt and normal generated declaration receiving for optional feed `spaceId` and
+`ratingQuestionId` remain prerequisites for installed integration. Positive native/default journey proof, original
+acceptance, visual review and public delivery are separate prerequisites for whole-feature completion; local typing
+establishes only source consistency. Preserve the parallel question consumer and all original Goal outcomes.
+
+### Adopted critical-path outcomes
+
+Adopt the [integrated critical-path attempts review](../research/critical-path-attempts-review.md). Search owns two
+ordered Source outcomes: first, complete captured-prefix repair, independent successor/Source verification and
+actual Search settlement with contiguous ACK; second, a useful installed default page using maintained indexed
+population and a single real coverage root with all dispatched/failed child work inside its bounds. Newer work and
+changed old cuts remain blocked. Neither helper exports nor the first checkpoint alone establish public Source
+closure. Search owns those bodies, Content owns feed composition, and Web owns Home; independent consumers proceed
+against settled interfaces while actual installation and positive proof are tracked separately.
+
+The repeated creator-sales generated-file landing refusal belongs to controller classification/reconciliation,
+not a product-test failure. Preserve paid source and existing owners; do not replace product work to evade a derived
+artifact refusal. Sales completion does not close independent Library expected-effects/current-seal or History
+retirement. Source, integration, typing, authored regressions, native proof, visual review and public delivery must
+remain distinct evidence categories.
+
+### Home Space cost
+
+#### Explicit lookup and selected refresh
+
+- Touches: the exact native address key and one Space point read; refresh touches the selected Space key only.
+- Bound: at most one address resolution plus one point per explicit lookup, one point per refresh; one selection and
+  one reviewed result, no hidden fanout, enumeration, all-download or per-option calls.
+- Growth check: authored regression asserts request counts, zero network for invalid URLs and replacement/fencing
+  of old lookup generations. Execution and native indexed-cost proof remain deferred to the owning integration.
+
+#### Selected mixed-feed page
+
+- Touches: one existing feed request per explicit page/retry/restart with the complete exact selection.
+- Bound: one displayed page, P<=20, existing native B<=160, fixed lanes/dedup/consumed frontier and no refill; Space
+  selection adds no browser population scan. Native composed authority/witness/cost stays with its producer.
+- Growth check: authored regression asserts exact selectors, page bounds and cursor retirement/retention, preserving
+  existing privacy assertions. Native examined-work/growth and positive default-path proof are separate obligations.
 
 ## Dependencies
 

@@ -3921,5 +3921,18 @@
   "library_type_empty_title": "Aucune entrée ne correspond à {type} dans cette vue",
   "statement_consent_subject": "Sujet",
   "statement_consent_relationship": "Relation",
-  "statement_consent_target": "Cible"
+  "statement_consent_target": "Cible",
+  "home_space_label": "Adresse ou URL du Space",
+  "home_space_hint": "Saisissez une adresse exacte ou une URL de même origine comme /spaces/adresse. Le Space et la question portent sur le même élément ; leurs avis justificatifs peuvent être différents.",
+  "home_space_lookup": "Rechercher un Space",
+  "home_space_loading": "Recherche du Space…",
+  "home_space_selected": "Space sélectionné",
+  "home_space_select": "Utiliser ce Space",
+  "home_space_refresh": "Actualiser le Space",
+  "home_space_clear": "Effacer le Space",
+  "home_space_retry": "Réessayer la recherche",
+  "home_space_invalid": "Saisissez une adresse exacte ou une URL de Space prise en charge de même origine.",
+  "home_space_unavailable": "Ce Space ou son Realm lisible est indisponible. Actualisez ou effacez la sélection.",
+  "home_space_changed": "L’identité du Space a changé. Le flux reprend sur une nouvelle page.",
+  "home_feed_sparse": "Aucun élément sur cette page. Passez à la suivante."
 }

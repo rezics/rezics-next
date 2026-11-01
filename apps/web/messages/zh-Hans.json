@@ -3922,5 +3922,18 @@
   "library_type_empty_title": "当前视图中没有符合“{type}”的条目",
   "statement_consent_subject": "主体",
   "statement_consent_relationship": "关系",
-  "statement_consent_target": "目标"
+  "statement_consent_target": "目标",
+  "home_space_label": "Space 地址或网址",
+  "home_space_hint": "输入准确地址或同源的 /spaces/地址 网址。Space 和问题约束同一条目，但作为依据的评论可能不同。",
+  "home_space_lookup": "查找 Space",
+  "home_space_loading": "正在查找 Space…",
+  "home_space_selected": "已选 Space",
+  "home_space_select": "使用此 Space",
+  "home_space_refresh": "刷新 Space",
+  "home_space_clear": "清除 Space",
+  "home_space_retry": "重试 Space 查找",
+  "home_space_invalid": "请输入准确的 Space 地址或受支持的同源 Space 网址。",
+  "home_space_unavailable": "此 Space 或其可读 Realm 不可用。请刷新或清除选择。",
+  "home_space_changed": "Space 身份信息已变更。信息流将从新页面开始。",
+  "home_feed_sparse": "本页没有条目。请继续下一页。"
 }

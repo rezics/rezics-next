@@ -120,3 +120,38 @@ export const KindChoicesNextPage: Story = {
     await expect(canvas.getByRole('combobox', { name: m.home_kind_label() })).toHaveValue('schema:Book');
   },
 };
+
+// Interactive source stories: use the actual exact-address control; no synthetic native-proof claim.
+export const SpaceSelection: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Look up home-reading-room, review its current title/address, then use the Space. Next, retry, refresh and clear use the default Home consumer.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="space-selection" />,
+};
+export const SpaceUnavailable: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Look up home-reading-room. Its illustrative native point response has no readable Realm; it cannot be selected or treated as an empty feed.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="space-unavailable" />,
+};
+export const SpaceIdentityChanged: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Look up and select home-reading-room, then refresh. The Realm changes independently while the head remains equal, retiring the displayed page and cursor.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="space-identity-changed" />,
+};

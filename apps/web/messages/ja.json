@@ -3921,5 +3921,18 @@
   "library_type_empty_title": "この表示に「{type}」に一致する項目はありません",
   "statement_consent_subject": "主語となる項目",
   "statement_consent_relationship": "関係",
-  "statement_consent_target": "対象となる項目"
+  "statement_consent_target": "対象となる項目",
+  "home_space_label": "Space のアドレスまたは URL",
+  "home_space_hint": "正確なアドレスか、同一オリジンの /spaces/アドレス URL を入力してください。Space と質問は同じ項目を絞り込みますが、根拠となるレビューは異なる場合があります。",
+  "home_space_lookup": "Space を検索",
+  "home_space_loading": "Space を検索中…",
+  "home_space_selected": "選択中の Space",
+  "home_space_select": "この Space を使う",
+  "home_space_refresh": "Space を更新",
+  "home_space_clear": "Space の選択を解除",
+  "home_space_retry": "Space の検索を再試行",
+  "home_space_invalid": "正確な Space のアドレスか、対応する同一オリジンの URL を入力してください。",
+  "home_space_unavailable": "この Space または閲覧可能な Realm を利用できません。更新するか選択を解除してください。",
+  "home_space_changed": "Space の識別情報が変わりました。フィードを新しいページから開始します。",
+  "home_feed_sparse": "このページに項目はありません。次のページに進んでください。"
 }

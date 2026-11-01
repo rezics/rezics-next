@@ -4,8 +4,15 @@ import { useCallback } from 'react';
 import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { homePageQuery, readPrivateHomePage, readPublicHomePage, readHomeKinds } from '../features/pages/home-queries';
+import {
+  homePageQuery,
+  readPrivateHomePage,
+  readPublicHomePage,
+  readHomeKinds,
+  readHomeSpaceChoice,
+} from '../features/pages/home-queries';
 import { HomeFeedConsumer } from '../features/pages/home-feed';
+import type { HomeSpaceRequest } from '../features/pages/home-feed-spaces';
 import { homeFeedViewer, type FeedInput } from '../features/pages/home-feed-read';
 import { homeJsonLd } from '../features/pages/jsonld';
 import { pageHead } from '../shell/head';
@@ -42,6 +49,14 @@ export function Home() {
       readHomeKinds({ data: { locale, ...(cursor === undefined ? {} : { cursor }) }, signal }),
     [locale],
   );
+  const readSpace = useCallback(
+    (input: HomeSpaceRequest, signal: AbortSignal) =>
+      readHomeSpaceChoice({
+        data: { locale, ...(subject ? { viewer: subject } : {}), ...input },
+        signal,
+      }),
+    [locale, subject],
+  );
   return (
     <HomeFeedConsumer
       key={`${locale}:${viewer?.scope ?? 'public'}`}
@@ -50,6 +65,8 @@ export function Home() {
       signedIn={viewer !== null}
       read={read}
       readKinds={readKinds}
+      readSpace={readSpace}
+      origin={loaded.origin}
     />
   );
 }

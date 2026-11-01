@@ -15,11 +15,16 @@ export type HomeFeedStory =
   | 'empty'
   | 'following'
   | 'kinds-unavailable'
-  | 'kinds-next';
+  | 'kinds-next'
+  | 'space-selection'
+  | 'space-unavailable'
+  | 'space-identity-changed';
 let selected: HomeFeedStory = 'mixed';
 let homeActive = false;
+let spaceReads = 0;
 export function selectHomeFeedStory(state: HomeFeedStory = 'mixed', active = true) {
   selected = state;
+  spaceReads = 0;
   homeActive = active;
 }
 
@@ -30,6 +35,7 @@ export function homeFeedStoryPage(
   state: HomeFeedStory = selected,
   cursor?: string,
   kind?: string,
+  spaceId?: string,
 ): FeedPage {
   const first = home.reads.r0.body.subjects[0]!;
   const labels = first.labels as Record<string, string>;
@@ -106,7 +112,10 @@ export function homeFeedStoryPage(
             ? [discovery, continued]
             : []
           : items,
-    next: !cursor && (kind !== undefined || (state === 'mixed' && personal)) ? 'illustrative-signed-frontier' : null,
+    next:
+      !cursor && (kind !== undefined || ((state === 'mixed' || spaceId !== undefined) && personal))
+        ? 'illustrative-signed-frontier'
+        : null,
     asOf: '2026-11-01T00:00:00.000Z',
     sources: {
       discovery:
@@ -143,7 +152,46 @@ export function homeKindStoryPage(cursor?: string): DiscoveryKinds {
   return cursor ? { values: [account], next: null } : { values: [book], next: 'illustrative-kind-frontier' };
 }
 
+/** Illustrative native-format Space point envelope; no membership or continuity certificate. */
+export const homeStorySpace = {
+  spaceId: '01a1a000-0000-7000-8000-000000000811',
+  realmId: '01a1a000-0000-7000-8000-000000000812',
+  headRevisionId: '01a1a000-0000-7000-8000-000000000813',
+  state: 'active' as const,
+  address: 'home-reading-room',
+  title: 'Home Reading Room',
+  summary: 'An illustrative Space for the Home exact-address journey.',
+  predecessor: null,
+  creator: '01a1a000-0000-7000-8000-000000000814',
+  author: '01a1a000-0000-7000-8000-000000000814',
+  createdAt: '2026-11-01T00:00:00.000Z',
+  revisionCreatedAt: '2026-11-01T00:00:00.000Z',
+};
+
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: '/v1/spaceAddresses/home-reading-room',
+    story: () => (homeActive ? { status: 200, spaceId: homeStorySpace.spaceId } : undefined),
+  },
+  {
+    method: 'GET',
+    path: `/v1/spaces/${homeStorySpace.spaceId}`,
+    story: () => {
+      if (!homeActive) return;
+      spaceReads++;
+      const space = {
+        ...homeStorySpace,
+        realmId:
+          selected === 'space-unavailable'
+            ? null
+            : selected === 'space-identity-changed' && spaceReads > 1
+              ? '01a1a000-0000-7000-8000-000000000815'
+              : homeStorySpace.realmId,
+      };
+      return { status: 200, space, community: null };
+    },
+  },
   {
     method: 'POST',
     path: '/v1/subjects:search',
@@ -188,6 +236,7 @@ export const routes: FakeRoute[] = [
           state,
           url.searchParams.get('cursor') ?? undefined,
           url.searchParams.get('kind') ?? undefined,
+          url.searchParams.get('spaceId') ?? undefined,
         ),
       };
     },

@@ -3921,5 +3921,18 @@
   "library_type_empty_title": "目前檢視中沒有符合「{type}」的項目",
   "statement_consent_subject": "主體",
   "statement_consent_relationship": "關係",
-  "statement_consent_target": "目標"
+  "statement_consent_target": "目標",
+  "home_space_label": "Space 位址或網址",
+  "home_space_hint": "輸入確切位址或同源的 /spaces/位址 網址。Space 與問題限制同一項目，但作為依據的評論可能不同。",
+  "home_space_lookup": "尋找 Space",
+  "home_space_loading": "正在尋找 Space…",
+  "home_space_selected": "已選 Space",
+  "home_space_select": "使用此 Space",
+  "home_space_refresh": "重新整理 Space",
+  "home_space_clear": "清除 Space",
+  "home_space_retry": "重試 Space 查詢",
+  "home_space_invalid": "請輸入確切的 Space 位址或支援的同源 Space 網址。",
+  "home_space_unavailable": "此 Space 或其可讀 Realm 無法使用。請重新整理或清除選擇。",
+  "home_space_changed": "Space 身分資訊已變更。動態將從新頁面開始。",
+  "home_feed_sparse": "本頁沒有項目。請繼續下一頁。"
 }

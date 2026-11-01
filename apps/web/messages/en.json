@@ -3924,5 +3924,18 @@
   "library_type_empty_title": "No entries match {type} in this view",
   "statement_consent_subject": "Subject",
   "statement_consent_relationship": "Relationship",
-  "statement_consent_target": "Target"
+  "statement_consent_target": "Target",
+  "home_space_label": "Space address or URL",
+  "home_space_hint": "Enter an exact address or a same-origin /spaces/address URL. Space and question constrain the same item; their review witnesses may differ.",
+  "home_space_lookup": "Look up Space",
+  "home_space_loading": "Looking up Space…",
+  "home_space_selected": "Selected Space",
+  "home_space_select": "Use this Space",
+  "home_space_refresh": "Refresh Space",
+  "home_space_clear": "Clear Space",
+  "home_space_retry": "Retry Space lookup",
+  "home_space_invalid": "Enter an exact Space address or a supported same-origin Space URL.",
+  "home_space_unavailable": "This Space or its readable Realm is unavailable. Refresh or clear the selection.",
+  "home_space_changed": "The Space identity changed. The feed starts from a new page.",
+  "home_feed_sparse": "No items on this page. Continue to the next page."
 }

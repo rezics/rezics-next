@@ -3921,5 +3921,18 @@
   "library_type_empty_title": "No hay entradas que coincidan con {type} en esta vista",
   "statement_consent_subject": "Sujeto",
   "statement_consent_relationship": "Relación",
-  "statement_consent_target": "Destino"
+  "statement_consent_target": "Destino",
+  "home_space_label": "Dirección o URL del Space",
+  "home_space_hint": "Introduce una dirección exacta o una URL del mismo origen como /spaces/dirección. El Space y la pregunta restringen el mismo elemento; las reseñas que los acreditan pueden ser distintas.",
+  "home_space_lookup": "Buscar Space",
+  "home_space_loading": "Buscando Space…",
+  "home_space_selected": "Space seleccionado",
+  "home_space_select": "Usar este Space",
+  "home_space_refresh": "Actualizar Space",
+  "home_space_clear": "Quitar Space",
+  "home_space_retry": "Reintentar búsqueda de Space",
+  "home_space_invalid": "Introduce una dirección exacta o una URL de Space admitida del mismo origen.",
+  "home_space_unavailable": "Este Space o su Realm legible no está disponible. Actualiza o quita la selección.",
+  "home_space_changed": "La identidad del Space ha cambiado. El feed comienza en una página nueva.",
+  "home_feed_sparse": "No hay elementos en esta página. Continúa a la siguiente."
 }

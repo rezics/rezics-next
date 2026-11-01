@@ -8,6 +8,8 @@ import { progressView } from '../../library/progress-label';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { createHomeKindChoices, type HomeKindsReader } from './home-feed-kinds';
+import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spaces';
+import { HomeFeedSpaceControl } from './home-feed-space-control';
 import { HomeFeedKindControl } from './home-feed-kind-control';
 import type { ReactNode } from 'react';
 import { PageHeading } from '../../shell/page-heading';
@@ -99,6 +101,7 @@ export function HomeFeed({
   busy = false,
   onSelect,
   kindControl,
+  spaceControl,
   onRetry,
   onNext,
   onRestart,
@@ -110,6 +113,7 @@ export function HomeFeed({
   busy?: boolean;
   onSelect?: (stream: FeedStream) => void;
   kindControl?: ReactNode;
+  spaceControl?: ReactNode;
   onRetry?: () => void;
   onNext?: (cursor: string) => void;
   onRestart?: () => void;
@@ -150,6 +154,7 @@ export function HomeFeed({
         ) : null}
       </nav>
       {kindControl}
+      {spaceControl}
       {signedIn ? (
         <p className="text-sm text-muted-foreground">
           {m.home_feed_horizon({}, options)}{' '}
@@ -203,7 +208,11 @@ export function HomeFeed({
           {!page.feedItems.length &&
           Object.values(page.sources).every((state) => state === 'ready' || state === 'not_requested') ? (
             <p role="status">
-              {stream === 'following' ? m.home_feed_following_empty({}, options) : m.home_feed_empty({}, options)}
+              {page.next
+                ? m.home_feed_sparse({}, options)
+                : stream === 'following'
+                  ? m.home_feed_following_empty({}, options)
+                  : m.home_feed_empty({}, options)}
             </p>
           ) : null}
           {!page.feedItems.length ? (
@@ -261,15 +270,31 @@ export function HomeFeedConsumer({
   signedIn,
   read,
   readKinds,
+  readSpace,
+  origin,
 }: {
   initial: HomeFeedResult;
   locale: string;
   signedIn: boolean;
   read: (input: FeedInput, signal: AbortSignal) => Promise<HomeFeedResult>;
   readKinds: HomeKindsReader;
+  readSpace: HomeSpaceReader;
+  origin: string;
 }) {
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
+  const spaces = useState(() =>
+    createHomeSpaceSelection(readSpace, (space, available) => {
+      choices.retire();
+      // Retire synchronously, including independent observed carrier changes at an unchanged head.
+      window.retire(available ? undefined : { state: 'unavailable', code: 'space_unavailable' });
+      if (!available) return;
+      const { cursor: _cursor, spaceId: _spaceId, ...selection } = window.snapshot().input;
+      void window.load({ ...selection, ...(space ? { spaceId: space.spaceId } : {}) });
+    }),
+  )[0];
+  const spaceSnapshot = useSyncExternalStore(spaces.subscribe, spaces.snapshot, spaces.snapshot);
+  useEffect(() => () => spaces.retire(), [spaces]);
   const kinds = useSyncExternalStore(choices.subscribe, choices.snapshot, choices.snapshot);
   useEffect(() => () => choices.retire(), [choices]);
   const snapshot = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
@@ -284,28 +309,52 @@ export function HomeFeedConsumer({
       signedIn={signedIn}
       stream={snapshot.input.stream}
       busy={snapshot.busy}
+      spaceControl={
+        <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
+      }
       kindControl={
         <HomeFeedKindControl
           choices={choices}
           snapshot={kinds}
           locale={locale}
           onSelect={(choice) => {
+            spaces.retire();
             choices.select(choice);
-            void window.load({ stream: snapshot.input.stream, ...(choice ? { kind: choice.id } : {}) });
+            const { cursor: _cursor, kind: _kind, ...selection } = snapshot.input;
+            const input = { ...selection, ...(choice ? { kind: choice.id } : {}) };
+            window.retire(undefined, input);
+            if (!spaces.snapshot().available) {
+              window.retire({ state: 'unavailable', code: 'space_unavailable' });
+              return;
+            }
+            void window.load(input);
           }}
         />
       }
       onSelect={(stream) => {
         choices.retire();
+        spaces.retire();
         const { cursor: _cursor, ...selection } = snapshot.input;
-        void window.load({ ...selection, stream });
+        const input = { ...selection, stream };
+        window.retire(undefined, input);
+        if (!spaces.snapshot().available) {
+          window.retire({ state: 'unavailable', code: 'space_unavailable' });
+          return;
+        }
+        void window.load(input);
       }}
-      onRetry={() => void window.load(snapshot.input)}
+      onRetry={() => {
+        if (spaces.snapshot().available) void window.load(snapshot.input);
+        else void spaces.refresh();
+      }}
       onRestart={() => {
+        if (!spaces.snapshot().available) return;
         const { cursor: _cursor, ...selection } = snapshot.input;
         void window.load(selection);
       }}
-      onNext={(cursor) => void window.load({ ...snapshot.input, cursor })}
+      onNext={(cursor) => {
+        if (spaces.snapshot().available) void window.load({ ...snapshot.input, cursor });
+      }}
     />
   );
 }

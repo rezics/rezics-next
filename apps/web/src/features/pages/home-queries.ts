@@ -6,6 +6,13 @@ import { prepareSession, sessionSubject, viewerCredential } from '../../session/
 import { kernelClient } from '../../kernel/client';
 import { requestLanguages } from '../../kernel/languages';
 import { readDiscovery, readDiscoveryKinds, type DiscoveryRequest } from '../../search/discovery';
+import {
+  homeFeedId,
+  homeSpaceAddress,
+  readHomeSpace,
+  type HomeSpaceRequest,
+  type HomeSpaceResult,
+} from './home-feed-spaces';
 import { homeFeedKind } from './home-feed-kinds';
 import { publicRead } from '../../kernel/query';
 import { validatePublicOrigin } from '../../shell/origin';
@@ -18,6 +25,8 @@ function localeInput(locale: unknown): string {
 function feedInput(input: FeedInput & { locale: string }) {
   localeInput(input.locale);
   homeFeedKind(input.kind);
+  homeFeedId(input.spaceId);
+  homeFeedId(input.ratingQuestionId);
   if (
     !['home', 'following'].includes(input.stream) ||
     (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 32768))
@@ -44,8 +53,13 @@ export const homePageQuery = (locale: string) =>
   });
 
 export const readPublicHomePage = createServerFn({ method: 'GET' })
-  .validator((input: { locale: string; cursor?: string; kind?: string }) => feedInput({ ...input, stream: 'home' }))
-  .handler(({ data }) => loadPublicHomeFeed(kernelClient(data.locale), data.cursor, data.kind, getRequest().signal));
+  .validator((input: Omit<FeedInput, 'stream'> & { locale: string }) => feedInput({ ...input, stream: 'home' }))
+  .handler(({ data }) =>
+    loadPublicHomeFeed(kernelClient(data.locale), data.cursor, data.kind, getRequest().signal, {
+      ...(data.spaceId === undefined ? {} : { spaceId: data.spaceId }),
+      ...(data.ratingQuestionId === undefined ? {} : { ratingQuestionId: data.ratingQuestionId }),
+    }),
+  );
 
 /** Private feed data lives in the mounted viewer's component, outside shared query/hydration caches. */
 export const readPrivateHomePage = createServerFn({ method: 'GET' })
@@ -68,6 +82,8 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
         kernelClient(data.locale),
         {
           stream: data.stream,
+          ...(data.spaceId === undefined ? {} : { spaceId: data.spaceId }),
+          ...(data.ratingQuestionId === undefined ? {} : { ratingQuestionId: data.ratingQuestionId }),
           ...(data.kind === undefined ? {} : { kind: data.kind }),
           ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
         },
@@ -116,4 +132,43 @@ export const readHomeKinds = createServerFn({ method: 'GET' })
       }
     }
     return result;
+  });
+
+/** Exact Home metadata stays out of shared query caches and hydration, including viewer-derived Realm. */
+export const readHomeSpaceChoice = createServerFn({ method: 'GET' })
+  .validator((input: HomeSpaceRequest & { locale: string; viewer?: string }) => {
+    localeInput(input.locale);
+    if (input.viewer !== undefined && (typeof input.viewer !== 'string' || !input.viewer || input.viewer.length > 256))
+      throw new Error('Invalid viewer');
+    if (input.spaceId !== undefined) {
+      homeFeedId(input.spaceId);
+      if (input.address !== undefined) throw new Error('Invalid Space request');
+    } else if (typeof input.address !== 'string' || !input.address || input.address.length > 2048)
+      throw new Error('Invalid Space address');
+    return input;
+  })
+  .handler(async ({ data }): Promise<HomeSpaceResult> => {
+    setResponseHeader('Cache-Control', 'private, no-store');
+    const request = getRequest();
+    let input: HomeSpaceRequest;
+    try {
+      input =
+        data.spaceId === undefined
+          ? { address: homeSpaceAddress(data.address, new URL(request.url).origin) }
+          : { spaceId: data.spaceId };
+    } catch {
+      return { status: 'invalid' };
+    }
+    try {
+      let authorization: string | undefined;
+      if (data.viewer !== undefined) {
+        const { env } = await import('cloudflare:workers');
+        await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
+        authorization = viewerCredential(request);
+        if (!authorization || sessionSubject(request) !== data.viewer) return { status: 'auth' };
+      }
+      return readHomeSpace(kernelClient(data.locale), input, authorization, request.signal);
+    } catch {
+      return { status: 'unavailable' };
+    }
   });

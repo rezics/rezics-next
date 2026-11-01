@@ -400,3 +400,334 @@ test('The default home route renders a bounded mixed discovery Following and Con
     }
   }
 });
+
+// Authored, UNEXECUTED: Space agreement receiving/native/default acceptance remains independent.
+test('Default Home resolves one exact Space and carries its identity through public and private mixed-feed requests while independently retiring changed head carrier and viewer generations', async () => {
+  const { createHomeSpaceSelection, homeSpaceGeneration } = await import('../src/features/pages/home-feed-spaces');
+  const { readHomeSpaceChoice } = await import('../src/features/pages/home-queries');
+  const { homeStorySpace } = await import('../src/kernel/fake/home-feed-stories');
+  const calls: Request[] = [];
+  let space = { ...homeStorySpace, realmId: homeStorySpace.realmId as string | null };
+  let pointStatus = 200;
+  let feedStatus = 200;
+  let pauseFeed: Promise<void> | undefined;
+  let pausePoint: Promise<void> | undefined;
+  request = new Request('https://rezics.example/en');
+  const initial = { state: 'ready' as const, page: homeFeedStoryPage('en', false) };
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const call = new Request(input, init);
+    calls.push(call);
+    expect(call.cache).toBe('no-store');
+    expect(call.redirect).toBe('manual');
+    const url = new URL(call.url);
+    if (url.pathname.startsWith('/v1/spaceAddresses/')) return Response.json({ spaceId: space.spaceId });
+    if (url.pathname === `/v1/spaces/${space.spaceId}`) {
+      const observed = { ...space };
+      const status = pointStatus;
+      if (pausePoint) await pausePoint;
+      return status === 200
+        ? Response.json({ space: observed, community: null })
+        : Response.json({ code: 'not_found' }, { status });
+    }
+    expect(url.pathname).toBe('/v1/feedItems');
+    expect(url.searchParams.get('limit')).toBe('20');
+    expect(url.searchParams.has('realmId')).toBe(false);
+    expect(url.searchParams.has('zoneId')).toBe(false);
+    const status = feedStatus;
+    const personal = call.headers.has('authorization');
+    const page = homeFeedStoryPage('en', personal, 'mixed', url.searchParams.get('cursor') ?? undefined);
+    if (pauseFeed) await pauseFeed;
+    return status === 200 ? Response.json(page) : Response.json({ code: 'stale_cursor' }, { status });
+  }) as typeof fetch;
+  const question = '01a1a000-0000-7000-8000-000000000821';
+  const selectionInput = { stream: 'home' as const, kind: 'schema:Book', ratingQuestionId: question };
+  let viewer: string | undefined;
+  const feed = createHomeFeedWindow(initial, (input, signal) =>
+    viewer
+      ? readPrivateHomePage({ data: { locale: 'en', viewer, ...input }, signal })
+      : readPublicHomePage({ data: { locale: 'en', ...input }, signal }),
+  );
+  await feed.load(selectionInput);
+  let applied: Promise<void> = Promise.resolve();
+  const selection = createHomeSpaceSelection(
+    (input, signal) =>
+      readHomeSpaceChoice({
+        data: { locale: 'en', ...(viewer ? { viewer } : {}), ...input },
+        signal,
+      }),
+    (selected, available) => {
+      feed.retire(available ? undefined : { state: 'unavailable', code: 'space_unavailable' });
+      if (!available) return;
+      const { cursor: _cursor, spaceId: _spaceId, ...rest } = feed.snapshot().input;
+      applied = feed.load({ ...rest, ...(selected ? { spaceId: selected.spaceId } : {}) });
+    },
+  );
+  const lastFeed = () => [...calls].reverse().find((call) => new URL(call.url).pathname === '/v1/feedItems')!;
+  const query = () => new URL(lastFeed().url).searchParams;
+  const beforeInvalid = calls.length;
+  for (const address of [
+    'https://other.example/spaces/room',
+    '/subjects/room',
+    '/spaces/room/extra',
+    '//other.example/spaces/room',
+    '/spaces/room%2Fextra',
+  ]) {
+    await selection.lookup(address, 'https://rezics.example');
+    expect(selection.snapshot().status).toBe('invalid');
+    expect(await readHomeSpaceChoice({ data: { locale: 'en', address } })).toEqual({ status: 'invalid' });
+  }
+  expect(calls.length).toBe(beforeInvalid);
+  let before = calls.length;
+  await selection.lookup('https://rezics.example/spaces/Home-Reading-Room', 'https://rezics.example');
+  expect(calls.length - before).toBe(2);
+  expect(selection.snapshot().candidate?.spaceId).toBe(space.spaceId);
+  expect(selection.snapshot().selected).toBeUndefined();
+  selection.select();
+  expect(feed.snapshot().result.state).toBe('loading');
+  await applied;
+  expect(query().get('spaceId')).toBe(space.spaceId);
+  expect(query().get('kind')).toBe('schema:Book');
+  expect(query().get('ratingQuestionId')).toBe(question);
+  expect(lastFeed().headers.has('authorization')).toBe(false);
+  const anonymousSessionReads = sessionReads;
+  await selection.refresh();
+  await applied;
+  expect(sessionReads).toBe(anonymousSessionReads);
+
+  viewer = 'viewer-a';
+  request = new Request('https://rezics.example/en', {
+    headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+  });
+  await feed.load({ ...feed.snapshot().input, stream: 'following', cursor: 'next-private' });
+  expect(lastFeed().headers.get('authorization')).toBe('Bearer private-token');
+  expect(headers['Cache-Control']).toBe('private, no-store');
+  expect(query().get('spaceId')).toBe(space.spaceId);
+  expect(query().get('ratingQuestionId')).toBe(question);
+  expect(query().get('kind')).toBe('schema:Book');
+  feedStatus = 409;
+  await feed.load(feed.snapshot().input);
+  expect(feed.snapshot().result.state).toBe('cursor');
+  expect(query().get('spaceId')).toBe(space.spaceId);
+  feedStatus = 200;
+  const { cursor: _cursor, ...restart } = feed.snapshot().input;
+  await feed.load(restart);
+  expect(query().has('cursor')).toBe(false);
+  expect(query().get('spaceId')).toBe(space.spaceId);
+
+  for (const change of ['head', 'realm'] as const) {
+    await feed.load({ ...feed.snapshot().input, cursor: 'retire-me' });
+    const oldGeneration = homeSpaceGeneration(selection.snapshot().selected!);
+    if (change === 'head') space.headRevisionId = '01a1a000-0000-7000-8000-000000000822';
+    else space.realmId = '01a1a000-0000-7000-8000-000000000823';
+    before = calls.length;
+    const refresh = selection.refresh();
+    expect(feed.snapshot().result.state).toBe('unavailable');
+    expect(feed.snapshot().input.cursor).toBeUndefined();
+    await refresh;
+    await applied;
+    expect(homeSpaceGeneration(selection.snapshot().selected!)).not.toBe(oldGeneration);
+    expect(selection.snapshot().changed).toBe(true);
+    const reads = calls.slice(before);
+    expect(reads.filter((call) => new URL(call.url).pathname.startsWith('/v1/spaces/'))).toHaveLength(1);
+    expect(reads.filter((call) => new URL(call.url).pathname.includes('spaceAddresses'))).toHaveLength(0);
+    expect(reads.filter((call) => new URL(call.url).pathname === '/v1/feedItems')).toHaveLength(1);
+    expect(query().has('cursor')).toBe(false);
+  }
+  // An unreadable carrier at the same head cannot broaden the selected feed.
+  space.realmId = null;
+  before = calls.length;
+  await selection.refresh();
+  expect(selection.snapshot().available).toBe(false);
+  expect(selection.snapshot().selected?.spaceId).toBe(space.spaceId);
+  expect(feed.snapshot().result.state).toBe('unavailable');
+  expect(calls.length - before).toBe(1);
+  space.realmId = homeStorySpace.realmId;
+  await selection.retry();
+  await applied;
+  expect(selection.snapshot().available).toBe(true);
+  pointStatus = 404;
+  await selection.refresh();
+  expect(selection.snapshot().available).toBe(false);
+  pointStatus = 200;
+  await selection.retry();
+  await applied;
+
+  let releasePoint!: () => void;
+  pausePoint = new Promise<void>((resolve) => {
+    releasePoint = resolve;
+  });
+  const oldPoint = selection.refresh();
+  selection.clear();
+  await applied;
+  expect(query().has('spaceId')).toBe(false);
+  expect(query().get('kind')).toBe('schema:Book');
+  expect(query().get('ratingQuestionId')).toBe(question);
+  releasePoint();
+  await oldPoint;
+  pausePoint = undefined;
+  expect(selection.snapshot().selected).toBeUndefined();
+  expect(query().has('spaceId')).toBe(false);
+
+  await selection.lookup('home-reading-room', 'https://rezics.example');
+  let releaseFeed!: () => void;
+  pauseFeed = new Promise<void>((resolve) => {
+    releaseFeed = resolve;
+  });
+  selection.select();
+  const oldFeed = applied;
+  selection.clear();
+  const clearedFeed = applied;
+  expect(feed.snapshot().result.state).toBe('loading');
+  releaseFeed();
+  await oldFeed;
+  await clearedFeed;
+  pauseFeed = undefined;
+  expect(feed.snapshot().input.spaceId).toBeUndefined();
+
+  // The production viewer remount's cleanup retires both in-flight private feed and Space metadata.
+  pausePoint = new Promise<void>((resolve) => {
+    releasePoint = resolve;
+  });
+  const oldLookup = selection.lookup('home-reading-room', 'https://rezics.example');
+  await Promise.resolve();
+  await Promise.resolve();
+  pauseFeed = new Promise<void>((resolve) => {
+    releaseFeed = resolve;
+  });
+  const privatePending = feed.load({ ...selectionInput, spaceId: space.spaceId });
+  selection.retire();
+  feed.clear();
+  viewer = undefined;
+  request = new Request('https://rezics.example/en');
+  releasePoint();
+  releaseFeed();
+  await oldLookup;
+  await privatePending;
+  pausePoint = undefined;
+  pauseFeed = undefined;
+  expect(selection.snapshot().candidate).toBeUndefined();
+  expect(feed.snapshot().result).toEqual(initial);
+  expect(feed.snapshot().input).toEqual({ stream: 'home' });
+  const beforeMismatch = calls.length;
+  expect(await readHomeSpaceChoice({ data: { locale: 'en', viewer: 'viewer-b', spaceId: space.spaceId } })).toEqual({
+    status: 'auth',
+  });
+  expect(calls.length).toBe(beforeMismatch);
+  await expect(async () => readPublicHomePage({ data: { locale: 'en', spaceId: 'invalid' } })).rejects.toThrow();
+  await expect(async () =>
+    readPrivateHomePage({ data: { locale: 'en', viewer: 'viewer-a', stream: 'home', ratingQuestionId: 'invalid' } }),
+  ).rejects.toThrow();
+  expect(calls.length).toBe(beforeMismatch);
+
+  // Reuse the existing regression's DOM setup and actual default route, not an alternate Home harness.
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const browser = new Window({ url: 'https://rezics.example/en' });
+  const globals = {
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    HTMLInputElement: browser.HTMLInputElement,
+    HTMLSelectElement: browser.HTMLSelectElement,
+    HTMLButtonElement: browser.HTMLButtonElement,
+    Element: browser.Element,
+    Node: browser.Node,
+    Document: browser.Document,
+    ShadowRoot: browser.ShadowRoot,
+    DocumentFragment: browser.DocumentFragment,
+    MutationObserver: browser.MutationObserver,
+    ResizeObserver: browser.ResizeObserver,
+    getComputedStyle: browser.getComputedStyle.bind(browser),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { sessionQuery } = await import('../src/session/query');
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null, subject: null });
+  const loaded = await client.fetchQuery(homePageQuery('en'));
+  const host = browser.document.createElement('div') as unknown as HTMLDivElement;
+  browser.document.body.append(host);
+  const root = createRoot(host);
+  const click = (text: string) =>
+    act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === text)!.click();
+    });
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  try {
+    setLocale('en', { reload: false });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <Home />
+        </QueryClientProvider>,
+      );
+    });
+    const label = [...host.querySelectorAll('label')].find((node) => node.textContent === m.home_space_label())!;
+    const input = host.querySelector<HTMLInputElement>(`[id="${label.htmlFor}"]`)!;
+    expect(input.getAttribute('aria-describedby')).toBeTruthy();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(browser.HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'home-reading-room',
+      );
+      input.dispatchEvent(new browser.Event('input', { bubbles: true }) as unknown as Event);
+      input.dispatchEvent(new browser.Event('change', { bubbles: true }) as unknown as Event);
+    });
+    before = calls.length;
+    await click(m.home_space_lookup());
+    await settle();
+    expect(calls.length - before).toBe(2);
+    expect(host.textContent).toContain(space.title);
+    await click(m.home_space_select());
+    await settle();
+    expect(query().get('spaceId')).toBe(space.spaceId);
+    const oldRealm = space.realmId;
+    space.realmId = '01a1a000-0000-7000-8000-000000000824';
+    pauseFeed = new Promise<void>((resolve) => {
+      releaseFeed = resolve;
+    });
+    await click(m.home_space_refresh());
+    await settle();
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    expect(host.textContent).toContain(m.home_space_changed());
+    releaseFeed();
+    await settle();
+    pauseFeed = undefined;
+    expect(query().has('cursor')).toBe(false);
+    space.realmId = null;
+    await click(m.home_space_refresh());
+    await settle();
+    expect(host.textContent).toContain(m.home_space_unavailable());
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+    space.realmId = oldRealm;
+    await click(m.home_space_retry());
+    await settle();
+    expect(query().get('spaceId')).toBe(space.spaceId);
+    await click(m.home_space_clear());
+    await settle();
+    expect(query().has('spaceId')).toBe(false);
+    expect(client.getQueryData(homePageQuery('en').queryKey)).toEqual(loaded);
+    expect(
+      client
+        .getQueryCache()
+        .getAll()
+        .filter((entry) => entry.queryKey[0] === 'home-page'),
+    ).toHaveLength(1);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    await browser.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});

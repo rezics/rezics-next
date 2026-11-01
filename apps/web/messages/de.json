@@ -3921,5 +3921,18 @@
   "library_type_empty_title": "Keine Einträge für {type} in dieser Ansicht",
   "statement_consent_subject": "Subjekt",
   "statement_consent_relationship": "Beziehung",
-  "statement_consent_target": "Ziel"
+  "statement_consent_target": "Ziel",
+  "home_space_label": "Space-Adresse oder URL",
+  "home_space_hint": "Eine genaue Adresse oder eine URL derselben Herkunft wie /spaces/adresse eingeben. Space und Frage betreffen dasselbe Element; ihre Rezensionsbelege können verschieden sein.",
+  "home_space_lookup": "Space suchen",
+  "home_space_loading": "Space wird gesucht…",
+  "home_space_selected": "Ausgewählter Space",
+  "home_space_select": "Diesen Space verwenden",
+  "home_space_refresh": "Space aktualisieren",
+  "home_space_clear": "Space abwählen",
+  "home_space_retry": "Space-Suche wiederholen",
+  "home_space_invalid": "Eine genaue Space-Adresse oder eine unterstützte Space-URL derselben Herkunft eingeben.",
+  "home_space_unavailable": "Dieser Space oder sein lesbarer Realm ist nicht verfügbar. Auswahl aktualisieren oder aufheben.",
+  "home_space_changed": "Die Space-Identität hat sich geändert. Der Feed beginnt auf einer neuen Seite.",
+  "home_feed_sparse": "Keine Elemente auf dieser Seite. Mit der nächsten Seite fortfahren."
 }
