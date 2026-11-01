@@ -152,8 +152,23 @@ export const DeletedDirectory: Story = {
     await expect(within(list).getByText(m.ctxw_community() + ' · ' + m.ctxw_deleted())).toBeVisible();
   },
 };
-export const Empty: Story = { args: { scenario: 'empty' } };
-export const SearchEmpty: Story = { args: { scenario: 'search-empty' } };
+export const Empty: Story = {
+  args: { scenario: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.ctxw_empty())).toBeVisible();
+    await expect(canvas.queryByRole('list', { name: m.ctxw_title() })).toBeNull();
+  },
+};
+export const SearchEmpty: Story = {
+  args: { scenario: 'search-empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.ctxw_no_matches())).toBeVisible();
+    await expect(canvas.getByRole('searchbox', { name: m.ctxw_search() })).toHaveValue('No matches');
+    await expect(canvas.queryByRole('list', { name: m.ctxw_title() })).toBeNull();
+  },
+};
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const Unavailable: Story = { args: { scenario: 'unavailable' } };
 export const StaleCursor: Story = { args: { scenario: 'stale' } };
