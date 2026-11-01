@@ -35,7 +35,7 @@ BEGIN
     (m.history_authority IS NOT NULL AND m.history_authority IS DISTINCT FROM p_authority) THEN
    RAISE EXCEPTION 'identity History original binding changed' USING ERRCODE='23514';
  END IF;
- PERFORM 1 FROM core.partition p,core.history_family_domain d WHERE p.partition_no=0 AND p.write_state='active'
+ PERFORM 1 FROM core.partition p,core.history_family_domain d WHERE p.partition_no=0 AND p.write_state='active' AND p.moved_to IS NULL
    AND p.epoch=m.receiver_epoch AND d.singleton AND d.generation=m.receiver_generation FOR SHARE OF p,d;
  IF NOT FOUND THEN RAISE EXCEPTION 'identity History receiving custody changed' USING ERRCODE='23514'; END IF;
  PERFORM 1 FROM core.history_work WHERE partition_no=0 AND work_id=m.custody_id
@@ -58,6 +58,9 @@ BEGIN
  SELECT semantic.lock_identity_source_history_handoff(p_authority->'reference',p_authority) INTO a;
  IF a IS NULL OR a IS DISTINCT FROM p_authority THEN
    RAISE EXCEPTION 'identity History Source authority changed' USING ERRCODE='23514'; END IF;
+ IF p_phase='closure' AND (m.sdk_readiness IS NULL OR
+      p_writer->>'restoreGeneration' IS DISTINCT FROM m.sdk_readiness->'writer'->>'restoreGeneration') THEN
+   RAISE EXCEPTION 'identity History original SDK restore generation changed' USING ERRCODE='23514'; END IF;
  IF (p_phase='readiness' AND (p_writer->>'generation' IS DISTINCT FROM '1' OR
        p_writer->>'closureID' IS NOT NULL OR p_writer->>'closedAt' IS NOT NULL)) OR
     (p_phase='closure' AND (p_writer->>'generation' IS DISTINCT FROM '2' OR

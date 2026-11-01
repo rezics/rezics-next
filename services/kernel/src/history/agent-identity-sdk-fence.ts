@@ -434,6 +434,8 @@ export async function retireAgentIdentitySDKWork(
   }
   const closed = await readAgentIdentitySDKWriterState(pool, client, receiver.binding.workflowId, context);
   if (closed.state === 'pending') return closed;
+  if (closed.writer.restoreGeneration !== durable.sdk_readiness.writer.restoreGeneration)
+    return pending('identity-sdk-original-restore-generation-changed');
   if (closed.writer.generation !== '2' || !closed.writer.closureID || closed.writer.closedAt === null)
     return pending('identity-sdk-permanent-closure-pending');
   return identityHistoryCommand(pool, context, async (tx) => {
