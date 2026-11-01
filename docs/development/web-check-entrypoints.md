@@ -22,7 +22,9 @@ bun <trusted-root>/scripts/check-run.ts --hosts <absolute-hosts-json> --workspac
 
 The default trusted root is the integrated main checkout discovered through Git's common directory; a caller may
 select a separate integrated snapshot with `WEB_CHECK_DRIVER_ROOT`. Its producer must be tracked, committed and
-clean, including helper source. This is a source-integrity guard, not verifier admission or a release receipt.
+clean, including helper source, and its commit must be an ancestor of the integrated checkout's current revision.
+The real driver root must differ from the candidate root; a candidate cannot select its own newly committed driver.
+This is a source-integrity guard, not verifier admission or a release receipt.
 The candidate revision comes from the candidate's Git identity, independently of the driver root. Performance must
 freeze/verify exact candidate inputs, native Git identity and same-snapshot generated Web inputs, and use its pinned
 Bun/frozen dependency preparation. Absent or unsupported producer source is unavailable, never an installed receipt.

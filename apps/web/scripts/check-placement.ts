@@ -87,6 +87,8 @@ export function webCheckDriverCommand(input: DriverInput): string[] {
   if (!/^[a-f0-9]{40}$/.test(input.revision)) throw new Error('Web check unavailable: full candidate revision required');
   if (![input.driverRoot, input.hosts, input.workspace, input.environmentFile].every(isAbsolute))
     throw new Error('Web check unavailable: driver, hosts, workspace and environment file must be absolute');
+  if (resolve(input.driverRoot) === resolve(input.workspace))
+    throw new Error('Web check unavailable: the trusted driver must be separate from candidate source');
   if (!input.command.length) throw new Error('Web check unavailable: empty command');
   return [
     'bun', join(input.driverRoot, 'scripts/check-run.ts'), '--hosts', input.hosts,
@@ -104,15 +106,23 @@ function git(directory: string, args: string[]): string {
 }
 
 function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string {
-  const integrated = env.WEB_CHECK_DRIVER_ROOT ?? mainCheckout(workspace);
+  const integrated = mainCheckout(workspace);
   if (!integrated) throw new Error('Web check unavailable: no integrated Performance driver checkout');
-  const driverRoot = realpathSync(integrated);
+  const driverRoot = realpathSync(env.WEB_CHECK_DRIVER_ROOT ?? integrated);
+  if (driverRoot === realpathSync(workspace))
+    throw new Error('Web check unavailable: the trusted driver must be separate from candidate source');
   const file = join(driverRoot, 'scripts/check-run.ts');
   if (!existsSync(file)) throw new Error('Web check unavailable: integrated scripts/check-run.ts is absent');
   // Do not import a live producer edit, including edits to its helper imports.
   if (git(driverRoot, ['status', '--porcelain', '--untracked-files=normal']))
     throw new Error('Web check unavailable: the trusted Performance checkout must be clean');
   git(driverRoot, ['ls-files', '--error-unmatch', 'scripts/check-run.ts']);
+  const producerRevision = git(driverRoot, ['rev-parse', 'HEAD']);
+  const integratedRevision = git(integrated, ['rev-parse', 'HEAD']);
+  const ancestry = spawnSync('git', ['-C', integrated, 'merge-base', '--is-ancestor', producerRevision, integratedRevision]);
+  if (ancestry.error) throw ancestry.error;
+  if (ancestry.status !== 0)
+    throw new Error('Web check unavailable: the selected Performance snapshot is not integrated');
   const committed = spawnSync('git', ['-C', driverRoot, 'show', 'HEAD:scripts/check-run.ts']);
   if (committed.status !== 0 || !committed.stdout.equals(readFileSync(file)))
     throw new Error('Web check unavailable: Performance driver differs from its committed source');

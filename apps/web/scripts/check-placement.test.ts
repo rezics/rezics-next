@@ -162,6 +162,8 @@ test('unsupported host dependencies and destinations fail before a driver or nat
   expect(f.calls).toHaveLength(0);
   expect(() => webCheckDriverCommand({ driverRoot: '/trusted', hosts: '/private/hosts', workspace: root,
     cwd: 'apps/web', revision: 'short', environmentFile: '/private/env', command: ['bun', 'test'], returns: [] })).toThrow('full candidate revision');
+  expect(() => webCheckDriverCommand({ driverRoot: root, hosts: '/private/hosts', workspace: root,
+    cwd: 'apps/web', revision, environmentFile: '/private/env', command: ['bun', 'test'], returns: [] })).toThrow('separate from candidate');
 });
 
 test('cancellation before dispatch cannot start queued work and the driver observes in-flight abort', async () => {
