@@ -126,7 +126,9 @@ function observeReactionSession(client: QueryClient | undefined) {
         )
           return;
         const next = identity();
-        if (next === previous) return;
+        // Success commits replace this observation, including equal results retained by structural sharing.
+        // Fetch starts, invalidations and observer notifications do not replace it.
+        if (next === previous && !(event.type === 'updated' && event.action.type === 'success')) return;
         previous = next;
         revision++;
         notify();

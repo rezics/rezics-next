@@ -79,7 +79,9 @@ class SubjectReactionReaderRegistry {
         const changed = next !== this.sessionIdentity;
         this.sessionIdentity = next;
         this.sessionHealthy = event.type !== 'removed' && this.client.getQueryState(['session'])?.status === 'success';
-        if (changed) {
+        // A committed success is a new observation even when structural sharing keeps every field equal.
+        // Advance before notifying React so held responses and queued commands lose authority immediately.
+        if (changed || (event.type === 'updated' && event.action.type === 'success')) {
           this.sessionAdmission++;
           this.notify();
         }

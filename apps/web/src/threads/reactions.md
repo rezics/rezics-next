@@ -6,6 +6,9 @@ and CSRF token are both identity fields. Replacing the QueryClient also creates 
 session fields. Even an observed away/back transition creates a new visit. The shared
 `Reactions` child remounts with the current controlled counts and selection; old optimistic state and refusal copy
 cannot follow it. Ordinary rerenders, callback changes and count echoes retain the current serialized queue.
+Every committed success update of the exact one-segment session Query retires earlier work synchronously, even
+when all serialized fields are equal and structural sharing retains the data object. Fetch starts, observer
+attachment/results notifications and invalidation without a successful replacement preserve current work.
 
 Each queued transport checks its original live visit before starting and after each await. It uses that visit's
 captured CSRF token, never a replacement token. A retired completion cannot start another queued write, invoke a
@@ -42,3 +45,8 @@ using real `ThreadReactions`, shared `Reactions`, the QueryClient cache and the 
 the existing read and change transports. These regressions are **UNRUN** pending integration verification.
 Browser/native assertions remain separate integration obligations; local web typing does not establish their
 completion.
+
+Equal-success regression campaigns also cover manual cache updates and real Query fetch completion, before React
+commits, through the ordinary Subject consumer and production Zone personal loader. Fresh admissions share one
+matching own response among mounted readers; independent Zone preferences, Library and public counts keep their
+original load. These authored campaigns and the original native cost campaigns remain **UNRUN** until integration.

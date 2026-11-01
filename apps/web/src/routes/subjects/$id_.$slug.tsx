@@ -306,9 +306,19 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
 });
 
 function SubjectRoute() {
-  const { tabs, verification, reader: initialReader, page } = Route.useLoaderData();
-  const { realm, slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision } = Route.useSearch();
-  const { undoKey } = Route.useSearch();
+  return <SubjectOverview data={Route.useLoaderData()} search={Route.useSearch()} />;
+}
+
+/** The ordinary route's browser consumer, with its loader result kept at the existing BFF boundary. */
+export function SubjectOverview({
+  data,
+  search,
+}: {
+  data: ReturnType<typeof Route.useLoaderData>;
+  search: ReturnType<typeof Route.useSearch>;
+}) {
+  const { tabs, verification, reader: initialReader, page } = data;
+  const { realm, slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision, undoKey } = search;
   const browserSession = useSession();
   const { state: session } = browserSession;
   const readerKey = subjectReaderPartition(realm, initialReader, browserSession);

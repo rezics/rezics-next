@@ -55,7 +55,7 @@ mock.module('../src/threads/reactions', () => ({
 }));
 const { createRoot } = await import('react-dom/client');
 const { renderToStaticMarkup } = await import('react-dom/server');
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, QueryObserver } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
 const { ThreadReactions } = await import('../src/threads/thread-reactions');
 const { m } = await import('../src/paraglide/messages.js');
@@ -340,8 +340,16 @@ test('ordinary echoes and callback replacement preserve current serialized repla
   await click(m.reaction_sad());
   await click(m.reaction_sad());
   expect(calls).toHaveLength(1);
+  const pendingSession = deferred<ReturnType<typeof viewer>>();
+  let sessionFetch!: Promise<ReturnType<typeof viewer>>;
+  const observer = new QueryObserver(client, sessionQuery);
+  const unsubscribe = observer.subscribe(() => {});
   await act(async () => {
-    client.setQueryData(sessionQuery.queryKey, { ...viewer() });
+    // These are ordinary notifications. A later success is separately covered as retirement.
+    observer.updateResult();
+    await client.invalidateQueries({ queryKey: sessionQuery.queryKey, exact: true, refetchType: 'none' });
+    client.setQueryData(['session', 'unrelated'], viewer());
+    sessionFetch = client.fetchQuery({ ...sessionQuery, queryFn: () => pendingSession.promise, staleTime: 0 });
   });
   await paint({
     counts: { ...props.counts, like: 1, love: 4 },
@@ -366,6 +374,11 @@ test('ordinary echoes and callback replacement preserve current serialized repla
   ).toBe(true);
   expect(refreshed).toEqual(['original', 'current', 'current']);
   expect(host.querySelector('[aria-busy="true"]')).toBeNull();
+  unsubscribe();
+  await act(async () => {
+    pendingSession.resolve(viewer());
+    await sessionFetch;
+  });
 });
 
 test('a current refusal rolls back one slot, preserves its copy, and keeps the next choice usable', async () => {
@@ -446,3 +459,116 @@ test('SSR, unknown sessions and readiness remain disabled, while anonymous URLs 
   await settle(0);
   expect(pressed()).toEqual([`${m.reaction_love()}4`]);
 });
+
+
+// UNRUN: qualifying equal successes replace work; no helper/queue/admission is mocked.
+for (const source of ['manual', 'fetch'] as const)
+  for (const target of ['thread', 'post', 'subject'] as const)
+    for (const outcome of ['success', 'refusal', 'lost-response'] as const)
+      test(`${source} equal success retires ${target} queued work and late ${outcome} before React commits`, async () => {
+        await paint({ target: { kind: target, id: 'one' } });
+        await click(m.reaction_love());
+        await click(m.reaction_sad());
+        expect(calls).toHaveLength(1);
+        const oldButton = chip(m.reaction_like());
+        const oldData = client.getQueryData(sessionQuery.queryKey);
+        const successes: unknown[] = [];
+        const unsubscribe = client.getQueryCache().subscribe((event) => {
+          if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session' &&
+              event.type === 'updated' && event.action.type === 'success') {
+            successes.push(event.query.state.data);
+            oldButton.click();
+            if (outcome === 'lost-response') calls[0]!.reject(new Error('Response lost'));
+            else calls[0]!.resolve(outcome === 'success' ? { ok: true } : { ok: false, reason: 'forbidden' });
+          }
+        });
+        const sessionResult = deferred<ReturnType<typeof viewer>>();
+        let pending: Promise<unknown> | undefined;
+        if (source === 'fetch') {
+          await act(async () => {
+            pending = client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: () => sessionResult.promise });
+          });
+          // Merely starting the fetch has not retired the optimistic selection or drained the queue.
+          expect(pressed()).toEqual([`${m.reaction_love()}4`]);
+          expect(calls).toHaveLength(1);
+        }
+        await act(async () => {
+          expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+          if (source === 'manual') client.setQueryData(sessionQuery.queryKey, { ...viewer() });
+          else {
+            sessionResult.resolve({ ...viewer() });
+            await pending;
+          }
+          expect(successes).toHaveLength(1);
+          expect(successes[0]).toBe(oldData); // Default structural sharing retained the original object.
+          expect(successes[0]).toEqual(viewer());
+          await tick();
+        });
+        unsubscribe();
+        expect(calls).toHaveLength(1);
+        expect(refreshed).toEqual([]);
+        expect(pressed()).toEqual([`${m.reaction_like()}2`]);
+        expect(host.querySelector('[role="status"]')).toBeNull();
+        expect(chip(m.reaction_love()).textContent).toBe(`${m.reaction_love()}3`);
+        expect(oldButton.isConnected).toBe(false);
+        expect(window.document.activeElement).not.toBe(oldButton);
+        await click(m.reaction_love());
+        await settle(1);
+        await click(m.reaction_love());
+        await settle(2);
+        expect(calls.map((call) => call.data.kind)).toEqual(['love', 'love', null]);
+        expect(calls.every((call) => call.data.target === target && call.data.id === 'one' &&
+          call.data.expectedReader === 'reader-one' && call.headers.get('x-csrf-token') === 'csrf-one')).toBe(true);
+        expect(refreshed).toEqual(['original', 'original']);
+        expect(pressed()).toEqual([]);
+      });
+
+for (const source of ['manual', 'fetch'] as const) {
+  test(`${source} equal success fences undispatched choices in the same act`, async () => {
+    await paint();
+    const oldButton = chip(m.reaction_sad());
+    const unsubscribe = client.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session' &&
+          event.type === 'updated' && event.action.type === 'success') oldButton.click();
+    });
+    await act(async () => {
+      if (source === 'fetch') {
+        await client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: async () => ({ ...viewer() }) });
+      } else {
+        chip(m.reaction_love()).click();
+        chip(m.reaction_sad()).click();
+        client.setQueryData(sessionQuery.queryKey, { ...viewer() });
+      }
+      await tick();
+    });
+    unsubscribe();
+    expect(calls).toEqual([]);
+    expect(refreshed).toEqual([]);
+    expect(pressed()).toEqual([`${m.reaction_like()}2`]);
+  });
+
+  for (const reject of [false, true])
+    test(`${source} equal success retires an already-started refresh and its late ${reject ? 'failure' : 'completion'}`, async () => {
+      const refresh = deferred<void>();
+      await paint({ onMutation: async () => { refreshed.push('started'); await refresh.promise; } });
+      await click(m.reaction_love());
+      await click(m.reaction_sad());
+      await settle(0);
+      expect(refreshed).toEqual(['started']);
+      await act(async () => {
+        if (source === 'manual') client.setQueryData(sessionQuery.queryKey, { ...viewer() });
+        else await client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: async () => ({ ...viewer() }) });
+        if (reject) refresh.reject(new Error('Refresh failed'));
+        else refresh.resolve();
+        await tick();
+      });
+      expect(calls).toHaveLength(1);
+      expect(refreshed).toEqual(['started']);
+      expect(pressed()).toEqual([`${m.reaction_like()}2`]);
+      expect(host.querySelector('[role="status"]')).toBeNull();
+      await paint(fresh());
+      await click(m.reaction_like());
+      await settle(1);
+      expect(refreshed).toEqual(['started', 'replacement']);
+    });
+}

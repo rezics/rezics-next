@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode } from 'react';
+import { act, StrictMode, Suspense, type ComponentProps } from 'react';
 import type { KernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import recordedSubject from '../src/kernel/recorded/zone-subject-page.json';
@@ -69,6 +69,8 @@ const ownReadQueue: Array<() => Promise<NativeReactionRead>> = [];
 const ownReads: NativeReadCall[] = [];
 const countReads: string[] = [];
 const nativeWrites: NativeWriteCall[] = [];
+type NativeWriteResult = { status: number; error?: { value: unknown } };
+const nativeWriteQueue: Array<() => Promise<NativeWriteResult>> = [];
 const preferenceReads: string[] = [];
 const libraryEntryReads: string[] = [];
 const followReads: string[] = [];
@@ -124,11 +126,13 @@ const fakeKernelClient = {
       },
       put: async (input: { kind: SubjectReactionKind }, options: { headers?: { authorization?: string } }) => {
         nativeWrites.push({ id, method: 'put', kind: input.kind, authorization: options.headers?.authorization });
-        return { status: 200, data: { kind: input.kind } };
+        const next = nativeWriteQueue.shift();
+        return next ? next() : { status: 200, data: { kind: input.kind } };
       },
       delete: async (_input: undefined, options: { headers?: { authorization?: string } }) => {
         nativeWrites.push({ id, method: 'delete', kind: null, authorization: options.headers?.authorization });
-        return { status: 204 };
+        const next = nativeWriteQueue.shift();
+        return next ? next() : { status: 204 };
       },
     },
     reactions: {
@@ -194,6 +198,10 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
 const { sessionQuery } = await import('../src/session/query');
 const { loadSubjectReactions, readOwnReaction } = await import('../src/features/pages/subject-reactions');
 const { ZoneSubjectPage, loadZoneSubjectPersonal } = await import('../src/zones/zone-shell');
+const { SubjectOverview } = await import('../src/routes/subjects/$id_.$slug');
+const { subjectFrameQuery, subjectRelationsQuery, subjectRatingQuery } =
+  await import('../src/features/pages/subject-queries');
+const { subjectPageType, pageRelationProperties } = await import('../src/features/pages/subject');
 const { m } = await import('../src/paraglide/messages.js');
 const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 
@@ -391,6 +399,7 @@ beforeEach(async () => {
   ownReads.length = 0;
   countReads.length = 0;
   nativeWrites.length = 0;
+  nativeWriteQueue.length = 0;
   preferenceReads.length = 0;
   libraryEntryReads.length = 0;
   followReads.length = 0;
@@ -680,3 +689,288 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(host.querySelector('[data-slot="reactions"]')).toBeNull();
   expect(personalCalls).toHaveLength(callsAtUnmount);
 });
+
+
+// UNRUN: both production consumers, the real session Query, own-query registry and shared queue are connected.
+const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
+async function paintOrdinary() {
+  const outcome = zoneOutcome(subjectId);
+  const page = outcome.common!.page!;
+  const type = subjectPageType(page);
+  // Recorded public loader payload, without substituting the admission, own query or UI under test.
+  client.setQueryData(subjectFrameQuery(type ?? '', 'en').queryKey, {});
+  client.setQueryData(subjectRelationsQuery(pageRelationProperties(page), 'en').queryKey, {});
+  client.setQueryData(subjectRatingQuery(subjectId, 'en').queryKey, null);
+  const data = {
+    page, tabs: [], reader: null, frame: {}, relations: {}, ratings: null,
+    verification: { sitekey: '', scriptUrl: '' },
+  } as unknown as ComponentProps<typeof SubjectOverview>['data'];
+  await act(async () => {
+    root.render(<StrictMode><QueryClientProvider client={client}>
+      <RouterContextProvider router={router}>
+        <Suspense fallback={<p>Loading</p>}><SubjectOverview data={data} search={{}} /></Suspense>
+      </RouterContextProvider>
+    </QueryClientProvider></StrictMode>);
+    await tick();
+  });
+}
+
+async function equalSuccess(source: 'manual' | 'fetch', afterCommit: () => void) {
+  const previous = client.getQueryData(sessionQuery.queryKey);
+  expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+  const successes: unknown[] = [];
+  const unsubscribe = client.getQueryCache().subscribe((event) => {
+    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session' ||
+        event.type !== 'updated' || event.action.type !== 'success') return;
+    successes.push(event.query.state.data);
+    // Settle/click inside the actual cache event, before a React commit or held promise continuation.
+    afterCommit();
+  });
+  await act(async () => {
+    if (source === 'manual') client.setQueryData(sessionQuery.queryKey, { ...sessionData() });
+    else await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+    await tick();
+  });
+  unsubscribe();
+  expect(successes).toHaveLength(1);
+  expect(successes[0]).toBe(previous);
+  expect(successes[0]).toEqual(sessionData());
+}
+
+function noSelection() {
+  expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
+}
+function independentZone(combined: number, counts: number) {
+  expect(personalCalls).toHaveLength(combined);
+  expect(countReads).toHaveLength(counts);
+  expect(preferenceReads).toEqual(['reader-one']);
+  expect(libraryEntryReads).toEqual([subjectId]);
+  expect(followReads).toEqual([subjectId]);
+  expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
+  expect(libraryEntryButton()?.disabled).toBe(false);
+  expect(chip('like').textContent).toContain('2');
+  const follow = [...host.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === m.library_follow());
+  expect(follow?.disabled).toBe(false);
+  const report = [...host.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.getAttribute('aria-label') === m.report_more());
+  expect(report?.disabled).toBe(false);
+}
+
+for (const source of ['manual', 'fetch'] as const)
+  test(`production Zone keeps a held combined payload independent of ${source} equal success and stale private completion`, async () => {
+    client.setQueryData(sessionQuery.queryKey, sessionData());
+    holdPersonalCalls = new Set([1]);
+    const oldOwn = deferred<NativeReactionRead>();
+    const freshOwn = deferred<NativeReactionRead>();
+    queueNativeRead(oldOwn);
+    queueNativeRead(freshOwn);
+    await paint(zoneOutcome(subjectId));
+    await until(() => ownReads.length === 1 && personalCalls[0]?.result !== undefined);
+    const oldKey = client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] })
+      .find((query) => query.state.fetchStatus === 'fetching')!.queryKey;
+    await equalSuccess(source, () => {
+      oldOwn.resolve({ status: 200, data: { kind: 'love' } });
+      personalCalls[0]!.gate!.resolve();
+    });
+    await until(() => ownReads.length === 2 && libraryEntryButton() !== null && followReads.length === 1);
+    expect(client.getQueryData(oldKey)).toBeUndefined();
+    expect(chips().every((button) => button.disabled)).toBe(true);
+    noSelection();
+    independentZone(1, 1);
+    expect(nativeWrites).toHaveLength(0);
+    await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
+    await until(() => chips().some((button) => !button.disabled));
+    await clickKind('like');
+    await until(() => nativeWrites.length === 1 && chip('like').getAttribute('aria-pressed') === 'true');
+    await clickKind('like');
+    await until(() => nativeWrites.length === 2 && chip('like').getAttribute('aria-pressed') !== 'true');
+    expect(nativeWrites.map((write) => [write.method, write.kind, write.authorization])).toEqual([
+      ['put', 'like', 'Bearer token-reader-one'], ['delete', null, 'Bearer token-reader-one'],
+    ]);
+    expect(ownReads).toHaveLength(2);
+    independentZone(1, 1);
+  });
+
+for (const surface of ['ordinary Subject', 'production Zone'] as const)
+  for (const source of ['manual', 'fetch'] as const)
+    for (const outcome of ['success', 'refusal', 'lost-response'] as const)
+      test(`${surface} ${source} equal success retires a dispatched ${outcome} and queued choice until fresh private recovery`, async () => {
+        client.setQueryData(sessionQuery.queryKey, sessionData());
+        queueNativeRead({ status: 200, data: { kind: null } });
+        if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
+        else await paintOrdinary();
+        await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+        const oldOwnQuery = client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] })
+          .find((query) => query.state.status === 'success')!;
+        const priorOwn = oldOwnQuery.state.data;
+        const write = deferred<NativeWriteResult>();
+        nativeWriteQueue.push(() => write.promise);
+        await clickKind('like');
+        await clickKind('insightful');
+        expect(nativeWrites).toHaveLength(1);
+        const oldButton = chip('like');
+        oldButton.focus();
+        const countsBefore = countReads.length;
+        const freshOwn = deferred<NativeReactionRead>();
+        queueNativeRead(freshOwn);
+        await equalSuccess(source, () => {
+          oldButton.click();
+          if (outcome === 'lost-response') write.reject(new Error('Response lost'));
+          else write.resolve(outcome === 'success' ? { status: 200 } : { status: 403, error: { value: {} } });
+        });
+        await until(() => ownReads.length === 2);
+        expect(nativeWrites).toHaveLength(1);
+        expect(oldOwnQuery.state.data).toBe(priorOwn);
+        expect(chips().every((button) => button.disabled)).toBe(true);
+        noSelection();
+        expect(host.textContent).not.toContain(m.reaction_forbidden());
+        expect(oldButton.isConnected).toBe(false);
+        expect(window.document.activeElement).not.toBe(oldButton);
+        expect(countReads).toHaveLength(countsBefore);
+        if (surface === 'production Zone') independentZone(1, 1);
+        // The fresh response comes through the real prepared native read, never from a copied cache value.
+        await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
+        await until(() => chips().some((button) => !button.disabled));
+        await clickKind('like');
+        await until(() => nativeWrites.length === 2 && chip('like').getAttribute('aria-pressed') === 'true');
+        await clickKind('like');
+        await until(() => nativeWrites.length === 3 && chip('like').getAttribute('aria-pressed') !== 'true');
+        expect(nativeWrites.map((write) => write.kind)).toEqual(['like', 'like', null]);
+        expect(nativeWrites.every((write) => write.id === subjectId && write.authorization === 'Bearer token-reader-one')).toBe(true);
+        expect(ownReads).toHaveLength(2);
+        if (surface === 'production Zone') independentZone(1, 1);
+        else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
+      });
+
+for (const source of ['manual', 'fetch'] as const)
+  test(`ordinary Subject ignores a held old own response after ${source} equal success`, async () => {
+    client.setQueryData(sessionQuery.queryKey, sessionData());
+    const oldOwn = deferred<NativeReactionRead>();
+    const freshOwn = deferred<NativeReactionRead>();
+    queueNativeRead(oldOwn);
+    queueNativeRead(freshOwn);
+    await paintOrdinary();
+    await until(() => ownReads.length === 1 && chips().length > 0);
+    await equalSuccess(source, () => oldOwn.resolve({ status: 200, data: { kind: 'love' } }));
+    await until(() => ownReads.length === 2);
+    noSelection();
+    expect(chips().every((button) => button.disabled)).toBe(true);
+    expect(nativeWrites).toHaveLength(0);
+    expect(countReads).toHaveLength(1);
+    await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
+    await until(() => chips().some((button) => !button.disabled));
+    noSelection();
+    expect(ownReads).toHaveLength(2);
+  });
+
+
+for (const surface of ['ordinary Subject', 'production Zone'] as const)
+  test(`${surface} preserves a useful serialized queue during real non-success notifications`, async () => {
+    client.setQueryData(sessionQuery.queryKey, sessionData());
+    queueNativeRead({ status: 200, data: { kind: null } });
+    if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
+    else await paintOrdinary();
+    await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    const write = deferred<NativeWriteResult>();
+    nativeWriteQueue.push(() => write.promise);
+    await clickKind('like');
+    await clickKind('insightful');
+    await clickKind('insightful');
+    expect(nativeWrites).toHaveLength(1);
+    const sessionResponse = deferred<SessionIdentity>();
+    browserSessionPending = sessionResponse;
+    let fetch!: Promise<unknown>;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: sessionQuery.queryKey, exact: true, refetchType: 'none' });
+      client.setQueryData(['session', 'unrelated'], sessionData());
+      fetch = client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+    });
+    expect(client.getQueryState(sessionQuery.queryKey)?.fetchStatus).toBe('fetching');
+    expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+    expect(ownReads).toHaveLength(1);
+    expect(nativeWrites).toHaveLength(1);
+    await flush(() => write.resolve({ status: 200 }));
+    await until(() => nativeWrites.length === 3 && chip('insightful').getAttribute('aria-pressed') !== 'true');
+    expect(nativeWrites.map((write) => write.kind)).toEqual(['like', 'insightful', null]);
+    expect(ownReads).toHaveLength(1);
+    expect(nativeWrites.every((write) => write.authorization === 'Bearer token-reader-one')).toBe(true);
+    if (surface === 'production Zone') independentZone(1, 1);
+    else expect(countReads).toHaveLength(4); // Initial public count and each of the three current callbacks.
+    // Only its eventual successful commit retires the observation.
+    await act(async () => { sessionResponse.resolve(storySession()); await fetch; await tick(); });
+    await until(() => ownReads.length === 2);
+  });
+
+test('production Zone keeps exact independent loads across private refusal, retained-data session error and missing cache', async () => {
+  client.setQueryData(sessionQuery.queryKey, sessionData());
+  queueNativeRead({ status: 403 });
+  await paint(zoneOutcome(subjectId));
+  await until(() => ownReads.length === 1 && libraryEntryButton() !== null && followReads.length === 1);
+  independentZone(1, 1);
+  noSelection();
+  expect(chips().every((button) => button.disabled)).toBe(true);
+  await act(async () => {
+    await client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: async () => {
+      throw new Error('session cache refresh failed');
+    } }).catch(() => undefined);
+    await tick();
+  });
+  expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
+  expect(client.getQueryData(sessionQuery.queryKey)).toEqual(sessionData());
+  independentZone(1, 1);
+  expect(ownReads).toHaveLength(1);
+  browserSessionPending = deferred<SessionIdentity>();
+  await flush(() => client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true }));
+  independentZone(1, 1);
+  noSelection();
+  expect(chips().every((button) => button.disabled)).toBe(true);
+  expect(ownReads).toHaveLength(1);
+  expect(nativeWrites).toHaveLength(0);
+  queueNativeRead({ status: 200, data: { kind: null } });
+  await flush(() => browserSessionPending!.resolve(storySession()));
+  await until(() => ownReads.length === 2 && chips().some((button) => !button.disabled));
+  independentZone(1, 1);
+});
+
+test('anonymous production Zone makes zero private reaction reads and preserves its public counts', async () => {
+  start.setStoryRequestContext({ visitor: 'Signed Out', url: window.location.href });
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+  await paint(zoneOutcome(subjectId));
+  await until(() => personalCalls[0]?.result !== undefined && chips().length > 0);
+  expect(ownReads).toHaveLength(0);
+  expect(nativeWrites).toHaveLength(0);
+  expect(countReads).toEqual([subjectId]);
+  expect(personalCalls).toHaveLength(1);
+  expect(preferenceReads).toHaveLength(0);
+  expect(libraryEntryReads).toHaveLength(0);
+  expect(followReads).toHaveLength(0);
+  noSelection();
+});
+
+
+for (const surface of ['ordinary Subject', 'production Zone'] as const)
+  test(`${surface} retires undispatched choices synchronously on equal success`, async () => {
+    client.setQueryData(sessionQuery.queryKey, sessionData());
+    queueNativeRead({ status: 200, data: { kind: null } });
+    if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
+    else await paintOrdinary();
+    await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    const freshOwn = deferred<NativeReactionRead>();
+    queueNativeRead(freshOwn);
+    const oldButton = chip('like');
+    await flush(() => {
+      oldButton.click();
+      chip('insightful').click();
+      client.setQueryData(sessionQuery.queryKey, { ...sessionData() });
+      oldButton.click();
+    });
+    await until(() => ownReads.length === 2);
+    expect(nativeWrites).toHaveLength(0);
+    noSelection();
+    expect(chips().every((button) => button.disabled)).toBe(true);
+    expect(countReads).toHaveLength(1);
+    if (surface === 'production Zone') independentZone(1, 1);
+    await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
+    await until(() => chips().some((button) => !button.disabled));
+  });
