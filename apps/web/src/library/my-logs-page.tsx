@@ -129,7 +129,8 @@ function MyLogsViewerRead({
   // within this request's lifetime instead of presenting successful empty history.
   const failure =
     read && read.sessionSubject === null && read.page.state !== 'loaded' && matchesAddress(read, cursor, locale);
-  const page: MyLogsPage = owner || failure ? read.page : { state: query.isError || read ? 'unavailable' : 'preparing' };
+  const page: MyLogsPage =
+    owner || failure ? read.page : { state: query.isError || read ? 'unavailable' : 'preparing' };
   return (
     <MyLogsPageView
       page={page}

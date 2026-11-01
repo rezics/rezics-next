@@ -224,33 +224,49 @@ function history(subject: string, cursor: string | null = null, title = `${subje
     locale: 'en',
     page: {
       state: 'loaded',
-      logs: [{
-        id: `${subject}-public-log`,
-        sessionState: 'completed',
-        startedAt: '2025-01-01T00:00:00Z',
-        completedAt: '2025-01-02T00:00:00Z',
-        publishedAt: '2025-01-03T00:00:00Z',
-        note: `${subject} published note`,
-        subject: { id: `${subject}-subject`, type: 'Book', types: ['Book'], label: title, cover: null },
-        account: null,
-      }],
+      logs: [
+        {
+          id: `${subject}-public-log`,
+          sessionState: 'completed',
+          startedAt: '2025-01-01T00:00:00Z',
+          completedAt: '2025-01-02T00:00:00Z',
+          publishedAt: '2025-01-03T00:00:00Z',
+          note: `${subject} published note`,
+          subject: { id: `${subject}-subject`, type: 'Book', types: ['Book'], label: title, cover: null },
+          account: null,
+        },
+      ],
       next: `${subject}-next+/opaque=`,
       restarted: false,
     },
   };
 }
 
-test('My Logs immediately retires an old owner\'s history on observed viewer replacement and accepts only the actual prepared viewer and requested cursor', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+test("My Logs immediately retires an old owner's history on observed viewer replacement and accepts only the actual prepared viewer and requested cursor", async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: `${origin}/en/library/logs` });
   const globals = {
-    window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    HTMLButtonElement: window.HTMLButtonElement, Element: window.Element, Node: window.Node,
-    NodeFilter: window.NodeFilter, Document: window.Document, ShadowRoot: window.ShadowRoot,
-    DocumentFragment: window.DocumentFragment, MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver, Event: window.Event, MouseEvent: window.MouseEvent,
-    PointerEvent: window.PointerEvent, getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window), cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -259,7 +275,8 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
   const { hydrateRoot } = await import('react-dom/client');
   const { renderToString } = await import('react-dom/server');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery, useSession } = await import('../src/session/query');
   const { Route } = await import('../src/routes/library/logs');
   const { requireSignedIn } = await import('../src/session/guard');
@@ -287,17 +304,27 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
   function Mounted() {
     const session = useSession();
     useLayoutEffect(() => {
-      if (observe) commits.push({
-        state: session.state, subject: session.subject, text: host.textContent ?? '',
-        links: [...host.querySelectorAll('a')].map((link) => link.getAttribute('href') ?? ''),
-      });
+      if (observe)
+        commits.push({
+          state: session.state,
+          subject: session.subject,
+          text: host.textContent ?? '',
+          links: [...host.querySelectorAll('a')].map((link) => link.getAttribute('href') ?? ''),
+        });
     });
     return <Page />;
   }
   const rootRoute = createRootRoute();
   const logsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/logs', component: Mounted });
-  const router = createRouter({ routeTree: rootRoute.addChildren([logsRoute]), history: createMemoryHistory({ initialEntries: ['/library/logs'] }) });
-  const tree = () => <QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>;
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([logsRoute]),
+    history: createMemoryHistory({ initialEntries: ['/library/logs'] }),
+  });
+  const tree = () => (
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  );
   const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
   const hydrationErrors: unknown[] = [];
   let root: ReturnType<typeof hydrateRoot> | undefined;
@@ -308,7 +335,7 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
       await tick();
     });
   };
-  const settle = async (call: typeof reads[number], value: MyLogsViewerHistory | Error) => {
+  const settle = async (call: (typeof reads)[number], value: MyLogsViewerHistory | Error) => {
     await act(async () => {
       if (value instanceof Error) call.reject(value);
       else call.resolve(value);
@@ -323,14 +350,23 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
     return reads.at(-1)!;
   };
   const retry = async () => {
-    const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === m.library_my_logs_retry());
+    const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent === m.library_my_logs_retry(),
+    );
     expect(button).toBeDefined();
-    await act(async () => { button!.click(); await tick(); });
+    await act(async () => {
+      button!.click();
+      await tick();
+    });
     return reads.at(-1)!;
   };
-  const link = (label: string) => [...host.querySelectorAll<HTMLAnchorElement>('a')].find((item) => item.textContent === label);
+  const link = (label: string) =>
+    [...host.querySelectorAll<HTMLAnchorElement>('a')].find((item) => item.textContent === label);
   const navigate = async (label: string) => {
-    await act(async () => { link(label)!.click(); await tick(); });
+    await act(async () => {
+      link(label)!.click();
+      await tick();
+    });
     return reads.at(-1)!;
   };
   const retired = () => {
@@ -343,7 +379,9 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
     expect(Route.options.staleTime).toBe(0);
     expect(Route.options.gcTime).toBe(0);
     // The actual route loader consumes the new envelope, not the old unbound page.
-    const load = Route.options.loader as unknown as (input: { deps: { cursor?: string } }) => Promise<MyLogsViewerHistory>;
+    const load = Route.options.loader as unknown as (input: {
+      deps: { cursor?: string };
+    }) => Promise<MyLogsViewerHistory>;
     const loaderRead = load({ deps: { cursor: 'loader+/address=' } });
     const loaderResponse = history('A', 'loader+/address=');
     reads[0]!.resolve(loaderResponse);
@@ -353,7 +391,9 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
     host.innerHTML = renderToString(tree());
     expect(host.textContent).toContain('A history');
     await act(async () => {
-      root = hydrateRoot(host as unknown as HTMLElement, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
+      root = hydrateRoot(host as unknown as HTMLElement, tree(), {
+        onRecoverableError: (error) => hydrationErrors.push(error),
+      });
       await tick();
     });
     expect(host.textContent).toContain('A history');
@@ -367,7 +407,11 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
     await settle(pendingA, history('A', null, 'Late A success'));
     expect(host.textContent).toContain('B history');
     expect(host.textContent).not.toContain('Late A success');
-    expect(commits.filter((commit) => commit.subject === 'B').every((commit) => !commit.text.includes('A history') && !commit.links.some((href) => href.includes('A-next')))).toBe(true);
+    expect(
+      commits
+        .filter((commit) => commit.subject === 'B')
+        .every((commit) => !commit.text.includes('A history') && !commit.links.some((href) => href.includes('A-next'))),
+    ).toBe(true);
 
     const pendingB = await refetch();
     const article = host.querySelector('article');
@@ -378,7 +422,10 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
     await settle(pendingB, history('B', null, 'B refreshed history'));
     expect(host.textContent).toContain('B refreshed history');
     initial = structuredClone(initial); // A loader object's identity is not an observed new owner.
-    await act(async () => { root!.render(tree()); await tick(); });
+    await act(async () => {
+      root!.render(tree());
+      await tick();
+    });
     expect(host.querySelector('article')).toBe(article);
     expect(host.textContent).not.toContain('A history');
 
@@ -400,11 +447,20 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
     expect(host.textContent).toContain('B next page');
     for (const state of ['denied', 'preparing', 'unavailable'] as const) {
       await settle(await refetch(), { sessionSubject: null, cursor: next.cursor, locale: 'en', page: { state } });
-      expect(host.textContent).toContain(state === 'denied' ? m.library_my_logs_denied() : state === 'preparing' ? m.library_my_logs_preparing() : m.library_my_logs_unavailable());
+      expect(host.textContent).toContain(
+        state === 'denied'
+          ? m.library_my_logs_denied()
+          : state === 'preparing'
+            ? m.library_my_logs_preparing()
+            : m.library_my_logs_unavailable(),
+      );
       expect(host.textContent).not.toContain(m.library_logs_empty());
       retired();
     }
-    await settle(await retry(), { ...history('B', next.cursor), page: { state: 'loaded', logs: [], next: 'bounded-more', restarted: false } });
+    await settle(await retry(), {
+      ...history('B', next.cursor),
+      page: { state: 'loaded', logs: [], next: 'bounded-more', restarted: false },
+    });
     expect(host.textContent).toContain(m.library_my_logs_no_visible());
     const newest = await navigate(m.library_my_logs_newest());
     expect(newest.cursor).toBeNull();
@@ -449,7 +505,9 @@ test('My Logs immediately retires an old owner\'s history on observed viewer rep
     expect(host.textContent).not.toContain(m.library_my_logs_unavailable());
     expect(host.querySelector('button')).toBeNull();
     expect(hydrationErrors).toEqual([]);
-    const activeKey = client.getQueryCache().findAll({ queryKey: ['my-logs-current-viewer'], type: 'active' })[0]!.queryKey;
+    const activeKey = client
+      .getQueryCache()
+      .findAll({ queryKey: ['my-logs-current-viewer'], type: 'active' })[0]!.queryKey;
     expect(activeKey.slice(1, 6)).toEqual(['B', 'published_log.list', true, null, 'en']);
   } finally {
     if (root) await act(async () => root!.unmount());
