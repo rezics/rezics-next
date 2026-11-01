@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -47,6 +47,8 @@ export function NotificationsCard({
 }) {
   const ids = useId();
   const [hydrated, setHydrated] = useState(false);
+  const sharedVersion = useRef(version);
+  sharedVersion.current = Math.max(sharedVersion.current, version);
   const [editor] = useState(
     () =>
       new NotificationEditor(
@@ -57,6 +59,7 @@ export function NotificationsCard({
           confirmed: onVersionChange,
         },
         initialFailed,
+        () => sharedVersion.current,
       ),
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
@@ -108,7 +111,7 @@ export function NotificationsCard({
                     }}
                   >
                     <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-                    <input type="hidden" name="expectedVersion" value={version} />
+                    <input type="hidden" name="expectedVersion" value={state.known.version} />
                     <input type="hidden" name="notificationKind" value={kind} />
                     <FieldLabel htmlFor={id} className="min-h-11 cursor-pointer has-data-disabled:cursor-not-allowed">
                       <Field orientation="horizontal" className="min-h-11">
@@ -168,7 +171,7 @@ export function NotificationsCard({
                 }}
               >
                 <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-                <input type="hidden" name="expectedVersion" value={version} />
+                <input type="hidden" name="expectedVersion" value={state.known.version} />
                 <input type="hidden" name="action" value="restore" />
                 <Button
                   className={preferenceActionClassName}

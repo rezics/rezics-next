@@ -163,15 +163,21 @@ const preferenceTransition: Story = {
     const notifications = within(canvas.getByRole('region', { name: m.settings_notifications_heading() }));
     await userEvent.click(notifications.getByRole('switch', { name: m.settings_notification_reply() }));
     await notifications.findByText(m.settings_conflict_title());
+    const notificationVersionFields = () =>
+      canvasElement.querySelectorAll<HTMLInputElement>('#notifications [name="expectedVersion"]');
+    await expect(notificationVersionFields().length).toBeGreaterThan(0);
+    const notificationBaseline = notificationVersionFields()[0]!.value;
     await userEvent.click(fixture.getByRole('button', { name: 'Refresh same viewer' }));
     await selectSettingsCategory(canvasElement, m.settings_reading_heading());
     await expect(reading.getByRole('switch', { name: m.settings_suitability_title() })).toBeChecked();
     await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     await expect(notifications.getByRole('switch', { name: m.settings_notification_reply() })).not.toBeChecked();
     await waitFor(() => {
-      for (const input of canvasElement.querySelectorAll<HTMLInputElement>('[name="expectedVersion"]'))
+      for (const input of canvasElement.querySelectorAll<HTMLInputElement>('#reading [name="expectedVersion"]'))
         expect(input.value).toBe('9');
     });
+    await expect(notificationVersionFields().length).toBeGreaterThan(0);
+    for (const input of notificationVersionFields()) await expect(input.value).toBe(notificationBaseline);
     for (const input of canvasElement.querySelectorAll<HTMLInputElement>('[name="csrf_token"]'))
       await expect(input.value).toBe('story-csrf-token');
     // The same-account refresh retains each editor until its explicit recovery action.
@@ -182,7 +188,12 @@ const preferenceTransition: Story = {
     );
     await selectSettingsCategory(canvasElement, m.settings_notifications_heading());
     await userEvent.click(notifications.getByRole('button', { name: m.settings_reload() }));
-    await userEvent.click(await notifications.findByRole('button', { name: m.settings_notifications_use_current() }));
+    const useCurrentNotifications = await notifications.findByRole('button', {
+      name: m.settings_notifications_use_current(),
+    });
+    await expect(notificationVersionFields().length).toBeGreaterThan(0);
+    for (const input of notificationVersionFields()) await expect(input.value).toBe('9');
+    await userEvent.click(useCurrentNotifications);
     await expect(notifications.getByRole('switch', { name: m.settings_notification_reply() })).toBeChecked();
     await selectSettingsCategory(canvasElement, m.settings_reading_heading());
     await userEvent.click(reading.getByRole('switch', { name: m.settings_suitability_title() }));
