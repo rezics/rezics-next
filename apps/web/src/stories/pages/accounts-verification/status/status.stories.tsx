@@ -34,6 +34,15 @@ export const Verified: Story = {
   beforeEach: () => selectVerificationStory('verified'),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
+    await expect(await view.findByText(m.av_verified({ subject: 'Mira Okabe' }))).toBeVisible();
+    await expect(view.getByRole('option', { name: m.av_revoke() })).toBeInTheDocument();
+  },
+};
+export const VerifiedRevocationJourney: Story = {
+  tags: ['!dev'],
+  beforeEach: () => selectVerificationStory('verified'),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
     await view.findByText(m.av_verified({ subject: 'Mira Okabe' }));
     await userEvent.selectOptions(view.getByLabelText(m.av_decision()), 'revoke');
     await userEvent.type(
