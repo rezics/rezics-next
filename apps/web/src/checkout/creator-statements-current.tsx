@@ -120,16 +120,13 @@ function StatementsRead({
   seed: boolean;
   origin: Origin;
 }) {
-  const [lifetime] = useState(() => crypto.randomUUID());
-  const [initialData] = useState<Outcome | undefined>(() =>
-    (() => {
+  const [initialData] = useState<Outcome | undefined>(() => {
       const value = (origin.workspace.read as CurrentRead | undefined) ?? (seed ? initial : undefined);
       return value && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : undefined;
-    })(),
-  );
+  });
   const query = useQuery<Outcome | null>({
     ...personalRead,
-    queryKey: ['creator-statements-current', subject, address, origin.id, lifetime],
+    queryKey: ['creator-statements-current', subject, address, origin.id],
     enabled: hydrated && origin.isCurrent() && personalRead.enabled,
     queryFn: async () => {
       if (!origin.isCurrent()) return null;

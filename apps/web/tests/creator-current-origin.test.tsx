@@ -39,6 +39,7 @@ for (const [key, value] of Object.entries(globals)) Object.defineProperty(global
 const { createRoot } = await import('react-dom/client');
 const { renderToStaticMarkup } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } = await import('@tanstack/react-router');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { sessionQuery } = await import('../src/session/query');
 const offers = await import('../src/checkout/creator-offers');
@@ -72,7 +73,8 @@ function editor(subject = A, contentEditionId = editionId): CreatorEditorCurrent
 }
 function statementList(subject = A, cursor: string | null = null): CreatorStatementsCurrentRead {
   return { sessionSubject: subject, requested: { kind: 'list', locale: 'en', cursor }, page: { kind: 'ready',
-    payoutStatements: [{ ...paidCreatorStatementFixture, creatorAccountId: subject, paidReference: `Private payment ${subject}` }], next: 'next+/=' } };
+    payoutStatements: [{ ...paidCreatorStatementFixture, id: subject === A ? paidCreatorStatementFixture.id : id(22),
+      creatorAccountId: subject, paidReference: `Private payment ${subject}` }], next: 'next+/=' } };
 }
 function detail(subject = A, cursor: string | null = null): CreatorStatementCurrentRead {
   const statement = { ...paidCreatorStatementFixture, creatorAccountId: subject, paidReference: `Private payment ${subject}` };
@@ -117,6 +119,8 @@ async function mount() {
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
+  const router = createRouter({ routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/en/creator/statements'] }) });
   const listReads: ReturnType<typeof deferred<CreatorOffersCurrentRead>>[] = [];
   const editorReads: ReturnType<typeof deferred<CreatorEditorCurrentRead>>[] = [];
   const statementReads: { input: unknown; work: ReturnType<typeof deferred<StatementRead>> }[] = [];
@@ -146,12 +150,12 @@ async function mount() {
   let locale = 'en';
   let initialOffers = list();
   let initialEditor = editor();
-  const tree = () => <StrictMode><QueryClientProvider client={client}>
+  const tree = () => <StrictMode><QueryClientProvider client={client}><RouterContextProvider router={router}>
     {mode === 'offers' ? <CreatorOffersCurrent initial={initialOffers} locale={locale} cursor={cursor} />
       : mode === 'editor' ? <CreatorOfferEditorCurrent initial={initialEditor} locale={locale} contentEditionId={editionId} />
       : mode === 'statements' ? <CreatorStatementsCurrent initial={statementList()} locale={locale} {...(cursor ? { cursor } : {})} />
       : <CreatorStatementCurrent initial={detail()} locale={locale} id={paidCreatorStatementFixture.id} from="back+/=" {...(cursor ? { cursor } : {})} />}
-  </QueryClientProvider></StrictMode>;
+  </RouterContextProvider></QueryClientProvider></StrictMode>;
   const tick = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
   const show = async (next: typeof mode = mode, address = cursor, nextLocale = locale) => {
     mode = next; cursor = address; locale = nextLocale;
@@ -273,6 +277,9 @@ describe('Creator workspace retires observed stale read and command origins befo
   }));
 
   test('statement first/next/detail and line results require exact actual read provenance and retire before commit', async () => workspace(async (p) => {
+    const visible = (mode: 'statements' | 'detail', subject: string) => mode === 'detail'
+      ? p.host.textContent!.includes(`Private payment ${subject}`)
+      : p.host.querySelector(`a[href*="${subject === A ? paidCreatorStatementFixture.id : id(22)}"]`) !== null;
     for (const [mode, cursor] of [['statements', undefined], ['statements', 'page+/='], ['detail', 'lines+/=']] as const) {
       await p.show(mode, cursor);
       const oldRead = p.queryCallback('creator-statements-current');
@@ -283,18 +290,18 @@ describe('Creator workspace retires observed stale read and command origins befo
         expect(await oldRead()).toBeNull();
       });
       await p.tick();
-      expect(p.host.textContent).not.toContain(`Private payment ${A}`);
+      expect(visible(mode, A)).toBe(false);
       const currentA = p.statementReads.at(-1)!;
       expect(currentA).not.toBe(pendingA);
       await p.settle(currentA.work, mode === 'detail' ? detail(A, cursor ?? null) : statementList(A, cursor ?? null));
-      expect(p.host.textContent).toContain(`Private payment ${A}`);
+      expect(visible(mode, A)).toBe(true);
       await act(async () => { p.session(B, 'csrf-B'); p.admit(); }); await p.tick();
       const bRead = p.statementReads.at(-1)!;
       await p.settle(bRead.work, mode === 'detail' ? detail(B, cursor ?? null) : statementList(B, cursor ?? null));
-      expect(p.host.textContent).toContain(`Private payment ${B}`);
+      expect(visible(mode, B)).toBe(true);
       await p.settle(pendingA.work, new Error('Retired statement failure'));
       expect(await first).toBeNull();
-      expect(p.host.textContent).toContain(`Private payment ${B}`);
+      expect(visible(mode, B)).toBe(true);
       if (mode === 'detail') {
         expect(p.host.textContent).toContain(`txn-${B}`);
         expect(p.host.querySelector('a[href*="from=back%2B%2F%3D"]')).not.toBeNull();
@@ -328,5 +335,10 @@ describe('Creator workspace retires observed stale read and command origins befo
       expect(await retiredRead()).toBeNull();
     }); await p.tick();
     expect(p.host.querySelector('input')).toBeNull();
+    await act(async () => { p.admit(['selling']); }); await p.tick();
+    const emptyWrongAddress = list(); emptyWrongAddress.requested.cursor = 'foreign-page';
+    emptyWrongAddress.data.page = { kind: 'ready', offers: [], next: null };
+    await p.settle(p.listReads.at(-1)!, emptyWrongAddress);
+    expect(p.host.textContent).not.toContain(m.creator_offers_empty());
   }));
 });

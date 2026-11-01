@@ -147,18 +147,15 @@ function CreatorRead({
   seed: boolean;
   origin: Origin;
 }) {
-  const [lifetime] = useState(() => crypto.randomUUID());
-  const [initialData] = useState<Outcome | undefined>(() =>
-    (() => {
+  const [initialData] = useState<Outcome | undefined>(() => {
       const retained = origin.workspace.read as Read | undefined;
       const value = retained ?? (seed ? initial : undefined);
       return matches(value, subject, address) ? { kind: 'accepted', value } : undefined;
-    })(),
-  );
+  });
   const guard: CreatorOfferGuard = origin;
   const query = useQuery<Outcome | null>({
     ...personalRead,
-    queryKey: ['creator-offers-current', subject, locale, address, origin.id, lifetime],
+    queryKey: ['creator-offers-current', subject, locale, address, origin.id],
     enabled: hydrated && origin.isCurrent() && personalRead.enabled,
     queryFn: async () => {
       if (!origin.isCurrent()) return null;
