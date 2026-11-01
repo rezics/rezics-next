@@ -716,7 +716,10 @@ function readResultFile(path: string): GateReportDecode {
   } catch (error) {
     const code = isRecord(error) ? error.code : undefined;
     if (code === 'ENOENT') return { kind: 'missing' };
-    return { kind: 'invalid', reason: `unable to read report: ${error instanceof Error ? error.message : String(error)}` };
+    return {
+      kind: 'invalid',
+      reason: `unable to read report: ${error instanceof Error ? error.message : String(error)}`,
+    };
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
   }

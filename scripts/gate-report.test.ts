@@ -51,10 +51,7 @@ function unknownOutcome(workspace: Workspace): WorkspaceOutcome {
   };
 }
 
-function rawReport(
-  workspaces: unknown[] = [outcome(selected)],
-  controlPlane?: unknown,
-): string {
+function rawReport(workspaces: unknown[] = [outcome(selected)], controlPlane?: unknown): string {
   return JSON.stringify({
     workspaces,
     ...(controlPlane === undefined ? {} : { controlPlane }),
@@ -134,25 +131,18 @@ describe('remote gate group report accounting', () => {
     ]);
 
     expect(result.exitCode).toBe(1);
-    expect(result.result.workspaces).toEqual([
-      unknownOutcome(selected),
-      outcome(other, 'check-b'),
-    ]);
+    expect(result.result.workspaces).toEqual([unknownOutcome(selected), outcome(other, 'check-b')]);
   });
 
   test('a requested control-plane result is required for a zero exit', () => {
-    const result = aggregateRemoteGateReports([
-      group([], JSON.stringify({ workspaces: [] }), { controlPlane: true }),
-    ]);
+    const result = aggregateRemoteGateReports([group([], JSON.stringify({ workspaces: [] }), { controlPlane: true })]);
 
     expect(result.exitCode).toBe(1);
     expect(result.result.controlPlane).toEqual({ passed: false, durationSeconds: 0, host: 'unknown' });
   });
 
   test('valid selected-only and control-only reports retain success', () => {
-    const selectedResult = aggregateRemoteGateReports([
-      group([selected], rawReport([outcome(selected)])),
-    ]);
+    const selectedResult = aggregateRemoteGateReports([group([selected], rawReport([outcome(selected)]))]);
     const controlResult = aggregateRemoteGateReports([controlOnly]);
 
     expect(selectedResult.exitCode).toBe(0);
@@ -165,9 +155,7 @@ describe('remote gate group report accounting', () => {
   });
 
   test('an empty unlaunched group needs no report', () => {
-    const result = aggregateRemoteGateReports([
-      group([], null, { launched: false }),
-    ]);
+    const result = aggregateRemoteGateReports([group([], null, { launched: false })]);
 
     expect(result.exitCode).toBe(0);
     expect(result.result).toEqual({ workspaces: [] });
