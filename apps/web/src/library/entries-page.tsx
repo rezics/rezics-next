@@ -165,7 +165,7 @@ function DisplayControls({
       {state ? (
         <a
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
+          href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
         >
           {m.library_clear_state()}
         </a>
