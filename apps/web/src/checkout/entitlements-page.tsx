@@ -1,5 +1,5 @@
+import { ContentItem } from '@rezics/ui/content-item';
 import { Cover } from '@rezics/ui/cover';
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -103,26 +103,26 @@ export function EntitlementsPage({
               record.summary,
             );
             return (
-              <ListRow key={record.id} className="flex min-w-0 gap-4 p-2" data-entitlement-id={record.id}>
-                <Cover subject={subject} cover={cover} size="xs" src={coverSrc} decorative />
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h2 className="min-w-0 break-words font-semibold" lang={record.summary?.label?.language}>
-                      {subject.title}
-                    </h2>
-                    <EntitlementStatus record={record} />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {m.entitlements_granted()} <EntitlementTime value={record.grantedAt} locale={locale} />
-                  </p>
-                  {capturedBenefit(record.contentEdition, record.targetSubjectId).kind === 'mapped' ? (
-                    <p className="text-sm text-muted-foreground">{m.benefit_heading()}</p>
-                  ) : null}
-                </div>
-                <ListRowLink href={`/${locale}/entitlements/${record.id}`}>
-                  {m.entitlements_open({ title: subject.title })}
-                </ListRowLink>
-              </ListRow>
+              <ContentItem
+                key={record.id}
+                data-entitlement-id={record.id}
+                title={subject.title}
+                {...(record.summary?.label ? { titleLang: record.summary.label.language } : {})}
+                headingLevel={2}
+                href={`/${locale}/entitlements/${record.id}`}
+                visual={<Cover subject={subject} cover={cover} size="xs" src={coverSrc} decorative />}
+                state={<EntitlementStatus record={record} />}
+                metadata={
+                  <>
+                    <p>
+                      {m.entitlements_granted()} <EntitlementTime value={record.grantedAt} locale={locale} />
+                    </p>
+                    {capturedBenefit(record.contentEdition, record.targetSubjectId).kind === 'mapped' ? (
+                      <p>{m.benefit_heading()}</p>
+                    ) : null}
+                  </>
+                }
+              />
             );
           })}
         </ul>
