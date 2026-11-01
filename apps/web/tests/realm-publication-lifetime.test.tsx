@@ -73,6 +73,7 @@ type Write = ReturnType<typeof deferred<PublicationOutcome>> & {
   credential: string;
 };
 const writes: Write[] = [];
+const hostWrites: (ReturnType<typeof deferred<PublicationOutcome>> & { input: Write['input'] })[] = [];
 const saved: { subject: string; head: string }[] = [];
 let activeCredential = 'csrf-one';
 let latestControl: ReturnType<typeof import('../src/community/publication-controls-view').usePublicationControls>;
@@ -126,6 +127,7 @@ const { m } = await import('../src/paraglide/messages.js');
 async function mountHook(session = viewer()) {
   await close();
   writes.length = 0;
+  hostWrites.length = 0;
   saved.length = 0;
   activeCredential = session.csrfToken ?? '';
   shelfSubjects = subjects();
@@ -172,12 +174,14 @@ async function updateSession(session: ReturnType<typeof viewer>) {
   });
 }
 
-async function startChange(action: PublicationChange['action']) {
-  let pending: Promise<void> | undefined;
+type StartedChange = { completion: Promise<void> };
+
+async function startChange(action: PublicationChange['action']): Promise<StartedChange> {
+  let completion!: Promise<void>;
   await act(async () => {
-    pending = latestControl.change(action, target());
+    completion = latestControl.change(action, target());
   });
-  return pending;
+  return { completion };
 }
 
 async function settle(index: number, outcome: PublicationOutcome) {
@@ -190,7 +194,13 @@ async function settle(index: number, outcome: PublicationOutcome) {
 afterEach(async () => {
   await close();
   client?.clear();
+  client = undefined;
+  writes.length = 0;
+  saved.length = 0;
   hostWrites.length = 0;
+  activeCredential = 'csrf-one';
+  shelfSubjects = subjects();
+  rerenderMarker = 0;
 });
 
 afterAll(async () => {
@@ -213,11 +223,11 @@ describe('Complete Realm publication original caller lifetime', () => {
     await paintHook();
     expect(latestControl.target).toEqual(selected);
 
-    const pending = await startChange('withdraw');
+    const { completion } = await startChange('withdraw');
     expect(writes).toHaveLength(1);
     expect(writes[0]!.input.expectedHead).toBe(nextHead);
     await settle(0, { kind: 'saved', head: id(32) });
-    await pending;
+    await completion;
     expect(saved).toEqual([{ subject: target().id, head: id(32) }]);
     expect(latestControl.outcome).toEqual({ kind: 'saved', head: id(32) });
   });
@@ -235,11 +245,11 @@ describe('Complete Realm publication original caller lifetime', () => {
     expect(latestControl.target).toBeNull();
 
     await act(async () => latestControl.choose(target()));
-    const pending = await startChange('publish');
+    const { completion } = await startChange('publish');
     expect(writes).toHaveLength(1);
     expect(writes[0]!.credential).toBe('csrf-one');
     await settle(0, { kind: 'saved', head: nextHead });
-    await pending;
+    await completion;
     expect(saved).toEqual([{ subject: target().id, head: nextHead }]);
   });
 
@@ -251,7 +261,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     ] as const) {
       await mountHook();
       await act(async () => latestControl.choose(target()));
-      const pending = await startChange('publish');
+      const current = await startChange('publish');
       expect(writes).toHaveLength(1);
       let currentCredential = 'csrf-two';
       if (outcome.kind === 'denied') {
@@ -272,18 +282,18 @@ describe('Complete Realm publication original caller lifetime', () => {
         await updateSession(viewer(reader, currentCredential));
       }
       await settle(0, outcome);
-      await pending;
+      await current.completion;
       expect(saved).toHaveLength(0);
       expect(latestControl.target).toBeNull();
       expect(latestControl.outcome).toBeNull();
       expect(writes).toHaveLength(1);
 
       await act(async () => latestControl.choose(target()));
-      const current = await startChange('publish');
+      const { completion } = await startChange('publish');
       expect(writes).toHaveLength(2);
       expect(writes[1]!.credential).toBe(currentCredential);
       await settle(1, { kind: 'saved', head: nextHead });
-      await current;
+      await completion;
       expect(saved).toEqual([{ subject: target().id, head: nextHead }]);
     }
   });
@@ -291,10 +301,10 @@ describe('Complete Realm publication original caller lifetime', () => {
   test('uncertain retry preserves the exact request and conflict review creates a fresh key at the current head', async () => {
     await mountHook();
     await act(async () => latestControl.choose(target()));
-    const first = await startChange('withdraw');
+    const { completion } = await startChange('withdraw');
     expect(writes).toHaveLength(1);
     await settle(0, { kind: 'unavailable' });
-    await first;
+    await completion;
     const exact = structuredClone(writes[0]!.input);
     expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
 
@@ -325,9 +335,9 @@ describe('Complete Realm publication original caller lifetime', () => {
     await mountHook();
     const privateTarget = { ...target(), id: id(41) };
     await act(async () => latestControl.choose(privateTarget));
-    const first = await startChange('publish');
+    const current = await startChange('publish');
     await settle(0, { kind: 'unavailable' });
-    await first;
+    await current.completion;
     expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
     const retired = latestControl;
 
@@ -368,7 +378,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     await mountHook();
     await act(async () => latestControl.choose(target()));
     const retained = latestControl;
-    const pending = await startChange('publish');
+    const retiredOperation = await startChange('publish');
     expect(writes).toHaveLength(1);
     await close();
     await act(async () => {
@@ -382,15 +392,15 @@ describe('Complete Realm publication original caller lifetime', () => {
     expect(latestControl.target).toBeNull();
     expect(writes).toHaveLength(1);
     await settle(0, { kind: 'saved', head: nextHead });
-    await pending;
+    await retiredOperation.completion;
     expect(saved).toHaveLength(0);
     expect(latestControl.outcome).toBeNull();
 
     await act(async () => latestControl.choose(target()));
-    const current = await startChange('publish');
+    const { completion } = await startChange('publish');
     expect(writes).toHaveLength(2);
     await settle(1, { kind: 'saved', head: nextHead });
-    await current;
+    await completion;
     expect(saved).toHaveLength(1);
   });
 
@@ -405,7 +415,6 @@ describe('Complete Realm publication original caller lifetime', () => {
     boardNext: null,
     publicationNext: null,
   };
-  const hostWrites: (ReturnType<typeof deferred<PublicationOutcome>> & { input: Write['input'] })[] = [];
   const hostSearch = publicationSubjectSearch(
     'en',
     async () =>
@@ -431,6 +440,13 @@ describe('Complete Realm publication original caller lifetime', () => {
   async function paintShelf() {
     await act(async () => {
       root!.render(tree(<RealmShelfHost />));
+      await tick();
+    });
+  }
+
+  async function settleHost(index: number, outcome: PublicationOutcome) {
+    await act(async () => {
+      hostWrites[index]!.resolve(outcome);
       await tick();
     });
   }
@@ -500,10 +516,7 @@ describe('Complete Realm publication original caller lifetime', () => {
       action: 'publish',
       expectedHead: head,
     });
-    await act(async () => {
-      hostWrites[0]!.resolve({ kind: 'saved', head: nextHead });
-      await tick();
-    });
+    await settleHost(0, { kind: 'saved', head: nextHead });
     const subjectCards = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((node) =>
       node.textContent?.includes(hostSubject.title),
     );
@@ -512,10 +525,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     await shelfWithdraw();
     expect(hostWrites).toHaveLength(2);
     expect(hostWrites[1]!.input.expectedHead).toBe(nextHead);
-    await act(async () => {
-      hostWrites[1]!.resolve({ kind: 'saved', head: id(32) });
-      await tick();
-    });
+    await settleHost(1, { kind: 'saved', head: id(32) });
     expect(host.querySelectorAll('a').length).toBe(0);
   });
 
@@ -526,20 +536,14 @@ describe('Complete Realm publication original caller lifetime', () => {
     await shelfWithdraw();
     expect(hostWrites).toHaveLength(1);
     await updateSession(viewer(reader, 'csrf-two'));
-    await act(async () => {
-      hostWrites[0]!.resolve({ kind: 'saved', head: nextHead });
-      await tick();
-    });
+    await settleHost(0, { kind: 'saved', head: nextHead });
     expect(host.textContent).toContain(target().title);
     expect(host.textContent).not.toContain(m.realm_publication_removed());
     expect(hostWrites).toHaveLength(1);
 
     await shelfWithdraw();
     expect(hostWrites).toHaveLength(2);
-    await act(async () => {
-      hostWrites[1]!.resolve({ kind: 'saved', head: nextHead });
-      await tick();
-    });
+    await settleHost(1, { kind: 'saved', head: nextHead });
     expect(host.textContent).not.toContain(target().title);
     expect(host.textContent).toContain(m.realm_publication_removed());
   });
