@@ -6,6 +6,8 @@ import {
   type RealmMembershipCaller,
 } from './realm-membership-lifetime';
 import type { loadRealmMembership } from './space';
+import { beginMyRealmsRead, captureMyRealmsCaller, type MyRealmsCaller } from './my-realms-caller';
+import { getLocale } from '../paraglide/runtime.js';
 
 export type RealmViewer = Awaited<ReturnType<typeof loadRealmMembership>>;
 
@@ -40,13 +42,31 @@ export const realmMembershipQuery = (realmId: string, subject: string | null, ca
     refetchOnReconnect: false,
   });
 
-export const myRealmsQuery = (cursor?: string) =>
+export const myRealmsQuery = (cursor?: string, caller?: MyRealmsCaller) =>
   queryOptions({
     ...personalRead,
     queryKey: ['my-realms', cursor ?? ''],
-    queryFn: async () => {
-      const { readMyRealmsPage } = await import('./space-actions');
-      return readMyRealmsPage({ data: cursor ? { cursor } : {} });
+    queryFn: async ({ client, signal }) => {
+      const captured =
+        caller ??
+        (await captureMyRealmsCaller(
+          client,
+          { cursor, locale: getLocale(), credentialMode: 'session' },
+          { preserveQuery: true },
+        ));
+      const operation = beginMyRealmsRead(captured, client, signal);
+      try {
+        operation.assertCurrent();
+        const { readMyRealmsPage } = await import('./space-actions');
+        operation.assertCurrent();
+        const page = await readMyRealmsPage({ data: cursor ? { cursor } : {} });
+        operation.assertCurrent();
+        operation.publish(page);
+        operation.assertCurrent();
+        return page;
+      } finally {
+        operation.finish();
+      }
     },
     retry: false,
   });

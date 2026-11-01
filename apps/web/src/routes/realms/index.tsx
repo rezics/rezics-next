@@ -1,19 +1,38 @@
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { Link, createFileRoute } from '@tanstack/react-router';
-import { MyRealmsPageView } from '../../community/my-realms-page';
+import { createFileRoute } from '@tanstack/react-router';
 import { myRealmsQuery } from '../../community/realm-membership-queries';
-import { useQuery } from '@tanstack/react-query';
-import { m } from '../../paraglide/messages.js';
+import { captureMyRealmsCaller, MyRealmsCallerHost } from '../../community/my-realms-caller';
 import { ClosedErrorPage } from '../../shell/closed';
+import { getLocale } from '../../paraglide/runtime.js';
+import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/realms/')({
   beforeLoad: requireSignedIn,
   validateSearch: (search: Record<string, unknown>) =>
     typeof search.cursor === 'string' && search.cursor ? { cursor: search.cursor } : {},
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ context, deps }) => context.queryClient.fetchQuery(myRealmsQuery(deps.cursor)),
+  loader: async ({ context, deps, abortController }) => {
+    const caller = await captureMyRealmsCaller(context.queryClient, {
+      cursor: deps.cursor,
+      locale: getLocale(),
+      credentialMode: 'session',
+    });
+    const stopOnAbort = () => caller.retire();
+    abortController.signal.addEventListener('abort', stopOnAbort, { once: true });
+    try {
+      abortController.signal.throwIfAborted();
+      const page = await context.queryClient.fetchQuery(myRealmsQuery(deps.cursor, caller));
+      abortController.signal.throwIfAborted();
+      return { page, visit: caller.acceptLoaderResult(page) };
+    } catch (error) {
+      caller.retire();
+      throw error;
+    } finally {
+      abortController.signal.removeEventListener('abort', stopOnAbort);
+    }
+  },
   head: ({ match }) =>
     pageHead({ title: m.realms_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   errorComponent: ClosedErrorPage,
@@ -22,15 +41,6 @@ export const Route = createFileRoute('/realms/')({
 
 function MyRealms() {
   const initial = Route.useLoaderData();
-  const { data = initial, isError, error } = useQuery(myRealmsQuery(Route.useSearch().cursor));
-  if (isError) throw error;
-  if (!data) throw new Error('Realm list is unavailable');
-  return (
-    <div className="space-y-6">
-      <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
-        {m.space_setup_heading()}
-      </Link>
-      <MyRealmsPageView page={data} />
-    </div>
-  );
+  const { cursor } = Route.useSearch();
+  return <MyRealmsCallerHost key={initial.visit.id} initial={initial} cursor={cursor} />;
 }
