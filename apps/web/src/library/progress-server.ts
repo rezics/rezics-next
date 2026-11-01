@@ -8,7 +8,9 @@ import { requestLocale } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { kernelClient } from '../kernel/client';
 import { nameSubjectTypes } from '../subject/definitions';
-import type { SessionEnv } from '../session/client';
+import { configured, type SessionEnv } from '../session/client';
+import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
+import { sessionSubject, viewerCredential } from '../session/request';
 import {
   finishProgress,
   loadProgressIndex,
@@ -111,28 +113,74 @@ function validateFinish(input: unknown): ProgressFinishInput {
   };
 }
 
+/** Presentation consumes the already bounded page; it never repeats authentication or the list. */
+async function presentProgressIndex(page: ProgressIndex, locale: string): Promise<ProgressIndex> {
+  await nameSubjectTypes([
+    page.selectedSubject,
+    ...page.sessions.flatMap((session) => [session.subject, session.versionSubject]),
+  ]);
+  if (page.signedIn) {
+    try {
+      const release = await readRelease();
+      const subject = page.selectedSubject;
+      page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
+    } catch (error) {
+      if (isPlatformClosedError(error)) throw error;
+      page.choicesUnavailable = true;
+    }
+  }
+  return page;
+}
+
 export const readProgressIndex = createServerFn({ method: 'GET' })
   .validator(validateIndexInput)
   .handler(async ({ data }): Promise<ProgressIndex> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     const page = await loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data);
-    await nameSubjectTypes([
-      page.selectedSubject,
-      ...page.sessions.flatMap((session) => [session.subject, session.versionSubject]),
-    ]);
-    if (page.signedIn) {
-      try {
-        const release = await readRelease();
-        const locale = requestLocale(request) ?? 'en';
-        const subject = page.selectedSubject;
-        page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
-      } catch (error) {
-        if (isPlatformClosedError(error)) throw error;
-        page.choicesUnavailable = true;
-      }
-    }
-    return page;
+    return presentProgressIndex(page, requestLocale(request) ?? 'en');
+  });
+
+export type CurrentViewerProgressIndex = {
+  viewer: string | null;
+  requested: { subjectId: string; cursor: string | null };
+  locale: string;
+  page: ProgressIndex;
+};
+
+/** The viewer comes from the preparation performed by this exact successful reader. */
+export const readCurrentViewerProgressIndex = createServerFn({ method: 'GET' })
+  .validator(validateIndexInput)
+  .handler(async ({ data }): Promise<CurrentViewerProgressIndex> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    const locale = requestLocale(request) ?? 'en';
+    const requested = { subjectId: data.subjectId ?? '', cursor: data.cursor ?? null };
+    // With these preconditions, a signed-in reader necessarily prepared the cookie's active
+    // credential/subject pair. Explicit bearer requests have no such subject association;
+    // missing cookies/configuration must never reuse WeakMap state left on a retained request.
+    const associated =
+      configured(env as Partial<SessionEnv>) &&
+      validId(cookie(request, SESSION_COOKIE)) &&
+      !request.headers.has('authorization');
+    const empty = (idempotencyKey: string): CurrentViewerProgressIndex => ({
+      viewer: null,
+      requested,
+      locale,
+      page: {
+        signedIn: false,
+        subjectId: requested.subjectId,
+        selectedSubject: null,
+        sessions: [],
+        next: null,
+        idempotencyKey,
+      },
+    });
+    if (!associated) return empty(crypto.randomUUID());
+    const page = await loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data);
+    const viewer = page.signedIn && viewerCredential(request) ? sessionSubject(request) : undefined;
+    if (!viewer) return empty(page.idempotencyKey);
+    return { viewer, requested, locale, page: await presentProgressIndex(page, locale) };
   });
 
 export const readProgressSession = createServerFn({ method: 'GET' })

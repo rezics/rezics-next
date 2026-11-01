@@ -3,8 +3,8 @@ import { prepareExposure } from '../../kernel/exposure';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
-import { ProgressIndexPage } from '../../library/progress-page';
-import { readProgressIndex } from '../../library/progress-server';
+import { CurrentViewerProgressIndexPage } from '../../library/progress-page';
+import { readCurrentViewerProgressIndex } from '../../library/progress-server';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/progress/')({
@@ -17,11 +17,11 @@ export const Route = createFileRoute('/library/progress/')({
     ...(typeof search.cursor === 'string' && search.cursor ? { cursor: search.cursor } : {}),
   }),
   loaderDeps: ({ search }) => ({ subjectId: search.subjectId, cursor: search.cursor }),
-  loader: ({ deps }) => readProgressIndex({ data: deps }),
+  loader: ({ deps }) => readCurrentViewerProgressIndex({ data: deps }),
   staleTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.library_progress_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function ProgressIndexRoute() {
-    return <ProgressIndexPage page={Route.useLoaderData()} />;
+    return <CurrentViewerProgressIndexPage loader={Route.useLoaderData()} requested={Route.useSearch()} />;
   },
 });
