@@ -193,12 +193,19 @@ function ActualSessionPage() {
         <button type="button" onClick={() => setGeneration((current) => current + 1)}>
           Mount fresh Settings owner
         </button>
-        <button type="button" onClick={() => client.setQueryData(sessionQuery.queryKey, { ...session, csrfToken: null })}>
+        <button
+          type="button"
+          onClick={() => client.setQueryData(sessionQuery.queryKey, {
+            state: 'signed-in', subject: session.subject ?? null, csrfToken: null,
+          })}
+        >
           Use read-only session
         </button>
         <button
           type="button"
-          onClick={() => client.setQueryData(sessionQuery.queryKey, { ...session, csrfToken: 'fresh-story-token' })}
+          onClick={() => client.setQueryData(sessionQuery.queryKey, {
+            state: 'signed-in', subject: session.subject ?? null, csrfToken: 'fresh-story-token',
+          })}
         >
           Install fresh explicit token
         </button>
