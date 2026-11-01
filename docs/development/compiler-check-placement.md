@@ -63,9 +63,24 @@ or physical proof. Database preparation was injected throughout. No database or 
 started by these units. The corrections were committed; the bounded invocation was not repeated. The final root
 fixture corrections and the untouched live relation acceptance remain unverified by execution.
 
-Required foreground workspace typing receipts are recorded separately below. Authored acceptance does not establish
-successful physical receiving recognition, real compiler/SQL correctness, migration correctness, or retained-output
-transport. Original acceptance/native/browser verification, stopped consumer retries and Goal closure remain deferred.
+Required foreground workspace typing ran sequentially from the worktree root at source commit 2ee6a0f9ae, using the
+supported placement and existing foreground session handles until each terminal result:
+
+| Command                                   | Host | Terminal status | Remote command duration | Reported peak memory |
+| ----------------------------------------- | ---- | --------------- | ----------------------- | -------------------- |
+| `bun run --cwd services/kernel typecheck` | b    | 0               | 361.939 s               | 9180 MiB             |
+| `bun run --cwd services/auth typecheck`   | b    | 0               | 332.244 s               | 5073 MiB             |
+
+Kernel's receipt includes `bun scripts/construct.ts`; Auth's includes its compiler database owner message. Both runs
+used the normal producer and physical receiving code, not injected evidence, local/off overrides or a replacement
+compiler. The unchanged source continued in the admitted run and returned zero. Neither command has a detached check
+ID. No original stopped consumer was started or retried, and neither compiler was interrupted or duplicated.
+
+These are actual direct-workspace typing receipts, separate from the authored acceptance. They do not prove root
+selected-workspace relocation on a physical host, schema/client output transport, the existing live relation
+acceptance, historical consumer failures or full native/browser behavior. Original acceptance/native/browser
+verification, stopped consumer retries and Goal closure remain deferred. The final receipt-only documentation commit
+does not change the typed source.
 
 ## Scope decisions and source reading
 
@@ -83,3 +98,7 @@ source governs this entrypoint repair and no new external research was required.
 Outside the seven declared paths, services/kernel/README.md and services/auth/README.md change only their command
 paragraphs: they previously promised environment-only execution and local fallback, contradicting the repaired
 entrypoints. They now point here for compiler policy.
+
+The read-only shared scripts/README.md still contains a superseded Auth URL-bypass sentence in its check-host section;
+this launch contract and the compiler policy above govern the entrypoints. That shared transport document was left
+closed alongside the producer/placement files.

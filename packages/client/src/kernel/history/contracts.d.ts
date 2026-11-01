@@ -310,6 +310,10 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         kind: 'non-personal';
         roles: readonly [];
     }>;
+    'com.rezics.rating.population-total.delivery.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
     'com.rezics.rating.prior_epoch.work.v1': Readonly<{
         kind: 'non-personal';
         roles: readonly [];

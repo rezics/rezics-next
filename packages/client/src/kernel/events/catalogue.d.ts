@@ -1413,6 +1413,23 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
+    readonly "com.rezics.rating.population-total.delivery.v1": Type.TUnion<[Type.TObject<{
+        sourcePartition: Type.TInteger;
+        populationId: Type.TString;
+        serial: Type.TString;
+        action: Type.TLiteral<"deliver">;
+        deltas: Type.TArray<Type.TObject<{
+            questionId: Type.TString;
+            shard: Type.TInteger;
+            count: Type.TString;
+            sum: Type.TString;
+        }>>;
+    }>, Type.TObject<{
+        sourcePartition: Type.TInteger;
+        populationId: Type.TString;
+        serial: Type.TString;
+        action: Type.TLiteral<"received">;
+    }>]>;
     readonly 'com.rezics.rating.voter-realm.changed.v1': Type.TObject<{
         voterId: Type.TString;
         realmId: Type.TString;
