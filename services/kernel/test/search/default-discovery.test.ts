@@ -379,7 +379,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
       // terminal boolean, a home count or a new equivalent page cannot supply it.
       const chains = await pool.query<{
         bootstrap: string; execution: string; pages: number; complete: number; tips: number;
-        bound: boolean; contiguous: boolean;
+        bound: boolean; contiguous: boolean; claimInputs: boolean;
       }>(
         `WITH originals AS (
            SELECT s.*,lead(step) OVER w AS successor,
@@ -395,6 +395,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
            count(*) FILTER (WHERE complete)::integer AS complete,
            count(*) FILTER (WHERE verified_next IS NULL)::integer AS tips,
            bool_and(verified_root IS NOT NULL AND verified_binding IS NOT NULL) AS bound,
+           bool_and((state::jsonb->'input'->>'claimInputs')::boolean IS TRUE) AS "claimInputs",
            bool_and(verified_ordinal=ordinal AND verified_next IS NOT DISTINCT FROM successor
              AND (NOT complete OR successor IS NULL)) AS contiguous
          FROM originals GROUP BY bootstrap,execution`, [`%${prefix}%`],
@@ -406,6 +407,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(chain.tips).toBe(1);
         expect(chain.bound).toBe(true);
         expect(chain.contiguous).toBe(true);
+        expect(chain.claimInputs).toBe(true);
       }
       const originalChain = chains.rows[0]!;
       const immutable = await pool.connect();

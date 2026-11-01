@@ -786,6 +786,17 @@ not current population eligibility or genuine receiver settlement. Native contig
 ACK, all-domain current window closure, population observations and response-root
 integration still require their actual maintained bodies before serving is ready.
 
+New original repair traversals include Account rows, Account intents and claim
+intents in each native home. Each arm seeks at most one raw key; all returned
+lookahead rows and bytes are charged before the bounded merge. A claim intent's
+route locates its claim home, independently of the Account ID. Repair releases
+that home, resolves the actual Account owner and retains the exact claim-home
+frontier for resumption. The independent verifier derives the same transition
+from native keys and owner facts. Original traversals without this claim-input
+coverage remain retained but cannot acquire a complete terminal proof. Delivered
+intents still require the separately retained creation-event bridge, and these
+key traversals do not acknowledge either native tuple domain.
+
 The native checkpoint row for an enrolled original window cannot be advanced,
 renamed or deleted by ordinary checkpoint delivery while its enrollment retains
 it. Verification does not release that retention obligation. Native retirement

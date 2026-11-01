@@ -770,6 +770,10 @@ export function createPublicFilterSourceBinding(
     bridge?: PublicFilterCreationWindow;
     /** Return to the exact captured event successor after its actual owner repair. */
     resumeBridge?: PublicFilterCreationWindow;
+    /** This original traversal includes both local and foreign claim intents. */
+    claimInputs?: true;
+    /** Release a claim home before repairing its independently routed Account. */
+    resumeAccountScan?: { partition: number; epoch: number; after: { route: number; id: string } };
   };
   type RepairRecord = {
     input: RepairState;
@@ -801,6 +805,13 @@ export function createPublicFilterSourceBinding(
     const { resumeBridge: _resume, ...rest } = state;
     return { ...rest, owner: 'semantic', partition: window.partition, epoch: window.epoch,
       subject: null, after: null, phase: 'bridge', version: null, projection: null, bridge: window };
+  }
+  function resumeAccountScan(state: RepairState): RepairState {
+    const scan = state.resumeAccountScan;
+    if (!scan || state.resumeBridge) throw new BindingError('binding_mismatch');
+    const { resumeAccountScan: _resume, ...rest } = state;
+    return { ...rest, owner: 'accounts', partition: scan.partition, epoch: scan.epoch,
+      after: scan.after, subject: null, phase: 'scan', version: null, projection: null };
   }
   async function advanceCreationBridge(
     bootstrap: string, state: RepairState, db: Pool, context: PublicFilterConsumerContext,
@@ -923,8 +934,11 @@ export function createPublicFilterSourceBinding(
         execution: joined.execution })) };
   }
   async function accountRepairKey(state: RepairState, db: Pool, cost: BindingCost) {
-    cost.inputKeys += 2;
-    return (await db.query<{ route: number; id: string }>(
+    const claims = state.claimInputs === true;
+    cost.inputKeys += claims ? 3 : 2;
+    // Return each arm's admitted point so actual rows and bytes, including the
+    // losing lookahead, are charged. The bounded merge never scans a home.
+    const keys = (await db.query<{ route: number; id: string }>(
       `SELECT route,id::text FROM (
          (SELECT route,account_id AS id FROM access.account
           WHERE route >= $1 AND route < $2 AND (route,account_id)>($3,$4::uuid)
@@ -933,15 +947,38 @@ export function createPublicFilterSourceBinding(
          (SELECT route,account_id AS id FROM access.account_discovery_intent
           WHERE route >= $1 AND route < $2 AND (route,account_id)>($3,$4::uuid)
           ORDER BY route,account_id LIMIT 1)
-       ) keys ORDER BY route,id LIMIT 1`,
+         ${claims ? `UNION ALL
+         (SELECT route,account_id AS id FROM access.account_discovery_claim_intent
+          WHERE route >= $1 AND route < $2 AND (route,account_id)>($3,$4::uuid)
+          ORDER BY route,account_id LIMIT 1)` : ''}
+       ) keys`,
       [state.partition*16,(state.partition+1)*16,state.after?.route ?? state.partition*16,
         state.after?.id ?? '00000000-0000-0000-0000-000000000000'],
-    )).rows[0];
+    )).rows;
+    return keys.sort((a,b) => a.route-b.route || Buffer.compare(Buffer.from(a.id),Buffer.from(b.id)))[0];
+  }
+  async function nextAccountRepair(state: RepairState, db: Pool, cost: BindingCost): Promise<RepairState> {
+    if (state.epoch === null || state.resumeAccountScan || state.resumeBridge)
+      throw new BindingError('binding_mismatch');
+    const key = await accountRepairKey(state,db,cost);
+    if (!key) return { ...state, partition: state.partition+1, after: null, epoch: null };
+    const route = routeOf(key.id);
+    if (route === null) throw new BindingError('binding_mismatch');
+    const home = partitionOf(route);
+    if (home === state.partition) return { ...state, subject: key.id, after: key, phase: 'account' };
+    if (state.claimInputs !== true) throw new BindingError('binding_mismatch');
+    // A claim's route is not the Account's route. Keep its exact original raw
+    // key frontier, release that home, then read the actual Account owner.
+    const owner = await readPartition(db,home);
+    if (!owner || owner.writeState !== 'active') throw new BindingError('owner_unavailable');
+    return { ...state, partition: home, epoch: owner.epoch, subject: key.id, after: null,
+      phase: 'account', resumeAccountScan: { partition: state.partition, epoch: state.epoch, after: key } };
   }
   function terminalRepairState(state: RepairState): boolean {
     return state.partition === 4096 && state.owner === 'semantic' && state.phase === 'window' &&
       state.subject === null && state.after === null && state.epoch === null && state.version === null &&
-      state.projection === null && state.bridge === undefined && state.resumeBridge === undefined;
+      state.projection === null && state.bridge === undefined && state.resumeBridge === undefined &&
+      state.resumeAccountScan === undefined && state.claimInputs === true;
   }
   async function repairNative(
     bootstrap: PublicSourceBootstrap,
@@ -1000,6 +1037,7 @@ export function createPublicFilterSourceBinding(
         version: null,
         epoch: null,
         projection: null,
+        claimInputs: true,
       };
     let next = structuredClone(state);
     let repairs: PublicSourceRepair[] = [],
@@ -1034,9 +1072,7 @@ export function createPublicFilterSourceBinding(
           // Raw owner keys include fenced/tombstoned rows and outstanding native
           // deletion intents. Each arm seeks one indexed key; no live-only page
           // may silently drop a previously indexed Account.
-          const key = await accountRepairKey(state,db,cost);
-          if (!key) next = { ...next, partition: state.partition+1, after: null, epoch: null };
-          else next = { ...next, subject: key.id, after: key, phase: 'account' };
+          next = await nextAccountRepair(next,db,cost);
         } else if (state.phase === 'account' && state.subject !== null) {
           account = replay?.account ?? await readAccountDiscoveryRepairObservation(db, state.subject, context);
           const current = await readAccountDiscoveryRepairObservation(db, state.subject, context);
@@ -1045,7 +1081,8 @@ export function createPublicFilterSourceBinding(
             throw new BindingError('configuration_changed');
           cost.inputKeys += 2;
           cost.candidates++;
-          next = state.resumeBridge ? resumeCreationBridge(next) : { ...next, subject: null, phase: 'scan' };
+          next = state.resumeBridge ? resumeCreationBridge(next)
+            : state.resumeAccountScan ? resumeAccountScan(next) : { ...next, subject: null, phase: 'scan' };
         } else throw new BindingError('binding_mismatch');
       } else
       if (state.phase === 'scan') {
@@ -1443,7 +1480,8 @@ export function createPublicFilterSourceBinding(
         } else if (record.input.partition !== 0 || record.input.owner !== undefined ||
           record.input.phase !== 'scan' || record.input.after !== null || record.input.subject !== null ||
           record.input.epoch !== null || record.input.version !== null || record.input.projection !== null ||
-          record.input.bridge !== undefined || record.input.resumeBridge !== undefined) {
+          record.input.bridge !== undefined || record.input.resumeBridge !== undefined ||
+          record.input.resumeAccountScan !== undefined) {
           throw new BindingError('binding_mismatch');
         }
         const chain = repairChain(cut.bootstrap,joined);
@@ -1507,7 +1545,8 @@ export function createPublicFilterSourceBinding(
             record.account.head.partition !== record.input.partition || record.account.head.epoch !== record.input.epoch)
             throw new BindingError('configuration_changed');
           expected = record.input.resumeBridge ? resumeCreationBridge(record.input)
-            : { ...record.input, subject: null, phase: 'scan' };
+            : record.input.resumeAccountScan ? resumeAccountScan(record.input)
+              : { ...record.input, subject: null, phase: 'scan' };
         } else if (record.input.phase === 'window' || record.input.phase === 'bridge') {
           if (receiptDigests.length !== 0 || record.input.partition >= 4096 ||
             (record.input.phase === 'window' && (!record.next.bridge || record.next.phase !== 'bridge')))
@@ -1522,7 +1561,8 @@ export function createPublicFilterSourceBinding(
         } else if (record.input.phase === 'scan') {
           const state = record.input;
           if (state.partition < 0 || state.partition >= 4096 || !Number.isInteger(state.partition) ||
-            state.subject !== null || state.projection !== null || state.bridge || state.resumeBridge)
+            state.subject !== null || state.projection !== null || state.bridge || state.resumeBridge ||
+            state.resumeAccountScan)
             throw new BindingError('binding_mismatch');
           const owner = await readPartition(db,state.partition);
           if (!owner || owner.writeState !== 'active' ||
@@ -1530,9 +1570,7 @@ export function createPublicFilterSourceBinding(
             throw new BindingError('configuration_changed');
           const base = { ...state, epoch: owner.epoch };
           if (state.owner === 'accounts') {
-            const key = await accountRepairKey(state,db,cost);
-            expected = key ? { ...base, subject: key.id, after: key, phase: 'account' }
-              : { ...base, partition: state.partition+1, after: null, epoch: null };
+            expected = await nextAccountRepair(base,db,cost);
           } else {
             const key = await repairKeys.run(db,{ partition_no: state.partition,
               after_route: state.after?.route ?? state.partition*16,
