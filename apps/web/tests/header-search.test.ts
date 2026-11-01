@@ -137,3 +137,46 @@ test('separate HeaderSearch instances keep their shortcut help and form referenc
   expect(markup).toContain(`aria-label="${m.header_search_global()} Ctrl/⌘ K"`);
   expect(markup).toContain(`aria-label="${m.header_search_in_scope({ scope: 'Reading list' })} Ctrl/⌘ K"`);
 });
+
+test('duplicate instances keep query and scoped names attached to their own visible shortcut and input help', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      'div',
+      null,
+      createElement(HeaderSearch, {
+        locale: 'en',
+        initialQuery: 'A visible draft',
+        keyboardShortcut: true,
+      }),
+      createElement(HeaderSearch, {
+        locale: 'en',
+        keyboardShortcut: true,
+        scope: { kind: 'Collection', id: 'reading', name: 'Reading list' },
+      }),
+    ),
+  );
+  const triggers = [...markup.matchAll(/<button\b[^>]*class="header-search-trigger[^>]*>[\s\S]*?<\/button>/gu)].map(
+    ([trigger]) => trigger,
+  );
+  expect(triggers).toHaveLength(2);
+  const attribute = (element: string, name: string) =>
+    element.match(new RegExp(`\\b${name}="([^"]*)"`, 'u'))?.[1];
+  expect(triggers.map((trigger) => attribute(trigger, 'aria-label'))).toEqual([
+    'A visible draft Ctrl/⌘ K',
+    `${m.header_search_in_scope({ scope: 'Reading list' })} Ctrl/⌘ K`,
+  ]);
+  for (const trigger of triggers) {
+    expect(trigger).toContain('</span> <kbd');
+    expect(trigger).toContain('aria-keyshortcuts="Control+k Meta+k"');
+  }
+
+  const helpIds = [...markup.matchAll(/<span id="([^"]+-keyboard-help)"/gu)].map(([, id]) => id!);
+  expect(helpIds).toHaveLength(2);
+  expect(new Set(helpIds).size).toBe(2);
+  const inputs = [...markup.matchAll(/<input\b(?=[^>]*role="combobox")[^>]*>/gu)].map(([, input]) => input!);
+  expect(inputs).toHaveLength(2);
+  for (const [index, input] of inputs.entries()) {
+    expect(input).toContain(`aria-label="${m.search_label()}"`);
+    expect(input).toContain(`aria-describedby="${helpIds[index]}"`);
+  }
+});

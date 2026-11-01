@@ -197,6 +197,52 @@ test('A reader can enter and leave the existing header search using a discoverab
     }
 }, 120_000);
 
+test('the signed-in Subject shell trigger has its exact visible accessible name before and after a retained query', async () => {
+  const context = await browser!.newContext({ viewport: { width: 980, height: 560 }, reducedMotion: 'reduce' });
+  try {
+    const page = await context.newPage();
+    await page.goto(
+      `${origin}/iframe.html?id=pages-subjects-subject--signed-in&viewMode=story&globals=locale:en;theme:light`,
+    );
+    await page.locator('html[data-hydrated]').waitFor();
+    await page.getByRole('main').getByRole('heading', { level: 1, name: 'The Little Prince' }).waitFor();
+
+    const owner = page.locator('[data-header-search]');
+    const trigger = owner.locator('.header-search-trigger');
+    const input = owner.locator('input[role="combobox"]');
+    const help = owner.locator('[id$="-keyboard-help"]');
+    await trigger.waitFor({ state: 'visible' });
+
+    const visibleName = (await trigger.innerText()).replace(/\s+/gu, ' ').trim();
+    expect(await trigger.getAttribute('aria-label')).toBe(visibleName);
+    expect(await page.getByRole('button', { name: visibleName, exact: true }).count()).toBe(1);
+    expect(await trigger.getAttribute('aria-keyshortcuts')).toBe('Control+k Meta+k');
+    const helpId = await help.getAttribute('id');
+    expect(helpId).toBeTruthy();
+    expect(await trigger.getAttribute('aria-describedby')).toBe(helpId);
+    expect((await help.innerText()).trim().length).toBeGreaterThan(0);
+    expect(await input.getAttribute('aria-label')).toBe('Search subjects');
+
+    await trigger.click();
+    const expandedInput = owner.getByRole('combobox', { name: 'Search subjects' });
+    await expandedInput.waitFor({ state: 'visible' });
+    expect(await expandedInput.getAttribute('aria-label')).toBe('Search subjects');
+    expect(await expandedInput.getAttribute('aria-keyshortcuts')).toBe('Control+k Meta+k');
+    expect((await expandedInput.getAttribute('aria-describedby'))?.split(/\s+/u)).toContain(helpId);
+
+    await expandedInput.fill('Visible draft');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.activeElement?.classList.contains('header-search-trigger'));
+    const queryName = (await trigger.innerText()).replace(/\s+/gu, ' ').trim();
+    expect(queryName).toBe('Visible draft Ctrl/⌘ K');
+    expect(await trigger.getAttribute('aria-label')).toBe(queryName);
+    expect(await page.getByRole('button', { name: queryName, exact: true }).count()).toBe(1);
+    expect(await trigger.getAttribute('aria-describedby')).toBe(helpId);
+  } finally {
+    await context.close();
+  }
+}, 120_000);
+
 // Extend the same real default composition, retaining every original geometry/filter/phone assertion above.
 async function keyboardJourney(page: Page, locale: string) {
   const owner = page.locator('[data-header-search]');

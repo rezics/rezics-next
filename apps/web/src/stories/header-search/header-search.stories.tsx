@@ -128,6 +128,48 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Keeps scoped names, field purpose and shortcut help aligned in the real presenter. */
+export const ScopedAccessibleNaming: Story = {
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <Example scope={scope} keyboardShortcut />,
+  play: async (context) => {
+    const canvas = within(context.canvasElement);
+    const owner = context.canvasElement.querySelector<HTMLElement>('[data-header-search]');
+    const trigger = owner?.querySelector<HTMLButtonElement>('.header-search-trigger');
+    const input = owner?.querySelector<HTMLInputElement>('input[role="combobox"]');
+    const help = owner?.querySelector<HTMLElement>('[id$="-keyboard-help"]');
+    if (!owner || !trigger || !input || !help)
+      throw new Error('The scoped search naming surface is missing.');
+
+    const visibleName = trigger.innerText.replace(/\s+/gu, ' ').trim();
+    await expect(trigger).toHaveAccessibleName(visibleName);
+    await expect(trigger).toHaveAttribute('aria-label', visibleName);
+    await expect(trigger).toHaveAccessibleDescription(m.header_search_keyboard_help());
+    await expect(input).toHaveAttribute('aria-label', m.search_label());
+    await expect(input).toHaveAttribute('placeholder', m.header_search_in_scope({ scope: scope.name }));
+
+    await userEvent.click(trigger);
+    const expandedInput = await canvas.findByRole('combobox', { name: m.search_label() });
+    await expect(expandedInput).toHaveAccessibleName(m.search_label());
+    await expect(expandedInput).toHaveAttribute(
+      'placeholder',
+      m.header_search_in_scope({ scope: scope.name }),
+    );
+    if (!input.getAttribute('aria-describedby')?.split(/\s+/u).includes(help.id)) {
+      throw new Error('The scoped search field lost its keyboard help description.');
+    }
+
+    await userEvent.type(expandedInput, 'Scoped draft');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(trigger).toBeVisible());
+    const queryName = trigger.innerText.replace(/\s+/gu, ' ').trim();
+    await expect(trigger).toHaveAccessibleName(queryName);
+    await expect(trigger).toHaveAttribute('aria-label', queryName);
+    await expect(trigger).toHaveAccessibleDescription(m.header_search_keyboard_help());
+    await expect(canvas.getByRole('button', { name: queryName, exact: true })).toBeVisible();
+  },
+};
+
 async function expand({ canvasElement }: { canvasElement: HTMLElement }, triggerName = m.header_search_global()) {
   const canvas = within(canvasElement);
   if (window.matchMedia('(max-width: 1023px)').matches)

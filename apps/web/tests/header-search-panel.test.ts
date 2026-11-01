@@ -136,6 +136,39 @@ test('the phone trigger name keeps its exact visible localized brand, query or s
   }
 });
 
+test('shortcut trigger text has an explicit rendered separator across locale, scope, query and expansion states', () => {
+  const previousLocale = getLocale();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const global = initialHeaderSearchState();
+      const scoped = initialHeaderSearchState(scope);
+      const queried = initialHeaderSearchState(undefined, 'A visible draft');
+      const states = [
+        global,
+        reduceHeaderSearchState(global, { type: 'focus' }),
+        scoped,
+        reduceHeaderSearchState(scoped, { type: 'focus' }),
+        queried,
+      ];
+
+      for (const state of states) {
+        const markup = present(state, { locale, keyboardShortcut: true });
+        const trigger = markup.match(/<button\b[^>]*class="header-search-trigger[^>]*>[\s\S]*?<\/button>/)?.[0];
+        const label =
+          state.query ||
+          (state.scope ? m.header_search_in_scope({ scope: state.scope.name }) : m.header_search_global());
+        expect(trigger).toBeDefined();
+        expect(trigger).toContain(`aria-label="${label} Ctrl/⌘ K"`);
+        expect(trigger).toContain('</span> <kbd');
+        expect(trigger).toContain('aria-describedby="header-keyboard-help"');
+      }
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
+});
+
 test('the single input keeps its search purpose name and associates shortcut help and expanded status descriptions', () => {
   const input = (markup: string) => markup.match(/<input\b(?=[^>]*role="combobox")[^>]*>/)?.[0] ?? '';
   const shortcut = { keyboardShortcut: true };
