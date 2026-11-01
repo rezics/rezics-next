@@ -51,7 +51,7 @@ export function MemberListRow({
     <ContentItem
       href={href}
       title={title}
-      titleLang={titleLang}
+      {...(titleLang ? { titleLang } : {})}
       titleDataSlot="member-list-row-title"
       forceOverlay={storyOverlay}
       className={className}
