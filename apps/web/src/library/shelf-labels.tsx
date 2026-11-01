@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import {
@@ -17,6 +17,7 @@ import { readSubjectLabelPage } from './labels-actions';
 import { labelReadMessage, SubjectLabelMore, SubjectLabelReadNotice } from './subject-labels.tsx';
 import type { useShelfRows } from './shelf-rows';
 import type { ShelfLabelOutcome } from './shelf-selection';
+import { PersonalShelfOrigin } from './personal-shelf-origin';
 
 type Controls = ReturnType<typeof useShelfRows>;
 type LabelPage = Awaited<ReturnType<typeof readSubjectLabelPage>>;
@@ -25,58 +26,113 @@ type LabelPage = Awaited<ReturnType<typeof readSubjectLabelPage>>;
 export function ShelfLabelAction({ controls }: { controls: Controls }) {
   const listAdmitted = useOperation('library_label.list');
   const session = useSession();
+  const origin = useContext(PersonalShelfOrigin);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [choiceId, setChoiceId] = useState('');
   const [page, setPage] = useState<LabelPage | null>(null);
   const requestId = useRef(0);
+  const livePage = useRef<LabelPage | null>(null);
+  const liveChoice = useRef('');
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mounted = useRef(true);
   const blocked = controls.pending || controls.labelSelectionBlocked;
+  const selected = controls.selected.join(':');
+  const scope = useMemo(
+    () => ({ active: true, current: controls.captureLabel() }),
+    [open, query, session.state, session.subject, controls.labelVersion, selected, origin],
+  );
+  const previous = useRef(scope);
+  const cancelTimer = () => {
+    clearTimeout(timer.current);
+    timer.current = undefined;
+  };
   const invalidate = () => {
+    scope.active = false;
     requestId.current++;
+    cancelTimer();
+    livePage.current = null;
+    liveChoice.current = '';
     setPage(null);
     setChoiceId('');
   };
+  if (previous.current !== scope) {
+    previous.current.active = false;
+    previous.current = scope;
+    requestId.current++;
+    cancelTimer();
+    livePage.current = null;
+    liveChoice.current = '';
+    setPage(null);
+    setChoiceId('');
+  }
+  const isCurrent = () => mounted.current && scope.active && scope.current();
+  const retainedCurrent = () => isCurrent() && page === livePage.current;
   const changeOpen = (value: boolean) => {
+    if (!retainedCurrent()) return;
     invalidate();
     setQuery('');
     setOpen(value);
   };
-  useLayoutEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       requestId.current++;
-    },
-    [],
-  );
+      clearTimeout(timer.current);
+    };
+  }, []);
+  const accept = (result: LabelPage, request: { query: string; cursor?: string }) => {
+    if (!isCurrent()) return false;
+    const provenance = result.provenance;
+    if (!provenance) return result.state !== 'loaded' && !result.labels.length;
+    const viewer = origin ? origin.viewer() : session.state === 'signed-in' ? session.subject : null;
+    return (
+      !!viewer &&
+      provenance.viewer === viewer &&
+      !!provenance.csrfToken &&
+      provenance.query === request.query &&
+      provenance.cursor === request.cursor
+    );
+  };
   useEffect(() => {
     const id = ++requestId.current;
-    setPage(null);
-    setChoiceId('');
-    if (!open || !listAdmitted || session.state !== 'signed-in') return;
-    const timeout = setTimeout(() => {
+    if (!open || !listAdmitted || !isCurrent()) return;
+    timer.current = setTimeout(() => {
+      timer.current = undefined;
+      if (id !== requestId.current || !isCurrent()) return;
       void readSubjectLabelPage({ data: { query } })
         .then((result) => {
-          if (id === requestId.current) setPage(result);
+          if (id !== requestId.current || !isCurrent()) return;
+          liveChoice.current = '';
+          setChoiceId('');
+          const next: LabelPage = accept(result, { query }) ? result : { state: 'unavailable', labels: [] };
+          livePage.current = next;
+          setPage(next);
         })
         .catch(() => {
-          if (id === requestId.current) setPage({ state: 'unavailable', labels: [] });
+          if (id === requestId.current && isCurrent()) {
+            const next: LabelPage = { state: 'unavailable', labels: [] };
+            livePage.current = next;
+            setPage(next);
+          }
         });
     }, 250);
     return () => {
-      clearTimeout(timeout);
+      clearTimeout(timer.current);
       requestId.current++;
     };
-  }, [open, query, listAdmitted, session.state, session.subject]);
-  const ready =
-    listAdmitted && session.state === 'signed-in' && page?.state === 'loaded' && !labelReadMessage(page.reason);
+  }, [scope]);
+  const ready = isCurrent() && listAdmitted && page?.state === 'loaded' && !labelReadMessage(page.reason);
   const choice = ready ? page.labels.find((label) => label.id === choiceId) : undefined;
-  const currentRequest = requestId.current;
+  const acceptedMore = useRef<LabelPage | null>(null);
   if (!controls.labelWriteAdmitted) return null;
   return (
-    <Dialog open={open} onOpenChange={changeOpen}>
+    <Dialog open={open && isCurrent()} onOpenChange={changeOpen}>
       <DialogTrigger render={<Button variant="outline" disabled={blocked || !controls.selected.length} />}>
         {m.library_selected_labels_open()}
       </DialogTrigger>
-      {open ? (
+      {open && isCurrent() ? (
         <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{m.library_selected_labels_open()}</DialogTitle>
@@ -89,8 +145,9 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
               maxLength={200}
               value={query}
               onChange={(event) => {
+                if (!retainedCurrent()) return;
                 invalidate();
-                setQuery(event.currentTarget.value);
+                setQuery(event.currentTarget.value.slice(0, 200));
               }}
               className="h-11 w-full min-w-0 rounded-md border bg-background px-3"
             />
@@ -119,7 +176,12 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
                         aria-label={label.name}
                         checked={choiceId === label.id}
                         disabled={blocked}
-                        onCheckedChange={(checked) => setChoiceId(checked ? label.id : '')}
+                        onCheckedChange={(checked) => {
+                          if (retainedCurrent() && !blocked) {
+                            liveChoice.current = checked ? label.id : '';
+                            setChoiceId(liveChoice.current);
+                          }
+                        }}
                       />
                       <span className="min-w-0 break-words">{label.name}</span>
                     </label>
@@ -135,8 +197,18 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
                 key={`${query}:${requestId.current}`}
                 query={query}
                 next={page.next ?? null}
+                isCurrent={retainedCurrent}
+                acceptPage={(result, request) => {
+                  if (!retainedCurrent() || !accept(result, request)) return false;
+                  acceptedMore.current = result;
+                  return true;
+                }}
                 onPage={(result) => {
-                  if (currentRequest !== requestId.current) return;
+                  if (!retainedCurrent() || acceptedMore.current !== result) return;
+                  acceptedMore.current = null;
+                  requestId.current++;
+                  liveChoice.current = '';
+                  livePage.current = result;
                   setChoiceId('');
                   setPage(result);
                 }}
@@ -155,7 +227,14 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
             <Button
               disabled={!choice || blocked || !controls.selected.length}
               onClick={() => {
-                if (!choice || blocked) return;
+                if (
+                  !retainedCurrent() ||
+                  !choice ||
+                  choice.id !== liveChoice.current ||
+                  blocked ||
+                  !controls.captureLabel()()
+                )
+                  return;
                 void controls.assignSelectedLabel(choice);
                 changeOpen(false);
               }}

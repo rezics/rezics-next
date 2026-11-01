@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { m } from '../paraglide/messages.js';
 import { useOperation } from '../kernel/exposure';
@@ -24,9 +24,10 @@ import {
 import { displayLibraryTitle } from './title';
 import { mutateSubjectLabelAction } from './subject-slot-actions';
 import type { LibraryLabelSummary } from './subject-labels.ts';
+import { PersonalShelfOrigin } from './personal-shelf-origin';
 
 /** The existing synchronous mutation lease survives a page/actor replacement until its request settles. */
-export type ShelfMutationLease = { current: boolean; listeners: Set<() => void> };
+export type ShelfMutationLease = { current: boolean; owner?: symbol; listeners: Set<() => void> };
 export const shelfMutationLease = (): ShelfMutationLease => ({ current: false, listeners: new Set() });
 
 export type ShelfFailure = 'closed' | 'denied' | 'unavailable' | 'signed-out' | 'unsupported_library_profile';
@@ -70,6 +71,7 @@ export function useShelfRows(
   busy: ShelfMutationLease,
   originatingCurrent?: () => boolean,
 ) {
+  const shelfOrigin = useContext(PersonalShelfOrigin);
   const [rows, setRows] = useState<ShelfRow[]>(() =>
     initial.map((entry) => ({ entry, conflict: false, failure: null })),
   );
@@ -101,16 +103,60 @@ export function useShelfRows(
   const progress = useOperation('progress_session.list');
   const list = useOperation('library_entry.list');
   const copies = useOperation('copy.list');
-  const permissions = useRef({ restoreAdmitted, removeAdmitted, progress, list, copies });
-  permissions.current = { restoreAdmitted, removeAdmitted, progress, list, copies };
   const origin = useRef(originatingCurrent);
   origin.current = originatingCurrent;
-  const isCurrent = useCallback(() => mounted.current && (origin.current?.() ?? true), []);
-  const authority = useRef(writeAdmitted);
-  authority.current = writeAdmitted;
+  const [rowCurrent] = useState(() => shelfOrigin?.capture('library_entry.list', 'progress_session.list'));
+  const isCurrent = useCallback(
+    () =>
+      (rowCurrent?.() ?? true) && mounted.current && (origin.current?.() ?? true) && (shelfOrigin?.current() ?? true),
+    [shelfOrigin, rowCurrent],
+  );
   const labelWriteAdmitted = useOperation('library_label.assign');
-  const labelAuthority = useRef(labelWriteAdmitted);
-  labelAuthority.current = labelWriteAdmitted;
+  const labelListAdmitted = useOperation('library_label.list');
+  const guard = (fallback: boolean, ...ops: Parameters<NonNullable<typeof shelfOrigin>['capture']>) => {
+    const current = shelfOrigin?.capture(...ops);
+    return () => isCurrent() && (current ? current() : fallback);
+  };
+  const stateCurrent = guard(writeAdmitted, 'library_entry.put');
+  const labelCurrent = guard(labelWriteAdmitted && labelListAdmitted, 'library_label.assign', 'library_label.list');
+  const removeCurrent = guard(removeAdmitted, 'library_entry.delete');
+  const restoreCurrent = guard(restoreAdmitted, 'library_entry.restore');
+  const copiesCurrent = guard(copies, 'copy.list');
+  const progressCurrent = guard(progress, 'progress_session.list');
+  const listCurrent = guard(list, 'library_entry.list');
+  const headers = () => shelfOrigin?.headers() ?? csrfHeaders();
+  const versions = [
+    shelfOrigin?.version('library_entry.put'),
+    shelfOrigin?.version('library_label.assign', 'library_label.list'),
+    shelfOrigin?.version('library_entry.delete'),
+  ];
+  const previousVersions = useRef(versions);
+  if (versions.some((version, i) => version !== previousVersions.current[i])) {
+    const [state, label, remove] = versions.map((version, i) => version !== previousVersions.current[i]);
+    previousVersions.current = versions;
+    // A retired command/key cannot be revived by an admission ABA. Independently readable rows stay visible.
+    const next = currentRows.current.map((row) => {
+      const next = { ...row, entry: { ...row.entry } };
+      if (state) {
+        delete next.unknownIntent;
+        next.entry.changeKey = crypto.randomUUID();
+      }
+      if (label) delete next.unknownLabelIntent;
+      if (remove) {
+        delete next.unknownRemove;
+        next.entry.removeKey = crypto.randomUUID();
+      }
+      return next;
+    });
+    currentRows.current = next;
+    setRows(next);
+    if (state) setOutcomes([]);
+    if (label) {
+      setLabelOutcomes([]);
+      setAssignedLabelName('');
+    }
+    if (remove) setRemoving(null);
+  }
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
@@ -162,29 +208,38 @@ export function useShelfRows(
       ),
     [updateRows],
   );
-  const lock = () => {
-    if (!isCurrent() || busy.current) return false;
+  const lock = (current: () => boolean) => {
+    if (!current() || busy.current) return undefined;
+    const owner = Symbol();
+    busy.owner = owner;
     busy.current = true;
     busy.listeners.forEach((listener) => listener());
-    return true;
-  };
-  const unlock = () => {
-    busy.current = false;
-    busy.listeners.forEach((listener) => listener());
-    const undo = queuedUndo.current;
-    queuedUndo.current = null;
-    if (isCurrent()) undo?.();
+    let unwatch: (() => void) | undefined;
+    const release = () => {
+      unwatch?.();
+      if (busy.owner !== owner) return;
+      delete busy.owner;
+      busy.current = false;
+      busy.listeners.forEach((listener) => listener());
+      const undo = queuedUndo.current;
+      queuedUndo.current = null;
+      if (isCurrent()) undo?.();
+    };
+    unwatch = shelfOrigin?.watch(() => {
+      if (!current()) release();
+    });
+    return release;
   };
 
   /** Shared by single-row changes, selected-page commands and deliberate same-key recovery. */
   const transition = async (intent: ShelfStateIntent): Promise<{ status: ShelfOutcome['status']; stop?: boolean }> => {
-    if (!isCurrent() || !authority.current) return { status: 'not-attempted', stop: true };
+    if (!isCurrent() || !stateCurrent()) return { status: 'not-attempted', stop: true };
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.subjectId);
     if (!row || row.unknownRemove || row.unknownLabelIntent || !matchesShelfIntent(row.entry, intent))
       return { status: 'not-attempted' };
     try {
-      const result = await savePersonalLibraryEntry({ data: intent, headers: csrfHeaders() });
-      if (!isCurrent() || !authority.current) return { status: 'unknown', stop: true };
+      const result = await savePersonalLibraryEntry({ data: intent, headers: headers() });
+      if (!isCurrent() || !stateCurrent()) return { status: 'unknown', stop: true };
       if (result.ok && result.entry && result.entry.subjectId === intent.subjectId) {
         const saved = result.entry;
         patch(intent.subjectId, (current) => ({
@@ -228,7 +283,7 @@ export function useShelfRows(
     } catch {
       // Transport loss says nothing about whether the native command committed.
     }
-    if (!isCurrent() || !authority.current) return { status: 'unknown', stop: true };
+    if (!isCurrent() || !stateCurrent()) return { status: 'unknown', stop: true };
     patch(intent.subjectId, (current) => ({ ...current, failure: 'unavailable', unknownIntent: intent }));
     return { status: 'unknown' };
   };
@@ -247,7 +302,7 @@ export function useShelfRows(
     );
   };
   const record = (subjectId: string, status: ShelfOutcome['status']) => {
-    if (!isCurrent() || !authority.current) return;
+    if (!isCurrent() || !stateCurrent()) return;
     setOutcomes((current) =>
       current.map((outcome) => (outcome.subjectId === subjectId ? { ...outcome, status } : outcome)),
     );
@@ -262,25 +317,29 @@ export function useShelfRows(
       row.unknownRemove ||
       row.unknownLabelIntent ||
       row.entry.state === value ||
-      !authority.current
+      !stateCurrent()
     )
       return;
     const intent = shelfStateIntent(row.entry, value);
-    if (!intent || !lock()) return;
+    if (!intent) return;
+    const release = lock(stateCurrent);
+    if (!release) return;
     try {
       record(subjectId, (await transition(intent)).status);
     } finally {
-      unlock();
+      release();
     }
   };
   const retryState = async (subjectId: string) => {
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
     const intent = row?.unknownIntent;
-    if (!row || !intent || !matchesShelfIntent(row.entry, intent) || !authority.current || !lock()) return;
+    if (!row || !intent || !matchesShelfIntent(row.entry, intent) || !stateCurrent()) return;
+    const release = lock(stateCurrent);
+    if (!release) return;
     try {
       record(subjectId, (await transition(intent)).status);
     } finally {
-      unlock();
+      release();
     }
   };
   const changeSelectedState = async (value: string) => {
@@ -291,7 +350,7 @@ export function useShelfRows(
       targets.length > shelfSelectionLimit ||
       targets.some((row) => row.unknownIntent || row.unknownLabelIntent || row.unknownRemove) ||
       !commonShelfStates(targets.map((row) => row.entry)).some((option) => option.id === value) ||
-      !authority.current
+      !stateCurrent()
     )
       return;
     const snapshot = targets.map((row) => ({
@@ -301,11 +360,12 @@ export function useShelfRows(
         ? displayLibraryTitle(row.entry.subject.label, locale).text
         : m.library_subject_unavailable(),
     }));
-    if (!lock()) return;
+    const release = lock(stateCurrent);
+    if (!release) return;
     setOutcomes(snapshot.map(({ intent, title }) => ({ subjectId: intent.subjectId, title, status: 'not-attempted' })));
     try {
       for (const { intent, unchanged } of snapshot) {
-        if (!isCurrent() || !authority.current) break;
+        if (!isCurrent() || !stateCurrent()) break;
         if (unchanged) {
           record(intent.subjectId, 'unchanged');
           continue;
@@ -315,12 +375,12 @@ export function useShelfRows(
         if (result.stop) break;
       }
     } finally {
-      unlock();
+      release();
     }
   };
 
   const recordLabel = (subjectId: string, result: Pick<ShelfLabelOutcome, 'status' | 'reason'>) => {
-    if (!isCurrent() || !labelAuthority.current) return;
+    if (!isCurrent() || !labelCurrent()) return;
     setLabelOutcomes((current) =>
       current.map((outcome) =>
         outcome.subjectId === subjectId ? { subjectId, title: outcome.title, ...result } : outcome,
@@ -331,7 +391,7 @@ export function useShelfRows(
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.input.subjectId);
     if (
       !isCurrent() ||
-      !labelAuthority.current ||
+      !labelCurrent() ||
       !row ||
       row.unknownIntent ||
       row.unknownRemove ||
@@ -339,8 +399,8 @@ export function useShelfRows(
     )
       return { status: 'not-attempted' };
     try {
-      const result = await mutateSubjectLabelAction({ data: intent.input, headers: csrfHeaders() });
-      if (!isCurrent() || !labelAuthority.current) return { status: 'unknown' };
+      const result = await mutateSubjectLabelAction({ data: intent.input, headers: headers() });
+      if (!isCurrent() || !labelCurrent()) return { status: 'unknown' };
       if (
         result.ok &&
         typeof result.assignment?.id === 'string' &&
@@ -365,14 +425,14 @@ export function useShelfRows(
     } catch {
       // The ordinary adapter can collapse transport loss or refusal to unavailable. Keep the exact command.
     }
-    if (!isCurrent() || !labelAuthority.current) return { status: 'unknown' };
+    if (!isCurrent() || !labelCurrent()) return { status: 'unknown' };
     patch(intent.input.subjectId, (current) => ({ ...current, unknownLabelIntent: intent }));
     return { status: 'unknown' };
   };
   const assignSelectedLabel = async (label: LibraryLabelSummary) => {
     const targets = currentRows.current.filter((row) => selected.includes(row.entry.subjectId));
     if (
-      !labelAuthority.current ||
+      !labelCurrent() ||
       !targets.length ||
       targets.length > shelfSelectionLimit ||
       currentRows.current.some((row) => row.unknownLabelIntent) ||
@@ -399,20 +459,21 @@ export function useShelfRows(
       },
       title: entry.subject ? displayLibraryTitle(entry.subject.label, locale).text : m.library_subject_unavailable(),
     }));
-    if (!lock()) return;
+    const release = lock(labelCurrent);
+    if (!release) return;
     setAssignedLabelName(label.name);
     setLabelOutcomes(
       snapshot.map(({ intent, title }) => ({ subjectId: intent.input.subjectId, title, status: 'not-attempted' })),
     );
     try {
       for (const { intent } of snapshot) {
-        if (!isCurrent() || !labelAuthority.current) break;
+        if (!isCurrent() || !labelCurrent()) break;
         const result = await assignLabel(intent);
         recordLabel(intent.input.subjectId, result);
         if (result.status !== 'assigned') break;
       }
     } finally {
-      unlock();
+      release();
     }
   };
   const retryLabel = async (subjectId: string) => {
@@ -424,30 +485,24 @@ export function useShelfRows(
       row.unknownIntent ||
       row.unknownRemove ||
       !matchesShelfLabelIntent(row.entry, intent) ||
-      !labelAuthority.current ||
-      !lock()
+      !labelCurrent()
     )
       return;
+    const release = lock(labelCurrent);
+    if (!release) return;
     try {
       recordLabel(subjectId, await assignLabel(intent));
     } finally {
-      unlock();
+      release();
     }
   };
 
   const remove = async () => {
     const subjectId = removing;
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
-    if (
-      !isCurrent() ||
-      !permissions.current.removeAdmitted ||
-      !subjectId ||
-      !row ||
-      row.unknownIntent ||
-      row.unknownLabelIntent ||
-      !lock()
-    )
-      return;
+    if (!isCurrent() || !removeCurrent() || !subjectId || !row || row.unknownIntent || row.unknownLabelIntent) return;
+    const release = lock(removeCurrent);
+    if (!release) return;
     try {
       const { entry } = row;
       const result = await deletePersonalLibraryEntry({
@@ -457,26 +512,28 @@ export function useShelfRows(
           ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
           idempotencyKey: entry.removeKey,
         },
-        headers: csrfHeaders(),
+        headers: headers(),
       });
-      if (!isCurrent() || !permissions.current.removeAdmitted) return;
+      if (!isCurrent() || !removeCurrent()) return;
       if (result.ok || result.reason === 'missing') {
         patch(subjectId, () => null);
-        if (result.ok && result.undo && permissions.current.restoreAdmitted) {
+        if (result.ok && result.undo && restoreCurrent()) {
           const receipt = result.undo;
+          const undoCurrent = guard(restoreAdmitted, 'library_entry.restore');
           undoToast(
             m.library_removed(),
             () => {
               const restore = () => {
-                if (!isCurrent() || !permissions.current.restoreAdmitted) return;
+                if (!undoCurrent()) return;
                 // Undo is an explicit user command too. Keep it behind the current request lease rather than losing it.
-                if (!lock()) {
+                const release = lock(undoCurrent);
+                if (!release) {
                   queuedUndo.current = restore;
                   return;
                 }
-                void restorePersonalLibraryEntryAction({ data: { subjectId, ...receipt }, headers: csrfHeaders() })
+                void restorePersonalLibraryEntryAction({ data: { subjectId, ...receipt }, headers: headers() })
                   .then((restored) => {
-                    if (!isCurrent() || !permissions.current.restoreAdmitted) return;
+                    if (!undoCurrent()) return;
                     if (restored.ok) {
                       updateRows((current) => [
                         ...current.filter((row) => row.entry.subjectId !== subjectId),
@@ -507,10 +564,9 @@ export function useShelfRows(
                     else setRestoreMessage(m.library_subject_unavailable());
                   })
                   .catch(() => {
-                    if (isCurrent() && permissions.current.restoreAdmitted)
-                      setRestoreMessage(m.library_subject_unavailable());
+                    if (undoCurrent()) setRestoreMessage(m.library_subject_unavailable());
                   })
-                  .finally(unlock);
+                  .finally(release);
               };
               restore();
             },
@@ -538,20 +594,20 @@ export function useShelfRows(
         }));
       }
     } catch {
-      if (isCurrent() && permissions.current.removeAdmitted)
+      if (isCurrent() && removeCurrent())
         patch(subjectId, (current) => ({ ...current, failure: 'unavailable', unknownRemove: true }));
     } finally {
-      unlock();
-      if (isCurrent()) setRemoving(null);
+      release();
+      if (removeCurrent()) setRemoving(null);
     }
   };
 
   return {
     rows,
     isCurrent,
-    copiesAdmitted: () => permissions.current.copies,
-    progressAdmitted: () => permissions.current.progress,
-    sortAdmitted: () => permissions.current.progress && permissions.current.list,
+    copiesAdmitted: copiesCurrent,
+    progressAdmitted: progressCurrent,
+    sortAdmitted: () => progressCurrent() && listCurrent(),
     pending,
     restoreMessage,
     removing,
@@ -560,7 +616,9 @@ export function useShelfRows(
     outcomes,
     labelOutcomes,
     assignedLabelName,
-    labelWriteAdmitted,
+    labelWriteAdmitted: labelCurrent(),
+    captureLabel: () => guard(labelWriteAdmitted && labelListAdmitted, 'library_label.assign', 'library_label.list'),
+    labelVersion: shelfOrigin?.version('library_label.assign', 'library_label.list'),
     assignSelectedLabel,
     retryLabel,
     labelSelectionBlocked:
@@ -576,21 +634,21 @@ export function useShelfRows(
     },
     changeSelectedState,
     retryState,
-    writeAdmitted,
+    writeAdmitted: stateCurrent(),
     selectionBlocked: selectedRows.some(
       (row) => !!row.unknownIntent || !!row.unknownLabelIntent || !!row.unknownRemove,
     ),
     askRemove: (subjectId: string) => {
       if (
         isCurrent() &&
-        permissions.current.removeAdmitted &&
+        removeCurrent() &&
         !busy.current &&
         !currentRows.current.some((row) => row.entry.subjectId === subjectId && row.unknownLabelIntent)
       )
         setRemoving(subjectId);
     },
     cancelRemove: () => {
-      if (isCurrent()) setRemoving(null);
+      if (removeCurrent()) setRemoving(null);
     },
     changeState,
     remove,
