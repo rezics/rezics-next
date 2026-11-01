@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useSyncExternalStore } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
@@ -74,12 +75,12 @@ export function RealmClaimStatusView({
         </h1>
         <p className="text-sm leading-7 text-muted-foreground">{m.realm_claim_status_authority()}</p>
       </header>
-      <section className="space-y-5 rounded-2xl border bg-card p-5 sm:p-6" aria-busy={state.busy}>
+      <section className="space-y-5" aria-busy={state.busy}>
         {receipt ? (
-          <>
-            <h2 className="text-xl font-semibold">
+          <ContentItemFrame as="article" aria-labelledby={`${id}-case`} className="space-y-5 p-5 sm:p-6">
+            <ContentItemHeading level={2} id={`${id}-case`} className="text-xl font-semibold">
               {receipt.state === 'approved' ? m.realm_claim_status_approved() : m.realm_claim_pending()}
-            </h2>
+            </ContentItemHeading>
             <p className="text-sm leading-7">
               {receipt.state === 'approved'
                 ? m.realm_claim_status_approved_help()
@@ -116,7 +117,7 @@ export function RealmClaimStatusView({
                 </div>
               ) : null}
             </dl>
-          </>
+          </ContentItemFrame>
         ) : (
           <p role="status" className="text-sm leading-7">
             {state.busy

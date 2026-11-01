@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { PatternStory } from '../page';
-import { RealmBansExample } from './example';
+import { fullBanReason, RealmBansExample } from './example';
 
 const meta = {
   title: 'Patterns/Community/Realm bans',
@@ -48,6 +48,17 @@ export const Current: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('button', { name: m.realm_bans_next() })).toBeEnabled();
+  },
+};
+export const FullReason: Story = {
+  args: { scenario: 'current' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(fullBanReason, { exact: true })).toBeVisible();
+    const timestamp = canvasElement.querySelector('time[datetime="2026-10-31T10:00:00Z"]');
+    if (!timestamp) throw new Error('The current ban record should retain its original timestamp.');
+    await expect(timestamp).toBeVisible();
+    await expect(timestamp).toHaveTextContent('UTC');
   },
 };
 export const BanAndUnban: Story = { args: { scenario: 'empty' }, play: banAndUnban };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -6,6 +7,7 @@ import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { initials } from '@rezics/ui/avatar-initials';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import {
   parseRealmBanTarget,
   revalidateRealmBanTarget,
@@ -29,12 +31,16 @@ export type RealmBansControlProps = {
 
 /** Native acceptance is distinct from completion of Accounts' membership removal. */
 export function RealmBanOutcome({ result }: { result: Extract<BanWriteResult, { ok: true }> }) {
+  const id = useId();
+  const accountId = result.action === 'ban' ? result.ban.accountId : result.accountId;
   return (
-    <div role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
-      <p className="break-all font-medium">{result.action === 'ban' ? result.ban.accountId : result.accountId}</p>
+    <ContentItemFrame as="article" role="status" aria-labelledby={`${id}-account`} className="space-y-2 p-4 text-sm">
+      <ContentItemHeading level={3} id={`${id}-account`} className="break-all whitespace-normal font-medium">
+        {accountId}
+      </ContentItemHeading>
       <p>{result.action === 'ban' ? m.realm_bans_active() : m.realm_bans_lifted()}</p>
       {result.action === 'ban' && result.ban.workflowId !== null ? <p>{m.realm_bans_removal_pending()}</p> : null}
-    </div>
+    </ContentItemFrame>
   );
 }
 
@@ -95,21 +101,27 @@ function targetMessage(state: BanTargetState['state']) {
   }
 }
 
-function TargetPreview({ target }: { target: RealmBanTarget }) {
+function TargetPreview({ target, headingLevel = 3 }: { target: RealmBanTarget; headingLevel?: 3 | 4 }) {
   const { account, lookupHandle } = target;
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl bg-muted p-4">
+    <ContentItemFrame
+      as="div"
+      data-slot="realm-ban-target-preview"
+      className="flex min-w-0 items-center gap-3 p-4"
+    >
       <Avatar aria-hidden="true">
         <AvatarFallback>{initials(account.displayName || account.handle)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0 space-y-1 wrap-anywhere text-sm">
-        {account.displayName ? <p className="font-medium">{account.displayName}</p> : null}
+        <ContentItemHeading level={headingLevel} className="break-words font-medium">
+          {account.displayName || `@${account.handle}`}
+        </ContentItemHeading>
         <p>@{account.handle}</p>
         {'movedTo' in account && account.movedTo ? (
           <p>{m.realm_bans_target_moved({ former: lookupHandle, current: account.movedTo })}</p>
         ) : null}
       </div>
-    </div>
+    </ContentItemFrame>
   );
 }
 
@@ -525,9 +537,11 @@ function RealmBansVisit({
               {m.realm_bans_ban()}
             </Button>
             {banConfirm && selected ? (
-              <div className="space-y-3 rounded-xl border p-4">
-                <p className="text-sm">{m.realm_bans_ban_confirm()}</p>
-                <TargetPreview target={selected} />
+              <ContentItemFrame as="div" className="space-y-3 p-4">
+                <ContentItemHeading level={3} className="line-clamp-none font-medium leading-6">
+                  {m.realm_bans_ban_confirm()}
+                </ContentItemHeading>
+                <TargetPreview target={selected} headingLevel={4} />
                 <p className="whitespace-pre-wrap wrap-anywhere text-sm">{reason || m.realm_bans_no_reason()}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -553,23 +567,34 @@ function RealmBansVisit({
                     {m.realm_bans_cancel()}
                   </Button>
                 </div>
-              </div>
+              </ContentItemFrame>
             ) : null}
           </form>
           <h3 className="font-semibold">{m.realm_bans_current()}</h3>
           {view.page.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">{m.realm_bans_empty()}</p>
           ) : (
-            <ul className="divide-y">
+            <ul className="space-y-3">
               {view.page.items.map((ban) => (
-                <li key={ban.accountId} className="space-y-3 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 basis-56 space-y-1">
-                      <p className="break-all text-sm font-medium">{ban.accountId}</p>
-                      <p className="whitespace-pre-wrap wrap-anywhere text-sm text-muted-foreground">
-                        {ban.reason || m.realm_bans_no_reason()}
-                      </p>
+                <ContentItem
+                  key={ban.accountId}
+                  title={ban.accountId}
+                  headingLevel={4}
+                  className="[&_h4]:line-clamp-none [&_h4]:break-all [&_h4]:whitespace-normal"
+                  metadata={
+                    <div className="space-y-2 whitespace-pre-wrap wrap-anywhere">
+                      <p>{ban.reason || m.realm_bans_no_reason()}</p>
+                      <time dateTime={ban.at}>
+                        {new Intl.DateTimeFormat(getLocale(), {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                          timeZone: 'UTC',
+                        }).format(new Date(ban.at))}{' '}
+                        UTC
+                      </time>
                     </div>
+                  }
+                  actions={
                     <Button
                       type="button"
                       variant="outline"
@@ -589,45 +614,49 @@ function RealmBansVisit({
                     >
                       {m.realm_bans_unban()}
                     </Button>
-                  </div>
-                  {confirm === ban.accountId ? (
-                    <div className="space-y-3 rounded-xl bg-muted p-4">
-                      <p className="max-w-prose text-sm">{m.realm_bans_unban_confirm()}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-                          disabled={disabled}
-                          onClick={() =>
-                            void change({
-                              realmId,
-                              accountId: ban.accountId,
-                              reason: '',
-                              action: 'unban',
-                              idempotencyKey: crypto.randomUUID(),
-                            })
-                          }
-                        >
-                          {m.realm_bans_confirm()}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-                          disabled={disabled}
-                          onClick={() => {
-                            if (gate.current() && !working.current) {
-                              intent.current++;
-                              setConfirm(null);
+                  }
+                  preview={
+                    confirm === ban.accountId ? (
+                      <ContentItemFrame as="div" className="space-y-3 p-4">
+                        <ContentItemHeading level={4} className="line-clamp-none font-medium leading-6">
+                          {m.realm_bans_unban_confirm()}
+                        </ContentItemHeading>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                            disabled={disabled}
+                            onClick={() =>
+                              void change({
+                                realmId,
+                                accountId: ban.accountId,
+                                reason: '',
+                                action: 'unban',
+                                idempotencyKey: crypto.randomUUID(),
+                              })
                             }
-                          }}
-                        >
-                          {m.realm_bans_cancel()}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                </li>
+                          >
+                            {m.realm_bans_confirm()}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                            disabled={disabled}
+                            onClick={() => {
+                              if (gate.current() && !working.current) {
+                                intent.current++;
+                                setConfirm(null);
+                              }
+                            }}
+                          >
+                            {m.realm_bans_cancel()}
+                          </Button>
+                        </div>
+                      </ContentItemFrame>
+                    ) : undefined
+                  }
+                />
               ))}
             </ul>
           )}

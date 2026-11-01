@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useSyncExternalStore } from 'react';
 import { ArrowRight, Check, CircleHelp, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../shell/page-heading';
 import { m } from '../paraglide/messages.js';
@@ -165,11 +166,16 @@ export function RealmClaimReviewView({
               </div>
             ) : null}
             {receipt ? (
-              <div role="status" className="space-y-3 rounded-xl border bg-muted/40 p-5 text-sm leading-6">
-                <p className="flex items-center gap-2 font-semibold">
+              <ContentItemFrame
+                as="article"
+                role="status"
+                aria-labelledby={`${id}-receipt`}
+                className="space-y-3 p-5 text-sm leading-6"
+              >
+                <ContentItemHeading level={3} id={`${id}-receipt`} className="flex items-center gap-2 font-semibold">
                   <Check className="size-4" aria-hidden="true" />
                   {m.realm_review_success()}
-                </p>
+                </ContentItemHeading>
                 <dl className="space-y-2">
                   <div>
                     <dt className="text-muted-foreground">{m.realm_review_claimant()}</dt>
@@ -197,10 +203,10 @@ export function RealmClaimReviewView({
                   </div>
                 </dl>
                 <p>{m.realm_review_success_help()}</p>
-              </div>
+              </ContentItemFrame>
             ) : null}
             {!page ? (
-              <div className="space-y-3 rounded-xl border border-dashed p-6 text-sm leading-7">
+              <div className="space-y-3 p-2 text-sm leading-7">
                 <p>
                   {state.busy
                     ? m.realm_review_working()
@@ -219,27 +225,29 @@ export function RealmClaimReviewView({
           {confirming ? (
             <section
               aria-labelledby={`${id}-confirm`}
-              className="space-y-5 rounded-2xl border border-primary/30 bg-primary/5 p-5 sm:p-6"
+              className="min-w-0"
             >
-              <div className="space-y-2">
-                <h3 id={`${id}-confirm`} className="text-lg font-semibold">
-                  {m.realm_review_confirm_heading()}
-                </h3>
-                <p className="text-sm leading-6">{m.realm_review_confirm_help()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">{m.realm_review_claimant()}</p>
-                <Reference>{confirming.source.claimantAccountId}</Reference>
-              </div>
-              <RequestDetails request={confirming.source} />
-              <div className="flex flex-wrap gap-3">
-                <Button className="min-h-11" disabled={!active || state.busy} onClick={() => void control.confirm()}>
-                  {m.realm_review_confirm()}
-                </Button>
-                <Button variant="outline" className="min-h-11" disabled={state.busy} onClick={() => control.cancel()}>
-                  {m.realm_review_cancel()}
-                </Button>
-              </div>
+              <ContentItemFrame as="div" className="space-y-5 p-5 sm:p-6">
+                <div className="space-y-2">
+                  <ContentItemHeading level={3} id={`${id}-confirm`} className="text-lg font-semibold">
+                    {m.realm_review_confirm_heading()}
+                  </ContentItemHeading>
+                  <p className="text-sm leading-6">{m.realm_review_confirm_help()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">{m.realm_review_claimant()}</p>
+                  <Reference>{confirming.source.claimantAccountId}</Reference>
+                </div>
+                <RequestDetails request={confirming.source} />
+                <div className="flex flex-wrap gap-3">
+                  <Button className="min-h-11" disabled={!active || state.busy} onClick={() => void control.confirm()}>
+                    {m.realm_review_confirm()}
+                  </Button>
+                  <Button variant="outline" className="min-h-11" disabled={state.busy} onClick={() => control.cancel()}>
+                    {m.realm_review_cancel()}
+                  </Button>
+                </div>
+              </ContentItemFrame>
             </section>
           ) : null}
           {page && !confirming ? (
@@ -247,18 +255,15 @@ export function RealmClaimReviewView({
               {page.claimRequests.length ? (
                 <ul className="space-y-4">
                   {page.claimRequests.map((request) => (
-                    <li key={request.requestId} className="space-y-5 rounded-2xl border bg-card p-5 sm:p-6">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-medium text-muted-foreground">{m.realm_review_claimant()}</h3>
-                          <Reference>{request.claimantAccountId}</Reference>
-                        </div>
-                        <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
-                          {m.realm_review_pending()}
-                        </span>
-                      </div>
-                      <RequestDetails request={request} />
-                      <div className="border-t pt-4">
+                    <ContentItem
+                      key={request.requestId}
+                      title={request.claimantAccountId}
+                      headingLevel={3}
+                      className="[&_h3]:line-clamp-none [&_h3]:break-all [&_h3]:whitespace-normal"
+                      context={<span>{m.realm_review_claimant()}</span>}
+                      metadata={<RequestDetails request={request} />}
+                      state={<span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">{m.realm_review_pending()}</span>}
+                      actions={
                         <Button
                           variant="outline"
                           className="min-h-10"
@@ -268,12 +273,12 @@ export function RealmClaimReviewView({
                           {m.realm_review_review()}
                           <ArrowRight aria-hidden="true" />
                         </Button>
-                      </div>
-                    </li>
+                      }
+                    />
                   ))}
                 </ul>
               ) : (
-                <div className="space-y-2 rounded-xl border border-dashed p-6 leading-7">
+                <div className="space-y-2 p-2 leading-7">
                   <p className="font-medium">{page.next ? m.realm_review_sparse() : m.realm_review_empty()}</p>
                   <p className="text-sm text-muted-foreground">
                     {page.next ? m.realm_review_sparse_help() : m.realm_review_empty_help()}

@@ -7,6 +7,8 @@ export const exampleRealmId = '01a1a000-0000-7000-8000-000000000002';
 export const exampleAccountId = '01a1a000-0000-7000-8000-000000000081';
 const existingAccount = '01a1a000-0000-7000-8000-000000000082';
 const laterAccount = '01a1a000-0000-7000-8000-000000000083';
+export const fullBanReason =
+  'Repeated disruption across several public discussions continued after two moderator notices. The interruptions prevented other members from completing their topics, so this record preserves the complete reason used for the current restriction and its original review context.';
 type Scenario =
   | 'current'
   | 'empty'
@@ -25,7 +27,7 @@ export function RealmBansExample({ scenario = 'current' }: { scenario?: Scenario
   const boundary = useMemo(() => {
     const existing = {
       accountId: existingAccount,
-      reason: 'Repeated disruption of discussions',
+      reason: fullBanReason,
       actor: null,
       at: '2026-10-31T10:00:00Z',
     };
@@ -56,6 +58,7 @@ export function RealmBansExample({ scenario = 'current' }: { scenario?: Scenario
                   state: 'active',
                   handle: 'river',
                   displayName: 'River 林',
+                  movedTo: 'river-current',
                   automated: false,
                   operatorId: null,
                 },
