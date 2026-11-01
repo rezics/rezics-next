@@ -246,9 +246,7 @@ export const QuestionSelectionLost: Story = {
     await waitFor(() => expect(select.querySelector(`option[value="${questionId}"]`)).not.toBeNull());
     await userEvent.selectOptions(select, questionId);
     await expect(await canvas.findByText(m.home_questions_lost())).toBeVisible();
-    await expect(canvas.getByRole('list', { name: m.refinement_selected() })).toHaveTextContent(
-      'Overall impression',
-    );
+    await expect(canvas.getByRole('list', { name: m.refinement_selected() })).toHaveTextContent('Overall impression');
     await expect(canvas.getAllByRole('alert')).toHaveLength(1);
     await expect(canvas.queryByText(m.home_feed_unavailable())).toBeNull();
     await expect(canvas.getByRole('button', { name: m.home_question_refresh() })).toBeEnabled();

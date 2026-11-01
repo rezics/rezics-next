@@ -282,8 +282,7 @@ export const routes: FakeRoute[] = [
     path: '/v1/feedItems',
     story: ({ request }) => {
       const url = new URL(request.url);
-      if (selected === 'expired-page' && url.searchParams.has('cursor'))
-        return { status: 409, code: 'invalid_cursor' };
+      if (selected === 'expired-page' && url.searchParams.has('cursor')) return { status: 409, code: 'invalid_cursor' };
       const locale = request.headers.get('accept-language')?.split(',')[0] ?? 'en';
       const personal = request.headers.has('authorization');
       const state = url.searchParams.get('stream') === 'following' ? 'following' : selected;
