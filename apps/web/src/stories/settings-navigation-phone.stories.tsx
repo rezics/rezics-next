@@ -52,10 +52,10 @@ function HomeDestination() {
   );
 }
 
-function NotificationsDestination() {
+function AlternateDestination() {
   return (
     <main className="space-y-4 p-4">
-      <h1>{m.settings_notifications_heading()}</h1>
+      <h1>{m.settings_account_heading()}</h1>
       <Link to="/settings">{m.settings_heading()}</Link>
     </main>
   );
@@ -71,8 +71,8 @@ function SettingsEditor() {
           <Link to="/" className="min-h-11 content-center underline">
             {m.nav_home()}
           </Link>
-          <Link to="/notifications" className="min-h-11 content-center underline">
-            {m.settings_notifications_heading()}
+          <Link to="/accounts" className="min-h-11 content-center underline">
+            {m.settings_account_heading()}
           </Link>
         </nav>
         <ChangeStoryViewer />
@@ -104,13 +104,13 @@ function SettingsNavigationPhoneExample() {
     const root = createRootRoute({ component: Outlet });
     const settings = createRoute({ getParentRoute: () => root, path: '/settings', component: SettingsEditor });
     const home = createRoute({ getParentRoute: () => root, path: '/', component: HomeDestination });
-    const notifications = createRoute({
+    const alternate = createRoute({
       getParentRoute: () => root,
-      path: '/notifications',
-      component: NotificationsDestination,
+      path: '/accounts',
+      component: AlternateDestination,
     });
     return createRouter({
-      routeTree: root.addChildren([settings, home, notifications]),
+      routeTree: root.addChildren([settings, home, alternate]),
       history: createMemoryHistory({ initialEntries: ['/settings'] }),
     });
   }, []);
@@ -165,7 +165,7 @@ export const DraftDecisionPhoneRecovery: Story = {
     await expect(spoiler).toBeChecked();
     await expect(suitability).toBeChecked();
 
-    const alternate = canvas.getByRole('link', { name: m.settings_notifications_heading() });
+    const alternate = canvas.getByRole('link', { name: m.settings_account_heading() });
     await userEvent.click(home);
     const reopenedDialog = within(await page.findByRole('alertdialog'));
     await waitFor(() => expect(reopenedDialog.getByRole('button', { name: m.settings_profile_stay() })).toHaveFocus());
@@ -173,7 +173,7 @@ export const DraftDecisionPhoneRecovery: Story = {
     await expect(await page.findAllByRole('alertdialog')).toHaveLength(1);
     await userEvent.click(reopenedDialog.getByRole('button', { name: m.settings_profile_leave() }));
     await canvas.findByRole('heading', { name: m.nav_home() });
-    await expect(canvas.queryByRole('heading', { name: m.settings_notifications_heading() })).toBeNull();
+    await expect(canvas.queryByRole('heading', { name: m.settings_account_heading() })).toBeNull();
     await expect(page.queryByRole('alertdialog')).toBeNull();
 
     await userEvent.click(canvas.getByRole('link', { name: m.settings_heading() }));
