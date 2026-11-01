@@ -373,6 +373,11 @@ async function mount(hydrate = false) {
       loader = value;
       await show();
     },
+    replace: async (value: CurrentViewerProgressIndex, address: typeof requested) => {
+      loader = value;
+      requested = address;
+      await show();
+    },
     refresh: () =>
       tick(() => {
         void client.invalidateQueries({ queryKey: ['library', 'progress', 'current-viewer'] });
@@ -681,6 +686,28 @@ test('a late originating choice lookup cannot replace or finish B choices', asyn
     const expected = progressFormChoices(bundledRelease, 'schema:VideoGame', 'en')![0]!;
     expect(writes()[0]!.body).toEqual({ subjectId: id(2), mode: expected.mode, unit: expected.units[0]!.id });
     await resolveWrite(writes()[0]!);
+    expect(h.navigation).toHaveLength(1);
+  } finally {
+    await h.close();
+  }
+});
+
+test('a fresh matching route loader seeds a new address without a duplicate list or surviving old creation', async () => {
+  const h = await mount();
+  try {
+    await h.submit();
+    const old = writes()[0]!;
+    const loader = await readCurrentViewerProgressIndex({ data: { subjectId: id(2), cursor: 'route-address' } });
+    const reads = calls.filter((call) => call.request.method === 'GET').length;
+    await h.replace(loader, { subjectId: id(2), cursor: 'route-address' });
+    expect(calls.filter((call) => call.request.method === 'GET')).toHaveLength(reads);
+    expect(h.host.textContent).toContain(`A private ${id(2)}`);
+    expect(h.host.querySelector<HTMLInputElement>('[name="idempotencyKey"]')!.value).toBe(loader.page.idempotencyKey);
+    await h.submit();
+    expect(writes()[1]!.body).toEqual({ subjectId: id(2), mode: 'scalar_amount', unit: 'page' });
+    await resolveWrite(old);
+    expect(h.navigation).toEqual([]);
+    await resolveWrite(writes()[1]!);
     expect(h.navigation).toHaveLength(1);
   } finally {
     await h.close();

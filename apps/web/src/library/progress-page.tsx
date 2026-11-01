@@ -107,6 +107,10 @@ export function CurrentViewerProgressIndexPage({
     result.requested.cursor === cursor &&
     result.page.signedIn &&
     result.page.subjectId === subjectId;
+  // Each newly delivered loader may seed its matching scope once. A retained
+  // loader cannot seed another lifetime after identity/admission retirement.
+  const loaderSource = useRef({ loader, origin });
+  if (loaderSource.current.loader !== loader) loaderSource.current = { loader, origin };
   const query = useQuery({
     ...personalRead,
     queryKey: ['library', 'progress', 'current-viewer', viewer, allowed, subjectId, cursor, locale, origin.generation],
@@ -119,7 +123,7 @@ export function CurrentViewerProgressIndexPage({
       }),
     enabled: personalRead.enabled && hydrated && !!viewer && allowed,
     // Do not duplicate the bounded loader read on hydration. Invalidations still refetch.
-    initialData: origin.generation === 1 && matches(loader) ? loader : undefined,
+    initialData: loaderSource.current.origin === origin && matches(loader) ? loader : undefined,
     staleTime: Infinity,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
