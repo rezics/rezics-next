@@ -17,12 +17,6 @@ import {
   type CommunityBoardPage,
 } from './board-feed-data';
 
-/*
- * ContentItem keeps the existing `<ListRow className=...>` and `<ListRowControl>` interaction layers. Its shared
- * localized href replaces `createLink(ListRowLink)` and the old `<ThreadCardLink` primary link; titleDataSlot preserves
- * `data-slot="board-feed-card"` on the visible heading. The hidden `<h3 className="text-lg leading-snug font-semibold tracking-tight break-words sm:text-xl">` is now a
- * visible level-three ContentItem title.
- */
 function ThreadCard({
   thread,
   authors,
@@ -64,7 +58,7 @@ function ThreadCard({
 
   return (
     <ContentItem
-      className="rounded-2xl bg-card px-3 py-5 sm:px-4"
+      className="px-3 py-5 sm:px-4"
       title={title}
       href={href}
       headingLevel={3}

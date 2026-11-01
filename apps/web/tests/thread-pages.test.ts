@@ -60,9 +60,9 @@ test('the actual board feed uses heading-style titles and the available opening 
   const html = renderToStaticMarkup(createElement(RouterProvider, { router }));
   expect(html).toMatch(/<h1\b[^>]*>Stories of the little prince<\/h1>/);
   expect(html).toMatch(/<h3\b[^>]*>The first words of this discussion\.<\/h3>/);
+  expect(html).toMatch(/<h3\b(?=[^>]*data-content-item-slot="title")(?=[^>]*data-slot="board-feed-card")[^>]*>/u);
   expect(html).toContain(`href="/en/threads/${row.id}/thread"`);
   expect(html).not.toContain('Letters from B-612');
-  expect(feed).toMatch(/text-lg[^"\n]*font-semibold tracking-tight/);
   expect(paths).toEqual([
     `/v1/boards/${boardRecording.board.id}`,
     `/v1/boards/${boardRecording.board.id}/threads`,
@@ -98,16 +98,9 @@ test('each route has one initial page source; an explicit thread refresh preserv
   expect(reading).not.toMatch(/\b(?:useQuery|fetchQuery|readThreadPage)\(/);
 });
 
-test('the shared board cards retain accessible ListRow links and controls without per-card HTTP', () => {
+test('the Board feed keeps its continuation route-owned and performs no per-card HTTP', () => {
   expect(board).toContain('<BoardCommunity');
   expect(community).toContain('<BoardFeed');
-  expect(feed).toContain('<ListRow ');
-  expect(feed).toContain('createLink(ListRowLink)');
-  expect(feed).toContain('<ThreadCardLink');
-  expect(feed).toContain('<ListRowControl');
-  expect(feed).toContain('data-slot="board-feed-card"');
-  expect(feed).toContain('<ul className="space-y-2">');
-  expect(feed).toContain('aria-labelledby="board-threads-heading"');
   expect(feed).toContain('search={{ cursor: page.next,');
   expect(feed).not.toMatch(/\b(?:fetch|useQuery|useInfiniteQuery|kernelClient)\(/);
   expect(feed).not.toMatch(/divide-y|border-y/);

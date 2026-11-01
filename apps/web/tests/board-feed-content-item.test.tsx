@@ -63,11 +63,34 @@ test('Discussion rows use shared ContentItem headings and destinations while ret
   const markup = await render(suppliedPage, 'hot');
   const primaryHref = threadLocation('en', { id: thread.id, title: thread.title });
   const authorHref = `/en/@${encodeURIComponent(author.handle)}`;
+  expect(markup).toContain('aria-labelledby="board-threads-heading"');
+  expect(markup).toContain('<ul');
+  expect(markup).toMatch(/<li\b(?=[^>]*data-slot="list-row")[^>]*>/u);
   expect(markup).toContain('data-slot="board-feed-card"');
-  expect(markup).toMatch(/<h3\b[^>]*data-slot="board-feed-card"[^>]*>/u);
-  expect(markup).toContain(`href="${primaryHref}"`);
+  const heading = markup.match(/<h3\b(?=[^>]*data-slot="board-feed-card")[^>]*>[\s\S]*?<\/h3>/u)?.[0];
+  const primaryLink = markup.match(/<a\b(?=[^>]*data-slot="list-row-link")[^>]*>/u)?.[0];
+  if (!heading || !primaryLink) throw new Error('The discussion row should expose its visible heading and primary link.');
+  const headingOpening = heading.slice(0, heading.indexOf('>') + 1);
+  const headingId = headingOpening.match(/\bid="([^"]+)"/u)?.[1];
+  expect(headingId).toBeDefined();
+  expect(primaryLink).toContain(`href="${primaryHref}"`);
+  expect(primaryLink).toContain(`aria-labelledby="${headingId}"`);
   expect(hrefCount(markup, primaryHref)).toBeGreaterThanOrEqual(3);
-  expect(markup).toContain(`href="${authorHref}"`);
+  const primaryEnd = markup.indexOf('</a>', markup.indexOf(primaryLink));
+  expect(hrefCount(markup.slice(primaryEnd + '</a>'.length), primaryHref)).toBeGreaterThanOrEqual(2);
+  const authorIndex = markup.indexOf(`href="${authorHref}"`);
+  expect(authorIndex).toBeGreaterThan(primaryEnd);
+  expect(markup.slice(0, authorIndex)).toMatch(
+    /<div\b(?=[^>]*data-content-item-slot="metadata")(?=[^>]*data-slot="list-row-control")[^>]*>[\s\S]*$/u,
+  );
+  const actionControl = markup.match(
+    /<div\b(?=[^>]*data-content-item-slot="actions")(?=[^>]*data-slot="list-row-control")[^>]*>/u,
+  )?.[0];
+  if (!actionControl) throw new Error('The discussion row should place its actions in the independent control layer.');
+  const actionControlIndex = markup.indexOf(actionControl);
+  expect(markup.indexOf(m.board_feed_reactions({ count: 5 }))).toBeGreaterThan(actionControlIndex);
+  expect(markup.indexOf(m.board_feed_replies({ count: 7 }))).toBeGreaterThan(actionControlIndex);
+  expect(markup.indexOf(`aria-label="${m.thread_content_more_actions()}"`)).toBeGreaterThan(actionControlIndex);
   expect(markup).toContain(m.board_feed_reactions({ count: 5 }));
   expect(markup).toContain(m.board_feed_replies({ count: 7 }));
   expect(markup).toContain('dateTime="2026-10-31T12:00:00.000Z"');
