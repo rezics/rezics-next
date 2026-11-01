@@ -62,7 +62,9 @@ test('Orders use shared items with captured historical money and distinct settle
       ]).toEqual([order.id, order.settlement, order.entitlementId ?? '']);
       expect(heading.textContent).toBe(order.title);
       expect(heading.getAttribute('data-content-item-slot')).toBe('title');
-      expect(heading.hidden || heading.classList.contains('sr-only') || heading.hasAttribute('aria-hidden')).toBe(false);
+      expect(heading.hidden || heading.classList.contains('sr-only') || heading.hasAttribute('aria-hidden')).toBe(
+        false,
+      );
       expect(heading.id).not.toBe('');
       expect(links).toHaveLength(1);
       expect(links[0]!.getAttribute('aria-labelledby')).toBe(heading.id);
