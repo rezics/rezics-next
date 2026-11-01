@@ -5,6 +5,10 @@ export const PERFORMANCE_HOST_NAMES = ['a', 'b'] as const;
 const MAX_SMALL_UNIT_FILES = 12;
 const MAX_SMALL_UNIT_SOURCE_BYTES = 256 * 1024;
 const MAX_SMALL_UNIT_IMPORTS = 64;
+// Local tests understand only these harness/assertion modules plus recursively checked relative files. Other bare,
+// workspace, builtin, dynamic, or configuration routes are opaque and stay remote. The closure is bounded to 12 test
+// entries, 64 source files, 64 static imports per file, and 256 KiB per source; it does not execute sources to inspect
+// them and rejects symlinked source parents instead of resolving through them.
 const SAFE_SMALL_UNIT_IMPORTS = new Set(['bun:test', 'node:test', 'node:assert', 'node:assert/strict']);
 
 export type CheckPlacement = {
