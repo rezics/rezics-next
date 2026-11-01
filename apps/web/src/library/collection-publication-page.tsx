@@ -4,7 +4,7 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { useLayoutEffect, useState, useRef } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { useCollectionOwnerCurrent } from './collection-rule-current';
+import { useCollectionOwnerCurrent } from './collection-owner-current';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import { CollectionMemberDetails } from './collection-member-row';
@@ -44,6 +44,7 @@ type PublicationViewProps = {
   submit: PublicationSubmit;
   onReload?: () => void;
   isCurrent?: () => boolean;
+  isOwnerCurrent?: () => boolean;
   canPublish?: () => boolean;
 };
 
@@ -51,10 +52,9 @@ type PublicationViewProps = {
 export function CollectionPublicationPageView(props: PublicationViewProps) {
   const { page } = props;
   const credential = !!page.viewer?.subject && !!page.viewer.csrfToken;
-  const authorityLost = page.source.state === 'denied' || page.source.state === 'unsupported';
   return (
     <PublicationIntentView
-      key={JSON.stringify([page.viewer?.subject, page.address.id, page.address.cursor, credential, authorityLost])}
+      key={JSON.stringify([page.viewer?.subject, page.address.id, page.address.cursor, credential])}
       {...props}
       page={
         credential && (page.source.state !== 'ready' || page.source.page.id === page.address.id)
@@ -82,6 +82,7 @@ function PublicationIntentView({
   onReload,
   isCurrent = () => true,
   canPublish = () => true,
+  isOwnerCurrent = isCurrent,
 }: PublicationViewProps) {
   const source = page.source;
   const ready = source.state === 'ready';
@@ -99,8 +100,8 @@ function PublicationIntentView({
   // Events and completions share the same synchronous gate, including before React renders again.
   const current = useRef(state);
   const active = useRef(true);
-  function update(change: (previous: IntentState) => IntentState) {
-    if (!active.current || !isCurrent()) return;
+  function update(change: (previous: IntentState) => IntentState, currentOwner = isCurrent) {
+    if (!active.current || !currentOwner()) return;
     current.current = change(current.current);
     setState(current.current);
   }
@@ -161,20 +162,23 @@ function PublicationIntentView({
     } catch {
       outcome = { ok: false, reason: 'unknown' };
     }
-    if (!active.current || !isCurrent()) return;
-    update((previous) => ({
-      ...previous,
-      result: outcome,
-      busy: false,
-      ...(outcome.ok
-        ? {
-            complete: outcome,
-            attempt: null,
-            confirmed: false,
-            selected: previous.sourceKey === previous.attempt?.sourceKey ? previous.selected : [],
-          }
-        : {}),
-    }));
+    if (!active.current || !isOwnerCurrent()) return;
+    update(
+      (previous) => ({
+        ...previous,
+        result: outcome,
+        busy: false,
+        ...(outcome.ok
+          ? {
+              complete: outcome,
+              attempt: null,
+              confirmed: false,
+              selected: previous.sourceKey === previous.attempt?.sourceKey ? previous.selected : [],
+            }
+          : {}),
+      }),
+      isOwnerCurrent,
+    );
   }
 
   function reload() {
@@ -273,6 +277,7 @@ function PublicationIntentView({
                           })}
                           disabled={locked || (!checked && selected.length >= 100)}
                           onChange={() => {
+                            if (!canPublish()) return;
                             update((previous) => {
                               if (previous.busy || previous.attempt) return previous;
                               const selected = previous.selected.includes(id)
@@ -304,6 +309,7 @@ function PublicationIntentView({
                 checked={confirmed}
                 disabled={locked}
                 onChange={(event) => {
+                  if (!canPublish()) return;
                   const confirmed = event.target.checked;
                   update((previous) => (previous.busy || previous.attempt ? previous : { ...previous, confirmed }));
                 }}
@@ -346,7 +352,7 @@ function PublicationIntentView({
 
 export function CollectionPublicationPage({ address }: { address: PublicationAddress }) {
   const owner = useCollectionOwnerCurrent(JSON.stringify(['publication', address.id, address.cursor ?? null]));
-  if (!owner.admitted || !owner.subject)
+  if (!owner.subject)
     return (
       <CollectionPublicationPageView
         page={{ viewer: null, address, source: { state: 'denied' } }}
@@ -357,7 +363,7 @@ export function CollectionPublicationPage({ address }: { address: PublicationAdd
     <CurrentPublicationPage
       key={owner.generation}
       subject={owner.subject}
-      csrfToken={owner.credential() ?? ''}
+      csrfToken={owner.csrfToken}
       address={address}
       owner={owner}
     />
@@ -377,12 +383,19 @@ function CurrentPublicationPage({
 }) {
   const client = useQueryClient();
   const viewer = { subject, csrfToken };
-  const options = collectionPublicationQuery(viewer, address, owner.isCurrent);
+  const started = useRef(new Set<string>());
+  const readIdentity = JSON.stringify([subject, csrfToken, address.id, address.cursor, owner.lifetime]);
+  const options = collectionPublicationQuery(viewer, address, () => {
+    if (!owner.isCurrent()) return false;
+    started.current.add(readIdentity);
+    return true;
+  });
   const query = useQuery({
     ...options,
     // A returning viewer/address cannot join a still-pending read or reuse its old cached result.
     queryKey: [...options.queryKey, owner.lifetime],
-    enabled: owner.isCurrent(),
+    // Admission churn may suspend a read, but never automatically replays a failed read.
+    enabled: owner.isCurrent() && !!csrfToken && !started.current.has(readIdentity),
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -390,17 +403,23 @@ function CurrentPublicationPage({
     const csrf = owner.credential();
     if (!csrf) return false;
     // Consult the actual cache before a replacement render commits, including a rotated credential's read.
-    const current = client.getQueryData<PublicationPage>([
+    const state = client.getQueryState<PublicationPage>([
       ...collectionPublicationQuery({ subject, csrfToken: csrf }, address).queryKey,
       owner.lifetime,
     ]);
+    const current = state?.data;
     return (
+      state?.status === 'success' &&
+      state.fetchStatus === 'idle' &&
+      current === query.data &&
       current?.viewer?.subject === subject &&
       current.viewer.csrfToken === csrf &&
       current.address.id === address.id &&
       current.address.cursor === address.cursor &&
       current.source.state === 'ready' &&
-      current.source.page.id === address.id
+      current.source.page.id === address.id &&
+      current.source.page.curatorAccountId === subject &&
+      current.source.page.builtinKind === undefined
     );
   }
   const data = query.data;
@@ -409,14 +428,20 @@ function CurrentPublicationPage({
     data?.viewer?.subject === subject &&
     data.viewer.csrfToken === csrfToken &&
     data.address.id === address.id &&
-    data.address.cursor === address.cursor;
+    data.address.cursor === address.cursor &&
+    (data.source.state !== 'ready' ||
+      (data.source.page.id === address.id &&
+        data.source.page.curatorAccountId === subject &&
+        data.source.page.builtinKind === undefined));
   const page: PublicationPage =
-    !query.isFetching && !query.isError && matches
+    query.isSuccess && !query.isFetching && matches
       ? data
       : {
           viewer,
           address,
-          source: { state: !query.isFetching && data?.source.state === 'denied' ? 'denied' : 'unavailable' },
+          source: {
+            state: owner.isCurrent() && !query.isFetching && data?.source.state === 'denied' ? 'denied' : 'unavailable',
+          },
         };
   return (
     <>
@@ -428,17 +453,23 @@ function CurrentPublicationPage({
       <CollectionPublicationPageView
         page={page}
         isCurrent={owner.isCurrent}
+        isOwnerCurrent={owner.isOwnerCurrent}
+        canPublish={canPublish}
         submit={async (input) => {
           const csrf = owner.credential();
           if (!csrf || !canPublish()) return { ok: false, reason: 'denied' };
-          const result = await publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrf } });
-          return owner.isCurrent() ? result : { ok: false, reason: 'denied' };
+          // Preserve the real outcome of a dispatched native write. Its view fences settlement by owner identity.
+          return publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrf } });
         }}
         {...(query.isFetching
           ? {}
           : {
               onReload: () => {
-                if (owner.isCurrent()) void query.refetch().catch(() => undefined);
+                if (
+                  owner.isCurrent() &&
+                  client.getQueryState([...options.queryKey, owner.lifetime])?.fetchStatus !== 'fetching'
+                )
+                  void query.refetch().catch(() => undefined);
               },
             })}
       />

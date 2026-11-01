@@ -198,6 +198,8 @@ type EditorProps = {
   csrfToken: string;
   isCurrent?: (() => boolean) | undefined;
   currentCsrf?: (() => string | null) | undefined;
+  isOwnerCurrent?: (() => boolean) | undefined;
+  canLabelCurrent?: (() => boolean) | undefined;
   requireProvenance?: boolean | undefined;
   navigate?: ((id: string) => void) | undefined;
 };
@@ -214,7 +216,13 @@ export function CollectionRuleEditor(props: EditorProps) {
     !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
   const canSave = !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.update');
   const canLabel = !!admitted?.includes('library_label.list');
-  const scope = JSON.stringify([viewerId, collectionId, canRead, canSave, canLabel]);
+  const scope = JSON.stringify(
+    props.isOwnerCurrent ? [viewerId, collectionId] : [viewerId, collectionId, canRead, canSave, canLabel],
+  );
+  const latest = useRef({ page, scope });
+  if (latest.current.page !== page || latest.current.scope !== scope) latest.current = { page, scope };
+  const origin = latest.current;
+  const sourceCurrent = () => latest.current === origin && (props.isCurrent?.() ?? true);
   const owned =
     canRead &&
     canSave &&
@@ -242,6 +250,7 @@ export function CollectionRuleEditor(props: EditorProps) {
     <RuleLifetime
       key={scope}
       {...props}
+      isCurrent={sourceCurrent}
       epoch={boundary.epoch}
       retired={boundary.retired}
       seen={boundary.seen}
@@ -252,7 +261,7 @@ export function CollectionRuleEditor(props: EditorProps) {
 }
 
 // A synchronous lock and a mounted generation belong to this page, never to replacement IO.
-function useRuleWork(epoch: number, isCurrent = alwaysCurrent) {
+function useRuleWork(epoch: number, isCurrent = alwaysCurrent, owns = isCurrent) {
   const work = useRef({ active: true, locked: false });
   const [pending, setPending] = useState(false);
   const previousEpoch = useRef(epoch);
@@ -269,15 +278,15 @@ function useRuleWork(epoch: number, isCurrent = alwaysCurrent) {
       current.active = false;
     };
   }, [epoch]);
-  function start() {
+  function start(settles = isCurrent) {
     const current = work.current;
     if (!current.active || !isCurrent() || current.locked) return null;
     current.locked = true;
     setPending(true);
     return {
-      current: () => current.active && isCurrent(),
+      current: () => current.active && settles(),
       finish: () => {
-        if (!current.active || !isCurrent()) return;
+        if (!current.active || !owns()) return;
         current.locked = false;
         setPending(false);
       },
@@ -299,19 +308,22 @@ function RuleLifetime({
 }: EditorProps & { authorized: boolean; canLabel: boolean; epoch: number; retired: Set<string>; seen: Set<string> }) {
   const [retried, setRetried] = useState<{ source: RulePage; page: RulePage } | null>(null);
   const current = retried?.source === page ? retried.page : page;
-  const work = useRuleWork(epoch, actions.isCurrent);
-  function accepts(value: RulePage): value is AvailablePage {
+  const work = useRuleWork(epoch, actions.isCurrent, actions.isOwnerCurrent);
+  function belongs(value: RulePage): value is AvailablePage {
     return (
-      authorized &&
-      (actions.isCurrent?.() ?? true) &&
       (value.state === 'ready' || value.state === 'new') &&
       value.viewerId === viewerId &&
       !retired.has(pageIdentity(value)!) &&
-      (value.state === 'ready' ? value.id === collectionId : collectionId === null)
+      (value.state === 'ready' ? value.id === collectionId : collectionId === null) &&
+      (!actions.requireProvenance || value.address?.collectionId === collectionId)
     );
+  }
+  function accepts(value: RulePage): value is AvailablePage {
+    return authorized && (actions.isCurrent?.() ?? true) && belongs(value);
   }
   function remember(value: AvailablePage) {
     seen.add(pageIdentity(value)!);
+    setRetried({ source: page, page: value });
   }
   async function retry() {
     if (!authorized) return;
@@ -332,16 +344,19 @@ function RuleLifetime({
       operation.finish();
     }
   }
-  return accepts(current) ? (
+  const retained = useRef<AvailablePage | null>(null);
+  if (belongs(current)) retained.current = current;
+  const formPage = belongs(current) ? current : actions.isOwnerCurrent ? retained.current : null;
+  return formPage && (actions.isOwnerCurrent || accepts(current)) ? (
     <RuleForm
-      page={current}
+      page={formPage}
+      sourceAvailable={belongs(current)}
       viewerId={viewerId!}
       collectionId={collectionId}
       epoch={epoch}
       canLabel={canLabel}
       accepts={accepts}
       remember={remember}
-      refuse={() => setRetried({ source: page, page: { state: 'denied' } })}
       {...actions}
     />
   ) : (
@@ -356,6 +371,7 @@ function RuleLifetime({
 
 function RuleForm({
   page,
+  sourceAvailable,
   save,
   reload,
   labels,
@@ -366,23 +382,26 @@ function RuleForm({
   canLabel,
   isCurrent: ownerCurrent = alwaysCurrent,
   currentCsrf,
+  isOwnerCurrent,
+  canLabelCurrent,
   requireProvenance,
   accepts,
   remember,
-  refuse,
 }: Omit<EditorProps, 'page' | 'admitted'> & {
   page: AvailablePage;
+  sourceAvailable: boolean;
   epoch: number;
   canLabel: boolean;
   accepts(value: RulePage): value is AvailablePage;
   remember(value: AvailablePage): void;
-  refuse(): void;
 }) {
   const sourceActive = useRef(true);
-  const isCurrent = () => sourceActive.current && ownerCurrent();
+  const available = useRef(sourceAvailable);
+  available.current = sourceAvailable;
+  const isCurrent = () => sourceActive.current && available.current && ownerCurrent();
   function refuseSource() {
     sourceActive.current = false;
-    refuse();
+    setFeedback(m.library_rule_denied());
   }
   const [base, setBase] = useState(page);
   const [title, setTitle] = useState(page.state === 'ready' ? page.title : '');
@@ -392,7 +411,7 @@ function RuleForm({
   );
   const [choices, setChoices] = useState(page.choices);
   const [query, setQuery] = useState('');
-  const { pending, start } = useRuleWork(epoch, isCurrent);
+  const { pending, start } = useRuleWork(epoch, ownerCurrent, isOwnerCurrent);
   const [feedback, setFeedback] = useState('');
   const [conflict, setConflict] = useState(false);
   const [intent, setIntent] = useState<RuleWrite | null>(null);
@@ -411,13 +430,25 @@ function RuleForm({
       { label: m.library_rule_holding(), value: { owner: { holding: { profileId: '' } } } },
     ],
     render: (value, onChange): ReactNode =>
-      'owner' in value ? <OwnerFields value={value} onChange={onChange} choices={choices} /> : null,
+      'owner' in value ? (
+        <OwnerFields
+          value={value}
+          onChange={(next) => {
+            if (isCurrent() && !captured.current) onChange(next);
+          }}
+          choices={
+            canLabel && (canLabelCurrent?.() ?? true)
+              ? choices
+              : { ...choices, labels: { state: 'unavailable', values: [], next: null } }
+          }
+        />
+      ) : null,
   };
   async function submit(event: FormEvent) {
     event.preventDefault();
     const csrf = currentCsrf ? currentCsrf() : csrfToken;
     if (!isCurrent() || !csrf || conflict || !filter || savedId) return;
-    const operation = start();
+    const operation = start(isOwnerCurrent ?? isCurrent);
     if (!operation) return;
     let parsed: FilterDocument;
     try {
@@ -441,7 +472,7 @@ function RuleForm({
     setIntent(input);
     setFeedback('');
     try {
-      if (!operation.current()) return;
+      if (!isCurrent() || !operation.current()) return;
       const result = await save(input, csrf);
       if (!operation.current()) return;
       if (result.ok || result.reason !== 'unavailable') {
@@ -472,6 +503,7 @@ function RuleForm({
     }
   }
   async function refresh() {
+    const choiceOrigin = choiceAddress.current;
     const operation = start();
     if (!operation) return;
     try {
@@ -479,12 +511,17 @@ function RuleForm({
       const current = await reload();
       if (!operation.current()) return;
       if (accepts(current)) {
+        sourceActive.current = true;
         remember(current);
         // An uncertain command retains its exact revision, filter, metadata and key across reads.
         if (!captured.current) setBase(current);
-        choiceContext.current = { q: '', next: current.choices.labels.next };
-        setChoiceQuery('');
-        setChoices(current.choices);
+        if (choiceAddress.current === choiceOrigin) {
+          choiceAddress.current = { q: '', cursor: undefined, generation: choiceOrigin.generation + 1 };
+          choiceContext.current = { q: '', next: current.choices.labels.next };
+          setQuery('');
+          setChoiceQuery('');
+          setChoices(current.choices);
+        }
         setConflict(false);
         setSavedId(null);
         setFeedback(m.library_rule_reloaded());
@@ -502,6 +539,7 @@ function RuleForm({
       !isCurrent() ||
       !labels ||
       !canLabel ||
+      !(canLabelCurrent?.() ?? true) ||
       captured.current ||
       query !== choiceAddress.current.q ||
       (cursor !== undefined && (query !== choiceContext.current.q || cursor !== choiceContext.current.next))
@@ -515,9 +553,9 @@ function RuleForm({
       if (!operation.current()) return;
       const result = await labels(requested.q, requested.cursor);
       if (!operation.current()) return;
-      if (choiceAddress.current !== requested) return;
+      if (choiceAddress.current !== requested || !(canLabelCurrent?.() ?? true)) return;
       if (requireProvenance && (!result || result.viewerId !== viewerId || !result.address)) {
-        refuseSource();
+        setFeedback(m.library_rule_labels_unavailable());
         return;
       }
       if (
@@ -534,6 +572,20 @@ function RuleForm({
       operation.finish();
     }
   }
+  // Keep this intent mounted while authority is unavailable, without retaining private UI in the DOM.
+  if (!isCurrent())
+    return (
+      <div role="alert">
+        <p>{m.library_rule_denied()}</p>
+        <Button type="button" disabled={!ownerCurrent() || pending} onClick={() => void refresh()}>
+          {m.library_collection_reload()}
+        </Button>
+      </div>
+    );
+  const visibleChoices =
+    canLabel && (canLabelCurrent?.() ?? true)
+      ? choices
+      : { ...choices, labels: { state: 'unavailable' as const, values: [], next: null } };
   return (
     <article className="flex max-w-4xl flex-col gap-6 text-foreground">
       <PageHeading>{base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}</PageHeading>
@@ -583,9 +635,9 @@ function RuleForm({
                   : m.condition_metadata_unavailable()}
               </p>
             )}
-            {choices.labels.state !== 'ready' && (
+            {visibleChoices.labels.state !== 'ready' && (
               <p role="status">
-                {choices.labels.state === 'preparing'
+                {visibleChoices.labels.state === 'preparing'
                   ? m.library_rule_preparing()
                   : m.library_rule_labels_unavailable()}
               </p>
@@ -598,7 +650,7 @@ function RuleForm({
                     value={query}
                     maxLength={1000}
                     onChange={(event) => {
-                      if (!isCurrent() || captured.current) return;
+                      if (!isCurrent() || !(canLabelCurrent?.() ?? true) || captured.current) return;
                       choiceAddress.current = {
                         q: event.currentTarget.value,
                         cursor: undefined,
