@@ -59,7 +59,12 @@ export function MyLogsCurrentViewer({
         locale,
         origin.lifetime(0),
       ],
-      enabled: personalRead.enabled && origin.hydrated && !!origin.subject && origin.allowed[0] && address.isCurrent(),
+      enabled:
+        personalRead.enabled &&
+        origin.hydrated &&
+        !!origin.subject &&
+        origin.allowed[0] === true &&
+        address.isCurrent(),
       queryFn: async ({ signal }) => {
         assertHistoryCurrent(current, signal);
         try {

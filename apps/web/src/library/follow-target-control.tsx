@@ -100,7 +100,7 @@ export function FollowTargetControl({
         origin.authoritative &&
         following === undefined &&
         !!viewer &&
-        origin.allowed[0] &&
+        origin.allowed[0] === true &&
         address.isCurrent(),
     },
     queryClient,

@@ -81,7 +81,12 @@ export function CurrentViewerMineFollowingPage({
   const read = useQuery(
     {
       ...options,
-      enabled: personalRead.enabled && origin.hydrated && !!origin.subject && origin.allowed[0] && address.isCurrent(),
+      enabled:
+        personalRead.enabled &&
+        origin.hydrated &&
+        !!origin.subject &&
+        origin.allowed[0] === true &&
+        address.isCurrent(),
       ...(origin.seed && origin.subject && matches(initial, origin.subject, address.cursor, locale)
         ? { initialData: initial }
         : {}),
@@ -108,7 +113,7 @@ export function CurrentViewerMineFollowingPage({
     isCurrent: current,
   };
   const status =
-    origin.subject && origin.allowed[0] && !page.signedIn
+    origin.subject && origin.allowed[0] === true && !page.signedIn
       ? read.isError || read.data
         ? 'unavailable'
         : 'preparing'
