@@ -5,6 +5,12 @@ keeps the existing visual, context, title, metadata, preview, state, action and 
 `ul` or `ol`; the shared row link and control layer keep one primary destination separate from independent links and
 buttons.
 
+The primary link uses the visible title as its accessible name by default. A caller may supply `primaryLinkLabel` when
+the destination needs additional, noninteractive summary context; a nonblank value becomes the link's exact accessible
+name while the visible heading remains unchanged. The supplied name must include the visible title verbatim and must
+not add secrets, action labels or fabricated facts. Empty or whitespace-only values use the default title name. Without
+`href`, no primary link or hidden announcement is rendered.
+
 `ContentItemFrame` provides the same rounded hover, focus and press surface for a tile root. A tile may choose
 `article` semantics and compose the shared `ContentItemHeading` and `ContentItemTitleLink` parts without adding a
 wrapper `li`. The primary title stays a real anchor, and controls use the `ListRowControl` layer above its stretched

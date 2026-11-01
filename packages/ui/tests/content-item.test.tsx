@@ -70,6 +70,76 @@ test('ContentItem composes its slots as one named heading, one stretched link an
   expect(plainItem).not.toContain('data-content-item-slot="trailing"');
 });
 
+test('ContentItem names supplied primary summaries without replacing the visible heading or independent controls', () => {
+  const summary = 'A reply from Momo. Momo. Reply. Unread. Thursday, October 29, 2026 at 10:00:00 AM UTC';
+  const html = renderToStaticMarkup(
+    createElement(
+      'ul',
+      null,
+      createElement(ContentItem, {
+        title: 'A reply from Momo',
+        href: '/threads/one',
+        primaryLinkLabel: summary,
+        metadata: createElement('a', { href: '/people/momo' }, 'Momo'),
+        actions: createElement('button', { type: 'button' }, 'Mark read'),
+        'data-testid': 'summary-item',
+      }),
+      createElement(ContentItem, {
+        title: 'A default title',
+        href: '/works/default',
+        'data-testid': 'default-item',
+      }),
+      createElement(ContentItem, {
+        title: 'A whitespace fallback title',
+        href: '/works/fallback',
+        primaryLinkLabel: ' \n\t ',
+        'data-testid': 'fallback-item',
+      }),
+      createElement(ContentItem, {
+        title: 'A heading without a destination',
+        primaryLinkLabel: 'A hidden announcement must not be created',
+        context: 'Supplied plain summary context',
+        'data-testid': 'plain-item',
+      }),
+    ),
+  );
+
+  const row = (testId: string) => {
+    const rendered = html.match(new RegExp(`<li\\b[^>]*data-testid="${testId}"[^>]*>[\\s\\S]*?<\\/li>`));
+    expect(rendered).toBeDefined();
+    return rendered![0];
+  };
+  const primaryLink = (renderedRow: string) => {
+    const rendered = renderedRow.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/);
+    expect(rendered).toBeDefined();
+    return rendered![0];
+  };
+
+  const summaryRow = row('summary-item');
+  const summaryLink = primaryLink(summaryRow);
+  expect(summaryLink).toContain(`aria-label="${summary}"`);
+  expect(summaryLink).not.toContain('aria-labelledby=');
+  expect(summaryLink).not.toMatch(/<(?:a|button|input)\b/);
+  expect(summaryRow).toContain('<h2');
+  expect(summaryRow).toContain('A reply from Momo');
+  expect(summaryRow).toContain('href="/people/momo"');
+  expect(summaryRow).toContain('Mark read');
+
+  for (const testId of ['default-item', 'fallback-item']) {
+    const renderedRow = row(testId);
+    const renderedLink = primaryLink(renderedRow);
+    expect(renderedLink).not.toContain('aria-label=');
+    expect(renderedLink).toMatch(/aria-labelledby="[^\"]+"/);
+  }
+
+  const plainRow = row('plain-item');
+  expect(plainRow).not.toContain('data-slot="list-row-link"');
+  expect(plainRow).not.toContain('aria-label=');
+  expect(plainRow).toContain('<h2');
+  expect(plainRow).toContain('A heading without a destination');
+  expect(plainRow).toContain('Supplied plain summary context');
+});
+
 test('ShelfListRow preserves its selection controls, independent status link, cover ratio and unknown progress', () => {
   const html = renderToStaticMarkup(
     createElement(

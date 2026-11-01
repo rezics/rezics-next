@@ -71,6 +71,8 @@ export function ContentItemFrame({
 export interface ContentItemProps extends Omit<HTMLAttributes<HTMLLIElement>, 'title' | 'children'> {
   title: string;
   href?: string;
+  /** Optional exact accessible name for the primary link when its supplied summary needs more context. */
+  primaryLinkLabel?: string;
   titleLang?: string;
   /** Optional adapter selector on the visible heading. */
   titleDataSlot?: string;
@@ -93,6 +95,7 @@ function hasSlot(value: ReactNode): boolean {
 export function ContentItem({
   title,
   href,
+  primaryLinkLabel,
   titleLang,
   titleDataSlot,
   headingLevel = 2,
@@ -109,6 +112,7 @@ export function ContentItem({
 }: ContentItemProps) {
   const titleId = useId();
   const hasRail = hasSlot(state) || hasSlot(actions) || hasSlot(trailing);
+  const hasPrimaryLinkLabel = primaryLinkLabel !== undefined && primaryLinkLabel.trim() !== '';
 
   return (
     <ListRow
@@ -117,7 +121,12 @@ export function ContentItem({
       className={cn('flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4', className)}
     >
       {href !== undefined && (
-        <ListRowLink href={href} lang={titleLang} aria-labelledby={titleId}>
+        <ListRowLink
+          href={href}
+          lang={titleLang}
+          aria-label={hasPrimaryLinkLabel ? primaryLinkLabel : undefined}
+          aria-labelledby={hasPrimaryLinkLabel ? undefined : titleId}
+        >
           {title}
         </ListRowLink>
       )}
