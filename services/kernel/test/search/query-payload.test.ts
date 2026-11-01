@@ -139,6 +139,31 @@ afterAll(async () => {
   }
 });
 
+test('an in-flight native search retains the original admitted generation and size', async () => {
+  const input = plan();
+  const observed = observe();
+  const client: OpenSearch = {
+    ...observed.client,
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const response = await observed.client.request<T>(...args);
+      if (args[1].endsWith('/_search/template')) {
+        input.generation = 2;
+        input.size = 2;
+        input.sort = 'name';
+        input.after = [null, id];
+      }
+      return response;
+    },
+  };
+  const result = await searchSubjects(client, prefix, input);
+  expect(result.generation).toBe(1);
+  expect(result.hits).toHaveLength(1);
+  expect(result.hits[0]!.sort).toEqual([id]);
+  expect(observed.calls).toHaveLength(1);
+  expect(observed.calls[0]!.path).toBe(`//_search/template`);
+  expect(input.generation).toBe(2);
+});
+
 test('bounded genuine search tuples preserve numeric zero, null names, generation and negative filters', async () => {
   for (const sort of ['id', 'name', 'collections', 'relevance'] as const) {
     const observed = observe();
