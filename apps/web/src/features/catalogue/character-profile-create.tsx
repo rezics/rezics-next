@@ -7,6 +7,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
+import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import { ScalarControl, EditorFailure } from './statement-editor-view';
 import { editableScalar, type StatementInput } from './statement-editor';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
@@ -124,23 +125,27 @@ export function CharacterProfileCreate({
               </Field>
             ))}
             {index > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                aria-controls={`${termsId}-${term.id}`}
+              <CreateSubjectLanguageRemove
+                locale={locale}
+                rowId={`${termsId}-${term.id}`}
+                focusId={
+                  terms[index + 1]
+                    ? `${termsId}-language-${terms[index + 1]!.id}`
+                    : `${termsId}-add`
+                }
                 disabled={locked}
-                onClick={() => {
+                onRemove={() => {
                   if (locked || running.current || pending.current) return;
                   setTerms((previous) => previous.filter((row) => row.id !== term.id));
                   setFailure(undefined);
                 }}
-              >
-                {m.catalogue_create_remove_language({}, o)}
-              </Button>
+              />
             )}
           </fieldset>
         ))}
         <Button
+          id={`${termsId}-add`}
+          className="h-auto min-h-11 max-w-full whitespace-normal"
           type="button"
           variant="outline"
           disabled={locked}
@@ -154,7 +159,12 @@ export function CharacterProfileCreate({
         </Button>
         <Field>
           <FieldLabel htmlFor="character-initial-field">{m.character_initial_fact({}, o)}</FieldLabel>
-          <NativeSelect id="character-initial-field" value={field} onChange={(event) => setField(event.target.value)}>
+          <NativeSelect
+            id="character-initial-field"
+            className="w-full [&>select]:min-h-11"
+            value={field}
+            onChange={(event) => setField(event.target.value)}
+          >
             <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
             {available.map((id) => (
               <NativeSelectOption key={id} value={id}>

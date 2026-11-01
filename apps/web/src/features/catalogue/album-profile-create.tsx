@@ -9,6 +9,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { useId, useRef, useState } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
+import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import {
   albumDraft,
   albumFields,
@@ -193,23 +194,27 @@ export function AlbumProfileCreate({
               );
             })}
             {index > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                aria-controls={`${termsId}-${term.id}`}
+              <CreateSubjectLanguageRemove
+                locale={locale}
+                rowId={`${termsId}-${term.id}`}
+                focusId={
+                  terms[index + 1]
+                    ? `${termsId}-language-${terms[index + 1]!.id}`
+                    : `${termsId}-add`
+                }
                 disabled={locked}
-                onClick={() => {
+                onRemove={() => {
                   if (locked || running.current || pending.current) return;
                   setTerms((previous) => previous.filter((row) => row.id !== term.id));
                   setFailure(undefined);
                 }}
-              >
-                {m.catalogue_create_remove_language({}, o)}
-              </Button>
+              />
             )}
           </fieldset>
         ))}
         <Button
+          id={`${termsId}-add`}
+          className="h-auto min-h-11 max-w-full whitespace-normal"
           type="button"
           variant="outline"
           disabled={locked}
@@ -240,10 +245,15 @@ export function AlbumProfileCreate({
             remove={() => setRows((previous) => previous.filter((item) => item.id !== row.id))}
           />
         ))}
-        <fieldset disabled={locked} className="flex flex-wrap items-end gap-3">
-          <Field className="min-w-0 flex-1">
+        <fieldset disabled={locked} className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+          <Field className="w-full min-w-0 sm:flex-1">
             <FieldLabel htmlFor="album-field">{m.character_add_fact({}, o)}</FieldLabel>
-            <NativeSelect id="album-field" value={property} onChange={(event) => setProperty(event.target.value)}>
+            <NativeSelect
+              id="album-field"
+              className="w-full [&>select]:min-h-11"
+              value={property}
+              onChange={(event) => setProperty(event.target.value)}
+            >
               <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
               {choices
                 .filter(
@@ -259,6 +269,7 @@ export function AlbumProfileCreate({
           <Button
             type="button"
             variant="outline"
+            className="h-auto min-h-11 max-w-full whitespace-normal"
             disabled={!choices.includes(property)}
             onClick={() => {
               setRows([

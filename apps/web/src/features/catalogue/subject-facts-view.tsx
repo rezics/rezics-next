@@ -147,9 +147,9 @@ function FactField({
       </p>
       <SelectedFacts property={property} read={read} locale={locale} />
       {!draft ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex min-w-0 flex-col gap-3">
           {!!selected.length && (
-            <Field className="w-full min-w-0 sm:flex-1">
+            <Field className="w-full min-w-0">
               <FieldLabel htmlFor={sourceId}>{m.facts_choose_value({}, o)}</FieldLabel>
               <NativeSelect
                 id={sourceId}
@@ -167,11 +167,11 @@ function FactField({
               </NativeSelect>
             </Field>
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-11 whitespace-normal"
+              className="h-auto min-h-11 max-w-full whitespace-normal"
               disabled={busy || !canStage || (!!selected.length && !source)}
               onClick={() => onStage(source || null)}
             >
@@ -181,7 +181,7 @@ function FactField({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 whitespace-normal"
+                className="h-auto min-h-11 max-w-full whitespace-normal"
                 disabled={busy || !canStage}
                 onClick={() => onStage(null)}
               >
@@ -239,7 +239,10 @@ function FactField({
                           href: `${editorHref}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`,
                         }
                       : {})}
-                    className={buttonVariants({ variant: 'outline' })}
+                    className={buttonVariants({
+                      variant: 'outline',
+                      className: 'h-auto min-h-11 max-w-full whitespace-normal',
+                    })}
                     onClick={(event) => {
                       if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
                         event.preventDefault();
@@ -459,7 +462,11 @@ export function SubjectFacts({
                 <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
                 {!!success && <p role="status">{m.facts_results({ count: success }, o)}</p>}
                 {busy && <p role="status">{m.correction_saving({}, o)}</p>}
-                <Button type="submit" disabled={busy || !changed.length}>
+                <Button
+                  type="submit"
+                  className="h-auto min-h-11 max-w-full whitespace-normal"
+                  disabled={busy || !changed.length}
+                >
                   {m.facts_submit({}, o)}
                 </Button>
               </div>

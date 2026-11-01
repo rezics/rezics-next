@@ -12,6 +12,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { useId, useRef, useState } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
+import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import { editorLabels } from '../../threads/composer';
 import { PageHeading } from '../../shell/page-heading';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
@@ -126,6 +127,7 @@ export function RecipeEditor({
   const currentHref = read?.public
     ? subjectHref({ id: read.public.subject.id, label: pickText(read.public.subject.labels, locale).text }, locale).href
     : undefined;
+  const Workspace = id ? 'div' : 'form';
   return (
     <article className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8 sm:px-6">
       <PageHeading>{id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}</PageHeading>
@@ -150,7 +152,7 @@ export function RecipeEditor({
           ) : (
             <EditorFailure locale={locale} reason="unavailable" />
           )}
-          <Button onClick={() => void query.refetch()}>{m.correction_retry({}, o)}</Button>
+          <Button type="button" onClick={() => void query.refetch()}>{m.correction_retry({}, o)}</Button>
         </div>
       )}
       {read && read.fields.length === 0 && <p role="status">{m.recipe_empty({}, o)}</p>}
@@ -169,6 +171,7 @@ export function RecipeEditor({
                   : m.catalogue_create_reader_unavailable({}, o)}
               </p>
               <Button
+                type="button"
                 disabled={busy}
                 onClick={async () => {
                   if (running.current) return;
@@ -192,7 +195,14 @@ export function RecipeEditor({
       ) : (
         read &&
         read.fields.length > 0 && (
-          <>
+          <Workspace
+            className="flex min-w-0 flex-col gap-6"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!id) void create();
+            }}
+          >
             {currentHref && (
               <a className="underline" href={currentHref}>
                 {m.candidate_view_public({}, o)}
@@ -244,23 +254,27 @@ export function RecipeEditor({
                       </Field>
                     ))}
                     {index > 0 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        aria-controls={`${termsId}-${term.id}`}
+                      <CreateSubjectLanguageRemove
+                        locale={locale}
+                        rowId={`${termsId}-${term.id}`}
+                        focusId={
+                          terms[index + 1]
+                            ? `${termsId}-language-${terms[index + 1]!.id}`
+                            : `${termsId}-add`
+                        }
                         disabled={locked || session !== 'signed-in'}
-                        onClick={() => {
+                        onRemove={() => {
                           if (locked || running.current || pending.current || session !== 'signed-in') return;
                           setTerms((previous) => previous.filter((value) => value.id !== term.id));
                           setFailure(undefined);
                         }}
-                      >
-                        {m.catalogue_create_remove_language({}, o)}
-                      </Button>
+                      />
                     )}
                   </fieldset>
                 ))}
                 <Button
+                  id={`${termsId}-add`}
+                  className="h-auto min-h-11 max-w-full whitespace-normal"
                   type="button"
                   variant="outline"
                   disabled={locked || session !== 'signed-in'}
@@ -284,11 +298,12 @@ export function RecipeEditor({
                 <section key={field} className="space-y-3">
                   <h2 className="font-semibold">{name(field)}</h2>
                   {(read.public!.subject.statements[field] ?? []).map((source) => (
-                    <div key={source.id} className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
-                      <div className="min-w-0 break-words sm:flex-1">
+                    <div key={source.id} className="flex min-w-0 flex-col items-start gap-3 md:flex-row">
+                      <div className="min-w-0 break-words md:flex-1">
                         <CandidateValue snak={source} related={read.public!.related} locale={locale} />
                       </div>
                       <Button
+                        type="button"
                         variant="outline"
                         className="h-auto min-h-11 max-w-full whitespace-normal"
                         disabled={rows.some((row) => row.source?.id === source.id)}
@@ -323,11 +338,12 @@ export function RecipeEditor({
                 onRemove={() => setRows(rows.filter((entry) => entry.id !== row.id))}
               />
             ))}
-            <div className="flex flex-wrap items-end gap-3">
-              <Field className="min-w-48 flex-1">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+              <Field className="w-full min-w-0 sm:flex-1">
                 <FieldLabel htmlFor="recipe-field">{m.character_add_fact({}, o)}</FieldLabel>
                 <NativeSelect
                   id="recipe-field"
+                  className="w-full [&>select]:min-h-11"
                   disabled={locked}
                   value={property}
                   onChange={(event) => setProperty(event.target.value)}
@@ -347,6 +363,8 @@ export function RecipeEditor({
                 </NativeSelect>
               </Field>
               <Button
+                type="button"
+                className="h-auto min-h-11 max-w-full whitespace-normal"
                 variant="outline"
                 disabled={locked || session !== 'signed-in' || !property}
                 onClick={() => {
@@ -382,6 +400,7 @@ export function RecipeEditor({
                     ))}
                     {failure.reason === 'conflict' && (
                       <Button
+                        type="button"
                         onClick={() => {
                           pending.current = null;
                           setFailure(undefined);
@@ -393,8 +412,9 @@ export function RecipeEditor({
                   </div>
                 )}
                 <Button
+                  type="submit"
+                  className="h-auto min-h-11 max-w-full self-start whitespace-normal"
                   disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict'}
-                  onClick={() => void create()}
                 >
                   {busy
                     ? m.catalogue_create_saving({}, o)
@@ -404,7 +424,7 @@ export function RecipeEditor({
                 </Button>
               </>
             )}
-          </>
+          </Workspace>
         )
       )}
     </article>
@@ -485,7 +505,7 @@ function RecipeField({
         {definition.datatype === 'document' ? (
           <>
             {!authored ? (
-              <Button variant="outline" onClick={() => updateAuthored(newAuthoredField())}>
+              <Button type="button" variant="outline" onClick={() => updateAuthored(newAuthoredField())}>
                 {m.recipe_replace_method({}, o)}
               </Button>
             ) : (
@@ -598,7 +618,7 @@ function RecipeField({
             }}
           />
         </Field>
-        <Button variant="ghost" onClick={onRemove}>
+        <Button type="button" variant="ghost" onClick={onRemove}>
           {m.recipe_remove_field({}, o)}
         </Button>
       </fieldset>
@@ -607,6 +627,7 @@ function RecipeField({
         !result.ok &&
         (result.reason === 'stale' || result.reason === 'invalid' || result.reason === 'denied') && (
           <Button
+            type="button"
             variant="outline"
             onClick={() => {
               command.current = null;
@@ -619,7 +640,7 @@ function RecipeField({
       {result?.ok ? (
         <div className="space-y-3">
           <p role="status">{m.correction_proposed({}, o)}</p>
-          {review && <Button onClick={() => setReviewing(true)}>{m.correction_review({}, o)}</Button>}
+          {review && <Button type="button" onClick={() => setReviewing(true)}>{m.correction_review({}, o)}</Button>}
           {reviewing && review && read.public && (
             <CandidateReview
               id={read.public.subject.id}
@@ -634,6 +655,7 @@ function RecipeField({
       ) : (
         read.public && (
           <Button
+            type="button"
             disabled={
               disabled ||
               busy ||
