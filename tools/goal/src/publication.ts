@@ -251,7 +251,7 @@ function isIdentity(value: unknown): value is ProcessIdentity {
   if (!isRecord(value)) return false;
   return (
     Number.isSafeInteger(value.pid) && Number(value.pid) > 0 &&
-    typeof value.start === 'string' && value.start.length > 0 &&
+    typeof value.start === 'string' && /^\d+$/.test(value.start) &&
     typeof value.boot === 'string' && value.boot.length > 0 &&
     Number.isSafeInteger(value.group) && Number(value.group) > 0
   );
@@ -424,6 +424,50 @@ function processMembersValid(members: unknown): members is ProcessIdentity[] {
   return Array.isArray(members) && members.every(isIdentity);
 }
 
+const CANCELLATION_EVIDENCE_PATH = 'control-plane/storybook-duplicate-cancellation.json';
+const PRIOR_SUCCESS_RECEIPT_PATH = 'web/resume-20261101/publication-1940.json';
+
+function sameIncarnation(left: ProcessIdentity, right: ProcessIdentity): boolean {
+  return left.pid === right.pid && left.start === right.start && left.boot === right.boot;
+}
+
+function validateCancelledDuplicate(body: Record<string, unknown>): ProcessIdentity {
+  const expected = body.expected;
+  const observed = body.observed;
+  const observedFields = isRecord(observed) ? observed : undefined;
+  const firstPublisher = body.firstPublisher;
+  const postSignal = body.postSignalObservation;
+  if (!isIdentity(expected) || !isIdentity(observed) || !observedFields || !isIdentity(firstPublisher) || !isRecord(postSignal) ||
+    body.toolExit !== 130 || body.signal !== 'SIGTERM to exact owned timeout PID only' ||
+    body.groupChange !== 'timeout created its own process group after launch identity capture' ||
+    body.laterKnownTreeGone !== true || !Number.isSafeInteger(body.toolSession) || Number(body.toolSession) <= 0 ||
+    typeof body.at !== 'number' || !Number.isFinite(body.at) ||
+    typeof body.observedAt !== 'number' || !Number.isFinite(body.observedAt) || body.observedAt <= body.at ||
+    !sameIncarnation(expected, observed) || expected.group === observed.group || expected.group === firstPublisher.group || observed.group !== observed.pid ||
+    firstPublisher.pid === observed.pid || firstPublisher.group !== firstPublisher.pid ||
+    typeof observedFields.cwd !== 'string' || !observedFields.cwd.endsWith('/apps/web') ||
+    typeof observedFields.cmd !== 'string' || !observedFields.cmd.startsWith('timeout --signal=TERM --kill-after=30s 1800s ') ||
+    firstPublisher.boot !== observed.boot || BigInt(firstPublisher.start) >= BigInt(observed.start) ||
+    postSignal[String(observed.pid)] !== null)
+    throw new Error('legacy cancelled-publisher identity or cancellation evidence is incomplete or inconsistent');
+
+  for (const [pid, value] of Object.entries(postSignal)) {
+    if (value === null) continue;
+    if (!isRecord(value) || pid !== String(firstPublisher.pid) || value.start !== firstPublisher.start ||
+      Number(value.group) !== firstPublisher.group || value.state !== 'S')
+      throw new Error('legacy cancelled-publisher post-signal evidence contains an unknown process incarnation');
+  }
+  return normalizedIdentity(observed);
+}
+
+function validatePriorWorkflowReceipt(body: Record<string, unknown>, identity: ProcessIdentity): void {
+  if (body.state !== 'terminal' || !Number.isInteger(body.exitCode) || typeof body.workflowStartedAt !== 'string' ||
+    !Number.isFinite(Date.parse(body.workflowStartedAt)) || typeof body.finishedAt !== 'string' ||
+    !Number.isFinite(Date.parse(body.finishedAt)) || !/^[0-9a-f]{40}$/i.test(String(body.sourceCommit)) ||
+    !Number.isSafeInteger(body.workflowPid) || body.workflowPid !== identity.pid)
+    throw new Error('legacy workflow receipt PID or terminal evidence does not match its retained process identity');
+}
+
 function readLatestProcessState(db: Database, id: string): { state: string; identity: ProcessIdentity | null; members: ProcessIdentity[] } | undefined {
   const row = db.query('SELECT state, identity, members FROM publication_custody WHERE id=?').get(id) as {
     state: string; identity: string | null; members: string;
@@ -558,6 +602,17 @@ export class PublicationController {
         throw new Error('publication bootstrap needs a complete host inventory, explicit no-unknown attestation, and retained legacy evidence records');
       const digest = file.hash;
       const imported = input.records.map((record, index) => this.importBootstrapRecord(record, index));
+      const requiredCustodyPaths = [
+        'control-plane/storybook-publication-20261031-2100.json',
+        'control-plane/storybook-publication-20261031-2200.json',
+        'control-plane/storybook-publication-20261031-2300.json',
+        CANCELLATION_EVIDENCE_PATH,
+        PRIOR_SUCCESS_RECEIPT_PATH,
+      ];
+      for (const path of requiredCustodyPaths) {
+        const count = imported.filter((record) => record.path.replaceAll('\\', '/') === path).length;
+        if (count !== 1) throw new Error(`publication bootstrap must import exactly one retained custody record for ${path}`);
+      }
       if (!Array.isArray(input.historyEvidencePaths) || input.historyEvidencePaths.length === 0 ||
         !input.historyEvidencePaths.every((path) => typeof path === 'string'))
         throw new Error('publication bootstrap must retain the cancelled-duplicate and prior owner history evidence paths');
@@ -638,24 +693,50 @@ export class PublicationController {
     const state = body.state;
     let rawIdentity: unknown = body.process ?? body.launcher ?? body.identity;
     let relatedEvidence: { path: string; hash: string; text: string } | undefined;
-    if (!isIdentity(rawIdentity) && typeof record.identityEvidencePath === 'string' && typeof record.identityField === 'string') {
+    let cancelledDuplicate = false;
+    const recordPath = record.path.replaceAll('\\', '/');
+    const hasCompanionReference = record.identityEvidencePath !== undefined || record.identityField !== undefined;
+    if (hasCompanionReference) {
+      if (isIdentity(rawIdentity)) throw new Error('legacy receipt mixes direct process identity with companion identity evidence');
+      if (record.kind !== 'publisher' || typeof record.identityEvidencePath !== 'string' || typeof record.identityField !== 'string')
+        throw new Error('legacy process companion identity reference is incomplete or unsupported');
+      const companionPath = record.identityEvidencePath.replaceAll('\\', '/');
+      const cancellationReference = recordPath === CANCELLATION_EVIDENCE_PATH &&
+        companionPath === CANCELLATION_EVIDENCE_PATH && record.identityField === 'observed';
+      const priorWorkflowReference = recordPath === PRIOR_SUCCESS_RECEIPT_PATH &&
+        companionPath === CANCELLATION_EVIDENCE_PATH && record.identityField === 'firstPublisher';
+      if (!cancellationReference && !priorWorkflowReference)
+        throw new Error('legacy process companion identity reference does not match a supported retained evidence form');
       relatedEvidence = readRegularFile(this.options.stateDirectory, record.identityEvidencePath);
       const identityBody = parseJson(relatedEvidence.text, 'legacy identity evidence');
-      if (isRecord(identityBody)) rawIdentity = identityBody[record.identityField];
-      if (isIdentity(rawIdentity) && body.workflowPid !== rawIdentity.pid)
-        throw new Error('legacy receipt PID does not match its companion process identity evidence');
+      if (!isRecord(identityBody)) throw new Error('legacy process companion identity evidence must be a JSON object');
+      if (cancellationReference) {
+        rawIdentity = validateCancelledDuplicate(identityBody);
+        cancelledDuplicate = true;
+      } else {
+        const cancellationIdentity = validateCancelledDuplicate(identityBody);
+        rawIdentity = identityBody.firstPublisher;
+        if (!isIdentity(rawIdentity)) throw new Error('legacy prior workflow has no complete retained first-publisher identity');
+        validatePriorWorkflowReceipt(body, rawIdentity);
+        if (sameIdentity(identityBody.firstPublisher, cancellationIdentity))
+          throw new Error('legacy cancellation and prior publisher identities are not independently retained');
+      }
     }
     if (!isIdentity(rawIdentity)) throw new Error(`legacy ${record.kind} evidence has no complete PID/start/boot/group identity`);
     const identity = normalizedIdentity(rawIdentity);
     const groupNow = this.observeGroup(identity.group);
+    const cancellationExpected = cancelledDuplicate ? body : undefined;
+    const expectedGroup = cancellationExpected && isIdentity(cancellationExpected.expected)
+      ? this.observeGroup(cancellationExpected.expected.group)
+      : undefined;
     const workflowReceipt = state === 'terminal' && Number.isInteger(body.exitCode) &&
       (typeof body.endedAt === 'string' || typeof body.finishedAt === 'string');
-    const cancelledDuplicate = body.toolExit === 130 && body.laterKnownTreeGone === true &&
-      typeof body.observedAt === 'number' && isIdentity(body.observed) && sameIdentity(rawIdentity, normalizedIdentity(body.observed));
     const terminalReceipt = workflowReceipt || cancelledDuplicate;
     let importedState: 'terminal' | 'running' | 'unknown';
-    if (terminalReceipt && groupNow.complete && groupNow.members.length === 0) importedState = 'terminal';
-    else if (this.process.same(identity) || groupNow.members.length > 0) importedState = 'running';
+    const allGroupsComplete = groupNow.complete && (!expectedGroup || expectedGroup.complete);
+    const allGroupsClear = groupNow.members.length === 0 && (!expectedGroup || expectedGroup.members.length === 0);
+    if (terminalReceipt && allGroupsComplete && allGroupsClear) importedState = 'terminal';
+    else if (this.process.same(identity) || groupNow.members.length > 0 || (expectedGroup?.members.length ?? 0) > 0) importedState = 'running';
     else importedState = 'unknown';
     if (record.kind === 'capture' && state !== 'terminal' && !isRecord(body.capture)) importedState = 'unknown';
     const rawLog = body.log ?? body.logPath;
@@ -707,8 +788,9 @@ export class PublicationController {
     if (!isRecord(failedBody) || failedBody.state !== 'terminal' || failedBody.exitCode !== 1 ||
       failedBody.result !== 'failed-no-repeat' || failedBody.attempts !== 1 || failedBody.maximumWorkflowInvocations !== 1)
       throw new Error('publication bootstrap does not preserve the prior terminal failed-no-repeat publisher receipt');
-    if (!isRecord(duplicateBody) || !isIdentity(duplicateBody.firstPublisher) || duplicateBody.toolExit !== 130)
+    if (!isRecord(duplicateBody))
       throw new Error('publication bootstrap does not preserve the cancelled duplicate and original publisher identity');
+    validateCancelledDuplicate(duplicateBody);
     if (!isRecord(dispositionBody) || dispositionBody.authorityDisposition !== 'unconsumed-retained' ||
       dispositionBody.workflowInvocationsByThisDecision !== 0 || dispositionBody.actual01Handle !== null)
       throw new Error('publication bootstrap does not preserve the current unconsumed owner authority disposition');
@@ -964,8 +1046,8 @@ export class PublicationController {
 
   private assertAllCustodyClear(): void {
     this.requireBootstrappedInventory();
-    const allRows = this.db.query('SELECT id, kind, state, invocation_id, identity, members FROM publication_custody').all() as
-      { id: string; kind: string; state: string; invocation_id: string | null; identity: string | null; members: string }[];
+    const allRows = this.db.query('SELECT id, kind, state, invocation_id, identity, members, evidence_path FROM publication_custody').all() as
+      { id: string; kind: string; state: string; invocation_id: string | null; identity: string | null; members: string; evidence_path: string }[];
     if (!allRows.length) throw new Error('native custody inventory has no retained legacy evidence; an empty registry cannot prove absence');
     for (const row of allRows) {
       if (row.state === 'unknown' || row.state === 'preparing' || row.state === 'launching')
@@ -992,6 +1074,19 @@ export class PublicationController {
       }
       if (!identity || !isIdentity(identity) || !processMembersValid(known))
         throw new Error(`${row.kind} custody ${row.id} has incomplete process ownership`);
+      if (row.kind === 'publisher' && row.evidence_path.replaceAll('\\', '/') === CANCELLATION_EVIDENCE_PATH) {
+        const wrapper = parseJson(retainedEvidence.evidence, 'retained cancelled-publisher evidence wrapper');
+        if (!isRecord(wrapper) || typeof wrapper.identityEvidence !== 'string')
+          throw new Error(`publisher custody ${row.id} lost its companion cancellation evidence`);
+        const cancellation = parseJson(wrapper.identityEvidence, 'retained cancelled-publisher identity evidence');
+        if (!isRecord(cancellation) || !sameIdentity(validateCancelledDuplicate(cancellation), identity))
+          throw new Error(`publisher custody ${row.id} no longer matches its cancelled-publisher identity evidence`);
+        const expectedIdentity = cancellation.expected;
+        if (!isIdentity(expectedIdentity)) throw new Error(`publisher custody ${row.id} has incomplete pre-change process-group identity`);
+        const originalGroup = this.observeGroup(expectedIdentity.group);
+        if (!originalGroup.complete) throw new Error(`publisher custody ${row.id} pre-change process-group visibility is incomplete`);
+        if (originalGroup.members.length) throw new Error(`publisher custody ${row.id} pre-change process group has live or unknown members`);
+      }
       const observed = this.observeGroup(identity.group);
       if (!observed.complete) throw new Error(`${row.kind} custody ${row.id} process-group visibility is incomplete`);
       if (observed.members.length) {

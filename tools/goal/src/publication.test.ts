@@ -21,6 +21,8 @@ import { dependencyKey, dependencyStoreMatches } from './shared-dependencies.ts'
 
 const OPERATIONS = 'control-plane';
 const OWNER = 'web';
+const CANCELLATION_EVIDENCE_PATH = 'control-plane/storybook-duplicate-cancellation.json';
+const PRIOR_SUCCESS_RECEIPT_PATH = 'web/resume-20261101/publication-1940.json';
 const WORKFLOW_BLOBS = [
   { path: 'apps/web/scripts/storybook-deploy.ts', blob: '1f3f1ed73e874b046747870435a668f3861f82cd' },
   { path: 'apps/web/scripts/storybook-build.ts', blob: '80ac41d76f350cda8f1bf33be6d3ac4e44eab292' },
@@ -249,14 +251,28 @@ function writeHistoricalEvidence(fixture: Fixture): Array<Record<string, unknown
   const oldPublisher = processFixtureIdentity(987_650_104);
   const duplicateIdentity = processFixtureIdentity(987_650_105);
   const duplicatePath = 'control-plane/storybook-duplicate-cancellation.json';
+  const duplicateObserved = {
+    ...duplicateIdentity,
+    group: duplicateIdentity.pid,
+    state: 'S',
+    cwd: '/fixture/storybook/apps/web',
+    cmd: 'timeout --signal=TERM --kill-after=30s 1800s /fixture/apps/web/node_modules/.bin/bun run storybook:deploy',
+  };
   const duplicate = {
     at: 1_793_476_025.9245746,
     toolSession: 50167,
     toolExit: 130,
-    expected: { ...duplicateIdentity, group: duplicateIdentity.pid - 1 },
-    observed: { ...duplicateIdentity, state: 'S', cwd: '/fixture/storybook/apps/web', cmd: 'timeout fixture workflow' },
+    expected: { ...duplicateIdentity, group: duplicateIdentity.pid - 7 },
+    observed: duplicateObserved,
     firstPublisher: oldPublisher,
     signal: 'SIGTERM to exact owned timeout PID only',
+    groupChange: 'timeout created its own process group after launch identity capture',
+    postSignalObservation: {
+      [duplicateIdentity.pid]: null,
+      [duplicateIdentity.pid + 1]: null,
+      [duplicateIdentity.pid + 2]: null,
+      [oldPublisher.pid]: { start: oldPublisher.start, state: 'S', group: String(oldPublisher.group) },
+    },
     observedAt: 1_793_476_032.6193025,
     laterKnownTreeGone: true,
   };
@@ -917,6 +933,55 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
     expect(invocationCount(unavailableDependencies)).toBe(0);
   } finally {
     unavailableDependencies.temporary.close();
+  }
+}, 30_000);
+
+test('Legacy bootstrap binds terminal workflow PIDs and validates cancellation identity evidence', async () => {
+  const mismatchedWorkflow = createFixture();
+  try {
+    initializeManagers(mismatchedWorkflow);
+    const records = writeHistoricalEvidence(mismatchedWorkflow);
+    const receiptPath = temporaryStatePath(mismatchedWorkflow, PRIOR_SUCCESS_RECEIPT_PATH);
+    const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as Record<string, unknown>;
+    receipt.workflowPid = Number(receipt.workflowPid) + 1;
+    writeJson(receiptPath, receipt);
+    writeBootstrap(mismatchedWorkflow, { records });
+    expect(await invoke(mismatchedWorkflow, ['publication', 'bootstrap'])).toBe(1);
+    expect(stateRow<{ count: number }>(mismatchedWorkflow,
+      'SELECT COUNT(*) AS count FROM publication_inventory')?.count).toBe(0);
+  } finally {
+    mismatchedWorkflow.temporary.close();
+  }
+
+  const invalidCancellation = createFixture();
+  try {
+    initializeManagers(invalidCancellation);
+    const records = writeHistoricalEvidence(invalidCancellation);
+    const cancellationPath = temporaryStatePath(invalidCancellation, CANCELLATION_EVIDENCE_PATH);
+    const cancellation = JSON.parse(readFileSync(cancellationPath, 'utf8')) as Record<string, any>;
+    cancellation.observed.start = String(BigInt(cancellation.observed.start) + 1n);
+    writeJson(cancellationPath, cancellation);
+    writeBootstrap(invalidCancellation, { records });
+    expect(await invoke(invalidCancellation, ['publication', 'bootstrap'])).toBe(1);
+    expect(stateRow<{ count: number }>(invalidCancellation,
+      'SELECT COUNT(*) AS count FROM publication_inventory')?.count).toBe(0);
+  } finally {
+    invalidCancellation.temporary.close();
+  }
+
+  const arbitraryPointer = createFixture();
+  try {
+    initializeManagers(arbitraryPointer);
+    const records = writeHistoricalEvidence(arbitraryPointer);
+    const cancellationRecord = records.find((record) => record.path === CANCELLATION_EVIDENCE_PATH);
+    expect(cancellationRecord).toBeDefined();
+    cancellationRecord!.identityField = 'firstPublisher';
+    writeBootstrap(arbitraryPointer, { records });
+    expect(await invoke(arbitraryPointer, ['publication', 'bootstrap'])).toBe(1);
+    expect(stateRow<{ count: number }>(arbitraryPointer,
+      'SELECT COUNT(*) AS count FROM publication_inventory')?.count).toBe(0);
+  } finally {
+    arbitraryPointer.temporary.close();
   }
 }, 30_000);
 

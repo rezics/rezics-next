@@ -994,10 +994,15 @@ come from the actual native host, include every retained publisher and capture h
 minutes. Each record is `{ "kind": "publisher" | "capture", "path": "<state-relative retained JSON>" }`; old receipts
 whose identity is in a companion record also use `identityEvidencePath` and `identityField`. For example, the retained
 1940 publisher identity is `firstPublisher` in `control-plane/storybook-duplicate-cancellation.json`, while the
-cancelled duplicate identity is `observed` in that same evidence. The record list must include those historical
-handles, the 2100, 2200 and 2300 publisher receipts, and every other legacy publisher/capture still in the host
-census. Terminal publisher records need their original log inside the Goal state directory. The bootstrap preserves
-the original bytes and hashes; it never rewrites the legacy receipt.
+cancelled duplicate identity is `observed` in that same evidence. Those are the only supported companion identity
+bindings: the 1940 terminal receipt's `workflowPid` must match `firstPublisher.pid`; the cancellation evidence must
+bind `expected` and `observed` to the same PID/start/boot, retain the documented process-group transition and exact
+owned-PID signal, and show its target absent after cancellation. The controller checks both recorded process groups
+for complete visibility and refuses while either has members. Arbitrary companion-field pointers and mismatched
+workflow PIDs fail closed. The record list must include those historical handles, the 2100, 2200 and 2300 publisher
+receipts, and every other legacy publisher/capture still in the host census. Terminal publisher records need their
+original log inside the Goal state directory. The bootstrap preserves the original bytes and hashes; it never rewrites
+the legacy receipt.
 
 The history list must retain these state-relative records: `control-plane/storybook-publication-20261031-2100.json`,
 `control-plane/storybook-publication-20261031-2200.json`,
