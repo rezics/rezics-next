@@ -1,13 +1,5 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { sessionQuery } from '../session/query';
 import type { SpacePageData } from './space';
@@ -308,8 +300,12 @@ export function bindHydratedSpacePage(
   if (!spacePageAdmissionIsAvailable(admission)) return false;
   if (
     admission.target.kind !== expected.target.kind ||
-    (admission.target.kind === 'space' && expected.target.kind === 'space' && admission.target.address !== expected.target.address) ||
-    (admission.target.kind === 'realm' && expected.target.kind === 'realm' && admission.target.id !== expected.target.id) ||
+    (admission.target.kind === 'space' &&
+      expected.target.kind === 'space' &&
+      admission.target.address !== expected.target.address) ||
+    (admission.target.kind === 'realm' &&
+      expected.target.kind === 'realm' &&
+      admission.target.id !== expected.target.id) ||
     admission.locale !== expected.locale ||
     admission.credentialMode !== expected.credentialMode ||
     admission.realmId !== (page.realm?.id ?? null)

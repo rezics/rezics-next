@@ -101,8 +101,7 @@ export const spaceQuery = (
     queryKey: readQueryKey(['space', address, locale], credentialMode),
     queryFn: async ({ client }) => {
       const target: SpacePageTarget = { kind: 'space', address };
-      const admission =
-        originalAdmission ?? captureSpacePageAdmission(client, { target, locale, credentialMode });
+      const admission = originalAdmission ?? captureSpacePageAdmission(client, { target, locale, credentialMode });
       if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();
       const page = await readSpacePage({ data: { address, credentialMode } });
       if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();
@@ -122,8 +121,7 @@ export const realmPageQuery = (
     queryKey: readQueryKey(['realm-page', id, locale], credentialMode),
     queryFn: async ({ client }) => {
       const target: SpacePageTarget = { kind: 'realm', id };
-      const admission =
-        originalAdmission ?? captureSpacePageAdmission(client, { target, locale, credentialMode });
+      const admission = originalAdmission ?? captureSpacePageAdmission(client, { target, locale, credentialMode });
       if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();
       const located = await locateRealmPage({ data: { realmId: id, credentialMode } });
       if (!spacePageAdmissionIsCurrent(admission, client)) throw new ObsoleteSpacePageReadError();

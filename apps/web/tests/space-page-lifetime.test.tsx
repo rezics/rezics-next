@@ -31,7 +31,9 @@ const globals = {
   matchMedia: window.matchMedia.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -106,8 +108,12 @@ const calls = {
   publications: [] as ShelfInput[],
 };
 let pageReader: (input: PageInput) => Promise<SpacePageData> = async (input) => pageFor(input.address, false);
-let realmReader: (input: RealmInput) => Promise<{ kind: 'page'; page: SpacePageData } | { kind: 'redirect'; address: string }> =
-  async () => ({ kind: 'page', page: pageFor(address) });
+let realmReader: (
+  input: RealmInput,
+) => Promise<{ kind: 'page'; page: SpacePageData } | { kind: 'redirect'; address: string }> = async () => ({
+  kind: 'page',
+  page: pageFor(address),
+});
 let boardReader: (input: ShelfInput) => Promise<ShelfPage<RealmBoard>> = async () => ({
   kind: 'page',
   items: [],
@@ -156,22 +162,12 @@ mock.module('../src/community/realm-home-header', () => ({ RealmHomeHeader: () =
 const { createRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const {
-  createMemoryHistory,
-  createRootRoute,
-  createRootRouteWithContext,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRoute, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { spaceQuery, useShelfList } = await import('../src/community/space-queries');
-const {
-  captureSpacePageAdmission,
-  getSpacePageAdmission,
-  SpacePageLifetimeHost,
-  useSpacePageLifetime,
-} = await import('../src/community/space-page-lifetime');
+const { captureSpacePageAdmission, getSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime } =
+  await import('../src/community/space-page-lifetime');
 const { SpacePage } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -193,11 +189,7 @@ function fileRouteTree(route: unknown, path: string) {
   return rootRoute.addChildren([registered as never]);
 }
 
-async function mountFileRoute(
-  tree: ReturnType<typeof fileRouteTree>,
-  entry: string,
-  queryClient: QueryClient,
-) {
+async function mountFileRoute(tree: ReturnType<typeof fileRouteTree>, entry: string, queryClient: QueryClient) {
   await close(false);
   calls.pages.length = 0;
   calls.realms.length = 0;
@@ -213,7 +205,11 @@ async function mountFileRoute(
   await nextRouter.load();
   root = createRoot(host);
   await act(async () => {
-    root!.render(<QueryClientProvider client={queryClient}><RouterProvider router={nextRouter} /></QueryClientProvider>);
+    root!.render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={nextRouter} />
+      </QueryClientProvider>,
+    );
     await tick();
   });
 }
@@ -257,9 +253,7 @@ function PageFrame({
   );
 }
 
-let latestShelfProbe:
-  | ReturnType<typeof useShelfList<RealmBoard>>
-  | undefined;
+let latestShelfProbe: ReturnType<typeof useShelfList<RealmBoard>> | undefined;
 
 function ShelfProbe({
   initial,
@@ -330,7 +324,13 @@ async function mount(
   const nextRouter = makeRouter(nextClient);
   await nextRouter.load();
   root = createRoot(host);
-  const contents = strictMode ? <StrictMode><RouterProvider router={nextRouter} /></StrictMode> : <RouterProvider router={nextRouter} />;
+  const contents = strictMode ? (
+    <StrictMode>
+      <RouterProvider router={nextRouter} />
+    </StrictMode>
+  ) : (
+    <RouterProvider router={nextRouter} />
+  );
   await act(async () => {
     root!.render(<QueryClientProvider client={nextClient}>{contents}</QueryClientProvider>);
     await tick();
@@ -339,11 +339,15 @@ async function mount(
 
 async function repaint(node: ReactNode) {
   view = node;
-  const contents = strictMode ? <StrictMode><RouterProvider router={router!} /></StrictMode> : <RouterProvider router={router!} />;
+  const contents = strictMode ? (
+    <StrictMode>
+      <RouterProvider router={router!} />
+    </StrictMode>
+  ) : (
+    <RouterProvider router={router!} />
+  );
   await act(async () => {
-    root!.render(
-      <QueryClientProvider client={client!}>{contents}</QueryClientProvider>,
-    );
+    root!.render(<QueryClientProvider client={client!}>{contents}</QueryClientProvider>);
     await tick();
   });
 }
@@ -462,7 +466,10 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
         return { ...pageFor(input.address, false), space: { id: spaceId, title: 'Public route page', summary: '' } };
       privateReads++;
       if (privateReads === 1)
-        return { ...pageFor(input.address, false, 'session'), space: { id: spaceId, title: 'Original private route page', summary: '' } };
+        return {
+          ...pageFor(input.address, false, 'session'),
+          space: { id: spaceId, title: 'Original private route page', summary: '' },
+        };
       return replacement.promise;
     };
 
@@ -493,7 +500,10 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     pageReader = async (input) => pageFor(input.address, false);
     const first = await loadSpaceRoute(nextClient);
     expect(first.page.space.title).toBe(title);
-    pageReader = async (input) => ({ ...pageFor(input.address, false), space: { id: spaceId, title: 'Fresh route read', summary: '' } });
+    pageReader = async (input) => ({
+      ...pageFor(input.address, false),
+      space: { id: spaceId, title: 'Fresh route read', summary: '' },
+    });
     const second = await loadSpaceRoute(nextClient);
     expect(second.admission.readId).not.toBe(first.admission.readId);
     expect(second.page.space.title).toBe('Fresh route read');
@@ -549,13 +559,9 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
       updatedAt: loaded.admission.sessionDataUpdatedAt,
     });
     await mount(
-      <PageFrame
-        page={loaded.page}
-        admission={structuredClone(loaded.admission)}
-        credentialMode="session"
-      />,
+      <PageFrame page={loaded.page} admission={structuredClone(loaded.admission)} credentialMode="session" />,
       {
-      queryClient: browserClient,
+        queryClient: browserClient,
       },
     );
     expect(host.textContent).not.toContain(title);
@@ -685,9 +691,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     ]);
     expect(host.textContent).toContain('Original board');
     expect(host.textContent).toContain('Restart board');
-    expect(calls.publications).toEqual([
-      { realmId, cursor: 'publication-cursor-one', credentialMode: 'anonymous' },
-    ]);
+    expect(calls.publications).toEqual([{ realmId, cursor: 'publication-cursor-one', credentialMode: 'anonymous' }]);
   });
 
   test('saved update and continuation callbacks cannot change a new target, locale or remounted visit', async () => {
