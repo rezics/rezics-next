@@ -1,4 +1,5 @@
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
+import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -40,8 +41,10 @@ export function CollectionSubjectList({
         const actionsLabel = `${m.library_collection_actions()}: ${m.library_member_occurrence({ title, position: index + 1 })}`;
         return (
           <ListRow key={subject?.id ?? `unavailable-${index}`} className="flex min-w-0 items-start gap-4 py-2">
-            {href ? <ListRowLink href={href.href}>{title}</ListRowLink> : null}
-            <div className="w-[72px] shrink-0 sm:w-24">
+            <div
+              data-content-item-slot="visual"
+              className="w-[72px] shrink-0 sm:w-24 [&_button]:relative [&_button]:z-10"
+            >
               <SubjectCover
                 subject={subject}
                 ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
@@ -49,13 +52,30 @@ export function CollectionSubjectList({
               />
             </div>
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="line-clamp-2 font-medium leading-snug">
-                <span aria-hidden={href ? true : undefined}>{title}</span>
-              </div>
-              <CollectionMemberDetails member={{ subject }} listPresentations={listPresentations} />
+              <ContentItemHeading
+                level={3}
+                lang={localizedTitle?.lang}
+                className="line-clamp-2 font-medium leading-snug"
+              >
+                {href ? (
+                  <ContentItemTitleLink
+                    href={href.href}
+                    lang={localizedTitle?.lang}
+                    data-slot="list-row-link"
+                    className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {title}
+                  </ContentItemTitleLink>
+                ) : (
+                  title
+                )}
+              </ContentItemHeading>
+              <ListRowControl data-content-item-slot="metadata">
+                <CollectionMemberDetails member={{ subject }} listPresentations={listPresentations} />
+              </ListRowControl>
             </div>
             {subject && onCopy ? (
-              <ListRowControl>
+              <ListRowControl data-content-item-slot="actions">
                 <Menu
                   title={actionsLabel}
                   trigger={
@@ -226,12 +246,11 @@ export function CollectionMemberList({
                 : undefined
             }
           >
-            {href ? <ListRowLink href={href.href}>{title}</ListRowLink> : null}
             {editing ? (
-              <ListRowControl className="flex flex-col items-center gap-2">
+              <ListRowControl data-content-item-slot="trailing" className="flex flex-col items-center gap-2">
                 <span
                   aria-hidden="true"
-                  className="inline-flex size-8 cursor-grab items-center justify-center text-muted-foreground"
+                  className="inline-flex size-11 cursor-grab items-center justify-center text-muted-foreground sm:size-8"
                   data-drag-handle
                   draggable={!busy}
                   onDragStart={beginDrag}
@@ -239,6 +258,7 @@ export function CollectionMemberList({
                   <GripVerticalIcon />
                 </span>
                 <Checkbox
+                  className="m-3.5 after:-inset-3.5 sm:m-0"
                   checked={selectedIds.has(member.id)}
                   disabled={busy || !onSelectionChange}
                   aria-label={m.library_collection_select_member({ title: actionContext })}
@@ -246,17 +266,34 @@ export function CollectionMemberList({
                 />
               </ListRowControl>
             ) : null}
-            <div className="min-w-0 [&_button]:relative [&_button]:z-10">
+            <div data-content-item-slot="visual" className="min-w-0 [&_button]:relative [&_button]:z-10">
               <SubjectCover subject={member.subject} ratio={rowRatio} size="fill" />
             </div>
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="line-clamp-2 font-medium leading-snug">
-                <span aria-hidden={href ? true : undefined}>{title}</span>
-              </div>
-              <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+              <ContentItemHeading
+                level={3}
+                lang={localizedTitle?.lang}
+                className="line-clamp-2 font-medium leading-snug"
+              >
+                {href ? (
+                  <ContentItemTitleLink
+                    href={href.href}
+                    lang={localizedTitle?.lang}
+                    data-slot="list-row-link"
+                    className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {title}
+                  </ContentItemTitleLink>
+                ) : (
+                  title
+                )}
+              </ContentItemHeading>
+              <ListRowControl data-content-item-slot="metadata">
+                <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+              </ListRowControl>
             </div>
             {editing && member.subject ? (
-              <ListRowControl className="col-span-2 col-start-2">
+              <ListRowControl data-content-item-slot="preview" className="col-span-2 col-start-2">
                 <details className="min-w-0" data-collection-note-editor>
                   <summary
                     className="min-h-11 cursor-pointer py-2 text-sm text-primary"
@@ -282,11 +319,18 @@ export function CollectionMemberList({
                 ) : null}
               </ListRowControl>
             ) : member.subject && member.note ? (
-              <p data-slot="collection-member-note" className="col-start-2 line-clamp-2 text-sm text-muted-foreground">
+              <p
+                data-slot="collection-member-note"
+                data-content-item-slot="preview"
+                className="col-start-2 line-clamp-2 text-sm text-muted-foreground"
+              >
                 {member.note}
               </p>
             ) : null}
-            <ListRowControl className={`col-start-2 flex flex-wrap items-center gap-2 ${editing ? 'col-span-2' : ''}`}>
+            <ListRowControl
+              data-content-item-slot="actions"
+              className={`col-start-2 flex flex-wrap items-center gap-2 ${editing ? 'col-span-2' : ''}`}
+            >
               {member.subject && (onCopy || (editing && onBoundaryMove)) ? (
                 <Menu
                   title={actionLabel(m.library_collection_actions())}
