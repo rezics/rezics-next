@@ -25,9 +25,10 @@ They never become anonymous authority. There is no session fetch or shared-sessi
 
 Navigation events, reloads, readiness loss, source replacement and account/session changes permanently
 retire the old visit. Retirement unmounts reasons, submitted evidence, current targets, exact revision
-bodies/media/links, drafts, selections, receipts, retry and continuation controls. A weak set marks the
-original native input object, so restoring old props, or a shallow copy made by the loader, cannot revive
-it. A newly prepared native generation may recover. A replacement QueryClient or action transport
+bodies/media/links, drafts, selections, receipts, retry and continuation controls. The original reader's
+local handoff and mounted ownership fence restoring old props or a shallow loader copy. Input object
+identity is not a retirement marker: default cache structural sharing may reuse it in a healthy newly
+prepared native generation. A replacement QueryClient or action transport
 requires a fresh native page. The standalone prepared View and server rendering with no browser session
 source remain explicit fixtures; the default route always uses the browser-bound Page wrapper.
 

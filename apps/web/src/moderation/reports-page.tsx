@@ -32,9 +32,6 @@ const submitReportAction: ReportQueueAction = async (data) => {
 };
 
 export type ReportNavigation = { isCurrent: () => boolean; subscribe: (retire: () => void) => () => void };
-// Each native read allocates its own original input object. Shallow loader copies retain this
-// read token; weak retention cannot accumulate a history of private pages.
-const retiredReads = new WeakSet<ReportReadInput>();
 
 /** Default route binding. Only a fresh native read can replace a retired private visit. */
 export function ModerationReportsPage(props: {
@@ -58,7 +55,7 @@ export function ModerationReportsPage(props: {
     const owner = browserClient
       ? createPrivateReaderLifetime(browserClient, page, reportReadKey(page.input), original.navigation)
       : undefined;
-    let retired = retiredReads.has(page.input);
+    let retired = false;
     let connected = true;
     let serial = 0;
     const listeners = new Set<() => void>();
@@ -66,7 +63,6 @@ export function ModerationReportsPage(props: {
       if (retired) return;
       retired = true;
       serial++;
-      retiredReads.add(page.input);
       owner?.retire();
       for (const listener of listeners) listener();
     };
@@ -102,9 +98,8 @@ export function ModerationReportsPage(props: {
         observe();
         return () => {
           connected = false;
-          // Mark the read synchronously for any new mount. Strict Mode reconnects this same
-          // visit, whose local retirement flag remains separate from the admission marker.
-          retiredReads.add(page.input);
+          // The original owner fences new mounts. Inputs may be structurally shared with
+          // a healthy new native generation and cannot serve as retirement markers.
           serial++;
           listeners.delete(listener);
           disconnectSession?.();
