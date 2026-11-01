@@ -161,6 +161,18 @@ export const History: Story = {
     if (!list) throw new Error('The captured history has no revision list.');
     const versions = Array.from(list.children) as HTMLElement[];
     await expect(versions).toHaveLength(2);
+    const firstDocument = versions[0]!.querySelector('[data-slot="document-body"]');
+    const firstProvenance = within(versions[0]!).getByRole('complementary', {
+      name: m.thread_provenance_heading(),
+    });
+    if (
+      !firstDocument ||
+      !(firstDocument.compareDocumentPosition(firstProvenance) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ) {
+      throw new Error('The recorded document must appear before its revision details.');
+    }
+    await expect(firstProvenance).toBeVisible();
+    await within(versions[0]!).findByText('LicenseRef-rezics-terms', { exact: true });
     await within(versions[0]!).findByRole('heading', { name: m.thread_history_version({ number: '1' }) });
     await within(versions[0]!).findByText('The first words stay visible.');
     await within(versions[0]!).findByRole('link', { name: 'An example link' });

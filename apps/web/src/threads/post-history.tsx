@@ -198,7 +198,7 @@ export function RevisionEntry({
 }) {
   const locale = getLocale();
   return (
-    <li className="space-y-3 border-t border-border/60 pt-4 first:border-0 first:pt-0">
+    <li className="min-w-0 space-y-3 border-t border-border/60 pt-4 first:border-0 first:pt-0">
       <h4 className="font-semibold">
         <a
           href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
@@ -207,8 +207,12 @@ export function RevisionEntry({
           {m.thread_history_version({ number: String(number) })}
         </a>
       </h4>
-      <Byline author={authors?.[revision.authorId]} createdAt={revision.createdAt} now={now} showAuthor />
-      <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
+      <Byline
+        author={authors?.[revision.authorId]}
+        createdAt={revision.revisedAt ?? revision.createdAt}
+        now={now}
+        showAuthor
+      />
       {revision.availability === 'available' && revision.body ? (
         <DocumentBody
           document={revision.body}
@@ -223,6 +227,9 @@ export function RevisionEntry({
           )}
         />
       ) : null}
+      <div className="min-w-0 max-w-2xl rounded-lg border border-border/60 bg-muted/30 p-3 [overflow-wrap:anywhere]">
+        <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
+      </div>
     </li>
   );
 }
