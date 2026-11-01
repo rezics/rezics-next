@@ -19,6 +19,11 @@ import { isLiteraryType, literaryFields, literaryInitialItem, type LiteraryRead 
 export type LiteraryTransport = Pick<CreateTransport, 'submit' | 'read'> & { load: () => Promise<LiteraryRead> };
 type Ready = Extract<LiteraryRead, { ok: true }>;
 type InitialRow = { id: string; statement: StatementInput };
+const coarseTarget = 'max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+const wrappingLink = `${coarseTarget} max-w-full whitespace-normal break-words`;
+const keyboardFocus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const touchAction = `${coarseTarget} max-md:w-full pointer-coarse:w-full`;
+const disclosureSummary = `min-h-8 min-w-0 cursor-pointer break-words text-xl font-semibold max-md:min-h-11 pointer-coarse:min-h-11 ${keyboardFocus} [overflow-wrap:anywhere]`;
 
 /** Optional initial facts share the scalar codecs. A row exists only after an explicit Add action. */
 function InitialFacts({
@@ -51,9 +56,14 @@ function InitialFacts({
         const definition = read.release.properties[statement.property.id];
         if (!definition)
           return (
-            <section key={id} className="space-y-3">
+            <section key={id} className="min-w-0 space-y-3">
               <EditorFailure locale={locale} reason="stale" />
-              <Button type="button" variant="ghost" onClick={() => change(rows.filter((row) => row.id !== id))}>
+              <Button
+                type="button"
+                variant="ghost"
+                className={touchAction}
+                onClick={() => change(rows.filter((row) => row.id !== id))}
+              >
                 {m.literary_remove_fact({}, o)}
               </Button>
             </section>
@@ -69,13 +79,16 @@ function InitialFacts({
             id={`literary-fact-${id}`}
             key={id}
             aria-label={label.text}
-            className="space-y-3 rounded-lg border border-border p-4"
+            className="min-w-0 space-y-3 rounded-lg border border-border p-4"
           >
-            <h3 lang={label.lang ?? undefined} className="font-semibold">
+            <h3 lang={label.lang ?? undefined} className="break-words font-semibold [overflow-wrap:anywhere]">
               {label.text}
             </h3>
             {description.text && (
-              <p lang={description.lang ?? undefined} className="text-sm text-muted-foreground">
+              <p
+                lang={description.lang ?? undefined}
+                className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
+              >
                 {description.text}
               </p>
             )}
@@ -100,17 +113,25 @@ function InitialFacts({
                 })
               }
             />
-            <Button type="button" variant="ghost" onClick={() => change(rows.filter((row) => row.id !== id))}>
+            <Button
+              type="button"
+              variant="ghost"
+              className={touchAction}
+              onClick={() => change(rows.filter((row) => row.id !== id))}
+            >
               {m.literary_remove_fact({}, o)}
             </Button>
           </section>
         );
       })}
-      <div className="flex flex-wrap items-end gap-3">
-        <Field className="min-w-0 flex-1">
+      <div
+        className="flex flex-wrap items-end gap-3 max-md:flex-col max-md:items-stretch pointer-coarse:flex-col pointer-coarse:items-stretch"
+      >
+        <Field className="w-full min-w-0 flex-1">
           <FieldLabel htmlFor="literary-initial-property">{m.refinement_property({}, o)}</FieldLabel>
           <NativeSelect
             id="literary-initial-property"
+            className={`${coarseTarget} w-full max-w-full`}
             value={fields.includes(property) ? property : ''}
             onChange={(event) => setProperty(event.target.value)}
           >
@@ -130,6 +151,7 @@ function InitialFacts({
         <Button
           type="button"
           variant="outline"
+          className={touchAction}
           disabled={
             !fields.includes(property) ||
             rows.length >= 12 ||
@@ -215,7 +237,7 @@ export function LiteraryProfile({
         ) : (
           <>
             <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
-            <Button variant="outline" onClick={() => void query.refetch()}>
+            <Button variant="outline" className={coarseTarget} onClick={() => void query.refetch()}>
               {m.correction_retry({}, o)}
             </Button>
           </>
@@ -301,35 +323,50 @@ export function LiteraryProfile({
       {heading}
       <section
         aria-label={m.literary_identity({}, o)}
-        className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
+        className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
       >
-        <h2 className="text-xl font-semibold">{m.literary_identity({}, o)}</h2>
-        <p>
-          <a lang={title.lang ?? undefined} href={href} className="font-sans text-xl underline">
+        <h2 className="break-words text-xl font-semibold [overflow-wrap:anywhere]">
+          {m.literary_identity({}, o)}
+        </h2>
+        <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+          <a
+            lang={title.lang ?? undefined}
+            href={href}
+            className={`inline-flex min-h-8 min-w-0 items-center font-sans text-xl underline ${wrappingLink} ${keyboardFocus} [overflow-wrap:anywhere]`}
+          >
             {title.text || m.subject_value_unlabelled({}, o)}
           </a>{' '}
           · <span lang={typeName.lang ?? undefined}>{typeName.text}</span>
         </p>
-        <p className="break-all text-sm text-muted-foreground">
+        <p className="min-w-0 break-all text-sm text-muted-foreground">
           {subject.id} · {subject.type}
         </p>
         {Object.entries(subject.labels).map(([language, label]) => (
-          <div key={language} className="space-y-1">
-            <p lang={language}>
+          <div key={language} className="min-w-0 space-y-1">
+            <p lang={language} className="break-words [overflow-wrap:anywhere]">
               {label} <span className="text-sm text-muted-foreground">({language})</span>
             </p>
-            {subject.descriptions[language] && <p lang={language}>{subject.descriptions[language]}</p>}
+            {subject.descriptions[language] && (
+              <p lang={language} className="break-words [overflow-wrap:anywhere]">
+                {subject.descriptions[language]}
+              </p>
+            )}
             {!!subject.aliases[language]?.length && (
-              <p lang={language} className="text-sm">
+              <p lang={language} className="break-words text-sm [overflow-wrap:anywhere]">
                 {subject.aliases[language]!.join(' · ')}
               </p>
             )}
           </div>
         ))}
-        <a href={`${href}/terms`} className={buttonVariants({ variant: 'outline' })}>
+        <a
+          href={`${href}/terms`}
+          className={buttonVariants({ variant: 'outline', className: `${wrappingLink} ${keyboardFocus}` })}
+        >
           {m.catalogue_terms_title({}, o)}
         </a>
-        <p className="text-sm text-muted-foreground">{m.literary_terms_help({}, o)}</p>
+        <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {m.literary_terms_help({}, o)}
+        </p>
       </section>
       {session !== 'signed-in' ? (
         <EditorFailure locale={locale} reason={session === 'signed-out' ? 'denied' : 'unavailable'} />
@@ -344,10 +381,12 @@ export function LiteraryProfile({
               onToggle={(event) => {
                 if (event.currentTarget.open) setOpened((previous) => ({ ...previous, relations: true }));
               }}
-              className="rounded-xl border border-border bg-card p-4 sm:p-6"
+              className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6"
             >
-              <summary className="cursor-pointer text-xl font-semibold">{m.literary_relations({}, o)}</summary>
-              <p className="my-4 text-sm text-muted-foreground">{m.literary_relations_help({}, o)}</p>
+              <summary className={disclosureSummary}>{m.literary_relations({}, o)}</summary>
+              <p className="my-4 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                {m.literary_relations_help({}, o)}
+              </p>
               {opened.relations && relations}
             </details>
           )}
@@ -356,20 +395,22 @@ export function LiteraryProfile({
               onToggle={(event) => {
                 if (event.currentTarget.open) setOpened((previous) => ({ ...previous, authored: true }));
               }}
-              className="rounded-xl border border-border bg-card p-4 sm:p-6"
+              className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6"
             >
-              <summary className="cursor-pointer text-xl font-semibold">{m.authored_title({}, o)}</summary>
-              <p className="my-4 text-sm text-muted-foreground">{m.literary_authored_help({}, o)}</p>
+              <summary className={disclosureSummary}>{m.authored_title({}, o)}</summary>
+              <p className="my-4 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                {m.literary_authored_help({}, o)}
+              </p>
               {opened.authored && authored}
             </details>
           )}
         </>
       )}
-      <nav className="flex flex-wrap gap-3">
-        <a className={buttonVariants({ variant: 'outline' })} href={href}>
+      <nav className="flex min-w-0 flex-wrap gap-3">
+        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={href}>
           {m.candidate_view_public({}, o)}
         </a>
-        <a className={buttonVariants({ variant: 'outline' })} href={`${href}/changes`}>
+        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={`${href}/changes`}>
           {m.changes_title({}, o)}
         </a>
       </nav>

@@ -180,4 +180,74 @@ export const Route: Story = {
   render: () => (
     <PageStory visitor="Signed In" path={`/subjects/${literaryWorkId}/an-original-literary-work/literary`} />
   ),
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const document = canvasElement.ownerDocument;
+    const view = document.defaultView;
+    if (!view) throw new Error('Literary profile story requires a browser window.');
+    await canvas.findByRole('heading', { level: 1, name: m.literary_title() });
+
+    const article = canvasElement.querySelector('article');
+    if (!article) throw new Error('Literary profile article is missing.');
+    const phoneWidth = document.documentElement.clientWidth < 768;
+    const coarsePointer = view.matchMedia('(pointer: coarse)').matches;
+    const touchLayout = phoneWidth || coarsePointer;
+    const minimumHeight = touchLayout ? 44 : 32;
+    const assertOwnedTarget = async (target: HTMLElement, region: HTMLElement) => {
+      const rect = target.getBoundingClientRect();
+      const bounds = region.getBoundingClientRect();
+      await expect(target).toBeVisible();
+      await expect(rect.height).toBeGreaterThanOrEqual(minimumHeight);
+      if (touchLayout) await expect(rect.width).toBeGreaterThanOrEqual(44);
+      else await expect(rect.height).toBeLessThan(44);
+      await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+      await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+      await expect(target.scrollWidth).toBeLessThanOrEqual(target.clientWidth + 1);
+    };
+
+    const identity = await canvas.findByRole('region', { name: m.literary_identity() });
+    await expect(identity.scrollWidth).toBeLessThanOrEqual(identity.clientWidth + 1);
+    const identityLinks = within(identity).getAllByRole('link');
+    await expect(identityLinks).toHaveLength(2);
+    const identityLink = identityLinks[0]!;
+    const termsLink = identityLinks[1]!;
+    await expect(identityLink).toHaveAttribute('href', expect.stringContaining(literaryWorkId));
+    await expect(termsLink).toHaveAttribute('href', expect.stringContaining('/terms'));
+    await assertOwnedTarget(identityLink, identity);
+    await assertOwnedTarget(termsLink, identity);
+
+    const navigation = article.querySelector('nav');
+    if (!navigation) throw new Error('Literary profile navigation is missing.');
+    const publicLink = within(navigation).getByRole('link', { name: m.candidate_view_public() });
+    const changesLink = within(navigation).getByRole('link', { name: m.changes_title() });
+    await assertOwnedTarget(publicLink, navigation);
+    await assertOwnedTarget(changesLink, navigation);
+
+    const summaries = Array.from(article.querySelectorAll<HTMLElement>('details > summary'));
+    await expect(summaries.length).toBeGreaterThan(0);
+    for (const summary of summaries) {
+      await expect(summary.tagName).toBe('SUMMARY');
+      await assertOwnedTarget(summary, article);
+    }
+
+    const summary = summaries[0]!;
+    const tabbable = Array.from(
+      article.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled), summary, input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter(
+      (element) =>
+        element.getClientRects().length > 0 &&
+        (element.tagName === 'SUMMARY' || !element.closest('details:not([open])')),
+    );
+    const previous = tabbable[tabbable.indexOf(summary) - 1];
+    if (!previous) throw new Error('Literary disclosure has no preceding keyboard target.');
+    previous.focus();
+    await userEvent.tab();
+    await expect(summary).toHaveFocus();
+    await expect(view.getComputedStyle(summary).outlineWidth).not.toBe('0px');
+    await userEvent.keyboard('{Enter}');
+    await expect(summary.closest('details')).toHaveAttribute('open', '');
+  },
 };
