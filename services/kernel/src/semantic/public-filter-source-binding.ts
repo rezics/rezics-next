@@ -25,6 +25,8 @@ import accountPage from './public-filter-source-binding-account-page.sql';
 import { enrollAccountDiscoveryHome } from '../access/account-discovery-reduction.ts';
 import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
+import { beginPublicFilterCoverageBaseline, adoptPublicFilterCoverageBaseline } from './public-filter-coverage-baseline.ts';
+import { encodePublicFilterNativeState } from '../search/public-filter-custody.ts';
 import readAccounts from './public-filter-source-binding-accounts.sql';
 import repairState from './public-filter-source-binding-repair-state.sql';
 import repairRead from './public-filter-source-binding-repair-read.sql';
@@ -1350,6 +1352,14 @@ export function createPublicFilterSourceBinding(
         if (!inserted) throw new BindingError('configuration_changed');
         const cut = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
         if (cut.row.state === 'capturing') {
+          const baseline = {
+            bootstrap: inserted.bootstrap,
+            registration: registration.registration,
+            definition: resolved.definition.readDefinition,
+            consumer: encodePublicFilterNativeState(consumer),
+            accounts: 'representation' in capture,
+          };
+          await beginPublicFilterCoverageBaseline(db,baseline,deadline);
           // One original native home per retained preparation step. Account and
           // Source writers share the locks used by this enrollment. Its original
           // tuple survives replay and is not replaced by a current read snapshot.
@@ -1364,11 +1374,15 @@ export function createPublicFilterSourceBinding(
           }, { deadline });
           if (!receipt.complete)
             return { status: 'unready' as const, reason: 'owner_unavailable' as const, cost };
+          const adopted = await adoptPublicFilterCoverageBaseline(db,baseline,receipt,deadline);
           const advanced = (await accountPage.run(db, {
             bootstrap: inserted.bootstrap,
             after_partition: cut.row.account_after,
             next_partition: cut.row.account_after + 1,
             head_count: 1,
+            coverage_generation: String(adopted.generation),
+            coverage_root: adopted.root,
+            registration: registration.registration.id,
             heads: [{ partition: receipt.partition, epoch: receipt.epoch,
               revision: String(receipt.revision), claim_revision: String(receipt.claimRevision) }],
           }))[0];

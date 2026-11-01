@@ -1,0 +1,143 @@
+import { createHash } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
+import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+
+type Binding = Readonly<{
+  bootstrap: string;
+  registration: Readonly<{ partition: number; id: string }>;
+  definition: string;
+  /** Original Search encoding, not a caller-provided permission or cut. */
+  consumer: string;
+  accounts: boolean;
+}>;
+const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+async function transaction<T>(pool: Pool, deadline: number, body: (client: PoolClient) => Promise<T>): Promise<T> {
+  requireAccessDeadline(deadline);
+  return withConnection(pool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
+      const value = await body(client);
+      requireAccessDeadline(deadline);
+      await client.query('COMMIT');
+      return value;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { discardConnection(client, rollbackError as Error); }
+      throw error;
+    }
+  });
+}
+
+async function lockRegistration(client: PoolClient, binding: Binding) {
+  const owner = (await client.query<{ write_state: string }>(
+    'SELECT write_state FROM core.partition WHERE partition_no=$1 FOR SHARE', [binding.registration.partition],
+  )).rows[0];
+  if (!owner || owner.write_state !== 'active')
+    throw new CommandUnavailableError('fenced', binding.registration.partition);
+  const registration = (await client.query<{ consumer: string; state: string; coverage_generation: string }>(
+    `SELECT consumer,state,coverage_generation::text FROM search.public_filter_registration
+     WHERE (partition_no,id)=($1,$2) FOR UPDATE`, [binding.registration.partition,binding.registration.id],
+  )).rows[0];
+  if (!registration || registration.state !== 'active' || registration.consumer !== binding.consumer)
+    throw new CommandUnavailableError('contention', binding.registration.partition);
+  return registration;
+}
+
+/** Pin the generation BEFORE taking any native home baseline. A later ACK can
+ * never renew this preparation's generation or original immutable chain.
+ */
+export async function beginPublicFilterCoverageBaseline(pool: Pool, binding: Binding, deadline: number) {
+  return transaction(pool,deadline,async (client) => {
+    const registration = await lockRegistration(client,binding);
+    await client.query(
+      `INSERT INTO search.public_filter_coverage_preparation
+         (partition_no,registration,bootstrap,definition,consumer,generation,root)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+      [binding.registration.partition,binding.registration.id,binding.bootstrap,binding.definition,
+        binding.consumer,registration.coverage_generation,
+        hash([binding.registration,binding.bootstrap,binding.definition,binding.consumer])],
+    );
+    const original = (await client.query<{ definition: string; consumer: string; generation: string }>(
+      `SELECT definition::text,consumer,generation::text FROM search.public_filter_coverage_preparation
+       WHERE (partition_no,registration,bootstrap)=($1,$2,$3)`,
+      [binding.registration.partition,binding.registration.id,binding.bootstrap],
+    )).rows[0];
+    if (!original || original.definition !== binding.definition || original.consumer !== binding.consumer)
+      throw new CommandUnavailableError('contention',binding.registration.partition);
+    // Source bootstrap and this registration currently share native home zero.
+    // Keep the original cut, not a mutable preparation root after some receipts.
+    if (binding.registration.partition !== 0)
+      throw new CommandUnavailableError('contention',binding.registration.partition);
+    const pinned = await client.query(
+      `UPDATE semantic.public_filter_bootstrap SET coverage_generation=$2,
+         coverage_root=coalesce(coverage_root,$3)
+       WHERE partition_no=0 AND bootstrap=$1 AND state='capturing'
+         AND (coverage_generation IS NULL OR coverage_generation=$2::bigint)
+       RETURNING bootstrap`,
+      [binding.bootstrap,original.generation,
+        hash([binding.registration,binding.bootstrap,binding.definition,binding.consumer])],
+    );
+    if (pinned.rowCount !== 1)
+      throw new CommandUnavailableError('contention',binding.registration.partition);
+    return BigInt(original.generation);
+  });
+}
+
+/** Adopt ONE committed original home receipt, after releasing that native home.
+ * The indexed predecessor and its successor commit together in the registration
+ * home. This is baseline enrollment, never a receiver-repair ACK.
+ */
+export async function adoptPublicFilterCoverageBaseline(
+  pool: Pool, binding: Binding, receipt: AccountDiscoveryEnrollment, deadline: number,
+): Promise<Readonly<{ after: number; root: string; generation: bigint }>> {
+  if (!receipt.complete || receipt.receipt === null || receipt.receipt !== hash([
+    receipt.partition,binding.bootstrap,binding.registration.partition,binding.registration.id,binding.definition,
+    receipt.epoch,String(receipt.sourcePosition),String(receipt.creationPosition),String(receipt.enqueueRevision),
+    binding.accounts ? String(receipt.revision) : null,
+    binding.accounts ? String(receipt.claimRevision) : null,receipt.keyDigest,
+  ])) throw new CommandUnavailableError('contention',receipt.partition);
+  return transaction(pool,deadline,async (client) => {
+    await lockRegistration(client,binding);
+    const preparation = (await client.query<{
+      definition: string; consumer: string; generation: string; after_home: number; root: string;
+    }>(
+      `SELECT definition::text,consumer,generation::text,after_home,root
+       FROM search.public_filter_coverage_preparation
+       WHERE (partition_no,registration,bootstrap)=($1,$2,$3) FOR UPDATE`,
+      [binding.registration.partition,binding.registration.id,binding.bootstrap],
+    )).rows[0];
+    if (!preparation || preparation.definition !== binding.definition || preparation.consumer !== binding.consumer ||
+      preparation.after_home < receipt.partition)
+      throw new CommandUnavailableError('contention',binding.registration.partition);
+    const keys = [binding.registration.partition,binding.registration.id,binding.bootstrap,receipt.partition];
+    if (preparation.after_home > receipt.partition) {
+      const replay = (await client.query<{ receipt: string; root: string }>(
+        `SELECT receipt,root FROM search.public_filter_coverage_baseline
+         WHERE (partition_no,registration,bootstrap,source_home)=($1,$2,$3,$4)`,keys,
+      )).rows[0];
+      if (!replay || replay.receipt !== receipt.receipt)
+        throw new CommandUnavailableError('contention',binding.registration.partition);
+      return { after: receipt.partition+1, root: replay.root, generation: BigInt(preparation.generation) };
+    }
+    const root = hash([preparation.root,receipt.partition,receipt.receipt]);
+    await client.query(
+      `INSERT INTO search.public_filter_coverage_baseline
+        (partition_no,registration,bootstrap,source_home,source_epoch,source_position,creation_position,
+         native_enqueue_revision,native_revision,native_claim_revision,receipt,predecessor,root)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [...keys,receipt.epoch,String(receipt.sourcePosition),String(receipt.creationPosition),
+        String(receipt.enqueueRevision),binding.accounts ? String(receipt.revision) : null,
+        binding.accounts ? String(receipt.claimRevision) : null,receipt.receipt,preparation.root,root],
+    );
+    await client.query(
+      `UPDATE search.public_filter_coverage_preparation SET after_home=$4,root=$5
+       WHERE (partition_no,registration,bootstrap)=($1,$2,$3) AND after_home=$6`,
+      [binding.registration.partition,binding.registration.id,binding.bootstrap,receipt.partition+1,root,receipt.partition],
+    );
+    return { after: receipt.partition+1,root,generation: BigInt(preparation.generation) };
+  });
+}
