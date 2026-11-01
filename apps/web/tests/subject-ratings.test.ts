@@ -184,3 +184,196 @@ test('rating request counts stay constant for empty and populated subjects', asy
     expect(signedIn.calls.vote).toHaveLength(1);
   }
 });
+
+// Render the current read model directly: these are presentation regressions, not producer/native evidence.
+const hierarchyData: import('../src/features/pages/subject-ratings').Ratings = {
+  question: {
+    id: QUESTION,
+    revision: 7,
+    label: 'How much did you like this work?',
+    grain: 'work',
+    scale: { min: 0, max: 20, displayStep: 1 },
+  },
+  figure: {
+    questionId: QUESTION,
+    populationId: GLOBAL,
+    scale: { min: 0, max: 20, displayStep: 1 },
+    count: 1203,
+    state: 'ready',
+    mean: 8.4,
+    score: 7.9,
+  },
+  figures: [figure(GLOBAL, 1203, { mean: 16.8, histogram })],
+  statistics: [{ ...imported, licence: 'ODbL-1.0', attribution: 'Example contributors' }],
+  realms: [],
+  own: null,
+};
+
+async function ratingDocument(html: string) {
+  const { createRequire } = await import('node:module');
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window();
+  window.document.body.innerHTML = html;
+  return window;
+}
+
+test('Subject rating presents one primary result and an accessible bounded distribution without manufacturing missing figures or leaking own votes', async () => {
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  for (const session of ['signed-in', 'signed-out', 'unknown', 'unavailable'] as const) {
+    const cache = new QueryClient();
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: cache },
+        createElement(RatingsView, {
+          data: { ...hierarchyData, own: 19, realms: [{ id: GLOBAL, name: 'Duplicate Global' }, realms[0]!] },
+          id: 'ratings',
+          subject: 'subject',
+          locale: 'en',
+          control: {
+            subjectId: 'subject',
+            locale: 'en',
+            returnTo: '/en/subjects/subject',
+            session,
+            own: { kind: 'unavailable' },
+          },
+        }),
+      ),
+    );
+    const window = await ratingDocument(html);
+    try {
+      const document = window.document;
+      const primary = document.querySelector('[data-slot="public-rating-figure"]')!;
+      expect(primary.textContent).toContain('8.4 out of 10');
+      expect(primary.textContent).toContain('1,203 ratings');
+      expect(document.querySelectorAll('[data-slot="public-rating-figure"]')).toHaveLength(1);
+      expect(document.querySelector('[data-slot="rating-question"]')?.getAttribute('data-revision')).toBe('7');
+      expect(html).not.toContain('Duplicate Global');
+      expect(html).not.toContain('9.5');
+      expect(document.querySelector('[data-slot="own-rating"]')).toBeNull();
+      const action = document.querySelector('[data-slot="rating-control-reserved"]')!;
+      expect(action).not.toBeNull();
+      expect(primary.compareDocumentPosition(action) & window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      for (const disclosure of document.querySelectorAll('details')) {
+        expect(disclosure.open).toBe(false);
+        expect(disclosure.querySelector('summary')?.textContent?.trim()).toBeTruthy();
+        expect(action.compareDocumentPosition(disclosure) & window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      }
+      const sources = document.querySelector('[data-slot="rating-provenance"]')!;
+      for (const detail of ['Example', '84', '100', '50', '2025', 'ODbL-1.0', 'Example contributors', 'Bayesian'])
+        expect(sources.textContent).toContain(detail);
+    } finally {
+      cache.clear();
+      await window.happyDOM.close();
+    }
+  }
+});
+
+test('missing comparison figure or mean stays unavailable while zero, threshold and updating remain distinct', async () => {
+  const data = {
+    ...hierarchyData,
+    realms: ['missing', 'zero', 'threshold', 'updating', 'missing-mean'].map((id) => ({ id, name: id })),
+    figures: [
+      ...hierarchyData.figures,
+      figure('zero', 0),
+      figure('threshold', 3, { mean: 20, remaining: 2 }),
+      figure('updating', 9, { mean: 18, freshness: { asOf: null, updating: true } }),
+      figure('missing-mean', 8),
+    ],
+  };
+  const window = await ratingDocument(render(data));
+  try {
+    const rows = new Map(
+      Array.from(window.document.querySelectorAll('[data-slot="rating-comparison"]'), (row) => [
+        row.querySelector('h3')!.textContent,
+        row.textContent,
+      ]),
+    );
+    expect(rows.get('missing')).toContain('Rating figure unavailable');
+    expect(rows.get('missing')).not.toContain('No ratings yet');
+    expect(rows.get('missing-mean')).toContain('8 ratings');
+    expect(rows.get('missing-mean')).toContain('Rating figure unavailable');
+    expect(rows.get('zero')).toContain('No ratings yet');
+    expect(rows.get('zero')).not.toContain('unavailable');
+    expect(rows.get('threshold')).toContain('2 more ratings');
+    expect(rows.get('threshold')).not.toContain('out of 10');
+    expect(rows.get('updating')).toContain('publication is updating');
+    expect(rows.get('updating')).not.toContain('out of 10');
+  } finally {
+    await window.happyDOM.close();
+  }
+});
+
+test('five supplied comparisons mount initially and local reveal/collapse mounts only supplied remainder without reads', async () => {
+  const { act } = await import('react');
+  const window = await ratingDocument('');
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const contexts = Array.from({ length: 8 }, (_, index) => ({
+    id: `supplied-${index}`,
+    name: `Supplied context ${index}`,
+  }));
+  const data = {
+    ...hierarchyData,
+    realms: [{ id: GLOBAL, name: 'Duplicate Global' }, ...contexts, contexts[0]!],
+    figures: [...hierarchyData.figures, ...contexts.map(({ id }, index) => figure(id, 8 - index, { mean: 16 }))],
+  };
+  const fetchBefore = globalThis.fetch;
+  let reads = 0;
+  globalThis.fetch = (() => {
+    reads++;
+    throw new Error('Presentation must not fetch');
+  }) as typeof fetch;
+  try {
+    await act(async () => {
+      root.render(createElement(RatingsView, { data, id: 'ratings', subject: 'subject', locale: 'en' }));
+    });
+    const disclosure = host.querySelector('[data-slot="rating-comparisons"]')!;
+    expect(disclosure.hasAttribute('open')).toBe(false);
+    expect(host.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(5);
+    expect(host.textContent).not.toContain('Duplicate Global');
+    expect(host.textContent).not.toContain('Supplied context 7');
+    const button = disclosure.querySelector('button')!;
+    expect(button.textContent).toContain('3 more supplied contexts');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    const remainder = host.querySelector(`#${button.getAttribute('aria-controls')}`)!;
+    expect(remainder.hasAttribute('hidden')).toBe(true);
+    await act(async () => {
+      button.click();
+    });
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(remainder.hasAttribute('hidden')).toBe(false);
+    expect(host.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(8);
+    expect(host.textContent).toContain('Supplied context 7');
+    await act(async () => {
+      button.click();
+    });
+    expect(host.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(5);
+    expect(host.textContent).not.toContain('Supplied context 7');
+    expect(reads).toBe(0);
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    globalThis.fetch = fetchBefore;
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.close();
+  }
+});

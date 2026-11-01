@@ -227,3 +227,79 @@ test('subject and Search render published ready, pending and below-threshold fig
     if (figure.state !== 'ready') expect(subject).not.toContain('data-slot="histogram"');
   }
 });
+
+test('horizontal distribution keeps semantic localized bucket counts, true scale steps and all-zero bars', async () => {
+  const { RatingDistribution } = await import('../src/features/pages/rating-distribution');
+  const { createRequire } = await import('node:module');
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const histogram = [0, 1203, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (const values of [histogram, histogram.map(() => 0)]) {
+    const html = renderToStaticMarkup(
+      createElement(RatingDistribution, {
+        headline: { ...ready, count: 1203 },
+        question,
+        locale: 'de',
+        figure: {
+          population: GLOBAL,
+          count: 1203,
+          mean: 4,
+          histogram: values,
+          freshness: { asOf: null, updating: false },
+        },
+      }),
+    );
+    const window = new Window();
+    window.document.body.innerHTML = html;
+    try {
+      const list = window.document.querySelector('ol')!;
+      expect(list.getAttribute('aria-label')).toBeTruthy();
+      const rows = Array.from(list.querySelectorAll('li'));
+      expect(rows).toHaveLength(11);
+      expect(rows.map((row) => row.firstElementChild!.textContent)).toEqual(
+        Array.from({ length: 11 }, (_, index) => String(index)),
+      );
+      expect(rows[0]!.textContent).toContain('0');
+      expect(rows[1]!.textContent).toContain(new Intl.NumberFormat('de').format(values[1]!));
+      for (const row of rows) {
+        const visual = row.querySelector('[aria-hidden="true"]')!;
+        expect(visual.textContent).toBe('');
+        expect(row.lastElementChild!.textContent!.trim()).toBeTruthy();
+      }
+      expect(html).not.toMatch(/NaN|Infinity|canvas/);
+      if (values.every((value) => value === 0)) {
+        expect(html.match(/width:0%/g)).toHaveLength(11);
+        expect(html).not.toContain('width:100%');
+      } else expect(html).toContain('width:100%');
+    } finally {
+      await window.happyDOM.close();
+    }
+  }
+});
+
+test('unpublished, ineligible, stale, threshold and absent distributions render no histogram or inferred buckets', async () => {
+  const { RatingDistribution } = await import('../src/features/pages/rating-distribution');
+  const eligible = {
+    population: GLOBAL,
+    count: ready.count,
+    mean: 32,
+    histogram: [0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0],
+    freshness: { asOf: null, updating: false },
+  };
+  const cases = [
+    { headline: { ...ready, state: 'updating', mean: null }, figure: eligible },
+    { headline: { ...ready, state: 'insufficient_data', count: 3, mean: null }, figure: eligible },
+    { headline: { ...ready, populationId: 'another-context' }, figure: eligible },
+    { headline: { ...ready, questionId: 'another-question' }, figure: eligible },
+    { headline: ready, figure: { ...eligible, remaining: 2 } },
+    { headline: ready, figure: { ...eligible, freshness: { asOf: null, updating: true } } },
+    { headline: ready, figure: { ...eligible, count: ready.count + 1 } },
+    { headline: ready, figure: { population: GLOBAL, count: ready.count, mean: 32, freshness: eligible.freshness } },
+    { headline: ready, figure: { ...eligible, histogram: [5] } },
+    { headline: ready, figure: { ...eligible, histogram: eligible.histogram.map(() => -1) } },
+    { headline: ready, figure: undefined },
+  ] satisfies { headline: PublicFigure; figure: import('../src/features/pages/subject-ratings').Figure | undefined }[];
+  for (const item of cases) {
+    const html = renderToStaticMarkup(createElement(RatingDistribution, { ...item, question, locale: 'en' }));
+    expect(html).toBe('');
+  }
+});

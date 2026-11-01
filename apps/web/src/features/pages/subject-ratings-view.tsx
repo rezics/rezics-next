@@ -1,17 +1,12 @@
-import { createContext, useContext, type ContextType } from 'react';
+import { createContext, useContext, useState, type ContextType } from 'react';
 import { MetaLine } from '@rezics/ui/meta-line';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { SubjectRatingControl } from './rating-control';
 import type { SubjectOwnRating } from './subject-ratings';
-import {
-  displayRating,
-  hasPublicMean,
-  GLOBAL,
-  PUBLIC_RATING_SCALE,
-  type Figure,
-  type Ratings,
-} from './subject-ratings';
+import { displayRating, GLOBAL, PUBLIC_RATING_SCALE, type Figure, type Ratings } from './subject-ratings';
 import { PublicRatingFigure } from './public-rating-figure';
+import { RatingDistribution } from './rating-distribution';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
@@ -96,53 +91,8 @@ export function RatingsView({
       : value;
   };
 
-  const figure = (item: Figure | undefined, label: string) => {
-    if (!item || item.count === 0)
-      return (
-        <p>
-          <MetaLine items={[<span className="font-medium">{label}</span>, m.subject_ratings_empty({}, options)]} />
-        </p>
-      );
-
-    const count = number(item.count);
-    const countLabel = m.subject_ratings_realm_count({ count, population: label }, options);
-    const mean = item.remaining === undefined ? item.mean : undefined;
-
-    return (
-      <div>
-        <p>
-          <MetaLine
-            items={[
-              mean !== undefined ? (
-                <strong className="text-xl tabular-nums">
-                  {m.rating_public_mean(
-                    {
-                      mean: number(displayRating(mean, data.question.scale), 2),
-                      maximum: number(PUBLIC_RATING_SCALE.max),
-                    },
-                    options,
-                  )}
-                </strong>
-              ) : null,
-              countLabel,
-            ]}
-          />
-        </p>
-        {item.remaining !== undefined && (
-          <p className="text-sm text-muted-foreground">
-            {m.subject_ratings_remaining({ count: number(item.remaining) }, options)}
-          </p>
-        )}
-      </div>
-    );
-  };
-
   const globalFigure = data.figures.find((item) => item.population === GLOBAL);
   const threshold = ['episode', 'character'].includes(data.question.grain) ? 10 : 5;
-  const published = hasPublicMean(data.figure);
-  const realms = data.realms
-    .map((realm) => ({ realm, figure: data.figures.find((item) => item.population === realm.id) }))
-    .sort((left, right) => (right.figure?.count ?? 0) - (left.figure?.count ?? 0));
 
   return (
     <section data-slot="rating-summary" aria-labelledby={`${id}-title`} className={sectionClass}>
@@ -155,56 +105,18 @@ export function RatingsView({
           {m.rating_question_revision({ revision: number(data.question.revision) }, options)}
         </span>
       </p>
-      <div data-slot="rating-figures" className={realms.length ? 'grid gap-6 md:grid-cols-2' : 'space-y-4'}>
-        <div className="space-y-3">
+      <div data-slot="rating-figures" className="space-y-4">
+        <div className="space-y-2 [&_strong]:text-3xl [&_strong]:font-semibold">
           <PublicRatingFigure figure={data.figure} locale={locale} remaining={threshold - data.figure.count} />
           {data.figure.count === 0 && data.figure.state !== 'updating' && (
             <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
           )}
-          {published && globalFigure?.remaining === undefined && globalFigure?.histogram && (
-            <details>
-              <summary className="cursor-pointer text-sm">{m.subject_ratings_distribution({}, options)}</summary>
-              <ol className="mt-2 grid max-w-sm grid-cols-3 gap-x-4 gap-y-1 text-xs tabular-nums" data-slot="histogram">
-                {globalFigure.histogram.map((count, index) => (
-                  <li key={index}>
-                    {number(displayRating(data.question.scale.min + index, data.question.scale), 2)}: {number(count)}
-                  </li>
-                ))}
-              </ol>
-            </details>
-          )}
-          <p className="text-xs text-muted-foreground">{m.rating_public_delay({}, options)}</p>
-          <p className="text-xs text-muted-foreground">{m.rating_public_ordering({}, options)}</p>
         </div>
-        {realms.length > 0 && (
-          <ul className="space-y-4">
-            {realms.map(({ realm, figure: item }) => (
-              <li key={realm.id}>{figure(item, realm.name)}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div className="space-y-3">
         {!control && data.own !== null && (
           <p data-slot="own-rating" className="text-sm text-muted-foreground">
             {m.subject_ratings_yours({ score: number(displayRating(data.own, data.question.scale), 2) }, options)}
           </p>
         )}
-        {data.statistics.map((item) => (
-          <p key={item.source} data-slot="imported-score">
-            <MetaLine
-              items={[
-                <span className="font-medium">{item.source === 'vndb' ? 'VNDB' : item.source}</span>,
-                <strong className="tabular-nums">
-                  {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
-                </strong>,
-                m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
-                item.licence ? m.rating_import_licence({ licence: item.licence }, options) : null,
-                item.attribution ? m.rating_import_attribution({ attribution: item.attribution }, options) : null,
-              ]}
-            />
-          </p>
-        ))}
         {control && (
           <SubjectRatingControl
             {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
@@ -217,9 +129,134 @@ export function RatingsView({
           />
         )}
       </div>
+      <RatingDistribution figure={globalFigure} headline={data.figure} question={data.question} locale={locale} />
+      <RatingComparisons
+        key={`${subject}:${data.question.id}:${data.question.revision}`}
+        data={data}
+        id={id}
+        locale={locale}
+      />
+      <details data-slot="rating-provenance" className="text-sm">
+        <summary className="cursor-pointer font-medium">{m.subject_ratings_provenance({}, options)}</summary>
+        <div className="mt-3 space-y-3 text-muted-foreground">
+          <p>{m.rating_public_delay({}, options)}</p>
+          <p>{m.rating_public_ordering({}, options)}</p>
+          {data.statistics.map((item) => (
+            <p key={item.source} data-slot="imported-score" className="min-w-0 break-words">
+              <MetaLine
+                items={[
+                  <span className="font-medium">{item.source === 'vndb' ? 'VNDB' : item.source}</span>,
+                  <strong className="tabular-nums">
+                    {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
+                  </strong>,
+                  m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
+                  item.licence ? m.rating_import_licence({ licence: item.licence }, options) : null,
+                  item.attribution ? m.rating_import_attribution({ attribution: item.attribution }, options) : null,
+                ]}
+              />
+            </p>
+          ))}
+        </div>
+      </details>
       <a data-slot="see-reviews" className={linkClass} href={reviewsHref}>
         {m.subject_ratings_reviews({}, options)}
       </a>
     </section>
+  );
+}
+
+/** Select at most five leading comparisons in O(R); do not sort or discover all populations. */
+function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; locale: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const options = { locale: locale as never };
+  const number = (value: number, digits = 0) =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
+  const figures = new Map(data.figures.map((item) => [item.population, item]));
+  const seen = new Set([GLOBAL]);
+  const comparisons = data.realms
+    .filter((realm) => {
+      if (seen.has(realm.id)) return false;
+      seen.add(realm.id);
+      return true;
+    })
+    .map((realm) => ({ realm, figure: figures.get(realm.id) }));
+  type Comparison = (typeof comparisons)[number];
+  const initial: Comparison[] = [];
+  for (const item of comparisons) {
+    const rank = (value: Comparison) => value.figure?.count ?? -1;
+    const position = initial.findIndex((candidate) => rank(item) > rank(candidate));
+    initial.splice(position < 0 ? initial.length : position, 0, item);
+    if (initial.length > 5) initial.pop();
+  }
+  if (comparisons.length === 0) return null;
+  const selected = new Set(initial.map(({ realm }) => realm.id));
+  const remaining = comparisons.filter(({ realm }) => !selected.has(realm.id));
+  const figure = (item: Figure | undefined, label: string) => {
+    if (!item || !Number.isSafeInteger(item.count) || item.count < 0)
+      return <p>{m.subject_ratings_figure_unavailable({}, options)}</p>;
+    if (item.freshness?.updating)
+      return (
+        <div>
+          <p>{m.subject_ratings_realm_count({ count: number(item.count), population: label }, options)}</p>
+          <p role="status" className="text-muted-foreground">
+            {m.rating_public_updating({}, options)}
+          </p>
+        </div>
+      );
+    if (item.count === 0) return <p>{m.subject_ratings_empty({}, options)}</p>;
+    return (
+      <div className="space-y-1">
+        <p>{m.subject_ratings_realm_count({ count: number(item.count), population: label }, options)}</p>
+        {item.remaining !== undefined ? (
+          <p className="text-muted-foreground">
+            {m.subject_ratings_remaining({ count: number(item.remaining) }, options)}
+          </p>
+        ) : item.mean !== undefined && Number.isFinite(item.mean) ? (
+          <p className="font-medium tabular-nums">
+            {m.rating_public_mean(
+              {
+                mean: number(displayRating(item.mean, data.question.scale), 2),
+                maximum: number(PUBLIC_RATING_SCALE.max),
+              },
+              options,
+            )}
+          </p>
+        ) : (
+          <p className="text-muted-foreground">{m.subject_ratings_figure_unavailable({}, options)}</p>
+        )}
+      </div>
+    );
+  };
+  const rows = (items: Comparison[]) =>
+    items.map(({ realm, figure: item }) => (
+      <li key={realm.id} data-slot="rating-comparison" className="min-w-0 space-y-1 break-words">
+        <h3 className="font-medium">{realm.name}</h3>
+        {figure(item, realm.name)}
+      </li>
+    ));
+  return (
+    <details data-slot="rating-comparisons" className="text-sm">
+      <summary className="cursor-pointer font-medium">{m.subject_ratings_comparisons({}, options)}</summary>
+      <ul className="mt-3 grid gap-4 sm:grid-cols-2">{rows(initial)}</ul>
+      {remaining.length > 0 && (
+        <>
+          <ul id={`${id}-more-comparisons`} hidden={!expanded} className="mt-4 grid gap-4 sm:grid-cols-2">
+            {expanded && rows(remaining)}
+          </ul>
+          <Button
+            type="button"
+            variant="link"
+            aria-expanded={expanded}
+            aria-controls={`${id}-more-comparisons`}
+            className="mt-3 h-auto max-w-full whitespace-normal p-0 text-start"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded
+              ? m.subject_ratings_fewer_comparisons({}, options)
+              : m.subject_ratings_more_comparisons({ count: number(remaining.length) }, options)}
+          </Button>
+        </>
+      )}
+    </details>
   );
 }

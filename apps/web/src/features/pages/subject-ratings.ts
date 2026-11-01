@@ -6,7 +6,14 @@ import { isPlatformClosedError } from '../../kernel/platform-closed';
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';
 export type Realm = { id: string; name: string };
-export type Figure = { population: string; count: number; mean?: number; histogram?: number[]; remaining?: number };
+export type Figure = {
+  population: string;
+  count: number;
+  mean?: number;
+  histogram?: number[];
+  remaining?: number;
+  freshness?: { asOf: string | null; updating: boolean };
+};
 export type Statistic = {
   source: string;
   scale: { min: number; max: number };

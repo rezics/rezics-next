@@ -3,16 +3,23 @@ import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { RatingControlView } from '../../features/pages/rating-control';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
-import type { PublicFigure } from '../../features/pages/subject-ratings';
+import { GLOBAL, type PublicFigure, type Ratings } from '../../features/pages/subject-ratings';
 import { ratingsFixtures, standardRatingQuestion } from '../../kernel/fake/ratings';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
-import { ResultList } from '../../search/results';
 
 const ready = ratingsFixtures['subject-ratings-global'].preview;
 const subject = '00000000-0000-4000-8000-000000000001';
 
-function Figures({ figure = ready.figure, imported = false }: { figure?: PublicFigure; imported?: boolean }) {
+function Figures({
+  figure,
+  imported = false,
+  data = ready,
+}: {
+  figure?: PublicFigure;
+  imported?: boolean;
+  data?: Ratings;
+}) {
   const locale = getLocale();
   return (
     <main className="mx-auto max-w-3xl space-y-8 p-4 sm:p-6">
@@ -21,16 +28,10 @@ function Figures({ figure = ready.figure, imported = false }: { figure?: PublicF
         subject={subject}
         locale={locale}
         data={{
-          ...ready,
-          figure,
-          statistics: imported ? ratingsFixtures['subject-ratings-imported'].preview.statistics : [],
+          ...data,
+          figure: figure ?? data.figure,
+          statistics: imported ? ratingsFixtures['subject-ratings-imported'].preview.statistics : data.statistics,
         }}
-      />
-      <ResultList
-        hits={[{ id: subject, type: 'schema:Book', labels: { en: 'Kokoro', 'zh-Hans': '心' }, figure }]}
-        locale={locale}
-        hitTypes={{ 'schema:Book': { en: 'Book', 'zh-Hans': '图书' } }}
-        yearProperties={[]}
       />
     </main>
   );
@@ -71,9 +72,9 @@ type Story = StoryObj<typeof meta>;
 
 export const Ready: Story = {
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getAllByText(/8.4/)).toHaveLength(2);
+    await expect(within(canvasElement).getAllByText(/8.4/)).toHaveLength(1);
     await userEvent.click(within(canvasElement).getByText(m.subject_ratings_distribution()));
-    await expect(canvasElement.querySelector('details')).toHaveAttribute('open');
+    await expect(canvasElement.querySelector('[data-slot="rating-distribution"]')).toHaveAttribute('open');
   },
 };
 export const Pending: Story = {
@@ -119,4 +120,115 @@ export const SaveFailure: Story = {
     await expect(view.getByRole('status')).toHaveTextContent(m.subject_rating_control_error());
     await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeDisabled();
   },
+};
+
+// Illustrative supplied data only: this does not enable Realm discovery or change readRatings' three-Realm limit.
+const suppliedContexts: Ratings = {
+  ...ready,
+  realms: [
+    { id: GLOBAL, name: 'Duplicate Global must be omitted' },
+    ...[
+      'Readers comparing translations across languages and editions with a deliberately long context name',
+      'A very long unbroken context label: ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ',
+      'Night Shift Translators',
+      'Hearth and Skillet',
+      'The Quiet Novel Club',
+      'Weekend Readers',
+      'Small Press Discussion',
+      'Archive Readers',
+    ].map((name, index) => ({ id: `supplied-context-${index}`, name })),
+  ],
+  figures: [
+    ...ready.figures,
+    ...[40, 30, 20, 10, 8, 6, 0, 0].map((count, index) => ({
+      population: `supplied-context-${index}`,
+      count,
+      ...(count > 0 ? { mean: 16 } : {}),
+    })),
+  ],
+};
+
+export const ManySuppliedContexts: Story = {
+  render: () => <Figures data={suppliedContexts} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(view.getByText(m.subject_ratings_comparisons()));
+    await expect(canvasElement.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(5);
+    await expect(view.queryByText('Duplicate Global must be omitted')).not.toBeInTheDocument();
+    const more = view.getByRole('button', { name: m.subject_ratings_more_comparisons({ count: '3' }) });
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(more);
+    await expect(canvasElement.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(8);
+    await expect(view.getByText('Archive Readers')).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.subject_ratings_fewer_comparisons() }));
+    await expect(canvasElement.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(5);
+  },
+};
+
+export const ContextStates: Story = {
+  render: () => (
+    <Figures
+      data={{
+        ...ready,
+        realms: [
+          { id: 'missing', name: 'Figure not supplied' },
+          { id: 'empty', name: 'No ratings yet' },
+          { id: 'threshold', name: 'Below publication threshold' },
+          { id: 'updating', name: 'Publication updating' },
+        ],
+        figures: [
+          ...ready.figures,
+          { population: 'empty', count: 0 },
+          { population: 'threshold', count: 3, remaining: 2 },
+          { population: 'updating', count: 12, mean: 17, freshness: { asOf: null, updating: true } },
+        ],
+      }}
+    />
+  ),
+};
+
+export const AllZeroDistribution: Story = {
+  render: () => (
+    <Figures
+      data={{
+        ...ready,
+        figures: ready.figures.map((item) => ({ ...item, histogram: Array.from({ length: 21 }, () => 0) })),
+      }}
+    />
+  ),
+};
+
+export const UpdatingDistribution: Story = {
+  render: () => (
+    <Figures
+      data={{
+        ...ready,
+        figures: ready.figures.map((item) => ({ ...item, freshness: { asOf: null, updating: true } })),
+      }}
+    />
+  ),
+};
+
+export const MissingDistribution: Story = {
+  render: () => <Figures data={{ ...ready, figures: [] }} />,
+};
+
+export const SteppedDistribution: Story = {
+  render: () => (
+    <Figures
+      data={{
+        ...ready,
+        question: { ...ready.question, revision: 7, scale: { min: 0, max: 40, displayStep: 4 } },
+        figure: { ...ready.figure, scale: { min: 0, max: 40, displayStep: 4 } },
+        figures: [
+          {
+            population: GLOBAL,
+            count: ready.figure.count,
+            mean: 33.6,
+            histogram: [0, 0, 0, 0, 0, 0, 0, 100, 600, 500, 3],
+          },
+        ],
+      }}
+    />
+  ),
 };

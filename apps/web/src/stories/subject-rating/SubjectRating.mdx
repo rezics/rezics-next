@@ -5,7 +5,7 @@ import * as SubjectRatingStories from './subject-rating.stories';
 
 # Subject Rating
 
-Subject pages reuse RatingsView and its question-driven control; Search rows reuse PublicRatingFigure.
+Subject pages reuse RatingsView and its question-driven control. Search rows independently reuse PublicRatingFigure; this pattern shows the Subject result once.
 Ready, pending, below-threshold, empty and published-zero states render the same published DTO on both surfaces.
 A ready snapshot remains ready while native publication works; private vote changes never replace public numbers.
 The headline mean and the Bayesian ordering measure have separate explanations. Imported statistics retain their
@@ -17,3 +17,32 @@ covered by the focused rating-figures outcome cases using the typed client.
 
 Review each story with the same ID using phone390/desktop1280, locale and theme globals. Web visual review,
 Root screenshots and postintegration acceptance are separate from local workspace typing.
+
+The primary published score/count/state and existing own-rating action precede secondary information. Distribution,
+context comparisons, and sources/explanations use labelled native disclosures. Comparisons omit Global and duplicate
+context IDs. The first group contains at most five supplied contexts, choosing the largest known counts first with
+stable ties and missing counts last. Show more mounts only the remaining supplied rows, in supplied order; Show fewer
+removes them again. This is a local reveal, with no chooser, discovery, pagination or extra requests.
+
+Missing comparison figures remain unavailable; a real count of zero remains empty. Updating comparisons withhold
+stale means, and threshold figures retain their remaining count. Question revision and imported source scale, count,
+as-of date, licence and attribution remain intact. Nothing derives a histogram from the mean, count or own vote.
+A distribution requires a published eligible Global headline, a matching aggregate count, no threshold remainder or
+updating aggregate, and valid supplied buckets for the real question step. Bucket labels convert stored units to
+0–10; every supplied zero bucket is retained. All-zero distribution is a defensive illustrative fixture, not evidence
+that a positive-count native aggregate can have no votes in any bucket. Its bars use a non-dividing maximum fallback.
+
+Cost: no additional network requests or storage, no per-row reads or population scans. One map over supplied figures
+and bounded five-item selection replaces repeated figure searches and full sorting. Rendering/traversal is O(H+R),
+where H is supplied histogram buckets and R is the supplied figure/context rows. The aggregate API currently accepts
+at most 20 populations and returns at most 20 figures; readRatings currently includes at most three supplied memberships
+and the normal Subject route supplies none. Five is a presentation bound, not a new server cap or an increase to
+those producer limits. Histogram length follows the question's (max − min) / displayStep + 1; no fixed bucket cap
+or all-Realm population limit is invented here.
+
+Many supplied contexts covers long wrapping labels, duplicate Global omission and local reveal/collapse. Context
+states distinguishes unavailable, empty, threshold and updating. All zero distribution, Updating distribution,
+Missing distribution and Stepped distribution cover supplied-series handling. Existing Ready, Pending, Below threshold,
+Empty, Published zero, Imported, Unavailable, Save clear zero and Save failure IDs and vote behavior are retained.
+These stories and authored regression assertions remain illustrative source. Workspace typing does not prove native
+persistence, distribution readiness, accessibility execution or visual approval at phone390/desktop1280.
