@@ -387,6 +387,19 @@ describe('Saved dynamic rule creation editing choices and selected publication a
       expect(ui.host.querySelector('form')).toBeNull();
       await show(rule('alice', null), null);
       expect(ui.host.querySelector('input[required]')).not.toBeNull();
+      await ui.perform(() => ui.button(m.search_apply()).click());
+      await settle(choices[0]!, {
+        viewerId: 'bob',
+        address: { q: '', cursor: null },
+        choices: unavailableRuleChoices(),
+      });
+      expect(ui.host.querySelector('form, select, a')).toBeNull();
+      await ui.perform(() => ui.button(m.library_follow_retry()).click());
+      await settle(ruleReads[1]!, rule('alice', null));
+      expect(ui.host.querySelector('form')).not.toBeNull();
+      await ui.perform(() => ui.button(m.library_collection_reload()).click());
+      await settle(ruleReads[2]!, { state: 'denied' });
+      expect(ui.host.querySelector('form, select, a')).toBeNull();
       for (const value of [
         { state: 'unknown', subject: null, csrfToken: null },
         { state: 'signed-out', subject: null, csrfToken: null },

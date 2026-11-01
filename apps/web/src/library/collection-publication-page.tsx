@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem } from '@rezics/ui/content-item';
 import { useLayoutEffect, useState, useRef } from 'react';
@@ -44,6 +44,7 @@ type PublicationViewProps = {
   submit: PublicationSubmit;
   onReload?: () => void;
   isCurrent?: () => boolean;
+  canPublish?: () => boolean;
 };
 
 /** Credentials authorize a fresh source read; their strings do not identify the originating intent. */
@@ -75,7 +76,13 @@ type IntentState = {
 };
 
 /** A source read is selection context; only a complete native command response is a publication result. */
-function PublicationIntentView({ page, submit, onReload, isCurrent = () => true }: PublicationViewProps) {
+function PublicationIntentView({
+  page,
+  submit,
+  onReload,
+  isCurrent = () => true,
+  canPublish = () => true,
+}: PublicationViewProps) {
   const source = page.source;
   const ready = source.state === 'ready';
   const candidates = ready ? publicationCandidates(source.page) : [];
@@ -125,6 +132,7 @@ function PublicationIntentView({ page, submit, onReload, isCurrent = () => true 
     if (
       !active.current ||
       !isCurrent() ||
+      !canPublish() ||
       !ready ||
       !origin.confirmed ||
       origin.busy ||
@@ -308,7 +316,11 @@ function PublicationIntentView({ page, submit, onReload, isCurrent = () => true 
             </label>
             <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_privacy()}</p>
             <div className="flex flex-wrap gap-3">
-              <Button type="button" disabled={!confirmed || busy || refused} onClick={() => void publish()}>
+              <Button
+                type="button"
+                disabled={!confirmed || busy || refused || !canPublish()}
+                onClick={() => void publish()}
+              >
                 {unknown ? m.library_publication_retry() : m.library_publication_publish()}
               </Button>
               {onReload && !busy && !unknown ? (
@@ -363,6 +375,7 @@ function CurrentPublicationPage({
   address: PublicationAddress;
   owner: ReturnType<typeof useCollectionOwnerCurrent>;
 }) {
+  const client = useQueryClient();
   const viewer = { subject, csrfToken };
   const options = collectionPublicationQuery(viewer, address, owner.isCurrent);
   const query = useQuery({
@@ -373,6 +386,23 @@ function CurrentPublicationPage({
     staleTime: 0,
     refetchOnMount: 'always',
   });
+  function canPublish() {
+    const csrf = owner.credential();
+    if (!csrf) return false;
+    // Consult the actual cache before a replacement render commits, including a rotated credential's read.
+    const current = client.getQueryData<PublicationPage>([
+      ...collectionPublicationQuery({ subject, csrfToken: csrf }, address).queryKey,
+      owner.lifetime,
+    ]);
+    return (
+      current?.viewer?.subject === subject &&
+      current.viewer.csrfToken === csrf &&
+      current.address.id === address.id &&
+      current.address.cursor === address.cursor &&
+      current.source.state === 'ready' &&
+      current.source.page.id === address.id
+    );
+  }
   const data = query.data;
   const matches =
     owner.isCurrent() &&
@@ -400,7 +430,7 @@ function CurrentPublicationPage({
         isCurrent={owner.isCurrent}
         submit={async (input) => {
           const csrf = owner.credential();
-          if (!csrf) return { ok: false, reason: 'denied' };
+          if (!csrf || !canPublish()) return { ok: false, reason: 'denied' };
           const result = await publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrf } });
           return owner.isCurrent() ? result : { ok: false, reason: 'denied' };
         }}

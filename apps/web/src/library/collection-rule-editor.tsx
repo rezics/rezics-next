@@ -198,6 +198,7 @@ type EditorProps = {
   csrfToken: string;
   isCurrent?: (() => boolean) | undefined;
   currentCsrf?: (() => string | null) | undefined;
+  requireProvenance?: boolean | undefined;
   navigate?: ((id: string) => void) | undefined;
 };
 
@@ -340,6 +341,7 @@ function RuleLifetime({
       canLabel={canLabel}
       accepts={accepts}
       remember={remember}
+      refuse={() => setRetried({ source: page, page: { state: 'denied' } })}
       {...actions}
     />
   ) : (
@@ -362,17 +364,26 @@ function RuleForm({
   viewerId,
   epoch,
   canLabel,
-  isCurrent = alwaysCurrent,
+  isCurrent: ownerCurrent = alwaysCurrent,
   currentCsrf,
+  requireProvenance,
   accepts,
   remember,
+  refuse,
 }: Omit<EditorProps, 'page' | 'admitted'> & {
   page: AvailablePage;
   epoch: number;
   canLabel: boolean;
   accepts(value: RulePage): value is AvailablePage;
   remember(value: AvailablePage): void;
+  refuse(): void;
 }) {
+  const sourceActive = useRef(true);
+  const isCurrent = () => sourceActive.current && ownerCurrent();
+  function refuseSource() {
+    sourceActive.current = false;
+    refuse();
+  }
   const [base, setBase] = useState(page);
   const [title, setTitle] = useState(page.state === 'ready' ? page.title : '');
   const [description, setDescription] = useState('');
@@ -478,7 +489,8 @@ function RuleForm({
         setSavedId(null);
         setFeedback(m.library_rule_reloaded());
         // The draft remains intact. Only an explicit subsequent save uses this captured current rule revision.
-      } else setFeedback(current.state === 'denied' ? m.library_rule_denied() : m.library_rule_unavailable());
+      } else if (current.state === 'unavailable') setFeedback(m.library_rule_unavailable());
+      else refuseSource();
     } catch {
       if (operation.current()) setFeedback(m.library_rule_unavailable());
     } finally {
@@ -504,6 +516,10 @@ function RuleForm({
       const result = await labels(requested.q, requested.cursor);
       if (!operation.current()) return;
       if (choiceAddress.current !== requested) return;
+      if (requireProvenance && (!result || result.viewerId !== viewerId || !result.address)) {
+        refuseSource();
+        return;
+      }
       if (
         result?.viewerId === viewerId &&
         (!result.address || (result.address.q === requested.q && result.address.cursor === (requested.cursor ?? null)))

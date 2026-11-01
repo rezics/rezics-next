@@ -138,6 +138,7 @@ export function CollectionRuleCurrent({
       csrfToken={owner.credential() ?? ''}
       isCurrent={owner.isCurrent}
       currentCsrf={owner.credential}
+      requireProvenance
       save={(data, csrf) =>
         owner.isCurrent()
           ? saveCollectionRule({ data, headers: { 'X-CSRF-Token': csrf } })
@@ -154,12 +155,7 @@ export function CollectionRuleCurrent({
       labels={async (q, cursor) => {
         if (!owner.isCurrent() || !owner.canLabel) return null;
         const value = await readCollectionRuleChoices({ data: { q, ...(cursor === undefined ? {} : { cursor }) } });
-        return owner.isCurrent() &&
-          value?.viewerId === owner.subject &&
-          value.address?.q === q &&
-          value.address.cursor === (cursor ?? null)
-          ? value
-          : null;
+        return owner.isCurrent() && value?.viewerId === owner.subject && value.address ? value : null;
       }}
       {...(navigate
         ? {
