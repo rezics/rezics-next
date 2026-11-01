@@ -1274,8 +1274,8 @@ export class PublicationController {
         .run(receipt.success === true ? 'terminal-success' : 'terminal-non-green', endedAt, exitCode, signal, cause,
           liveStatus, liveCommit ?? null, liveError ?? null, text, identity ? JSON.stringify(identity) : null,
           members ? JSON.stringify(members) : null, invocation.id);
-      this.db.query("UPDATE publication_custody SET state='terminal', members=?, evidence_path=?, evidence_hash=?, evidence=?, terminal_at=?
-        WHERE invocation_id=? AND kind='publisher'")
+      this.db.query(`UPDATE publication_custody SET state='terminal', members=?, evidence_path=?, evidence_hash=?, evidence=?, terminal_at=?
+        WHERE invocation_id=? AND kind='publisher'`)
         .run(JSON.stringify(members ?? []), relative(this.options.stateDirectory, invocation.receipt_path), sha256(text), text,
           endedAt, invocation.id);
     }).immediate();
