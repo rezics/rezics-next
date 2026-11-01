@@ -167,16 +167,29 @@ export function CreatorOfferEditor({
 
 function StandaloneCreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
   const client = useContext(QueryClientContext);
-  return client ? <ObservedCreatorOfferEditor data={data} locale={locale} />
-    : <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={creatorPreviewGuard} />;
+  return client ? (
+    <ObservedCreatorOfferEditor data={data} locale={locale} />
+  ) : (
+    <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={creatorPreviewGuard} />
+  );
 }
 
 function ObservedCreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
   const edition = data.editor.kind === 'ready' ? data.editor.edition : undefined;
-  const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, edition?.editionId ?? data.editor.kind]),
-    edition?.creatorAccountId);
-  return <CreatorOfferForm key={current.origin.id} data={data} locale={locale}
-    createKey={current.seed ? data.createKey : current.origin.id} guard={current.origin} />;
+  const current = useCreatorCurrentOrigin(
+    'offer.list',
+    JSON.stringify([locale, edition?.editionId ?? data.editor.kind]),
+    edition?.creatorAccountId,
+  );
+  return (
+    <CreatorOfferForm
+      key={current.origin.id}
+      data={data}
+      locale={locale}
+      createKey={current.seed ? data.createKey : current.origin.id}
+      guard={current.origin}
+    />
+  );
 }
 
 type CreateIntent = {
@@ -259,8 +272,16 @@ function CreatorOfferForm({
       };
       submittedRules.current = rules;
     }
-    memory.value = { editor, rules, intent, title, taxCode, pending: pending.current, key: key.current,
-      result: { kind: 'retry' } };
+    memory.value = {
+      editor,
+      rules,
+      intent,
+      title,
+      taxCode,
+      pending: pending.current,
+      key: key.current,
+      result: { kind: 'retry' },
+    };
     locked.current = true;
     setBusy(true);
     let saved = false;
@@ -274,7 +295,16 @@ function CreatorOfferForm({
         submittedRules.current = null;
         key.current = crypto.randomUUID();
       }
-      memory.value = { editor, rules, intent, title, taxCode, pending: pending.current, key: key.current, result: next };
+      memory.value = {
+        editor,
+        rules,
+        intent,
+        title,
+        taxCode,
+        pending: pending.current,
+        key: key.current,
+        result: next,
+      };
     } catch {
       if (current.active && guard.isCurrent()) setResult({ kind: 'retry' });
     } finally {
@@ -339,11 +369,21 @@ function CreatorOfferForm({
                 maxLength={1024}
                 value={title}
                 disabled={frozen}
-                onChange={(event) => { if (guard.isCurrent()) setTitle(event.target.value); }}
+                onChange={(event) => {
+                  if (guard.isCurrent()) setTitle(event.target.value);
+                }}
                 className="min-h-11"
               />
             </Field>
-            <CreatorPriceFields rules={rules} intent={intent} onChange={(next) => { if (guard.isCurrent()) setIntent(next); }} locale={locale} disabled={frozen} />
+            <CreatorPriceFields
+              rules={rules}
+              intent={intent}
+              onChange={(next) => {
+                if (guard.isCurrent()) setIntent(next);
+              }}
+              locale={locale}
+              disabled={frozen}
+            />
             <Field>
               <FieldLabel htmlFor={`${fieldId}-tax`}>{m.creator_tax_code()}</FieldLabel>
               <Input
@@ -353,7 +393,9 @@ function CreatorOfferForm({
                 maxLength={256}
                 value={taxCode}
                 disabled={frozen}
-                onChange={(event) => { if (guard.isCurrent()) setTaxCode(event.target.value); }}
+                onChange={(event) => {
+                  if (guard.isCurrent()) setTaxCode(event.target.value);
+                }}
                 className="min-h-11"
               />
               <p className="text-sm text-muted-foreground">{m.creator_tax_code_hint()}</p>

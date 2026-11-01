@@ -79,8 +79,12 @@ function StatementsBoundary({ initial, address }: { initial: CurrentRead; addres
   const subject = hydrated ? current.subject : initial.sessionSubject;
   const admitted = hydrated ? origin.isCurrent() : !!initial.sessionSubject;
   if (!subject || !admitted) {
-    const kind = current.state === 'unavailable' || current.admission === 'unavailable'
-      ? 'unavailable' : current.state === 'signed-out' || current.admission === 'closed' ? 'denied' : 'preparing';
+    const kind =
+      current.state === 'unavailable' || current.admission === 'unavailable'
+        ? 'unavailable'
+        : current.state === 'signed-out' || current.admission === 'closed'
+          ? 'denied'
+          : 'preparing';
     return <StatementPresentation address={address} page={{ kind }} />;
   }
   return (
@@ -121,8 +125,8 @@ function StatementsRead({
   origin: Origin;
 }) {
   const [initialData] = useState<Outcome | undefined>(() => {
-      const value = (origin.workspace.read as CurrentRead | undefined) ?? (seed ? initial : undefined);
-      return value && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : undefined;
+    const value = (origin.workspace.read as CurrentRead | undefined) ?? (seed ? initial : undefined);
+    return value && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : undefined;
   });
   const query = useQuery<Outcome | null>({
     ...personalRead,
@@ -132,7 +136,9 @@ function StatementsRead({
       if (!origin.isCurrent()) return null;
       try {
         const value = await readCurrent(address);
-        return origin.isCurrent() && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : null;
+        return origin.isCurrent() && acceptsStatementsCurrent(value, subject, address)
+          ? { kind: 'accepted', value }
+          : null;
       } catch {
         return origin.isCurrent() ? { kind: 'failed' } : null;
       }

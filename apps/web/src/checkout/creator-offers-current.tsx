@@ -106,21 +106,17 @@ function CreatorCurrent(props: Props) {
   const subject = hydrated ? current.subject : initial.sessionSubject;
   const admitted = hydrated ? origin.isCurrent() : initial.data.selling;
   if (!subject || !admitted) {
-    const kind = current.state === 'unavailable' || current.admission === 'unavailable'
-      ? 'unavailable' : current.state === 'signed-out' ? 'denied'
-      : current.admission === 'closed' ? 'closed' : 'preparing';
+    const kind =
+      current.state === 'unavailable' || current.admission === 'unavailable'
+        ? 'unavailable'
+        : current.state === 'signed-out'
+          ? 'denied'
+          : current.admission === 'closed'
+            ? 'closed'
+            : 'preparing';
     return <Notice kind={kind} address={address} locale={locale} />;
   }
-  return (
-    <CreatorRead
-      key={origin.id}
-      {...props}
-      subject={subject}
-      hydrated={hydrated}
-      seed={seed}
-      origin={origin}
-    />
-  );
+  return <CreatorRead key={origin.id} {...props} subject={subject} hydrated={hydrated} seed={seed} origin={origin} />;
 }
 
 async function read(address: CreatorOfferAddress): Promise<Read> {
@@ -148,9 +144,9 @@ function CreatorRead({
   origin: Origin;
 }) {
   const [initialData] = useState<Outcome | undefined>(() => {
-      const retained = origin.workspace.read as Read | undefined;
-      const value = retained ?? (seed ? initial : undefined);
-      return matches(value, subject, address) ? { kind: 'accepted', value } : undefined;
+    const retained = origin.workspace.read as Read | undefined;
+    const value = retained ?? (seed ? initial : undefined);
+    return matches(value, subject, address) ? { kind: 'accepted', value } : undefined;
   });
   const guard: CreatorOfferGuard = origin;
   const query = useQuery<Outcome | null>({

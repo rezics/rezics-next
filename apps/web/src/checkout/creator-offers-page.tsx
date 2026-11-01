@@ -33,19 +33,37 @@ function OwnedOfferControls({
   return <StandaloneOfferCommands offer={offer} data={data} locale={locale} />;
 }
 
-function StandaloneOfferCommands({ offer, data, locale }: {
-  offer: CreatorOffer; data: CreatorOffersPageData; locale: string;
+function StandaloneOfferCommands({
+  offer,
+  data,
+  locale,
+}: {
+  offer: CreatorOffer;
+  data: CreatorOffersPageData;
+  locale: string;
 }) {
   const client = useContext(QueryClientContext);
-  return client ? <ObservedOfferCommands offer={offer} data={data} locale={locale} />
-    : <OfferCommands offer={offer} data={data} locale={locale} guard={creatorPreviewGuard} />;
+  return client ? (
+    <ObservedOfferCommands offer={offer} data={data} locale={locale} />
+  ) : (
+    <OfferCommands offer={offer} data={data} locale={locale} guard={creatorPreviewGuard} />
+  );
 }
 
-function ObservedOfferCommands({ offer, data, locale }: {
-  offer: CreatorOffer; data: CreatorOffersPageData; locale: string;
+function ObservedOfferCommands({
+  offer,
+  data,
+  locale,
+}: {
+  offer: CreatorOffer;
+  data: CreatorOffersPageData;
+  locale: string;
 }) {
-  const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, offer.id]),
-    offer.contentEdition?.creatorAccountId);
+  const current = useCreatorCurrentOrigin(
+    'offer.list',
+    JSON.stringify([locale, offer.id]),
+    offer.contentEdition?.creatorAccountId,
+  );
   return <OfferCommands key={current.origin.id} offer={offer} data={data} locale={locale} guard={current.origin} />;
 }
 
@@ -58,8 +76,16 @@ type ChangeIntent = {
   result: CreatorOfferResult;
 };
 
-function OfferCommands({ offer, data, locale, guard }: {
-  offer: CreatorOffer; data: CreatorOffersPageData; locale: string; guard: CreatorOfferGuard;
+function OfferCommands({
+  offer,
+  data,
+  locale,
+  guard,
+}: {
+  offer: CreatorOffer;
+  data: CreatorOffersPageData;
+  locale: string;
+  guard: CreatorOfferGuard;
 }) {
   const memory = useCreatorIntent<ChangeIntent>(guard, offer.id);
   const [resume] = useState(memory.value);
@@ -71,20 +97,22 @@ function OfferCommands({ offer, data, locale, guard }: {
   const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
   const locked = useRef(resume?.result.kind === 'saved');
   const keys = useRef(resume ? resume.keys : data.keys[observed.id]);
-  const [rule] = useState(() => resume ? resume.rule :
-    data.schema?.configuredSaleCurrencies.find((row) => row.currency === observed.currency));
+  const [rule] = useState(() =>
+    resume ? resume.rule : data.schema?.configuredSaleCurrencies.find((row) => row.currency === observed.currency),
+  );
   const mounted = useRef({ active: false });
   useLayoutEffect(() => {
     const current = { active: true };
     mounted.current = current;
-    return () => { current.active = false; };
+    return () => {
+      current.active = false;
+    };
   }, []);
   const isCurrent = () => mounted.current.active && guard.isCurrent();
   const csrf = () => guard.csrfToken();
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
-  const editable =
-    observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
+  const editable = observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
   async function change(operation: 'reprice' | 'delist') {
     const lifetime = mounted.current;
     const owns = () => lifetime.active && guard.isCurrent();
@@ -136,7 +164,9 @@ function OfferCommands({ offer, data, locale, guard }: {
           <CreatorPriceField
             rule={rule}
             text={text}
-            onChange={(next) => { if (isCurrent()) setText(next); }}
+            onChange={(next) => {
+              if (isCurrent()) setText(next);
+            }}
             locale={locale}
             disabled={!editable || frozen}
           />

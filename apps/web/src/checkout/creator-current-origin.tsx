@@ -22,37 +22,47 @@ type Workspace = {
   intents: Map<string, Slot<unknown>>;
 };
 const workspace = (subject: string | null): Workspace => ({
-  subject, initial: true, read: undefined, intents: new Map(),
+  subject,
+  initial: true,
+  read: undefined,
+  intents: new Map(),
 });
 const closed: Observation = {
-  state: 'unknown', subject: null, csrfToken: null, admission: 'preparing', observation: null,
+  state: 'unknown',
+  subject: null,
+  csrfToken: null,
+  admission: 'preparing',
+  observation: null,
 };
 
 function observe(client: QueryClient | undefined, operation: Operation): Observation {
   if (!client) return closed;
   const session = client.getQueryState(sessionQuery.queryKey);
   const data = session?.status === 'success' ? session.data : undefined;
-  const subject = data?.state === 'signed-in' && typeof data.subject === 'string' && data.subject.trim()
-    ? data.subject : null;
+  const subject =
+    data?.state === 'signed-in' && typeof data.subject === 'string' && data.subject.trim() ? data.subject : null;
   const lifetime = viewerExposureLifetime(client).getSnapshot();
-  const observation = lifetime.state === 'signed-in' && lifetime.observation.subject === subject
-    ? lifetime.observation : undefined;
+  const observation =
+    lifetime.state === 'signed-in' && lifetime.observation.subject === subject ? lifetime.observation : undefined;
   const exposure = observation ? client.getQueryState(viewerExposureQuery(observation).queryKey) : undefined;
   return {
-    state: session?.status === 'error' ? 'unavailable' : data?.state ?? 'unknown',
+    state: session?.status === 'error' ? 'unavailable' : (data?.state ?? 'unknown'),
     subject,
     csrfToken: subject && typeof data?.csrfToken === 'string' && data.csrfToken.trim() ? data.csrfToken : null,
     observation: observation?.id ?? null,
-    admission: exposure?.status === 'error' ? 'unavailable'
-      : exposure?.status !== 'success' ? 'preparing'
-      : exposure.data?.subject === subject && operationIsAdmitted(operation, exposure.data.admitted)
-        ? 'admitted' : 'closed',
+    admission:
+      exposure?.status === 'error'
+        ? 'unavailable'
+        : exposure?.status !== 'success'
+          ? 'preparing'
+          : exposure.data?.subject === subject && operationIsAdmitted(operation, exposure.data.admitted)
+            ? 'admitted'
+            : 'closed',
   };
 }
 
-const identity = (value: Observation) => JSON.stringify([
-  value.state, value.subject, !!value.csrfToken, value.admission, value.observation,
-]);
+const identity = (value: Observation) =>
+  JSON.stringify([value.state, value.subject, !!value.csrfToken, value.admission, value.observation]);
 
 /** An episode can retire from cache notifications, without waiting for a React render or commit. */
 class CreatorCurrentOrigin implements CreatorOfferGuard {
@@ -75,30 +85,51 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
 
   observe = () => {
     const next = observe(this.client, this.operation);
-    if (next.state !== 'signed-in' || next.subject !== this.workspace.subject || !next.csrfToken ||
-        next.admission === 'closed' || next.admission === 'unavailable') this.workspace.read = undefined;
+    if (
+      next.state !== 'signed-in' ||
+      next.subject !== this.workspace.subject ||
+      !next.csrfToken ||
+      next.admission === 'closed' ||
+      next.admission === 'unavailable'
+    )
+      this.workspace.read = undefined;
     if (!this.retired && identity(next) !== identity(this.observed)) {
       // Same-owner healthy observation renewal can reuse the accepted read, but never its
       // in-flight response. Explicit authority loss discards the read, retaining only intent.
-      if (this.observed.admission === 'admitted' || next.state === 'signed-out' || next.state === 'unavailable' ||
-          (this.observed.subject && next.subject !== this.observed.subject) ||
-          (this.observed.csrfToken && !next.csrfToken) || next.admission === 'closed' ||
-          next.admission === 'unavailable') this.workspace.initial = false;
+      if (
+        this.observed.admission === 'admitted' ||
+        next.state === 'signed-out' ||
+        next.state === 'unavailable' ||
+        (this.observed.subject && next.subject !== this.observed.subject) ||
+        (this.observed.csrfToken && !next.csrfToken) ||
+        next.admission === 'closed' ||
+        next.admission === 'unavailable'
+      )
+        this.workspace.initial = false;
       this.retire();
     }
     return next;
   };
   isCurrent = () => {
     const actual = this.observe();
-    return !this.retired && (!this.mounted || this.users > 0) && !!this.client &&
-      actual.state === 'signed-in' && !!actual.subject && !!actual.csrfToken &&
-      actual.admission === 'admitted' && (!this.expected || actual.subject === this.expected);
+    return (
+      !this.retired &&
+      (!this.mounted || this.users > 0) &&
+      !!this.client &&
+      actual.state === 'signed-in' &&
+      !!actual.subject &&
+      !!actual.csrfToken &&
+      actual.admission === 'admitted' &&
+      (!this.expected || actual.subject === this.expected)
+    );
   };
-  csrfToken = () => this.isCurrent() ? observe(this.client, this.operation).csrfToken : null;
+  csrfToken = () => (this.isCurrent() ? observe(this.client, this.operation).csrfToken : null);
   snapshot = () => this.retired;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
   retire = (notify = true) => {
     if (this.retired) return;
@@ -136,25 +167,49 @@ export function useCreatorCurrentOrigin(operation: Operation, address: string, e
   const hydrated = useSyncExternalStore(subscribe, () => true, serverSnapshot);
   const view = observe(client, operation);
   const [scope, setScope] = useState(() => ({
-    client, operation, address, expected, generation: 0,
-    origin: new CreatorCurrentOrigin(client, operation, {
-      ...workspace(view.subject), initial: view.state !== 'signed-out' && view.state !== 'unavailable',
-    }, expected),
+    client,
+    operation,
+    address,
+    expected,
+    generation: 0,
+    origin: new CreatorCurrentOrigin(
+      client,
+      operation,
+      {
+        ...workspace(view.subject),
+        initial: view.state !== 'signed-out' && view.state !== 'unavailable',
+      },
+      expected,
+    ),
   }));
   scope.origin.observe();
   let current = scope;
-  if (scope.client !== client || scope.operation !== operation || scope.address !== address ||
-      scope.expected !== expected || scope.origin.retired) {
+  if (
+    scope.client !== client ||
+    scope.operation !== operation ||
+    scope.address !== address ||
+    scope.expected !== expected ||
+    scope.origin.retired
+  ) {
     const previous = scope.origin.workspace;
-    const sameWorkspace = scope.client === client && scope.operation === operation &&
-      scope.address === address && scope.expected === expected &&
+    const sameWorkspace =
+      scope.client === client &&
+      scope.operation === operation &&
+      scope.address === address &&
+      scope.expected === expected &&
       (!view.subject || !previous.subject || previous.subject === view.subject);
     scope.origin.retire(false);
     const owner = sameWorkspace ? previous : workspace(view.subject);
     owner.subject = view.subject ?? owner.subject;
     if (!sameWorkspace) owner.initial = false;
-    current = { client, operation, address, expected, generation: scope.generation + 1,
-      origin: new CreatorCurrentOrigin(client, operation, owner, expected) };
+    current = {
+      client,
+      operation,
+      address,
+      expected,
+      generation: scope.generation + 1,
+      origin: new CreatorCurrentOrigin(client, operation, owner, expected),
+    };
     setScope(current);
   }
   useLayoutEffect(() => current.origin.mount(), [current.origin]);
@@ -168,6 +223,9 @@ export function useCreatorIntent<T>(guard: CreatorOfferGuard, key: string): Slot
   if (!(guard instanceof CreatorCurrentOrigin)) return fallback;
   const intents = guard.workspace.intents;
   let slot = intents.get(key);
-  if (!slot) { slot = {}; intents.set(key, slot); }
+  if (!slot) {
+    slot = {};
+    intents.set(key, slot);
+  }
   return slot as Slot<T>;
 }
