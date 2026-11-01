@@ -160,8 +160,7 @@ globalThis.fetch = (async (input, init) => {
     await pending.release.promise;
   }
   if (url.pathname === `/v1/boards/${boardRecording.board.id}`) {
-    if (!authorization && protectedBoard)
-      return Response.json({ detail: 'Not found' }, { status: 404 });
+    if (!authorization && protectedBoard) return Response.json({ detail: 'Not found' }, { status: 404 });
     return Response.json({
       ...boardRecording,
       board: {
@@ -185,7 +184,8 @@ globalThis.fetch = (async (input, init) => {
   if (url.pathname === '/v1/me/realms') {
     const cursor = url.searchParams.get('cursor');
     realmRecoveryCalls.push(cursor ?? '');
-    if (recoverCursor && cursor === 'expired-cursor') return Response.json({ detail: 'Expired cursor' }, { status: 409 });
+    if (recoverCursor && cursor === 'expired-cursor')
+      return Response.json({ detail: 'Expired cursor' }, { status: 409 });
     if (deniedRealms) return Response.json({ detail: 'Denied' }, { status: 403 });
     return Response.json({
       items: pausedRequest?.realmsSnapshot?.items ?? myRealmItems,
@@ -195,14 +195,8 @@ globalThis.fetch = (async (input, init) => {
   throw new Error(`Unexpected native compatibility request ${request.method} ${url.pathname}`);
 }) as typeof fetch;
 
-const {
-  QueryClient,
-  QueryClientProvider,
-  QueryObserver,
-  dehydrate,
-  hydrate,
-  notifyManager,
-} = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, QueryObserver, dehydrate, hydrate, notifyManager } =
+  await import('@tanstack/react-query');
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRouteWithContext, createRouter, RouterProvider } =
   await import('@tanstack/react-router');
@@ -369,10 +363,16 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   expect(nativeCalls.filter((call) => call.path.endsWith('/threads')).map((call) => call.cursor)).toEqual(['sparse']);
   expect(nativeCalls.filter((call) => call.path.endsWith('/threads')).map((call) => call.sort)).toEqual([null]);
   expect(nativeCalls.filter((call) => call.path.endsWith('/threads')).map((call) => call.limit)).toEqual([null]);
-  expect(nativeCalls.filter((call) => call.path.endsWith('/threads')).every((call) => call.authorization === 'Bearer access-a'))
-    .toBe(true);
-  expect(nativeCalls.filter((call) => call.path === `/v1/boards/${boardRecording.board.id}`).every((call) => call.method === 'GET'))
-    .toBe(true);
+  expect(
+    nativeCalls
+      .filter((call) => call.path.endsWith('/threads'))
+      .every((call) => call.authorization === 'Bearer access-a'),
+  ).toBe(true);
+  expect(
+    nativeCalls
+      .filter((call) => call.path === `/v1/boards/${boardRecording.board.id}`)
+      .every((call) => call.method === 'GET'),
+  ).toBe(true);
   expect(JSON.stringify(boardResult)).not.toContain('access-a');
   expect(JSON.stringify(boardResult)).not.toContain('csrf-a');
 
@@ -394,7 +394,10 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
       ),
   );
   await mount(boardSurface);
-  await until(() => boardSurface.host.textContent?.includes('Reader A protected Board') ?? false, 'the transferred Board page');
+  await until(
+    () => boardSurface.host.textContent?.includes('Reader A protected Board') ?? false,
+    'the transferred Board page',
+  );
   expect(boardSurface.host.querySelector(`a[href*="/threads/${threadsRecording.threads[0]!.id}/"]`)).not.toBeNull();
 
   const mismatchedBoardClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -417,7 +420,8 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   );
   await mount(mismatchedBoardSurface);
   await until(
-    () => mismatchedBoardClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] }).length === 0,
+    () =>
+      mismatchedBoardClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] }).length === 0,
     'the mismatched hydrated Board cache retirement',
   );
   expect(mismatchedBoardSurface.host.textContent).not.toContain('Reader A protected Board');
@@ -432,18 +436,27 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   expect(sessionPreparationCalls - preparationsBeforeAnonymousRead).toBe(0);
   expect(anonymousBoard.caller.readerOrigin).toEqual({ kind: 'anonymous' });
   expect(anonymousBoard.board.visibility).toBe('public');
-  expect(nativeCalls.filter((call) => call.path === `/v1/boards/${boardRecording.board.id}`).at(-1)?.authorization).toBeNull();
+  expect(
+    nativeCalls.filter((call) => call.path === `/v1/boards/${boardRecording.board.id}`).at(-1)?.authorization,
+  ).toBeNull();
   requestFor('realms', { anonymous: true });
   const { readMyRealmsPage } = await import('../src/community/space-actions');
   const realmCallsBeforeAnonymousAction = nativeCalls.filter((call) => call.path === '/v1/me/realms').length;
   const anonymousRealms = await readMyRealmsPage({ data: {} });
-  expect(anonymousRealms).toMatchObject({ signedIn: false, realms: [], next: null, readerOrigin: { kind: 'anonymous' } });
+  expect(anonymousRealms).toMatchObject({
+    signedIn: false,
+    realms: [],
+    next: null,
+    readerOrigin: { kind: 'anonymous' },
+  });
   expect(nativeCalls.filter((call) => call.path === '/v1/me/realms')).toHaveLength(realmCallsBeforeAnonymousAction);
 
   protectedBoard = true;
   const deniedBoardClient = clientFor();
   await expect(loadBoard(deniedBoardClient, 'anonymous')).rejects.toThrow();
-  expect(deniedBoardClient.getQueryData(['board-page', boardRecording.board.id, null, null, 'anonymous'])).toBeUndefined();
+  expect(
+    deniedBoardClient.getQueryData(['board-page', boardRecording.board.id, null, null, 'anonymous']),
+  ).toBeUndefined();
   protectedBoard = false;
 
   // A separately hydrated MyRealms cache consumes the actual action and query result. The native order, next cursor,
@@ -477,7 +490,10 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
     createElement(MyRealmsCallerHost, { initial: realmsWire.result, cursor: undefined }),
   );
   await mount(realmsSurface);
-  await until(() => realmsSurface.host.textContent?.includes('Private A description') ?? false, 'the transferred MyRealms page');
+  await until(
+    () => realmsSurface.host.textContent?.includes('Private A description') ?? false,
+    'the transferred MyRealms page',
+  );
   expect(realmsSurface.host.querySelector('a[href="/en/realms/0192f3a0-6c1e-7b2a-9d4e-000000000401"]')).not.toBeNull();
   expect(realmsSurface.host.querySelector('a[href*="cursor=native-next"]')).not.toBeNull();
 
@@ -509,7 +525,9 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   requestFor('boards/board-a', { explicitAuthorization: 'Bearer explicit-reader' });
   const explicitBoardClient = clientFor();
   await expect(loadBoard(explicitBoardClient, 'session')).rejects.toThrow();
-  expect(explicitBoardClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toHaveLength(0);
+  expect(
+    explicitBoardClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] }),
+  ).toHaveLength(0);
   requestFor('realms', { explicitAuthorization: 'Bearer explicit-reader' });
   const explicitRealmsClient = clientFor();
   await expect(loadMyRealms(explicitRealmsClient)).rejects.toThrow();
@@ -615,17 +633,18 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
     boardReplacementResult.caller.queryKey as never,
     structuredClone(boardCachedRead) as never,
   );
-  expect(isBoardPageResultCurrent(boardReplacementClient, boardReplacementResult, inputForBoard('session'))).toBe(false);
-  expect(boardReplacementClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toHaveLength(0);
+  expect(isBoardPageResultCurrent(boardReplacementClient, boardReplacementResult, inputForBoard('session'))).toBe(
+    false,
+  );
+  expect(
+    boardReplacementClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] }),
+  ).toHaveLength(0);
 
   const realmsReplacementClient = clientFor();
   requestFor('realms');
   const realmsReplacementResult = await loadMyRealms(realmsReplacementClient);
   const realmsReplacementCaller = myRealmsCallerForVisit(realmsReplacementClient, realmsReplacementResult.visit);
-  realmsReplacementClient.setQueryData(
-    ['my-realms', ''],
-    structuredClone(realmsReplacementResult.page),
-  );
+  realmsReplacementClient.setQueryData(['my-realms', ''], structuredClone(realmsReplacementResult.page));
   expect(realmsReplacementCaller.isCurrent()).toBe(false);
   expect(realmsReplacementClient.getQueryData(['my-realms', ''])).toBeUndefined();
 
@@ -669,13 +688,15 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   requestFor('realms');
   const errorResult = await loadMyRealms(errorClient);
   const errorCaller = myRealmsCallerForVisit(errorClient, errorResult.visit);
-  await errorClient.fetchQuery({
-    ...sessionQuery,
-    staleTime: 0,
-    queryFn: async () => {
-      throw new Error('session refresh failed');
-    },
-  }).catch(() => undefined);
+  await errorClient
+    .fetchQuery({
+      ...sessionQuery,
+      staleTime: 0,
+      queryFn: async () => {
+        throw new Error('session refresh failed');
+      },
+    })
+    .catch(() => undefined);
   expect(errorCaller.isCurrent()).toBe(false);
   expect(errorClient.getQueryData(['my-realms', ''])).toBeUndefined();
 
@@ -747,10 +768,8 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   const replayBoard = await loadBoard(replayClient, 'session');
   const replayInput = inputForBoard('session');
   const replayHost = makeHost(replayClient, 'session', `/en/boards/${replayInput.id}`, () =>
-    createElement(
-      BoardPageCallerHost,
-      { result: replayBoard, input: replayInput },
-      (page) => createElement(BoardCommunity, { page, sort: 'active' }),
+    createElement(BoardPageCallerHost, { result: replayBoard, input: replayInput }, (page) =>
+      createElement(BoardCommunity, { page, sort: 'active' }),
     ),
   );
   await mount(replayHost);
@@ -766,7 +785,9 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   });
   await Promise.resolve();
   expect(browserRealmsClient.getQueryData(['my-realms', ''])).toBeUndefined();
-  expect(browserBoardClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toHaveLength(0);
+  expect(
+    browserBoardClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] }),
+  ).toHaveLength(0);
   realmsSurface.host.remove();
   boardSurface.host.remove();
   mismatchedBoardSurface.host.remove();

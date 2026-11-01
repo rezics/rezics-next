@@ -189,7 +189,7 @@ async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: stri
   ) {
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, value);
-        mockReaderSession = value;
+      mockReaderSession = value;
     });
   }
 

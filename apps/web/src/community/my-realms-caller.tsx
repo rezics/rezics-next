@@ -113,15 +113,13 @@ function sameVisit(left: MyRealmsVisit, right: MyRealmsVisit): boolean {
   );
 }
 
-function sameReaderOrigin(
-  left: MyRealmsReaderOrigin | undefined,
-  right: MyRealmsReaderOrigin | undefined,
-): boolean {
+function sameReaderOrigin(left: MyRealmsReaderOrigin | undefined, right: MyRealmsReaderOrigin | undefined): boolean {
   if (!left || !right) return left === right;
   if (left.kind !== right.kind) return false;
-  return left.kind !== 'session' || (right.kind === 'session' &&
-    left.subject === right.subject &&
-    left.csrfFingerprint === right.csrfFingerprint);
+  return (
+    left.kind !== 'session' ||
+    (right.kind === 'session' && left.subject === right.subject && left.csrfFingerprint === right.csrfFingerprint)
+  );
 }
 
 function originMatchesVisit(origin: MyRealmsReaderOrigin | undefined, visit: MyRealmsVisit): boolean {
@@ -517,8 +515,7 @@ export class MyRealmsCaller {
   private watchTransferredQuery() {
     const key = ['my-realms', this.visit.cursor ?? ''] as const;
     if (this.ownedQuery) {
-      this.acceptedQueryUpdateCount =
-        this.source.client.getQueryState<MyRealmsPage>(key)?.dataUpdateCount ?? 0;
+      this.acceptedQueryUpdateCount = this.source.client.getQueryState<MyRealmsPage>(key)?.dataUpdateCount ?? 0;
       this.readDataUpdateCount = this.acceptedQueryUpdateCount;
     }
     this.stopReadWatching?.();
@@ -535,7 +532,10 @@ export class MyRealmsCaller {
         return;
       }
       if (event.query !== this.ownedQuery) return;
-      if (event.type === 'removed' || (event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error')))
+      if (
+        event.type === 'removed' ||
+        (event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error'))
+      )
         this.retire();
     });
   }

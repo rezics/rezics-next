@@ -56,10 +56,7 @@ export const Route = createFileRoute('/boards/$id')({
         rememberThreadSlug(thread.id, threadTitle(thread));
       }
       caller.assertLoadCurrent();
-      return await caller.resultFor(
-        read,
-        deps.cursor === undefined && read.page.threads.threads.length > 0,
-      );
+      return await caller.resultFor(read, deps.cursor === undefined && read.page.threads.threads.length > 0);
     } catch (error) {
       caller.captureError(error);
       throw error;
