@@ -66,7 +66,7 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-  const { fromPlainText } = await import('@rezics/document');
+  const { fromMarkdown, fromPlainText } = await import('@rezics/document');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
@@ -101,7 +101,7 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
     subjectIds: [],
     mediaIds: [mediaId],
     availability: 'available' as const,
-    body: fromPlainText('Original post body.', 'blocks'),
+    body: fromMarkdown(`Original post body. ![chart](/media/${mediaId})`, 'blocks'),
   } as unknown as ThreadPost;
   const availablePost = (nextRevision = revisionId, body = sourcePost.body) =>
     ({ ...sourcePost, availability: 'available', revisionId: nextRevision, body } as ThreadPost);
@@ -417,6 +417,7 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
     await settle(() => changes.length === 1 && pageReads.length === 1 && buttons(m.thread_post_undo()).length === 1);
     expect(changes[0]!.availability).toBe('erased');
     expect(openingChanges).toEqual([false]);
+    expect(host.querySelector<HTMLElement>(`#post-${postId}`)?.style.minHeight).toBe('0px');
     await act(async () => pageReads[0]!.reject(new Error('Current post read failed after applied delete')));
     await settle(() => host.textContent?.includes(m.thread_post_delete_read_failure()) === true);
     expect(erasures).toHaveLength(1); // An applied delete is not repeated after its page read fails.
@@ -515,6 +516,7 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
     // A retained refresh callback is checked before starting another page read. A read already in flight is
     // checked again after settlement and cannot publish state under a replacement readiness/CSRF revision.
     const oldRefreshButton = button(m.thread_post_refresh());
+    applyRefreshPost = false;
     await act(async () => user.click(oldRefreshButton));
     await settle(() => pageReads.length === 5);
     client.setQueryData(sessionQuery.queryKey, { ...originalSession, csrfToken: null });
@@ -559,6 +561,26 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
     await settle(() => host.querySelector(`#post-${postId}`) !== null);
     await act(async () => oldUndo.click());
     expect(restorations).toHaveLength(3);
+
+    // Delete keeps its exact key after a lost response. A later confirmed result from that old caller cannot
+    // publish the erased placeholder, update the opening post, start a refresh, or show a fresh Undo.
+    const changesBeforeLateDelete = changes.length;
+    const readsBeforeLateDelete = pageReads.length;
+    await openDelete();
+    await click(m.thread_delete_confirm());
+    await settle(() => erasures.length === 4);
+    const lostDelete = structuredClone(erasures[3]!.data);
+    await act(async () => erasures[3]!.gate.reject(new Error('Delete response was lost')));
+    await settle(() => host.textContent?.includes('Delete response was lost') === true);
+    await click(m.thread_delete_confirm());
+    await settle(() => erasures.length === 5);
+    expect(erasures[4]!.data).toEqual(lostDelete);
+    expect(erasures[4]!.csrf).toBe('csrf-final');
+    client.setQueryData(sessionQuery.queryKey, { ...originalSession, csrfToken: 'csrf-replaced-after-send' });
+    await act(async () => erasures[4]!.gate.resolve({ ok: true }));
+    expect(changes).toHaveLength(changesBeforeLateDelete);
+    expect(pageReads).toHaveLength(readsBeforeLateDelete);
+    expect(openingChanges).toEqual([false, false]);
   } finally {
     await act(async () => root.unmount());
     editSpy.mockRestore();
