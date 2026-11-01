@@ -777,7 +777,8 @@ key, advancement, projection, Account tuple or creation-event successor before
 adopting it. Payloads, limits, locators and existing proof roots stay immutable;
 only the exact original successor can extend the prefix. A partial unique index
 locates its tip without walking prior pages. Trigger metadata and successor-FK
-keyed reads are charged alongside the submitted native statements. Recovery can verify one older original
+keyed reads are admitted before submission and retained in failed-call accounting.
+Recovery can verify one older original
 page per funded repair invocation. The empty terminal successor binds this same
 prefix and its exact definition, queried observation, covered/start and execution;
 it does not call the served-population reader. This closes captured page replay,

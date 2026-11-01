@@ -49,7 +49,8 @@ export async function readPublicFilterRepairVerification(pool: Pool, chain: Chai
  */
 export async function retainPublicFilterRepairVerification(
   pool: Pool, chain: Chain, page: Page, context: Readonly<{ deadline: number }>,
-) {
+  chargeControls: (cost: Readonly<{ rows: number; keys: number; bytes: number }>) => void,
+): Promise<boolean> {
   requireAccessDeadline(context.deadline);
   return withConnection(pool,async (client) => {
     await client.query('BEGIN');
@@ -96,11 +97,27 @@ export async function retainPublicFilterRepairVerification(
         if (current.binding !== chain.binding || current.root !== root || BigInt(current.ordinal!) !== ordinal)
           throw new CommandUnavailableError('contention',0);
       } else {
-        if (parent && parent.next === null) await client.query(
-          `UPDATE semantic.public_filter_repair_step SET verified_next=$4
-           WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) AND verified_next IS NULL`,
-          [chain.bootstrap,chain.execution,parent.step,page.step],
-        );
+        if (parent && parent.next === null) {
+          // Admit the immutable-page trigger's child seek and successor FK
+          // point before submission, including a submission that later fails.
+          chargeControls({ rows: 2, keys: 9, bytes: 2 * Buffer.byteLength(JSON.stringify({
+            key: [0,chain.bootstrap,chain.execution,page.step],predecessor: page.predecessor,
+          })) });
+          await client.query(
+            `UPDATE semantic.public_filter_repair_step SET verified_next=$4
+             WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) AND verified_next IS NULL`,
+            [chain.bootstrap,chain.execution,parent.step,page.step],
+          );
+        }
+        if (parent) {
+          // The new prefix member's trigger independently reads its parent.
+          // These are design-visible keyed controls, not MVCC visibility work.
+          chargeControls({ rows: 1, keys: 4, bytes: Buffer.byteLength(JSON.stringify({
+            key: [0,chain.bootstrap,chain.execution,page.predecessor],
+            complete: parent.complete,root: parent.root,binding: parent.binding,
+            next: page.step,ordinal: parent.ordinal,
+          })) });
+        }
         await client.query(
           `UPDATE semantic.public_filter_repair_step
            SET verified_binding=$4,verified_root=$5,verified_ordinal=$6
@@ -110,25 +127,7 @@ export async function retainPublicFilterRepairVerification(
       }
       requireAccessDeadline(context.deadline);
       await client.query('COMMIT');
-      // measuredPool charges the submitted statements and their own rows. The
-      // immutable-page trigger also seeks the parent metadata; linking a parent
-      // seeks its persisted child and performs the successor FK point check.
-      // These are design-visible keyed reads, not MVCC visibility work. They
-      // must travel with the adoption result rather than becoming free controls.
-      const advanced = current.root === null;
-      const parentRead = advanced && parent ? 1 : 0;
-      const childReads = advanced && parent?.next === null ? 2 : 0;
-      const triggerRows = parentRead + childReads;
-      const triggerBytes = parentRead ? Buffer.byteLength(JSON.stringify({
-        key: [0,chain.bootstrap,chain.execution,page.predecessor],
-        complete: parent!.complete,root: parent!.root,binding: parent!.binding,
-        next: page.step,ordinal: parent!.ordinal,
-      })) : 0;
-      const childBytes = childReads * Buffer.byteLength(JSON.stringify({
-        key: [0,chain.bootstrap,chain.execution,page.step],predecessor: page.predecessor,
-      }));
-      return { advanced, triggerRows, triggerBytes: triggerBytes + childBytes,
-        triggerKeys: parentRead * 4 + (childReads ? 9 : 0) };
+      return current.root === null;
     } catch (error) {
       try { await client.query('ROLLBACK'); }
       catch (rollbackError) { discardConnection(client,rollbackError as Error); }
