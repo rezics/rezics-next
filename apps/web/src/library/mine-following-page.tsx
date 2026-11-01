@@ -1,5 +1,5 @@
 import { Exposure, useOperation } from '../kernel/exposure';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
 import { useState } from 'react';
@@ -138,34 +138,27 @@ function MineFollowingPageState({ page }: { page: MineFollowingPage }) {
                           ? m.library_follow_reason_membership()
                           : undefined;
                     return (
-                      <ListRow
+                      <ContentItem
                         key={`${type}:${follow.targetId}`}
-                        className="flex min-h-16 items-center gap-4 rounded-xl px-4 py-3"
-                      >
-                        {href ? (
-                          <ListRowLink href={href} lang={title.lang}>
-                            {title.text}
-                          </ListRowLink>
-                        ) : null}
-                        <div className="min-w-0 flex-1">
-                          <p
-                            aria-hidden={href ? 'true' : undefined}
-                            lang={title.lang}
-                            className="break-words font-medium"
-                          >
-                            {title.text}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {type === 'subject'
-                              ? (follow.target?.typeLabel ?? label)
-                              : type === 'collection'
-                                ? m.library_following_kind_collection()
-                                : m.library_following_kind_space()}
-                          </p>
-                          {reason ? <p className="text-sm text-muted-foreground">{reason}</p> : null}
-                        </div>
-                        {canUnfollow ? (
-                          <ListRowControl className="shrink-0">
+                        className="px-4"
+                        title={title.text}
+                        {...(title.lang ? { titleLang: title.lang } : {})}
+                        headingLevel={3}
+                        {...(href ? { href } : {})}
+                        metadata={
+                          <div className="min-w-0 space-y-1">
+                            <p>
+                              {type === 'subject'
+                                ? (follow.target?.typeLabel ?? label)
+                                : type === 'collection'
+                                  ? m.library_following_kind_collection()
+                                  : m.library_following_kind_space()}
+                            </p>
+                            {reason ? <p>{reason}</p> : null}
+                          </div>
+                        }
+                        actions={
+                          canUnfollow ? (
                             <FollowTargetControl
                               targetId={follow.targetId}
                               following
@@ -176,9 +169,9 @@ function MineFollowingPageState({ page }: { page: MineFollowingPage }) {
                                 setRemoved(true);
                               }}
                             />
-                          </ListRowControl>
-                        ) : null}
-                      </ListRow>
+                          ) : null
+                        }
+                      />
                     );
                   })}
                 </ul>
