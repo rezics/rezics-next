@@ -688,8 +688,7 @@ export function recognizeCheckHostRun(
     const inside = relative(CHECK_HOST_RUNS_ROOT, absolute);
     if (!insidePath(CHECK_HOST_RUNS_ROOT, absolute) || inside === '') return refusal('cwd-outside-runs');
     const runId = inside.split(sep)[0] ?? '';
-    if (!new RegExp(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.runIdPattern).test(runId))
-      return refusal('run-id-invalid');
+    if (!new RegExp(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.runIdPattern).test(runId)) return refusal('run-id-invalid');
     const runDirectory = join(CHECK_HOST_RUNS_ROOT, runId);
     if (!insidePath(runDirectory, absolute)) return refusal('cwd-not-confined');
 
@@ -744,8 +743,7 @@ export function recognizeCheckHostRun(
       !owner ||
       typeof owner !== 'object' ||
       Array.isArray(owner) ||
-      Object.keys(owner).sort().join(',') !==
-        [...CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.fields].sort().join(',') ||
+      Object.keys(owner).sort().join(',') !== [...CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.fields].sort().join(',') ||
       !Number.isSafeInteger(owner.schema) ||
       owner.schema !== CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.version ||
       typeof owner.host !== 'string' ||

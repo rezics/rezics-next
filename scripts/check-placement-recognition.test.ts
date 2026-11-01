@@ -41,9 +41,7 @@ function markerRecord(host: string, overrides: Record<string, unknown> = {}): Re
     uid: fixtureUid,
   };
   return {
-    ...Object.fromEntries(
-      CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.fields.map((field) => [field, values[field]] as const),
-    ),
+    ...Object.fromEntries(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.fields.map((field) => [field, values[field]] as const)),
     ...overrides,
   };
 }
@@ -216,9 +214,7 @@ test('environment markers and caller run IDs cannot replace a refused physical p
     console.error = original;
   }
   expect(remoteAttempts).toBe(0);
-  expect(diagnostics).toEqual([
-    'stack-run: kernel typecheck physical run recognition refused (cwd-not-confined)',
-  ]);
+  expect(diagnostics).toEqual(['stack-run: kernel typecheck physical run recognition refused (cwd-not-confined)']);
 });
 
 test('malformed run paths remain candidates and cannot enter nested placement', () => {
@@ -303,11 +299,7 @@ test('only exact producer markers and live process evidence are admitted', () =>
     {
       name: 'a mismatched process start time',
       alter: (fixture) =>
-        setReadText(
-          fixture,
-          `/proc/${supervisorPid}/stat`,
-          processStat(supervisorPid, supervisorPid, '812345678'),
-        ),
+        setReadText(fixture, `/proc/${supervisorPid}/stat`, processStat(supervisorPid, supervisorPid, '812345678')),
       reason: 'supervisor-start-mismatch',
     },
     {
@@ -343,21 +335,13 @@ test('only exact producer markers and live process evidence are admitted', () =>
     {
       name: 'a foreign cgroup scope',
       alter: (fixture) =>
-        setReadText(
-          fixture,
-          '/proc/self/cgroup',
-          `0::/system.slice/${fixture.slice}/rezics-check-another-run.scope\n`,
-        ),
+        setReadText(fixture, '/proc/self/cgroup', `0::/system.slice/${fixture.slice}/rezics-check-another-run.scope\n`),
       reason: 'scope-mismatch',
     },
     {
       name: 'a foreign run slice with the expected scope',
       alter: (fixture) =>
-        setReadText(
-          fixture,
-          '/proc/self/cgroup',
-          `0::/system.slice/rezics-check-another-run.slice/${fixture.scope}\n`,
-        ),
+        setReadText(fixture, '/proc/self/cgroup', `0::/system.slice/rezics-check-another-run.slice/${fixture.scope}\n`),
       reason: 'scope-mismatch',
     },
     {

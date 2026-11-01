@@ -14,15 +14,15 @@ control validator and receiving predicate all use that representation.
 
 Version 1 is a closed JSON object with exactly these seven fields:
 
-| Field | Meaning and bound |
-| --- | --- |
-| `schema` | Integer `1`. |
-| `host` | Selected approved host name, exactly `a` or `b`. |
-| `run` | The lowercase run id, matching `[a-z0-9-]{1,64}`. |
-| `pid` | The lifetime monitor pid, a safe integer of at least `2`. |
+| Field     | Meaning and bound                                                              |
+| --------- | ------------------------------------------------------------------------------ |
+| `schema`  | Integer `1`.                                                                   |
+| `host`    | Selected approved host name, exactly `a` or `b`.                               |
+| `run`     | The lowercase run id, matching `[a-z0-9-]{1,64}`.                              |
+| `pid`     | The lifetime monitor pid, a safe integer of at least `2`.                      |
 | `started` | The monitor's `/proc/<pid>/stat` start-time token, one to twenty ASCII digits. |
-| `group` | The monitor's process group; it must equal `pid`. |
-| `uid` | The monitor's current uid, a nonnegative safe integer. |
+| `group`   | The monitor's process group; it must equal `pid`.                              |
+| `uid`     | The monitor's current uid, a nonnegative safe integer.                         |
 
 The marker is limited to 4 KiB. The producer checks the same closed fields and bounds before it accepts source or
 prepared controls. It emits field names from the shared schema rather than a second handwritten key list. The shell
