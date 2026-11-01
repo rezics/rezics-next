@@ -56,6 +56,12 @@ export const moderationQueueFixture = {
   ] satisfies ResolvedReportTarget[],
   revisions: [{ reportId: postReport.id, value: { post: { body: revisionText } } }] satisfies ReportedRevision[],
 };
+export const selectedQueueFixture = {
+  ...moderationQueueFixture,
+  reports: [postReport],
+  selection: { status: 'pending', targetKind: 'post', order: 'oldest' } as const,
+};
+
 export const resolvedQueueFixture = {
   ...moderationQueueFixture,
   reports: [

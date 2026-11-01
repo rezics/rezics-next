@@ -10,6 +10,7 @@ import { m } from '../paraglide/messages.js';
 import {
   moderationQueueFixture,
   resolvedQueueFixture,
+  selectedQueueFixture,
   postReport,
   queueViewports,
 } from './patterns/board-report-queue/fixture';
@@ -35,6 +36,8 @@ const meta = {
     ...moderationQueueFixture,
     next: 'cursor-next',
     onNext: fn(),
+    onSelection: fn(),
+    onRestart: fn(),
     onAction: fn<ReportQueueAction>(async (_input) => {
       throw new TypeError('Failed to fetch');
     }),
@@ -133,3 +136,20 @@ export const UncertainRetry: Story = {
 export const EmptyWithNext: Story = { args: { reports: [], targets: [], revisions: [] } };
 export const Loading: Story = { args: { state: 'loading', next: null } };
 export const Error: Story = { args: { state: 'error', next: null, onRetry: fn() } };
+
+export const SelectedReports: Story = {
+  args: { ...selectedQueueFixture },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('combobox', { name: m.moderation_filter_status() })).toHaveValue('pending');
+    await expect(view.getByRole('combobox', { name: m.moderation_filter_kind() })).toHaveValue('post');
+    await expect(view.getByRole('combobox', { name: m.moderation_filter_order() })).toHaveValue('oldest');
+    await userEvent.selectOptions(view.getByRole('combobox', { name: m.moderation_filter_status() }), 'resolved');
+    await expect(args.onSelection).toHaveBeenCalledWith({ status: 'resolved', targetKind: 'post', order: 'oldest' });
+  },
+};
+export const SelectedPending: Story = {
+  args: { ...selectedQueueFixture, reports: [], targets: [], revisions: [], state: 'loading', next: null },
+};
+export const ReadDenied: Story = { args: { reports: [], targets: [], revisions: [], state: 'denied', next: null } };
+export const StaleSelection: Story = { args: { reports: [], targets: [], revisions: [], state: 'stale', next: null } };

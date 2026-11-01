@@ -1,4 +1,10 @@
-import { createFileRoute, useNavigate, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
+import {
+  createFileRoute,
+  useNavigate,
+  useRouter,
+  useRouterState,
+  type ErrorComponentProps,
+} from '@tanstack/react-router';
 import { PendingPage } from '../../shell/pending';
 import { ClosedErrorPage } from '../../shell/closed';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
@@ -6,14 +12,25 @@ import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { m } from '../../paraglide/messages.js';
-import { loadModerationReports } from '../../moderation/reports-read';
+import {
+  loadModerationReports,
+  moderationReportInput,
+  reportPageIsCurrent,
+  reportSelection,
+  type ReportSelection,
+} from '../../moderation/reports-read';
 import { ModerationReportsView } from '../../moderation/reports-page';
 import { loadModerationAppeals } from '../../moderation/appeals-read';
 import { ModerationAppealsView } from '../../moderation/appeals-tab';
 
 export const Route = createFileRoute('/boards/$id_/moderation')({
   beforeLoad: requireSignedIn,
+  pendingMs: 0,
+  pendingMinMs: 0,
+  staleTime: 0,
+  gcTime: 0,
   validateSearch: (search: Record<string, unknown>) => ({
+    ...reportSelection(search),
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
     ...(typeof search.thread === 'string' && search.thread.length <= 128 ? { thread: search.thread } : {}),
     ...(typeof search.post === 'string' && search.post.length <= 128 ? { post: search.post } : {}),
@@ -28,7 +45,7 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
     };
     return deps.tab === 'appeals'
       ? loadModerationAppeals({ data: input })
-      : loadModerationReports({ data: { ...input, ...(deps.post ? { postId: deps.post } : {}) } });
+      : loadModerationReports({ data: moderationReportInput(params.id, deps) });
   },
   head: ({ match }) =>
     pageHead(
@@ -48,14 +65,24 @@ function ModerationReportsRoute() {
   const router = useRouter();
   const page = Route.useLoaderData();
   const { id } = Route.useParams();
-  const { thread, post, cursor, tab } = Route.useSearch();
+  const search = Route.useSearch();
+  const { thread, post, tab } = search;
+  const selection = reportSelection(search);
+  const latestSearch = useRouterState({ select: (state) => state.location.search });
+  const currentInput = moderationReportInput(id, latestSearch);
   const appealPage = page as Awaited<ReturnType<typeof loadModerationAppeals>>;
   const reportPage = page as Awaited<ReturnType<typeof loadModerationReports>>;
   const onNext = (nextCursor: string) =>
     void navigate({
       to: '/boards/$id/moderation',
       params: { id },
-      search: { ...(thread ? { thread } : {}), ...(post ? { post } : {}), ...(tab ? { tab } : {}), cursor: nextCursor },
+      search: {
+        ...selection,
+        ...(thread ? { thread } : {}),
+        ...(post ? { post } : {}),
+        ...(tab ? { tab } : {}),
+        cursor: nextCursor,
+      },
     });
   return tab === 'appeals' ? (
     <ModerationAppealsView
@@ -68,9 +95,26 @@ function ModerationReportsRoute() {
     />
   ) : (
     <ModerationReportsView
-      key={`${id}:${thread ?? ''}:${post ?? ''}:${cursor ?? ''}`}
+      key={`${reportPage.readKey}:${reportPage.viewerId}`}
       boardId={id}
       reports={reportPage.reports}
+      selection={selection}
+      viewerId={reportPage.viewerId}
+      state={reportPageIsCurrent(reportPage, currentInput) ? reportPage.state : 'loading'}
+      onSelection={(value) =>
+        navigate({
+          to: '/boards/$id/moderation',
+          params: { id },
+          search: { ...value, ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
+        })
+      }
+      onRestart={() =>
+        void navigate({
+          to: '/boards/$id/moderation',
+          params: { id },
+          search: { ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
+        })
+      }
       revisions={reportPage.revisions}
       targets={reportPage.targets}
       next={reportPage.next}
@@ -78,6 +122,7 @@ function ModerationReportsRoute() {
       {...(thread ? { threadId: thread } : {})}
       {...(post ? { postId: post } : {})}
       onNext={onNext}
+      onRetry={() => void router.invalidate({ sync: true })}
       onRefresh={() => router.invalidate({ sync: true })}
     />
   );
@@ -85,13 +130,24 @@ function ModerationReportsRoute() {
 
 function ModerationReportsPending() {
   const { id } = Route.useParams();
-  const { tab, thread, post } = Route.useSearch();
+  const search = Route.useSearch();
+  const { tab, thread, post } = search;
+  const navigate = useNavigate();
+  const selection = reportSelection(search);
   if (tab === 'appeals') return <PendingPage />;
   return (
     <ModerationReportsView
       boardId={id}
       {...(thread ? { threadId: thread } : {})}
       {...(post ? { postId: post } : {})}
+      selection={selection}
+      onSelection={(value: ReportSelection) =>
+        navigate({
+          to: '/boards/$id/moderation',
+          params: { id },
+          search: { ...value, ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
+        })
+      }
       reports={[]}
       targets={[]}
       next={null}
@@ -103,13 +159,24 @@ function ModerationReportsPending() {
 function ModerationReportsError({ reset, error }: ErrorComponentProps) {
   const { id } = Route.useParams();
   const router = useRouter();
-  const { tab, thread, post } = Route.useSearch();
+  const search = Route.useSearch();
+  const { tab, thread, post } = search;
+  const navigate = useNavigate();
+  const selection = reportSelection(search);
   if (tab === 'appeals' || isPlatformClosedError(error)) return <ClosedErrorPage error={error} />;
   return (
     <ModerationReportsView
       {...(thread ? { threadId: thread } : {})}
       {...(post ? { postId: post } : {})}
       boardId={id}
+      selection={selection}
+      onSelection={(value: ReportSelection) =>
+        navigate({
+          to: '/boards/$id/moderation',
+          params: { id },
+          search: { ...value, ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
+        })
+      }
       reports={[]}
       targets={[]}
       next={null}

@@ -41,6 +41,11 @@ export type ReportTarget =
   | Readonly<{ kind: 'board'; id: BoardId }>
   | Readonly<{ kind: 'thread'; id: ThreadId }>
   | Readonly<{ kind: 'post'; id: PostId }>;
+export type ReportSelection = Readonly<{
+  status?: 'all' | 'pending' | 'resolved';
+  targetKind?: 'all' | ReportTarget['kind'];
+  order?: 'newest' | 'oldest';
+}>;
 export type ReportInput = Readonly<{
   target: ReportTarget;
   revisionId?: RevisionId;
@@ -604,19 +609,38 @@ export async function listTargetReports(
   context: ReadContext,
   cursor?: string,
   limit = 100,
+  selection: ReportSelection = {},
 ): Promise<Page<ReportView>> {
   validateTarget(target);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Report limit must be 1 to 100');
+  const status = selection.status ?? 'all';
+  const targetKind = selection.targetKind ?? 'all';
+  const order = selection.order ?? 'newest';
+  if (
+    !['all', 'pending', 'resolved'].includes(status) ||
+    !['all', 'board', 'thread', 'post'].includes(targetKind) ||
+    !['newest', 'oldest'].includes(order)
+  )
+    throw new TypeError('Invalid report selection');
   const initial = await inspect(dependencies, target, context);
   const empty = { entries: [], nextCursor: null, anchor: initial.anchor };
   if (!initial.value) return empty;
   const ring = tokens(dependencies);
   const binding: CursorBinding = {
-    operation: 'content.target-reports',
+    // Versioned binding deliberately refuses legacy cursors lacking selection/credential authority.
+    operation: 'content.target-reports.v2',
     parameters: {
       kind: target.kind,
       id: target.id,
       actor: context.actor.kind === 'account' ? context.actor.accountId : null,
+      client: context.actor.kind === 'account' ? context.actor.clientId : null,
+      requestedBy: context.actor.kind === 'account' ? context.actor.requestedBy : null,
+      authnEpoch: context.actor.kind === 'account' ? context.actor.authnEpoch : null,
+      scopes: context.actor.kind === 'account' ? JSON.stringify([...new Set(context.actor.scopes)].sort()) : null,
+      status,
+      targetKind,
+      order,
+      limit,
     },
   };
   let after: { at: string; id: string } | null = null;
@@ -641,7 +665,8 @@ export async function listTargetReports(
       board_id: target.id,
       target_kind: target.kind,
       target_id: target.id,
-      created_at: after?.at ?? 'infinity',
+      created_at: after?.at ?? (order === 'oldest' ? '-infinity' : 'infinity'),
+      oldest: order === 'oldest',
       report_id: after?.id ?? '00000000-0000-0000-0000-000000000000',
       limit: limit + 1,
     };
@@ -663,6 +688,7 @@ export async function listTargetReports(
   for (const candidate of selected) {
     if (route(candidate.report_id) !== candidate.report_route) throw new ReportUnavailableError();
     const candidateTarget: ReportTarget = { kind: candidate.target_kind, id: candidate.target_id };
+    if (targetKind !== 'all' && candidateTarget.kind !== targetKind) continue;
     // Explicit inspection is required even when the viewer also owns the report.
     if (!(await inspect(dependencies, candidateTarget, context)).value) continue;
     if (
@@ -691,6 +717,8 @@ export async function listTargetReports(
       ).value !== target.id
     )
       continue;
+    if (status === 'pending' && record.value.outcome !== null) continue;
+    if (status === 'resolved' && record.value.outcome === null) continue;
     entries.push(record.value);
   }
   // No evidence or identifiers leave the adapter after revocation during hydration.

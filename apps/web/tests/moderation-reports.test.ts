@@ -630,3 +630,137 @@ test('Default report review preserves authorized rich reported and current evide
     expect(withoutContext).not.toContain('Current community board');
   }
 });
+
+test('default report transport forwards every selection and exact scope with native sparse continuation', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readModerationReportPage, moderationReportInput, reportPageIsCurrent } =
+    await import('../src/moderation/reports-read');
+  const calls: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        calls.push(request);
+        const path = new URL(request.url).pathname;
+        if (
+          ![`/v1/boards/${id(1)}/reports`, `/v1/threads/${id(2)}/reports`, `/v1/posts/${id(3)}/reports`].includes(path)
+        )
+          throw new Error(`Unexpected report request: ${path}`);
+        return Response.json({ reports: [], next: 'native-sparse-next' });
+      },
+      { preconnect() {} },
+    ),
+  });
+  for (const scope of [{}, { thread: id(2) }, { thread: id(2), post: id(3) }]) {
+    const input = moderationReportInput(id(1), {
+      ...scope,
+      status: 'resolved',
+      targetKind: 'post',
+      order: 'oldest',
+      cursor: 'native-current',
+    });
+    const page = await readModerationReportPage(client, input, 'Bearer moderator', id(900));
+    expect(page.state).toBe('ready');
+    expect(page.reports).toEqual([]);
+    expect(page.next).toBe('native-sparse-next');
+    expect(page.viewerId).toBe(id(900));
+    expect(reportPageIsCurrent(page, input)).toBe(true);
+    const request = calls.at(-1)!;
+    expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+      status: 'resolved',
+      targetKind: 'post',
+      order: 'oldest',
+      limit: '20',
+      cursor: 'native-current',
+    });
+    expect(request.headers.get('authorization')).toBe('Bearer moderator');
+    expect(request.cache).toBe('no-store');
+    const markup = renderToStaticMarkup(
+      createElement(ModerationReportsView, {
+        ...page,
+        selection: { status: 'resolved', targetKind: 'post', order: 'oldest' },
+      }),
+    );
+    expect(markup).toContain('There may be more reports on the next page.');
+    expect(markup).toContain('Next page');
+    expect(markup).not.toContain('native-sparse-next');
+  }
+  expect(calls.map((request) => new URL(request.url).pathname)).toEqual([
+    `/v1/boards/${id(1)}/reports`,
+    `/v1/threads/${id(2)}/reports`,
+    `/v1/posts/${id(3)}/reports`,
+  ]);
+});
+
+test('a late native response retires after any selector, cursor or exact scope changes', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readModerationReportPage, moderationReportInput, reportPageIsCurrent } =
+    await import('../src/moderation/reports-read');
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: Object.assign(
+      async () => {
+        await pending;
+        return Response.json({ reports: [], next: 'old-generation' });
+      },
+      { preconnect() {} },
+    ),
+  });
+  const original = moderationReportInput(id(1), {
+    status: 'pending',
+    targetKind: 'post',
+    order: 'oldest',
+    cursor: 'native-page',
+  });
+  const inFlight = readModerationReportPage(client, original, 'Bearer moderator', id(900));
+  const selected = moderationReportInput(id(1), { status: 'resolved', targetKind: 'post', order: 'oldest' });
+  expect(selected.cursor).toBeUndefined();
+  release();
+  const late = await inFlight;
+  expect(reportPageIsCurrent(late, original)).toBe(true);
+  for (const changed of [
+    selected,
+    { ...original, targetKind: 'thread' as const },
+    { ...original, order: 'newest' as const },
+    { ...original, cursor: undefined },
+    { ...original, threadId: id(2) },
+    { ...original, postId: id(3) },
+    { ...original, boardId: id(4) },
+  ])
+    expect(reportPageIsCurrent(late, changed)).toBe(false);
+});
+
+test('default native read distinguishes stale selection, denied queue and unavailable transport without private rows', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readModerationReportPage } = await import('../src/moderation/reports-read');
+  const { m } = await import('../src/paraglide/messages.js');
+  for (const [status, code, expected, message] of [
+    [400, 'invalid_cursor', 'stale', m.moderation_queue_stale()],
+    [404, 'not_found', 'denied', m.moderation_queue_read_denied()],
+    [503, 'dependency_unavailable', 'error', m.moderation_queue_error()],
+  ] as const) {
+    const client = createKernelClient('https://kernel.test', {
+      fetch: Object.assign(async () => Response.json({ code }, { status }), { preconnect() {} }),
+    });
+    const page = await readModerationReportPage(
+      client,
+      { boardId: id(1), cursor: 'stale' },
+      'Bearer moderator',
+      id(900),
+    );
+    expect(page.state).toBe(expected);
+    expect(page.reports).toEqual([]);
+    expect(page.targets).toEqual([]);
+    expect(page.revisions).toEqual([]);
+    expect(page.next).toBeNull();
+    const markup = renderToStaticMarkup(
+      createElement(ModerationReportsView, { ...page, onRestart() {}, onRetry() {} }),
+    );
+    expect(markup).toContain(message);
+    expect(markup).not.toContain(m.moderation_reports_empty());
+    expect(markup).not.toContain(m.moderation_queue_end());
+  }
+});

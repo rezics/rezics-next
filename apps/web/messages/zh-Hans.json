@@ -3978,5 +3978,19 @@
   "home_feed_sparse": "本页没有条目。请继续下一页。",
   "subject_relation_completed_more": "{label}：新增可见条目 {count} 个。可以继续加载。",
   "subject_relation_completed_end": "{label}：新增可见条目 {count} 个。已到达此列表末尾。",
-  "subject_relation_end": "已到达{label}末尾。"
+  "subject_relation_end": "已到达{label}末尾。",
+  "moderation_filter_label": "筛选举报",
+  "moderation_filter_status": "状态",
+  "moderation_filter_all_status": "所有状态",
+  "moderation_filter_pending": "待处理",
+  "moderation_filter_resolved": "已处理",
+  "moderation_filter_kind": "目标类型",
+  "moderation_filter_all_kinds": "所有类型",
+  "moderation_filter_order": "时间排序",
+  "moderation_filter_newest": "从新到旧",
+  "moderation_filter_oldest": "从旧到新",
+  "moderation_filter_reset": "重置筛选",
+  "moderation_queue_read_denied": "此举报队列不可用，或你已无权查看。",
+  "moderation_queue_stale": "此举报页面已过期或属于其他筛选条件。请按当前条件重新开始。",
+  "moderation_queue_restart": "重新查看举报"
 }

@@ -630,6 +630,18 @@ export const MediaDownloadResponseSchema = t.Object(
   closed,
 );
 
+/** Only report lists accept these selectors; unrelated content pages remain unchanged. */
+export const ReportPageQuerySchema = t.Object(
+  {
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+    status: t.Optional(t.Union([t.Literal('all'), t.Literal('pending'), t.Literal('resolved')])),
+    targetKind: t.Optional(t.Union([t.Literal('all'), t.Literal('board'), t.Literal('thread'), t.Literal('post')])),
+    order: t.Optional(t.Union([t.Literal('newest'), t.Literal('oldest')])),
+  },
+  closed,
+);
+
 export const ReportPageResponseSchema = t.Object(
   {
     reports: t.Array(ModeratorReportResponseSchema.properties.report, { maxItems: 100 }),

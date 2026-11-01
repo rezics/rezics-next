@@ -108,6 +108,7 @@ export function ReportReviewCard({
     setFailure(null);
     setConfirmed(confirmation);
     if (confirmation.action === 'take-down') onTakenDown();
+    if (onRefresh) void onRefresh().catch(() => setMessage(m.moderation_queue_error()));
   }
 
   async function retry() {

@@ -3977,5 +3977,19 @@
   "home_feed_sparse": "このページに項目はありません。次のページに進んでください。",
   "subject_relation_completed_more": "{label}：新しく表示された項目は{count}件です。さらに読み込めます。",
   "subject_relation_completed_end": "{label}：新しく表示された項目は{count}件です。このリストの末尾です。",
-  "subject_relation_end": "{label}の末尾です。"
+  "subject_relation_end": "{label}の末尾です。",
+  "moderation_filter_label": "通報を絞り込む",
+  "moderation_filter_status": "状態",
+  "moderation_filter_all_status": "すべての状態",
+  "moderation_filter_pending": "未対応",
+  "moderation_filter_resolved": "対応済み",
+  "moderation_filter_kind": "対象の種類",
+  "moderation_filter_all_kinds": "すべての種類",
+  "moderation_filter_order": "日時順",
+  "moderation_filter_newest": "新しい順",
+  "moderation_filter_oldest": "古い順",
+  "moderation_filter_reset": "絞り込みをリセット",
+  "moderation_queue_read_denied": "この通報一覧は利用できないか、閲覧権限が失われています。",
+  "moderation_queue_stale": "このページは期限切れか、別の絞り込み条件のものです。選択中の条件で最初から表示してください。",
+  "moderation_queue_restart": "通報一覧を最初から表示"
 }

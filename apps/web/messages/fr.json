@@ -3977,5 +3977,19 @@
   "home_feed_sparse": "Aucun élément sur cette page. Passez à la suivante.",
   "subject_relation_completed_more": "{label} : nouveaux éléments visibles : {count}. Vous pouvez en charger davantage.",
   "subject_relation_completed_end": "{label} : nouveaux éléments visibles : {count}. Fin de cette liste.",
-  "subject_relation_end": "Fin de {label}."
+  "subject_relation_end": "Fin de {label}.",
+  "moderation_filter_label": "Filtrer les signalements",
+  "moderation_filter_status": "Statut",
+  "moderation_filter_all_status": "Tous les statuts",
+  "moderation_filter_pending": "En attente",
+  "moderation_filter_resolved": "Résolus",
+  "moderation_filter_kind": "Type de cible",
+  "moderation_filter_all_kinds": "Tous les types",
+  "moderation_filter_order": "Ordre chronologique",
+  "moderation_filter_newest": "Plus récents en premier",
+  "moderation_filter_oldest": "Plus anciens en premier",
+  "moderation_filter_reset": "Réinitialiser les filtres",
+  "moderation_queue_read_denied": "Cette file de signalements est indisponible ou vous ne pouvez plus la consulter.",
+  "moderation_queue_stale": "Cette page a expiré ou correspond à une autre sélection. Recommencez avec les filtres sélectionnés.",
+  "moderation_queue_restart": "Recommencer les signalements"
 }

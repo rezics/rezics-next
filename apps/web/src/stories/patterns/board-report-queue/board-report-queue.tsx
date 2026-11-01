@@ -3,7 +3,7 @@ import { Skeleton } from '@rezics/ui/shadcn/skeleton';
 import { useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import type { ReportQueueAction } from '../../../moderation/reports-view-action';
-import type { Report, ReportedRevision, ResolvedReportTarget } from '../../../moderation/reports-read';
+import type { ReportReadState, Report, ReportedRevision, ResolvedReportTarget } from '../../../moderation/reports-read';
 import { ReportReviewCard } from '../../../moderation/reports-view-card';
 
 export type { ReportQueueAction } from '../../../moderation/reports-view-action';
@@ -14,7 +14,8 @@ export type ReportQueueProps = {
   onAction: ReportQueueAction;
   next?: string | null;
   onNext?: (cursor: string) => void;
-  state?: 'ready' | 'loading' | 'error';
+  state?: ReportReadState;
+  onRestart?: () => void;
   onRetry?: () => void;
   onRefresh?: () => Promise<void>;
 };
@@ -30,6 +31,7 @@ export function BoardReportQueue({
   state = 'ready',
   onRetry,
   onRefresh,
+  onRestart,
 }: ReportQueueProps) {
   const [takenDown, setTakenDown] = useState<ReadonlySet<string>>(() => new Set());
   const targetByKey = new Map(targets.map((target) => [target.key, target]));
@@ -42,6 +44,17 @@ export function BoardReportQueue({
         <Skeleton className="h-52 rounded-2xl" />
         <Skeleton className="h-52 rounded-2xl" />
       </section>
+    );
+  if (state === 'denied' || state === 'stale')
+    return (
+      <div className="space-y-3 rounded-2xl border p-6">
+        <p role="alert">{state === 'denied' ? m.moderation_queue_read_denied() : m.moderation_queue_stale()}</p>
+        {state === 'stale' && onRestart ? (
+          <Button variant="outline" onClick={onRestart}>
+            {m.moderation_queue_restart()}
+          </Button>
+        ) : null}
+      </div>
     );
   if (state === 'error')
     return (

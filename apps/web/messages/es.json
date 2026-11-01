@@ -3977,5 +3977,19 @@
   "home_feed_sparse": "No hay elementos en esta página. Continúa a la siguiente.",
   "subject_relation_completed_more": "{label}: nuevos elementos visibles: {count}. Puedes cargar más.",
   "subject_relation_completed_end": "{label}: nuevos elementos visibles: {count}. Fin de esta lista.",
-  "subject_relation_end": "Fin de {label}."
+  "subject_relation_end": "Fin de {label}.",
+  "moderation_filter_label": "Filtrar denuncias",
+  "moderation_filter_status": "Estado",
+  "moderation_filter_all_status": "Todos los estados",
+  "moderation_filter_pending": "Pendientes",
+  "moderation_filter_resolved": "Resueltas",
+  "moderation_filter_kind": "Tipo de destino",
+  "moderation_filter_all_kinds": "Todos los tipos",
+  "moderation_filter_order": "Orden temporal",
+  "moderation_filter_newest": "Más recientes primero",
+  "moderation_filter_oldest": "Más antiguas primero",
+  "moderation_filter_reset": "Restablecer filtros",
+  "moderation_queue_read_denied": "Esta cola de denuncias no está disponible o ya no tienes permiso para leerla.",
+  "moderation_queue_stale": "Esta página ha caducado o pertenece a otra selección. Vuelve a empezar con los filtros seleccionados.",
+  "moderation_queue_restart": "Reiniciar denuncias"
 }

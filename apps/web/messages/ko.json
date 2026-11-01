@@ -3977,5 +3977,19 @@
   "home_feed_sparse": "이 페이지에는 항목이 없습니다. 다음 페이지로 이동하세요.",
   "subject_relation_completed_more": "{label}: 새로 표시된 항목 {count}개. 더 불러올 수 있습니다.",
   "subject_relation_completed_end": "{label}: 새로 표시된 항목 {count}개. 이 목록의 끝입니다.",
-  "subject_relation_end": "{label}의 끝입니다."
+  "subject_relation_end": "{label}의 끝입니다.",
+  "moderation_filter_label": "신고 필터",
+  "moderation_filter_status": "상태",
+  "moderation_filter_all_status": "모든 상태",
+  "moderation_filter_pending": "처리 대기",
+  "moderation_filter_resolved": "처리 완료",
+  "moderation_filter_kind": "대상 유형",
+  "moderation_filter_all_kinds": "모든 유형",
+  "moderation_filter_order": "시간순",
+  "moderation_filter_newest": "최신순",
+  "moderation_filter_oldest": "오래된순",
+  "moderation_filter_reset": "필터 초기화",
+  "moderation_queue_read_denied": "이 신고 목록을 사용할 수 없거나 더 이상 열람 권한이 없습니다.",
+  "moderation_queue_stale": "이 페이지가 만료되었거나 다른 선택 조건에 속합니다. 선택한 필터로 처음부터 다시 시작하세요.",
+  "moderation_queue_restart": "신고 목록 다시 시작"
 }

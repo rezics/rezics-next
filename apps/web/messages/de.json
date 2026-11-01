@@ -3977,5 +3977,19 @@
   "home_feed_sparse": "Keine Elemente auf dieser Seite. Mit der nächsten Seite fortfahren.",
   "subject_relation_completed_more": "{label}: Neue sichtbare Einträge: {count}. Weitere können geladen werden.",
   "subject_relation_completed_end": "{label}: Neue sichtbare Einträge: {count}. Ende dieser Liste.",
-  "subject_relation_end": "Ende von {label}."
+  "subject_relation_end": "Ende von {label}.",
+  "moderation_filter_label": "Meldungen filtern",
+  "moderation_filter_status": "Status",
+  "moderation_filter_all_status": "Alle Status",
+  "moderation_filter_pending": "Ausstehend",
+  "moderation_filter_resolved": "Erledigt",
+  "moderation_filter_kind": "Zieltyp",
+  "moderation_filter_all_kinds": "Alle Zieltypen",
+  "moderation_filter_order": "Zeitliche Reihenfolge",
+  "moderation_filter_newest": "Neueste zuerst",
+  "moderation_filter_oldest": "Älteste zuerst",
+  "moderation_filter_reset": "Filter zurücksetzen",
+  "moderation_queue_read_denied": "Diese Meldungswarteschlange ist nicht verfügbar oder du darfst sie nicht mehr lesen.",
+  "moderation_queue_stale": "Diese Meldungsseite ist abgelaufen oder gehört zu einer anderen Auswahl. Starte mit den ausgewählten Filtern neu.",
+  "moderation_queue_restart": "Meldungen neu starten"
 }

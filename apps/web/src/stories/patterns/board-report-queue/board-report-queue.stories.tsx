@@ -323,3 +323,8 @@ export const Error: Story = {
     await expect(args.onRetry).toHaveBeenCalledTimes(1);
   },
 };
+
+export const ReadDenied: Story = { args: { reports: [], targets: [], revisions: [], state: 'denied', next: null } };
+export const StaleSelection: Story = {
+  args: { reports: [], targets: [], revisions: [], state: 'stale', next: null, onRestart: fn() },
+};

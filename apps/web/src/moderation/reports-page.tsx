@@ -1,3 +1,7 @@
+import { useId, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { DEFAULT_REPORT_SELECTION, type ReportSelection, type ReportReadState } from './reports-read';
 import { useSession } from '../session/query';
 import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
@@ -29,9 +33,17 @@ export function ModerationReportsView({
   state = 'ready',
   onRetry,
   onRefresh,
+  selection = DEFAULT_REPORT_SELECTION,
+  onSelection,
+  onRestart,
+  viewerId,
 }: {
   boardId?: string;
-  state?: 'ready' | 'loading' | 'error';
+  state?: ReportReadState;
+  selection?: ReportSelection;
+  onSelection?: (selection: ReportSelection) => void | Promise<void>;
+  onRestart?: () => void;
+  viewerId?: string;
   onRetry?: () => void;
   onRefresh?: () => Promise<void>;
   reports: Report[];
@@ -45,10 +57,17 @@ export function ModerationReportsView({
   onAction?: ReportQueueAction;
 }) {
   const session = useSession();
+  const controlsId = useId();
+  const [retired, setRetired] = useState(false);
+  const select = (value: ReportSelection) => {
+    setRetired(true);
+    void Promise.resolve(onSelection?.(value)).finally(() => setRetired(false));
+  };
   const evidence = [...targets, ...revisions].map((target) => moderationEvidence(target.value));
   if (
     session.state !== 'unknown' &&
-    evidence.some((item) => item && (session.state !== 'signed-in' || session.subject !== item.viewerId))
+    ((viewerId !== undefined && (session.state !== 'signed-in' || session.subject !== viewerId)) ||
+      evidence.some((item) => item && (session.state !== 'signed-in' || session.subject !== item.viewerId)))
   )
     return <p role="status">{m.moderation_target_unavailable()}</p>;
   const filters = [
@@ -57,7 +76,8 @@ export function ModerationReportsView({
   ]
     .filter(Boolean)
     .join('&');
-  const reportsHref = filters ? `?${filters}` : '?';
+  const selectedQuery = new URLSearchParams(selection).toString();
+  const reportsHref = `?${filters ? `${filters}&` : ''}${selectedQuery}`;
   const appealsHref = `?tab=appeals${filters ? `&${filters}` : ''}`;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 text-foreground">
@@ -95,6 +115,50 @@ export function ModerationReportsView({
           <a href={appealsHref}>{m.moderation_appeals_tab()}</a>
         )}
       </nav>
+      <fieldset className="flex flex-wrap items-end gap-3" disabled={!onSelection || retired}>
+        <legend className="sr-only">{m.moderation_filter_label()}</legend>
+        <label htmlFor={`${controlsId}-status`} className="space-y-1 text-sm">
+          <span className="block">{m.moderation_filter_status()}</span>
+          <NativeSelect
+            id={`${controlsId}-status`}
+            value={selection.status}
+            onChange={(event) => select({ ...selection, status: event.target.value as ReportSelection['status'] })}
+          >
+            <NativeSelectOption value="all">{m.moderation_filter_all_status()}</NativeSelectOption>
+            <NativeSelectOption value="pending">{m.moderation_filter_pending()}</NativeSelectOption>
+            <NativeSelectOption value="resolved">{m.moderation_filter_resolved()}</NativeSelectOption>
+          </NativeSelect>
+        </label>
+        <label htmlFor={`${controlsId}-kind`} className="space-y-1 text-sm">
+          <span className="block">{m.moderation_filter_kind()}</span>
+          <NativeSelect
+            id={`${controlsId}-kind`}
+            value={selection.targetKind}
+            onChange={(event) =>
+              select({ ...selection, targetKind: event.target.value as ReportSelection['targetKind'] })
+            }
+          >
+            <NativeSelectOption value="all">{m.moderation_filter_all_kinds()}</NativeSelectOption>
+            <NativeSelectOption value="board">{m.moderation_queue_board()}</NativeSelectOption>
+            <NativeSelectOption value="thread">{m.moderation_queue_thread()}</NativeSelectOption>
+            <NativeSelectOption value="post">{m.moderation_queue_post()}</NativeSelectOption>
+          </NativeSelect>
+        </label>
+        <label htmlFor={`${controlsId}-order`} className="space-y-1 text-sm">
+          <span className="block">{m.moderation_filter_order()}</span>
+          <NativeSelect
+            id={`${controlsId}-order`}
+            value={selection.order}
+            onChange={(event) => select({ ...selection, order: event.target.value as ReportSelection['order'] })}
+          >
+            <NativeSelectOption value="newest">{m.moderation_filter_newest()}</NativeSelectOption>
+            <NativeSelectOption value="oldest">{m.moderation_filter_oldest()}</NativeSelectOption>
+          </NativeSelect>
+        </label>
+        <Button type="button" variant="outline" onClick={() => select(DEFAULT_REPORT_SELECTION)}>
+          {m.moderation_filter_reset()}
+        </Button>
+      </fieldset>
       <BoardReportQueue
         reports={reports}
         targets={targets}
@@ -102,7 +166,8 @@ export function ModerationReportsView({
         onAction={onAction}
         next={next}
         {...(onNext ? { onNext } : {})}
-        state={state}
+        state={retired ? 'loading' : state}
+        {...(onRestart ? { onRestart } : {})}
         {...(onRetry ? { onRetry } : {})}
         {...(onRefresh ? { onRefresh } : {})}
       />

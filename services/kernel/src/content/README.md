@@ -128,6 +128,23 @@ candidates even when none can be returned. The board's current inspection check 
 Each page costs O(limit) bounded current-authority and native ancestry checks, each O(log R); the fixed existing
 post ancestry bound remains 33. Replays repair an interrupted board projection without duplicating candidates.
 
+The board, thread and post report list routes accept singular optional `status=all|pending|resolved`,
+`targetKind=all|board|thread|post` and `order=newest|oldest`. Defaults are all/all/newest, including omitted
+selectors. These selectors belong only to Reports, never Appeals. Every selector intersects the exact route scope:
+a thread or post scope cannot produce board reports. Target kind is the native report target discriminant.
+Pending means the currently inspected report has a null outcome; resolved means actioned or dismissed.
+The candidate index has no outcome authority. Filters can leave a sparse or empty page with continuation;
+continue with the same selection instead of interpreting that page as an empty queue.
+
+Newest traverses `(created_at, report_id)` descending; oldest traverses the same index in reverse, ascending.
+Each SQL branch uses a matching keyset inequality and its own bounded limit; only the chosen branch executes.
+The v2 sealed cursor binds normalized selectors, order, limit, target, partition epoch and the current account,
+client, scopes, requested-by identity and authentication epoch. Legacy report cursors lack these bindings and
+are refused by the ordinary invalid-cursor rules; restart explicitly with the current selection. There is no
+legacy fallback that could widen a population. The Web page forwards the selected values on next/retry/refresh,
+retires older selection results, clears the cursor on selection changes, and keeps private responses viewer-bound.
+Switching to Appeals drops the Reports selection, while retaining thread/post scope as before.
+
 The moderator interface labels submitted evidence, the reported revision and the readable current target separately.
 It reads a reported revision only through the ordinary exact revision GET with an actually known post identity;
 thread-only revision references and refused reads remain neutrally unavailable. Exact revision reads deduplicate
@@ -488,6 +505,18 @@ this change adds no deletion path.
 | Liked membership   | One statement and one primary-key seek per requested id, for up to 256 ids: O(k log n).                                                                                                            |
 
 ### Cost
+
+### Selected report pages
+
+- Touches: one board-candidate or exact-target index range of at most `limit + 1` raw references; at most
+  `limit` current native report inspections, target disclosure and exact board-placement checks, plus the
+  initial/final target authority fence. Status comes from the actual report, with no outcome projection.
+- Bound: API limit 1–100 (default 20 on HTTP, Web fixed at 20); O(limit) point reads and O(limit × log R)
+  indexed work, using descending or reverse ascending traversal. Filtered rows consume the same bound and
+  advance the last examined position. No refill, total, private allow-bit index or whole-queue scan.
+- Growth check: deferred to controller integration; existing report growth regressions remain applicable and
+  selected current-status/sparse-cursor HTTP regressions are authored but unrun in this source delivery.
+
 
 #### Subject reaction merge page
 
