@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -15,57 +15,61 @@ import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
 import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
-import { Button } from '@rezics/ui/shadcn/button';
 
-export function DynamicCollectionPage({
-  page,
-  readMembers,
-  search,
-}: {
+type DynamicCollectionPageProps = {
   page: DynamicCollectionPageData;
   search?: Record<string, string | string[]>;
   readMembers?: (id: string, cursor?: string) => Promise<DynamicMembersResult>;
-}) {
+};
+
+export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
+  const [source, setSource] = useState({ page: props.page, lifetime: 0 });
+  // A newly observed loader object starts a page before any of its children render, even at the same URL.
+  if (source.page !== props.page) setSource({ page: props.page, lifetime: source.lifetime + 1 });
+  return <DynamicCollectionPageLifetime key={source.lifetime} {...props} />;
+}
+
+function DynamicCollectionPageLifetime({ page, readMembers, search }: DynamicCollectionPageProps) {
   const [current, setCurrent] = useState(page);
   const [retries, setRetries] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [copyFailure, setCopyFailure] = useState(false);
+  // The route's reader closes over the originating filter; callback churn must not retarget a timer.
+  const reader = useRef(readMembers);
+  const active = useRef(false);
   const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   const pins = current.pins ?? navigation.data?.pins ?? { state: 'closed' as const };
   const collections = current.navigationCollections ?? navigation.data?.collections ?? [];
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const { id, cursor, preparing, unavailable, retryAfterMs } = current;
   useEffect(() => {
-    setCurrent(page);
-    setRetries(0);
-    setRetrying(false);
-    setCopyFailure(false);
-  }, [page]);
-  useEffect(() => {
-    if (!current.preparing || retries >= 3 || retrying || !readMembers) return;
+    const read = reader.current;
+    if (!preparing || unavailable || retries >= 3 || retrying || !read) return;
     const timer = setTimeout(
-      () => {
+      async () => {
+        if (!active.current) return;
         setRetrying(true);
-        void readMembers(current.id, current.cursor)
-          .then(
-            (result) => {
-              setCurrent((value) => ({ ...value, ...result }));
-            },
-            () => {
-              setCurrent((value) => ({
-                ...value,
-                preparing: false,
-                unavailable: true,
-              }));
-            },
-          )
-          .finally(() => {
+        try {
+          const result = await read(id, cursor);
+          if (active.current) setCurrent((value) => ({ ...value, ...result }));
+        } catch {
+          if (active.current) setCurrent((value) => ({ ...value, preparing: false, unavailable: true }));
+        } finally {
+          if (active.current) {
             setRetries((count) => count + 1);
             setRetrying(false);
-          });
+          }
+        }
       },
-      Math.max(1000, Math.min(30_000, current.retryAfterMs)),
+      Math.max(1000, Math.min(30_000, Number.isFinite(retryAfterMs) ? retryAfterMs : 1000)),
     );
     return () => clearTimeout(timer);
-  }, [current, readMembers, retries, retrying]);
+  }, [id, cursor, preparing, unavailable, retryAfterMs, retries, retrying]);
   const empty =
     current.builtinKind === 'everything'
       ? m.library_dynamic_empty_everything()
@@ -73,11 +77,12 @@ export function DynamicCollectionPage({
         ? m.library_dynamic_empty_liked()
         : m.library_collection_empty();
   async function copyLink(href: string) {
+    if (!active.current) return;
     setCopyFailure(false);
     try {
       await navigator.clipboard.writeText(`${location.origin}${href}`);
     } catch {
-      setCopyFailure(true);
+      if (active.current) setCopyFailure(true);
     }
   }
   const locale = getLocale();
@@ -149,8 +154,8 @@ export function DynamicCollectionPage({
               className="underline"
               type="button"
               onClick={() => {
+                if (!active.current || retrying) return;
                 setRetries(0);
-                setRetrying(false);
               }}
             >
               {m.library_collection_reload()}
