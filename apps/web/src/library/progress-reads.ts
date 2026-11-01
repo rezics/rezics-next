@@ -383,7 +383,7 @@ export function parseUnitBatch(
 }
 
 async function bearer(request: Request, env: Partial<SessionEnv>): Promise<string | null> {
-  await prepareSession(request, env);
+  if (await prepareSession(request, env)) return null;
   return viewerCredential(request);
 }
 
@@ -391,13 +391,17 @@ async function readList(client: KernelClient, subjectId: string, authorization: 
   const result = await client.progressSessions.get({
     query: { ...libraryListQuery(cursor), subjectId },
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   return readData<{ progressSessions: RawSession[]; next: string | null }>(result);
 }
 
 /** Resolve the one subject named by the page when no listed session embeds it. */
 async function readSelectedSubject(client: KernelClient, subjectId: string, authorization: string) {
-  const result = await client.subjects({ id: subjectId }).get({ headers: { authorization } });
+  const result = await client.subjects({ id: subjectId }).get({
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
   const status = callStatus(result);
   const problem = callBody(result.error);
   if (
@@ -427,6 +431,7 @@ async function readOne(client: KernelClient, sessionId: string, authorization: s
   const result = await client.progressSessions({ sessionId }).get({
     query,
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   return readLibraryResult(result).progressSession;
 }
@@ -435,6 +440,7 @@ async function readChanges(client: KernelClient, sessionId: string, authorizatio
   const result = await client.progressSessions({ sessionId }).changes.get({
     query: libraryListQuery(cursor),
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   return readData<{ changes: RawChange[]; next: string | null }>(result);
 }
@@ -443,6 +449,7 @@ async function readUnits(client: KernelClient, sessionId: string, authorization:
   const result = await client.progressSessions({ sessionId }).completedUnits.get({
     query: libraryListQuery(cursor),
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   return readData<{ completedUnits: string[]; next: string | null }>(result);
 }
