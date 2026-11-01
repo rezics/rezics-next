@@ -75,12 +75,10 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                   key={edition.editionId}
                   headingLevel={2}
                   title={editionSubjectName(edition.identity?.subject)}
-                  titleLang={edition.identity?.subject.label?.language}
-                  href={
-                    edition.state === 'published'
-                      ? localizeHref(`/editions/${encodeURIComponent(edition.editionId)}`)
-                      : undefined
-                  }
+                  {...(edition.identity?.subject.label ? { titleLang: edition.identity.subject.label.language } : {})}
+                  {...(edition.state === 'published'
+                    ? { href: localizeHref(`/editions/${encodeURIComponent(edition.editionId)}`) }
+                    : {})}
                   state={
                     <span className="rounded-md bg-muted px-2 py-1 text-sm font-medium">
                       {edition.state === 'draft'
