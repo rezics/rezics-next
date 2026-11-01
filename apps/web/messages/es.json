@@ -3862,6 +3862,8 @@
   "subject_cast": "Reparto",
   "subject_section_more": "Más: {label}",
   "subject_credit_part": "Parte correspondiente",
+  "zone_name_fallback": "Se muestra el nombre en el idioma del lector si está disponible; de lo contrario, se muestra el nombre principal.",
+  "zone_name_invalid": "Introduce un nombre en {language} de entre 1 y 80 caracteres, sin marcado ni caracteres de control.",
   "zone_name_primary": "Nombre principal",
   "zone_name_language": "Idioma del nombre principal",
   "zone_name_translations": "Traducciones opcionales",

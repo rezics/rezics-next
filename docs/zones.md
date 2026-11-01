@@ -168,7 +168,9 @@ configuration. When explicit primary metadata exists but neither the requested n
 readable, the display remains unnamed instead of selecting an unrelated translation. The owner editor explains the legacy order and stores an explicit primary when the owner
 edits a name or chooses its language. Switching either interface or primary language preserves entered
 names; selecting a missing primary presents a blank required field without adding an empty translation. Only nonprimary translations can be
-removed. Optional translations are progressively disclosed and must be authored, never synthesized.
+removed. Optional translations are progressively disclosed and must be authored, never synthesized. The form
+explains the primary-name fallback. Name validation identifies the affected input with localized correction
+text associated through `aria-describedby`; invalid translations open their optional section.
 Public output remains a closed partial label map, including the empty map after withholding, with optional
 primary-language metadata subject to the same field withholding. A configured
 route has no `view`; a subject has no `route`; account targets are not Zone targets. Bodies with extra keys,
@@ -306,7 +308,7 @@ read snapshot. Active private heads retain a false public floor for explicit rea
 root-withheld, missing and inactive-owner heads are absent. Owner identity never grants an action, and no
 source reads or source permissions are inferred from this metadata.
 
-The page edits all eight localized names, up to 16 sorted relative routes including the required empty
+The page edits one primary name with optional translations, up to 16 sorted relative routes including the required empty
 home route, and each document through the common registry-derived Puck composition editor. Page appearance
 uses the common root tokens. Navigation follows the sorted configured routes; there is no independent navigation
 layout or ordering store. The first route segment `subjects` remains reserved. Saved filters come from the actual
@@ -354,7 +356,7 @@ request after revocation. `Cache-Control: private, no-store` applies to all succ
 is a write precondition, never a reason to skip current Access checks.
 
 `ZonePublic` is also the shell in page results. Navigation is only the sorted configured `{route}` entries
-that remain visible. Its labels come from the Zone's eight safe labels, not mounted Collection titles.
+that remain visible. Its labels come from the Zone's authored safe name map, not mounted Collection titles.
 It has no owner ID, mounts, scope IDs, source names, private configured counts, total source counts,
 configuration, deletion evidence or history. Readable Collection summaries appear only through the separate
 Collection mount route, which omits unreadable entries entirely. Configuration response is authenticated
@@ -607,14 +609,14 @@ The next independent implementation changes exactly `services/kernel/src/zones/c
 `zonePageResponseSchema`, `zoneListSchema`, `publishZoneSchema`, `takedownSchema`,
 `releaseTakedownSchema`, `purgeSchema`, and their inferred types named as in the ABI above. Export
 `publicLabelsSchema` for the closed partial safe locale map, and reuse composition validators for the
-exact-eight input/configuration map. The common page schema includes optional `account` for its existing
+saved configuration name map described above; inert starters still require all eight names. The common page schema includes optional `account` for its existing
 account-target responses; the Zone schema excludes that property and permits only Zone page targets.
 Do not mutate the common response schema while deriving the Zone extension.
 
 A meaningful focused test is `bun run --cwd services/kernel check test/zones/header-contract.test.ts`:
 "Zone header schemas distinguish complete configuration from withheld public labels" validates a real
-book starter with all eight labels as create/configuration input, rejects a missing input locale and an
-unknown locale, accepts the public shell with `en` withheld, rejects unsafe public labels, and validates
+book starter with all eight labels as legacy create/configuration input, rejects a missing legacy input locale and an
+unknown locale, accepts an explicit primary name with optional translations, accepts the public shell with `en` withheld, rejects unsafe public labels, and validates
 a top-level common page plus Zone shell while rejecting nested `page`, `account` and private mount fields.
 It also rejects a target naming both route and subject. This can pass before any Zone API/table/query
 implementation exists. Shared `validateZoneStarter` plus resource-layer route validation still enforce

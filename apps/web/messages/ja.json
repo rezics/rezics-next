@@ -3862,6 +3862,8 @@
   "subject_cast": "キャスト",
   "subject_section_more": "{label}をもっと見る",
   "subject_credit_part": "対象の部分",
+  "zone_name_fallback": "読者の言語の名前がある場合はそれを表示し、ない場合は主名称を表示します。",
+  "zone_name_invalid": "{language}の名前を1〜80文字で入力してください。マークアップや制御文字は使用できません。",
   "zone_name_primary": "主名称",
   "zone_name_language": "主名称の言語",
   "zone_name_translations": "翻訳（任意）",

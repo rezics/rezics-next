@@ -3862,6 +3862,8 @@
   "subject_cast": "演出人員",
   "subject_section_more": "更多{label}",
   "subject_credit_part": "適用篇章",
+  "zone_name_fallback": "讀者會看到其語言的名稱；若未提供該語言的名稱，則顯示主要名稱。",
+  "zone_name_invalid": "請輸入 1 至 80 個字元的{language}名稱，不含標記或控制字元。",
   "zone_name_primary": "主要名稱",
   "zone_name_language": "主要名稱語言",
   "zone_name_translations": "翻譯（選填）",

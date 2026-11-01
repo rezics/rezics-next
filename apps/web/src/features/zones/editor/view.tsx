@@ -225,7 +225,10 @@ export function ZoneConfigurationEditor({
             labels={draft.configuration.labels}
             primaryLanguage={draft.configuration.primaryLanguage}
             disabled={editDisabled}
-            errors={state.violations.map((error) => `/configuration${error.pointer}`)}
+            errors={[
+              ...state.violations.map((error) => `/configuration${error.pointer}`),
+              ...(state.failure?.errors?.map((error) => error.pointer) ?? []),
+            ]}
             onChange={(names) => session.edit({ ...draft, configuration: { ...draft.configuration, ...names } })}
           />
           <section className="min-w-0 space-y-4" aria-labelledby="zone-pages-heading">

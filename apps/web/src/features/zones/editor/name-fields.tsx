@@ -1,8 +1,9 @@
 import { UI_LOCALES, zonePrimaryLanguage, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { useEffect, useRef } from 'react';
 import { m } from '../../../paraglide/messages.js';
 
 type Names = Pick<ZoneConfiguration, 'labels'> & { primaryLanguage: ZoneLanguage };
@@ -30,12 +31,26 @@ export function ZoneNameFields({
   const change = (next: ZoneConfiguration['labels'], language = primary) =>
     onChange({ labels: next, primaryLanguage: language });
   const invalid = (language: string) => errors?.includes(`/configuration/labels/${language}`) ?? false;
+  const translations = useRef<HTMLDetailsElement>(null);
+  const translationErrors = UI_LOCALES.filter((language) => language !== primary && invalid(language)).join(',');
+  useEffect(() => {
+    // An invalid translation must be reachable even when its optional section was closed.
+    if (translationErrors && translations.current) translations.current.open = true;
+  }, [translationErrors]);
+  const describedBy = (language: string) => `zone-name-help${invalid(language) ? ` zone-label-${language}-error` : ''}`;
+  const error = (language: string) =>
+    invalid(language) ? (
+      <FieldDescription id={`zone-label-${language}-error`} className="text-destructive">
+        {m.zone_name_invalid({ language: languageName(language) }, options)}
+      </FieldDescription>
+    ) : null;
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-4">
       <legend className="mb-3 text-lg font-semibold">{m.zones_create_names({}, options)}</legend>
       <p id="zone-name-help" className="text-sm text-muted-foreground">
         {m.zones_create_names_help({}, options)}
       </p>
+      <p className="text-sm text-muted-foreground">{m.zone_name_fallback({}, options)}</p>
       {!primaryLanguage ? <p className="text-sm text-muted-foreground">{m.zone_name_legacy({}, options)}</p> : null}
       <Field>
         <FieldLabel htmlFor="zone-primary-language">{m.zone_name_language({}, options)}</FieldLabel>
@@ -63,11 +78,12 @@ export function ZoneNameFields({
           value={labels[primary] ?? ''}
           required
           aria-invalid={invalid(primary)}
-          aria-describedby="zone-name-help"
+          aria-describedby={describedBy(primary)}
           onChange={(event) => change({ ...labels, [primary]: event.target.value })}
         />
+        {error(primary)}
       </Field>
-      <details className="min-w-0 space-y-4">
+      <details ref={translations} className="min-w-0 space-y-4">
         <summary className="cursor-pointer font-medium">{m.zone_name_translations({}, options)}</summary>
         <p className="text-sm text-muted-foreground">{m.zone_name_translation_help({}, options)}</p>
         {UI_LOCALES.filter((language) => language !== primary && Object.hasOwn(labels, language)).map((language) => (
@@ -78,12 +94,15 @@ export function ZoneNameFields({
               lang={language}
               value={labels[language] ?? ''}
               aria-invalid={invalid(language)}
-              aria-describedby="zone-name-help"
+              required
+              aria-describedby={describedBy(language)}
               onChange={(event) => change({ ...labels, [language]: event.target.value })}
             />
+            {error(language)}
             <Button
               type="button"
               variant="outline"
+              className="h-auto whitespace-normal text-start"
               onClick={() => {
                 const next = { ...labels };
                 delete next[language];

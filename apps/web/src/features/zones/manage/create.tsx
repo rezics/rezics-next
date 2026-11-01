@@ -137,6 +137,7 @@ export function CreateZone({ locale, session, onCreate, onNavigate }: CreateProp
               onChange={(names) => {
                 setLabels(names.labels);
                 setPrimaryLanguage(names.primaryLanguage);
+                setResult(null);
               }}
             />
           ) : null}

@@ -3862,6 +3862,8 @@
   "subject_cast": "Distribution",
   "subject_section_more": "Voir plus : {label}",
   "subject_credit_part": "Partie concernée",
+  "zone_name_fallback": "Le nom dans la langue du lecteur est affiché s’il existe ; sinon, le nom principal est utilisé.",
+  "zone_name_invalid": "Saisissez un nom en {language} de 1 à 80 caractères, sans balisage ni caractères de contrôle.",
   "zone_name_primary": "Nom principal",
   "zone_name_language": "Langue du nom principal",
   "zone_name_translations": "Traductions facultatives",

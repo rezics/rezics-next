@@ -3865,6 +3865,8 @@
   "subject_cast": "Cast",
   "subject_section_more": "More: {label}",
   "subject_credit_part": "Applies to part",
+  "zone_name_fallback": "Readers see a name in their language when available; otherwise they see the primary name.",
+  "zone_name_invalid": "Enter a name in {language} using 1–80 characters, without markup or control characters.",
   "zone_name_primary": "Primary name",
   "zone_name_language": "Primary name language",
   "zone_name_translations": "Optional translations",

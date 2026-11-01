@@ -3862,6 +3862,8 @@
   "subject_cast": "출연진",
   "subject_section_more": "{label} 더 보기",
   "subject_credit_part": "해당 부분",
+  "zone_name_fallback": "독자의 언어로 된 이름이 있으면 표시하고, 없으면 기본 이름을 표시합니다.",
+  "zone_name_invalid": "{language} 이름을 1~80자로 입력하세요. 마크업이나 제어 문자는 사용할 수 없습니다.",
   "zone_name_primary": "기본 이름",
   "zone_name_language": "기본 이름 언어",
   "zone_name_translations": "번역 (선택 사항)",

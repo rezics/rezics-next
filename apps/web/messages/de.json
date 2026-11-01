@@ -3862,6 +3862,8 @@
   "subject_cast": "Besetzung",
   "subject_section_more": "Mehr: {label}",
   "subject_credit_part": "Gilt für Teil",
+  "zone_name_fallback": "Lesende sehen den Namen in ihrer Sprache, falls vorhanden, andernfalls den Hauptnamen.",
+  "zone_name_invalid": "Gib einen Namen auf {language} mit 1–80 Zeichen ohne Markup oder Steuerzeichen ein.",
   "zone_name_primary": "Hauptname",
   "zone_name_language": "Sprache des Hauptnamens",
   "zone_name_translations": "Optionale Übersetzungen",
