@@ -812,3 +812,261 @@ test('simultaneous default report readers keep private viewers, credentials and 
   expect(received.map((request) => request.headers.get('authorization'))).toEqual(['Bearer first', 'Bearer second']);
   expect(received.every((request) => request.cache === 'no-store')).toBe(true);
 });
+
+// Authored UNRUN for controller integration; this mounts the default composition and uses its native transport.
+test('The default Reports queue dismisses only explicitly selected loaded pending reports through existing native commands, retaining per-item outcomes and exact uncertain retry without crossing viewer or page generations', async () => {
+  const { dirname } = await import('node:path');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const { act } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { createKernelClient } = await import('@rezics/client');
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { readModerationReportPage } = await import('../src/moderation/reports-read');
+  const { sendModerationReportAction } = await import('../src/moderation/actions');
+  const { m } = await import('../src/paraglide/messages.js');
+  const window = new Window({ url: 'https://site.test/en/boards/moderation' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const rows = [1, 2, 3, 4, 5].map((n) => ({
+    ...report(n, { kind: 'post', id: id(50) }, n === 5 ? 'dismissed' : null),
+    evidence: 'Private evidence from the loaded page',
+  }));
+  const recorded = createStoryRecordedKernelFetch();
+  const commands: { path: string; body: string; key: string | null; authorization: string | null }[] = [];
+  let mode: 'uncertain' | 'refused' | 'success' = 'uncertain';
+  let hold = true;
+  let release!: () => void;
+  let gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let active = 0,
+    maximumActive = 0,
+    refreshes = 0;
+  let refreshFails = true;
+  let lost = false;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const path = new URL(request.url).pathname;
+        if (request.method === 'GET' && path === `/v1/boards/${id(1)}/reports`)
+          return Response.json({ reports: rows, next: 'bounded-next' });
+        if (request.method !== 'POST') return recorded(request);
+        expect(path).toMatch(/^\/v1\/reports\/[0-9a-f-]+:dismiss$/u);
+        commands.push({
+          path,
+          body: await request.text(),
+          key: request.headers.get('idempotency-key'),
+          authorization: request.headers.get('authorization'),
+        });
+        active++;
+        maximumActive = Math.max(maximumActive, active);
+        try {
+          if (hold) {
+            hold = false;
+            await gate;
+          }
+          if (mode === 'refused')
+            return Response.json({ code: 'forbidden', detail: 'NEVER DISCLOSE' }, { status: 403 });
+          if (mode === 'uncertain' && path === `/v1/reports/${id(3)}:dismiss` && !lost) {
+            lost = true;
+            throw new TypeError('Failed to fetch');
+          }
+          return Response.json({});
+        } finally {
+          active--;
+        }
+      },
+      { preconnect() {} },
+    ),
+  });
+  const onAction = (input: Parameters<typeof sendModerationReportAction>[1]) =>
+    sendModerationReportAction(client, input, 'Bearer moderator');
+  let data = await readModerationReportPage(client, { boardId: id(1) }, 'Bearer moderator', id(900));
+  type Props = Parameters<typeof ModerationReportsView>[0];
+  let props: Props;
+  const render = async (patch: Partial<Props> = {}) => {
+    props = { ...props, ...patch };
+    await act(async () => root.render(createElement(ModerationReportsView, props)));
+  };
+  const onRefresh = async () => {
+    refreshes++;
+    if (refreshFails) throw new Error('Refresh failed');
+    data = await readModerationReportPage(client, { boardId: id(1) }, 'Bearer moderator', id(900));
+    props = { ...props, ...data };
+    root.render(createElement(ModerationReportsView, props));
+  };
+  props = { ...data, boardId: id(1), onAction, onRefresh, onNext() {} };
+  const button = (name: string) => {
+    const found = [...host.querySelectorAll('button')].find((element) => element.textContent === name);
+    expect(found, name).toBeDefined();
+    return found!;
+  };
+  const flush = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  const click = async (name: string) => {
+    await act(async () => button(name).click());
+    await flush();
+  };
+  const select = async (number: number) => {
+    const label = [...host.querySelectorAll('label')].find(
+      (element) => element.textContent === m.moderation_bulk_select_report({ number }),
+    );
+    expect(label).toBeDefined();
+    const checkbox = host.querySelector(`[id="${label!.htmlFor}"]`) as unknown as HTMLElement;
+    await act(async () => checkbox.click());
+  };
+  const review = async (count: number) => {
+    await click(m.moderation_bulk_review());
+    expect(host.textContent).toContain(m.moderation_bulk_confirmation({ count }));
+  };
+  try {
+    await render();
+    expect(host.querySelectorAll('[role="checkbox"]')).toHaveLength(4); // Resolved row has no selection.
+    await select(1);
+    await select(3);
+    await select(4);
+    await review(3);
+    await click(m.moderation_bulk_cancel());
+    expect(commands).toHaveLength(0);
+    await review(3);
+    const confirm = button(m.moderation_bulk_confirm({ count: 3 }));
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+    });
+    await flush();
+    expect(commands.map((command) => command.path)).toEqual([`/v1/reports/${id(1)}:dismiss`]);
+    const firstCard = host.querySelector('[role="article"]')!;
+    for (const element of firstCard.querySelectorAll('button')) {
+      if ([m.moderation_dismiss(), m.moderation_take_down()].includes(element.textContent!))
+        expect(element.disabled).toBe(true);
+    }
+    await act(async () => release());
+    await flush();
+    expect(commands.map((command) => command.path)).toEqual([
+      `/v1/reports/${id(1)}:dismiss`,
+      `/v1/reports/${id(3)}:dismiss`,
+    ]);
+    expect(host.textContent).toContain(m.moderation_bulk_dismissed());
+    expect(host.textContent).toContain(m.moderation_bulk_uncertain());
+    expect(host.textContent).toContain(m.moderation_bulk_unattempted());
+    expect(refreshes).toBe(0);
+    expect(commands[0]!.key).not.toBe(commands[1]!.key);
+    await click(m.moderation_bulk_retry());
+    expect(commands).toHaveLength(3);
+    expect(commands[2]).toEqual(commands[1]); // Exact payload, original key and authority, no batch replay.
+    expect(commands[2]!.body).toBe('{}');
+    expect(commands[2]!.authorization).toBe('Bearer moderator');
+    expect(maximumActive).toBe(1);
+    expect(refreshes).toBe(1);
+    expect(host.textContent).toContain(m.moderation_bulk_stale());
+    expect(host.textContent!.split(m.moderation_bulk_dismissed())).toHaveLength(3);
+    expect(host.textContent).not.toContain('Private evidence from the loaded page');
+    expect(host.textContent).not.toContain('NEVER DISCLOSE');
+
+    // A definitive native refusal stops immediately and requires a real read before a new key/intent.
+    mode = 'refused';
+    hold = false;
+    await render({ reports: [...rows] });
+    await click(m.moderation_bulk_select_loaded());
+    await review(4);
+    await click(m.moderation_bulk_confirm({ count: 4 }));
+    expect(commands).toHaveLength(4);
+    expect(host.textContent).toContain(m.moderation_bulk_forbidden());
+    expect(host.querySelectorAll('[role="checkbox"]:not([disabled])')).toHaveLength(0);
+    expect(
+      [...host.querySelectorAll('button')].some((element) => element.textContent === m.moderation_bulk_retry()),
+    ).toBe(false);
+    const refusedKey = commands[3]!.key;
+    mode = 'success';
+    refreshFails = false;
+    await click(m.moderation_bulk_refresh());
+    await select(1);
+    await review(1);
+    await click(m.moderation_bulk_confirm({ count: 1 }));
+    expect(commands).toHaveLength(5);
+    expect(commands[4]!.key).not.toBe(refusedKey);
+
+    // Every current composition identity retires a pending batch; its late success cannot schedule row two.
+    for (const change of ['viewer', 'scope', 'selectors', 'page', 'loading', 'next', 'tab'] as const) {
+      await render({
+        ...data,
+        reports: [...rows],
+        boardId: id(1),
+        viewerId: id(900),
+        tab: 'reports',
+        state: 'ready',
+        selection: { status: 'all', targetKind: 'all', order: 'newest' },
+      });
+      hold = true;
+      gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await click(m.moderation_bulk_select_loaded());
+      await review(4);
+      const before = commands.length;
+      await click(m.moderation_bulk_confirm({ count: 4 }));
+      expect(commands).toHaveLength(before + 1);
+      if (change === 'viewer') await render({ viewerId: id(901), reports: [] });
+      if (change === 'scope') await render({ postId: id(99), reports: [] });
+      if (change === 'selectors')
+        await render({ selection: { status: 'pending', targetKind: 'post', order: 'oldest' }, reports: [] });
+      if (change === 'page') await render({ reports: [], next: 'new-page' });
+      if (change === 'loading') await render({ state: 'loading' });
+      if (change === 'next') await click(m.threads_next_page());
+      if (change === 'tab') await render({ tab: 'appeals' });
+      await act(async () => release());
+      await flush();
+      expect(commands).toHaveLength(before + 1);
+      expect(host.textContent).not.toContain(m.moderation_bulk_dismissed());
+      expect(host.textContent).not.toContain(m.moderation_bulk_results());
+      expect(host.textContent).not.toContain(m.moderation_bulk_uncertain());
+      if (change === 'tab') expect(host.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
+    }
+    await render({
+      state: 'ready',
+      tab: 'reports',
+      reports: Array.from({ length: 25 }, (_, index) => ({ ...rows[0]!, id: id(100 + index) })),
+    });
+    expect(host.querySelectorAll('[role="checkbox"]')).toHaveLength(20);
+    await click(m.moderation_bulk_select_loaded());
+    expect(host.textContent).toContain(m.moderation_bulk_selected({ count: 20 }));
+    expect(
+      commands.some(
+        (command) =>
+          command.path === `/v1/reports/${id(2)}:dismiss` ||
+          command.path === `/v1/reports/${id(4)}:dismiss` ||
+          command.path === `/v1/reports/${id(5)}:dismiss`,
+      ),
+    ).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    await window.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}, 30_000);

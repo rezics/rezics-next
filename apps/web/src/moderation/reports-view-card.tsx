@@ -11,6 +11,7 @@ import { reportDecisionReason } from './actions';
 import { createReportReviewAction, type ReportReviewResult } from './reports-view-action';
 import type { Report, ReportTargetValue, ResolvedReportTarget } from './reports-read';
 import type { ReportQueueAction } from '../stories/patterns/board-report-queue/board-report-queue';
+import type { ReportsBulkAction } from './reports-bulk-action';
 import { moderationTargetContent } from './target-content';
 
 type Confirmation = { action: 'dismiss' } | { action: 'take-down'; reason: string };
@@ -42,7 +43,11 @@ export function ReportReviewCard({
   onAction,
   onTakenDown,
   onRefresh,
+  intentOwner,
+  bulkBlocked = false,
 }: {
+  intentOwner?: ReportsBulkAction;
+  bulkBlocked?: boolean;
   report: Report;
   target: ResolvedReportTarget | undefined;
   revision: ReportTargetValue | null;
@@ -72,7 +77,8 @@ export function ReportReviewCard({
           : m.moderation_queue_open();
 
   async function act(action: 'dismiss' | 'take-down') {
-    if (pending || confirmed || report.outcome || failure || (takenDown && action === 'take-down')) return;
+    if (bulkBlocked || pending || confirmed || report.outcome || failure || (takenDown && action === 'take-down'))
+      return;
     setMessage('');
     let confirmation: Confirmation;
     try {
@@ -91,6 +97,7 @@ export function ReportReviewCard({
             targetId: report.target.id,
             reason: confirmation.reason,
           };
+    if (intentOwner && !intentOwner.claimIndividual(report.id)) return;
     setPending(true);
     try {
       finish(await reviewAction.submit(intent, onAction), confirmation);
@@ -113,7 +120,7 @@ export function ReportReviewCard({
 
   async function retry() {
     const input = reviewAction.input;
-    if (pending || !input) return;
+    if (bulkBlocked || pending || !input) return;
     setPending(true);
     setMessage('');
     try {
@@ -133,6 +140,7 @@ export function ReportReviewCard({
     try {
       await reviewAction.refresh(onRefresh);
       setFailure(null);
+      intentOwner?.releaseIndividual(report.id);
       setMessage(m.moderation_queue_refreshed());
     } catch {
       setMessage(m.moderation_queue_error());
@@ -141,7 +149,7 @@ export function ReportReviewCard({
     }
   }
 
-  const blocked = pending || !!failure;
+  const blocked = bulkBlocked || pending || !!failure;
   const failureMessage =
     failure === 'conflict'
       ? m.moderation_queue_conflict()
@@ -229,7 +237,10 @@ export function ReportReviewCard({
             </div>
           ) : (
             <Collapsible>
-              <CollapsibleTrigger render={<Button variant="outline" className="min-h-11" />} disabled={pending}>
+              <CollapsibleTrigger
+                render={<Button variant="outline" className="min-h-11" />}
+                disabled={bulkBlocked || pending}
+              >
                 {m.moderation_queue_review()}
               </CollapsibleTrigger>
               <CollapsibleContent keepMounted>
@@ -250,7 +261,7 @@ export function ReportReviewCard({
                       maxLength={1024}
                       rows={3}
                       value={reason}
-                      disabled={pending || failure === 'uncertain'}
+                      disabled={bulkBlocked || pending || failure === 'uncertain'}
                       aria-describedby={`${id}-hint`}
                       onChange={(event) => {
                         setReason(event.target.value);
@@ -292,7 +303,7 @@ export function ReportReviewCard({
                           type="button"
                           variant="outline"
                           className="min-h-11"
-                          disabled={pending}
+                          disabled={bulkBlocked || pending}
                           onClick={() => void retry()}
                         >
                           {m.moderation_queue_retry_action()}

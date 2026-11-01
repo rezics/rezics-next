@@ -328,3 +328,53 @@ export const ReadDenied: Story = { args: { reports: [], targets: [], revisions: 
 export const StaleSelection: Story = {
   args: { reports: [], targets: [], revisions: [], state: 'stale', next: null, onRestart: fn() },
 };
+
+const bulkReports = [...moderationQueueFixture.reports, { ...postReport, id: '0192f3a0-6c1e-7b2a-9d4e-000000000003' }];
+async function confirmBulk(canvasElement: HTMLElement) {
+  const view = within(canvasElement);
+  await userEvent.click(view.getByRole('button', { name: m.moderation_bulk_select_loaded() }));
+  await userEvent.click(view.getByRole('button', { name: m.moderation_bulk_review() }));
+  await userEvent.click(view.getByRole('button', { name: m.moderation_bulk_confirm({ count: 3 }) }));
+  return view;
+}
+export const BulkSelected: Story = {
+  args: { ...moderationQueueFixture, reports: bulkReports },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await userEvent.click(view.getByRole('checkbox', { name: m.moderation_bulk_select_report({ number: 1 }) }));
+    await userEvent.click(view.getByRole('button', { name: m.moderation_bulk_review() }));
+    await expect(view.getByRole('button', { name: m.moderation_bulk_confirm({ count: 1 }) })).toBeVisible();
+    await expect(args.onAction).not.toHaveBeenCalled();
+  },
+};
+export const BulkPartial: Story = {
+  args: {
+    ...moderationQueueFixture,
+    reports: bulkReports,
+    onAction: fn<ReportQueueAction>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: false, state: 'forbidden' }),
+  },
+  play: async ({ canvasElement, args }) => {
+    const view = await confirmBulk(canvasElement);
+    await expect(await view.findByText(m.moderation_bulk_forbidden(), { exact: false })).toBeVisible();
+    await expect(view.getByText(m.moderation_bulk_dismissed(), { exact: false })).toBeVisible();
+    await expect(view.getByText(m.moderation_bulk_unattempted(), { exact: false })).toBeVisible();
+    await expect(args.onAction).toHaveBeenCalledTimes(2);
+  },
+};
+export const BulkUncertain: Story = {
+  args: {
+    ...moderationQueueFixture,
+    reports: bulkReports,
+    onAction: fn<ReportQueueAction>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockRejectedValue(new TypeError('Failed to fetch')),
+  },
+  play: async ({ canvasElement, args }) => {
+    const view = await confirmBulk(canvasElement);
+    await expect(await view.findByRole('button', { name: m.moderation_bulk_retry() })).toBeVisible();
+    await expect(view.getByText(m.moderation_bulk_unattempted(), { exact: false })).toBeVisible();
+    await expect(args.onAction).toHaveBeenCalledTimes(2);
+  },
+};

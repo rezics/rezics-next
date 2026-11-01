@@ -160,6 +160,20 @@ export function ModerationReportsView({
         </Button>
       </fieldset>
       <BoardReportQueue
+        bulkEnabled={tab === 'reports'}
+        queueIdentity={JSON.stringify([
+          boardId,
+          threadId,
+          postId,
+          tab,
+          selection.status,
+          selection.targetKind,
+          selection.order,
+          viewerId,
+          session.state,
+          session.subject,
+          session.csrfToken,
+        ])}
         reports={reports}
         targets={targets}
         revisions={revisions}

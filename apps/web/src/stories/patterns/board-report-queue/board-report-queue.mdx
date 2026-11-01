@@ -25,6 +25,37 @@ outcome: the page does not claim that asynchronous report resolution has finishe
 bodies for that target across the returned page after a confirmed takedown. Dismissal preserves current content.
 Resolved read rows show the native disposition and resolution time. Appeal statements remain in the separate tab.
 
+## Dismiss selected loaded reports
+
+Labelled checkboxes select only pending Reports on this rendered native page, up to 20. **Select loaded pending
+reports** has that same bound; it never selects a continuation or all matching reports. Resolved reports and Appeals
+have no selection. Individual takedown, dismissal and evidence review remain available for unselected reports.
+Selected, submitted and uncertain items cannot also acquire an individual command; an individual intent likewise
+cannot enter the bulk selection.
+
+**Review dismissal** names the selected count and explains that dismissal closes each report without taking down
+content. Review receives keyboard focus. Cancel returns focus to the review trigger without submitting. Confirmation
+runs existing authorized native dismiss commands in rendered order, one at a time, each with its own immutable intent
+key. Results identify each selected row by its position and distinguish confirmed dismissal, refusal, failure,
+uncertainty and unattempted rows. There is no atomic result and no automatic continuation after a problem.
+
+Only explicit retry of the uncertain row reuses its exact original command and key. It never resumes later rows.
+Normal refresh follows confirmed effects when no command remains uncertain; while a result is uncertain, refresh
+waits for its explicit retry so the original intent remains available. A definitive refusal requires a fresh native
+read before a new decision. A failed refresh retains confirmed dismissal receipts and announces stale queue data;
+it cannot turn command success into failure. Receipts contain row positions and public outcomes, never evidence.
+
+Scope, selectors, tab, viewer, current session authority, page-data replacement, loading and navigation retire the
+selection and results. Refresh retires command scheduling; only completion receipts can remain while that same
+page's refresh fails. A late command may settle its private intent but cannot publish into a retired generation or
+schedule another report. Parent session isolation remains authoritative. Nothing is saved in browser storage. The
+cost is at most 20 sequential point commands per confirmed selection and the existing normal refresh, with no scans,
+new endpoints, background work or per-card discovery reads.
+
+<Canvas of={Queue.BulkSelected} />
+<Canvas of={Queue.BulkPartial} />
+<Canvas of={Queue.BulkUncertain} />
+
 An empty page with a continuation still offers Next page. It does not imply a total count or an exhausted queue.
 Loading and error states show no report details. The page uses its known board route for Back to board; it does not
 invent a community name or fetch one merely for the heading.
@@ -45,7 +76,7 @@ invent a community name or fetch one merely for the heading.
 Use the same IDs with the phone390 and desktop1280 viewport globals, light/dark theme and locale globals. Pattern
 IDs use `patterns-moderation-queue--` with suffixes `open`, `resolved`, `target-unavailable`, `revision-differs`,
 `native-denied`, `uncertain-retry`, `retry-confirmed`, `confirmed-takedown`, `confirmed-dismissal`, `empty-with-next`,
-`loading`, `error`, `empty`, `pending-submission`, `stale-conflict` and `reason-validation`.
+`bulk-selected`, `bulk-partial`, `bulk-uncertain`, `loading`, `error`, `empty`, `pending-submission`, `stale-conflict` and `reason-validation`.
 
 Page IDs use `pages-community-moderation-reports--` with suffixes `open-reports`, `resolved-reports`,
 `target-unavailable`, `revision-differs`, `native-denied`, `uncertain-retry`, `empty-with-next`, `loading`, `error`
