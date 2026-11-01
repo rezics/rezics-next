@@ -2,6 +2,7 @@ import { useSession } from '../../session/query';
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
 import { boardPageHead } from '../../threads/thread-head';
 import { rememberThreadSlug, threadTitle } from '../../threads/thread-href';
 import { boardPageQuery } from '../../threads/thread-queries';
@@ -9,6 +10,13 @@ import { boardSortFromSearch } from '../../threads/board-sort';
 import { BoardCommunity, BoardCommunityMenu, BoardCommunityStatus } from '../../threads/board-community';
 import { BoardParticipation, BoardStartThread } from '../../threads/board-community-actions';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
+import {
+  BoardPageCallerHost,
+  boardPageResultIsCurrent,
+  createBoardPageCaller,
+  useBoardPageErrorLifecycle,
+  type BoardPageLoadResult,
+} from '../../threads/board-page-caller';
 
 function boardSearch(search: Record<string, unknown>): { cursor?: string; sort?: 'hot' | 'new' } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
@@ -27,43 +35,106 @@ export const Route = createFileRoute('/boards/$id')({
     const parsed = boardSearch(search);
     return { cursor: parsed.cursor, sort: parsed.sort };
   },
-  loader: async ({ params, deps, context }) => {
-    const page = await context.queryClient.ensureQueryData(
-      boardPageQuery(params.id, deps.cursor, deps.sort, context.credentialMode),
+  loader: async ({ params, deps, abortController, context }) => {
+    const caller = createBoardPageCaller(
+      context.queryClient,
+      {
+        id: params.id,
+        ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+        ...(deps.sort === undefined ? {} : { sort: deps.sort }),
+        locale: getLocale(),
+        credentialMode: context.credentialMode,
+      },
+      abortController.signal,
     );
-    for (const thread of page.threads.threads) rememberThreadSlug(thread.id, threadTitle(thread));
-    return { ...page, indexable: deps.cursor === undefined && page.threads.threads.length > 0 };
+    try {
+      const page = await context.queryClient.ensureQueryData(
+        caller.queryOptions(boardPageQuery(params.id, deps.cursor, deps.sort, context.credentialMode)),
+      );
+      caller.assertLoadCurrent();
+      for (const thread of page.threads.threads) {
+        caller.assertLoadCurrent();
+        rememberThreadSlug(thread.id, threadTitle(thread));
+      }
+      caller.assertLoadCurrent();
+      return caller.resultFor(page, deps.cursor === undefined && page.threads.threads.length > 0);
+    } catch (error) {
+      caller.captureError(error);
+      throw error;
+    }
   },
-  head: ({ loaderData }) => (loaderData ? boardPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
+  head: ({ loaderData, params, deps, context }) => {
+    const input = {
+      id: params.id,
+      ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+      ...(deps.sort === undefined ? {} : { sort: deps.sort }),
+      locale: getLocale(),
+      credentialMode: context.credentialMode,
+    };
+    return loaderData && boardPageResultIsCurrent(context.queryClient, loaderData, input)
+      ? boardPageHead(loaderData)
+      : { meta: [{ title: m.threads_untitled() }] };
+  },
   pendingComponent: () => <BoardCommunityStatus state="loading" />,
   errorComponent: BoardPageError,
   component: BoardPage,
 });
 
 function BoardPage() {
-  const page = Route.useLoaderData();
+  const page = Route.useLoaderData() as BoardPageLoadResult;
   const { state: session } = useSession();
   const location = useLocation();
+  const router = useRouter();
   const id = Route.useParams().id;
-  const sort = boardSortFromSearch(Route.useSearch().sort);
+  const search = Route.useSearch();
+  const sort = boardSortFromSearch(search.sort);
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
   return (
-    <BoardCommunity
-      page={page}
-      sort={sort ?? 'active'}
-      participation={<BoardParticipation realm={page.realm} community={page.community} returnTo={returnTo} />}
-      start={<BoardStartThread board={page.board} realm={page.realm} returnTo={returnTo} />}
-      overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
-    />
+    <BoardPageCallerHost
+      result={page}
+      input={{
+        id,
+        ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+        ...(sort === undefined ? {} : { sort }),
+        locale: getLocale(),
+        credentialMode: router.options.context.credentialMode,
+      }}
+    >
+      {(currentPage) => (
+        <BoardCommunity
+          page={currentPage}
+          sort={sort ?? 'active'}
+          participation={
+            <BoardParticipation realm={currentPage.realm} community={currentPage.community} returnTo={returnTo} />
+          }
+          start={<BoardStartThread board={currentPage.board} realm={currentPage.realm} returnTo={returnTo} />}
+          overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
+        />
+      )}
+    </BoardPageCallerHost>
   );
 }
 
 function BoardPageError({ error }: { error: unknown }) {
   const router = useRouter();
+  const id = Route.useParams().id;
+  const search = Route.useSearch();
+  const sort = boardSortFromSearch(search.sort);
+  const lifecycle = useBoardPageErrorLifecycle(error, {
+    id,
+    ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+    ...(sort === undefined ? {} : { sort }),
+    locale: getLocale(),
+    credentialMode: router.options.context.credentialMode,
+  });
   return (
     <BoardCommunityStatus
-      state={isPlatformClosedError(error) ? 'closed' : 'error'}
-      onRetry={() => void router.invalidate()}
+      state={lifecycle.caller && !lifecycle.current ? 'loading' : isPlatformClosedError(error) ? 'closed' : 'error'}
+      onRetry={
+        lifecycle.caller && lifecycle.current
+          ? () => lifecycle.retry(() => void router.invalidate())
+          : undefined
+      }
     />
   );
 }
