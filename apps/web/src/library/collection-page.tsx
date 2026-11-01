@@ -28,9 +28,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { csrfHeaders } from '../threads/composer';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
-import { operationIsAdmitted, useOperation } from '../kernel/exposure';
+import { useSession } from '../session/query';
+import {
+  useCollectionCurrentAdmission,
+  type CollectionAdmission,
+  type CollectionOperation,
+} from './collection-current-admission';
 import { AccountRef } from './account-ref';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
@@ -259,40 +262,29 @@ type CollectionPageProps = {
 };
 
 export function CollectionPage(props: CollectionPageProps) {
-  const session = useSession();
-  const admitted = useOperation('collection.get');
-  const client = useQueryClient();
-  const viewer = session.state === 'signed-in' && session.subject ? session.subject : null;
-  const ready = viewer !== null && Boolean(session.csrfToken) && admitted;
+  useSession();
   const { page } = props;
-  const identity = JSON.stringify([
+  const address = JSON.stringify([
+    getLocale(),
     collectionRequestVariant({ id: page.id, cursor: props.cursor, search: props.search }),
     props.queryKey,
-    session.state,
-    viewer,
-    Boolean(session.csrfToken),
-    admitted,
-    page.visibility,
-    page.viewerActions?.state,
-    page.viewerActions?.state === 'ready'
-      ? page.viewerActions.actions.map(({ action, operations }) => [action, [...operations].sort()]).sort()
-      : null,
   ]);
-  function current() {
-    // Consult the actual session cache too: a transport may resume before React commits its next observation.
-    const actual = client.getQueryData(sessionQuery.queryKey);
+  const admission = useCollectionCurrentAdmission(
+    address,
+    JSON.stringify([page.visibility, page.viewerActions]),
+    props.queryKey,
+  );
+  function current(operation: CollectionOperation = 'collection.get') {
+    const action = operation === 'collection.delete' ? 'collection:delete' : 'collection:update';
     return (
-      ready &&
-      actual?.state === 'signed-in' &&
-      actual.subject === viewer &&
-      Boolean(actual.csrfToken) &&
-      operationIsAdmitted('collection.get', client.getQueryData(exposureQuery.queryKey)) &&
+      admission.current('collection.get') &&
+      admission.current(operation) &&
+      (operation === 'collection.get' || admitsCollectionOperation(page.viewerActions, action, operation)) &&
       (props.isCurrent?.() ?? true)
     );
   }
-  // Retire draft, receipt and callback state in the same render that observes replacement authority.
-  // A nonempty CSRF rotation or ordinary refetch keeps the originating intent and idempotency keys.
-  return <CollectionPageLifetime key={identity} {...props} current={current} />;
+  // Permission renewals retire callbacks; the owning viewer/address alone owns drafts and uncertain keys.
+  return <CollectionPageLifetime key={admission.owner} {...props} current={current} admission={admission} />;
 }
 
 function CollectionPageLifetime({
@@ -304,7 +296,8 @@ function CollectionPageLifetime({
   layout = 'list',
   search,
   current,
-}: CollectionPageProps & { current: () => boolean }) {
+  admission,
+}: CollectionPageProps & { current: (operation?: CollectionOperation) => boolean; admission: CollectionAdmission }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useSession();
@@ -335,6 +328,7 @@ function CollectionPageLifetime({
   const [destinationId, setDestinationId] = useState('');
   const [destination, setDestination] = useState<CollectionDestination | null>(null);
   const [destinationLoading, setDestinationLoading] = useState(false);
+  const destinationVersion = useRef(0);
   const [transfer, setTransfer] = useState<{ destination: CollectionDestination; memberIds: string[] } | null>(null);
   const [bulkUnavailable, setBulkUnavailable] = useState(false);
   const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
@@ -350,10 +344,44 @@ function CollectionPageLifetime({
   const [failure, setFailure] = useState('');
   const [writing, setPending] = useState(false);
   const [boundary, setBoundary] = useState<BoundaryMove | null>(null);
+  const captureSave = () => ({
+    page,
+    members,
+    editorMembers,
+    transfer,
+    batchRemovalIds,
+    title,
+    description,
+    visibility,
+    kind,
+    storedKind,
+    coverMediaId,
+  });
+  const saveIntent = useRef<ReturnType<typeof captureSave> | null>(null);
+  const draftFrozen = saveIntent.current !== null;
   const boundaryRef = useRef<BoundaryMove | null>(null);
   const mounted = useRef(false);
-  function isCurrent() {
-    return mounted.current && current();
+  function isCurrent(operation: CollectionOperation = 'collection.get') {
+    return mounted.current && current(operation);
+  }
+  function headers(operation: CollectionOperation) {
+    if (!isCurrent(operation)) throw new Error('Collection authority retired');
+    return { 'X-CSRF-Token': admission.csrf(operation)! };
+  }
+  const inFlight = useRef<object | null>(null);
+  const deleteInFlight = useRef<object | null>(null);
+  function startRequest() {
+    if (inFlight.current) return null;
+    const request = {};
+    inFlight.current = request;
+    setPending(true);
+    return request;
+  }
+  function finishRequest(request: object) {
+    if (inFlight.current !== request) return;
+    inFlight.current = null;
+    // Physical progress settles even when permission is temporarily unavailable.
+    if (admission.retained()) setPending(false);
   }
   const pending = writing || (boundary !== null && boundary.phase !== 'done');
   const [deletion, setDeletion] = useState<{ collectionId: string; revision: number; idempotencyKey: string } | null>(
@@ -399,6 +427,8 @@ function CollectionPageLifetime({
   }, []);
   useEffect(() => {
     let current = true;
+    const version = destinationVersion.current;
+    const destinationIsCurrent = () => current && version === destinationVersion.current && isCurrent();
     setDestination(null);
     if (!editing || !destinationId || !isCurrent()) {
       setDestinationLoading(false);
@@ -408,14 +438,14 @@ function CollectionPageLifetime({
     void readCollectionDestination({ data: destinationId })
       .then(
         (value) => {
-          if (current && isCurrent()) setDestination(value?.id === destinationId ? value : null);
+          if (destinationIsCurrent()) setDestination(value?.id === destinationId ? value : null);
         },
         () => {
-          if (current && isCurrent()) setDestination(null);
+          if (destinationIsCurrent()) setDestination(null);
         },
       )
       .finally(() => {
-        if (current && isCurrent()) setDestinationLoading(false);
+        if (current && version === destinationVersion.current && admission.retained()) setDestinationLoading(false);
       });
     return () => {
       current = false;
@@ -441,18 +471,20 @@ function CollectionPageLifetime({
     const refreshed = await refreshPage();
     if (!isCurrent()) return;
     queryClient.setQueryData(queryKey, refreshed);
+    if (!isCurrent()) return;
     await router.invalidate();
   }
 
   async function reloadFromControl() {
     if (!isCurrent()) return;
-    setPending(true);
+    const request = startRequest();
+    if (!request) return;
     try {
       await reloadCollection();
     } catch {
       if (isCurrent()) setFailure(m.error_message());
     } finally {
-      if (isCurrent()) setPending(false);
+      finishRequest(request);
     }
   }
 
@@ -488,21 +520,36 @@ function CollectionPageLifetime({
       if (boundaryIsCurrent(value)) recordBoundary({ ...value, reading: false });
     } finally {
       // A page/actor change fences the result, including an in-flight read, without abandoning its intent.
-      if (isCurrent() && boundaryRef.current?.intent === value.intent && boundaryRef.current.reading)
+      if (admission.retained() && boundaryRef.current?.intent === value.intent && boundaryRef.current.reading)
         recordBoundary({ ...boundaryRef.current, reading: false });
     }
   }
 
   async function dispatchBoundary(value: BoundaryMove) {
-    if (!boundaryIsCurrent(value) || boundaryRef.current !== value || !boundaryAdmitted) return;
+    if (
+      !boundaryIsCurrent(value) ||
+      !isCurrent('collection_member.move') ||
+      boundaryRef.current !== value ||
+      !boundaryAdmitted
+    )
+      return;
     recordBoundary({ ...value, phase: 'pending' });
     let result: CollectionWriteResult;
     try {
-      result = await moveCollectionMember({ data: value.intent.data, headers: csrfHeaders() });
+      result = await moveCollectionMember({ data: value.intent.data, headers: headers('collection_member.move') });
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
-    if (!isCurrent() || boundaryRef.current?.intent !== value.intent) return;
+    if (!isCurrent('collection_member.move') || boundaryRef.current?.intent !== value.intent) {
+      // Release only this request's physical pending phase. Its old response cannot publish a result.
+      if (
+        admission.retained() &&
+        boundaryRef.current?.intent === value.intent &&
+        boundaryRef.current.phase === 'pending'
+      )
+        recordBoundary({ ...value, phase: 'unknown', reading: false });
+      return;
+    }
     if (result.ok) {
       const confirmed: BoundaryMove = { ...value, phase: 'confirmed', reading: false };
       recordBoundary(confirmed);
@@ -524,6 +571,7 @@ function CollectionPageLifetime({
       conflict ||
       !editing ||
       !boundaryAdmitted ||
+      !isCurrent('collection_member.move') ||
       draftChanged ||
       session.state !== 'signed-in' ||
       !session.subject ||
@@ -554,8 +602,9 @@ function CollectionPageLifetime({
   }
 
   async function beginEditing() {
-    if (!isCurrent() || pending || !owner) return;
-    setPending(true);
+    if (!isCurrent('collection.update') || pending || !owner) return;
+    const request = startRequest();
+    if (!request) return;
     setFailure('');
     try {
       const editable = readEditorPage ? await readEditorPage() : page;
@@ -585,12 +634,13 @@ function CollectionPageLifetime({
     } catch {
       if (isCurrent()) setFailure(m.error_message());
     } finally {
-      if (isCurrent()) setPending(false);
+      finishRequest(request);
     }
   }
 
   function cancelEditing() {
-    if (!isCurrent() || pending) return;
+    if (!isCurrent() || pending || (draftFrozen && !conflict)) return;
+    saveIntent.current = null;
     setBatchRemovalIds(new Set());
     setTransfer(null);
     setDestinationId('');
@@ -610,10 +660,24 @@ function CollectionPageLifetime({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isCurrent() || !hydrated || pending || conflict || !owner) return;
-    setPending(true);
+    if (!isCurrent('collection.update') || !hydrated || pending || conflict || !owner) return;
+    const request = startRequest();
+    if (!request) return;
     setFailure('');
     setConflict(false);
+    const {
+      page,
+      members,
+      editorMembers,
+      transfer,
+      batchRemovalIds,
+      title,
+      description,
+      visibility,
+      kind,
+      storedKind,
+      coverMediaId,
+    } = (saveIntent.current ??= captureSave());
     let committed = 0;
     let currentRevision: number | undefined = page.revision;
 
@@ -662,10 +726,11 @@ function CollectionPageLifetime({
             ...(coverMediaId !== (page.coverMediaId ?? null) ? { coverMediaId } : {}),
             idempotencyKey: keyFor([page.id, page.revision, title, description, visibility, kind, coverMediaId]),
           },
-          headers: csrfHeaders(),
+          headers: headers('collection.update'),
         });
         if (!isCurrent()) return;
         if (!result.ok) {
+          if (result.reason !== 'unavailable') saveIntent.current = null;
           if (result.reason === 'conflict') setConflict(true);
           else {
             setFailure(writeMessage(result));
@@ -690,9 +755,9 @@ function CollectionPageLifetime({
         };
         const result = await transferCollectionMembers({
           data: { ...data, idempotencyKey: keyFor(data) },
-          headers: csrfHeaders(),
+          headers: headers('collection_member.transfer'),
         });
-        if (!isCurrent()) return;
+        if (!isCurrent('collection_member.transfer')) return;
         if (!result.ok) {
           await fail(result);
           return;
@@ -712,9 +777,9 @@ function CollectionPageLifetime({
         };
         const result = await batchRemoveCollectionMembers({
           data: { ...data, idempotencyKey: keyFor(data) },
-          headers: csrfHeaders(),
+          headers: headers('collection_member.batch_remove'),
         });
-        if (!isCurrent()) return;
+        if (!isCurrent('collection_member.batch_remove')) return;
         if (!result.ok) {
           await fail(result);
           return;
@@ -737,9 +802,9 @@ function CollectionPageLifetime({
             if (currentRevision === undefined) return { ok: false, reason: 'unavailable' };
             const result = await removeCollectionMember({
               data: { ...common, memberId: operation.memberId, revision: currentRevision },
-              headers: csrfHeaders(),
+              headers: headers('collection_member.delete'),
             });
-            if (!isCurrent()) return result;
+            if (!isCurrent('collection_member.delete')) return { ok: false, reason: 'unavailable' };
             if (result.ok) {
               currentRevision = result.revision;
               const episode = result.undo;
@@ -752,15 +817,19 @@ function CollectionPageLifetime({
             }
             return result;
           }
-          if (operation.kind === 'move')
-            return moveCollectionMember({
-              data: { ...common, memberId: operation.memberId, after: operation.after },
-              headers: csrfHeaders(),
-            });
-          return updateMemberNote({
-            data: { ...common, memberId: operation.memberId, note: operation.note },
-            headers: csrfHeaders(),
-          });
+          const result =
+            operation.kind === 'move'
+              ? await moveCollectionMember({
+                  data: { ...common, memberId: operation.memberId, after: operation.after },
+                  headers: headers('collection_member.move'),
+                })
+              : await updateMemberNote({
+                  data: { ...common, memberId: operation.memberId, note: operation.note },
+                  headers: headers('collection_member.update'),
+                });
+          return isCurrent(operation.kind === 'move' ? 'collection_member.move' : 'collection_member.update')
+            ? result
+            : { ok: false, reason: 'unavailable' };
         },
       );
       if (!isCurrent()) return;
@@ -775,6 +844,7 @@ function CollectionPageLifetime({
       }
       await reloadCollection();
       if (!isCurrent()) return;
+      saveIntent.current = null;
       setEditing(false);
       setConflict(false);
       setSelectedIds(new Set());
@@ -786,19 +856,20 @@ function CollectionPageLifetime({
         setFailure(m.library_collection_save_partial({ count: committed }));
       } else setFailure(m.error_message());
     } finally {
-      if (isCurrent()) setPending(false);
+      finishRequest(request);
     }
   }
 
   async function undoRemoval(episode: CollectionMemberUndo & { key: string }) {
-    if (!isCurrent() || pending || !owner) return;
-    setPending(true);
+    if (!isCurrent('collection_member.restore') || pending || !owner) return;
+    const request = startRequest();
+    if (!request) return;
     setFailure('');
     try {
       const { key, ...deletion } = episode;
       const result = await restoreCollectionMember({
         data: { ...deletion, idempotencyKey: key },
-        headers: csrfHeaders(),
+        headers: headers('collection_member.restore'),
       });
       if (!isCurrent()) return;
       if (result.ok || (!result.ok && result.reason === 'expired'))
@@ -808,16 +879,26 @@ function CollectionPageLifetime({
     } catch {
       if (isCurrent()) setFailure(m.error_message());
     } finally {
-      if (isCurrent()) setPending(false);
+      finishRequest(request);
     }
   }
 
   async function removeCollection() {
-    if (!isCurrent() || !deletion || deleting || pending || !deleteAdmitted) return;
+    if (
+      !isCurrent('collection.delete') ||
+      !deletion ||
+      deleting ||
+      pending ||
+      deleteInFlight.current ||
+      !deleteAdmitted
+    )
+      return;
+    const request = {};
+    deleteInFlight.current = request;
     setDeleting(true);
     setDeleteFailure('');
     try {
-      const result = await deleteCollection({ data: deletion, headers: csrfHeaders() });
+      const result = await deleteCollection({ data: deletion, headers: headers('collection.delete') });
       if (!isCurrent()) return;
       if (!result.ok) {
         setDeleteFailure(result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result));
@@ -827,20 +908,24 @@ function CollectionPageLifetime({
     } catch {
       if (isCurrent()) setDeleteFailure(m.error_message());
     } finally {
-      if (isCurrent()) setDeleting(false);
+      if (deleteInFlight.current === request) {
+        deleteInFlight.current = null;
+        if (admission.retained()) setDeleting(false);
+      }
     }
   }
 
   function setMemberOrder(memberId: string, after: string | null) {
-    if (!isCurrent()) return;
+    if (!isCurrent('collection_member.move') || inFlight.current || draftFrozen) return;
     setMembers((current) => reorderCollectionMembers(current, memberId, after, page.firstPage));
   }
 
   async function copyLink(href: string) {
+    if (!mounted.current || !admission.observed()) return;
     try {
       await navigator.clipboard.writeText(`${location.origin}${href}`);
     } catch {
-      if (mounted.current) setFailure(m.error_message());
+      if (mounted.current && admission.observed()) setFailure(m.error_message());
     }
   }
 
@@ -922,7 +1007,9 @@ function CollectionPageLifetime({
               <Button
                 type="button"
                 disabled={!hydrated || pending || editing || adding}
-                onClick={() => setAdding(true)}
+                onClick={() => {
+                  if (isCurrent('collection_member.create')) setAdding(true);
+                }}
               >
                 {m.library_collection_add_items()}
               </Button>
@@ -955,7 +1042,7 @@ function CollectionPageLifetime({
                         label: m.library_collection_delete(),
                         disabled: !hydrated || pending || editing || adding,
                         onSelect: () => {
-                          if (!isCurrent()) return;
+                          if (!isCurrent('collection.delete')) return;
                           setDeleteFailure('');
                           setDeletion({
                             collectionId: page.id,
@@ -1089,10 +1176,11 @@ function CollectionPageLifetime({
           </p>
         ) : null}
 
-        {adding && addAdmitted ? (
+        {adding ? (
           <CollectionAddMembers
             key={page.id}
             collectionId={page.id}
+            isCurrent={() => isCurrent('collection_member.create')}
             onAdded={reloadCollection}
             onClose={() => {
               if (isCurrent()) setAdding(false);
@@ -1111,9 +1199,12 @@ function CollectionPageLifetime({
                 <label className="block max-w-3xl">
                   {m.library_collection_title()}
                   <input
-                    disabled={pending}
+                    disabled={pending || draftFrozen}
                     className={fieldClass}
-                    onChange={(event) => setTitle(event.target.value)}
+                    onChange={(event) => {
+                      if (isCurrent('collection.update') && !inFlight.current && !draftFrozen)
+                        setTitle(event.target.value);
+                    }}
                     required
                     maxLength={512}
                     value={title}
@@ -1122,10 +1213,13 @@ function CollectionPageLifetime({
                 <label className="block max-w-3xl">
                   {m.library_collection_description()}
                   <textarea
-                    disabled={pending}
+                    disabled={pending || draftFrozen}
                     maxLength={20_000}
                     className={fieldClass}
-                    onChange={(event) => setDescription(event.target.value)}
+                    onChange={(event) => {
+                      if (isCurrent('collection.update') && !inFlight.current && !draftFrozen)
+                        setDescription(event.target.value);
+                    }}
                     rows={4}
                     value={description}
                   />
@@ -1133,13 +1227,23 @@ function CollectionPageLifetime({
                 <CollectionPresentationFields
                   types={page.presentationTypes}
                   kind={kind}
-                  onKindChange={setKind}
+                  onKindChange={(value) => {
+                    if (isCurrent('collection.update') && !inFlight.current && !draftFrozen) setKind(value);
+                  }}
                   coverMediaId={coverMediaId}
-                  onCoverChange={setCoverMediaId}
+                  onCoverChange={(value) => {
+                    if (isCurrent('collection.update') && !inFlight.current && !draftFrozen) setCoverMediaId(value);
+                  }}
                   members={page.members}
-                  disabled={pending}
+                  disabled={pending || draftFrozen}
                 />
-                <VisibilityField onChange={setVisibility} value={visibility} disabled={pending} />
+                <VisibilityField
+                  onChange={(value) => {
+                    if (isCurrent('collection.update') && !inFlight.current && !draftFrozen) setVisibility(value);
+                  }}
+                  value={visibility}
+                  disabled={pending || draftFrozen}
+                />
                 <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
               </div>
             </details>
@@ -1204,8 +1308,9 @@ function CollectionPageLifetime({
               <Button
                 type="button"
                 variant="outline"
-                disabled={pending || conflict || bulkUnavailable || selectedIds.size === 0}
+                disabled={pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0}
                 onClick={() => {
+                  if (!isCurrent('collection_member.delete') || inFlight.current || draftFrozen) return;
                   setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
                   setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
                   setSelectedIds(new Set());
@@ -1218,8 +1323,12 @@ function CollectionPageLifetime({
                 <select
                   className={fieldClass}
                   value={destinationId}
-                  disabled={pending || conflict || transfer !== null}
-                  onChange={(event) => setDestinationId(event.target.value)}
+                  disabled={pending || draftFrozen || conflict || transfer !== null}
+                  onChange={(event) => {
+                    if (!isCurrent('collection_member.move') || inFlight.current || draftFrozen) return;
+                    destinationVersion.current++;
+                    setDestinationId(event.target.value);
+                  }}
                 >
                   <option value="">{m.library_collection_choose_destination()}</option>
                   {destinations.map((collection) => (
@@ -1243,7 +1352,8 @@ function CollectionPageLifetime({
                   transfer !== null
                 }
                 onClick={() => {
-                  if (!destination) return;
+                  if (!isCurrent('collection_member.transfer') || inFlight.current || draftFrozen || !destination)
+                    return;
                   const memberIds = members.filter((member) => selectedIds.has(member.id)).map((member) => member.id);
                   setTransfer({ destination, memberIds });
                   setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
@@ -1282,7 +1392,12 @@ function CollectionPageLifetime({
           {page.memberState === 'unavailable' ? (
             <div className="space-y-3">
               <p role="alert">{m.library_dynamic_unavailable()}</p>
-              <Button type="button" variant="outline" disabled={pending} onClick={() => void reloadFromControl()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || draftFrozen}
+                onClick={() => void reloadFromControl()}
+              >
                 {m.library_collection_reload()}
               </Button>
             </div>
@@ -1314,26 +1429,29 @@ function CollectionPageLifetime({
               listPresentations={page.listPresentations}
               editing={editing && owner}
               firstPage={page.firstPage}
-              busy={pending}
+              busy={pending || draftFrozen}
               selectedIds={selectedIds}
-              onSelectionChange={(memberId, selected) =>
+              onSelectionChange={(memberId, selected) => {
+                if (!isCurrent() || inFlight.current || draftFrozen) return;
                 setSelectedIds((current) => {
                   const next = new Set(current);
                   if (selected && next.size < 100 && members.some((member) => member.id === memberId))
                     next.add(memberId);
                   else next.delete(memberId);
                   return next;
-                })
-              }
+                });
+              }}
               onMove={setMemberOrder}
               onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
               boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
-              onNoteChange={(memberId, note) =>
+              onNoteChange={(memberId, note) => {
+                if (!isCurrent('collection_member.update') || inFlight.current || draftFrozen) return;
                 setMembers((current) =>
                   current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
-                )
-              }
+                );
+              }}
               onRemove={(memberId) => {
+                if (!isCurrent('collection_member.delete') || inFlight.current || draftFrozen) return;
                 setMembers((current) => current.filter((member) => member.id !== memberId));
                 setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
               }}
@@ -1358,7 +1476,7 @@ function CollectionPageLifetime({
             <Button type="submit" form="collection-edit-form" disabled={!hydrated || pending || conflict}>
               {writing ? m.library_collection_save_pending() : m.library_collection_save()}
             </Button>
-            <Button type="button" variant="outline" disabled={pending} onClick={cancelEditing}>
+            <Button type="button" variant="outline" disabled={pending || draftFrozen} onClick={cancelEditing}>
               {m.library_collection_cancel()}
             </Button>
             {memberDraftChanged || transfer ? (

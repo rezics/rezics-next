@@ -2,21 +2,11 @@ import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { QueryClientContext } from '@tanstack/react-query';
-import {
-  useContext,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type FormEvent,
-} from 'react';
-import { operationIsAdmitted, useOperation } from '../kernel/exposure';
+import { useId, useRef, useState, type FormEvent } from 'react';
+import { useCollectionCurrentAdmission } from './collection-current-admission';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { useSession } from '../session/query';
 import { searchContentSubjects } from '../threads/content-subject-search';
 import { addCollectionMember } from './collection-edit';
 
@@ -24,89 +14,25 @@ type CollectionAddMembersProps = {
   collectionId: string;
   onAdded: () => Promise<void>;
   onClose: () => void;
+  /** Rejection from the enclosing page's native action/read lifetime. */
+  isCurrent?: () => boolean;
 };
 
 /** Each explicit add creates an occurrence, including when the subject is already a member. */
 export function CollectionAddMembers(props: CollectionAddMembersProps) {
-  const session = useSession();
-  const admitted = useOperation('collection_member.create');
-  const client = useContext(QueryClientContext);
-  const observation = useMemo(() => {
-    let snapshot = { subject: null as string | null, generation: 0 };
-    function read() {
-      const actual = client?.getQueryState<ReturnType<typeof useSession>>(sessionQuery.queryKey);
-      const exposure = client?.getQueryState<readonly string[]>(exposureQuery.queryKey);
-      const viewer = actual?.data;
-      const subject =
-        actual?.status === 'success' &&
-        viewer?.state === 'signed-in' &&
-        viewer.subject &&
-        viewer.csrfToken &&
-        exposure?.status === 'success' &&
-        operationIsAdmitted('collection_member.create', exposure.data)
-          ? viewer.subject
-          : null;
-      if (subject !== snapshot.subject) snapshot = { subject, generation: snapshot.generation + 1 };
-      return snapshot;
-    }
-    return {
-      read,
-      subscribe: (notify: () => void) => {
-        // QueryCache notifications are synchronous, including away/back transitions batched before a React commit.
-        const unsubscribe = client?.getQueryCache().subscribe(() => {
-          read();
-          notify();
-        });
-        read();
-        return () => unsubscribe?.();
-      },
-    };
-  }, [client]);
-  const snapshot = useSyncExternalStore(observation.subscribe, observation.read, observation.read);
-  const ready = Boolean(
-    snapshot.subject &&
-    session.state === 'signed-in' &&
-    session.subject === snapshot.subject &&
-    session.csrfToken &&
-    admitted &&
-    props.collectionId,
+  useSession();
+  const admission = useCollectionCurrentAdmission(JSON.stringify([props.collectionId]));
+  const currentCsrf = () => ((props.isCurrent?.() ?? true) ? admission.csrf('collection_member.create') : null);
+  const ready = !!props.collectionId && !!currentCsrf();
+  return (
+    <CollectionAddMembersForm
+      key={admission.owner}
+      {...props}
+      ready={ready}
+      retained={admission.retained}
+      currentCsrf={currentCsrf}
+    />
   );
-  const signature = JSON.stringify([snapshot.generation, props.collectionId, ready]);
-  const boundary = useRef({ signature, observation, generation: 0, mounted: false, retired: false });
-  if (boundary.current.signature !== signature || boundary.current.observation !== observation) {
-    boundary.current.retired = true;
-    boundary.current = {
-      signature,
-      observation,
-      generation: boundary.current.generation + 1,
-      mounted: false,
-      retired: false,
-    };
-  }
-  const origin = boundary.current;
-  useLayoutEffect(() => {
-    origin.mounted = true;
-    return () => {
-      // A dispatched write can still commit; only its UI completion is retired.
-      origin.mounted = false;
-    };
-  }, [origin]);
-  function currentCsrf() {
-    if (observation.read() !== snapshot) origin.retired = true;
-    if (!ready || !origin.mounted || origin.retired) return null;
-    const actual = client?.getQueryData(sessionQuery.queryKey);
-    return actual?.state === 'signed-in' && actual.subject === snapshot.subject && actual.csrfToken
-      ? actual.csrfToken
-      : null;
-  }
-  function close() {
-    if (!currentCsrf()) return;
-    origin.retired = true;
-    props.onClose();
-  }
-  if (!ready) return null;
-  // A nonempty token rotation preserves the occurrence; viewer/admission/address replacement retires it.
-  return <CollectionAddMembersForm key={origin.generation} {...props} currentCsrf={currentCsrf} onClose={close} />;
 }
 
 type AddReceipt = {
@@ -119,22 +45,32 @@ function CollectionAddMembersForm({
   collectionId,
   onAdded,
   onClose,
-  currentCsrf,
-}: CollectionAddMembersProps & { currentCsrf: () => string | null }) {
+  currentCsrf: admittedCsrf,
+  retained,
+  ready,
+}: CollectionAddMembersProps & { currentCsrf: () => string | null; retained: () => boolean; ready: boolean }) {
+  const closed = useRef(false);
+  const currentCsrf = () => (closed.current ? null : admittedCsrf());
+  function close() {
+    if (!currentCsrf()) return;
+    closed.current = true;
+    onClose();
+  }
   const noteId = useId();
   const [selected, setSelected] = useState<EntityPickerSubject[]>([]);
   const [note, setNote] = useState('');
   const [pending, setPending] = useState(false);
-  const [accepted, setAccepted] = useState(false);
   const [failure, setFailure] = useState('');
-  const locked = useRef(false);
+  const locked = useRef<object | null>(null);
   const receipt = useRef<AddReceipt | null>(null);
+  const accepted = receipt.current?.accepted ?? false;
   const frozen = Boolean(receipt.current?.uncertain || accepted);
 
   async function add(event: FormEvent) {
     event.preventDefault();
     if (!currentCsrf() || locked.current || !selected[0]) return;
-    locked.current = true;
+    const request = {};
+    locked.current = request;
     setPending(true);
     setFailure('');
     try {
@@ -151,6 +87,13 @@ function CollectionAddMembersForm({
           data: captured.data,
           headers: { 'X-CSRF-Token': csrfToken },
         });
+        if (!retained()) return;
+        // A dispatched native success remains acknowledged during a permission gap. Publishing,
+        // reload and close still require the originating permission episode below.
+        if (result.ok) {
+          captured.accepted = true;
+          captured.uncertain = false;
+        }
         if (!currentCsrf()) return;
         if (!result.ok) {
           // Only a known refusal permits correcting this command. An unknown outcome keeps its exact input/key.
@@ -166,24 +109,24 @@ function CollectionAddMembersForm({
         }
         captured.accepted = true;
         captured.uncertain = false;
-        setAccepted(true);
       }
       if (!currentCsrf()) return;
       await onAdded();
       if (!currentCsrf()) return;
-      onClose();
+      close();
     } catch {
       if (currentCsrf()) setFailure(m.error_message());
     } finally {
-      if (currentCsrf()) {
-        locked.current = false;
-        setPending(false);
+      if (locked.current === request) {
+        locked.current = null;
+        if (retained()) setPending(false);
       }
     }
   }
 
   return (
     <form
+      hidden={!ready}
       className="min-w-0 space-y-3 rounded-2xl border border-border bg-card p-4"
       onSubmit={(event) => void add(event)}
       aria-label={m.library_collection_add_items()}
@@ -199,7 +142,7 @@ function CollectionAddMembersForm({
           receipt.current = null;
           setSelected(value);
         }}
-        disabled={pending || frozen}
+        disabled={!ready || pending || frozen}
       />
       {selected.length ? (
         <details>
@@ -210,7 +153,7 @@ function CollectionAddMembersForm({
               id={noteId}
               value={note}
               maxLength={20_000}
-              disabled={pending || frozen}
+              disabled={!ready || pending || frozen}
               onChange={(event) => {
                 if (!currentCsrf() || locked.current || receipt.current?.accepted || receipt.current?.uncertain) return;
                 receipt.current = null;
@@ -222,7 +165,7 @@ function CollectionAddMembersForm({
       ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={pending || selected.length === 0} aria-busy={pending}>
+        <Button type="submit" disabled={!ready || pending || selected.length === 0} aria-busy={pending}>
           {accepted ? m.library_collection_reload() : m.library_collection_add_selected()}
         </Button>
         <Button
@@ -230,7 +173,7 @@ function CollectionAddMembersForm({
           variant="outline"
           disabled={pending}
           onClick={() => {
-            if (currentCsrf() && !locked.current) onClose();
+            if (currentCsrf() && !locked.current) close();
           }}
         >
           {m.library_collection_cancel()}
