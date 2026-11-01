@@ -90,8 +90,7 @@ export function SpaceSetupPage({
     csrfToken.length > 0;
   const targetSpaceId = spaceId ?? (initial.kind === 'ready' ? (initial.space?.id ?? null) : null);
   const targetRealmId = initial.kind === 'ready' ? (initial.realm?.id ?? null) : null;
-  const targetMismatch =
-    !!spaceId && initial.kind === 'ready' && initial.space?.id !== spaceId;
+  const targetMismatch = !!spaceId && initial.kind === 'ready' && initial.space?.id !== spaceId;
   const initialIdentity = JSON.stringify(initial);
   const boundary = useMemo(
     () => ({}),
@@ -205,9 +204,7 @@ export function SpaceSetupPage({
           (data.step === 'space' && targetSpaceId !== null)
         )
           return denied;
-        const result = csrfToken
-          ? await changeSpaceSetup({ data, headers: { 'X-CSRF-Token': csrfToken } })
-          : denied;
+        const result = csrfToken ? await changeSpaceSetup({ data, headers: { 'X-CSRF-Token': csrfToken } }) : denied;
         if (!caller.owns(ticket)) return unavailable;
         if (result.kind === 'failure') return result;
         if (data.step === 'space') {
@@ -254,12 +251,7 @@ export function SpaceSetupPage({
   }, [initial, hydrated]);
   let formInitial: SetupSnapshot | SetupFailure;
   if (!hydrated) formInitial = initial;
-  else if (
-    ready &&
-    initialSessionMatches &&
-    !targetMismatch &&
-    spaceSetupInitialSnapshotAvailable(initial)
-  )
+  else if (ready && initialSessionMatches && !targetMismatch && spaceSetupInitialSnapshotAvailable(initial))
     formInitial = initial;
   else formInitial = targetMismatch ? denied : unavailable;
 
@@ -299,7 +291,17 @@ export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
     session.csrfToken.length > 0;
   const boundary = useMemo(
     () => ({}),
-    [queryClient, sessionSource, sessionRevision, dataUpdateCount, dataUpdatedAt, session.state, session.subject, session.csrfToken, spaceId],
+    [
+      queryClient,
+      sessionSource,
+      sessionRevision,
+      dataUpdateCount,
+      dataUpdatedAt,
+      session.state,
+      session.subject,
+      session.csrfToken,
+      spaceId,
+    ],
   );
   const activeBoundary = useRef(boundary);
   activeBoundary.current = boundary;

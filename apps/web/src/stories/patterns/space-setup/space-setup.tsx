@@ -147,16 +147,13 @@ function Choice({
   const mounted = useRef(false);
   const intent = useRef({ transport, kind, text });
   intent.current = { transport, kind, text };
-  useEffect(
-    () => {
-      mounted.current = true;
-      return () => {
-        mounted.current = false;
-        generation.current++;
-      };
-    },
-    [],
-  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      generation.current++;
+    };
+  }, []);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<SetupFailure | null>(null);
   const id = useId();
@@ -251,13 +248,14 @@ type SpaceSetupFormProps = {
   boardChoices?: BoardChoiceSource;
 };
 
-export function SpaceSetupForm({ initial, transport, boardChoices = unavailableBoardChoiceSource }: SpaceSetupFormProps) {
+export function SpaceSetupForm({
+  initial,
+  transport,
+  boardChoices = unavailableBoardChoiceSource,
+}: SpaceSetupFormProps) {
   const inherited = useContext(SpaceSetupCallerLifetimeContext);
   const initialIdentity = JSON.stringify(initial);
-  const standalone = useMemo(
-    () => standaloneSpaceSetupLifetime(),
-    [initialIdentity, transport, boardChoices],
-  );
+  const standalone = useMemo(() => standaloneSpaceSetupLifetime(), [initialIdentity, transport, boardChoices]);
   const caller = inherited ?? standalone;
   return (
     <SpaceSetupFormVisit
@@ -385,14 +383,7 @@ function SpaceSetupFormVisit({
     }
   }
   async function submit(draft: SetupDraftCommand) {
-    if (
-      inFlight.current ||
-      !loaded ||
-      (needsRefresh && !pending) ||
-      !caller.binding.ready ||
-      !caller.current()
-    )
-      return;
+    if (inFlight.current || !loaded || (needsRefresh && !pending) || !caller.binding.ready || !caller.current()) return;
     const ticket = caller.ticket();
     const request = ++operation.current;
     inFlight.current = true;
@@ -586,10 +577,7 @@ function SpaceSetupFormVisit({
             <div className="mb-6 space-y-3 rounded-xl border border-border bg-muted p-4" role="alert">
               <p className="text-sm leading-relaxed">{problemText(problem)}</p>
               {pending ? (
-                <Button
-                  disabled={busy || !callerCurrent || !caller.binding.ready}
-                  onClick={() => void submit(pending)}
-                >
+                <Button disabled={busy || !callerCurrent || !caller.binding.ready} onClick={() => void submit(pending)}>
                   {m.space_setup_retry()}
                 </Button>
               ) : (

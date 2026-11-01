@@ -101,7 +101,10 @@ mock.module('@tanstack/react-start', () => ({
     return chain;
   },
 }));
-mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => new Request('https://site.test/action') }));
+mock.module('@tanstack/react-start/server', () => ({
+  ...start,
+  getRequest: () => new Request('https://site.test/action'),
+}));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const { createRoot } = await import('react-dom/client');
@@ -110,10 +113,8 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = a
 const { sessionQuery } = await import('../src/session/query');
 const { SpaceSetupEntry, SpaceSetupPage } = await import('../src/community/space-setup-page');
 const { SpaceSetupForm } = await import('../src/stories/patterns/space-setup/space-setup');
-const {
-  bindSpaceSetupInitialSnapshot,
-  captureSpaceSetupInitialAdmission,
-} = await import('../src/community/space-setup-lifetime');
+const { bindSpaceSetupInitialSnapshot, captureSpaceSetupInitialAdmission } =
+  await import('../src/community/space-setup-lifetime');
 const { m } = await import('../src/paraglide/messages.js');
 const id = (number: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(number).padStart(12, '0')}`;
 const subject = id(1);
@@ -215,8 +216,7 @@ async function mount(
   searches.length = 0;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session);
-  if (bindSnapshot)
-    bindSpaceSetupInitialSnapshot(bindSnapshot, captureSpaceSetupInitialAdmission(client));
+  if (bindSnapshot) bindSpaceSetupInitialSnapshot(bindSnapshot, captureSpaceSetupInitialAdmission(client));
   if (sessionAtRender !== undefined) client.setQueryData(sessionQuery.queryKey, sessionAtRender);
   const route = createRootRoute({ component: () => content });
   router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/realms/new'] }) });
@@ -232,14 +232,19 @@ async function setSession(session: unknown) {
 }
 async function edit(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   await act(async () => {
-    const prototype = element instanceof window.HTMLInputElement ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+    const prototype =
+      element instanceof window.HTMLInputElement
+        ? window.HTMLInputElement.prototype
+        : window.HTMLTextAreaElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value);
     element.dispatchEvent(new window.Event('input', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 function button(label: string) {
-  const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => candidate.textContent?.trim() === label);
+  const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
   expect(node).toBeDefined();
   return node!;
 }
@@ -333,7 +338,14 @@ test('healthy rerender keeps a draft; uncertain retry reuses the frozen command 
   expect(commands[1]!.headers).toEqual(first.headers);
   await settle(commands[1]!.pending, {
     kind: 'space',
-    space: { id: spaceId, head: id(8), title: 'Returned Space identity', summary: 'Saved despite refresh', address: null, realmId: null },
+    space: {
+      id: spaceId,
+      head: id(8),
+      title: 'Returned Space identity',
+      summary: 'Saved despite refresh',
+      address: null,
+      realmId: null,
+    },
   });
   expect(reads).toHaveLength(1);
   expect(reads[0]!.data).toEqual({ spaceId });

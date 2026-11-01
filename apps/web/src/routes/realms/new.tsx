@@ -6,10 +6,7 @@ import { pageHeadContext } from '../../shell/head-context';
 import { ClosedErrorPage } from '../../shell/closed';
 import { m } from '../../paraglide/messages.js';
 import { readSpaceSetup } from '../../community/space-actions';
-import {
-  bindSpaceSetupInitialSnapshot,
-  captureSpaceSetupInitialAdmission,
-} from '../../community/space-setup-lifetime';
+import { bindSpaceSetupInitialSnapshot, captureSpaceSetupInitialAdmission } from '../../community/space-setup-lifetime';
 import { setupReadSchema } from '../../community/space-setup';
 import { SpaceSetupPage } from '../../community/space-setup-page';
 
@@ -30,11 +27,7 @@ export const Route = createFileRoute('/realms/new')({
     const { initial, admission } = Route.useLoaderData();
     bindSpaceSetupInitialSnapshot(initial, admission);
     return (
-      <SpaceSetupPage
-        key={Route.useSearch().spaceId ?? 'new'}
-        initial={initial}
-        spaceId={Route.useSearch().spaceId}
-      />
+      <SpaceSetupPage key={Route.useSearch().spaceId ?? 'new'} initial={initial} spaceId={Route.useSearch().spaceId} />
     );
   },
 });

@@ -6,7 +6,12 @@ import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { m } from '../paraglide/messages.js';
 import type { SetupChoice } from './space-setup';
-import { BoardChoicePager, type BoardChoicePage, type BoardChoiceScope, type BoardChoiceSource } from './setup-board-picker';
+import {
+  BoardChoicePager,
+  type BoardChoicePage,
+  type BoardChoiceScope,
+  type BoardChoiceSource,
+} from './setup-board-picker';
 
 export function SetupBoardPicker({
   kind,

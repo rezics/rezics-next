@@ -241,16 +241,19 @@ test('StrictMode-style Context picker reconnect can run a fresh current read wit
 test('Context exact, current, and page callbacks expire when query or reference text leaves and returns', async () => {
   let searches = 0;
   let resolutions = 0;
-  const picker = createSetupContextPicker({
-    search: async () => {
-      searches++;
-      return { contexts: [{ id: contextId, label: 'Current search result' }], next: 'opaque-next' };
+  const picker = createSetupContextPicker(
+    {
+      search: async () => {
+        searches++;
+        return { contexts: [{ id: contextId, label: 'Current search result' }], next: 'opaque-next' };
+      },
+      resolve: async (id) => {
+        resolutions++;
+        return { id, label: 'Current exact result' };
+      },
     },
-    resolve: async (id) => {
-      resolutions++;
-      return { id, label: 'Current exact result' };
-    },
-  }, contextId);
+    contextId,
+  );
 
   picker.search('same');
   await new Promise((resolve) => setTimeout(resolve, 270));
