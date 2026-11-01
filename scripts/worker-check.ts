@@ -29,11 +29,13 @@ import {
   ownedLocalCommand,
   parseRunLifetimeFailure,
   parseRemotePhysicalRunReceipt,
+  readHosts,
   RUN_LIFETIME_FAILURE_MARKER,
   type RemotePhysicalRunReceipt,
 } from './remote-check.ts';
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { hostsLocation } from './stack-run.ts';
+import { classifyCheck, isCheckHostRun, performanceHosts, splitEnvironmentCommand } from './check-placement.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
@@ -1134,308 +1136,8 @@ function checkLogContents(file: string): string {
   }
 }
 
-type EnvironmentCommand = { prefix: string[]; command: string[] };
-
-/** Parse the ordinary `env` prefix forms without interpreting shell text. */
-function splitEnvironmentCommand(argv: readonly string[]): EnvironmentCommand | undefined {
-  const parseOne = (input: readonly string[]): EnvironmentCommand | undefined => {
-    const executable = input[0] ?? '';
-    const prefix = [executable];
-    let index = 1;
-    while (index < input.length) {
-      const argument = input[index]!;
-      if (argument === '--') {
-        prefix.push(argument);
-        index += 1;
-        break;
-      }
-      if (argument === '-u' || argument === '--unset') {
-        const name = input[index + 1];
-        if (!name || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return undefined;
-        prefix.push(argument, name);
-        index += 2;
-        continue;
-      }
-      if (argument.startsWith('--unset=')) {
-        const name = argument.slice('--unset='.length);
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return undefined;
-        prefix.push(argument);
-        index += 1;
-        continue;
-      }
-      if (argument === '-i' || argument === '--ignore-environment') {
-        prefix.push(argument);
-        index += 1;
-        continue;
-      }
-      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(argument)) {
-        prefix.push(argument);
-        index += 1;
-        continue;
-      }
-      if (argument.startsWith('-')) return undefined;
-      break;
-    }
-    if (index >= input.length) return undefined;
-    return { prefix, command: input.slice(index) };
-  };
-
-  let command = [...argv];
-  const prefix: string[] = [];
-  while (command[0]?.split(/[\\/]/).at(-1) === 'env') {
-    const parsed = parseOne(command);
-    if (!parsed) return undefined;
-    prefix.push(...parsed.prefix);
-    command = parsed.command;
-    if (prefix.includes('--')) break;
-  }
-  return { prefix, command };
-}
-
-function pathSegments(path: string): string[] {
-  return resolve(path)
-    .split(/[\\/]+/)
-    .filter(Boolean);
-}
-
-function hasPathPair(path: string, parent: string, child: string): boolean {
-  const segments = pathSegments(path);
-  return segments.some((segment, index) => segment === parent && segments[index + 1] === child);
-}
-
-/** Paths whose runner owns a database, browser, or other stack admission. */
-function isNativeStackPath(path: string): boolean {
-  return (
-    hasPathPair(path, 'services', 'kernel') ||
-    hasPathPair(path, 'services', 'auth') ||
-    hasPathPair(path, 'apps', 'auth') ||
-    hasPathPair(path, 'apps', 'web')
-  );
-}
-
-/** The compiler database is needed only by SQL-mapped Kernel and Auth service projects. */
-function isCompilerDatabasePath(path: string): boolean {
-  return hasPathPair(path, 'services', 'kernel') || hasPathPair(path, 'services', 'auth');
-}
-
-function isNativeScript(path: string): boolean {
-  const segments = pathSegments(path);
-  const entries = [
-    ['scripts', 'typecheck.ts'],
-    ['scripts', 'typecheck.test.ts'],
-    ['scripts', 'remote-check.ts'],
-    ['scripts', 'remote-check.test.ts'],
-  ];
-  return entries.some((entry) =>
-    segments.some((segment, index) => segment === entry[0] && segments[index + 1] === entry[1]),
-  );
-}
-
-function bunExecutable(value: string): boolean {
-  return value === 'bun' || value === process.execPath || value.split(/[\\/]/).at(-1) === 'bun';
-}
-
-function executableName(value: string): string {
-  return value.split(/[\\/]/).at(-1) ?? value;
-}
-
-function projectNeedsCompilerDatabase(args: readonly string[], cwd: string): boolean {
-  const projects: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index]!;
-    const project =
-      argument === '-p' || argument === '--project'
-        ? args[index + 1]
-        : argument.startsWith('--project=')
-          ? argument.slice('--project='.length)
-          : undefined;
-    if (argument === '-p' || argument === '--project') {
-      if (!project || project.startsWith('-')) return true;
-      projects.push(project);
-      index += 1;
-    } else if (argument.startsWith('--project=')) {
-      if (!project) return true;
-      projects.push(project);
-    }
-  }
-  if (projects.length > 1) return true;
-  return isCompilerDatabasePath(resolve(cwd, projects[0] ?? '.'));
-}
-
-function pureCompilerOrTool(command: string, args: readonly string[], cwd: string): boolean {
-  const name = executableName(command);
-  if (name === 'oxlint' || name === 'oxfmt') return true;
-  if (name === 'tsc') return args.includes('--noEmit') && !projectNeedsCompilerDatabase(args, cwd);
-  if (name === 'check') {
-    const hasProject = args.some(
-      (argument, index) => argument === '-p' || argument === '--project' || argument.startsWith('--project='),
-    );
-    return args.includes('--no-script') && hasProject && !projectNeedsCompilerDatabase(args, cwd);
-  }
-  if (name === 'lint') return args.includes('--no-script');
-  return false;
-}
-
-function packageScript(cwd: string, script: string): string | undefined {
-  let directory = resolve(cwd);
-  while (true) {
-    const manifest = join(directory, 'package.json');
-    if (existsSync(manifest)) {
-      try {
-        const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { scripts?: Record<string, unknown> };
-        const value = parsed.scripts?.[script];
-        return typeof value === 'string' ? value : undefined;
-      } catch {
-        return undefined;
-      }
-    }
-    const parent = resolve(directory, '..');
-    if (parent === directory) return undefined;
-    directory = parent;
-  }
-}
-
-function isPureWebTypecheck(directory: string, script: string, source: string | undefined): boolean {
-  const segments = pathSegments(directory);
-  return (
-    script === 'typecheck' &&
-    segments.at(-2) === 'apps' &&
-    segments.at(-1) === 'web' &&
-    source?.trim() === 'bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json'
-  );
-}
-
-function testFilesNeedStack(args: readonly string[], cwd: string): boolean {
-  let directory = cwd;
-  const files: string[] = [];
-  const selectors = new Set(['-t', '--test-name-pattern']);
-  const preloadOptions = new Set(['--preload', '--require', '-r']);
-  const valueOptions = new Set([
-    '--bail',
-    '--coverage-dir',
-    '--coverage-reporter',
-    '--coverage-threshold',
-    '--max-concurrency',
-    '--rerun-each',
-    '--timeout',
-  ]);
-  let optionsEnded = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index]!;
-    if (!optionsEnded && argument === '--') {
-      optionsEnded = true;
-      continue;
-    }
-    if (!optionsEnded && (argument === '--cwd' || argument.startsWith('--cwd='))) {
-      const value = argument === '--cwd' ? args[index + 1] : argument.slice('--cwd='.length);
-      if (!value) return true;
-      directory = resolve(cwd, value);
-      if (argument === '--cwd') index += 1;
-      continue;
-    }
-    if (!optionsEnded && argument.startsWith('-')) {
-      const separator = argument.indexOf('=');
-      const option = separator < 0 ? argument : argument.slice(0, separator);
-      const inlineValue = separator >= 0;
-      if (selectors.has(option) || valueOptions.has(option) || preloadOptions.has(option)) {
-        const value = inlineValue ? argument.slice(separator + 1) : args[index + 1];
-        if (value === undefined) return true;
-        if (!inlineValue) index += 1;
-        if (preloadOptions.has(option)) {
-          if (
-            /[*?{}\[\]]/.test(value) ||
-            isNativeStackPath(resolve(directory, value)) ||
-            isNativeScript(resolve(directory, value)) ||
-            (!value.startsWith('.') && !value.startsWith('/') && !value.includes('/') && !value.includes('\\'))
-          )
-            return true;
-        }
-      }
-      continue;
-    }
-    if (/[*?{}\[\]]/.test(argument)) return true;
-    if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(argument)) {
-      files.push(resolve(directory, argument));
-      continue;
-    }
-    // Extra positional arguments can discover tests or supply an unresolved file or directory.
-    return true;
-  }
-  if (files.length === 0 || isNativeStackPath(directory)) return true;
-  return files.some((file) => isNativeStackPath(file) || isNativeScript(file));
-}
-
-function classifyWorkerCommand(argv: readonly string[], cwd: string, depth = 0): boolean {
-  if (argv.length === 0 || depth > 4) return true;
-  const command = argv[0]!;
-  const args = argv.slice(1);
-  const name = executableName(command);
-  if (['sh', 'bash', 'dash', 'zsh', 'fish', 'pwsh', 'powershell', 'cmd'].includes(name)) return true;
-
-  if (bunExecutable(command)) {
-    let index = 1;
-    let directory = cwd;
-    while (index < argv.length) {
-      const argument = argv[index]!;
-      if (argument === '--cwd' && argv[index + 1]) {
-        directory = resolve(cwd, argv[index + 1]!);
-        index += 2;
-      } else if (argument.startsWith('--cwd=')) {
-        directory = resolve(cwd, argument.slice('--cwd='.length));
-        index += 1;
-      } else break;
-    }
-    const operation = argv[index];
-    const rest = argv.slice(index + 1);
-    if (operation === 'test') return testFilesNeedStack(rest, directory);
-    if (operation === 'run') {
-      let scriptIndex = index + 1;
-      while (scriptIndex < argv.length) {
-        const argument = argv[scriptIndex]!;
-        if (argument === '--cwd' && argv[scriptIndex + 1]) {
-          directory = resolve(cwd, argv[scriptIndex + 1]!);
-          scriptIndex += 2;
-        } else if (argument.startsWith('--cwd=')) {
-          directory = resolve(cwd, argument.slice('--cwd='.length));
-          scriptIndex += 1;
-        } else break;
-      }
-      const script = argv[scriptIndex];
-      if (!script) return true;
-      const source = packageScript(directory, script);
-      const webTypecheckPipeline = isPureWebTypecheck(directory, script, source);
-      if (!webTypecheckPipeline && isNativeStackPath(directory)) return true;
-      const scriptPath = resolve(directory, script);
-      if (!webTypecheckPipeline && (isNativeStackPath(scriptPath) || isNativeScript(scriptPath))) return true;
-      if (script.includes('/') || script.includes('\\') || /\.(?:[cm]?[jt]sx?)$/.test(script)) return true;
-      if (webTypecheckPipeline) return false;
-      if (!source || /[;&|<>`$]/.test(source)) return true;
-      const tokens = source.trim().split(/\s+/).filter(Boolean);
-      return tokens.length === 0 || classifyWorkerCommand(tokens, directory, depth + 1);
-    }
-    if (operation === 'x') {
-      const tool = rest[0];
-      if (!tool) return true;
-      return !pureCompilerOrTool(tool, rest.slice(1), directory);
-    }
-    if (operation === 'check' || operation === 'lint') return !pureCompilerOrTool(operation, rest, directory);
-    if (operation === 'fmt') return false;
-    if (operation && (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(operation) || operation.endsWith('.ts'))) {
-      return true;
-    }
-    return true;
-  }
-
-  if (name === 'oxlint' || name === 'oxfmt') return false;
-  if (name === 'tsc') return !pureCompilerOrTool(command, args, cwd);
-  return true;
-}
-
-/** Whether the command has a known stack requirement; unknown commands stay on the existing admission path. */
 export function workerCheckNeedsStack(argv: readonly string[], cwd = process.cwd()): boolean {
-  const parsed = splitEnvironmentCommand(argv);
-  if (!parsed) return true;
-  return classifyWorkerCommand(parsed.command, resolve(cwd));
+  return classifyCheck(argv, resolve(cwd)).placement === 'remote';
 }
 
 export async function runWorkerCheck(
@@ -1533,7 +1235,9 @@ export async function runWorkerCheck(
     env.REZICS_CHECK_STOP_FILE = stopIntentPath(root, logicalCheckId, physicalRunId);
     env.REZICS_CHECK_REMOTE_CUSTODY_FILE = remoteRunCustodyPath(root, physicalRunId);
   }
-  const needsStack = setup(() => workerCheckNeedsStack(argv, root));
+  const classification = setup(() => classifyCheck(argv, root));
+  const physicallyRemote = isCheckHostRun(root);
+  const needsStack = classification.placement === 'remote' && !physicallyRemote;
   const commandClass = setup(() => checkClass(argv, root));
   argv = setup(() => scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`)));
   const command = setup(() => resolveRepositoryBun(argv, root));
@@ -1580,22 +1284,31 @@ export async function runWorkerCheck(
   const weight = checkMemoryWeight(readPeaks(directory)[commandClass] ?? [], capacity);
   const p90 = checkMemoryP90(readPeaks(directory)[commandClass] ?? []);
   const noMemoryLease = weight === 0;
-  if (noMemoryLease) {
+  if (noMemoryLease && !needsStack) {
     const line = `worker-check: ${commandClass} local p90 ${(p90! / 2 ** 20).toFixed(1)} MiB; skipping local memory lease\n`;
     process.stderr.write(line);
     writeSync(descriptor, line);
   }
-  if (localOnly) env.REZICS_CHECK_LOCAL_ONLY = '1';
+  if (localOnly && needsStack) {
+    const line = 'worker-check: --local cannot place a heavy or unknown check on this host; routing to a or b\n';
+    process.stderr.write(line);
+    writeSync(descriptor, line);
+  }
   const locatedHosts = hostsLocation(root, env);
   const remoteHostsFile = 'file' in locatedHosts ? locatedHosts.file : undefined;
-  const remoteEligible =
-    needsStack &&
-    !localOnly &&
-    env.REZICS_CHECK_LOCAL_ONLY !== '1' &&
-    env.REZICS_CHECK_MEMORY_LEASE === undefined &&
-    env.KERNEL_CHECK_ON_REMOTE !== '1' &&
-    weight >= 2 &&
-    remoteHostsFile !== undefined;
+  let remoteHostFailure: string | undefined;
+  if (needsStack) {
+    if (!remoteHostsFile) remoteHostFailure = 'remote check hosts are unavailable: ' + ('reason' in locatedHosts ? locatedHosts.reason : 'no file');
+    else {
+      try {
+        if (performanceHosts(readHosts(remoteHostsFile)).length === 0)
+          remoteHostFailure = `remote check hosts ${remoteHostsFile} contain no approved a/b host`;
+      } catch (error) {
+        remoteHostFailure = `remote check hosts are invalid: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+  }
+  const remoteEligible = needsStack;
   const relativeLogPath = relative(root, file);
   const report = (code: number): number => {
     process.stdout.write(`check: exit status ${code}\n`);
@@ -1604,6 +1317,15 @@ export async function runWorkerCheck(
     return code;
   };
   if (remoteEligible) {
+    if (remoteHostFailure || !remoteHostsFile) {
+      beginLedger('remote', 0);
+      const detail = remoteHostFailure ?? 'remote check hosts are unavailable';
+      writeSync(descriptor, `worker-check: infrastructure unavailable: ${detail}\n`);
+      wait.stop();
+      endLedger(75, detail);
+      closeSync(descriptor);
+      return report(75);
+    }
     const artifactRelative = artifactRunRelativePath(physicalRunId);
     let artifactPrepared = false;
     try {
@@ -1731,8 +1453,9 @@ export async function runWorkerCheck(
           resolveRepositoryBun(['bun'], root)[0]!,
           [
             join(root, 'scripts/remote-check.ts'),
-            '--memory-gib',
-            String(weight),
+            ...(weight < 2 ? [] : ['--memory-gib', String(weight)]),
+            '--allowed-hosts',
+            'a,b',
             ...(growthProfileRelative === undefined ? [] : ['--returns', growthProfileRelative]),
             ...(artifactPrepared ? ['--returns', artifactRelative] : []),
             ...returnPaths.flatMap((path) => ['--returns', path]),
@@ -1916,42 +1639,23 @@ export async function runWorkerCheck(
         );
       }
     }
-    const stoppedBeforeFallback =
-      logicalCheckId !== undefined && Boolean(checkStopIntent(root, logicalCheckId, physicalRunId));
-    const cancelledBeforeFallback = logicalCheckId !== undefined && checkCancelled(root, logicalCheckId) !== undefined;
+    const stopped = logicalCheckId !== undefined && Boolean(checkStopIntent(root, logicalCheckId, physicalRunId));
+    const cancelledLogical = logicalCheckId !== undefined && checkCancelled(root, logicalCheckId) !== undefined;
     const remoteTerminal = remoteCustody?.physicalRunId === physicalRunId && remoteCustody.status === 'terminal';
-    if (
-      remoteCode !== 75 ||
-      !failedTransport ||
-      remoteSignal !== undefined ||
-      stoppedBeforeFallback ||
-      cancelledBeforeFallback ||
-      !remoteTerminal
-    ) {
-      wait.stop();
-      const exitCode =
-        remoteSignal !== undefined
-          ? 128 + remoteSignal
-          : cancelledBeforeFallback || stoppedBeforeFallback
-            ? 125
-            : remoteCode;
-      if (ledger && Object.keys(remoteCommandPhases).length) ledger.commandPhases = remoteCommandPhases;
-      endLedger(
-        exitCode,
-        lifetimeReason ??
-          (!cancelledBeforeFallback && failedTransport && !remoteTerminal
-            ? `${failedTransport}; remote execution terminality is unknown`
-            : failedTransport),
-      );
-      closeSync(descriptor);
-      return report(exitCode);
-    }
-    const retry = `worker-check: remote transport failed: ${failedTransport}; retrying locally under memory lease\n`;
-    process.stderr.write(retry);
-    writeSync(descriptor, retry);
+    wait.stop();
+    const exitCode =
+      remoteSignal !== undefined
+        ? 128 + remoteSignal
+        : cancelledLogical || stopped
+          ? 125
+          : remoteCode;
     if (ledger && Object.keys(remoteCommandPhases).length) ledger.commandPhases = remoteCommandPhases;
-    endLedger(remoteCode, failedTransport);
-    ledger = undefined;
+    const terminalityCause = failedTransport && !remoteTerminal
+      ? `${failedTransport}; remote execution terminality is unknown`
+      : failedTransport ?? (remoteCode === 75 && !remoteTerminal ? 'remote execution terminality is unknown' : undefined);
+    endLedger(exitCode, lifetimeReason ?? terminalityCause);
+    closeSync(descriptor);
+    return report(exitCode);
   }
   beginLedger(hostname(), 0);
   const leaseEnv = { ...env };

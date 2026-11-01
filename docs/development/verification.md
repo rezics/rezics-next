@@ -84,6 +84,32 @@ alone is load evidence, as in the landing check; a reproducible assertion remain
 acceptance, root typecheck and the applicable individual reruns pass. This exception does not excuse transport,
 setup or cleanup failures and does not authorize a discretionary whole-suite run.
 
+## Check placement
+
+`scripts/check-placement.ts` is the shared conservative classifier used by worker checks. Root and Web typecheck
+scripts, pure compiler and formatter commands, and explicit small unit selections are local. A small unit selection
+has at most 12 explicit test files; each file and its statically imported relative source is at most 256 KiB, within
+64 files total, and has no browser, server, database or native-stack dependency. Discovery, globs, preloads, shell
+commands, full Kernel checks, browser work, database/container work and commands the classifier cannot prove local
+go to a or b. Package-script, `--cwd` and ordinary `env` prefixes use the same classification.
+
+`worker-check` and `stack-run` filter configured hosts to the performance pool `a,b`. Local flags, off markers,
+learned memory weights, local leases, an absent host pool and a transport error cannot put heavy or unknown work on
+host c or replay it locally. A failed or unavailable remote run remains non-green. A command is already on a check
+host only when its working directory is inside that run's directory, its cgroup names the matching run scope, and
+the run has a valid supervisor marker; environment flags alone do not establish remote custody.
+
+`scripts/check-run.ts` is the trusted generic driver for caller-owned checks. Its `--hosts`, `--workspace`, `--cwd`,
+`--source-revision` and private `--env-file` arguments are explicit, and the original command is passed after `--`
+as separate argv tokens. The driver requires a full candidate commit match, freezes and hashes the candidate's Git
+index and admitted tracked, modified, deleted and untracked source, then transports that snapshot through
+`remote-check`. It does not borrow the trusted driver's checkout or candidate `node_modules`, caches or `.temp`.
+Web and Auth generated inputs are prepared from the frozen candidate after the remote frozen install. Declared return
+paths are cleared before transfer, bounded and checked on return, and restored only from the terminal physical run.
+The private environment overlay cannot replace host runtime, placement or task-custody authority; unsupported
+host-absolute file settings fail closed. Cancellation uses the existing durable remote-check intent and receipt
+channel. Transport loss never starts a local copy of the command.
+
 ## External integrations
 
 Prove deploys, provider configuration and integrations such as Cloudflare or Stripe through the real tool's validation

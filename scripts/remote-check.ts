@@ -50,6 +50,7 @@ import {
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { stageCheckGit } from './check-git.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
+import { PERFORMANCE_HOST_NAMES } from './check-placement.ts';
 
 export type Host = {
   name: string;
@@ -64,9 +65,13 @@ export type Host = {
 
 export type RemoteCheck = {
   hosts: Host[];
+  /** Heavy checks are limited to the two performance-approved hosts. */
+  allowedHosts?: string[];
   workspace: string;
   cwd?: string;
   command: string[];
+  /** Repository-declared workspace preparation, run after frozen install and before the command. */
+  prepare?: { cwd: string; command: string[] }[];
   /** An owner-published durable intent, independent of transport availability or a runner incarnation. */
   cancellation?: ExecutionCancellation;
   /** Trusted outer execution boundary; command stdout never supplies this value. */
@@ -351,7 +356,7 @@ function getPinnedBun(): { version: string; revision: string } {
 }
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
-const REMOTE_TRANSPORT_FAILURE = 75;
+export const REMOTE_TRANSPORT_FAILURE = 75;
 export const REMOTE_DEADLINE_EXIT = 124;
 export const HARD_RUN_LIFETIME_MS = 2 * 60 * 60 * 1000;
 // Admission's estimate saturation is separate from execution's effective deadline. Keep the generated shell and
@@ -2074,6 +2079,7 @@ export function runScript(
   maxMs?: number,
   gitManifestRelativePath?: string,
   gitManifestSha256?: string,
+  prepare: { cwd: string; command: string[] }[] = [],
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
@@ -2108,6 +2114,18 @@ export function runScript(
       exit 1
     fi
     rm -rf -- ${quote(gitArtifactDirectory)}`;
+  const preparationScript = prepare
+    .map(({ cwd: prepareCwd, command: prepareCommand }) => {
+      const absolute = resolve(directory, prepareCwd);
+      const inside = relative(resolve(directory), absolute);
+      if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside) || prepareCommand.length === 0)
+        throw new Error('remote-check: preparation command is outside the prepared workspace or empty');
+      return `if [ "$code" -eq 0 ]; then
+        cd ${quote(absolute)} || code=$?
+        if [ "$code" -eq 0 ]; then ${prepareCommand.map(quote).join(' ')}; code=$?; fi
+      fi`;
+    })
+    .join('\n');
   const systemdScript = `${refreshBaseScript(id, directory, gitArtifactRelativePath)}
 set +e
 host=$REMOTE_CHECK_HOST
@@ -2173,6 +2191,9 @@ host=$REMOTE_CHECK_HOST
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
+      ${preparationScript}
+    fi
+    if [ "$code" -eq 0 ]; then
       cd "$1"
       code=$?
       shift${process.env.KERNEL_CHECK_CONCURRENCY === undefined ? '' : `; export KERNEL_CHECK_CONCURRENCY=${quote(process.env.KERNEL_CHECK_CONCURRENCY)}`}
@@ -3059,13 +3080,15 @@ type HostProvider = () => Host[];
 type Placement = Pick<Host, 'name' | 'address' | 'identity'>;
 
 /** Reads once per admission round and keeps the last complete valid configuration through partial rewrites. */
-function liveHosts(initial: Host[], file?: string): HostProvider {
-  let lastValid = initial;
+function liveHosts(initial: Host[], file?: string, requested: readonly string[] = PERFORMANCE_HOST_NAMES): HostProvider {
+  const allowed = new Set(requested.filter((name) => (PERFORMANCE_HOST_NAMES as readonly string[]).includes(name)));
+  const eligible = (hosts: Host[]) => hosts.filter(({ name }) => allowed.has(name));
+  let lastValid = eligible(initial);
   let reportedInvalidRewrite = false;
   return () => {
     if (!file) return lastValid;
     try {
-      lastValid = readHosts(file);
+      lastValid = eligible(readHosts(file));
     } catch (error) {
       if (!reportedInvalidRewrite) {
         const detail = error instanceof Error ? error.message : String(error);
@@ -4197,6 +4220,7 @@ async function runLeased(
           options.maxMs,
           prepared.gitManifestRelativePath,
           prepared.gitManifestSha256,
+          options.prepare,
         ),
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
@@ -4375,7 +4399,7 @@ async function runWithTransportRetries(
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
     options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
-  const hostsForRound = liveHosts(initialHosts, options.hostsFile);
+  const hostsForRound = liveHosts(initialHosts, options.hostsFile, options.allowedHosts);
   const failedHosts = new Set<string>();
   let transportAttempts = 0;
   let lastFailure: RemoteTransportError | undefined;
@@ -4462,15 +4486,17 @@ async function runWithTransportRetries(
   throw lastFailure;
 }
 
-/** The first unresponsive-host round may hand local work to its caller; later loss keeps waiting. */
-export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number | null> {
+/** Compatibility entry point that now fails closed instead of handing unavailable work to a local caller. */
+export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
   getPinnedBun();
   const files = workspaceFiles(options.workspace);
-  return await withExecutionCancellation(options, signal, (ownedSignal) =>
+  const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered),
   );
+  if (result === null) throw new Error('remote-check: no check host answered');
+  return result;
 }
 
 /** Tries each available host once without waiting for a slot. */
@@ -4487,7 +4513,7 @@ async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): P
   const memoryReservationBytes =
     options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
   const files = workspaceFiles(options.workspace);
-  const hostsForRound = liveHosts(options.hosts, options.hostsFile);
+  const hostsForRound = liveHosts(options.hosts, options.hostsFile, options.allowedHosts);
   const initial = hostsForRound();
   const ranked = await rankedHosts(
     initial,
@@ -4572,6 +4598,7 @@ function parse(argv: string[]): RemoteCheck {
   let maxMs: number | undefined;
   let gate = false;
   let returns: string[] | undefined;
+  let allowedHosts: string[] = [...PERFORMANCE_HOST_NAMES];
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
@@ -4580,6 +4607,14 @@ function parse(argv: string[]): RemoteCheck {
       if (!value) throw new Error('--returns needs a path');
       returns ??= [];
       returns.push(value);
+      continue;
+    }
+    if (flag === '--allowed-hosts') {
+      const value = rest.shift();
+      if (!value) throw new Error('--allowed-hosts needs a comma-separated a/b host list');
+      allowedHosts = value.split(',');
+      if (allowedHosts.length === 0 || allowedHosts.some((name) => !(PERFORMANCE_HOST_NAMES as readonly string[]).includes(name)))
+        throw new Error('--allowed-hosts may contain only a and b');
       continue;
     }
     if (flag === '--gate') {
@@ -4633,6 +4668,7 @@ function parse(argv: string[]): RemoteCheck {
   const cancellation = executionCancellationFromEnvironment();
   return {
     hosts: readHosts(hostsFile),
+    allowedHosts,
     ...(cancellation === undefined ? {} : { cancellation }),
     completed: cliPhysicalReceipt,
     workspace,
