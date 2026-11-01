@@ -3,7 +3,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { loadFollowState, validFollowInput, writeFollowRecord } from './follow-records';
+import { loadCurrentFollowState, loadFollowState, validFollowInput, writeFollowRecord } from './follow-records';
 
 function targetId(input: { targetId: string }): { targetId: string } {
   if (typeof input?.targetId !== 'string' || input.targetId.length === 0 || input.targetId.length > 128)
@@ -16,6 +16,13 @@ export const readFollowState = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadFollowState(kernelClient(), getRequest(), env as Partial<SessionEnv>, data.targetId);
+  });
+
+export const readCurrentFollowState = createServerFn({ method: 'GET' })
+  .validator(targetId)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadCurrentFollowState(kernelClient(), getRequest(), env as Partial<SessionEnv>, data.targetId);
   });
 
 export const setFollow = createServerFn({ method: 'POST' })

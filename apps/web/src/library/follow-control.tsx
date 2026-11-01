@@ -1,7 +1,7 @@
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { EllipsisIcon } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
 
@@ -23,6 +23,10 @@ export type FollowControlProps = {
   menuTitle?: string;
   onChange?: (following: boolean) => void;
   onRetry?: () => void;
+  /** Routed controls bind callbacks to actual mounted viewer and directional write admission. */
+  isCurrent?: (following: boolean) => boolean;
+  readLifetime?: string | null;
+  onAccepted?: (following: boolean, input: FollowWriteInput) => boolean;
 };
 
 /** The same presenter serves a target button and a Following row's responsive menu. */
@@ -41,6 +45,9 @@ function FollowControlState({
   menuTitle,
   onChange,
   onRetry,
+  isCurrent,
+  readLifetime,
+  onAccepted,
 }: FollowControlProps) {
   const [current, setCurrent] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -48,16 +55,46 @@ function FollowControlState({
   const [removed, setRemoved] = useState(false);
   const attempt = useRef<FollowWriteInput | null>(null);
   const conflict = useRef(false);
-  const inFlight = useRef<{ input: FollowWriteInput } | null>(null);
-  const committed = useRef<Pick<FollowControlProps, 'ready' | 'canFollow' | 'canRemove' | 'write' | 'onChange'> | null>(
-    null,
-  );
+  const inFlight = useRef<{
+    input: FollowWriteInput;
+    isCurrent: FollowControlProps['isCurrent'];
+    readLifetime: FollowControlProps['readLifetime'];
+    onAccepted: FollowControlProps['onAccepted'];
+  } | null>(null);
+  const committed = useRef<Pick<
+    FollowControlProps,
+    'ready' | 'canFollow' | 'canRemove' | 'write' | 'onChange' | 'isCurrent' | 'readLifetime' | 'onAccepted'
+  > | null>(null);
   const signedOut = initial.state === 'signed-out';
+  const following = initial.state === 'ready' ? initial.following : undefined;
+  const initialKey = JSON.stringify([readLifetime, initial.state, following]);
+  const [observed, setObserved] = useState(initialKey);
+  if (observed !== initialKey) {
+    // Adjust before commit: a retired/unavailable read must never leave a ready frame behind.
+    setObserved(initialKey);
+    setCurrent(initial);
+    setRemoved(false);
+  }
   // Callback identities may refresh without starting a new request lifetime.
   useLayoutEffect(() => {
-    committed.current = { ready: ready && !signedOut, canFollow, canRemove, write, ...(onChange ? { onChange } : {}) };
+    committed.current = {
+      ready: ready && !signedOut,
+      canFollow,
+      canRemove,
+      write,
+      ...(readLifetime !== undefined ? { readLifetime } : {}),
+      ...(onChange ? { onChange } : {}),
+      ...(isCurrent ? { isCurrent } : {}),
+      ...(onAccepted ? { onAccepted } : {}),
+    };
     const running = inFlight.current;
-    if (running && (!ready || signedOut || !(running.input.following ? canFollow : canRemove))) {
+    if (
+      running &&
+      (!ready ||
+        signedOut ||
+        !(running.input.following ? canFollow : canRemove) ||
+        (running.isCurrent && !running.isCurrent(running.input.following)))
+    ) {
       // The dispatched intent remains uncertain; only its retired completion loses authority.
       inFlight.current = null;
       setPending(false);
@@ -71,11 +108,6 @@ function FollowControlState({
     },
     [],
   );
-  const following = initial.state === 'ready' ? initial.following : undefined;
-  useEffect(() => {
-    if (attempt.current) return;
-    setCurrent((previous) => (initial.state !== 'ready' && previous.state === 'ready' ? previous : initial));
-  }, [initial.state, following]);
   const action = signedOut
     ? null
     : attempt.current
@@ -96,8 +128,13 @@ function FollowControlState({
       following: action === 'follow',
       idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
     };
-    if (!(input.following ? live.canFollow : live.canRemove)) return;
-    const running = { input };
+    if (
+      !(input.following ? live.canFollow : live.canRemove) ||
+      (isCurrent && !isCurrent(input.following)) ||
+      (live.isCurrent && !live.isCurrent(input.following))
+    )
+      return;
+    const running = { input, isCurrent: live.isCurrent, readLifetime: live.readLifetime, onAccepted: live.onAccepted };
     inFlight.current = running;
     attempt.current = input;
     setPending(true);
@@ -109,13 +146,16 @@ function FollowControlState({
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
-    if (inFlight.current !== running) return;
+    if (inFlight.current !== running || (running.isCurrent && !running.isCurrent(input.following))) return;
     try {
       if (result.ok) {
         attempt.current = null;
-        setCurrent({ state: 'ready', following: result.following });
-        setRemoved(!result.following);
-        committed.current?.onChange?.(result.following);
+        const accepted = running.onAccepted?.(result.following, input) ?? true;
+        if (accepted && committed.current?.readLifetime === running.readLifetime) {
+          setCurrent({ state: 'ready', following: result.following });
+          setRemoved(!result.following);
+        }
+        if (!running.onAccepted) committed.current?.onChange?.(result.following);
       } else {
         conflict.current = result.reason === 'conflict';
         setFailure(result.reason);

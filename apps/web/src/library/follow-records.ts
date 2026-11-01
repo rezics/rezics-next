@@ -2,13 +2,15 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 
 type NativeFollow = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>['follows'][number];
 export type FollowTargetType = NativeFollow['targetType'];
 export type FollowState =
   | { state: 'ready'; following: boolean }
   | { state: 'pending' | 'unavailable' | 'forbidden' | 'signed-out' | 'closed' };
+/** Provenance comes from actual server preparation, never an expected browser subject. */
+export type CurrentFollowState = { subject: string | null; targetId: string; edge: FollowState };
 export type FollowWriteInput = { targetId: string; following: boolean; idempotencyKey: string };
 export type FollowWriteResult =
   | { ok: true; following: boolean }
@@ -34,11 +36,37 @@ export async function readFollowRecord(
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
     if (result.status === 404) return { state: 'ready', following: false };
     if (result.status === 401 || result.status === 403) return { state: 'forbidden' };
-    if (result.error || !result.data?.follow || !['following', 'unfollowed'].includes(result.data.follow.state))
+    if (
+      result.error ||
+      !result.data?.follow ||
+      (result.data.follow.targetId !== undefined && result.data.follow.targetId !== targetId) ||
+      !['following', 'unfollowed'].includes(result.data.follow.state)
+    )
       return { state: 'unavailable' };
     return { state: 'ready', following: result.data.follow.state === 'following' };
   } catch (error) {
     return { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
+  }
+}
+
+/** One fresh preparation and one BASIC own-edge read, including provenance for an absent edge. */
+export async function loadCurrentFollowState(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  targetId: string,
+): Promise<CurrentFollowState> {
+  let subject: string | null = null;
+  try {
+    // A reused Request's old WeakMap entries must not impersonate this preparation.
+    const current = new Request(request);
+    if (await prepareSession(current, sessionEnv)) return { subject, targetId, edge: { state: 'signed-out' } };
+    const authorization = viewerCredential(current);
+    subject = sessionSubject(current) ?? null;
+    if (!subject || !authorization) return { subject: null, targetId, edge: { state: 'signed-out' } };
+    return { subject, targetId, edge: await readFollowRecord(client, targetId, authorization) };
+  } catch {
+    return { subject, targetId, edge: { state: 'unavailable' } };
   }
 }
 
