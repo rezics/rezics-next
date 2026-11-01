@@ -36,7 +36,16 @@ async function read(data: ReturnType<typeof validate>): Promise<LabelsCurrentRea
     return {
       sessionSubject: null,
       requested: null,
-      page: { ...page, operations: [], csrfToken: '', labels: [], next: null, query: undefined, feedback: undefined },
+      page: {
+        signedIn: false,
+        ...(page.state ? { state: page.state } : {}),
+        operations: [],
+        csrfToken: '',
+        createKey: page.createKey,
+        undoKey: page.undoKey,
+        labels: [],
+        next: null,
+      },
     };
   return {
     sessionSubject: subject,

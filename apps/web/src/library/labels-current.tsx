@@ -70,7 +70,13 @@ export function LabelsCurrent({
     };
   }, [currentOrigin]);
   if (!subject) {
-    if (!hydrated) return <LabelsPageView page={{ ...signedOutPage, state: initial.page.state }} locale={locale} />;
+    if (!hydrated)
+      return (
+        <LabelsPageView
+          page={{ ...signedOutPage, ...(initial.page.state ? { state: initial.page.state } : {}) }}
+          locale={locale}
+        />
+      );
     if (session.state === 'signed-out') return <LabelsPageView page={signedOutPage} locale={locale} />;
     return <p role="status">{m.library_labels_unavailable()}</p>;
   }
@@ -175,7 +181,7 @@ function LabelsRead({
       page={page}
       isCurrent={isCurrent}
       refresh={refresh}
-      cursor={address.cursor ?? undefined}
+      {...(address.cursor === null ? {} : { cursor: address.cursor })}
       locale={address.locale}
     />
   );

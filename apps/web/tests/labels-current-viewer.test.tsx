@@ -77,7 +77,7 @@ function response(subject: string, search: Search = {}, revision = 7): LabelsCur
       state: 'loaded',
       operations: [...operations],
       csrfToken: `prepared-${subject}`,
-      query: search.q,
+      ...(search.q === undefined ? {} : { query: search.q }),
       createKey: crypto.randomUUID(),
       undoKey: crypto.randomUUID(),
       next: `next-${subject}`,
