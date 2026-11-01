@@ -47,18 +47,17 @@ type QueryStamp = {
   dataUpdatedAt: number;
   errorUpdatedAt: number;
   terminalRevision: number;
-  cancelRevision: number;
 };
 
 type QueryCacheEvent = {
   type: string;
   query: { queryKey: QueryKey };
-  action?: { type?: string };
+  action?: { type?: string; state?: unknown };
 };
 
 type RefreshContinuationState = {
   active: boolean;
-  boundary?: 'cancel' | 'remove';
+  boundary: 'cancel' | 'remove' | undefined;
   identity: ThreadPageRouteIdentity;
   session: SessionStamp;
   connectionOwner: object;
@@ -112,16 +111,16 @@ function observeThreadPageCache(client: QueryClient) {
   let sessionRevision = 0;
   let observationRevision = 0;
   const terminalRevisions = new Map<string, number>();
-  const cancelRevisions = new Map<string, number>();
   const listeners = new Set<(event: QueryCacheEvent) => void>();
   const initial = sessionCache(client);
   let previousSession = JSON.stringify(initial);
   client.getQueryCache().subscribe((event) => {
     observationRevision++;
-    const { query, type } = event;
+    const cacheEvent = event as unknown as QueryCacheEvent;
+    const { query, type } = cacheEvent;
     if (keyId(query.queryKey) === keyId(sessionQuery.queryKey)) {
       const next = JSON.stringify(sessionCache(client));
-      const action = type === 'updated' ? event.action.type : undefined;
+      const action = type === 'updated' ? cacheEvent.action?.type : undefined;
       const authorityEvent =
         type === 'added' || type === 'removed' || action === 'success' || action === 'error' || action === 'setState';
       if (authorityEvent || next !== previousSession) {
@@ -130,16 +129,13 @@ function observeThreadPageCache(client: QueryClient) {
       }
     }
     const terminalEvent =
-      type === 'removed' || (type === 'updated' && (event.action.type === 'error' || event.action.type === 'setState'));
+      type === 'removed' ||
+      (type === 'updated' && (cacheEvent.action?.type === 'error' || cacheEvent.action?.type === 'setState'));
     if (terminalEvent) {
       const id = keyId(query.queryKey);
       terminalRevisions.set(id, (terminalRevisions.get(id) ?? 0) + 1);
     }
-    if (type === 'updated' && event.action.type === 'cancel') {
-      const id = keyId(query.queryKey);
-      cancelRevisions.set(id, (cancelRevisions.get(id) ?? 0) + 1);
-    }
-    for (const listener of listeners) listener(event as QueryCacheEvent);
+    for (const listener of listeners) listener(cacheEvent);
   });
 
   return {
@@ -151,9 +147,6 @@ function observeThreadPageCache(client: QueryClient) {
     observationRevision: () => observationRevision,
     queryTerminalRevision(queryKey: QueryKey) {
       return terminalRevisions.get(keyId(queryKey)) ?? 0;
-    },
-    queryCancelRevision(queryKey: QueryKey) {
-      return cancelRevisions.get(keyId(queryKey)) ?? 0;
     },
     queryStamp(queryKey: QueryKey): QueryStamp | undefined {
       const query = client.getQueryCache().find({ queryKey, exact: true });
@@ -168,7 +161,6 @@ function observeThreadPageCache(client: QueryClient) {
         dataUpdatedAt: query.state.dataUpdatedAt,
         errorUpdatedAt: query.state.errorUpdatedAt,
         terminalRevision: terminalRevisions.get(keyId(queryKey)) ?? 0,
-        cancelRevision: cancelRevisions.get(keyId(queryKey)) ?? 0,
       };
     },
     subscribe(listener: (event: QueryCacheEvent) => void) {
@@ -220,8 +212,7 @@ function sameQuery(left: QueryStamp | undefined, right: QueryStamp | undefined) 
     left.errorUpdateCount === right.errorUpdateCount &&
     left.dataUpdatedAt === right.dataUpdatedAt &&
     left.errorUpdatedAt === right.errorUpdatedAt &&
-    left.terminalRevision === right.terminalRevision &&
-    left.cancelRevision === right.cancelRevision
+    left.terminalRevision === right.terminalRevision
   );
 }
 
@@ -286,7 +277,6 @@ export class ThreadPageCaller {
   private inFlightQuery: object | undefined;
   private queryStarted = false;
   private queryStartTerminalRevision = 0;
-  private queryStartCancelRevision = 0;
   private releaseSource: (() => void) | undefined;
   private connection: Connection = { owner: null, connected: false, generation: 0, retired: false };
   private personalSequence = 0;
@@ -479,7 +469,6 @@ export class ThreadPageCaller {
   private queryCurrent() {
     if (this.queryStarted) {
       if (this.source.queryTerminalRevision(this.queryKey) !== this.queryStartTerminalRevision) return false;
-      if (this.source.queryCancelRevision(this.queryKey) !== this.queryStartCancelRevision) return false;
       const current = this.source.queryStamp(this.queryKey);
       if (this.inFlightQuery) return current?.query === this.inFlightQuery;
       return current === undefined;
@@ -524,7 +513,9 @@ export class ThreadPageCaller {
       )
         continue;
       const ownBoundaryEvent =
-        (continuation.boundary === 'cancel' && event.type === 'updated' && event.action?.type === 'cancel') ||
+        (continuation.boundary === 'cancel' &&
+          event.type === 'updated' &&
+          event.action?.type === 'setState') ||
         (continuation.boundary === 'remove' && event.type === 'removed');
       if (!ownBoundaryEvent && isRetiringQueryEvent(event)) continuation.queryRetired = true;
     }
@@ -698,7 +689,6 @@ export class ThreadPageCaller {
     if (keyId(queryKey) !== keyId(this.currentAdmission.queryKey)) throw new ThreadPageCallerRetired();
     this.inFlightQuery = this.source.queryStamp(queryKey)?.query;
     this.queryStartTerminalRevision = this.source.queryTerminalRevision(queryKey);
-    this.queryStartCancelRevision = this.source.queryCancelRevision(queryKey);
     this.queryStarted = true;
   }
 

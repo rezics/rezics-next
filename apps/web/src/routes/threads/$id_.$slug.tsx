@@ -398,7 +398,7 @@ export function ThreadPage() {
       nextCaller.clearRefreshGuard();
       continuation.release();
       operation.invalidate();
-      if (read.operation === operation) read.operation = undefined;
+      if (read.operation === operation) delete read.operation;
     }
   }
 
