@@ -31,6 +31,7 @@ const args = process.argv.slice(2);
 const positionals: string[] = [];
 const options: string[] = [];
 const reject = (detail: string): never => {
+  try { appendFileSync(dir + '/log.jsonl', JSON.stringify({ kind: 'reject', detail }) + '\\n'); } catch {}
   process.stderr.write('fake ssh: ' + detail + '\\n');
   process.exit(2);
 };
@@ -508,7 +509,7 @@ test('ordinary remote transport keeps the native outcome and declared returns/cl
   const fixture = scenario({ a: { available: 20e9, exit: 7 } });
   const directory = workspace();
   const result = await stack(fixture.env, ['true'], ['--returns', 'missing-output.txt'], directory);
-  expect(result.code, result.stderr).toBe(7);
+  expect(result.code, `${result.stderr} ${JSON.stringify(fixture.events())}`).toBe(7);
   const events = fixture.events();
   expect(events.some((event) => event.kind === 'prepared-inputs')).toBe(false);
   const runIndex = events.findIndex((event) => event.kind === 'run');
