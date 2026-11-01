@@ -3991,5 +3991,15 @@
   "moderation_filter_reset": "Restablecer filtros",
   "moderation_queue_read_denied": "Esta cola de denuncias no está disponible o ya no tienes permiso para leerla.",
   "moderation_queue_stale": "Esta página ha caducado o pertenece a otra selección. Vuelve a empezar con los filtros seleccionados.",
-  "moderation_queue_restart": "Reiniciar denuncias"
+  "moderation_queue_restart": "Reiniciar denuncias",
+  "thread_authoring_session_changed": "Tu sesión ha cambiado. Recarga esta página para iniciar una nueva conversación con tu cuenta actual.",
+  "thread_authoring_leave_title": "¿Salir de la conversación?",
+  "thread_authoring_leave_unsaved": "Tus textos y selecciones locales no se han guardado. Al salir, se descartarán.",
+  "thread_authoring_leave_pending": "Tus textos locales no se han guardado. El resultado de un envío aún es desconocido; al salir perderás la recuperación local para reintentarlo. La solicitud aún podría terminar. Salir no la cancela ni la revierte.",
+  "thread_authoring_discard_title": "¿Descartar esta edición?",
+  "thread_authoring_discard_unsaved": "Esta edición no se ha guardado. ¿Quieres descartarla?",
+  "thread_authoring_discard_pending": "El resultado de este envío de edición aún es desconocido. Al descartarla perderás la recuperación local para reintentarlo; la solicitud aún podría terminar. Esto no la cancela ni la revierte.",
+  "thread_authoring_stay": "Quedarme",
+  "thread_authoring_leave": "Salir",
+  "thread_authoring_discard": "Descartar edición"
 }

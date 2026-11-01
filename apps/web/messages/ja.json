@@ -3991,5 +3991,15 @@
   "moderation_filter_reset": "絞り込みをリセット",
   "moderation_queue_read_denied": "この通報一覧は利用できないか、閲覧権限が失われています。",
   "moderation_queue_stale": "このページは期限切れか、別の絞り込み条件のものです。選択中の条件で最初から表示してください。",
-  "moderation_queue_restart": "通報一覧を最初から表示"
+  "moderation_queue_restart": "通報一覧を最初から表示",
+  "thread_authoring_session_changed": "ログイン状態が変わりました。このページを再読み込みして、現在のアカウントで新しい会話を始めてください。",
+  "thread_authoring_leave_title": "会話を離れますか？",
+  "thread_authoring_leave_unsaved": "入力内容と選択内容はまだ保存されていません。ページを離れると破棄されます。",
+  "thread_authoring_leave_pending": "入力内容はまだ保存されていません。送信結果はまだ不明です。ページを離れると、この端末での再試行に必要な情報が失われます。リクエストは完了する可能性があり、ページを離れてもキャンセルや取り消しにはなりません。",
+  "thread_authoring_discard_title": "この編集を破棄しますか？",
+  "thread_authoring_discard_unsaved": "この編集はまだ保存されていません。破棄しますか？",
+  "thread_authoring_discard_pending": "編集の送信結果はまだ不明です。破棄すると、この端末での再試行に必要な情報が失われます。リクエストは完了する可能性があり、キャンセルや取り消しにはなりません。",
+  "thread_authoring_stay": "続ける",
+  "thread_authoring_leave": "離れる",
+  "thread_authoring_discard": "編集を破棄"
 }

@@ -3991,5 +3991,15 @@
   "moderation_filter_reset": "重設篩選",
   "moderation_queue_read_denied": "此檢舉佇列無法使用，或你已無權查看。",
   "moderation_queue_stale": "此檢舉頁面已過期或屬於其他篩選條件。請依目前條件重新開始。",
-  "moderation_queue_restart": "重新查看檢舉"
+  "moderation_queue_restart": "重新查看檢舉",
+  "thread_authoring_session_changed": "登入狀態已變更。請重新載入此頁，再使用目前帳戶開始新的對話。",
+  "thread_authoring_leave_title": "要離開這段對話嗎？",
+  "thread_authoring_leave_unsaved": "本機輸入內容與所選項目尚未儲存。離開後會將它們捨棄。",
+  "thread_authoring_leave_pending": "本機輸入內容尚未儲存，送出結果也尚未確定。離開會失去本機重試所需的資訊；請求仍可能完成，離開不會取消或撤銷請求。",
+  "thread_authoring_discard_title": "要捨棄這次編輯嗎？",
+  "thread_authoring_discard_unsaved": "這次編輯尚未儲存。要捨棄嗎？",
+  "thread_authoring_discard_pending": "這次編輯的送出結果尚未確定。捨棄會失去本機重試所需的資訊；請求仍可能完成，也不會因此取消或撤銷。",
+  "thread_authoring_stay": "留下",
+  "thread_authoring_leave": "離開",
+  "thread_authoring_discard": "捨棄編輯"
 }

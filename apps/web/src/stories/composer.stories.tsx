@@ -180,6 +180,25 @@ export const NewThreadLong: Story = {
   render: newThread,
   play: longThreadPlay,
 };
+export const NewThreadDeparture: Story = {
+  name: 'New thread / Protect changed writing on departure',
+  render: newThread,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const title = await view.findByLabelText(m.thread_title_label());
+    await userEvent.type(title, 'An opening that is not saved yet');
+    const destination = view.getByRole('link', { name: m.board_threads_heading() });
+    await userEvent.click(destination);
+    let dialog = await screen.findByRole('alertdialog', { name: m.thread_authoring_leave_title() });
+    await expect(dialog).toHaveTextContent(m.thread_authoring_leave_unsaved());
+    await userEvent.click(within(dialog).getByRole('button', { name: m.thread_authoring_stay() }));
+    await expect(title).toHaveValue('An opening that is not saved yet');
+    await userEvent.click(destination);
+    dialog = await screen.findByRole('alertdialog', { name: m.thread_authoring_leave_title() });
+    await userEvent.click(within(dialog).getByRole('button', { name: m.thread_authoring_leave() }));
+    await view.findByRole('heading', { name: m.board_threads_heading() });
+  },
+};
 export const NewThreadSubjects: Story = {
   name: 'New thread / Choose subjects',
   render: () => (

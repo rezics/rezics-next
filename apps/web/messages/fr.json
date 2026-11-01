@@ -3991,5 +3991,15 @@
   "moderation_filter_reset": "Réinitialiser les filtres",
   "moderation_queue_read_denied": "Cette file de signalements est indisponible ou vous ne pouvez plus la consulter.",
   "moderation_queue_stale": "Cette page a expiré ou correspond à une autre sélection. Recommencez avec les filtres sélectionnés.",
-  "moderation_queue_restart": "Recommencer les signalements"
+  "moderation_queue_restart": "Recommencer les signalements",
+  "thread_authoring_session_changed": "Votre connexion a changé. Rechargez cette page pour commencer une nouvelle conversation avec votre compte actuel.",
+  "thread_authoring_leave_title": "Quitter la conversation ? ",
+  "thread_authoring_leave_unsaved": "Vos textes et sélections locaux ne sont pas enregistrés. En quittant, ils seront supprimés.",
+  "thread_authoring_leave_pending": "Vos textes locaux ne sont pas enregistrés. Le résultat d’un envoi est encore inconnu ; en quittant, vous perdez la reprise locale de la tentative. La requête peut tout de même aboutir. Quitter ne l’annule pas et ne peut pas en annuler les effets.",
+  "thread_authoring_discard_title": "Supprimer cette modification ?",
+  "thread_authoring_discard_unsaved": "Cette modification n’est pas enregistrée. Voulez-vous la supprimer ?",
+  "thread_authoring_discard_pending": "Le résultat de cet envoi de modification est encore inconnu. La suppression fait perdre la reprise locale de la tentative ; la requête peut tout de même aboutir. Cela ne l’annule pas et ne peut pas en annuler les effets.",
+  "thread_authoring_stay": "Rester",
+  "thread_authoring_leave": "Quitter",
+  "thread_authoring_discard": "Supprimer la modification"
 }

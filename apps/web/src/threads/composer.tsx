@@ -26,6 +26,7 @@ import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from '
 import { ReplyImageUploadRecovery, ReplyUploadRecoveryRefusal, type ReplyUploadTarget } from './media-upload-recovery';
 import { ExistingReviewNotice } from './write-prompts';
 import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from './authoring-departure';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -371,22 +372,7 @@ function editorLabels(): RichTextEditorLabels {
   };
 }
 
-export function PostComposer<T, Context = undefined>({
-  initialKey,
-  initialBody,
-  titleRequired = false,
-  canSubmit = true,
-  containerId,
-  boardId,
-  replyTargetId,
-  replyContext,
-  focusRequest = 0,
-  onPendingChange,
-  submissionContext,
-  onIntentLockChange,
-  onSubmit,
-  onSuccess,
-}: {
+type PostComposerProps<T, Context> = {
   initialKey: string;
   initialBody?: DocumentSnapshot;
   titleRequired?: boolean;
@@ -401,7 +387,32 @@ export function PostComposer<T, Context = undefined>({
   onIntentLockChange?: (locked: boolean) => void;
   onSubmit: (input: ReplyCommand<Context>) => Promise<WriteResult<T>>;
   onSuccess: (value: T) => void;
-}) {
+};
+
+export function PostComposer<T, Context = undefined>(props: PostComposerProps<T, Context>) {
+  return (
+    <AuthoringDepartureBoundary>
+      <PostComposerContent<T, Context> {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+function PostComposerContent<T, Context = undefined>({
+  initialKey,
+  initialBody,
+  titleRequired = false,
+  canSubmit = true,
+  containerId,
+  boardId,
+  replyTargetId,
+  replyContext,
+  focusRequest = 0,
+  onPendingChange,
+  submissionContext,
+  onIntentLockChange,
+  onSubmit,
+  onSuccess,
+}: PostComposerProps<T, Context>) {
   const formId = useId();
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
@@ -416,6 +427,9 @@ export function PostComposer<T, Context = undefined>({
   );
   const [title, setTitle] = useState('');
   const [body, setBody] = useState(() => initialBody ?? fromPlainText('', 'blocks'));
+  const initialBodyRef = useRef(body);
+  const initialSubmissionContext = useRef(JSON.stringify(submissionContext));
+  const initialReplyTarget = useRef(replyTargetId ?? null);
   const bodyRef = useRef(body);
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
   const editorHost = useRef<HTMLDivElement>(null);
@@ -457,6 +471,25 @@ export function PostComposer<T, Context = undefined>({
     (!titleRequired || Boolean(title.trim())) &&
     !draftHasMediaIssues(failure, body) &&
     !uncertainChanged;
+  const departureSignature = JSON.stringify([
+    title,
+    bodyRef.current,
+    submissionContext,
+    replyTargetId ?? null,
+    pendingRef.current,
+    submittingRef.current,
+    replyIntent.current.unresolved,
+  ]);
+  const departure = useAuthoringDeparture(
+    title !== '' ||
+      JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
+      JSON.stringify(submissionContext) !== initialSubmissionContext.current ||
+      (replyTargetId ?? null) !== initialReplyTarget.current ||
+      pendingRef.current > 0 ||
+      uncertainChanged,
+    submittingRef.current || replyIntent.current.unresolved,
+    departureSignature,
+  );
   const uploadTarget = containerId ?? (boardId ? { newThread: { boardId, idempotencyKey } } : undefined);
   const recoverUpload = useComposerUpload(uploadTarget, ownedMediaIds, refusalRef);
   const upload = uploadTarget ? recoverUpload : undefined;
@@ -655,6 +688,7 @@ export function PostComposer<T, Context = undefined>({
         setIdempotencyKey(nextKey);
         replyIntent.current.reset(nextKey);
       }
+      departure.release();
       onSuccess(result.value);
     } catch {
       replyIntent.current.settle(false);
@@ -798,16 +832,7 @@ export function postEditFailureText(failure: EditFailure): string {
   }
 }
 
-export function InlinePostEditor({
-  initialBody,
-  initialMediaIds = [],
-  revisionId: initialRevisionId,
-  idempotencyKey,
-  containerId,
-  onSubmit,
-  onCancel,
-  onSuccess,
-}: {
+type InlinePostEditorProps = {
   initialBody: DocumentSnapshot;
   initialMediaIds?: readonly string[];
   revisionId: string;
@@ -821,10 +846,30 @@ export function InlinePostEditor({
   }) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
   onCancel: () => void;
   onSuccess: (post: RevisedPost) => void;
-}) {
+};
+
+export function InlinePostEditor(props: InlinePostEditorProps) {
+  return (
+    <AuthoringDepartureBoundary>
+      <InlinePostEditorContent {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+function InlinePostEditorContent({
+  initialBody,
+  initialMediaIds = [],
+  revisionId: initialRevisionId,
+  idempotencyKey,
+  containerId,
+  onSubmit,
+  onCancel,
+  onSuccess,
+}: InlinePostEditorProps) {
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
   const [body, setBody] = useState(initialBody);
+  const initialBodyRef = useRef(initialBody);
   const bodyRef = useRef(body);
   const [revisionId, setRevisionId] = useState(initialRevisionId);
   const [failure, setFailure] = useState<EditFailure | null>(null);
@@ -847,6 +892,22 @@ export function InlinePostEditor({
     commandContext,
   );
   const ready = hasDocumentContent(body) && !draftHasMediaIssues(failure, body) && !uncertainChanged;
+  const departureSignature = JSON.stringify([
+    bodyRef.current,
+    revisionId,
+    pendingRef.current,
+    submitting,
+    editIntent.current.unresolved,
+  ]);
+  const departure = useAuthoringDeparture(
+    JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
+      pendingRef.current > 0 ||
+      editIntent.current.unresolved ||
+      uncertainChanged,
+    submitting || editIntent.current.unresolved,
+    departureSignature,
+    onCancel,
+  );
   const upload = useComposerUpload(containerId, ownedMediaIds, refusalRef);
   const { check: checkMedia, checking } = useDraftMediaCheck(bodyRef, containerId, failure, ownedMediaIds, (media) =>
     setFailure((current) => (current?.reason === 'media-unavailable' ? { ...current, media } : current)),
@@ -966,6 +1027,7 @@ export function InlinePostEditor({
         });
         return;
       }
+      departure.release();
       onSuccess(result.post);
     } catch {
       editIntent.current.settle(false);
@@ -982,6 +1044,7 @@ export function InlinePostEditor({
       setFailure({ ok: false, reason: 'not-found' });
       return;
     }
+    initialBodyRef.current = current.body;
     bodyRef.current = current.body;
     setBody(current.body);
     ownedMediaIds.current = new Set(current.mediaIds);
@@ -1010,7 +1073,7 @@ export function InlinePostEditor({
           return;
         if (event.key === 'Escape' && !submitting) {
           event.preventDefault();
-          onCancel();
+          departure.requestDiscard(onCancel);
         }
       }}
     >
@@ -1069,7 +1132,12 @@ export function InlinePostEditor({
             {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
             {m.thread_edit_save()}
           </Button>
-          <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={() => departure.requestDiscard(onCancel)}
+          >
             {m.thread_edit_cancel()}
           </Button>
         </div>

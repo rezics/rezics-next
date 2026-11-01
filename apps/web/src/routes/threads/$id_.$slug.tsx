@@ -44,6 +44,7 @@ import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
 import { PageHeading } from '../../shell/page-heading';
+import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 
 function threadSearch(search: Record<string, unknown>): { cursor?: string } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
@@ -171,21 +172,23 @@ function ThreadPage() {
   }
 
   return (
-    <ThreadReading
-      key={id}
-      page={page}
-      readAuthority={readScope}
-      readerSubject={subject}
-      Post={ThreadReadingPost}
-      signedOut={<SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />}
-      personal={personal}
-      session={session}
-      returnTo={returnTo}
-      renderHeader={(title) => <ThreadReadingHeader page={page} title={title} />}
-      onMutation={refreshThreadQueries}
-      onPageRefresh={refreshThreadPage}
-      onPostIdsChange={setPostIds}
-    />
+    <AuthoringDepartureProvider>
+      <ThreadReading
+        key={id}
+        page={page}
+        readAuthority={readScope}
+        readerSubject={subject}
+        Post={ThreadReadingPost}
+        signedOut={<SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />}
+        personal={personal}
+        session={session}
+        returnTo={returnTo}
+        renderHeader={(title) => <ThreadReadingHeader page={page} title={title} />}
+        onMutation={refreshThreadQueries}
+        onPageRefresh={refreshThreadPage}
+        onPostIdsChange={setPostIds}
+      />
+    </AuthoringDepartureProvider>
   );
 }
 

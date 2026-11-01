@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ThreadReading } from '../../../threads/thread-reading';
+import { AuthoringDepartureProvider } from '../../../threads/authoring-departure';
 import type { ThreadPost } from '../../../threads/thread-page';
 import { ThreadReadingHeader, ThreadReadingPost } from '../../../routes/threads/$id_.$slug';
 import { threadPageQuery, threadPersonalQuery } from '../../../threads/thread-queries';
@@ -140,7 +141,9 @@ export function ThreadReadingPreview({
     );
   return (
     <PatternStory visitor={visitor} path={threadHref(readingThread(state))}>
-      {shell ? <AppShell>{content}</AppShell> : <div className="p-3 md:p-6">{content}</div>}
+      <AuthoringDepartureProvider>
+        {shell ? <AppShell>{content}</AppShell> : <div className="p-3 md:p-6">{content}</div>}
+      </AuthoringDepartureProvider>
     </PatternStory>
   );
 }

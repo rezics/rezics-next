@@ -17,6 +17,7 @@ import { PageHeading } from '../../shell/page-heading';
 import { canSubmitThread } from '../../threads/review-policy';
 import { DiscussionSubjects } from '../../threads/discussion-subjects';
 import { contentSubjectPreset } from '../../threads/content-subject-search';
+import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 
 type NewThreadSearch = { subject?: string; subjectTitle?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -70,63 +71,65 @@ function NewThreadPage() {
     : { subjectIds: discussionSubjects.map((subject) => subject.id) };
 
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">{board.title ?? m.threads_untitled()}</p>
-        <PageHeading>{m.thread_new_heading()}</PageHeading>
-      </header>
-      <div className="space-y-5">
-        {review ? (
-          <ReviewFields
-            {...(presetSubject ? { initialSubjectId: presetSubject } : {})}
-            {...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {})}
-            onSubjectChange={handleSubjectChange}
-            onVoteCitationChange={handleVoteCitationChange}
-            disabled={metadataLocked}
-            searchScope={searchScope}
-          />
-        ) : (
-          <DiscussionSubjects
-            value={discussionSubjects}
-            onValueChange={(items) => {
-              if (!metadataLockedRef.current) setDiscussionSubjects(items);
+    <AuthoringDepartureProvider>
+      <article className="max-w-4xl space-y-8 text-foreground">
+        <header className="space-y-3">
+          <p className="text-sm font-medium text-muted-foreground">{board.title ?? m.threads_untitled()}</p>
+          <PageHeading>{m.thread_new_heading()}</PageHeading>
+        </header>
+        <div className="space-y-5">
+          {review ? (
+            <ReviewFields
+              {...(presetSubject ? { initialSubjectId: presetSubject } : {})}
+              {...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {})}
+              onSubjectChange={handleSubjectChange}
+              onVoteCitationChange={handleVoteCitationChange}
+              disabled={metadataLocked}
+              searchScope={searchScope}
+            />
+          ) : (
+            <DiscussionSubjects
+              value={discussionSubjects}
+              onValueChange={(items) => {
+                if (!metadataLockedRef.current) setDiscussionSubjects(items);
+              }}
+              disabled={metadataLocked}
+              searchScope={searchScope}
+            />
+          )}
+          <PostComposer
+            initialKey={idempotencyKey}
+            titleRequired
+            canSubmit={canSubmitThread(board.purpose, subjectId)}
+            boardId={board.id}
+            submissionContext={submissionContext}
+            onIntentLockChange={handleIntentLockChange}
+            onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
+              const result = await startThread({
+                data: {
+                  boardId: board.id,
+                  title,
+                  body,
+                  idempotencyKey: key,
+                  ...originalContext!,
+                  ...(mediaIds.length > 0 ? { mediaIds } : {}),
+                },
+                headers: { 'X-CSRF-Token': csrfToken ?? '' },
+                fetch: draftFetch(body),
+              });
+              if (result.ok)
+                document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
+              return result.ok ? { ok: true as const, value: result.thread } : result;
             }}
-            disabled={metadataLocked}
-            searchScope={searchScope}
+            onSuccess={(thread) => {
+              window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
+            }}
           />
-        )}
-        <PostComposer
-          initialKey={idempotencyKey}
-          titleRequired
-          canSubmit={canSubmitThread(board.purpose, subjectId)}
-          boardId={board.id}
-          submissionContext={submissionContext}
-          onIntentLockChange={handleIntentLockChange}
-          onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
-            const result = await startThread({
-              data: {
-                boardId: board.id,
-                title,
-                body,
-                idempotencyKey: key,
-                ...originalContext!,
-                ...(mediaIds.length > 0 ? { mediaIds } : {}),
-              },
-              headers: { 'X-CSRF-Token': csrfToken ?? '' },
-              fetch: draftFetch(body),
-            });
-            if (result.ok)
-              document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
-            return result.ok ? { ok: true as const, value: result.thread } : result;
-          }}
-          onSuccess={(thread) => {
-            window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
-          }}
-        />
-      </div>
-      <Link to="/boards/$id" params={{ id: board.id }} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-        {m.board_threads_heading()}
-      </Link>
-    </article>
+        </div>
+        <Link to="/boards/$id" params={{ id: board.id }} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+          {m.board_threads_heading()}
+        </Link>
+      </article>
+    </AuthoringDepartureProvider>
   );
 }

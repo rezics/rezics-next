@@ -3994,5 +3994,15 @@
   "moderation_filter_reset": "Reset filters",
   "moderation_queue_read_denied": "This report queue is unavailable or you no longer have permission to read it.",
   "moderation_queue_stale": "This report page has expired or belongs to another selection. Start again with the selected filters.",
-  "moderation_queue_restart": "Restart reports"
+  "moderation_queue_restart": "Restart reports",
+  "thread_authoring_session_changed": "Your sign-in changed. Reload this page to start a new conversation with your current account.",
+  "thread_authoring_leave_title": "Leave the conversation?",
+  "thread_authoring_leave_unsaved": "Your local writing and selections have not been saved. Leaving discards them.",
+  "thread_authoring_leave_pending": "Your local writing has not been saved. The result of a submission is still unknown; leaving removes its local retry recovery. The request may still finish, and leaving does not cancel or undo it.",
+  "thread_authoring_discard_title": "Discard this edit?",
+  "thread_authoring_discard_unsaved": "This edit has not been saved. Discard it?",
+  "thread_authoring_discard_pending": "The result of this edit submission is still unknown. Discarding removes its local retry recovery; the request may still finish. This does not cancel or undo it.",
+  "thread_authoring_stay": "Stay",
+  "thread_authoring_leave": "Leave",
+  "thread_authoring_discard": "Discard edit"
 }

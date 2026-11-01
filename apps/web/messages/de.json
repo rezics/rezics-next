@@ -3991,5 +3991,15 @@
   "moderation_filter_reset": "Filter zurücksetzen",
   "moderation_queue_read_denied": "Diese Meldungswarteschlange ist nicht verfügbar oder du darfst sie nicht mehr lesen.",
   "moderation_queue_stale": "Diese Meldungsseite ist abgelaufen oder gehört zu einer anderen Auswahl. Starte mit den ausgewählten Filtern neu.",
-  "moderation_queue_restart": "Meldungen neu starten"
+  "moderation_queue_restart": "Meldungen neu starten",
+  "thread_authoring_session_changed": "Deine Anmeldung hat sich geändert. Lade diese Seite neu, um mit deinem aktuellen Konto eine neue Unterhaltung zu beginnen.",
+  "thread_authoring_leave_title": "Unterhaltung verlassen?",
+  "thread_authoring_leave_unsaved": "Deine lokalen Texte und Auswahlen wurden nicht gespeichert. Beim Verlassen werden sie verworfen.",
+  "thread_authoring_leave_pending": "Deine lokalen Texte wurden nicht gespeichert. Das Ergebnis einer Übermittlung ist noch unbekannt; beim Verlassen geht die lokale Wiederherstellungsmöglichkeit verloren. Die Anfrage kann trotzdem abgeschlossen werden. Das Verlassen bricht sie nicht ab und macht sie nicht rückgängig.",
+  "thread_authoring_discard_title": "Diese Bearbeitung verwerfen?",
+  "thread_authoring_discard_unsaved": "Diese Bearbeitung wurde nicht gespeichert. Möchtest du sie verwerfen?",
+  "thread_authoring_discard_pending": "Das Ergebnis dieser Bearbeitung ist noch unbekannt. Beim Verwerfen geht die lokale Wiederherstellungsmöglichkeit verloren; die Anfrage kann trotzdem abgeschlossen werden. Sie wird dadurch weder abgebrochen noch rückgängig gemacht.",
+  "thread_authoring_stay": "Bleiben",
+  "thread_authoring_leave": "Verlassen",
+  "thread_authoring_discard": "Bearbeitung verwerfen"
 }
