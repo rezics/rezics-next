@@ -1,8 +1,6 @@
-import { useCallback, useLayoutEffect, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { useCallback, useState, type ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
 import {
   readBuyerEntitlementCurrent,
   readBuyerEntitlementsCurrent,
@@ -15,8 +13,8 @@ import {
 } from './entitlements';
 import { EntitlementPage } from './entitlement-page';
 import { EntitlementsPage } from './entitlements-page';
+import { useBuyerCurrentOrigin, type BuyerCurrentOrigin } from './buyer-current-origin';
 
-const subscribe = () => () => {};
 type Page = BuyerEntitlementsPage | BuyerEntitlementPage;
 type PageProps<T> = { page: T; locale: string; retry?: () => void; continuation?: boolean };
 type CurrentProps<T extends Page> = {
@@ -25,7 +23,6 @@ type CurrentProps<T extends Page> = {
   read: (address: EntitlementsAddress) => Promise<BuyerEntitlementsCurrentRead<T>>;
   Presentation: ComponentType<PageProps<T>>;
 };
-type Origin = { active: boolean };
 type Outcome<T> = { kind: 'accepted'; value: BuyerEntitlementsCurrentRead<T> } | { kind: 'failed' };
 
 function matches<T>(value: BuyerEntitlementsCurrentRead<T>, subject: string, address: EntitlementsAddress) {
@@ -82,34 +79,17 @@ export function EntitlementCurrent({
   );
 }
 
-/** Retire during render so no private child survives an observed authority or address replacement. */
+/** Observed cache replacement and render-time address replacement permanently retire private work. */
 function EntitlementsBoundary<T extends Page>(props: CurrentProps<T>) {
   const { initial, address, Presentation } = props;
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
-  const session = useSession();
-  const purchases = useOperation('entitlement.get');
+  const session = useBuyerCurrentOrigin('entitlement.get', JSON.stringify(address));
+  const { hydrated, origin } = session;
   const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
-  const admitted = hydrated ? purchases : !!initial.sessionSubject;
-  const key = JSON.stringify([subject ?? null, admitted, address]);
-  const [scope, setScope] = useState(() => ({ key, generation: 0, seed: true, origin: { active: true } }));
-  if (scope.key !== key) {
-    scope.origin.active = false;
-    setScope({ key, generation: scope.generation + 1, seed: false, origin: { active: true } });
-  }
-  useLayoutEffect(() => {
-    scope.origin.active = true;
-    return () => {
-      scope.origin.active = false;
-    };
-  }, [scope.origin]);
+  const admitted = hydrated ? session.admitted : !!initial.sessionSubject;
   const retrySession = useCallback(() => {
-    if (scope.origin.active && hydrated) window.location.reload();
-  }, [scope.origin, hydrated]);
-  if (!subject || !admitted) {
+    if (origin.isObserved() && hydrated) window.location.reload();
+  }, [origin, hydrated]);
+  if (!subject || !admitted || (hydrated && !session.csrfToken)) {
     const kind =
       hydrated && session.state === 'unavailable'
         ? 'unavailable'
@@ -120,12 +100,12 @@ function EntitlementsBoundary<T extends Page>(props: CurrentProps<T>) {
   }
   return (
     <EntitlementsRead
-      key={scope.generation}
+      key={session.generation}
       {...props}
       subject={subject}
       hydrated={hydrated}
-      seed={scope.seed}
-      origin={scope.origin}
+      seed={session.seed}
+      origin={origin}
     />
   );
 }
@@ -139,7 +119,7 @@ function EntitlementsRead<T extends Page>({
   hydrated,
   seed,
   origin,
-}: CurrentProps<T> & { subject: string; hydrated: boolean; seed: boolean; origin: Origin }) {
+}: CurrentProps<T> & { subject: string; hydrated: boolean; seed: boolean; origin: BuyerCurrentOrigin }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState<Outcome<T> | undefined>(() =>
     seed && matches(initial, subject, address) ? { kind: 'accepted', value: initial } : undefined,
@@ -149,12 +129,12 @@ function EntitlementsRead<T extends Page>({
     queryKey: ['buyer-entitlements-current', subject, true, address.kind, address, lifetime],
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.active) return null;
+      if (!origin.isCurrent()) return null;
       try {
         const value = await read(address);
-        return origin.active && matches(value, subject, address) ? { kind: 'accepted', value } : null;
+        return origin.isCurrent() && matches(value, subject, address) ? { kind: 'accepted', value } : null;
       } catch {
-        return origin.active ? { kind: 'failed' } : null;
+        return origin.isCurrent() ? { kind: 'failed' } : null;
       }
     },
     ...(initialData ? { initialData } : {}),
@@ -178,7 +158,7 @@ function EntitlementsRead<T extends Page>({
     });
   }
   const retry = useCallback(() => {
-    if (origin.active) void query.refetch();
+    if (origin.isCurrent()) void query.refetch();
   }, [origin, query.refetch]);
   return (
     <Presentation

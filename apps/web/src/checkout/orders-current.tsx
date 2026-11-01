@@ -1,15 +1,13 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { isNotFound } from '@tanstack/react-router';
-import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
 import { PendingPage } from '../shell/pending';
 import { ErrorPage, NotFoundPage } from '../shell/shell';
 import { readBuyerOrdersCurrent, type BuyerOrdersAddress, type BuyerOrdersCurrentRead } from './orders';
 import { OrdersPage } from './orders-page';
+import { useBuyerCurrentOrigin, type BuyerCurrentOrigin } from './buyer-current-origin';
 
-const subscribe = () => () => {};
 function matches(
   value: BuyerOrdersCurrentRead | undefined,
   subject: string,
@@ -22,7 +20,7 @@ function matches(
   );
 }
 
-/** Identity, admission and address replacement retire the entire private history during render. */
+/** The actual observed viewer, admission and address own the entire private history. */
 export function OrdersCurrent({
   initial,
   search,
@@ -32,27 +30,12 @@ export function OrdersCurrent({
   search: { cursor?: string };
   locale: string;
 }) {
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
-  const session = useSession();
-  const admitted = useOperation('order.list');
+  const address = { cursor: search.cursor || null, locale };
+  const session = useBuyerCurrentOrigin('order.list', JSON.stringify(address));
+  const { hydrated, admitted, origin } = session;
   const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
   const allowed = !hydrated || admitted;
-  const address = { cursor: search.cursor || null, locale };
-  const key = JSON.stringify([subject, allowed, address.cursor, address.locale]);
-  const [scope, setScope] = useState({ key, generation: 0, seed: true });
-  const origin = useRef({ key, active: true });
-  if (origin.current.key !== key) {
-    origin.current.active = false;
-    origin.current = { key, active: true };
-  }
-  if (scope.key !== key) {
-    setScope({ key, generation: scope.generation + 1, seed: false });
-  }
-  if (!subject) {
+  if (!subject || (hydrated && !session.csrfToken)) {
     if (hydrated && session.state === 'signed-out') return <NotFoundPage />;
     if (hydrated && session.state === 'unavailable') return <ErrorPage />;
     return <PendingPage />;
@@ -60,13 +43,13 @@ export function OrdersCurrent({
   if (!allowed) return <NotFoundPage />;
   return (
     <CurrentOrdersRead
-      key={scope.generation}
+      key={session.generation}
       subject={subject}
       address={address}
       initial={initial}
-      seed={scope.seed}
+      seed={session.seed}
       hydrated={hydrated}
-      origin={origin.current}
+      origin={origin}
     />
   );
 }
@@ -84,28 +67,20 @@ function CurrentOrdersRead({
   initial: BuyerOrdersCurrentRead;
   seed: boolean;
   hydrated: boolean;
-  origin: { active: boolean };
+  origin: BuyerCurrentOrigin;
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? initial : undefined));
-  const mounted = useRef(true);
-  useLayoutEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
   const query = useQuery({
     ...personalRead,
     queryKey: ['orders-current', subject, address.cursor, address.locale, lifetime],
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.active || !mounted.current) throw new Error('Obsolete order history read');
+      if (!origin.isCurrent()) throw new Error('Obsolete order history read');
       const value = await readBuyerOrdersCurrent({
         data: { ...(address.cursor ? { cursor: address.cursor } : {}), locale: address.locale },
       });
-      if (!origin.active || !mounted.current || !matches(value, subject, address))
-        throw new Error('Unaccepted order history read');
+      if (!origin.isCurrent() || !matches(value, subject, address)) throw new Error('Unaccepted order history read');
       return value;
     },
     initialData,
@@ -122,7 +97,7 @@ function CurrentOrdersRead({
       <ErrorPage
         retrying={query.isFetching}
         onRetry={() => {
-          if (origin.active && mounted.current) void query.refetch();
+          if (origin.isCurrent()) void query.refetch();
         }}
       />
     );
