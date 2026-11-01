@@ -84,7 +84,7 @@ function ControlledInbox() {
   useEffect(() => {
     const previousFetch = globalThis.fetch;
     let releaseHeld = (_status: 204 | 503) => {};
-    const fetcher: typeof fetch = async (input, init) => {
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
       if (url.origin !== 'http://kernel.local' || ['GET', 'HEAD', 'OPTIONS'].includes(request.method))
@@ -106,14 +106,15 @@ function ControlledInbox() {
       });
       journey.settled = response.then(() => {});
       return response;
-    };
+    }) as typeof fetch;
     globalThis.fetch = fetcher;
     journey.refresh = async () => {
       const viewer = currentInboxViewer(client);
       if (!viewer) throw new Error('No current Inbox viewer');
       await client.refetchQueries({ queryKey: inboxViewerQueryKey(viewer), type: 'active' });
     };
-    journey.retire = () => client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null });
+    const sessionKey: readonly unknown[] = sessionQuery.queryKey;
+    journey.retire = () => client.setQueryData(sessionKey, { state: 'unknown', subject: null, csrfToken: null });
     journey.resume = () => {
       journey.epoch++;
       journey.confirmed = false;
