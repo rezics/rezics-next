@@ -12,6 +12,7 @@ import type {
   PublicFilterProjectionMeaning,
 } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
+import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type {
   PublicFilterSourceBinding,
   NativeSourceRepairLocator,
@@ -112,6 +113,8 @@ export type RetainedRepairPage = Readonly<{
   frontier: string | null;
   complete: boolean;
   repairs: readonly RetainedSourceRepair[];
+  /** Independent native Account input, never a Subject projection or privacy cause. */
+  account?: AccountDiscoveryRepairObservation;
 }>;
 export type RetainedRepairSettlement = Readonly<{
   id: string;

@@ -20,6 +20,7 @@ import {
   readPublicFilterRepairPhysicalTarget,
   repairWriterPosition,
   validatePublicFilterRepairWriterEvidence,
+  isDiscoveryRepairWriterReceipt,
   type PublicFilterRepairWriterReceipt,
 } from './writer-guard.ts';
 import { subjectPartition } from './source.ts';
@@ -676,6 +677,34 @@ export async function readPublicFilterRepairSettlement(
             throw new Failure('binding_mismatch');
           latest.set(receipt.subject, receipt);
           copies.delete(receipt.subject);
+        }
+        if (page.account) {
+          if (page.repairs.length || page.complete) throw new Failure('binding_mismatch');
+          meter.candidates++;
+          meter.inputKeys++;
+          admit();
+          const effect = await repairEffect.run(db, { ...keys, page: ordinal, item: 0 });
+          if (!effect) throw new Failure('owner_unavailable');
+          const receipt = decode<PublicFilterRepairWriterReceipt>(effect.receipt);
+          if (
+            !isDiscoveryRepairWriterReceipt(receipt) ||
+            receipt.owner !== 'accounts' ||
+            !receipt.account ||
+            !isDeepStrictEqual({ ...receipt.account, position: page.account.position }, page.account) ||
+            receipt.locator !== encode({ observation: q.snapshot.observation, execution: input.execution, page: ordinal, item: 0 }) ||
+            receipt.subject !== page.account.id ||
+            receipt.partition !== page.account.head.partition ||
+            receipt.epoch !== page.account.head.epoch ||
+            repairWriterPosition(receipt) < page.account.position ||
+            receipt.incarnation !== q.consumer.incarnation
+          )
+            throw new Failure('binding_mismatch');
+          validatePublicFilterRepairWriterEvidence(q.consumer.physicalTarget, receipt);
+          const previous = latest.get(receipt.subject);
+          if (previous && (repairWriterPosition(receipt) < repairWriterPosition(previous) ||
+            receipt.enrollment.position <= previous.completion.position)) throw new Failure('binding_mismatch');
+          effects.push({ page: ordinal, item: 0, receipt: effect.receipt });
+          latest.set(receipt.subject, receipt);
         }
       };
       let after = -1;

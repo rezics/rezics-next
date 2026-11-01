@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import { readNativePublicFilterAccountRepair } from '../semantic/public-filter-source-binding.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import type {
@@ -55,6 +56,7 @@ export async function verifyPublicFilterRepairSourcePage(
     frontier: string | null;
     complete: boolean;
     sourceStep?: string;
+    account?: RetainedRepairPage['account'];
   }>,
   context: PublicFilterConsumerContext,
   charge: (cost?: PublicFilterCost) => void,
@@ -109,11 +111,19 @@ export async function verifyPublicFilterRepairSourcePage(
     if (!isDeepStrictEqual(repairBody(sourceRepair(verified.repair)), repairBody(repairs[item]!)))
       throw new PublicFilterRepairSourceError('binding_mismatch');
   }
+  charge();
+  const nativeAccount = await owner(() => readNativePublicFilterAccountRepair(binding, request, context));
+  if (nativeAccount) charge(nativeAccount.cost);
+  if (expected.account !== undefined && !isDeepStrictEqual(expected.account, nativeAccount?.account))
+    throw new PublicFilterRepairSourceError('binding_mismatch');
+  if (nativeAccount?.account && (repairs.length || step.complete))
+    throw new PublicFilterRepairSourceError('binding_mismatch');
   return {
     sourceStep: step.step,
     predecessor: step.predecessor,
     frontier: step.frontier,
     complete: step.complete,
     repairs,
+    ...(nativeAccount?.account ? { account: nativeAccount.account } : {}),
   };
 }

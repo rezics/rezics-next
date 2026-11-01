@@ -11,6 +11,10 @@ import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readAccountDiscoveryReductionBinding } from '../access/account-discovery-reduction.ts';
+import {
+  readAccountDiscoveryRepairObservation,
+  type AccountDiscoveryRepairObservation,
+} from '../access/account-discovery-source.ts';
 import { readRelease, freeze } from './definitions.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
@@ -304,6 +308,38 @@ export type NativePublicFilterPreparation = PublicSourceBootstrapResult | Readon
 const nativePreparations = new WeakMap<PublicFilterSourceBinding, (
   input: NativePreparationInput, context: PublicFilterConsumerContext,
 ) => Promise<NativePublicFilterPreparation>>();
+
+// These private factory associations locate original native bodies. The bodies
+// resolve persisted custody and owner facts on every call; the association is
+// neither a repair receipt nor population/serving authority.
+const nativeAccountRepairs = new WeakMap<PublicFilterSourceBinding, (
+  request: NativeSourceRepairStepRead, context: PublicFilterConsumerContext,
+) => Promise<Readonly<{ account: AccountDiscoveryRepairObservation | null; cost: PublicFilterCost }>>>();
+const nativeRepairStarts = new WeakMap<PublicFilterSourceBinding, (
+  request: Readonly<{ bootstrap: string; queried: PublicFilterQueriedObservation }>,
+  context: PublicFilterConsumerContext,
+) => Promise<Readonly<{ start: PrivacyReductionStart; cost: PublicFilterCost }>>>();
+const nativeRepairJoins = new WeakMap<PublicFilterSourceBinding, PublicFilterSourceBinding['join']>();
+
+export async function joinNativePublicFilterRepair(
+  binding: PublicFilterSourceBinding, request: Parameters<PublicFilterSourceBinding['join']>[0],
+  context: PublicFilterConsumerContext,
+) {
+  return nativeRepairJoins.get(binding)?.(request, context) ?? null;
+}
+
+export async function readNativePublicFilterAccountRepair(
+  binding: PublicFilterSourceBinding, request: NativeSourceRepairStepRead, context: PublicFilterConsumerContext,
+) {
+  return nativeAccountRepairs.get(binding)?.(request, context) ?? null;
+}
+export async function readNativePublicFilterRepairStart(
+  binding: PublicFilterSourceBinding,
+  request: Readonly<{ bootstrap: string; queried: PublicFilterQueriedObservation }>,
+  context: PublicFilterConsumerContext,
+) {
+  return nativeRepairStarts.get(binding)?.(request, context) ?? null;
+}
 
 /** A private factory association locates the native body; it cannot grant coverage or open a PIT. */
 export async function advanceNativePublicFilterPreparation(
@@ -712,10 +748,11 @@ export function createPublicFilterSourceBinding(
       throw new BindingError('binding_mismatch');
   }
   type RepairState = {
+    owner?: 'semantic' | 'accounts';
     partition: number;
     after: { route: number; id: string } | null;
     subject: string | null;
-    phase: 'scan' | 'advance' | 'project';
+    phase: 'scan' | 'advance' | 'project' | 'account';
     advance: string;
     version: bigint | null;
     epoch: number | null;
@@ -730,6 +767,7 @@ export function createPublicFilterSourceBinding(
       frontier: PublicFilterProjectionFrontier;
       request: { inputLimit: number; frontier: PublicFilterProjectionFrontier | null };
     } | null;
+    account?: AccountDiscoveryRepairObservation;
   };
   type Projection = Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }>;
   function projectionDigest(page: Projection): string {
@@ -856,16 +894,53 @@ export function createPublicFilterSourceBinding(
     let next = structuredClone(state);
     let repairs: PublicSourceRepair[] = [],
       output: RepairRecord['output'] = null,
+      account: AccountDiscoveryRepairObservation | undefined,
       complete = false;
     if (state.partition === 4096) {
+      if ('representation' in bootstrap.definition.capture && state.owner !== 'accounts') {
+        next = { ...next, owner: 'accounts', partition: 0, after: null, subject: null, epoch: null, phase: 'scan' };
+      } else {
       // A full enumeration alone cannot close the creation/change bridge or certify a moving Source.
       await validateOriginalAndFinal(bootstrap, joined, cost, context);
       complete = true;
+      }
     } else {
       const owner = await readPartition(db, state.partition);
       if (!owner || owner.writeState !== 'active') throw new BindingError('owner_unavailable');
       if (state.epoch !== null && state.epoch !== owner.epoch) throw new BindingError('configuration_changed');
       next.epoch = owner.epoch;
+      if (state.owner === 'accounts') {
+        if (state.phase === 'scan') {
+          // Raw owner keys include fenced/tombstoned rows and outstanding native
+          // deletion intents. Each arm seeks one indexed key; no live-only page
+          // may silently drop a previously indexed Account.
+          const key = (await db.query<{ route: number; id: string }>(
+            `SELECT route,id::text FROM (
+               (SELECT route,account_id AS id FROM access.account
+                WHERE route >= $1 AND route < $2 AND (route,account_id)>($3,$4::uuid)
+                ORDER BY route,account_id LIMIT 1)
+               UNION ALL
+               (SELECT route,account_id AS id FROM access.account_discovery_intent
+                WHERE route >= $1 AND route < $2 AND (route,account_id)>($3,$4::uuid)
+                ORDER BY route,account_id LIMIT 1)
+             ) keys ORDER BY route,id LIMIT 1`,
+            [state.partition*16,(state.partition+1)*16,state.after?.route ?? state.partition*16,
+              state.after?.id ?? '00000000-0000-0000-0000-000000000000'],
+          )).rows[0];
+          cost.inputKeys += 2;
+          if (!key) next = { ...next, partition: state.partition+1, after: null, epoch: null };
+          else next = { ...next, subject: key.id, after: key, phase: 'account' };
+        } else if (state.phase === 'account' && state.subject !== null) {
+          account = replay?.account ?? await readAccountDiscoveryRepairObservation(db, state.subject, context);
+          const current = await readAccountDiscoveryRepairObservation(db, state.subject, context);
+          if (account.head.partition !== state.partition || account.head.epoch !== owner.epoch ||
+            !isDeepStrictEqual({ ...current, position: account.position }, account))
+            throw new BindingError('configuration_changed');
+          cost.inputKeys += 2;
+          cost.candidates++;
+          next = { ...next, subject: null, phase: 'scan' };
+        } else throw new BindingError('binding_mismatch');
+      } else
       if (state.phase === 'scan') {
         const key = await repairKeys.run(db, {
           partition_no: state.partition,
@@ -999,7 +1074,8 @@ export function createPublicFilterSourceBinding(
       }
     }
     checkDeadline(context);
-    if (replay && encode({ input: state, next, output }) !== encode(replay))
+    const record: RepairRecord = { input: state, next, output, ...(account ? { account } : {}) };
+    if (replay && encode(record) !== encode(replay))
       throw new BindingError('binding_mismatch');
     if (!old) {
       const saved = await repairSave.run(db, {
@@ -1007,7 +1083,7 @@ export function createPublicFilterSourceBinding(
         execution: request.execution,
         step,
         predecessor: request.frontier ?? '',
-        state: encode({ input: state, next, output } satisfies RepairRecord),
+        state: encode(record),
         complete,
         input_limit: request.inputLimit,
         repair_locator_digests: packRepairLocatorDigests(repairs.map((repair) => repair.locator), request.inputLimit),
@@ -1020,6 +1096,57 @@ export function createPublicFilterSourceBinding(
       ? { status: 'complete', repairs, frontier: null, cost }
       : { status: 'progress', repairs, frontier: step, cost };
   }
+  async function joinNative(
+    request: Parameters<PublicFilterSourceBinding['join']>[0],
+    context: PublicFilterConsumerContext, maintenance = false,
+  ): ReturnType<PublicFilterSourceBinding['join']> {
+      let input: typeof request;
+      try {
+        input = structuredClone(request);
+      } catch {
+        return fail('binding_mismatch');
+      }
+      const deadline = context.deadline;
+      return run({ deadline }, async (cost, db) => {
+        const retained = await readPublicFilterConsumerCustody(pool, input, { deadline });
+        addCost(cost, retained.cost);
+        if (retained.status !== 'found') return { ...retained, cost };
+        const definition = await loadDefinition(retained.definition.readDefinition, db);
+        requireSameDefinition(definition, retained.definition);
+        // Custody owns immutable root input and lineage. Never compare refill frontier/size to it.
+        const cut = await loadBootstrap(retained.covered.observation, db, definition);
+        if (
+          cut.definition.readDefinition !== definition.readDefinition ||
+          encode(cut.bootstrap.consumer) !== encode(retained.queried.consumer) ||
+          cut.bootstrap.snapshot !== retained.queried.snapshot.kind ||
+          cut.row.state === 'aborting' ||
+          cut.row.state === 'aborted'
+        )
+          throw new BindingError('binding_mismatch');
+        if (!maintenance) await validateAccounts(cut.row, definition, db, { deadline });
+        if (retained.execution !== null) {
+          const started = await loadBootstrap(retained.execution.start.observation, db, definition);
+          if (
+            started.definition.readDefinition !== definition.readDefinition ||
+            encode(started.bootstrap.consumer) !== encode(retained.queried.consumer) ||
+            started.bootstrap.snapshot !== retained.queried.snapshot.kind ||
+            started.row.state === 'aborting' ||
+            started.row.state === 'aborted'
+          )
+            throw new BindingError('binding_mismatch');
+          if (!maintenance) await validateAccounts(started.row, definition, db, { deadline });
+        }
+        freeze(definition);
+        return {
+          status: 'joined' as const,
+          definition,
+          queried: retained.queried,
+          covered: retained.covered,
+          execution: retained.execution,
+          cost,
+        };
+      });
+    }
   const binding: PublicFilterSourceBinding = {
     async resolve(request, context) {
       // Capture all caller data and constructor identity before the first suspension.
@@ -1061,54 +1188,7 @@ export function createPublicFilterSourceBinding(
         return { status: 'resolved' as const, definition: native, cost };
       });
     },
-    async join(request, context) {
-      let input: typeof request;
-      try {
-        input = structuredClone(request);
-      } catch {
-        return fail('binding_mismatch');
-      }
-      const deadline = context.deadline;
-      return run({ deadline }, async (cost, db) => {
-        const retained = await readPublicFilterConsumerCustody(pool, input, { deadline });
-        addCost(cost, retained.cost);
-        if (retained.status !== 'found') return { ...retained, cost };
-        const definition = await loadDefinition(retained.definition.readDefinition, db);
-        requireSameDefinition(definition, retained.definition);
-        // Custody owns immutable root input and lineage. Never compare refill frontier/size to it.
-        const cut = await loadBootstrap(retained.covered.observation, db, definition);
-        if (
-          cut.definition.readDefinition !== definition.readDefinition ||
-          encode(cut.bootstrap.consumer) !== encode(retained.queried.consumer) ||
-          cut.bootstrap.snapshot !== retained.queried.snapshot.kind ||
-          cut.row.state === 'aborting' ||
-          cut.row.state === 'aborted'
-        )
-          throw new BindingError('binding_mismatch');
-        await validateAccounts(cut.row, definition, db, { deadline });
-        if (retained.execution !== null) {
-          const started = await loadBootstrap(retained.execution.start.observation, db, definition);
-          if (
-            started.definition.readDefinition !== definition.readDefinition ||
-            encode(started.bootstrap.consumer) !== encode(retained.queried.consumer) ||
-            started.bootstrap.snapshot !== retained.queried.snapshot.kind ||
-            started.row.state === 'aborting' ||
-            started.row.state === 'aborted'
-          )
-            throw new BindingError('binding_mismatch');
-          await validateAccounts(started.row, definition, db, { deadline });
-        }
-        freeze(definition);
-        return {
-          status: 'joined' as const,
-          definition,
-          queried: retained.queried,
-          covered: retained.covered,
-          execution: retained.execution,
-          cost,
-        };
-      });
-    },
+    join: joinNative,
   };
   async function beginRetained(
     request: Parameters<PublicFilterSourceBootstrapBinding['begin']>[0],
@@ -1219,7 +1299,7 @@ export function createPublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         const bootstrapId = nativeId(input.bootstrap);
-        const joined = await binding.join({ queried: input.queried, execution: input.execution }, { deadline });
+        const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
         addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
@@ -1229,8 +1309,6 @@ export function createPublicFilterSourceBinding(
           encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
-        // Account repair is owned by its native producer; Subject evidence cannot certify it.
-        if ('representation' in cut.definition.capture) throw new BindingError('owner_unavailable');
         const row = await repairRead.run(db, {
           bootstrap: bootstrapId,
           execution: input.execution,
@@ -1277,6 +1355,13 @@ export function createPublicFilterSourceBinding(
             page, meaning: cut.definition.meaning,
           }, { deadline })) throw new BindingError('owner_unavailable');
           await currentRepairHome(input.bootstrap, input.execution, record.input, page.source, db);
+        } else if (record.account) {
+          if (record.input.owner !== 'accounts' || record.input.phase !== 'account' ||
+            record.input.subject !== record.account.id || receiptDigests.length !== 0)
+            throw new BindingError('binding_mismatch');
+          const current = await readAccountDiscoveryRepairObservation(db, record.account.id, { deadline });
+          if (!isDeepStrictEqual({ ...current, position: record.account.position }, record.account))
+            throw new BindingError('configuration_changed');
         } else if (
           (record.input.phase !== 'scan' && record.input.phase !== 'advance') ||
           receiptDigests.length !== 0
@@ -1356,7 +1441,7 @@ export function createPublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         // Preparation stays acyclic: this is basic immutable Search custody, never its settlement reader.
-        const joined = await binding.join({ queried, execution }, { deadline });
+        const joined = await joinNative({ queried, execution }, { deadline }, true);
         addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const cut = await loadBootstrap(receipt.bootstrap, db, joined.definition);
@@ -1366,7 +1451,6 @@ export function createPublicFilterSourceBinding(
           encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
-        if ('representation' in cut.definition.capture) throw new BindingError('owner_unavailable');
         const row = await repairState.run(db, {
           bootstrap: nativeId(receipt.bootstrap),
           execution,
@@ -1508,7 +1592,7 @@ export function createPublicFilterSourceBinding(
         deadline = context.deadline;
       if (!Number.isInteger(input.inputLimit) || input.inputLimit < 1 || input.inputLimit > 256)
         throw new RangeError('Repair inputLimit must be 1 through 256');
-      const joined = await binding.join({ queried: input.queried, execution: input.execution }, { deadline });
+      const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
       if (joined.status !== 'joined') return joined;
       return run({ deadline }, async (cost, db) => {
         addCost(cost, joined.cost);
@@ -1519,15 +1603,13 @@ export function createPublicFilterSourceBinding(
           encode(joined.covered) !== encode(cut.bootstrap.covered)
         )
           throw new BindingError('binding_mismatch');
-        // An Account family needs the Accounts native repair owner; Subject versions never certify it.
-        if ('representation' in cut.definition.capture) throw new BindingError('owner_unavailable');
         return repairNative(cut.bootstrap, joined, input, db, cost, { deadline });
       });
     },
     async settle(request, context) {
       const input = structuredClone(request),
         deadline = context.deadline;
-      const joined = await binding.join({ queried: input.queried, execution: input.execution }, { deadline });
+      const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
       if (joined.status !== 'joined') return joined;
       return run({ deadline }, async (cost, db) => {
         addCost(cost, joined.cost);
@@ -1562,6 +1644,54 @@ export function createPublicFilterSourceBinding(
       });
     },
   };
+  nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, true));
+  nativeRepairStarts.set(bootstrapBinding, async (request, context) => {
+    const result = await run(context, async (cost, db) => {
+    const joined = await joinNative({ queried: request.queried }, context, true);
+    addCost(cost, joined.cost);
+    if (joined.status !== 'joined') throw new BindingError(joined.reason);
+    const cut = await loadBootstrap(request.bootstrap, db, joined.definition);
+    if (!cut.row.coverage_sealed || cut.row.coverage_after !== 4096 || cut.row.state !== 'adopted' ||
+      cut.row.queried !== joined.queried.snapshot.observation ||
+      encode(cut.bootstrap.covered) !== encode(joined.covered))
+      throw new BindingError('binding_mismatch');
+    // This is an original maintenance locator, not a clean population result.
+    // It cannot authorize enumeration or renew an immutable served observation.
+    return { status: 'start' as const, start: joined.covered, cost };
+    });
+    if (result.status !== 'start') throw new BindingError(result.reason);
+    return result;
+  });
+  nativeAccountRepairs.set(bootstrapBinding, async (request, context) => {
+    const result = await run(context, async (cost, db) => {
+      const joined = await joinNative({ queried: request.queried, execution: request.execution }, context, true);
+      addCost(cost, joined.cost);
+      if (joined.status !== 'joined') throw new BindingError(joined.reason);
+      const cut = await loadBootstrap(request.bootstrap, db, joined.definition);
+      if (cut.row.state !== 'adopted' || cut.row.queried !== joined.queried.snapshot.observation ||
+        encode(cut.bootstrap.covered) !== encode(joined.covered))
+        throw new BindingError('binding_mismatch');
+      const row = await repairRead.run(db, {
+        bootstrap: nativeId(request.bootstrap), execution: request.execution, predecessor: request.predecessor ?? '',
+      });
+      if (!row || row.receipt_protocol !== 1 || row.complete) throw new BindingError('owner_unavailable');
+      const record = decode<RepairRecord>(row.state);
+      if (!record.account) return { status: 'account' as const, account: null, cost };
+      if (!('representation' in cut.definition.capture) || record.input.owner !== 'accounts' ||
+        record.input.phase !== 'account' || record.input.subject !== record.account.id ||
+        record.account.head.partition !== record.input.partition || record.account.head.epoch !== record.input.epoch)
+        throw new BindingError('binding_mismatch');
+      const current = await readAccountDiscoveryRepairObservation(db, record.account.id, context);
+      if (!isDeepStrictEqual({ ...current, position: record.account.position }, record.account))
+        throw new BindingError('configuration_changed');
+      const original = await loadBootstrap(request.bootstrap, db, joined.definition);
+      if (original.row.state !== 'adopted' || original.row.queried !== cut.row.queried)
+        throw new BindingError('configuration_changed');
+      return { status: 'account' as const, account: record.account, cost };
+    });
+    if (result.status !== 'account') throw new BindingError(result.reason);
+    return result;
+  });
   nativePreparations.set(bootstrapBinding, async (input, context) => {
     if (!('bootstrap' in input)) return beginRetained(input, context);
     const retained = await run(context, async (cost, db) => {

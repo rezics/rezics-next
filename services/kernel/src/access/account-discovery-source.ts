@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import type { AccountKind } from './account-data.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
@@ -7,8 +8,8 @@ import { readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
-import { deadlineFor } from '../request/deadline.ts';
-import { readAccountDiscoveryReductionBinding } from './account-discovery-reduction.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { readAccountDiscoveryReductionBinding, type AccountDiscoveryReductionHead } from './account-discovery-reduction.ts';
 import type { AccountDiscoverySource, AccountDiscoverySummary } from '../search/discovery.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from '../semantic/summaries.ts';
 
@@ -251,6 +252,46 @@ export async function readAccountDiscoveryBindings(
     );
   };
   return snapshotClient ? read(snapshotClient) : withReadTransaction(pool, read);
+}
+
+/** Original Account repair input. The core snapshot position is a writer floor;
+ * revision and claimRevision remain independent native Account domains. None of
+ * these fields is a Semantic privacy-log position or a population ACK.
+ */
+export type AccountDiscoveryRepairObservation = Readonly<{
+  id: string;
+  head: AccountDiscoveryReductionHead;
+  position: bigint;
+  account: Awaited<ReturnType<AccountDiscoverySource['read']>>['accounts'][number] | null;
+  binding: Awaited<ReturnType<typeof readAccountDiscoveryBindings>> extends Map<string, infer B> ? B | null : never;
+}>;
+
+/** Release every owner read before the next phase and revalidate both the local
+ * native head and the exact current-handle/claim cursor after foreign reads.
+ * Missing/fenced rows are retained as keyed deletion inputs, never Subjects.
+ */
+export async function readAccountDiscoveryRepairObservation(
+  pool: Pool, id: string, context: Readonly<{ deadline: number }>,
+): Promise<AccountDiscoveryRepairObservation> {
+  const route = routeOf(id);
+  if (route === null) throw new TypeError('Account repair requires a native Account key');
+  const partition = partitionOf(route);
+  requireAccessDeadline(context.deadline);
+  return withRequestDeadline(context.deadline, async () => {
+    const before = (await readAccountDiscoveryReductionBinding(pool, [partition], context)).heads[0]!;
+    const snapshot = await accountDiscoverySource(pool).read(partition, [id]);
+    const binding = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id) ?? null;
+    const current = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id) ?? null;
+    const after = (await readAccountDiscoveryReductionBinding(pool, [partition], context)).heads[0]!;
+    const account = snapshot.accounts[0] ?? null;
+    requireAccessDeadline(context.deadline);
+    if (!isDeepStrictEqual(before, after) || !isDeepStrictEqual(binding, current) ||
+      (account === null ? binding !== null : binding === null || binding.revision !== account.revision ||
+        binding.handle !== account.handle ||
+        (binding.claim !== null && binding.consumedClaimRevision < binding.claim.revision)))
+      throw new CommandUnavailableError('contention', partition);
+    return Object.freeze({ id, head: before, position: snapshot.position, account, binding });
+  });
 }
 
 function summary(

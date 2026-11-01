@@ -1,4 +1,5 @@
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
+import { joinNativePublicFilterRepair, readNativePublicFilterRepairStart } from '../semantic/public-filter-source-binding.ts';
 import repairSave from './public-filter-custody-repair-save.sql';
 import repairCurrent from './public-filter-custody-repair-current.sql';
 import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
@@ -697,6 +698,8 @@ type ConsumerWork = {
   repair: RetainedSourceRepair | null;
   repairPage: {
     repairs: readonly RetainedSourceRepair[];
+    account?: RetainedRepairPage['account'];
+    accountDone?: boolean;
     next: number;
     frontier: string | null;
     complete: boolean;
@@ -1652,10 +1655,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
       use = acquired.use;
       await physical(q, m, context);
-      const joined = await join(q, undefined, m, context);
+      const nativeJoin = await joinNativePublicFilterRepair(binding, { queried: q }, context);
+      const joined = nativeJoin ? m.take(nativeJoin) : await join(q, undefined, m, context);
+      if (joined.status !== 'joined') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
       if (!work.execution) {
-        const started = await observe(q, null, undefined, m, context);
+        // Original native preparation must be repairable while its same-row
+        // summary is behind. A served population start would require this ACK
+        // before the very repair which establishes it. Other bindings preserve
+        // their original start behavior; this private native port grants no query.
+        const nativeStart = await readNativePublicFilterRepairStart(binding, {
+          bootstrap: work.bootstrap.id, queried: q,
+        }, context);
+        const started = nativeStart ? m.take(nativeStart) : await observe(q, null, undefined, m, context);
         const execution = randomUUID();
         const appended = m.take(
           await custody.appendExecution(
@@ -1750,7 +1762,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           const body = encodeNative(intent);
           await repairPageSave.run(m.pool, {
             ...keys,
-            has_repairs: intent.repairs.length > 0,
+            has_repairs: intent.repairs.length > 0 || intent.account !== undefined,
             intent: body,
           });
           page = await repairPageSql.run(m.pool, keys);
@@ -1786,12 +1798,36 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (!work.repairPage) {
           work.repairPage = {
             repairs: intent.repairs,
+            ...(intent.account ? { account: intent.account, accountDone: false } : {}),
             next: 0,
             frontier: intent.frontier,
             complete: intent.complete,
           };
           encoded = await save(work, encoded, false, m);
-        } else if (!isDeepStrictEqual(work.repairPage.repairs, intent.repairs)) return m.unavailable('source_pending');
+        } else if (!isDeepStrictEqual(work.repairPage.repairs, intent.repairs) ||
+          !isDeepStrictEqual(work.repairPage.account, intent.account)) return m.unavailable('source_pending');
+        if (intent.account && !work.repairPage.accountDone) {
+          if (intent.repairs.length || work.repair || work.projectionSource || work.records.length)
+            return m.unavailable('source_pending');
+          const guard = await mixedRepairWriter(q, m);
+          const locator = encodeNative({ observation: q.snapshot.observation, execution: work.execution,
+            page: state.pages, item: 0 });
+          m.cost.candidates++;
+          m.cost.inputKeys++;
+          const receipt = await guard.repairAccount(intent.account.id, locator, context);
+          if (!receipt.account || receipt.owner !== 'accounts' || receipt.epoch !== intent.account.head.epoch ||
+            !isDeepStrictEqual({ ...receipt.account, position: intent.account.position }, intent.account) ||
+            receipt.sourcePosition < intent.account.position || receipt.incarnation !== q.consumer.incarnation)
+            return m.unavailable('source_pending');
+          await physical(q, m, context);
+          const effect = { ...keys, page: state.pages, item: 0 };
+          const body = encodeNative(receipt);
+          await repairEffectSave.run(m.pool, { ...effect, receipt: body });
+          const saved = await repairEffectSql.run(m.pool, effect);
+          if (!saved || saved.receipt !== body) return m.unavailable('source_pending');
+          work.repairPage.accountDone = true;
+          encoded = await save(work, encoded, false, m);
+        }
         while (work.repairPage.next < work.repairPage.repairs.length) {
           const repair = work.repair ?? work.repairPage.repairs[work.repairPage.next]!;
           encoded = await applyRepair(repair, work, state.pages, encoded, m, context);
@@ -1837,6 +1873,41 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (use) m.add((await custody.release(use, context)).cost);
     }
   }
+  async function mixedRepairWriter(q: PublicFilterQueriedObservation, m: Meter) {
+    const origin = publicFilterSourceOrigin(config.source);
+    const mixedTarget = /^(.*)discovery-g([1-9][0-9]*)$/.exec(target);
+    if (!origin || !mixedTarget) throw new ConsumerFailure('source_pending');
+      if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
+      await mixedGeneration(m);
+      const generation = Number(mixedTarget[2]);
+      const prefix = mixedTarget[1]!;
+      const row = (
+        await m.sql<{ uuid: string; incarnation: string }>(
+          `SELECT index_uuid AS uuid,incarnation::text FROM search.discovery_generation
+         WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active')`,
+          [prefix, generation],
+        )
+      ).rows[0];
+      if (!row?.uuid || row.uuid !== q.consumer.incarnation) throw new ConsumerFailure('incarnation_changed');
+      const registry = await nativeDiscoveryRegistry(
+        m.pool,
+        origin.routeKey,
+        createRatedSubjectSource(m.pool, origin.routeKey).source,
+        { release: config.meaning.release },
+      );
+      return createDiscoveryRepairWriter({
+        pool: m.pool,
+        search: m.native,
+        consumer: discoveryConsumer(prefix, generation),
+        projection: createDiscoveryProjection({
+          pool: m.pool,
+          search: m.native,
+          registry,
+          listing: subjectListingSource(m.pool),
+          target: { prefix, generation, uuid: row.uuid, incarnation: row.incarnation },
+        }),
+      });
+  }
   async function applyRepair(
     repair: RetainedSourceRepair,
     work: ConsumerWork,
@@ -1874,36 +1945,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       | Pick<ReturnType<typeof createSearchWriterGuard>, 'repair'>
       | ReturnType<typeof createDiscoveryRepairWriter>;
     if (mixedTarget) {
-      if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
-      await mixedGeneration(m);
-      const generation = Number(mixedTarget[2]);
-      const prefix = mixedTarget[1]!;
-      const row = (
-        await m.sql<{ uuid: string; incarnation: string }>(
-          `SELECT index_uuid AS uuid,incarnation::text FROM search.discovery_generation
-         WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active')`,
-          [prefix, generation],
-        )
-      ).rows[0];
-      if (!row?.uuid || row.uuid !== q.consumer.incarnation) throw new ConsumerFailure('incarnation_changed');
-      const registry = await nativeDiscoveryRegistry(
-        m.pool,
-        origin.routeKey,
-        createRatedSubjectSource(m.pool, origin.routeKey).source,
-        { release: config.meaning.release },
-      );
-      guard = createDiscoveryRepairWriter({
-        pool: m.pool,
-        search: m.native,
-        consumer: discoveryConsumer(prefix, generation),
-        projection: createDiscoveryProjection({
-          pool: m.pool,
-          search: m.native,
-          registry,
-          listing: subjectListingSource(m.pool),
-          target: { prefix, generation, uuid: row.uuid, incarnation: row.incarnation },
-        }),
-      });
+      guard = await mixedRepairWriter(q, m);
     } else {
       if (!subjectTarget) throw new ConsumerFailure('source_pending');
       guard = createSearchWriterGuard({

@@ -589,7 +589,11 @@ export function createDiscoveryProjection(options: {
       }
     }
   }
-  async function prepareRepair(id: string, obligation: bigint): Promise<DiscoveryIndexAction[]> {
+  async function prepareRepair(
+    id: string,
+    obligation: bigint,
+    owner: DiscoveryKey['owner'] = 'semantic',
+  ): Promise<DiscoveryIndexAction[]> {
     const route = routeOf(id);
     if (route === null) throw new TypeError('Invalid discovery repair anchor');
     const partition = discoveryPartition(id);
@@ -605,21 +609,26 @@ export function createDiscoveryProjection(options: {
     const selected = new Map<string, DiscoveryKey>();
     for (const { kind } of copies) {
       const entry = registry.get(kind);
+      // An ID can name rows in both native owners. Their positions and deletion
+      // obligations are independent, including when their UUID happens to agree.
+      if (entry.owner !== owner) continue;
       const key: DiscoveryKey =
         entry.owner === 'accounts'
           ? { owner: 'accounts', kind: 'account', route, id }
           : { owner: 'semantic', kind, route, id };
       selected.set(kind, registry.key(key));
     }
-    if (subject?.owner === 'semantic') {
+    if (owner === 'semantic' && subject?.owner === 'semantic') {
       const snapshot = await subject.source.read(partition, [id]);
       validateObservation(snapshot, partition, [id], obligation, true);
       for (const row of snapshot.subjects)
         selected.set(row.type, registry.key({ owner: 'semantic', kind: row.type, route, id }));
     }
-    const snapshot = validateAccountSnapshot(await accounts.source.read(partition, [id]), partition, [id], obligation);
-    if (snapshot.accounts.length)
-      selected.set('account', registry.key({ owner: 'accounts', kind: 'account', route, id }));
+    if (owner === 'accounts') {
+      const snapshot = validateAccountSnapshot(await accounts.source.read(partition, [id]), partition, [id], obligation);
+      if (snapshot.accounts.length)
+        selected.set('account', registry.key({ owner: 'accounts', kind: 'account', route, id }));
+    }
     if (!selected.size) throw new Error('Native repair anchor has no owner key or retained physical copy');
     if (selected.size > 100) throw new Error('Discovery repair exceeds its bounded keyed action window');
     const actions: DiscoveryIndexAction[] = [];
