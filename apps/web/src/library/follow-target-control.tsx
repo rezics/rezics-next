@@ -1,8 +1,14 @@
 import { QueryClient, QueryClientContext, queryOptions, useQuery } from '@tanstack/react-query';
-import { useContext, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useRef, useState } from 'react';
 import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
+import { getLocale } from '../paraglide/runtime.js';
+import {
+  assertHistoryCurrent,
+  useHistoryAddress,
+  useHistoryCurrentOrigin,
+  type HistoryOrigin,
+} from './history-current-origin';
 import { readCurrentFollowState, readFollowState, setFollow } from './follow-actions';
 import { FollowControl } from './follow-control';
 import type { FollowState } from './follow-records';
@@ -17,11 +23,16 @@ export const followStateQuery = (subject: string | null, targetId: string, lifet
     queryFn: async ({ signal }): Promise<FollowState> => {
       signal.throwIfAborted();
       if (lifetime) {
-        if (!subject || !lifetime.isCurrent()) return { state: 'unavailable' };
+        assertHistoryCurrent(() => !!subject && lifetime.isCurrent(), signal);
         lifetime.accepted = false;
-        const page = await readCurrentFollowState({ data: { targetId } });
-        signal.throwIfAborted();
-        if (!lifetime.isCurrent()) return { state: 'unavailable' };
+        let page;
+        try {
+          page = await readCurrentFollowState({ data: { targetId } });
+          assertHistoryCurrent(lifetime.isCurrent, signal);
+        } catch (error) {
+          assertHistoryCurrent(lifetime.isCurrent, signal);
+          throw error;
+        }
         if (page.subject !== subject || page.targetId !== targetId)
           return page.subject === null && page.edge.state !== 'ready' ? page.edge : { state: 'unavailable' };
         lifetime.accepted = true;
@@ -38,32 +49,7 @@ export const followStateQuery = (subject: string | null, targetId: string, lifet
   });
 const previewClient = new QueryClient();
 
-/** Observed ABA creates a new entry; only a committed, mounted lifetime can dispatch or accept work. */
-function useFollowLifetime(identity: string | null): FollowLifetime | null {
-  const committed = useRef<FollowLifetime | null>(null);
-  const create = () => {
-    if (identity === null) return { identity, lifetime: null };
-    const lifetime: FollowLifetime = {
-      key: crypto.randomUUID(),
-      isCurrent: () => committed.current === lifetime,
-    };
-    return { identity, lifetime };
-  };
-  const [observed, setObserved] = useState(create);
-  let current = observed;
-  if (observed.identity !== identity) {
-    current = create();
-    setObserved(current);
-  }
-  const lifetime = current.lifetime;
-  useLayoutEffect(() => {
-    committed.current = lifetime;
-    return () => {
-      committed.current = null;
-    };
-  }, [lifetime]);
-  return lifetime;
-}
+const followOperations = ['follow.get', 'follow.put', 'follow.delete'] as const;
 
 /** Supplied edges retain their parent's authority; unsupplied targets use one current BASIC edge read. */
 export function FollowTargetControl({
@@ -72,88 +58,113 @@ export function FollowTargetControl({
   idempotencyKey,
   menuTitle,
   onRemoved,
+  origin: parent,
 }: {
   targetId: string;
   following?: boolean | null;
   idempotencyKey?: string;
   menuTitle?: string;
   onRemoved?: () => void;
+  /** Supplied owner rows retain their actual reader and mounted address. */
+  origin?: HistoryOrigin;
 }) {
-  const { state: session, csrfToken, subject } = useSession();
-  const viewer = session === 'signed-in' && subject ? subject : null;
   const canFollow = useOperation('follow.put');
   const canRemove = useOperation('follow.delete');
   const canRead = useOperation('follow.get');
-  const identity = viewer ? JSON.stringify([viewer, targetId]) : null;
+  const address = useHistoryAddress(null, undefined, getLocale());
+  const origin = useHistoryCurrentOrigin(JSON.stringify([address.key, targetId]), followOperations, null, parent, [
+    canRead,
+    canFollow,
+    canRemove,
+  ]);
+  const viewer = origin.subject;
+  const identity = origin.boundary.id;
   const [readGeneration, setReadGeneration] = useState(0);
-  const readLifetime = useFollowLifetime(
-    identity && canRead && following === undefined ? JSON.stringify([identity, readGeneration]) : null,
-  );
-  const putLifetime = useFollowLifetime(identity && csrfToken && canFollow && !onRemoved ? identity : null);
-  const deleteLifetime = useFollowLifetime(identity && csrfToken && canRemove ? identity : null);
-  const removedCallback = useRef(onRemoved);
-  useLayoutEffect(() => {
-    removedCallback.current = onRemoved;
-  });
+  const readRef = useRef<FollowLifetime | null>(null);
+  const readKey = JSON.stringify([origin.lifetime(0), readGeneration, following === undefined]);
+  if (readRef.current?.key !== readKey) {
+    const lifetime: FollowLifetime = {
+      key: readKey,
+      isCurrent: () => readRef.current === lifetime && address.isCurrent() && origin.current(0),
+    };
+    readRef.current = lifetime;
+  }
+  const readLifetime = readRef.current;
   const queryClient = useContext(QueryClientContext) ?? previewClient;
-  const options = followStateQuery(viewer, targetId, readLifetime ?? undefined);
-  const read = useQuery({ ...options, enabled: personalRead.enabled && readLifetime !== null }, queryClient);
+  const options = followStateQuery(viewer, targetId, readLifetime);
+  const read = useQuery(
+    {
+      ...options,
+      enabled:
+        personalRead.enabled &&
+        origin.authoritative &&
+        following === undefined &&
+        !!viewer &&
+        origin.allowed[0] &&
+        address.isCurrent(),
+    },
+    queryClient,
+  );
   if (viewer === null || (!canFollow && !canRemove)) return null;
   const initial: FollowState =
     following !== undefined
       ? following === null
         ? { state: 'unavailable' }
         : { state: 'ready', following }
-      : !canRead
+      : !canRead || !origin.allowed[0]
         ? { state: 'forbidden' }
         : read.isPending || read.isFetching
           ? { state: 'pending' }
           : read.isError
             ? { state: 'unavailable' }
-            : (read.data ?? { state: 'unavailable' });
-  const isCurrent = (next: boolean) => (next ? putLifetime : deleteLifetime)?.isCurrent() ?? false;
+            : read.data?.state === 'signed-out'
+              ? { state: 'unavailable' }
+              : (read.data ?? { state: 'unavailable' });
+  const isCurrent = (next: boolean) => address.isCurrent() && origin.current(next ? 1 : 2);
   const acceptedOrigin = following !== undefined || (!read.isFetching && readLifetime?.accepted === true);
   return (
     <FollowControl
       key={identity}
       targetId={targetId}
       initial={initial}
-      readLifetime={following === undefined ? (readLifetime?.key ?? null) : 'supplied'}
+      readLifetime={following === undefined ? readLifetime.key : identity}
       isCurrent={isCurrent}
-      canFollow={canFollow && !onRemoved}
-      canRemove={canRemove}
-      ready={!!csrfToken}
+      canFollow={canFollow && origin.allowed[1] === true && !onRemoved}
+      canRemove={canRemove && origin.allowed[2] === true}
+      ready={origin.allowed[1] === true || origin.allowed[2] === true}
       {...(idempotencyKey ? { idempotencyKey } : {})}
       {...(menuTitle ? { menuTitle } : {})}
-      {...(readLifetime
+      {...(following === undefined && canRead && origin.allowed[0]
         ? {
             onRetry: () => {
               if (readLifetime.isCurrent()) setReadGeneration((generation) => generation + 1);
             },
           }
         : {})}
-      write={(input) =>
-        isCurrent(input.following)
-          ? setFollow({ data: input, headers: { 'X-CSRF-Token': csrfToken ?? '' } })
-          : Promise.resolve({ ok: false, reason: 'unavailable' })
-      }
+      write={(input) => {
+        const token = origin.credential(input.following ? 1 : 2);
+        return token && isCurrent(input.following)
+          ? setFollow({ data: input, headers: { 'X-CSRF-Token': token } })
+          : Promise.resolve({ ok: false, reason: 'unavailable' });
+      }}
       onAccepted={(next, input) => {
         if (!isCurrent(input.following)) return false;
         // A write retains its originating read. Read retirement alone does not cancel an admitted DELETE.
         const reconcile = acceptedOrigin && (following !== undefined || readLifetime?.isCurrent() === true);
         if (readLifetime?.isCurrent()) {
           void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
+          if (!isCurrent(input.following)) return false;
           queryClient.setQueryData<FollowState>(options.queryKey, (): FollowState =>
             reconcile ? { state: 'ready', following: next } : { state: 'unavailable' },
           );
         }
-        if (reconcile) {
+        if (reconcile && isCurrent(input.following)) {
           queryClient.setQueryData<FollowState>(followStateQuery(viewer, targetId).queryKey, (): FollowState => ({
             state: 'ready',
             following: next,
           }));
         }
-        if (!next) removedCallback.current?.();
+        if (!next && isCurrent(input.following)) onRemoved?.();
         return reconcile;
       }}
     />

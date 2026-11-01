@@ -2,10 +2,15 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef } from 'react';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
+import {
+  assertHistoryCurrent,
+  useHistoryAddress,
+  useHistoryCurrentOrigin,
+  type HistoryOrigin,
+} from './history-current-origin';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -15,9 +20,7 @@ import { readMyPublishedLogHistoryForViewer, type MyLogsViewerHistory } from './
 import { SubjectCover, rowRatio } from './subject-row';
 import { displayLibraryTitle } from './title';
 
-const subscribe = () => () => {};
-const hydratedSnapshot = () => true;
-const serverSnapshot = () => false;
+const logOperations = ['published_log.list'] as const;
 
 function matchesAddress(read: MyLogsViewerHistory, cursor: string | null, locale: string) {
   return read.cursor === cursor && read.locale === locale;
@@ -35,107 +38,91 @@ export function MyLogsCurrentViewer({
   initial: MyLogsViewerHistory;
   cursor?: string | undefined;
 }) {
-  const hydrated = useSyncExternalStore(subscribe, hydratedSnapshot, serverSnapshot);
-  const session = useSession();
-  const canList = useOperation('published_log.list');
-  const address = myLogsSearch({ cursor }).cursor ?? null;
+  useOperation('published_log.list');
   const locale = getLocale();
-  const subject = hydrated
-    ? session.state === 'signed-in' && session.subject
-      ? session.subject
-      : null
-    : initial.page.state === 'loaded'
-      ? initial.sessionSubject
-      : null;
-  // A successful SSR loader has already passed native list admission. The browser
-  // must independently observe the current viewer and the current operation gate.
-  const admitted = hydrated ? canList : initial.page.state === 'loaded';
-  const key = JSON.stringify([subject, admitted, address, locale]);
-  const [lifetime, setLifetime] = useState({ key, generation: 0, seed: true });
-  if (lifetime.key !== key) setLifetime({ key, generation: lifetime.generation + 1, seed: false });
-
-  if (!subject || !admitted) {
-    const page: MyLogsPage =
-      !hydrated && matchesAddress(initial, address, locale) && initial.page.state !== 'loaded'
-        ? initial.page
-        : {
-            state:
-              session.state === 'signed-out'
-                ? 'signed-out'
-                : session.state === 'unknown'
-                  ? 'preparing'
-                  : subject && !admitted
-                    ? 'denied'
-                    : 'unavailable',
-          };
-    return <MyLogsPageView page={page} />;
-  }
-  return (
-    <MyLogsViewerRead
-      key={lifetime.generation}
-      subject={subject}
-      cursor={address}
-      locale={locale}
-      hydrated={hydrated}
-      initial={initial}
-      seed={lifetime.seed}
-    />
+  const address = useHistoryAddress('/library/logs', myLogsSearch({ cursor }).cursor, locale);
+  const origin = useHistoryCurrentOrigin(
+    address.key,
+    logOperations,
+    initial.page.state === 'loaded' ? initial.sessionSubject : null,
   );
-}
-
-function MyLogsViewerRead({
-  subject,
-  cursor,
-  locale,
-  hydrated,
-  initial,
-  seed,
-}: {
-  subject: string;
-  cursor: string | null;
-  locale: string;
-  hydrated: boolean;
-  initial: MyLogsViewerHistory;
-  seed: boolean;
-}) {
-  // Retired owners, addresses and admissions cannot reuse a cache even on an ABA
-  // return. CSRF rotation and equivalent response objects keep this lifetime.
-  const [lifetime] = useState(() => crypto.randomUUID());
-  const [initialData] = useState(() => (seed && matchesOwner(initial, subject, cursor, locale) ? initial : undefined));
-  const query = useQuery({
-    ...personalRead,
-    queryKey: ['my-logs-current-viewer', subject, 'published_log.list', true, cursor, locale, lifetime],
-    enabled: hydrated && personalRead.enabled,
-    queryFn: async ({ signal }) => {
-      const read = await readMyPublishedLogHistoryForViewer({ data: { cursor: cursor ?? undefined } });
-      signal.throwIfAborted();
-      return read;
+  const current = () => address.isCurrent() && origin.current(0);
+  const query = useQuery(
+    {
+      ...personalRead,
+      queryKey: [
+        'my-logs-current-viewer',
+        origin.subject,
+        'published_log.list',
+        true,
+        address.cursor,
+        locale,
+        origin.lifetime(0),
+      ],
+      enabled: personalRead.enabled && origin.hydrated && !!origin.subject && origin.allowed[0] && address.isCurrent(),
+      queryFn: async ({ signal }) => {
+        assertHistoryCurrent(current, signal);
+        try {
+          const read = await readMyPublishedLogHistoryForViewer({ data: { cursor: address.cursor ?? undefined } });
+          assertHistoryCurrent(current, signal);
+          return read;
+        } catch (error) {
+          assertHistoryCurrent(current, signal);
+          throw error;
+        }
+      },
+      ...(origin.seed && origin.subject && matchesOwner(initial, origin.subject, address.cursor, locale)
+        ? { initialData: initial }
+        : {}),
+      gcTime: 0,
+      retry: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     },
-    initialData,
-    gcTime: 0,
-    retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
+    origin.client,
+  );
   const previousLoader = useRef(initial);
   useEffect(() => {
     if (previousLoader.current === initial) return;
     previousLoader.current = initial;
-    void query.refetch();
-  }, [initial, query.refetch]);
+    if (current()) void query.refetch();
+  }, [initial, query.refetch, origin.lifetime(0)]);
   const read = query.isError ? undefined : query.data;
-  const owner = read && matchesOwner(read, subject, cursor, locale);
-  // Native failures have no asserted viewer or owner data. Keep their distinctions
-  // within this request's lifetime instead of presenting successful empty history.
+  const owner = read && origin.subject && matchesOwner(read, origin.subject, address.cursor, locale);
   const failure =
-    read && read.sessionSubject === null && read.page.state !== 'loaded' && matchesAddress(read, cursor, locale);
+    read &&
+    read.sessionSubject === null &&
+    read.page.state !== 'loaded' &&
+    matchesAddress(read, address.cursor, locale);
   const page: MyLogsPage =
-    owner || failure ? read.page : { state: query.isError || read ? 'unavailable' : 'preparing' };
+    !origin.subject || !origin.allowed[0]
+      ? !origin.hydrated && matchesAddress(initial, address.cursor, locale) && initial.page.state !== 'loaded'
+        ? initial.page
+        : {
+            state:
+              origin.session.state === 'signed-out'
+                ? 'signed-out'
+                : origin.session.state === 'unknown'
+                  ? 'preparing'
+                  : origin.subject
+                    ? 'denied'
+                    : 'unavailable',
+          }
+      : origin.current(0, false) && address.isCurrent() && (owner || failure)
+        ? read!.page
+        : { state: query.isError || read ? 'unavailable' : 'preparing' };
   return (
     <MyLogsPageView
+      origin={{ lifetime: origin.boundary.lifetime, isCurrent: current }}
       page={page}
-      cursor={owner ? (cursor ?? undefined) : undefined}
-      onRetry={() => void query.refetch()}
+      cursor={page.state === 'loaded' ? (address.cursor ?? undefined) : undefined}
+      onRetry={
+        origin.subject && origin.allowed[0]
+          ? () => {
+              if (current()) void query.refetch();
+            }
+          : undefined
+      }
     />
   );
 }
@@ -152,10 +139,12 @@ export function MyLogsPageView({
   page,
   cursor,
   onRetry,
+  origin,
 }: {
   page: MyLogsPage;
   cursor?: string | undefined;
-  onRetry?: () => void;
+  onRetry?: (() => void) | undefined;
+  origin?: HistoryOrigin;
 }) {
   const ratio = rowRatio(page.state === 'loaded' ? page.logs.map((log) => log.subject) : []);
   return (
@@ -269,6 +258,9 @@ export function MyLogsPageView({
               <Link
                 to="/library/logs"
                 search={{ cursor: page.next }}
+                onClick={(event) => {
+                  if (origin && !origin.isCurrent()) event.preventDefault();
+                }}
                 className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary hover:bg-muted"
               >
                 {m.library_logs_more()}
@@ -281,6 +273,9 @@ export function MyLogsPageView({
         <Link
           to="/library/logs"
           search={{}}
+          onClick={(event) => {
+            if (origin && !origin.isCurrent()) event.preventDefault();
+          }}
           className="inline-flex min-h-10 items-center text-primary underline-offset-4 hover:underline"
         >
           {m.library_my_logs_newest()}

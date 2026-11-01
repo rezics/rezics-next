@@ -31,7 +31,55 @@ export type FollowControlProps = {
 
 /** The same presenter serves a target button and a Following row's responsive menu. */
 export function FollowControl(props: FollowControlProps) {
-  return <FollowControlState key={props.targetId} {...props} />;
+  const create = () => ({
+    targetId: props.targetId,
+    active: true,
+    mounted: false,
+    put: { active: true, allowed: false },
+    remove: { active: true, allowed: false },
+  });
+  const ref = useRef(create());
+  if (ref.current.targetId !== props.targetId) {
+    ref.current.active = false;
+    ref.current = create();
+  }
+  const origin = ref.current;
+  for (const [name, allowed] of [
+    ['put', props.ready && props.initial.state !== 'signed-out' && props.canFollow],
+    ['remove', props.ready && props.initial.state !== 'signed-out' && props.canRemove],
+  ] as const) {
+    if (origin[name].allowed !== allowed) {
+      origin[name].active = false;
+      origin[name] = { active: true, allowed };
+    }
+  }
+  const { put, remove } = origin;
+  useLayoutEffect(() => {
+    if (origin.active) origin.mounted = true;
+    return () => {
+      origin.mounted = false;
+    };
+  }, [origin]);
+  return (
+    <FollowControlState
+      key={props.targetId}
+      {...props}
+      {...(props.onRetry
+        ? {
+            onRetry: () => {
+              if (origin.active && origin.mounted) props.onRetry?.();
+            },
+          }
+        : {})}
+      isCurrent={(next) =>
+        origin.active &&
+        origin.mounted &&
+        (next ? put : remove).active &&
+        (next ? put : remove).allowed &&
+        (props.isCurrent?.(next) ?? true)
+      }
+    />
+  );
 }
 
 function FollowControlState({
@@ -60,6 +108,7 @@ function FollowControlState({
     isCurrent: FollowControlProps['isCurrent'];
     readLifetime: FollowControlProps['readLifetime'];
     onAccepted: FollowControlProps['onAccepted'];
+    onChange: FollowControlProps['onChange'];
   } | null>(null);
   const committed = useRef<Pick<
     FollowControlProps,
@@ -75,6 +124,18 @@ function FollowControlState({
     setCurrent(initial);
     setRemoved(false);
   }
+  const running = inFlight.current;
+  if (
+    running &&
+    (!ready ||
+      signedOut ||
+      !(running.input.following ? canFollow : canRemove) ||
+      (running.isCurrent && !running.isCurrent(running.input.following)))
+  ) {
+    inFlight.current = null;
+    setPending(false);
+    setFailure('unavailable');
+  }
   // Callback identities may refresh without starting a new request lifetime.
   useLayoutEffect(() => {
     committed.current = {
@@ -87,19 +148,6 @@ function FollowControlState({
       ...(isCurrent ? { isCurrent } : {}),
       ...(onAccepted ? { onAccepted } : {}),
     };
-    const running = inFlight.current;
-    if (
-      running &&
-      (!ready ||
-        signedOut ||
-        !(running.input.following ? canFollow : canRemove) ||
-        (running.isCurrent && !running.isCurrent(running.input.following)))
-    ) {
-      // The dispatched intent remains uncertain; only its retired completion loses authority.
-      inFlight.current = null;
-      setPending(false);
-      setFailure('unavailable');
-    }
   });
   useLayoutEffect(
     () => () => {
@@ -134,7 +182,13 @@ function FollowControlState({
       (live.isCurrent && !live.isCurrent(input.following))
     )
       return;
-    const running = { input, isCurrent: live.isCurrent, readLifetime: live.readLifetime, onAccepted: live.onAccepted };
+    const running = {
+      input,
+      isCurrent: live.isCurrent,
+      readLifetime: live.readLifetime,
+      onAccepted: live.onAccepted,
+      onChange: live.onChange,
+    };
     inFlight.current = running;
     attempt.current = input;
     setPending(true);
@@ -151,17 +205,18 @@ function FollowControlState({
       if (result.ok) {
         attempt.current = null;
         const accepted = running.onAccepted?.(result.following, input) ?? true;
+        if (running.isCurrent && !running.isCurrent(input.following)) return;
         if (accepted && committed.current?.readLifetime === running.readLifetime) {
           setCurrent({ state: 'ready', following: result.following });
           setRemoved(!result.following);
         }
-        if (!running.onAccepted) committed.current?.onChange?.(result.following);
+        if (!running.onAccepted) running.onChange?.(result.following);
       } else {
         conflict.current = result.reason === 'conflict';
         setFailure(result.reason);
       }
     } finally {
-      if (inFlight.current === running) {
+      if (inFlight.current === running && (!running.isCurrent || running.isCurrent(input.following))) {
         inFlight.current = null;
         setPending(false);
       }
