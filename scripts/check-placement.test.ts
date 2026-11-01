@@ -150,7 +150,8 @@ test('worker --local with only host c returns unavailable without executing the 
   mkdirSync(parent, { recursive: true });
   const root = mkdtempSync(join(parent, `worker-placement-${randomUUID()}-`));
   temporary.push(root);
-  mkdirSync(join(root, '.git'));
+  const gitInit = Bun.spawnSync(['git', 'init', '--quiet', root], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+  expect(gitInit.exitCode).toBe(0);
   const config = hostsFile(root, ['c']);
   const sentinel = join(root, 'local-command-ran');
   const saved = Object.fromEntries(
