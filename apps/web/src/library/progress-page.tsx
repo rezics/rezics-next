@@ -408,7 +408,7 @@ function SessionRow({
   session: ProgressIndex['sessions'][number];
   ratio: CoverRatio;
   sourcePage: ProgressIndex;
-  authority?: ProgressAuthority;
+  authority?: ProgressAuthority | undefined;
 }) {
   const readable = useOperation('progress_session.read');
   const completable = useOperation('progress_session.complete');
