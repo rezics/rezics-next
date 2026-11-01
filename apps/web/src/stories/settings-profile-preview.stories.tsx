@@ -116,7 +116,8 @@ export const DraftPreview: Story = {
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
         await expect(toggle).toHaveFocus();
 
-        const preview = within(await profile.findByRole('region', { name: m.settings_profile_preview_heading() }));
+        const previewRegion = await profile.findByRole('region', { name: m.settings_profile_preview_heading() });
+        const preview = within(previewRegion);
         await expect(preview.getByRole('heading', { level: 4, name: draftName })).toBeVisible();
         await expect(preview.getByText(draftBiography, { exact: true })).toBeVisible();
         await expect(preview.getByRole('link', { name: draftLabel })).toHaveAttribute('href', draftUrl);
@@ -128,8 +129,7 @@ export const DraftPreview: Story = {
         await expect(traffic.publicReads).toBe(initialPublicReads);
         await expect(traffic.editableReads).toBe(initialEditableReads);
 
-        const layout = preview.getByRole('region', { name: m.settings_profile_preview_heading() });
-        await expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+        await expect(previewRegion.scrollWidth).toBeLessThanOrEqual(previewRegion.clientWidth);
         const urlLine = preview.getByText(draftUrl, { exact: true });
         await expect(urlLine.scrollWidth).toBeLessThanOrEqual(urlLine.clientWidth);
 
