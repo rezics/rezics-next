@@ -137,19 +137,15 @@ function controlledPreparationTimers() {
   const nativeSetTimeout = globalThis.setTimeout;
   const nativeClearTimeout = globalThis.clearTimeout;
   let nextTimer = -1;
-  const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(
-    ((run, delay, ...args) => {
-      if (delay !== 2_000 && delay !== 30_000) return nativeSetTimeout(run, delay, ...args);
-      const id = nextTimer--;
-      timers.set(id, { delay: Number(delay), run: () => run(...args) });
-      return id;
-    }) as typeof setTimeout,
-  );
-  const clearSpy = spyOn(globalThis, 'clearTimeout').mockImplementation(
-    ((id) => {
-      if (!timers.delete(Number(id))) nativeClearTimeout(id);
-    }) as typeof clearTimeout,
-  );
+  const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((run, delay, ...args) => {
+    if (delay !== 2_000 && delay !== 30_000) return nativeSetTimeout(run, delay, ...args);
+    const id = nextTimer--;
+    timers.set(id, { delay: Number(delay), run: () => run(...args) });
+    return id;
+  }) as typeof setTimeout);
+  const clearSpy = spyOn(globalThis, 'clearTimeout').mockImplementation(((id) => {
+    if (!timers.delete(Number(id))) nativeClearTimeout(id);
+  }) as typeof clearTimeout);
   return {
     timers,
     async fireNext() {
