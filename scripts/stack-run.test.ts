@@ -237,6 +237,8 @@ function nodeFixture(source: string): string {
     .replaceAll('Bun.sleep(', 'sleep(');
   if (/\bBun\./.test(javascript)) throw new Error('Node fake transport still contains a Bun runtime call');
   return `#!/usr/bin/env node
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const readStdin = async () => {
   const chunks = [];
