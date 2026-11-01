@@ -771,9 +771,7 @@ test('Complete original-frame History accounting refuses implicit wrong-Pool exp
       bytes: before.bytes - 1,
       engineRequests: before.engineRequests,
     });
-    await expect(reserveIdentityHistoryWork(foreignPool, cost)).rejects.toBeInstanceOf(
-      IdentityHistoryWorkUnavailable,
-    );
+    await expect(reserveIdentityHistoryWork(foreignPool, cost)).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
     await expect(
       reserveIdentityHistoryWork(f.pool, cost, {
         ...funded,
@@ -790,9 +788,7 @@ test('Complete original-frame History accounting refuses implicit wrong-Pool exp
       }),
     ).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
   });
-  await expect(reserveIdentityHistoryWork(f.pool, cost, ended!)).rejects.toBeInstanceOf(
-    IdentityHistoryWorkUnavailable,
-  );
+  await expect(reserveIdentityHistoryWork(f.pool, cost, ended!)).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
   expect(foreignCheckouts).toBe(0);
 
   for (const [axis, property, value] of [
@@ -818,9 +814,7 @@ test('Complete original-frame History accounting refuses implicit wrong-Pool exp
       async () => {
         const amount = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
         amount[property] = 2;
-        await expect(reserveIdentityHistoryWork(pool, amount)).rejects.toBeInstanceOf(
-          IdentityHistoryWorkUnavailable,
-        );
+        await expect(reserveIdentityHistoryWork(pool, amount)).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
       },
     );
     expect(checkouts).toBe(0);

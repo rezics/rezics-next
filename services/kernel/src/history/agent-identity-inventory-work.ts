@@ -26,8 +26,7 @@ export async function reserveIdentityHistoryWork(
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
   if (invocation !== undefined && (!invocation || typeof invocation !== 'object'))
     throw new IdentityHistoryWorkUnavailable();
-  const explicitSourceAuthority =
-    invocation !== undefined && 'identityConsumerWork' in invocation;
+  const explicitSourceAuthority = invocation !== undefined && 'identityConsumerWork' in invocation;
   const active = explicitSourceAuthority
     ? (invocation as IdentitySourceConsumerMaintenanceContext)
     : owner.activeIdentitySourceConsumerMaintenance(pool);

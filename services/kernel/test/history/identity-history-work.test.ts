@@ -60,9 +60,7 @@ test('Implicit, explicit, expired, detached and exhausted Source authority refus
 
   await withIdentitySourceConsumerMaintenance({ pool: original.pool, env: {} }, { deadline }, async (funded) => {
     ended = funded;
-    await expect(reserveIdentityHistoryWork(foreign.pool, cost)).rejects.toBeInstanceOf(
-      IdentityHistoryWorkUnavailable,
-    );
+    await expect(reserveIdentityHistoryWork(foreign.pool, cost)).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
     await expect(
       reserveIdentityHistoryWork(original.pool, cost, {
         ...funded,
@@ -87,13 +85,17 @@ test('Implicit, explicit, expired, detached and exhausted Source authority refus
 
   const expired = checkoutSentinel('expired frame must refuse before checkout');
   const expiringDeadline = Date.now() + 20;
-  await withIdentitySourceConsumerMaintenance({ pool: expired.pool, env: {} }, { deadline: expiringDeadline }, async () => {
-    await new Promise<void>((resolve) => setTimeout(resolve, 30));
-    expect(activeIdentitySourceConsumerMaintenance(expired.pool)?.deadline).toBe(expiringDeadline);
-    await expect(reserveIdentityHistoryWork(expired.pool, cost)).rejects.toBeInstanceOf(
-      IdentityHistoryWorkUnavailable,
-    );
-  });
+  await withIdentitySourceConsumerMaintenance(
+    { pool: expired.pool, env: {} },
+    { deadline: expiringDeadline },
+    async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 30));
+      expect(activeIdentitySourceConsumerMaintenance(expired.pool)?.deadline).toBe(expiringDeadline);
+      await expect(reserveIdentityHistoryWork(expired.pool, cost)).rejects.toBeInstanceOf(
+        IdentityHistoryWorkUnavailable,
+      );
+    },
+  );
   expect(expired.checkouts()).toBe(0);
 
   const detached = checkoutSentinel('settled descendant must refuse before checkout');
@@ -232,7 +234,13 @@ test('Durable History mapping failures and repeated invocations keep their origi
         statements: before.statements - after.statements,
         bytes: before.bytes - after.bytes,
         engineRequests: before.engineRequests - after.engineRequests,
-      }).toEqual({ rows: 4 * attempt, points: 4 * attempt, statements: 3 * attempt, bytes: 16384 * attempt, engineRequests: 0 });
+      }).toEqual({
+        rows: 4 * attempt,
+        points: 4 * attempt,
+        statements: 3 * attempt,
+        bytes: 16384 * attempt,
+        engineRequests: 0,
+      });
     }
   });
 });

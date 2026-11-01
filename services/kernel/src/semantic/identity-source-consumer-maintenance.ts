@@ -112,9 +112,7 @@ export function currentIdentitySourceConsumerMaintenance(
  * Presence is provenance only: callers must still validate the token against the actual Pool,
  * current async frame, and deadline before dispatch. A settled or foreign invocation remains
  * observable so it cannot be mistaken for a genuinely absent Source frame. */
-export function activeIdentitySourceConsumerMaintenance(
-  _pool: Pool,
-): IdentitySourceConsumerMaintenanceContext | null {
+export function activeIdentitySourceConsumerMaintenance(_pool: Pool): IdentitySourceConsumerMaintenanceContext | null {
   const frame = current.getStore();
   if (!frame) return null;
   return Object.freeze({ deadline: frame.deadline, identityConsumerWork: frame.token });
