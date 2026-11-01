@@ -2,8 +2,9 @@ import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useCallback, useRef, useState } from 'react';
+import type { QueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, notFound } from '@tanstack/react-router';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
@@ -17,14 +18,23 @@ import { canSubmitThread } from '../../threads/review-policy';
 import { DiscussionSubjects } from '../../threads/discussion-subjects';
 import { contentSubjectPreset } from '../../threads/content-subject-search';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
-import { ThreadCreationLifetimeProvider, useThreadCreationLifetime } from '../../threads/thread-creation-lifetime';
+import {
+  observeThreadCreationReader,
+  threadCreationReaderObservationMatches,
+  ThreadCreationLifetimeProvider,
+  useThreadCreationLifetime,
+  type ThreadCreationReaderAdmission,
+} from '../../threads/thread-creation-lifetime';
 
 type NewThreadSearch = { subject?: string; subjectTitle?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const Route = createFileRoute('/boards/$id_/new')({
   beforeLoad: requireSignedIn,
-  loader: ({ params }) => readNewThreadPage({ data: { id: params.id } }),
+  loader: ({ params, context }) =>
+    loadAdmittedNewThreadPage(context.queryClient, params.id, (expectedReaderSubject) =>
+      readNewThreadPage({ data: { id: params.id, expectedReaderSubject } }),
+    ),
   validateSearch: (search: Record<string, unknown>): NewThreadSearch => {
     const subject = typeof search.subject === 'string' && uuid.test(search.subject) ? search.subject : undefined;
     const subjectTitle =
@@ -41,13 +51,31 @@ export const Route = createFileRoute('/boards/$id_/new')({
   component: NewThreadPage,
 });
 
+export async function loadAdmittedNewThreadPage(
+  client: QueryClient,
+  id: string,
+  read: (expectedReaderSubject: string) => Promise<Awaited<ReturnType<typeof readNewThreadPage>>>,
+): Promise<Awaited<ReturnType<typeof readNewThreadPage>> & { readerAdmission: ThreadCreationReaderAdmission }> {
+  const observation = observeThreadCreationReader(client);
+  if (!observation) throw notFound();
+  const page = await read(observation.subject);
+  if (
+    page.board.id !== id ||
+    page.readerSubject !== observation.subject ||
+    !threadCreationReaderObservationMatches(client, observation, page.readerSubject)
+  )
+    throw notFound();
+  return { ...page, readerAdmission: { observation, actualSubject: page.readerSubject } };
+}
+
 function NewThreadPage() {
-  const { board, idempotencyKey } = Route.useLoaderData();
+  const { board, idempotencyKey, readerAdmission } = Route.useLoaderData();
   const { subject: presetSubject, subjectTitle: presetSubjectTitle } = Route.useSearch();
   return (
     <NewThreadComposition
       board={board}
       idempotencyKey={idempotencyKey}
+      readerAdmission={readerAdmission}
       {...(presetSubject ? { presetSubject } : {})}
       {...(presetSubjectTitle ? { presetSubjectTitle } : {})}
     />
@@ -57,29 +85,36 @@ function NewThreadPage() {
 export function NewThreadComposition({
   board,
   idempotencyKey,
+  readerAdmission,
   presetSubject,
   presetSubjectTitle,
 }: {
   board: Awaited<ReturnType<typeof readNewThreadPage>>['board'];
   idempotencyKey: string;
+  readerAdmission: ThreadCreationReaderAdmission;
   presetSubject?: string;
   presetSubjectTitle?: string;
 }) {
-  const visit = useThreadCreationLifetime({
-    boardId: board.id,
-    purpose: board.purpose,
-    initialKey: idempotencyKey,
-    ...(presetSubject ? { initialSubject: presetSubject } : {}),
-    ...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {}),
-  });
+  const visit = useThreadCreationLifetime(
+    {
+      boardId: board.id,
+      purpose: board.purpose,
+      initialKey: idempotencyKey,
+      ...(presetSubject ? { initialSubject: presetSubject } : {}),
+      ...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {}),
+    },
+    readerAdmission,
+  );
   const { lifetime, ticket, current, bound } = visit;
   const [origin] = useState(() => ({
+    board,
     boardId: board.id,
     purpose: board.purpose,
     idempotencyKey,
     presetSubject: presetSubject ?? null,
     presetSubjectTitle: presetSubjectTitle ?? null,
   }));
+  const [initiallyAdmitted] = useState(() => bound);
   const review = origin.purpose === 'reviews';
   const [subjectId, setSubjectId] = useState<string | null>(origin.presetSubject);
   const [discussionSubjects, setDiscussionSubjects] = useState(() =>
@@ -130,15 +165,29 @@ export function NewThreadComposition({
     ? lockedSubmissionContext.current.value
     : liveSubmissionContext;
 
+  useLayoutEffect(() => {
+    const title = `${(bound ? origin.board.title : null) ?? m.thread_new_heading()} – REZICS`;
+    document.title = title;
+    document.head
+      .querySelectorAll<HTMLMetaElement>('meta[property="og:title"], meta[name="twitter:title"]')
+      .forEach((meta) => meta.setAttribute('content', title));
+  }, [bound, origin.board.title]);
+
+  if (!initiallyAdmitted) return <p role="status">{m.thread_authoring_session_changed()}</p>;
+
   return (
     <ThreadCreationLifetimeProvider lifetime={lifetime}>
       <AuthoringDepartureProvider>
         <article className="max-w-4xl space-y-8 text-foreground">
           <header className="space-y-3">
-            <p className="text-sm font-medium text-muted-foreground">{board.title ?? m.threads_untitled()}</p>
+            {bound ? (
+              <p className="text-sm font-medium text-muted-foreground">
+                {origin.board.title ?? m.threads_untitled()}
+              </p>
+            ) : null}
             <PageHeading>{m.thread_new_heading()}</PageHeading>
           </header>
-          <div className="space-y-5">
+          <div className="space-y-5" inert={!editable}>
             {bound ? (
               review ? (
                 <ReviewFields
@@ -196,13 +245,15 @@ export function NewThreadComposition({
               }}
             />
           </div>
-          <Link
-            to="/boards/$id"
-            params={{ id: board.id }}
-            className={buttonVariants({ variant: 'outline', size: 'lg' })}
-          >
-            {m.board_threads_heading()}
-          </Link>
+          {bound ? (
+            <Link
+              to="/boards/$id"
+              params={{ id: origin.boardId }}
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+            >
+              {m.board_threads_heading()}
+            </Link>
+          ) : null}
         </article>
       </AuthoringDepartureProvider>
     </ThreadCreationLifetimeProvider>

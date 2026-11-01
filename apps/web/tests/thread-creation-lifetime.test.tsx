@@ -72,6 +72,7 @@ async function mountPage(initial: PageConfig) {
     await import('@tanstack/react-router');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   const { sessionQuery } = await import('../src/session/query');
+  const { observeThreadCreationReader } = await import('../src/threads/thread-creation-lifetime');
   const { NewThreadComposition } = await import('../src/routes/boards/$id_.new');
   const actions = await import('../src/threads/actions');
   const voteRead = await import('../src/threads/review-vote-read');
@@ -110,15 +111,20 @@ async function mountPage(initial: PageConfig) {
   let poke!: () => void;
   function ComposePage() {
     const [config, setConfig] = useState(initial);
+    const [readerAdmission] = useState(() => {
+      const observation = observeThreadCreationReader(client);
+      return observation ? { observation, actualSubject: observation.subject } : null;
+    });
     const [, rerender] = useState(0);
     updateConfig = setConfig;
     poke = () => rerender((value) => value + 1);
     return (
       <>
-        {config.visible ? (
+        {config.visible && readerAdmission ? (
           <NewThreadComposition
             board={board(config)}
             idempotencyKey={config.key}
+            readerAdmission={readerAdmission}
             presetSubject={config.presetSubject}
             presetSubjectTitle={config.presetSubjectTitle}
           />
@@ -468,13 +474,16 @@ test('locale changes retire metadata monotonically while benign rerenders keep t
 test('caller revisions reject retained callbacks after same-value cache replacement and same-turn readiness loss', async () => {
   const { QueryClient } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
-  const { ThreadCreationLifetime, threadCreationSessionSource } =
+  const { ThreadCreationLifetime, observeThreadCreationReader, threadCreationSessionSource } =
     await import('../src/threads/thread-creation-lifetime');
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, owner);
   const source = threadCreationSessionSource(client);
+  const observation = observeThreadCreationReader(client);
+  expect(observation).not.toBeNull();
+  const admission = { observation: observation!, actualSubject: owner.subject };
   const binding = { client, source, scope: 'board-purpose-original-intent' };
-  const lifetime = new ThreadCreationLifetime(client, source, () => binding, binding.scope);
+  const lifetime = new ThreadCreationLifetime(client, source, () => binding, binding.scope, admission);
   const disconnect = lifetime.connect();
   const originalTicket = lifetime.connectionTicket;
   const retainedSelection = () => lifetime.isEditable(originalTicket);
@@ -489,8 +498,17 @@ test('caller revisions reject retained callbacks after same-value cache replacem
   const replayClient = new QueryClient();
   replayClient.setQueryData(sessionQuery.queryKey, owner);
   const replaySource = threadCreationSessionSource(replayClient);
+  const replayObservation = observeThreadCreationReader(replayClient);
+  expect(replayObservation).not.toBeNull();
+  const replayAdmission = { observation: replayObservation!, actualSubject: owner.subject };
   const replayBinding = { client: replayClient, source: replaySource, scope: 'same-mounted-visit' };
-  const replay = new ThreadCreationLifetime(replayClient, replaySource, () => replayBinding, replayBinding.scope);
+  const replay = new ThreadCreationLifetime(
+    replayClient,
+    replaySource,
+    () => replayBinding,
+    replayBinding.scope,
+    replayAdmission,
+  );
   const firstCleanup = replay.connect();
   const beforeReplay = replay.connectionTicket;
   firstCleanup();
@@ -507,12 +525,16 @@ test('caller revisions reject retained callbacks after same-value cache replacem
   const readinessClient = new QueryClient();
   readinessClient.setQueryData(sessionQuery.queryKey, owner);
   const readinessSource = threadCreationSessionSource(readinessClient);
+  const readinessObservation = observeThreadCreationReader(readinessClient);
+  expect(readinessObservation).not.toBeNull();
+  const readinessAdmission = { observation: readinessObservation!, actualSubject: owner.subject };
   const readinessBinding = { client: readinessClient, source: readinessSource, scope: 'ready-original' };
   const readiness = new ThreadCreationLifetime(
     readinessClient,
     readinessSource,
     () => readinessBinding,
     readinessBinding.scope,
+    readinessAdmission,
   );
   const readinessCleanup = readiness.connect();
   const readinessTicket = readiness.connectionTicket;

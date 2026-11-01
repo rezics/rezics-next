@@ -20,7 +20,10 @@ const board: Board = {
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
-function session(state: 'active' | 'absent' | 'unavailable' | 'failed' = 'active') {
+function session(
+  state: 'active' | 'absent' | 'unavailable' | 'failed' = 'active',
+  subject: string | undefined = 'member',
+) {
   let reads = 0;
   const env = {
     AUTH_ISSUER: 'https://auth.test',
@@ -35,7 +38,7 @@ function session(state: 'active' | 'absent' | 'unavailable' | 'failed' = 'active
           reads += 1;
           if (state === 'failed') throw new Error('Session store unavailable');
           return state === 'active'
-            ? { status: state, accessToken, subject: 'member', csrfToken: 'server-csrf-token' }
+            ? { status: state, accessToken, subject, csrfToken: 'server-csrf-token' }
             : { status: state };
         },
       }),
@@ -72,11 +75,14 @@ test('The signed-in new-thread page reads its protected board through the existi
     return Response.json({ board });
   });
 
-  const page = await loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId });
+  const page = await loadNewThreadPage(client, viewer.request(), viewer.env, {
+    id: boardId,
+    expectedReaderSubject: 'member',
+  });
 
   expectBoardRead(calls);
   expect(viewer.reads()).toBe(1);
-  expect(page).toEqual({ board, idempotencyKey: expect.any(String) });
+  expect(page).toEqual({ board, idempotencyKey: expect.any(String), readerSubject: 'member' });
   expect(page.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   expect(JSON.stringify(page)).not.toContain(accessToken);
   expect(JSON.stringify(page)).not.toContain('server-csrf-token');
@@ -87,7 +93,10 @@ test.each([401, 403, 404, 503])('board GET %s never retries anonymously or issue
   const { client, calls } = transport(() =>
     Response.json({ code: status === 404 ? 'not_found' : 'unavailable', detail: accessToken }, { status }),
   );
-  const failure = await loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId }).catch(
+  const failure = await loadNewThreadPage(client, viewer.request(), viewer.env, {
+    id: boardId,
+    expectedReaderSubject: 'member',
+  }).catch(
     (error: unknown) => error,
   );
 
@@ -104,7 +113,9 @@ test('a board transport failure remains an error without an anonymous retry', as
     throw new TypeError('Kernel connection unavailable');
   });
 
-  await expect(loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId })).rejects.toBeInstanceOf(Error);
+  await expect(
+    loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId, expectedReaderSubject: 'member' }),
+  ).rejects.toBeInstanceOf(Error);
   expectBoardRead(calls);
 });
 
@@ -113,7 +124,10 @@ test.each(['absent', 'unavailable', 'failed'] as const)(
   async (state) => {
     const viewer = session(state);
     const { client, calls } = transport();
-    const failure = await loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId }).catch(
+    const failure = await loadNewThreadPage(client, viewer.request(), viewer.env, {
+      id: boardId,
+      expectedReaderSubject: 'member',
+    }).catch(
       (error: unknown) => error,
     );
 
@@ -131,9 +145,12 @@ test.each(['', '__Host-rezics_session=malformed'])(
     const viewer = session();
     const { client, calls } = transport();
 
-    await expect(loadNewThreadPage(client, viewer.request(cookie), viewer.env, { id: boardId })).rejects.toThrow(
-      'A signed-in session is required to start a thread.',
-    );
+    await expect(
+      loadNewThreadPage(client, viewer.request(cookie), viewer.env, {
+        id: boardId,
+        expectedReaderSubject: 'member',
+      }),
+    ).rejects.toThrow('A signed-in session is required to start a thread.');
     expect(viewer.reads()).toBe(0);
     expect(calls).toEqual([]);
   },
@@ -143,9 +160,9 @@ test('an unconfigured session cannot fall back to an anonymous read', async () =
   const viewer = session();
   const { client, calls } = transport();
 
-  await expect(loadNewThreadPage(client, viewer.request(), {}, { id: boardId })).rejects.toThrow(
-    'A signed-in session is required to start a thread.',
-  );
+  await expect(
+    loadNewThreadPage(client, viewer.request(), {}, { id: boardId, expectedReaderSubject: 'member' }),
+  ).rejects.toThrow('A signed-in session is required to start a thread.');
   expect(viewer.reads()).toBe(0);
   expect(calls).toEqual([]);
 });
@@ -154,8 +171,32 @@ test('the returned board must have the exact requested identity', async () => {
   const viewer = session();
   const { client, calls } = transport(() => Response.json({ board: { ...board, id: board.realmId } }));
 
-  await expect(loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId })).rejects.toMatchObject({
+  await expect(
+    loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId, expectedReaderSubject: 'member' }),
+  ).rejects.toMatchObject({
     isNotFound: true,
   });
   expectBoardRead(calls);
+});
+
+test('a prepared credential with missing actual reader provenance is refused before the board read', async () => {
+  const viewer = session('active', undefined);
+  const { client, calls } = transport();
+
+  await expect(
+    loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId, expectedReaderSubject: 'member' }),
+  ).rejects.toMatchObject({ isNotFound: true });
+  expect(viewer.reads()).toBe(1);
+  expect(calls).toEqual([]);
+});
+
+test('an expected reader compares with actual same-prepared provenance and never authenticates a replacement', async () => {
+  const viewer = session();
+  const { client, calls } = transport();
+
+  await expect(
+    loadNewThreadPage(client, viewer.request(), viewer.env, { id: boardId, expectedReaderSubject: 'other-member' }),
+  ).rejects.toMatchObject({ isNotFound: true });
+  expect(viewer.reads()).toBe(1);
+  expect(calls).toEqual([]);
 });

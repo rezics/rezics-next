@@ -25,7 +25,7 @@ import {
   type RevisionDocumentMedia,
 } from './exact-revision-media';
 import type { ThreadDocumentMedia } from './document-media-read';
-import { loadNewThreadPage } from './new-thread-read';
+import { loadNewThreadPage, type NewThreadPageResult } from './new-thread-read';
 import { loadReplyParent, validateReplyParentInput } from './reply-parent-read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -79,6 +79,23 @@ function validatePageInput(input: unknown): PageInput {
   };
 }
 
+type NewThreadPageInput = { id: string; expectedReaderSubject: string };
+function validateNewThreadPageInput(input: unknown): NewThreadPageInput {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('id' in input) ||
+    typeof input.id !== 'string' ||
+    input.id.length > 128 ||
+    !('expectedReaderSubject' in input) ||
+    typeof input.expectedReaderSubject !== 'string' ||
+    input.expectedReaderSubject.length === 0 ||
+    input.expectedReaderSubject.length > 128
+  )
+    throw notFound();
+  return { id: input.id, expectedReaderSubject: input.expectedReaderSubject };
+}
+
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
   if (result.error) {
     if (result.status === 404) throw notFound();
@@ -104,8 +121,8 @@ export const readBoardPage = createServerFn({ method: 'GET' })
   });
 
 export const readNewThreadPage = createServerFn({ method: 'GET' })
-  .validator(validatePageInput)
-  .handler(async ({ data }): Promise<{ board: Board['board']; idempotencyKey: string }> => {
+  .validator(validateNewThreadPageInput)
+  .handler(async ({ data }): Promise<NewThreadPageResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadNewThreadPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });

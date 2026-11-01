@@ -26,6 +26,18 @@ export type ThreadCreationSessionSource = {
   subscribe: (notify: () => void) => () => void;
 };
 
+export type ThreadCreationReaderObservation = {
+  subject: string;
+  dataUpdateCount: number;
+  errorUpdateCount: number;
+  dataUpdatedAt: number;
+};
+
+export type ThreadCreationReaderAdmission = {
+  observation: ThreadCreationReaderObservation;
+  actualSubject: string;
+};
+
 const sources = new WeakMap<QueryClient, ThreadCreationSessionSource>();
 const emptySource: ThreadCreationSessionSource = {
   read: () => undefined,
@@ -34,27 +46,36 @@ const emptySource: ThreadCreationSessionSource = {
   subscribe: () => () => {},
 };
 
-/** Observe only the route's existing session cache; successful replacements advance its visit revision. */
+function sessionIdentity(session: ThreadCreationSession | undefined) {
+  return JSON.stringify([
+    session?.state ?? 'unknown',
+    session?.subject ?? null,
+    session?.csrfToken ?? null,
+    readerReady(session),
+    writerReady(session),
+  ]);
+}
+
+/** Track real session observations while ignoring fetch and observer bookkeeping. */
 export function threadCreationSessionSource(client: QueryClient | undefined): ThreadCreationSessionSource {
   if (!client) return emptySource;
   const known = sources.get(client);
   if (known) return known;
 
   const read = () => client.getQueryData<ThreadCreationSession>(sessionQuery.queryKey);
-  const identity = () => {
-    const session = read();
-    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
-  };
+  const identity = () => sessionIdentity(read());
   let previous = identity();
   let revision = 0;
   const listeners = new Set<() => void>();
   client.getQueryCache().subscribe((event) => {
-    const { query, type } = event;
-    if (JSON.stringify(query.queryKey) !== JSON.stringify(sessionQuery.queryKey)) return;
+    if (JSON.stringify(event.query.queryKey) !== JSON.stringify(sessionQuery.queryKey)) return;
+
     const next = identity();
-    // Every update to this exact cache entry changes the observed session authority, including equal replacements.
-    const replaced = type === 'added' || type === 'removed' || type === 'updated';
-    if (next === previous && !replaced) return;
+    const removed = event.type === 'removed';
+    const successfulReplacement = event.type === 'updated' && event.action.type === 'success';
+    const failedObservation = event.type === 'updated' && event.action.type === 'error';
+    if (!removed && !successfulReplacement && !failedObservation && next === previous) return;
+
     previous = next;
     revision++;
     for (const listener of listeners) listener();
@@ -72,32 +93,60 @@ export function threadCreationSessionSource(client: QueryClient | undefined): Th
   return source;
 }
 
-function ready(session: ThreadCreationSession | undefined): session is ThreadCreationSession & {
+function readerReady(session: ThreadCreationSession | undefined): session is ThreadCreationSession & {
+  state: 'signed-in';
+  subject: string;
+} {
+  return session?.state === 'signed-in' && typeof session.subject === 'string' && session.subject.length > 0;
+}
+
+function writerReady(session: ThreadCreationSession | undefined): session is ThreadCreationSession & {
   state: 'signed-in';
   subject: string;
   csrfToken: string;
 } {
-  return (
-    session?.state === 'signed-in' &&
-    typeof session.subject === 'string' &&
-    session.subject.length > 0 &&
-    typeof session.csrfToken === 'string' &&
-    session.csrfToken.length > 0
-  );
+  return readerReady(session) && typeof session.csrfToken === 'string' && session.csrfToken.length > 0;
 }
 
-function sessionIdentity(session: ThreadCreationSession | undefined) {
-  return JSON.stringify([
-    session?.state ?? 'unknown',
-    session?.subject ?? null,
-    session?.csrfToken ?? null,
-    ready(session),
-  ]);
+/** Capture the exact successful session-query result that precedes the private board read. */
+export function observeThreadCreationReader(
+  client: QueryClient | undefined,
+): ThreadCreationReaderObservation | null {
+  if (!client) return null;
+  threadCreationSessionSource(client);
+  const query = client.getQueryState<ThreadCreationSession>(sessionQuery.queryKey);
+  const session = query?.data;
+  if (!query || query.status !== 'success' || !readerReady(session)) return null;
+  return {
+    subject: session.subject,
+    dataUpdateCount: query.dataUpdateCount,
+    errorUpdateCount: query.errorUpdateCount,
+    dataUpdatedAt: query.dataUpdatedAt,
+  };
+}
+
+export function threadCreationReaderObservationMatches(
+  client: QueryClient | undefined,
+  observation: ThreadCreationReaderObservation,
+  actualSubject: string,
+): boolean {
+  if (!client || actualSubject !== observation.subject) return false;
+  const query = client.getQueryState<ThreadCreationSession>(sessionQuery.queryKey);
+  const session = query?.data;
+  return Boolean(
+    query &&
+      query.status === 'success' &&
+      query.dataUpdateCount === observation.dataUpdateCount &&
+      query.errorUpdateCount === observation.errorUpdateCount &&
+      query.dataUpdatedAt === observation.dataUpdatedAt &&
+      readerReady(session) &&
+      session.subject === observation.subject,
+  );
 }
 
 type Binding = { client: QueryClient | undefined; source: ThreadCreationSessionSource; scope: string };
 
-/** One mounted new-thread visit. Cache, scope and connection changes retire it permanently. */
+/** One mounted new-thread visit. A reader may be admitted without a current write token. */
 export class ThreadCreationLifetime {
   private readonly sourceRevision: number;
   private readonly ownerSession: string;
@@ -117,14 +166,17 @@ export class ThreadCreationLifetime {
     private readonly source: ThreadCreationSessionSource,
     private readonly binding: () => Binding,
     initialScope: string,
+    private readonly admission: ThreadCreationReaderAdmission,
   ) {
     this.sourceRevision = source.snapshot();
     const session = source.read();
     this.ownerSession = sessionIdentity(session);
     this.ownerLocale = getLocale();
     this.ownerScope = initialScope;
-    this.csrfToken = ready(session) ? session.csrfToken : '';
-    this.accountId = ready(session) ? session.subject : '';
+    const admitted = threadCreationReaderObservationMatches(client, admission.observation, admission.actualSubject);
+    this.csrfToken = admitted && writerReady(session) ? session.csrfToken : '';
+    this.accountId = admitted && readerReady(session) ? session.subject : '';
+    this.retired = !admitted;
   }
 
   private notify() {
@@ -152,7 +204,8 @@ export class ThreadCreationLifetime {
       current.scope !== this.ownerScope ||
       this.source.snapshot() !== this.sourceRevision ||
       sessionIdentity(session) !== this.ownerSession ||
-      !ready(session) ||
+      !readerReady(session) ||
+      !threadCreationReaderObservationMatches(this.client, this.admission.observation, this.admission.actualSubject) ||
       getLocale() !== this.ownerLocale
     )
       this.retire(notify);
@@ -175,7 +228,7 @@ export class ThreadCreationLifetime {
 
   isCurrent(ticket = this.connection, notify = true) {
     this.check(notify);
-    return !this.retired && this.connected && ticket === this.connection;
+    return !this.retired && this.connected && ticket === this.connection && writerReady(this.source.read());
   }
 
   isBound(ticket = this.connection, notify = false) {
@@ -211,6 +264,7 @@ export class ThreadCreationLifetime {
       });
     };
   }
+
 }
 
 export type ThreadCreationScope = {
@@ -221,21 +275,32 @@ export type ThreadCreationScope = {
   initialSubjectTitle?: string;
 };
 
-export function useThreadCreationLifetime(scope: ThreadCreationScope) {
+export function useThreadCreationLifetime(
+  scope: ThreadCreationScope,
+  admission: ThreadCreationReaderAdmission,
+) {
   const client = useContext(QueryClientContext);
   const source = useMemo(() => threadCreationSessionSource(client), [client]);
   const locale = getLocale();
+  const observation = admission.observation;
   const scopeKey = JSON.stringify([
     scope.boardId,
     scope.purpose,
     scope.initialKey,
     scope.initialSubject ?? null,
     scope.initialSubjectTitle ?? null,
+    observation.subject,
+    observation.dataUpdateCount,
+    observation.errorUpdateCount,
+    observation.dataUpdatedAt,
+    admission.actualSubject,
     locale,
   ]);
   const bindingRef = useRef<Binding>({ client, source, scope: scopeKey });
   bindingRef.current = { client, source, scope: scopeKey };
-  const [lifetime] = useState(() => new ThreadCreationLifetime(client, source, () => bindingRef.current, scopeKey));
+  const [lifetime] = useState(
+    () => new ThreadCreationLifetime(client, source, () => bindingRef.current, scopeKey, admission),
+  );
 
   const sessionRevision = useSyncExternalStore(source.subscribe, source.snapshot, source.serverSnapshot);
   useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.serverSnapshot);
