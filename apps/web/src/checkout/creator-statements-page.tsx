@@ -1,3 +1,4 @@
+import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
@@ -151,27 +152,22 @@ export function CreatorStatementsPage({
               <p className="text-sm text-muted-foreground">{m.statements_empty_hint()}</p>
             </div>
           ) : (
-            <ul className="divide-y rounded-xl border bg-card text-card-foreground">
+            <ul>
               {page.payoutStatements.map((statement) => (
-                <li key={statement.id} className="min-w-0 p-4 sm:p-5">
-                  <Link
-                    preload={false}
-                    to="/creator/statements/$id"
-                    params={{ id: statement.id }}
-                    search={cursor ? { from: cursor } : {}}
-                    className="flex min-h-11 flex-wrap items-start justify-between gap-3 rounded-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                  >
-                    <div className="space-y-1">
-                      <h2 className="font-semibold">
-                        {statementMonth(statement.period, locale)} · {statement.currency.toUpperCase()}
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        {statement.state === 'paid' ? m.statements_paid() : m.statements_open()}
-                      </p>
-                    </div>
-                    <div className="space-y-1 sm:text-right">
+                <ContentItem
+                  key={statement.id}
+                  title={`${statementMonth(statement.period, locale)} · ${statement.currency.toUpperCase()}`}
+                  headingLevel={2}
+                  href={statementHref(locale, statement.id, undefined, cursor)}
+                  state={
+                    <span className="text-sm text-muted-foreground">
+                      {statement.state === 'paid' ? m.statements_paid() : m.statements_open()}
+                    </span>
+                  }
+                  trailing={
+                    <div className="min-w-0 space-y-1 sm:text-right">
                       <p className="text-sm text-muted-foreground">{m.statements_creator_share()}</p>
-                      <p className="font-semibold">
+                      <p className="break-words font-semibold">
                         <StatementAmount
                           value={statement.creatorShareMinor}
                           moneyUnit={recordedMoneyUnit(statement)}
@@ -180,8 +176,8 @@ export function CreatorStatementsPage({
                         />
                       </p>
                     </div>
-                  </Link>
-                </li>
+                  }
+                />
               ))}
             </ul>
           )}
