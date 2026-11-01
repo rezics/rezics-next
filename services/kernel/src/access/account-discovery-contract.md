@@ -398,3 +398,21 @@ frontier under the same writer locks. Its receipt proves only that home enrollme
 step. It does not certify population repair, a complete baseline, physical
 publication or public-filter readiness. Population reads retain their existing
 fail-closed guards until the original complete Source handover is available.
+
+The returned `AccountDiscoveryEnrollment` keeps the native `epoch`, `revision`
+and `claimRevision` separate from `sourcePosition`, the original creation/change
+`creationPosition` and the Account-domain `enqueueRevision`. `keyDigest` binds the
+complete compiler closure; nullable `receipt` remains absent until the retained
+key frontier completes. A step inserts at most 900 keys, leaving room for native
+control and receipt work within the existing maintenance allowance. Replays of a
+sealed receipt retain its original positions and tuple rather than current heads.
+
+`semantic/public-filter-coverage-baseline.ts` resolves that exact committed owner
+receipt after releasing its writer home, then adopts it in the registration home.
+The predecessor/root chain advances one home at a time. The original covered
+generation is pinned before the first home; only the contiguous 4096-home chain
+can seal the Source bootstrap. Existing enrollment rows without these original
+receipts stay unknown. Each adopted baseline records its own outstanding repair
+obligation on the existing home summary. Enrollment never copies an older
+baseline's ACK or changes an immutable covered cut. These bodies do not implement
+the remaining mixed receiver repair, contiguous ACK or bounded population reader.
