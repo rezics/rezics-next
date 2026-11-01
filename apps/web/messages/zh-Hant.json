@@ -4114,5 +4114,7 @@
   "search_reader_facets_not_ready": "部分篩選選項目前無法使用。已選取的篩選條件仍會套用。",
   "search_reader_facets_unavailable": "部分篩選選項無法載入。已選取的篩選條件仍會套用。",
   "search_reader_results_unavailable": "搜尋結果目前無法使用。你的搜尋內容和篩選條件會保留。",
-  "reporter_status_read_closed": "此平台暫不提供檢舉狀態。"
+  "reporter_status_read_closed": "此平台暫不提供檢舉狀態。",
+  "changes_abstained_detail": "審核決定為棄權；這並不代表接受或選用。",
+  "changes_rank_deprecated": "已棄用"
 }

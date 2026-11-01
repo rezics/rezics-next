@@ -4115,5 +4115,7 @@
   "search_reader_facets_not_ready": "部分筛选选项目前不可用。已选筛选条件仍会应用。",
   "search_reader_facets_unavailable": "部分筛选选项无法加载。已选筛选条件仍会应用。",
   "search_reader_results_unavailable": "搜索结果目前不可用。你的搜索内容和筛选条件已保留。",
-  "reporter_status_read_closed": "此平台暂不提供举报状态。"
+  "reporter_status_read_closed": "此平台暂不提供举报状态。",
+  "changes_abstained_detail": "审核决定为弃权；这并不代表接受或选用。",
+  "changes_rank_deprecated": "已弃用"
 }

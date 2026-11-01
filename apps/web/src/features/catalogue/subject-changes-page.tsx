@@ -1,3 +1,4 @@
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { useEffect, useReducer, useRef } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
@@ -283,59 +284,86 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
   );
 }
 
-/** Instance state is destroyed when identity/session changes. It never enters SSR or a query cache. */
-export function SubjectChanges({
+/** Each admitted visit owns its private list, selected explanation and native continuation. */
+export function SubjectChanges(props: { locale: string; transport: ChangesTransport; currentHref?: string }) {
+  const work = useCatalogueLifetime(JSON.stringify([props.locale, props.currentHref]));
+  return <SubjectChangesReader key={work.generation} {...props} work={work} />;
+}
+
+function SubjectChangesReader({
   locale,
   transport,
   currentHref,
+  work,
 }: {
   locale: string;
   transport: ChangesTransport;
   currentHref?: string;
+  work: ReturnType<typeof useCatalogueLifetime>;
 }) {
   const [state, dispatch] = useReducer(changesState, { loading: 'list' });
   const session = useRef<string | undefined>(undefined);
   const running = useRef(false);
   const mounted = useRef(false);
   const retryCursor = useRef<string | undefined>(undefined);
+  const latest = useRef(state);
+  latest.current = state;
+  const active = () => mounted.current && work.active();
   useEffect(() => {
     mounted.current = true;
     let cancelled = false;
-    running.current = true;
-    void transport
-      .list()
-      .catch(() => ({ kind: 'unavailable' as const }))
-      .then((result) => {
-        if (cancelled) return;
-        if (result.kind === 'ready') session.current = result.session;
-        dispatch({ type: 'list', result, more: false });
-        running.current = false;
-      });
+    const current = () => !cancelled && active();
+    if (current()) {
+      running.current = true;
+      void (async () => {
+        try {
+          const result = await transport.list();
+          if (!current()) return;
+          if (result.kind === 'ready') session.current = result.session;
+          dispatch({ type: 'list', result, more: false });
+        } catch {
+          if (current()) dispatch({ type: 'list', result: { kind: 'unavailable' }, more: false });
+        } finally {
+          if (current()) running.current = false;
+        }
+      })();
+    }
     return () => {
       cancelled = true;
       mounted.current = false;
     };
-  }, [transport]);
+  }, [transport, work]);
   async function load(cursor?: string) {
-    if (running.current) return;
+    if (!active() || running.current) return;
     running.current = true;
     retryCursor.current = cursor;
     dispatch({ type: 'list-start', more: cursor !== undefined });
-    const result = await transport.list(cursor, session.current).catch(() => ({ kind: 'unavailable' as const }));
-    if (!mounted.current) return;
-    if (result.kind === 'ready') session.current = result.session ?? session.current;
-    dispatch({ type: 'list', result, more: cursor !== undefined });
-    running.current = false;
+    try {
+      const result = await transport.list(cursor, session.current);
+      if (!active()) return;
+      if (result.kind === 'ready') session.current = result.session ?? session.current;
+      dispatch({ type: 'list', result, more: cursor !== undefined });
+    } catch {
+      if (active()) dispatch({ type: 'list', result: { kind: 'unavailable' }, more: cursor !== undefined });
+    } finally {
+      if (active()) running.current = false;
+    }
   }
   async function select(revision: number) {
-    if (running.current) return;
+    if (!active() || running.current || !latest.current.page?.revisions.some((row) => row.revision === revision))
+      return;
     running.current = true;
     dispatch({ type: 'detail-start', revision });
-    const result = await transport.detail(revision, session.current).catch(() => ({ kind: 'unavailable' as const }));
-    if (!mounted.current) return;
-    if (result.kind === 'ready') session.current = result.session ?? session.current;
-    dispatch({ type: 'detail', result });
-    running.current = false;
+    try {
+      const result = await transport.detail(revision, session.current);
+      if (!active()) return;
+      if (result.kind === 'ready') session.current = result.session ?? session.current;
+      dispatch({ type: 'detail', result });
+    } catch {
+      if (active()) dispatch({ type: 'detail', result: { kind: 'unavailable' } });
+    } finally {
+      if (active()) running.current = false;
+    }
   }
   return (
     <SubjectChangesPage
@@ -343,16 +371,17 @@ export function SubjectChanges({
       locale={locale}
       {...(currentHref ? { currentHref } : {})}
       onMore={() => {
-        if (state.page?.next !== null && state.page?.next !== undefined) void load(state.page.next);
+        const cursor = state.page?.next;
+        if (cursor !== null && cursor !== undefined && cursor === latest.current.page?.next) void load(cursor);
       }}
       onRetry={() => {
-        void load(retryCursor.current);
+        if (state === latest.current) void load(retryCursor.current);
       }}
       onSelect={(revision) => {
         void select(revision);
       }}
       onDetailRetry={() => {
-        if (state.selected !== undefined) void select(state.selected);
+        if (state.selected !== undefined && state === latest.current) void select(state.selected);
       }}
     />
   );

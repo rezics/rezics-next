@@ -4114,5 +4114,7 @@
   "search_reader_facets_not_ready": "Algunas opciones de filtro no están disponibles ahora. Los filtros seleccionados siguen aplicándose.",
   "search_reader_facets_unavailable": "No se pudieron cargar algunas opciones de filtro. Los filtros seleccionados siguen aplicándose.",
   "search_reader_results_unavailable": "Los resultados de búsqueda no están disponibles ahora. Se conservan tu búsqueda y tus filtros.",
-  "reporter_status_read_closed": "El estado de las denuncias no está disponible en esta plataforma."
+  "reporter_status_read_closed": "El estado de las denuncias no está disponible en esta plataforma.",
+  "changes_abstained_detail": "La decisión de revisión es abstenerse; no confirma la aceptación ni la selección.",
+  "changes_rank_deprecated": "Obsoleto"
 }

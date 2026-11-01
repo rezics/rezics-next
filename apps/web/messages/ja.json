@@ -4114,5 +4114,7 @@
   "search_reader_facets_not_ready": "一部のフィルター候補を現在利用できません。選択済みのフィルターは適用されたままです。",
   "search_reader_facets_unavailable": "一部のフィルター候補を読み込めませんでした。選択済みのフィルターは適用されたままです。",
   "search_reader_results_unavailable": "検索結果を現在利用できません。検索内容とフィルターは保持されています。",
-  "reporter_status_read_closed": "このプラットフォームでは通報状況を確認できません。"
+  "reporter_status_read_closed": "このプラットフォームでは通報状況を確認できません。",
+  "changes_abstained_detail": "審査の判断は棄権です。承認や選択を示すものではありません。",
+  "changes_rank_deprecated": "非推奨"
 }

@@ -4114,5 +4114,7 @@
   "search_reader_facets_not_ready": "Certaines options de filtre sont indisponibles pour le moment. Les filtres sélectionnés restent appliqués.",
   "search_reader_facets_unavailable": "Certaines options de filtre n’ont pas pu être chargées. Les filtres sélectionnés restent appliqués.",
   "search_reader_results_unavailable": "Les résultats de recherche sont indisponibles pour le moment. Votre recherche et vos filtres sont conservés.",
-  "reporter_status_read_closed": "Le statut des signalements est indisponible sur cette plateforme."
+  "reporter_status_read_closed": "Le statut des signalements est indisponible sur cette plateforme.",
+  "changes_abstained_detail": "La décision de révision est une abstention ; elle ne confirme ni acceptation ni sélection.",
+  "changes_rank_deprecated": "Obsolète"
 }

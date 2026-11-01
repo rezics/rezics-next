@@ -4114,5 +4114,7 @@
   "search_reader_facets_not_ready": "일부 필터 옵션을 지금 사용할 수 없습니다. 선택한 필터는 계속 적용됩니다.",
   "search_reader_facets_unavailable": "일부 필터 옵션을 불러오지 못했습니다. 선택한 필터는 계속 적용됩니다.",
   "search_reader_results_unavailable": "검색 결과를 지금 사용할 수 없습니다. 검색어와 필터는 유지됩니다.",
-  "reporter_status_read_closed": "이 플랫폼에서는 신고 상태를 확인할 수 없습니다."
+  "reporter_status_read_closed": "이 플랫폼에서는 신고 상태를 확인할 수 없습니다.",
+  "changes_abstained_detail": "검토 결정은 기권입니다. 수락이나 선택을 의미하지 않습니다.",
+  "changes_rank_deprecated": "사용 중단"
 }
