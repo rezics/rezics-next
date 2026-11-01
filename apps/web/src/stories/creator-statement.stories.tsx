@@ -28,6 +28,7 @@ export const Creator: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
+    await userEvent.click(view.getByRole('button', { name: m.statements_line_source_details() }));
     await expect(await view.findByText('txn_creatorCharge')).toBeVisible();
     await expect(
       view.getByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(-3.15)),
@@ -44,12 +45,16 @@ export const NegativeAdjustment: Story = {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
     await userEvent.click(await view.findByRole('link', { name: m.statements_next_lines() }));
+    await view.findByText('txn_creatorRefund');
+    await userEvent.click(view.getByRole('button', { name: m.statements_line_source_details() }));
     await expect(await view.findByText('txn_creatorRefund')).toBeVisible();
     await expect(view.getByRole('heading', { name: m.statements_refund() })).toBeVisible();
     await expect(
       view.getAllByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(-11))[0],
     ).toBeVisible();
     await userEvent.click(view.getByRole('link', { name: m.statements_restart_lines() }));
+    await view.findByText('txn_creatorCharge');
+    await userEvent.click(view.getByRole('button', { name: m.statements_line_source_details() }));
     await expect(await view.findByText('txn_creatorCharge')).toBeVisible();
   },
 };
