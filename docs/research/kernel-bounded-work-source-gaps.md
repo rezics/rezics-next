@@ -23,12 +23,12 @@ The lockfile and [workspace manifest](../../services/kernel/package.json) pin DB
 For reproducible citations, `SDK/` below means
 `services/kernel/node_modules/@dbos-inc/dbos-sdk/dist/src/`; installed bytes have these SHA-256 pins:
 
-| Source | SHA-256 |
-| --- | --- |
-| `SDK/system_database.js` | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
+| Source                                        | SHA-256                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------ |
+| `SDK/system_database.js`                      | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
 | `SDK/sysdb_migrations/internal/migrations.js` | `d187c8a19e4c3141392c73701899ca0005155febdabdfde481bf5782fe61daff` |
-| `SDK/wfqueue.js` | `9be7bd806fb41bbb73d87b848a2c8ac1cb8bc8e615c6cadd7158bffb8b0698c5` |
-| Repository SDK patch | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
+| `SDK/wfqueue.js`                              | `9be7bd806fb41bbb73d87b848a2c8ac1cb8bc8e615c6cadd7158bffb8b0698c5` |
+| Repository SDK patch                          | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
 
 Supporting SDK source read: `client.js`, `dbos.js`, `system_database.d.ts`, `serialization.d.ts`, `wfqueue.d.ts`,
 `telemetry/logs.d.ts`, and the package manifest. Installed source presence is an observation of these bytes, not a
@@ -47,16 +47,16 @@ Here `H` is workflow/outbox history in the relevant relation, `P` active queue k
 `d` selected workflows, `c` their actually changed child rows, `b` envelopes and `k` events per envelope.
 All row widths, configuration and operation inputs stay fixed while unrelated history grows.
 
-| Surface inspected | Source result and evidence boundary |
-| --- | --- |
-| Command execution and receipts | [`runCommand`](../../services/kernel/src/command/command.ts) authorizes before receipt lookup, uses the full partition/principal/kind/key anchor in [`read-receipt.sql`](../../services/kernel/src/command/read-receipt.sql), then one partition fence and `k <= 1,000` event writes in [`fence.sql`](../../services/kernel/src/command/fence.sql). Hit, digest conflict and denied replay do not execute the body; a miss adds change-proportional work. At fixed key-ring size, `O(1+k)` rows and `O((1+k) log H)` indexed blocks per attempt remain the source shape. [`growth-command.test.ts`](../../services/kernel/test/growth-command.test.ts) covers new/replay/denial/contention; [`growth-command-wait.test.ts`](../../services/kernel/test/growth-command-wait.test.ts) covers waiting. Retry count follows the deadline/contention, not a history enumeration. |
-| Admission and write rate | [`Admission`](../../services/kernel/src/http/admission.ts) scans at most its configured queue (default 32; 8 normal plus 2 reserved permits); [`enterCommandGate`](../../services/kernel/src/command/gate.ts) has at most 64 waiters per partition. [`app.ts`](../../services/kernel/src/http/app.ts), [`write-rate-stage.ts`](../../services/kernel/src/access/write-rate-stage.ts), [`write-rate.ts`](../../services/kernel/src/access/write-rate.ts) and [`write-rate-counter.sql`](../../services/kernel/src/access/write-rate-counter.sql) lead to a routed identity/family upsert plus exact authenticated account/deletion-barrier probes. Expiry uses ordered route/expiry selection and exact locked TIDs, at most 1,000 counters/chunks combined in [`write-rate-expiry.sql`](../../services/kernel/src/access/write-rate-expiry.sql). Accounts owns native authorization/rate semantics and its `test/access/growth-write-rate*.test.ts`; no substitute Accounts contract is proposed. |
-| Anchored reads and keysets | [`readPartition` / `readPartitions`](../../services/kernel/src/partition/partition.ts), [`partitionReadClients`](../../services/kernel/src/database/read-snapshot.ts), and [`withReadTransaction`](../../services/kernel/src/semantic/read.ts) bind exact homes in one physical snapshot. Fixed full-key sets give `O(q)` rows and `O(q log H)` blocks, including misses; moved homes refuse. [`subjectRoutes`](../../services/kernel/src/semantic/http/subjects.ts), mounted by [`createKernel`](../../services/kernel/src/http/kernel.ts), delegates actual subject/related/list hydration and disclosure to Semantic. The legacy [`pageSubjects`](../../services/kernel/src/semantic/page.ts) helper seeks `(route, subject_id)` and returns `size+1`, but is not called by current `subjectRoutes`: the cursor growth test's helper invocation is not mounted-list evidence. Native labels, candidates, links and disclosure remain Semantic's contract. No source defect follows merely from deferred owner proof. |
-| Session headers and cursor codecs | [`app.ts`](../../services/kernel/src/http/app.ts) decodes once, merges through [`session.ts`](../../services/kernel/src/tokens/session.ts) and retains 32 components. [`seal.ts`](../../services/kernel/src/tokens/seal.ts) rejects decode tokens over 4,096 characters; direct merge validates its supplied array, and encoding is not universally byte-capped. [`cursor.ts`](../../services/kernel/src/tokens/cursor.ts) permits eight after-keys but sorts binding parameter names and processes supplied string bytes. Their CPU follows input bytes/configuration, with zero SQL; this is not database-history growth. [`list-cursor.ts`](../../services/kernel/src/tokens/list-cursor.ts) has explicit profile-specific byte limits. [`growth-request.test.ts`](../../services/kernel/test/growth-request.test.ts) measures SQL, not a universal CPU bound; its `j` case holds database population fixed and its admission case calls health. These limitations do not create an additional repair class. |
-| Outbox and relay | [`read-log.sql`](../../services/kernel/src/events/read-log.sql) generates at most 64 positions and probes `outbox_pkey` at those positions, with at most 1,000 events each. [`log.ts`](../../services/kernel/src/events/log.ts) preserves epoch, gaps, sequence and minimized markers; [`projectBatch`](../../services/kernel/src/events/log.ts) releases its snapshot before apply and compare-and-set advancement. [`scan-partitions.sql`](../../services/kernel/src/events/scan-partitions.sql) visits the fixed 4,096-home map and each next-envelope key, not outbox history. [`startRelays`](../../services/kernel/src/events/relays.ts) drains bounded batches; total drain work legitimately follows backlog. [`growth-events.test.ts`](../../services/kernel/test/growth-events.test.ts), [`growth-projection.test.ts`](../../services/kernel/test/growth-projection.test.ts) and [`relay-effects.test.ts`](../../services/kernel/test/relay-effects.test.ts) target these shapes, including deep positions, full batches and empty/busy/lost-CAS outcomes. |
-| Effect registration and callbacks | [`registerEffects`](../../services/kernel/src/events/effects.ts) rejects a 33rd matching consumer per event type, counting duplicate types once. Both native admission and durable enqueue therefore have matching fanout at most 32 per event; total registration/type-list CPU is configuration-dependent. Deterministic workflow IDs, source-slot dispositions, position/event order and separate locator work are preserved. Completion uses unique workflow ID indexes in the schema. Native admission/run callbacks retain their actual owners: Accounts/History, Content, Semantic, Commerce, etc. Their native work is additional; a function type alone proves no callback bound. The queue discovery finding below concerns SDK scheduling, not an invented unbounded registration fanout. |
-| Work status and steps | [`createWorkClient`](../../services/kernel/src/work/client.ts), `SDK/client.js` and `SDK/system_database.js:getWorkflowStatus/getAllOperationResults` use exact workflow identity and keyed step rows for ordinary fixed-limit reads. `OFFSET`/page inputs and returned step count are separate input axes. [`growth-work-client.test.ts`](../../services/kernel/test/work/growth-work-client.test.ts) distinguishes the ordinary fixed-page case from the legacy Realm-leave JSON join. That compatibility fallback explicitly allows linear history and is already assigned separate design research: no duplicate task here. |
-| Work scheduling and retention | [`startWorker`](../../services/kernel/src/worker.ts) passes the same native pool to Work and DBOS; [`composeWork`](../../services/kernel/src/work/registry.ts) persists the queue configuration before launch. All seven queues currently have worker concurrency limits, summing to **34**, including `workflows: 8`. Worker concurrency bounds starts, not discovery. The two manifestations below belong to one native discovery repair class. |
+| Surface inspected                 | Source result and evidence boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Command execution and receipts    | [`runCommand`](../../services/kernel/src/command/command.ts) authorizes before receipt lookup, uses the full partition/principal/kind/key anchor in [`read-receipt.sql`](../../services/kernel/src/command/read-receipt.sql), then one partition fence and `k <= 1,000` event writes in [`fence.sql`](../../services/kernel/src/command/fence.sql). Hit, digest conflict and denied replay do not execute the body; a miss adds change-proportional work. At fixed key-ring size, `O(1+k)` rows and `O((1+k) log H)` indexed blocks per attempt remain the source shape. [`growth-command.test.ts`](../../services/kernel/test/growth-command.test.ts) covers new/replay/denial/contention; [`growth-command-wait.test.ts`](../../services/kernel/test/growth-command-wait.test.ts) covers waiting. Retry count follows the deadline/contention, not a history enumeration.                                                                                                                                                                                          |
+| Admission and write rate          | [`Admission`](../../services/kernel/src/http/admission.ts) scans at most its configured queue (default 32; 8 normal plus 2 reserved permits); [`enterCommandGate`](../../services/kernel/src/command/gate.ts) has at most 64 waiters per partition. [`app.ts`](../../services/kernel/src/http/app.ts), [`write-rate-stage.ts`](../../services/kernel/src/access/write-rate-stage.ts), [`write-rate.ts`](../../services/kernel/src/access/write-rate.ts) and [`write-rate-counter.sql`](../../services/kernel/src/access/write-rate-counter.sql) lead to a routed identity/family upsert plus exact authenticated account/deletion-barrier probes. Expiry uses ordered route/expiry selection and exact locked TIDs, at most 1,000 counters/chunks combined in [`write-rate-expiry.sql`](../../services/kernel/src/access/write-rate-expiry.sql). Accounts owns native authorization/rate semantics and its `test/access/growth-write-rate*.test.ts`; no substitute Accounts contract is proposed.                                                                    |
+| Anchored reads and keysets        | [`readPartition` / `readPartitions`](../../services/kernel/src/partition/partition.ts), [`partitionReadClients`](../../services/kernel/src/database/read-snapshot.ts), and [`withReadTransaction`](../../services/kernel/src/semantic/read.ts) bind exact homes in one physical snapshot. Fixed full-key sets give `O(q)` rows and `O(q log H)` blocks, including misses; moved homes refuse. [`subjectRoutes`](../../services/kernel/src/semantic/http/subjects.ts), mounted by [`createKernel`](../../services/kernel/src/http/kernel.ts), delegates actual subject/related/list hydration and disclosure to Semantic. The legacy [`pageSubjects`](../../services/kernel/src/semantic/page.ts) helper seeks `(route, subject_id)` and returns `size+1`, but is not called by current `subjectRoutes`: the cursor growth test's helper invocation is not mounted-list evidence. Native labels, candidates, links and disclosure remain Semantic's contract. No source defect follows merely from deferred owner proof.                                              |
+| Session headers and cursor codecs | [`app.ts`](../../services/kernel/src/http/app.ts) decodes once, merges through [`session.ts`](../../services/kernel/src/tokens/session.ts) and retains 32 components. [`seal.ts`](../../services/kernel/src/tokens/seal.ts) rejects decode tokens over 4,096 characters; direct merge validates its supplied array, and encoding is not universally byte-capped. [`cursor.ts`](../../services/kernel/src/tokens/cursor.ts) permits eight after-keys but sorts binding parameter names and processes supplied string bytes. Their CPU follows input bytes/configuration, with zero SQL; this is not database-history growth. [`list-cursor.ts`](../../services/kernel/src/tokens/list-cursor.ts) has explicit profile-specific byte limits. [`growth-request.test.ts`](../../services/kernel/test/growth-request.test.ts) measures SQL, not a universal CPU bound; its `j` case holds database population fixed and its admission case calls health. These limitations do not create an additional repair class.                                                      |
+| Outbox and relay                  | [`read-log.sql`](../../services/kernel/src/events/read-log.sql) generates at most 64 positions and probes `outbox_pkey` at those positions, with at most 1,000 events each. [`log.ts`](../../services/kernel/src/events/log.ts) preserves epoch, gaps, sequence and minimized markers; [`projectBatch`](../../services/kernel/src/events/log.ts) releases its snapshot before apply and compare-and-set advancement. [`scan-partitions.sql`](../../services/kernel/src/events/scan-partitions.sql) visits the fixed 4,096-home map and each next-envelope key, not outbox history. [`startRelays`](../../services/kernel/src/events/relays.ts) drains bounded batches; total drain work legitimately follows backlog. [`growth-events.test.ts`](../../services/kernel/test/growth-events.test.ts), [`growth-projection.test.ts`](../../services/kernel/test/growth-projection.test.ts) and [`relay-effects.test.ts`](../../services/kernel/test/relay-effects.test.ts) target these shapes, including deep positions, full batches and empty/busy/lost-CAS outcomes. |
+| Effect registration and callbacks | [`registerEffects`](../../services/kernel/src/events/effects.ts) rejects a 33rd matching consumer per event type, counting duplicate types once. Both native admission and durable enqueue therefore have matching fanout at most 32 per event; total registration/type-list CPU is configuration-dependent. Deterministic workflow IDs, source-slot dispositions, position/event order and separate locator work are preserved. Completion uses unique workflow ID indexes in the schema. Native admission/run callbacks retain their actual owners: Accounts/History, Content, Semantic, Commerce, etc. Their native work is additional; a function type alone proves no callback bound. The queue discovery finding below concerns SDK scheduling, not an invented unbounded registration fanout.                                                                                                                                                                                                                                                                 |
+| Work status and steps             | [`createWorkClient`](../../services/kernel/src/work/client.ts), `SDK/client.js` and `SDK/system_database.js:getWorkflowStatus/getAllOperationResults` use exact workflow identity and keyed step rows for ordinary fixed-limit reads. `OFFSET`/page inputs and returned step count are separate input axes. [`growth-work-client.test.ts`](../../services/kernel/test/work/growth-work-client.test.ts) distinguishes the ordinary fixed-page case from the legacy Realm-leave JSON join. That compatibility fallback explicitly allows linear history and is already assigned separate design research: no duplicate task here.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Work scheduling and retention     | [`startWorker`](../../services/kernel/src/worker.ts) passes the same native pool to Work and DBOS; [`composeWork`](../../services/kernel/src/work/registry.ts) persists the queue configuration before launch. All seven queues currently have worker concurrency limits, summing to **34**, including `workflows: 8`. Worker concurrency bounds starts, not discovery. The two manifestations below belong to one native discovery repair class.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 Stale documentation, not product defects: the kernel README's final claim that effects have no fanout cap and its
 `workflows` unbounded-concurrency/18-total description contradict current source. Even
@@ -228,39 +228,46 @@ const now = new Date();
 const root = `retention-inversion:${crypto.randomUUID()}:`;
 
 async function put(group: string, count: number, createdAge: number, completedAge: number) {
-  await db.admin.query(`
+  await db.admin.query(
+    `
     INSERT INTO dbos.workflow_status
       (workflow_uuid,status,name,authenticated_roles,recovery_attempts,
        created_at,updated_at,completed_at,application_name)
     SELECT $1 || lpad(n::text,8,'0'), 'SUCCESS','retention.growth.fixture','[]',0,
            $2::bigint+n,$3::bigint+n,$3::bigint+n,'rezics-kernel'
     FROM generate_series(1,$4::int) n`,
-    [root + group + ':', +now-createdAge*day, +now-completedAge*day, count]);
+    [root + group + ':', +now - createdAge * day, +now - completedAge * day, count],
+  );
 }
 
 test('retention discovery is bounded with an older ineligible prefix and growing eligible backlog', async () => {
   await checkGrowth(db, {
     name: 'completion-inverted retention discovery',
-    rule: 'series', scales: [1,4,16], repetitions: 1,
+    rule: 'series',
+    scales: [1, 4, 16],
+    repetitions: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     // Preserve the original full deletion-batch index-descent allowance.
     indexProbes: 4000,
     async grow(_db, scale) {
-      await db.admin.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [root+'%']);
-      await put('retained', 49_152*scale, 400, 1);
-      await put('eligible-backlog', 49_152*scale, 200, 90);
+      await db.admin.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [root + '%']);
+      await put('retained', 49_152 * scale, 400, 1);
+      await put('eligible-backlog', 49_152 * scale, 200, 90);
       await put('warmup', 1000, 202, 90);
     },
     async warmup() {
       expect(await runWorkflowRetentionBatch(30, client, now)).toBe(1000);
     },
-    async prepare() { await put('probe', 1000, 201, 90); },
+    async prepare() {
+      await put('probe', 1000, 201, 90);
+    },
     async operation() {
       expect(await runWorkflowRetentionBatch(30, client, now)).toBe(1000);
       // Assertions through admin are outside measured SQL, as in existing fixtures.
-      expect((await db.admin.query(
-        'SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid LIKE $1',
-        [root+'probe:%'])).rowCount).toBe(0);
+      expect(
+        (await db.admin.query('SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [root + 'probe:%']))
+          .rowCount,
+      ).toBe(0);
     },
   });
 });
@@ -284,8 +291,18 @@ import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { WORK_APPLICATION } from '../../src/work/client.ts';
 
 const logger = new GlobalLogger();
-const native = new SystemDatabase(databaseUrl, logger, DBOSJSON, 10, db.pool,
-  'dbos', false, undefined, undefined, WORK_APPLICATION);
+const native = new SystemDatabase(
+  databaseUrl,
+  logger,
+  DBOSJSON,
+  10,
+  db.pool,
+  'dbos',
+  false,
+  undefined,
+  undefined,
+  WORK_APPLICATION,
+);
 const effects = new WorkflowQueue(WorkflowQueue.recordFromParams('effects', WORK_QUEUES.effects));
 const workflows = new WorkflowQueue(WorkflowQueue.recordFromParams('workflows', WORK_QUEUES.workflows));
 // No DBOS launch/init or runtime dispatcher is needed for this native statement probe.
@@ -299,60 +316,84 @@ Compose with `checkGrowth`, `expect`, `checkoutPartitionKey` and the lifecycle/i
 const root = `queue-discovery:${crypto.randomUUID()}:`;
 const workflowId = (id: string) => root + id.padEnd(24, '_');
 const provider = { accountNamespace: 'acct_growth', livemode: false };
-const sessionKey = (n: number) => checkoutPartitionKey(provider, `cs_test_${String(n).padStart(8,'0')}`);
+const sessionKey = (n: number) => checkoutPartitionKey(provider, `cs_test_${String(n).padStart(8, '0')}`);
 
-async function queued(id: string, queueName: string, key: string|null,
-  status: 'PENDING'|'ENQUEUED', version: string, n: number) {
-  await db.admin.query(`INSERT INTO dbos.workflow_status
+async function queued(
+  id: string,
+  queueName: string,
+  key: string | null,
+  status: 'PENDING' | 'ENQUEUED',
+  version: string,
+  n: number,
+) {
+  await db.admin.query(
+    `INSERT INTO dbos.workflow_status
     (workflow_uuid,status,name,queue_name,queue_partition_key,application_name,application_version,
      authenticated_roles,recovery_attempts,priority,created_at,updated_at)
     VALUES ($1,$2,'commerce.checkoutSync',$3,$4,'rezics-kernel',$5,'[]',0,0,$6,$6)`,
-    [workflowId(id),status,queueName,key,version,1_700_000_000_000+n]);
+    [workflowId(id), status, queueName, key, version, 1_700_000_000_000 + n],
+  );
 }
 
-for (const selector of ['partitioned','nonpartitioned'] as const) {
-for (const axis of ['keys-hit','keys-busy-miss','hot-version-hit','hot-version-miss'] as const) {
-  if (selector === 'nonpartitioned' && !axis.startsWith('hot-')) continue;
-  test(`one native queue discovery stays bounded: ${selector}/${axis}`, async () => {
-    const queueName = selector === 'partitioned' ? 'effects' : 'workflows';
-    const key = (n: number) => selector === 'partitioned' ? sessionKey(n) : null;
-    // One free slot is a real worker state. Exercise production-called SDK methods.
-    const claim = () => selector === 'partitioned'
-      ? native.findAndMarkStartablePartitionedWorkflows(
-          effects, 'growth-discovery', 'live-version', 1, crypto.randomUUID(), true)
-      : native.findAndMarkStartableWorkflows(
-          workflows, 'growth-discovery', 'live-version', undefined, 7, 0, crypto.randomUUID(), true);
-    let claimed: string[] = [];
-    await checkGrowth(db, {
-      name: `native queue discovery ${selector}/${axis}`,
-      rule: 'series', scales: [256,1024,4096], repetitions: 1,
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      async grow(_db, scale) {
-        await db.admin.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [root+'%']);
-        // Materialization batches these identical fixture inserts outside capture, as seed() does.
-        for (let n=0; n<16*scale; n++) {
-          const hot = axis.startsWith('hot-');
-          await queued(`q:${n}`, queueName, key(hot ? 0 : n), 'ENQUEUED',
-            hot ? 'other-version' : 'live-version', n);
-          if (axis === 'keys-busy-miss')
-            await queued(`owner:${n}`, queueName, key(n), 'PENDING', 'live-version', n);
-        }
-        if (axis === 'hot-version-hit')
-          await queued('probe', queueName, key(0), 'ENQUEUED', 'live-version', 16*scale+1);
-      },
-      async prepare() {
-        // Restore only our previous claims; preserve deliberately PENDING owners.
-        await db.admin.query("UPDATE dbos.workflow_status SET status='ENQUEUED' WHERE workflow_uuid=ANY($1)",
-          [claimed]);
-      },
-      async operation() {
-        claimed = await claim();
-        expect(claimed).toHaveLength(axis.endsWith('hit') ? 1 : 0);
-        if (axis === 'hot-version-hit') expect(claimed).toEqual([workflowId('probe')]);
-      },
+for (const selector of ['partitioned', 'nonpartitioned'] as const) {
+  for (const axis of ['keys-hit', 'keys-busy-miss', 'hot-version-hit', 'hot-version-miss'] as const) {
+    if (selector === 'nonpartitioned' && !axis.startsWith('hot-')) continue;
+    test(`one native queue discovery stays bounded: ${selector}/${axis}`, async () => {
+      const queueName = selector === 'partitioned' ? 'effects' : 'workflows';
+      const key = (n: number) => (selector === 'partitioned' ? sessionKey(n) : null);
+      // One free slot is a real worker state. Exercise production-called SDK methods.
+      const claim = () =>
+        selector === 'partitioned'
+          ? native.findAndMarkStartablePartitionedWorkflows(
+              effects,
+              'growth-discovery',
+              'live-version',
+              1,
+              crypto.randomUUID(),
+              true,
+            )
+          : native.findAndMarkStartableWorkflows(
+              workflows,
+              'growth-discovery',
+              'live-version',
+              undefined,
+              7,
+              0,
+              crypto.randomUUID(),
+              true,
+            );
+      let claimed: string[] = [];
+      await checkGrowth(db, {
+        name: `native queue discovery ${selector}/${axis}`,
+        rule: 'series',
+        scales: [256, 1024, 4096],
+        repetitions: 1,
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        async grow(_db, scale) {
+          await db.admin.query('DELETE FROM dbos.workflow_status WHERE workflow_uuid LIKE $1', [root + '%']);
+          // Materialization batches these identical fixture inserts outside capture, as seed() does.
+          for (let n = 0; n < 16 * scale; n++) {
+            const hot = axis.startsWith('hot-');
+            await queued(`q:${n}`, queueName, key(hot ? 0 : n), 'ENQUEUED', hot ? 'other-version' : 'live-version', n);
+            if (axis === 'keys-busy-miss') await queued(`owner:${n}`, queueName, key(n), 'PENDING', 'live-version', n);
+          }
+          if (axis === 'hot-version-hit')
+            await queued('probe', queueName, key(0), 'ENQUEUED', 'live-version', 16 * scale + 1);
+        },
+        async prepare() {
+          // Restore only our previous claims; preserve deliberately PENDING owners.
+          await db.admin.query("UPDATE dbos.workflow_status SET status='ENQUEUED' WHERE workflow_uuid=ANY($1)", [
+            claimed,
+          ]);
+        },
+        async operation() {
+          claimed = await claim();
+          expect(claimed).toHaveLength(axis.endsWith('hit') ? 1 : 0);
+          if (axis === 'hot-version-hit') expect(claimed).toEqual([workflowId('probe')]);
+        },
+      });
     });
-  });
-}
+  }
 }
 ```
 
@@ -369,16 +410,16 @@ not an empty result. Do not replace the SDK query with a copied SQL implementati
 Add these outcomes alongside the reproducers; not every control is expected to fail current source. Each scenario
 keeps the same hot partition/key and fixed probe neighborhood while growing unrelated history independently.
 
-| Axis | Frozen assertion |
-| --- | --- |
-| Retention hits `d=10` and `d=1000`; empty `d=0` | Grow both age-400/recently-completed and age-1/recently-completed histories with a fixed eligible set (or none). Preserve strict cutoff, null completion exclusion and all four terminal statuses; keep pending/enqueued/delayed work. Bound selection rows/statements independently of history, blocks logarithmically. These complement the inversion fixture, not replace it. |
-| Retention change size and children | Independently vary `d=0,10,1000` and actual owned operation/event/history/message/stream rows at fixed unrelated history. Charge `O(d+c)` rows/writes and `O((1+d+c) log H)` blocks, fixed ID-batch statement structure. Assert every selected owned row kind is deleted, unselected workflows/descendants and permanent fences remain. Never classify legitimate changed child rows as unrelated scans. |
-| Creation/completion inversions | Keep uniquely ordered probe creation times; shuffle eligible completion order, include creation ties without demanding a new tie authority, grow later eligible and earlier noneligible cohorts together. Native list examined work must stay independent of either cohort. Preserve creation-order behavior where unambiguous and the original strict cutoff at one fixed `now` throughout a sweep. |
-| Queue depth versus key count | Run independent growth of one hot key's compatible backlog (fixed available slots), distinct active Session keys, busy keys, and SUCCESS history. Repeated polls must make progress without enumerating unrelated keys per poll. Terminal history alone is insufficient. |
-| Version/ownership misses and hits | Repeat partitioned and nonpartitioned selectors with incompatible ENQUEUED prefixes. Latest worker accepts current or null version; a non-latest worker accepts only its version. Preserve SDK own-application **or unclaimed** admission and cross-owner PENDING exclusion. Test foreign-application rows only as a supported SDK ownership control; their production presence is not assumed by the core counterexample. |
-| Claims, races and failure | Two workers must not run two workflows for one Session; preserve native partition locks, fixed candidate recheck, row lock/skip behavior, owner token and per-key priority/creation ordering. Lost claims, rollback/retry and empty/busy polls retain bounded work. No serialization guarantee may be removed to lower examination. |
-| Mounted Commerce | Extend the existing `work.test.ts`/Session-refresh journey with distinct Sessions plus repeated same-Session refreshes. Assert the original Session key, deterministic workflow IDs, replay/input compatibility, exactly-once native outcomes and ordinary authorization. Measure scheduler work separately from provider/domain callbacks; do not call Stripe in the scheduler-only fixture. |
-| Migration/restart | On an old migrated fixture with existing queued, delayed, terminal, null-version and unclaimed rows, apply the additive migration through the supported SDK path; interrupt/resume any backfill, restart, then repeat hit/miss bounds and ownership cases. No unbounded startup census, lost existing work, removed compatibility or new authority is acceptable. Execution is deferred here. |
+| Axis                                            | Frozen assertion                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Retention hits `d=10` and `d=1000`; empty `d=0` | Grow both age-400/recently-completed and age-1/recently-completed histories with a fixed eligible set (or none). Preserve strict cutoff, null completion exclusion and all four terminal statuses; keep pending/enqueued/delayed work. Bound selection rows/statements independently of history, blocks logarithmically. These complement the inversion fixture, not replace it.                                           |
+| Retention change size and children              | Independently vary `d=0,10,1000` and actual owned operation/event/history/message/stream rows at fixed unrelated history. Charge `O(d+c)` rows/writes and `O((1+d+c) log H)` blocks, fixed ID-batch statement structure. Assert every selected owned row kind is deleted, unselected workflows/descendants and permanent fences remain. Never classify legitimate changed child rows as unrelated scans.                   |
+| Creation/completion inversions                  | Keep uniquely ordered probe creation times; shuffle eligible completion order, include creation ties without demanding a new tie authority, grow later eligible and earlier noneligible cohorts together. Native list examined work must stay independent of either cohort. Preserve creation-order behavior where unambiguous and the original strict cutoff at one fixed `now` throughout a sweep.                       |
+| Queue depth versus key count                    | Run independent growth of one hot key's compatible backlog (fixed available slots), distinct active Session keys, busy keys, and SUCCESS history. Repeated polls must make progress without enumerating unrelated keys per poll. Terminal history alone is insufficient.                                                                                                                                                   |
+| Version/ownership misses and hits               | Repeat partitioned and nonpartitioned selectors with incompatible ENQUEUED prefixes. Latest worker accepts current or null version; a non-latest worker accepts only its version. Preserve SDK own-application **or unclaimed** admission and cross-owner PENDING exclusion. Test foreign-application rows only as a supported SDK ownership control; their production presence is not assumed by the core counterexample. |
+| Claims, races and failure                       | Two workers must not run two workflows for one Session; preserve native partition locks, fixed candidate recheck, row lock/skip behavior, owner token and per-key priority/creation ordering. Lost claims, rollback/retry and empty/busy polls retain bounded work. No serialization guarantee may be removed to lower examination.                                                                                        |
+| Mounted Commerce                                | Extend the existing `work.test.ts`/Session-refresh journey with distinct Sessions plus repeated same-Session refreshes. Assert the original Session key, deterministic workflow IDs, replay/input compatibility, exactly-once native outcomes and ordinary authorization. Measure scheduler work separately from provider/domain callbacks; do not call Stripe in the scheduler-only fixture.                              |
+| Migration/restart                               | On an old migrated fixture with existing queued, delayed, terminal, null-version and unclaimed rows, apply the additive migration through the supported SDK path; interrupt/resume any backfill, restart, then repeat hit/miss bounds and ownership cases. No unbounded startup census, lost existing work, removed compatibility or new authority is acceptable. Execution is deferred here.                              |
 
 ## Next complete implementation recommendation
 
