@@ -273,6 +273,7 @@ export const Uncertain: Story = {
     const canvas = within(canvasElement);
     await fillSeries(canvasElement);
     const terms = within(await canvas.findByRole('group', { name: m.catalogue_create_terms() }));
+    const originalLabel = terms.getByRole('textbox', { name: m.catalogue_create_label() });
     await userEvent.click(await enabled(terms.getByRole('button', { name: m.catalogue_create_add_language() })));
     const language = terms.getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!;
     const translation = terms.getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!;
@@ -282,7 +283,8 @@ export const Uncertain: Story = {
     await userEvent.type(translation, translationLabel);
     await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByRole('alert')).toBeVisible();
-    await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
+    await expect(originalLabel).toBeDisabled();
+    await expect(translation).toBeDisabled();
     const remove = terms.getByRole('button', { name: m.catalogue_create_remove_language() });
     await expect(remove).toBeDisabled();
     await expect(terms.getByRole('button', { name: m.catalogue_create_add_language() })).toBeDisabled();
