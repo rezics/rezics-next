@@ -112,6 +112,7 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
           value.mode === 'public' ||
           (value.state === 'unknown' && value.expectedReader !== undefined) ||
           (value.state !== 'unknown' && value.expectedReader === undefined) ||
+          ((value.state === 'signed-out' || value.state === 'unavailable') && value.expectedReader !== null) ||
           (value.mode === 'initial-hydration' && value.state !== 'unknown'))) ||
       (!selectedRealm &&
         (value.state !== 'public' || value.mode !== 'public' || value.expectedReader !== undefined || value.incarnation !== 'public'))

@@ -309,15 +309,23 @@ test('configured full lists retire private reads across reader, target, node, cu
     expect(nativeReads[3]!.body.target).toEqual({ subject: subjectA, realm: realmA });
     expect(nativeReads[3]!.body.continuation).toEqual({ node: 'books-a-next', cursor: cursorA2 });
 
+    config = { list: 'books-a-next', page: targetA, cursor: cursorA2, locale: 'ja' };
+    await render();
+    await until(() => nativeReads.length === 5, 'replacement locale read');
+    expect(nativeReads[4]!.authorization).toBe('Bearer reader-a-token');
+    expect(nativeReads[4]!.body.languages[0]).toBe('ja');
+
     await act(async () => {
       nativeReads[2]!.work.resolve({ status: 308, data: { redirect: { to: 'retired-account' } } });
+      nativeReads[3]!.work.resolve(pageResponse(nativeReads[3]!, 'Retired locale rows'));
     });
     await flush();
     expect(host.textContent).not.toContain('Render failed');
+    expect(host.textContent).not.toContain('Retired locale rows');
     expect(errors).toHaveLength(0);
 
     await act(async () => {
-      nativeReads[3]!.work.resolve(pageResponse(nativeReads[3]!, 'Current A rows'));
+      nativeReads[4]!.work.resolve(pageResponse(nativeReads[4]!, 'Current A rows'));
     });
     await until(() => host.textContent?.includes('Current A rows') ?? false, 'current reader rows');
     expect(host.textContent).not.toContain('Retired A rows');
@@ -329,15 +337,15 @@ test('configured full lists retire private reads across reader, target, node, cu
     const publicPromise = client.fetchQuery(
       publicList.typeListQuery('en', 'public-books', publicTarget, undefined, publicAdmission),
     );
-    await until(() => nativeReads.length === 5, 'anonymous public SSR list read');
-    expect(nativeReads[4]!.authorization).toBeUndefined();
-    expect(nativeReads[4]!.body.target).toEqual({ route: '/public-books' });
-    expect(nativeReads[4]!.body.continuation).toBeUndefined();
+    await until(() => nativeReads.length === 6, 'anonymous public SSR list read');
+    expect(nativeReads[5]!.authorization).toBeUndefined();
+    expect(nativeReads[5]!.body.target).toEqual({ route: '/public-books' });
+    expect(nativeReads[5]!.body.continuation).toBeUndefined();
     expect(privateHeaders.get('cache-control')).toBe('private, no-store');
-    await act(async () => nativeReads[4]!.work.resolve(pageResponse(nativeReads[4]!, 'Public SSR')));
+    await act(async () => nativeReads[5]!.work.resolve(pageResponse(nativeReads[5]!, 'Public SSR')));
     const publicData = await publicPromise;
     responseNode = 'public-books';
-    config = { list: 'public-books', page: publicTarget, cursor: undefined, locale: 'en', initialData: publicData };
+    config = { list: 'public-books', page: publicTarget, locale: 'en', initialData: publicData };
     await render();
     await until(() => host.textContent?.includes('Public SSR') ?? false, 'public SSR rows');
 
@@ -346,7 +354,7 @@ test('configured full lists retire private reads across reader, target, node, cu
       client.setQueryData(sessionModule.sessionQuery.queryKey, session('reader-b'));
       root.render(createElement(QueryClientProvider, { client }, createElement(Surface)));
     });
-    expect(nativeReads).toHaveLength(5);
+    expect(nativeReads).toHaveLength(6);
     expect(host.textContent).toContain('Public SSR');
     expect(errors).toHaveLength(0);
   } finally {

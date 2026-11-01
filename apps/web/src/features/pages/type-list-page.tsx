@@ -128,12 +128,13 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   const queryKey = options.queryKey;
   const queryKeyHash = JSON.stringify(queryKey);
   useEffect(() => {
+    if (!selectedRealm) return;
     const retiredKey = queryKey;
     return () => {
       void queryClient.cancelQueries({ queryKey: retiredKey, exact: true });
       queryClient.removeQueries({ queryKey: retiredKey, exact: true });
     };
-  }, [queryClient, queryKeyHash]);
+  }, [queryClient, queryKeyHash, selectedRealm]);
 
   if (query.isError) throw query.error;
   const result = query.data;
@@ -150,6 +151,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     request.mode === mode &&
     request.realm === (selectedRealm ? target.realm : null) &&
     result.node === list &&
+    JSON.stringify(result.target) === JSON.stringify(target) &&
     result.admission.context === (result.page.context?.id ?? null) &&
     (selectedRealm
       ? state === 'unknown'
