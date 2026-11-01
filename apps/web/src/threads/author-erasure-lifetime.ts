@@ -32,11 +32,7 @@ export function authorErasureSessionSource(client: QueryClient | undefined): Aut
   const read = () => client.getQueryData<AuthorErasureSession>(sessionQuery.queryKey);
   const identity = () => {
     const session = read();
-    return JSON.stringify([
-      session?.state ?? 'unknown',
-      session?.subject ?? null,
-      session?.csrfToken ?? null,
-    ]);
+    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
   };
   let previous = identity();
   let revision = 0;
@@ -82,10 +78,7 @@ export function authorErasureSessionIsAuthenticated(
   );
 }
 
-export type AuthorErasureTransport = (
-  intent: ErasureIntent,
-  csrfToken: string,
-) => Promise<ErasureEnqueue>;
+export type AuthorErasureTransport = (intent: ErasureIntent, csrfToken: string) => Promise<ErasureEnqueue>;
 
 /** The caller's token and liveness check cross every asynchronous transport-loading boundary together. */
 export async function dispatchAuthorErasure(
@@ -94,8 +87,7 @@ export async function dispatchAuthorErasure(
   isCurrent: () => boolean,
   loadTransport: () => Promise<AuthorErasureTransport> = async () => {
     const { beginThreadAuthorErasure } = await import('./author-erasure-server');
-    return (original, token) =>
-      beginThreadAuthorErasure({ data: original, headers: { 'X-CSRF-Token': token } });
+    return (original, token) => beginThreadAuthorErasure({ data: original, headers: { 'X-CSRF-Token': token } });
   },
 ): Promise<ErasureEnqueue | undefined> {
   if (!isCurrent()) return undefined;

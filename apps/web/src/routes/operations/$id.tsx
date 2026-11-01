@@ -21,13 +21,6 @@ export const Route = createFileRoute('/operations/$id')({
     const initial = Route.useLoaderData();
     const location = useLocation();
     const read = useCallback(() => readThreadAuthorErasure({ data: { id } }), [id]);
-    return (
-      <AuthorErasureOperationPage
-        initial={initial}
-        operationId={id}
-        navigationKey={location.href}
-        read={read}
-      />
-    );
+    return <AuthorErasureOperationPage initial={initial} operationId={id} navigationKey={location.href} read={read} />;
   },
 });

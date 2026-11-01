@@ -13,11 +13,7 @@ import {
   type AuthorErasureSessionSource,
 } from './author-erasure-lifetime';
 
-async function sendNative(
-  intent: ErasureIntent,
-  csrfToken: string,
-  isCurrent: () => boolean,
-): Promise<ErasureEnqueue> {
+async function sendNative(intent: ErasureIntent, csrfToken: string, isCurrent: () => boolean): Promise<ErasureEnqueue> {
   // The token belongs to this caller; never look up a fresh token after an asynchronous boundary.
   return (await dispatchAuthorErasure(intent, csrfToken, isCurrent)) ?? { kind: 'uncertain' };
 }
@@ -39,10 +35,7 @@ export function erasureRefusal(kind: Exclude<ErasureEnqueue['kind'], 'accepted'>
   }
 }
 
-async function readNative(
-  threadId: string,
-  isCurrent: () => boolean = () => true,
-): Promise<AuthorErasureAdmission> {
+async function readNative(threadId: string, isCurrent: () => boolean = () => true): Promise<AuthorErasureAdmission> {
   if (!isCurrent()) return { kind: 'unavailable' };
   const { readThreadAuthorErasureAdmission } = await import('./author-erasure-server');
   if (!isCurrent()) return { kind: 'unavailable' };
@@ -120,14 +113,10 @@ function AuthorErasureEntryVisit({
     reads.current.bind(threadId, viewerId, nextOpen, revision);
     const ticket = connection.current;
     const current = () => isCurrent(ticket);
-    const pendingRead = reads.current.refresh(
-      viewerId,
-      () => readAdmission(threadId, current),
-      current,
-    );
+    const pendingRead = reads.current.refresh(viewerId, () => readAdmission(threadId, current), current);
     setOpen(nextOpen);
     updateAdmission((value) => value + 1);
-    if (await pendingRead && current()) updateAdmission((value) => value + 1);
+    if ((await pendingRead) && current()) updateAdmission((value) => value + 1);
   }
 
   function toggle(next: boolean) {
@@ -156,13 +145,10 @@ function AuthorErasureEntryVisit({
     if (!request.current) {
       const originalSend = send;
       const csrfToken = sessionAtIntent.csrfToken;
-      request.current = authorErasureRequest(
-        { threadId, idempotencyKey: crypto.randomUUID() },
-        (intent) => {
-          if (!current()) return Promise.resolve({ kind: 'uncertain' });
-          return originalSend ? originalSend(intent) : sendNative(intent, csrfToken, current);
-        },
-      );
+      request.current = authorErasureRequest({ threadId, idempotencyKey: crypto.randomUUID() }, (intent) => {
+        if (!current()) return Promise.resolve({ kind: 'uncertain' });
+        return originalSend ? originalSend(intent) : sendNative(intent, csrfToken, current);
+      });
     }
     let outcome: ErasureEnqueue;
     try {

@@ -5,12 +5,7 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useSyncExt
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { threadLocation } from './thread-href';
-import {
-  authorErasureRefreshes,
-  erasureStage,
-  type ErasureOperation,
-  type ErasureRead,
-} from './author-erasure';
+import { authorErasureRefreshes, erasureStage, type ErasureOperation, type ErasureRead } from './author-erasure';
 import { erasureRefusal } from './author-erasure-entry';
 import {
   authorErasureSessionIsAuthenticated,
@@ -67,7 +62,8 @@ function operationMatches(read: ErasureRead, operationId: string, subject?: stri
   const operation = operationFor(read);
   return (
     !operation ||
-    (operation.name === `operations/${operationId}` && (subject === undefined || operation.metadata.authorId === subject))
+    (operation.name === `operations/${operationId}` &&
+      (subject === undefined || operation.metadata.authorId === subject))
   );
 }
 
@@ -211,8 +207,7 @@ function initialState(
       : { state: { kind: 'unavailable' }, needsRead: false };
   }
   const session = source.read();
-  if (!authorErasureSessionIsAuthenticated(session))
-    return { state: unavailableFor(session), needsRead: true };
+  if (!authorErasureSessionIsAuthenticated(session)) return { state: unavailableFor(session), needsRead: true };
   if (!operationMatches(initial, operationId, session.subject))
     return { state: { kind: 'unavailable' }, needsRead: true };
   return { state: initial, needsRead: false };
@@ -234,8 +229,7 @@ export function AuthorErasureOperationPage({
   const source = authorErasureSessionSource(client);
   const revision = useSyncExternalStore(source.subscribe, source.snapshot, source.serverSnapshot);
   const derivedOperationId =
-    suppliedOperationId ??
-    (initial.kind === 'available' ? initial.operation.name.slice('operations/'.length) : '');
+    suppliedOperationId ?? (initial.kind === 'available' ? initial.operation.name.slice('operations/'.length) : '');
   const routeScope = JSON.stringify([derivedOperationId, navigationKey]);
   const budget = useRef<{ scope: string; value: RefreshBudget } | null>(null);
   const reader = useRef(read);
@@ -310,10 +304,7 @@ export function AuthorErasureOperationPage({
     },
     [source, visit],
   );
-  const snapshot = useCallback(
-    () => JSON.stringify([source.snapshot(), visit.snapshot()]),
-    [source, visit],
-  );
+  const snapshot = useCallback(() => JSON.stringify([source.snapshot(), visit.snapshot()]), [source, visit]);
   useSyncExternalStore(subscribe, snapshot, () => '[0,0]');
 
   useLayoutEffect(() => {

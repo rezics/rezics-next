@@ -178,7 +178,7 @@ test('The complete author erasure caller retires private admission command callb
         ? lateAdmission.promise
         : admissionReads === 2
           ? currentAdmission.promise
-        : Promise.resolve({ kind: 'current', authorId: authorA, mayErase: true });
+          : Promise.resolve({ kind: 'current', authorId: authorA, mayErase: true });
     };
     const lateAcknowledgement = gate<{ kind: 'accepted'; operationId: string } | { kind: 'uncertain' }>();
     const targetRetirement = gate<{ kind: 'uncertain' } | { kind: 'accepted'; operationId: string }>();
