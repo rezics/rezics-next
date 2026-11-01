@@ -209,6 +209,9 @@ test('default thread composers preserve drafts on Stay, allow Leave and success 
     expect(titleInput()?.value).toBe('An unsaved opening');
     expect(textbox(m.thread_new_body_label())?.textContent).toContain('A structured opening paragraph.');
     expect(openingCalls).toEqual([originalCommand]);
+    await click(m.thread_write_retry());
+    await settle(() => openingCalls.length === 2 && host.textContent?.includes(m.thread_write_unavailable()) === true);
+    expect(openingCalls[1]).toEqual(originalCommand);
     await click('Leave conversation');
     await settle(() => dialog() !== null);
     await click(m.thread_authoring_leave());
