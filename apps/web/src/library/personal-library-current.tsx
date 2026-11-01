@@ -171,26 +171,47 @@ function PersonalLibraryRead({
   const client = useQueryClient();
   const [lifetime] = useState(() => crypto.randomUUID());
   const queryKey = ['personal-library-current', subject, address, lifetime];
+  const browser = useRef(hydrated);
+  browser.current = hydrated;
+  const seedVersions = useRef({ entries: null as string | null, continue: null as string | null });
   const envelope = (value: PersonalLibraryCurrentRead) => ({
     value,
-    entries: origin.capture('library_entry.list', 'progress_session.list'),
-    continue: origin.capture('library_continue.list', 'progress_session.list'),
+    entries: browser.current ? origin.version('library_entry.list', 'progress_session.list') : null,
+    continue: browser.current ? origin.version('library_continue.list', 'progress_session.list') : null,
   });
+  const regionCurrent = (read: ReturnType<typeof envelope>, region: 'entries' | 'continue') => {
+    if (!origin.current()) return false;
+    if (!browser.current) return true;
+    const ops = [
+      region === 'entries' ? 'library_entry.list' : 'library_continue.list',
+      'progress_session.list',
+    ] as const;
+    const version = origin.version(...ops);
+    seedVersions.current[region] ??= version;
+    return origin.capture(...ops)() && version === (read[region] ?? seedVersions.current[region]);
+  };
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? envelope(initial) : undefined));
+  const enabled =
+    hydrated &&
+    personalRead.enabled &&
+    (origin.capture('library_entry.list', 'progress_session.list')() ||
+      origin.capture('library_continue.list', 'progress_session.list')());
   const query = useQuery({
     ...personalRead,
     queryKey,
-    enabled: hydrated && personalRead.enabled,
+    enabled,
     queryFn: async () => {
       if (!origin.current()) throw new Error('Obsolete personal Library read');
       const guards = envelope(initial);
+      if (!regionCurrent(guards, 'entries') && !regionCurrent(guards, 'continue'))
+        throw new Error('Unadmitted personal Library read');
       const value = await readPersonalLibraryCurrent({ data: input });
       if (!origin.current() || !matches(value, subject, address)) throw new Error('Unaccepted personal Library read');
       return {
         ...guards,
         value: {
           ...value,
-          page: guards.entries()
+          page: regionCurrent(guards, 'entries')
             ? value.page
             : {
                 signedIn: true,
@@ -201,7 +222,7 @@ function PersonalLibraryRead({
                 ...(address.type ? { type: address.type } : {}),
                 ...(address.state ? { state: address.state } : {}),
               },
-          continueEntries: guards.continue() ? value.continueEntries : { state: 'denied', status: 403 },
+          continueEntries: regionCurrent(guards, 'continue') ? value.continueEntries : { state: 'denied', status: 403 },
         } satisfies PersonalLibraryCurrentRead,
       };
     },
@@ -211,18 +232,21 @@ function PersonalLibraryRead({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const previousLoader = useRef({ initial, readVersion });
+  const previousLoader = useRef({ initial, readVersion, enabled });
   useEffect(() => {
-    if (previousLoader.current.initial !== initial || previousLoader.current.readVersion !== readVersion) {
-      previousLoader.current = { initial, readVersion };
+    const previous = previousLoader.current;
+    previousLoader.current = { initial, readVersion, enabled };
+    if (previous.initial !== initial || previous.readVersion !== readVersion) {
       if (
+        previous.enabled &&
+        enabled &&
         origin.current() &&
         (origin.capture('library_entry.list', 'progress_session.list')() ||
           origin.capture('library_continue.list', 'progress_session.list')())
       )
         void query.refetch();
     }
-  }, [initial, readVersion, query.refetch, origin]);
+  }, [initial, readVersion, enabled, query.refetch, origin]);
   const actualRead = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
   const accepted =
     !query.isError &&
@@ -305,7 +329,11 @@ function PersonalLibraryRead({
     () => async () => {
       const current = origin.capture('library_continue.list', 'progress_session.list');
       const currentRead = () =>
-        isCurrent() && client.getQueryData(queryKey) === accepted && !!accepted?.continue() && current();
+        isCurrent() &&
+        client.getQueryData(queryKey) === accepted &&
+        !!accepted &&
+        regionCurrent(accepted, 'continue') &&
+        current();
       if (!currentRead()) return { state: 'unavailable' } as const;
       const result = await readPersonalLibraryContinue({
         data: {
@@ -327,9 +355,9 @@ function PersonalLibraryRead({
   return (
     <PersonalShelfOrigin.Provider value={pageOrigin}>
       <PersonalLibraryPage
-        key={readGeneration}
+        key={`${readGeneration}:${origin.version('library_entry.list', 'progress_session.list')}`}
         page={
-          accepted.entries()
+          regionCurrent(accepted, 'entries')
             ? accepted.value.page
             : {
                 signedIn: true,
@@ -349,7 +377,9 @@ function PersonalLibraryRead({
           collections: collectionsAdmitted ? accepted.value.navigation.collections : [],
           collectionsState: collectionsAdmitted ? (accepted.value.navigation.collectionsState ?? 'loaded') : 'loaded',
         }}
-        continueState={accepted.continue() ? accepted.value.continueEntries : { state: 'denied', status: 403 }}
+        continueState={
+          regionCurrent(accepted, 'continue') ? accepted.value.continueEntries : { state: 'denied', status: 403 }
+        }
         continueRead={readContinue}
         isCurrent={isCurrent}
         originatingLease={mutationLease}

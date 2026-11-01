@@ -431,6 +431,14 @@ test('Per-operation retirement keeps healthy reads, exact uncertain keys and par
     });
     expect(old.isCurrent()).toBe(false);
     expect(ui.controls.selected).toEqual([]);
+    await ui.settle(ui.reads.at(-1)!, response('A'));
+    expect(ui.controls.isCurrent()).toBe(true);
+    const recoveredWrites = ui.writes.length;
+    await ui.run(() => {
+      void ui.controls.changeState(id(1), 'completed');
+    });
+    expect(ui.writes).toHaveLength(recoveredWrites + 1);
+    await ui.settle(ui.writes.at(-1)!.work, saved(1));
   } finally {
     await ui.close();
   }

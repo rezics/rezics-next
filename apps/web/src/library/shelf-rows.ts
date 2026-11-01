@@ -26,7 +26,7 @@ import { mutateSubjectLabelAction } from './subject-slot-actions';
 import type { LibraryLabelSummary } from './subject-labels.ts';
 import { PersonalShelfOrigin } from './personal-shelf-origin';
 
-/** The existing synchronous mutation lease survives a page/actor replacement until its request settles. */
+/** A synchronous lease releases only its own command, including after an originating authority retires. */
 export type ShelfMutationLease = { current: boolean; owner?: symbol; listeners: Set<() => void> };
 export const shelfMutationLease = (): ShelfMutationLease => ({ current: false, listeners: new Set() });
 
