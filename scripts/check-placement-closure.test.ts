@@ -80,9 +80,7 @@ test('opaque dependencies, runtime configuration, flags, and physical escapes ar
 
   const unknownFlag = fixture();
   writeTest(unknownFlag, testSource());
-  expect(
-    placement(unknownFlag, ['bun', 'test', '--unreviewed-runtime-option', testPath]),
-  ).toBe('remote');
+  expect(placement(unknownFlag, ['bun', 'test', '--unreviewed-runtime-option', testPath])).toBe('remote');
 
   const escaped = fixture();
   const outside = mkdtempSync(join(join(repository, '.temp'), `placement-escape-${randomUUID()}-`));
