@@ -16,29 +16,29 @@ control path to its candidate manifest.
 
 The reserved root-relative producer files are:
 
-| Path | Producer and lifecycle |
-| --- | --- |
-| `.alive` | Upload, admission heartbeat, and run wrapper; empty liveness file before source verification. |
-| `.remote-check-slot-count` | Slot admission; bounded positive slot count before source verification. |
-| `.remote-check-supervisor` | Host lifetime monitor; durable host, run, UID, PID, start tick, and process-group identity before source verification. |
-| `.remote-check-supervisor.pending` | Temporary durable-write sibling; must be absent at source verification and prepared receipt. |
-| `bun-runtime-transpiler-cache` | Pinned Bun runtime cache; may be created by runtime verification before source verification and grows during preparation. This is the sole reserved root directory. |
-| `.preparation-started` | Preparation supervisor; host, run, deadline, and bounded timeout after preparation begins. |
-| `preparation-install.json` | Frozen installer; cache classification and package receipt after successful install. |
-| `.bun-install-complete` | Installer; empty completion marker after a successful frozen install. |
-| `preparation-status.json` | Preparation or lifetime failure reporting; forbidden at a successful prepared-input boundary. |
-| `run-lifetime-status.json` | Host lifetime monitor; terminal timeout report, after preparation evidence. |
-| `run-lifetime-status.json.pending` | Temporary durable-write sibling. |
-| `command-started` | Run wrapper; written after prepared-input evidence. |
-| `.command-result` | Run wrapper terminal result. |
-| `.command-result.pending` | Temporary durable-write sibling. |
-| `exit-status` | Host lifetime monitor terminal result. |
-| `exit-status.pending` | Temporary durable-write sibling. |
-| `command-phases.tsv` | Command phase recorder; command output after prepared-input evidence. |
-| `physical-resources.json` | Host lifetime monitor; terminal resource receipt after the command. |
-| `physical-resources.json.pending` | Temporary durable-write sibling. |
-| `.resource-terminal-ready` | Lifetime monitor terminal sampling handoff. |
-| `.resource-terminal-sampled` | Lifetime monitor terminal sampling acknowledgement. |
+| Path                               | Producer and lifecycle                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.alive`                           | Upload, admission heartbeat, and run wrapper; empty liveness file before source verification.                                                                       |
+| `.remote-check-slot-count`         | Slot admission; bounded positive slot count before source verification.                                                                                             |
+| `.remote-check-supervisor`         | Host lifetime monitor; durable host, run, UID, PID, start tick, and process-group identity before source verification.                                              |
+| `.remote-check-supervisor.pending` | Temporary durable-write sibling; must be absent at source verification and prepared receipt.                                                                        |
+| `bun-runtime-transpiler-cache`     | Pinned Bun runtime cache; may be created by runtime verification before source verification and grows during preparation. This is the sole reserved root directory. |
+| `.preparation-started`             | Preparation supervisor; host, run, deadline, and bounded timeout after preparation begins.                                                                          |
+| `preparation-install.json`         | Frozen installer; cache classification and package receipt after successful install.                                                                                |
+| `.bun-install-complete`            | Installer; empty completion marker after a successful frozen install.                                                                                               |
+| `preparation-status.json`          | Preparation or lifetime failure reporting; forbidden at a successful prepared-input boundary.                                                                       |
+| `run-lifetime-status.json`         | Host lifetime monitor; terminal timeout report, after preparation evidence.                                                                                         |
+| `run-lifetime-status.json.pending` | Temporary durable-write sibling.                                                                                                                                    |
+| `command-started`                  | Run wrapper; written after prepared-input evidence.                                                                                                                 |
+| `.command-result`                  | Run wrapper terminal result.                                                                                                                                        |
+| `.command-result.pending`          | Temporary durable-write sibling.                                                                                                                                    |
+| `exit-status`                      | Host lifetime monitor terminal result.                                                                                                                              |
+| `exit-status.pending`              | Temporary durable-write sibling.                                                                                                                                    |
+| `command-phases.tsv`               | Command phase recorder; command output after prepared-input evidence.                                                                                               |
+| `physical-resources.json`          | Host lifetime monitor; terminal resource receipt after the command.                                                                                                 |
+| `physical-resources.json.pending`  | Temporary durable-write sibling.                                                                                                                                    |
+| `.resource-terminal-ready`         | Lifetime monitor terminal sampling handoff.                                                                                                                         |
+| `.resource-terminal-sampled`       | Lifetime monitor terminal sampling acknowledgement.                                                                                                                 |
 
 The implementation owns this list once in `scripts/remote-check.ts`; the source verifier, prepared-input evidence,
 installer cache inventory, local manifest preflight, and refreshed-base cleanup derive their exact root paths from it.

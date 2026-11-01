@@ -177,17 +177,12 @@ function visibleSourcePaths(root: string, prefix = ''): string[] {
   return result.sort();
 }
 
-function runSource(
-  fixture: Fixture,
-  manifest = fixture.manifest,
-  program = sourceInputVerificationProgram,
-) {
+function runSource(fixture: Fixture, manifest = fixture.manifest, program = sourceInputVerificationProgram) {
   writeSourceManifest(fixture, manifest);
-  return spawnSync(
-    'python3',
-    ['-c', program, fixture.root, manifest.sourceSha256, fixture.run, fixture.host],
-    { encoding: 'utf8', timeout: 5_000 },
-  );
+  return spawnSync('python3', ['-c', program, fixture.root, manifest.sourceSha256, fixture.run, fixture.host], {
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
 }
 
 function generatedScript(fixture: Fixture): string {
@@ -280,8 +275,11 @@ test('the generated source verifier accepts producer controls after the frozen s
     expect(preRepairPaths.filter((path) => !frozenPaths.includes(path))).toEqual(producerPaths);
     const preRepairProgram = sourceInputVerificationProgram
       .replace("validate_producer_controls(root,run,host,'source')\n", '')
-      .replace("        if relative_path in CONTROL_ROOT_DIRECTORIES:\n            dirs.remove(name)\n            continue\n", '')
-      .replace("        if rel in CONTROL_ROOT_FILES: continue\n", '');
+      .replace(
+        '        if relative_path in CONTROL_ROOT_DIRECTORIES:\n            dirs.remove(name)\n            continue\n',
+        '',
+      )
+      .replace('        if rel in CONTROL_ROOT_FILES: continue\n', '');
     expect(preRepairProgram).not.toBe(sourceInputVerificationProgram);
     const preRepair = runSource(fixture, fixture.manifest, preRepairProgram);
     expect(preRepair.status).not.toBe(0);
@@ -420,7 +418,9 @@ test('reserved producer control names fail before staging and cannot masquerade 
     expect(() => validateExpectedSourceManifest(collision, collision.sourceSha256)).toThrow('reserved entry');
     const result = runSource(fixture, collision);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('source manifest collides with a reserved producer control: .remote-check-supervisor');
+    expect(result.stderr).toContain(
+      'source manifest collides with a reserved producer control: .remote-check-supervisor',
+    );
 
     for (const control of REMOTE_CHECK_PRODUCER_CONTROL_FILES) {
       const candidate = manifestFor([{ ...fixture.manifest.entries[0]!, path: control }]);
@@ -435,7 +435,9 @@ test('reserved producer control names fail before staging and cannot masquerade 
     ];
     for (const path of reservedNames)
       expect(() => validateCandidateUploadPaths([path])).toThrow('candidate upload path is invalid or reserved');
-    expect(() => validateExpectedSourceManifest(manifestFor([], ['.remote-check-supervisor']))).toThrow('reserved deleted path');
+    expect(() => validateExpectedSourceManifest(manifestFor([], ['.remote-check-supervisor']))).toThrow(
+      'reserved deleted path',
+    );
   } finally {
     cleanup(fixture);
   }
@@ -587,4 +589,3 @@ test('prepared input evidence ignores only validated controls and keeps generate
     cleanup(fixture);
   }
 });
-

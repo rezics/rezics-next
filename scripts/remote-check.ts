@@ -123,10 +123,7 @@ export function validateCandidateUploadPaths(paths: readonly string[]): void {
 }
 
 /** Validate generic source evidence before a manifest is staged or any candidate bytes are uploaded. */
-export function validateExpectedSourceManifest(
-  manifest: ExpectedSourceManifest,
-  expectedSourceSha256?: string,
-): void {
+export function validateExpectedSourceManifest(manifest: ExpectedSourceManifest, expectedSourceSha256?: string): void {
   if (
     !manifest ||
     Object.keys(manifest).sort().join(',') !== 'deleted,entries,head,indexTree,sourceSha256' ||
@@ -161,16 +158,21 @@ export function validateExpectedSourceManifest(
           entry.target.includes('\0') ||
           createHash('sha256').update(entry.target).digest('hex') !== entry.sha256))
     ) {
-      throw new Error(`remote-check: expected source manifest contains an invalid or reserved entry: ${String(entry?.path)}`);
+      throw new Error(
+        `remote-check: expected source manifest contains an invalid or reserved entry: ${String(entry?.path)}`,
+      );
     }
-    if (entries.has(entry.path)) throw new Error(`remote-check: expected source manifest has a duplicate path: ${entry.path}`);
+    if (entries.has(entry.path))
+      throw new Error(`remote-check: expected source manifest has a duplicate path: ${entry.path}`);
     entries.set(entry.path, entry);
   }
 
   const deleted = new Set<string>();
   for (const path of manifest.deleted) {
     if (!isSafeSourcePath(path) || collidesWithProducerControl(path))
-      throw new Error(`remote-check: expected source manifest contains an invalid or reserved deleted path: ${String(path)}`);
+      throw new Error(
+        `remote-check: expected source manifest contains an invalid or reserved deleted path: ${String(path)}`,
+      );
     if (deleted.has(path) || entries.has(path))
       throw new Error(`remote-check: expected source manifest has a duplicate or present deleted path: ${path}`);
     deleted.add(path);
