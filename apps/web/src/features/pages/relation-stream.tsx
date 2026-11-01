@@ -51,14 +51,17 @@ function useReadingLifetime(onRetire: () => void) {
       }
     };
   }, []);
-  return useMemo(() => ({
-    current(generation: number) {
-      return lifetime.current.mounted && lifetime.current.generation === generation;
-    },
-    generation() {
-      return lifetime.current.generation;
-    },
-  }), []);
+  return useMemo(
+    () => ({
+      current(generation: number) {
+        return lifetime.current.mounted && lifetime.current.generation === generation;
+      },
+      generation() {
+        return lifetime.current.generation;
+      },
+    }),
+    [],
+  );
 }
 
 const actionClass =
@@ -109,13 +112,7 @@ export function RelationStream(props: {
     view,
     sectionIncarnation(props.section),
   ]);
-  return (
-    <StreamState
-      key={identity}
-      viewer={viewer}
-      {...props}
-    />
-  );
+  return <StreamState key={identity} viewer={viewer} {...props} />;
 }
 
 function StreamState({
@@ -271,9 +268,7 @@ function StreamState({
       if (lifetime.current(generation)) {
         if (activeQueryKey.current?.at(-1) === incarnation) activeQueryKey.current = undefined;
         active.current = false;
-        setState((previous) =>
-          lifetime.current(generation) ? { ...previous, pending: false } : previous,
-        );
+        setState((previous) => (lifetime.current(generation) ? { ...previous, pending: false } : previous));
       }
     }
   }

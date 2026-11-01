@@ -139,9 +139,7 @@ export const loadMemberList = createServerFn({ method: 'GET', strict: false })
     const cursor = value.cursor === undefined ? undefined : validateViewCursor(value.cursor);
     if (!node || (value.cursor !== undefined && !cursor)) throw new Error('Invalid continuation');
     const representation = value.representation;
-    const representationContext = isRecord(representation)
-      ? validatePageRealm(representation.context)
-      : undefined;
+    const representationContext = isRecord(representation) ? validatePageRealm(representation.context) : undefined;
     const populationId =
       isRecord(representation) && representation.population === 'realm'
         ? validatePageRealm(representation.populationId)

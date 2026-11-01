@@ -407,7 +407,11 @@ test('Retired composed continuations cannot alter or invalidate a replacement re
     });
     const retiredReaderTrigger = await start('side-stories');
     expect(pending).toHaveLength(1);
-    expect(pending[0]?.request).toMatchObject({ reader: 'reader-A', context: contextA.id, populationId: contextA.population.id });
+    expect(pending[0]?.request).toMatchObject({
+      reader: 'reader-A',
+      context: contextA.id,
+      populationId: contextA.population.id,
+    });
     await replace(readerB);
     const currentReaderTrigger = trigger('side-stories');
     currentReaderTrigger.focus();

@@ -8,13 +8,7 @@ import { m } from '../../paraglide/messages.js';
 import type { SubjectSummary } from '../../media/summary';
 import type { Fact } from '../../search/results';
 import { CoverList } from './cover-list';
-import {
-  OverviewContext,
-  pageRepresentation,
-  type Item,
-  type OverviewValue,
-  type Section,
-} from './overview';
+import { OverviewContext, pageRepresentation, type Item, type OverviewValue, type Section } from './overview';
 import { isRecord, pageText } from './shared';
 import { loadMemberList, type MemberListRequest, type MemberPageTarget } from './member-list-query';
 
@@ -169,13 +163,17 @@ function MemberReader({
     typeof viewer.subject === 'string' &&
     viewer.subject.length > 0;
   const recoveryReader = needsViewer ? viewer.subject! : (value.cacheReader ?? null);
-  const queryKey = ['composed-members-viewer', {
-    target,
-    locale: value.locale,
-    node,
-    expectedReader: recoveryReader,
-    representation,
-  }, incarnation] as const;
+  const queryKey = [
+    'composed-members-viewer',
+    {
+      target,
+      locale: value.locale,
+      node,
+      expectedReader: recoveryReader,
+      representation,
+    },
+    incarnation,
+  ] as const;
   const lifetime = useReadingLifetime(() => {
     void queryClient.cancelQueries({ queryKey, exact: true });
   });
@@ -203,11 +201,7 @@ function MemberReader({
   });
   if (needsViewer && target && current.isPending)
     return <p role="status">{m.subject_relation_loading({}, { locale: value.locale as never })}</p>;
-  const section: Section = needsViewer
-    ? current.isError
-      ? { ok: false }
-      : (current.data ?? initial)
-    : initial;
+  const section: Section = needsViewer ? (current.isError ? { ok: false } : (current.data ?? initial)) : initial;
   const continuationEnabled =
     value.cacheReader == null || (viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
   // An anonymous public page has no viewer provenance by design. A known private page cannot outlive its reader.
@@ -356,9 +350,7 @@ export function MemberList({
       } else {
         const visible = new Set(unique.keys());
         for (const item of memberItems(next, value)) visible.add(item.id);
-        setPages((previous) =>
-          lifetime.current(generation) ? (cursor ? [...previous, next] : [next]) : previous,
-        );
+        setPages((previous) => (lifetime.current(generation) ? (cursor ? [...previous, next] : [next]) : previous));
         setCompletion((previous) =>
           lifetime.current(generation)
             ? {

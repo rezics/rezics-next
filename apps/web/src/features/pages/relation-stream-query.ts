@@ -86,7 +86,18 @@ export const loadRelationGroup = createServerFn({ method: 'GET', strict: false }
       !isRecord(value) ||
       Object.keys(value).some(
         (key) =>
-          !['subject', 'locale', 'view', 'node', 'cursor', 'realm', 'reader', 'context', 'population', 'populationId'].includes(key),
+          ![
+            'subject',
+            'locale',
+            'view',
+            'node',
+            'cursor',
+            'realm',
+            'reader',
+            'context',
+            'population',
+            'populationId',
+          ].includes(key),
       ) ||
       typeof value.subject !== 'string' ||
       !/^[0-9a-f-]{36}$/.test(value.subject) ||

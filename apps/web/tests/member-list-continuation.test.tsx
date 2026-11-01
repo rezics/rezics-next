@@ -311,7 +311,11 @@ test('Default composed member continuation announces actual unique additions and
     replacementTrigger.focus();
     const currentA = hold();
     await press(replacementTrigger);
-    expect(requests.slice(-2).map(({ expectedReader, representation, cursor }) => ({ expectedReader, representation, cursor }))).toEqual([
+    expect(
+      requests
+        .slice(-2)
+        .map(({ expectedReader, representation, cursor }) => ({ expectedReader, representation, cursor })),
+    ).toEqual([
       {
         expectedReader: 'reader-one',
         representation: {

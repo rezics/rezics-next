@@ -219,17 +219,13 @@ test('values are text and links stay safe', () => {
 test('member continuations plan account descriptors from the resolved page account', () => {
   const document = {
     ...memberContinuationDocument,
-    content: [
-      node('AccountCollections', 'collections', { limit: 12 }),
-      ...memberContinuationDocument.content,
-    ],
+    content: [node('AccountCollections', 'collections', { limit: 12 }), ...memberContinuationDocument.content],
   } as CompositionDocument;
   const account = { id: '01a1740d-7480-71e4-841f-66c04022d7d3', handle: 'resolved-account' };
-  const plan = memberContinuationPlan(
-    { subject: null, account },
-    document,
-    { node: 'members', cursor: 'opaque:account-continuation==' },
-  );
+  const plan = memberContinuationPlan({ subject: null, account }, document, {
+    node: 'members',
+    cursor: 'opaque:account-continuation==',
+  });
   expect(plan.reads[plan.nodes.collections!]).toEqual({
     kind: 'accountCollections',
     id: account.id,
