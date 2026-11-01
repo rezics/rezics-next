@@ -1,10 +1,11 @@
 import { Cover } from '@rezics/ui/cover';
 import { CoverCard } from '@rezics/ui/cover-card';
-import { ListRow, ListRowControl } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { Link } from '@tanstack/react-router';
+import { Link, useLinkProps } from '@tanstack/react-router';
 import {
   ChevronRightIcon,
   EllipsisIcon,
@@ -145,23 +146,24 @@ export function CollectionBrowseRow({
   const title = browseCollectionTitle(collection);
   const firstMember = collection.preview.state === 'loaded' ? collection.preview.members[0] : undefined;
   const action = readable ? m.library_collection_open() : m.account_sign_in();
+  const collectionLink = useLinkProps({ to: '/collections/$id', params: { id: collection.id } });
+  const href = readable
+    ? collectionLink.href
+    : `/${getLocale()}/auth/sign-in?return_to=${encodeURIComponent(collectionHref(collection.id))}`;
   return (
-    <ListRow
-      className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl p-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto_auto] sm:gap-6 sm:p-4"
+    <ContentItem
+      title={title}
+      {...(href !== undefined ? { href } : {})}
       data-collection-row={collection.id}
-    >
-      <div className="row-span-2 sm:row-span-1">
-        <CollectionCover collection={collection} subject={firstMember ?? null} />
-      </div>
-      <div className="col-span-2 min-w-0 py-1 sm:col-span-1">
-        <h2 className="line-clamp-2 text-lg font-semibold leading-snug sm:text-xl">{title}</h2>
-        <CollectionFacts collection={collection} />
-      </div>
-      {menu ? (
-        <ListRowControl className="col-start-3 row-start-2 sm:col-auto sm:row-auto">{menu}</ListRowControl>
-      ) : null}
-      <ListRowControl className="col-start-2 row-start-2 justify-self-start sm:col-auto sm:row-auto sm:justify-self-end">
-        {readable ? (
+      visual={
+        <div className="w-[72px] sm:w-24">
+          <CollectionCover collection={collection} subject={firstMember ?? null} />
+        </div>
+      }
+      metadata={<CollectionFacts collection={collection} />}
+      actions={menu}
+      trailing={
+        readable ? (
           <Link to="/collections/$id" params={{ id: collection.id }} className={buttonVariants({ size: 'lg' })}>
             {action}
           </Link>
@@ -172,9 +174,9 @@ export function CollectionBrowseRow({
           >
             {action}
           </a>
-        )}
-      </ListRowControl>
-    </ListRow>
+        )
+      }
+    />
   );
 }
 
@@ -207,46 +209,33 @@ function PreviewStrip({ members }: { members: readonly LibrarySubject[] }) {
 export function CollectionPreview({ collection, menu }: { collection: CollectionBrowseRecord; menu?: ReactNode }) {
   const title = browseCollectionTitle(collection);
   const members = collection.preview.state === 'loaded' ? collection.preview.members.slice(0, 3) : [];
+  const { href } = useLinkProps({ to: '/collections/$id', params: { id: collection.id } });
   return (
-    <article
-      className="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-4"
+    <ContentItem
+      title={title}
+      {...(href !== undefined ? { href } : {})}
       data-collection-preview={collection.id}
-    >
-      <header className="flex min-w-0 items-center gap-3">
-        <Link
-          to="/collections/$id"
-          params={{ id: collection.id }}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          <span className="line-clamp-2 min-w-0 text-lg font-semibold">{title}</span>
-          {privateCollection(collection) ? (
-            <LockKeyholeIcon aria-label={m.library_visibility_private()} className="size-4 shrink-0" />
-          ) : null}
-          {collection.memberCount !== undefined ? (
-            <span className="shrink-0 text-sm text-muted-foreground">
-              {m.library_collection_item_count({ count: collection.memberCount })}
-            </span>
-          ) : null}
-          <ChevronRightIcon aria-hidden="true" className="ms-auto size-4 shrink-0" />
-        </Link>
-        {menu}
-      </header>
-      <div className="mt-3">
-        {members.length ? (
-          <PreviewStrip members={members} />
-        ) : collection.preview.state === 'loaded' && collection.memberCount === 0 ? (
-          <p className="text-sm text-muted-foreground">{m.library_collection_empty()}</p>
-        ) : collection.preview.state === 'loaded' && collection.preview.emptyConfirmed ? (
-          <p className="text-sm text-muted-foreground">{m.library_collection_preview_no_visible_members()}</p>
-        ) : (
-          <p role="status" data-preview-state={collection.preview.state} className="text-sm text-muted-foreground">
-            {collection.preview.state === 'preparing'
-              ? m.library_collection_preview_preparing()
-              : m.library_collection_preview_unavailable()}
-          </p>
-        )}
-      </div>
-    </article>
+      metadata={<CollectionFacts collection={collection} />}
+      actions={menu}
+      trailing={<ChevronRightIcon aria-hidden="true" className="size-4 shrink-0" />}
+      preview={
+        <ListRowControl>
+          {members.length ? (
+            <PreviewStrip members={members} />
+          ) : collection.preview.state === 'loaded' && collection.memberCount === 0 ? (
+            <p className="text-sm text-muted-foreground">{m.library_collection_empty()}</p>
+          ) : collection.preview.state === 'loaded' && collection.preview.emptyConfirmed ? (
+            <p className="text-sm text-muted-foreground">{m.library_collection_preview_no_visible_members()}</p>
+          ) : (
+            <p role="status" data-preview-state={collection.preview.state} className="text-sm text-muted-foreground">
+              {collection.preview.state === 'preparing'
+                ? m.library_collection_preview_preparing()
+                : m.library_collection_preview_unavailable()}
+            </p>
+          )}
+        </ListRowControl>
+      }
+    />
   );
 }
 
@@ -324,11 +313,11 @@ export function CollectionBrowseList({
 }) {
   if (layout === 'previews')
     return (
-      <div className="min-w-0 space-y-3" data-collection-browse="previews">
+      <ul className="min-w-0 space-y-3" data-collection-browse="previews">
         {collections.map((collection) => (
           <CollectionPreview key={collection.id} collection={collection} menu={menuFor?.(collection)} />
         ))}
-      </div>
+      </ul>
     );
   return (
     <ul className="min-w-0 space-y-3" data-collection-browse="rows">
