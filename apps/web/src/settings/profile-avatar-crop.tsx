@@ -7,6 +7,10 @@ import type { ProfileAvatarUpload } from './profile-avatar-upload';
 
 type CropState = ReturnType<ProfileAvatarUpload['snapshot']>;
 
+function sliderValue(value: number | readonly number[], fallback: number): number {
+  return typeof value === 'number' ? value : (value[0] ?? fallback);
+}
+
 export function ProfileAvatarCrop({
   controller,
   state,
@@ -67,7 +71,7 @@ export function ProfileAvatarCrop({
             max={100}
             step={1}
             value={[position.horizontal]}
-            onValueChange={(value) => controller.setCrop({ horizontal: value[0] ?? position.horizontal })}
+            onValueChange={(value) => controller.setCrop({ horizontal: sliderValue(value, position.horizontal) })}
           />
         </div>
         <div>
@@ -85,7 +89,7 @@ export function ProfileAvatarCrop({
             max={100}
             step={1}
             value={[position.vertical]}
-            onValueChange={(value) => controller.setCrop({ vertical: value[0] ?? position.vertical })}
+            onValueChange={(value) => controller.setCrop({ vertical: sliderValue(value, position.vertical) })}
           />
         </div>
         <div>
@@ -103,7 +107,7 @@ export function ProfileAvatarCrop({
             max={zoomLimit}
             step={10}
             value={[position.zoom]}
-            onValueChange={(value) => controller.setCrop({ zoom: value[0] ?? position.zoom })}
+            onValueChange={(value) => controller.setCrop({ zoom: sliderValue(value, position.zoom) })}
           />
         </div>
       </div>

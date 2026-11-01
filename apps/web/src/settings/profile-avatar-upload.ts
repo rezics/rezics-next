@@ -172,9 +172,9 @@ export class ProfileAvatarUpload {
     if (!selection || !this.editable() || !['crop', 'original-only'].includes(this.state.phase)) return;
     this.preparation++;
     selection.bitmap?.close();
-    selection.bitmap = undefined;
-    selection.source = undefined;
-    selection.crop = undefined;
+    delete selection.bitmap;
+    delete selection.source;
+    delete selection.crop;
     void this.send(selection);
   };
   retry = () => {
@@ -273,17 +273,18 @@ export class ProfileAvatarUpload {
       selection.file = file;
       selection.url = url;
       selection.bitmap?.close();
-      selection.bitmap = undefined;
-      selection.source = undefined;
-      selection.crop = undefined;
+      delete selection.bitmap;
+      delete selection.source;
+      delete selection.crop;
       this.urls.revokeObjectURL(previousUrl);
       await this.send(selection);
     } catch {
       if (!this.ownsPreparation(selection, preparation)) return;
+      const crop = selection.source && selection.crop ? { ...selection.source, position: selection.crop } : undefined;
       this.update({
         phase: 'crop',
         url: selection.url,
-        crop: selection.source && selection.crop ? { ...selection.source, position: selection.crop } : undefined,
+        ...(crop ? { crop } : {}),
         cropIssue: 'encode',
       });
     }
