@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import type { OwnerReadObservation } from '../editor/owner-lifetime';
 import { plainText, UI_LOCALES, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 
 export type OwnedZoneList = NonNullable<Awaited<ReturnType<KernelClient['zones']['get']>>['data']>;
@@ -8,8 +9,12 @@ export type Failure = {
   kind: 'signed-out' | 'denied' | 'closed' | 'actor' | 'missing' | 'invalid' | 'conflict' | 'stale' | 'unavailable';
   fields?: string[];
 };
-export type ListOutcome = { kind: 'ready'; page: OwnedZoneList } | Failure;
-export type CommandOutcome = { kind: 'saved'; zone: OwnedZone } | Failure;
+export type ListOutcome = ({ kind: 'ready'; page: OwnedZoneList } | Failure) & {
+  ownerObservation?: OwnerReadObservation;
+};
+export type CommandOutcome = ({ kind: 'saved'; zone: OwnedZone } | Failure) & {
+  ownerObservation?: OwnerReadObservation;
+};
 export type LifecycleCommand = { id: string; revision: string; key: string; operation: 'delete' | 'restore' };
 export type CreateCommand = {
   starter: string;

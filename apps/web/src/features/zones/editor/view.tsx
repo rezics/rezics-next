@@ -63,10 +63,12 @@ export function ZoneConfigurationEditor({
   session,
   locale,
   enabled = true,
+  writeEnabled = enabled,
 }: {
   session: ZoneEditorSession;
   locale: string;
   enabled?: boolean;
+  writeEnabled?: boolean;
 }) {
   const state = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
   const [selected, setSelected] = useState('');
@@ -132,11 +134,12 @@ export function ZoneConfigurationEditor({
       session.edit({ ...draft, mounts: checked ? [...draft.mounts, id] : draft.mounts.filter((item) => item !== id) });
   }
   async function copy() {
+    if (!session.isCurrent()) return;
     try {
       await navigator.clipboard.writeText(new URL(href, window.location.origin).href);
-      setCopied('copied');
+      if (session.isCurrent()) setCopied('copied');
     } catch {
-      setCopied('failed');
+      if (session.isCurrent()) setCopied('failed');
     }
   }
   const scopeOptions = loaded.options.scopes;
@@ -422,7 +425,7 @@ export function ZoneConfigurationEditor({
             </Button>
           </section>
           <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
-            <Button disabled={editDisabled || !dirty} onClick={() => void session.save()}>
+            <Button disabled={editDisabled || !writeEnabled || !dirty} onClick={() => void session.save()}>
               {m.zone_editor_save()}
             </Button>
             <Field className="w-auto">
@@ -430,7 +433,7 @@ export function ZoneConfigurationEditor({
               <NativeSelect
                 id="zone-visibility"
                 value={visibility}
-                disabled={disabled || !loaded.permissions.publish}
+                disabled={disabled || !writeEnabled || !loaded.permissions.publish}
                 onChange={(event) => setVisibility(event.target.value as Visibility)}
               >
                 <NativeSelectOption value="private">{m.library_visibility_private()}</NativeSelectOption>
@@ -440,7 +443,13 @@ export function ZoneConfigurationEditor({
             </Field>
             <Button
               variant="outline"
-              disabled={disabled || dirty || !loaded.permissions.publish || visibility === saved.zone.visibility}
+              disabled={
+                disabled ||
+                !writeEnabled ||
+                dirty ||
+                !loaded.permissions.publish ||
+                visibility === saved.zone.visibility
+              }
               onClick={() => void session.publish(visibility)}
             >
               {m.zone_editor_publish()}

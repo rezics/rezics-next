@@ -6,6 +6,7 @@ import type {
   ZonePageResponse,
   ZonePublishInput,
 } from '../../../../../../services/kernel/src/zones/contract';
+import type { OwnerReadObservation } from './owner-lifetime';
 
 export type { ZoneConfigurationResponse, ZoneConfigureInput, ZoneOwned, ZonePageResponse };
 export type Visibility = ZonePublishInput['visibility'];
@@ -15,20 +16,28 @@ export type Failure = {
   code: string;
   errors?: { pointer: string; code: string }[];
   retryAfter?: string;
+  ownerObservation?: OwnerReadObservation;
 };
-export type Result<T> = { kind: 'ready'; value: T } | Failure;
+export type Result<T> = { kind: 'ready'; value: T; ownerObservation?: OwnerReadObservation } | Failure;
 export type Permissions = { configure: boolean; publish: boolean; available: boolean; failure?: Failure };
 export type Options = {
   scopes: Result<{ release: string; ids: string[] }>;
   collections: Result<{ items: { id: string; title: string }[]; next: string | null }>;
 };
-export type Loaded = { resource: Result<ZoneConfigurationResponse>; permissions: Permissions; options: Options };
+export type Loaded = {
+  resource: Result<ZoneConfigurationResponse>;
+  permissions: Permissions;
+  options: Options;
+  ownerObservation?: OwnerReadObservation;
+};
 export type Mutation = {
   id: string;
   revision: string;
   key: string;
 } & ({ operation: 'save'; body: ZoneConfigureInput } | { operation: 'publish'; body: ZonePublishInput });
-export type Preview = Result<ZonePageResponse> | { kind: 'preparing'; retryAfter: string };
+export type Preview =
+  | Result<ZonePageResponse>
+  | { kind: 'preparing'; retryAfter: string; ownerObservation?: OwnerReadObservation };
 export type Transport = {
   load(): Promise<Loaded>;
   mutate(input: Mutation): Promise<Result<ZoneOwned>>;
@@ -72,11 +81,18 @@ export class ZoneEditorSession {
   private state: EditorState;
   private listeners = new Set<() => void>();
   private attempt: { signature: string; input: Mutation } | undefined;
+  private readonly ownerCurrent: () => boolean;
+  private readonly ownerObservation: OwnerReadObservation | undefined;
+  private readonly retireOwner: (() => void) | undefined;
   constructor(
-    private transport: Transport,
+    private readonly transport: Transport,
     loaded: Loaded,
     private key = () => crypto.randomUUID(),
+    owner?: { isCurrent(): boolean; observation: OwnerReadObservation; retire(): void },
   ) {
+    this.ownerCurrent = owner ? owner.isCurrent : () => true;
+    this.ownerObservation = owner?.observation;
+    this.retireOwner = owner?.retire;
     const saved = loaded.resource.kind === 'ready' ? loaded.resource.value : undefined;
     this.state = {
       loaded,
@@ -93,17 +109,36 @@ export class ZoneEditorSession {
     };
   };
   snapshot = () => this.state;
-  setTransport(transport: Transport) {
-    this.transport = transport;
+  isCurrent() {
+    return this.current();
   }
   clearPreview() {
+    if (!this.current()) return;
     this.update({ preview: undefined });
   }
   private update(patch: Partial<EditorState>) {
+    if (!this.current()) return;
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
+  private current() {
+    return this.ownerCurrent();
+  }
+  private localFailure(): Failure {
+    return unavailable;
+  }
+  private matchesOwner(response: { ownerObservation?: OwnerReadObservation }): boolean {
+    if (!this.ownerObservation) return true;
+    const observation = response.ownerObservation;
+    const matches =
+      !!observation &&
+      observation.reader === this.ownerObservation.reader &&
+      observation.admission === this.ownerObservation.admission;
+    if (!matches) this.retireOwner?.();
+    return matches;
+  }
   dirty() {
+    if (!this.current()) return false;
     const { saved, draft } = this.state;
     return (
       !!draft &&
@@ -112,7 +147,7 @@ export class ZoneEditorSession {
     );
   }
   edit(draft: ZoneConfigureInput) {
-    if (this.state.busy || this.state.conflict || !this.state.loaded.permissions.configure) return;
+    if (!this.current() || this.state.busy || this.state.conflict || !this.state.loaded.permissions.configure) return;
     this.update({
       draft: structuredClone(draft),
       failure: undefined,
@@ -122,18 +157,21 @@ export class ZoneEditorSession {
     });
   }
   async refresh() {
-    if (this.state.busy) return;
+    if (!this.current() || this.state.busy) return;
     this.update({ busy: true });
     try {
       const loaded = await this.transport.load();
+      if (!this.current() || !this.matchesOwner(loaded)) return;
       if (this.state.draft) {
         this.update({ conflict: loaded, busy: false });
       } else this.accept(loaded);
     } catch {
-      this.update({ busy: false, failure: unavailable });
+      if (!this.current()) return;
+      this.update({ busy: false, failure: this.localFailure() });
     }
   }
   private accept(loaded: Loaded) {
+    if (!this.current() || !this.matchesOwner(loaded)) return;
     const saved = loaded.resource.kind === 'ready' ? loaded.resource.value : undefined;
     this.attempt = undefined;
     this.update({
@@ -150,6 +188,7 @@ export class ZoneEditorSession {
     });
   }
   resolve(choice: 'reload' | 'reapply') {
+    if (!this.current()) return;
     const loaded = this.state.conflict;
     if (!loaded || loaded.resource.kind !== 'ready') return;
     if (choice === 'reload') this.accept(loaded);
@@ -172,6 +211,7 @@ export class ZoneEditorSession {
     await this.write('publish', visibility);
   }
   private async write(operation: 'save' | 'publish', visibility?: Visibility) {
+    if (!this.current()) return;
     const { saved, draft, loaded, busy, conflict } = this.state;
     if (!saved || !draft || busy || conflict || !loaded.permissions[operation === 'save' ? 'configure' : 'publish'])
       return;
@@ -204,11 +244,14 @@ export class ZoneEditorSession {
       };
     this.update({ busy: true, failure: undefined, preview: undefined, notice: undefined, violations: [] });
     let result: Result<ZoneOwned>;
+    let received = true;
     try {
       result = await this.transport.mutate(this.attempt.input);
     } catch {
-      result = unavailable;
+      result = this.localFailure();
+      received = false;
     }
+    if (!this.current() || (received && !this.matchesOwner(result))) return;
     if (result.kind === 'ready') {
       this.attempt = undefined;
       const next = { ...structuredClone(draft), zone: result.value };
@@ -226,6 +269,8 @@ export class ZoneEditorSession {
       } catch {
         /* Keep the draft and the original retry request. */
       }
+      if (!this.current()) return;
+      if (current && !this.matchesOwner(current)) return;
       this.update({
         busy: false,
         failure: result,
@@ -238,6 +283,7 @@ export class ZoneEditorSession {
     }
   }
   async preview(route: string) {
+    if (!this.current()) return;
     if (
       this.state.busy ||
       this.state.conflict ||
@@ -247,21 +293,28 @@ export class ZoneEditorSession {
       return;
     this.update({ busy: true, preview: undefined, notice: undefined });
     try {
-      this.update({ preview: await this.transport.preview(route), busy: false });
+      const preview = await this.transport.preview(route);
+      if (!this.current() || !this.matchesOwner(preview)) return;
+      this.update({ preview, busy: false });
     } catch {
-      this.update({ preview: unavailable, busy: false });
+      if (!this.current()) return;
+      this.update({ preview: this.localFailure(), busy: false });
     }
   }
   async moreCollections() {
+    if (!this.current()) return;
     const current = this.state.loaded.options.collections;
     if (this.state.busy || current.kind !== 'ready' || !current.value.next) return;
     this.update({ busy: true });
     let result: Options['collections'];
+    let received = true;
     try {
       result = await this.transport.collections(current.value.next);
     } catch {
-      result = unavailable;
+      result = this.localFailure();
+      received = false;
     }
+    if (!this.current() || (received && !this.matchesOwner(result))) return;
     if (result.kind === 'ready') {
       const items = [
         ...new Map([...current.value.items, ...result.value.items].map((item) => [item.id, item])).values(),

@@ -16,6 +16,7 @@ import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { PageHeading } from '../../../shell/page-heading';
 import { m } from '../../../paraglide/messages.js';
 import { ZoneFeedback } from './feedback';
+import { hasValidOwnerCsrfToken, type OwnerCapture, type OwnerLifetime } from '../editor/owner-lifetime';
 import {
   listHref,
   zonePaths,
@@ -30,7 +31,8 @@ export type WorkspaceProps = {
   locale: string;
   input: ListInput;
   outcome: ListOutcome | null;
-  onChange: (command: LifecycleCommand) => Promise<CommandOutcome>;
+  owner?: OwnerLifetime;
+  onChange: (command: LifecycleCommand, capture?: OwnerCapture) => Promise<CommandOutcome>;
   onReload: () => void | Promise<void>;
 };
 
@@ -75,7 +77,7 @@ function DeleteZone({
   );
 }
 
-export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload }: WorkspaceProps) {
+export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, onReload }: WorkspaceProps) {
   const options = { locale: locale as never };
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
@@ -84,6 +86,9 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
   const [result, setResult] = useState<CommandOutcome | null>(null);
   const [now, setNow] = useState(Date.now);
   const paths = zonePaths(locale);
+  const capture = owner?.capture();
+  const currentRead = !owner || owner.owns(outcome?.ownerObservation);
+  const visibleOutcome = owner && outcome?.kind === 'ready' && !currentRead ? null : outcome;
   useEffect(() => {
     if (outcome?.kind !== 'ready' || !input.deleted) return;
     const deadlines = outcome.page.zones.flatMap((zone) => (zone.restoreUntil ? [Date.parse(zone.restoreUntil)] : []));
@@ -94,15 +99,30 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
   }, [outcome, input.deleted, now]);
 
   async function submit(command: LifecycleCommand) {
+    const admission = owner?.capture();
+    if (owner && (!admission || !owner.owns(outcome?.ownerObservation))) return;
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setPending(command);
     let changed: CommandOutcome;
+    let received = true;
     try {
-      changed = await onChange(command);
+      changed = await onChange(command, admission ?? undefined);
     } catch {
       changed = { kind: 'unavailable' };
+      received = false;
+    }
+    const ownerCurrent = !owner || owner.isCurrent(admission);
+    const responseMatches =
+      !owner ||
+      !received ||
+      (!!admission &&
+        changed.ownerObservation?.reader === admission.observation.reader &&
+        changed.ownerObservation?.admission === admission.observation.admission);
+    if (!ownerCurrent || !responseMatches) {
+      owner?.retire(admission);
+      return;
     }
     setResult(changed);
     // Delivery uncertainty retains the original CAS and key; reload never silently retries a command.
@@ -110,27 +130,44 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
     inFlight.current = false;
     setBusy(false);
     if (changed.kind === 'saved') {
-      requestAnimationFrame(() => confirmation.current?.focus());
+      requestAnimationFrame(() => {
+        if (!owner || owner.isCurrent(admission)) confirmation.current?.focus();
+      });
       try {
-        await onReload();
+        if (!owner || owner.isCurrent(admission)) await onReload();
       } catch {
         /* The native success remains confirmed; the page still offers refresh. */
       }
     }
   }
 
-  const zones = outcome?.kind === 'ready' ? outcome.page.zones : [];
-  const blocked = busy || pending !== null || result?.kind === 'conflict';
+  const zones = visibleOutcome?.kind === 'ready' ? visibleOutcome.page.zones : [];
+  const blocked =
+    busy ||
+    pending !== null ||
+    result?.kind === 'conflict' ||
+    !currentRead ||
+    (owner && (!capture || !hasValidOwnerCsrfToken(capture.csrfToken)));
   async function refresh() {
     if (busy || pending) return;
+    const admission = owner?.capture();
+    if (owner && !admission) {
+      try {
+        await onReload();
+      } catch {
+        /* A fresh route read is the only safe retry after this visit retired. */
+      }
+      return;
+    }
     setBusy(true);
     try {
       await onReload();
-      setResult(null);
+      if (!owner || owner.isCurrent(admission)) setResult(null);
     } catch {
-      setResult({ kind: 'unavailable' });
+      if (!owner || owner.isCurrent(admission))
+        setResult({ kind: 'unavailable', ...(admission ? { ownerObservation: admission.observation } : {}) });
     } finally {
-      setBusy(false);
+      if (!owner || owner.isCurrent(admission)) setBusy(false);
     }
   }
   return (
@@ -183,10 +220,10 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
           }
         />
       ) : null}
-      {!outcome ? (
+      {!visibleOutcome ? (
         <p role="status">{m.zones_owner_loading({}, options)}</p>
-      ) : outcome.kind !== 'ready' ? (
-        <ZoneFeedback failure={outcome} locale={locale} onRetry={() => void refresh()} />
+      ) : visibleOutcome.kind !== 'ready' ? (
+        <ZoneFeedback failure={visibleOutcome} locale={locale} onRetry={() => void refresh()} />
       ) : zones.length === 0 ? (
         <section className="space-y-3">
           <h2 className="text-xl font-semibold">
@@ -282,10 +319,10 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, onChange, onReload
             })}
         </ul>
       )}
-      {outcome?.kind === 'ready' && outcome.page.next ? (
+      {visibleOutcome?.kind === 'ready' && visibleOutcome.page.next ? (
         <a
           className={buttonVariants({ variant: 'outline' })}
-          href={listHref(locale, { deleted: input.deleted, cursor: outcome.page.next })}
+          href={listHref(locale, { deleted: input.deleted, cursor: visibleOutcome.page.next })}
         >
           {m.zones_owner_next({}, options)}
         </a>

@@ -34,7 +34,8 @@ type Mode =
   | 'source'
   | 'validation'
   | 'saved'
-  | 'published';
+  | 'published'
+  | 'read-only';
 
 function EditorStory({ mode = 'ready' }: { mode?: Mode }) {
   const [session] = useState(() => {
@@ -63,7 +64,7 @@ function EditorStory({ mode = 'ready' }: { mode?: Mode }) {
       fixture.initial.options.collections = { kind: 'failure', status: 503, code: 'semantic_not_ready' };
     }
     const value = new ZoneEditorSession(fixture.transport, fixture.initial);
-    if (['dirty', 'conflict', 'validation', 'saved'].includes(mode)) {
+    if (['dirty', 'conflict', 'validation', 'saved', 'read-only'].includes(mode)) {
       const draft = structuredClone(value.snapshot().draft!);
       draft.configuration.labels.en = mode === 'validation' ? '' : 'My Field Notes';
       value.edit(draft);
@@ -79,7 +80,7 @@ function EditorStory({ mode = 'ready' }: { mode?: Mode }) {
   return (
     <PatternStory visitor="Signed In" path="/my/zones/0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11/edit">
       <AppShell>
-        <ZoneConfigurationEditor session={session} locale={getLocale()} />
+        <ZoneConfigurationEditor session={session} locale={getLocale()} writeEnabled={mode !== 'read-only'} />
       </AppShell>
     </PatternStory>
   );
@@ -119,6 +120,14 @@ export const SourceUnavailable: Story = { render: () => <EditorStory mode="sourc
 export const Validation: Story = { render: () => <EditorStory mode="validation" /> };
 export const Saved: Story = { render: () => <EditorStory mode="saved" /> };
 export const Published: Story = { render: () => <EditorStory mode="published" /> };
+export const SignedInReadOnly: Story = {
+  render: () => <EditorStory mode="read-only" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('button', { name: m.zone_editor_refresh() })).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.zone_editor_save() })).toBeDisabled();
+  },
+};
 export const Loading: Story = {
   render: () => (
     <PatternStory visitor="Signed In">

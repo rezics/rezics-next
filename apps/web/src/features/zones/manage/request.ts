@@ -3,7 +3,8 @@ import type { KernelClient } from '@rezics/client';
 import { MediaProblem } from '../../../media/kernel';
 import { isPlatformClosedError } from '../../../kernel/platform-closed';
 import type { SessionEnv } from '../../../session/client';
-import { prepareSession, viewerCredential } from '../../../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../../../session/request';
+import type { OwnerReadObservation } from '../editor/owner-lifetime';
 import { copyStarter } from './starters';
 import {
   failure,
@@ -12,6 +13,7 @@ import {
   validLifecycle,
   type CommandOutcome,
   type CreateCommand,
+  type Failure,
   type LifecycleCommand,
   type ListInput,
   type ListOutcome,
@@ -21,16 +23,29 @@ async function asViewer<T extends ListOutcome | CommandOutcome>(
   request: Request,
   env: Partial<SessionEnv>,
   run: (authorization: string) => Promise<T>,
-): Promise<T | Exclude<ListOutcome, { kind: 'ready' }>> {
+  expected?: OwnerReadObservation,
+): Promise<T | Failure> {
+  let preparedReader: string | undefined;
   try {
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
+    const reader = sessionSubject(request);
     if (stale || !authorization) return { kind: 'signed-out' };
-    return await run(authorization);
+    if (expected && !reader) return { kind: 'stale' };
+    preparedReader = reader;
+    if (expected && (expected.reader !== reader || !/^\d+:\d+:[0-9a-f-]{36}$/.test(expected.admission)))
+      return { kind: 'stale' };
+    const result = await run(authorization);
+    return expected ? { ...result, ownerObservation: { reader: reader!, admission: expected.admission } } : result;
   } catch (error) {
-    if (isPlatformClosedError(error)) return { kind: 'closed' };
-    if (error instanceof MediaProblem) return failure(error.problem.status, error.problem);
-    return { kind: 'unavailable' };
+    const outcome = isPlatformClosedError(error)
+      ? { kind: 'closed' as const }
+      : error instanceof MediaProblem
+        ? failure(error.problem.status, error.problem)
+        : { kind: 'unavailable' as const };
+    return expected && preparedReader === expected.reader
+      ? { ...outcome, ownerObservation: { reader: preparedReader, admission: expected.admission } }
+      : outcome;
   }
 }
 
@@ -40,6 +55,7 @@ export async function readOwnedZones(
   request: Request,
   env: Partial<SessionEnv>,
   input: ListInput,
+  expected?: OwnerReadObservation,
 ): Promise<ListOutcome> {
   return asViewer(request, env, async (authorization): Promise<ListOutcome> => {
     const result = await client.zones.get({
@@ -53,7 +69,7 @@ export async function readOwnedZones(
     return result.status === 200 && result.data
       ? { kind: 'ready', page: result.data }
       : failure(result.status, result.error?.value);
-  });
+  }, expected);
 }
 
 /** The retained command is replayed byte-for-byte after an uncertain response. */
@@ -62,6 +78,7 @@ export async function changeOwnedZone(
   request: Request,
   env: Partial<SessionEnv>,
   command: LifecycleCommand,
+  expected?: OwnerReadObservation,
 ): Promise<CommandOutcome> {
   if (!validLifecycle(command)) return { kind: 'invalid' };
   return asViewer(request, env, async (authorization): Promise<CommandOutcome> => {
@@ -74,7 +91,7 @@ export async function changeOwnedZone(
     return result.status === 200 && result.data
       ? { kind: 'saved', zone: result.data.zone }
       : failure(result.status, result.error?.value);
-  });
+  }, expected);
 }
 
 export async function createOwnedZone(
@@ -82,6 +99,7 @@ export async function createOwnedZone(
   request: Request,
   env: Partial<SessionEnv>,
   command: CreateCommand,
+  expected?: OwnerReadObservation,
 ): Promise<CommandOutcome> {
   const configuration: ZoneConfiguration | undefined = command && copyStarter(command.starter);
   const fields = command ? invalidLabels(command.labels, command.primaryLanguage) : [];
@@ -99,5 +117,5 @@ export async function createOwnedZone(
     return result.status === 201 && result.data
       ? { kind: 'saved', zone: result.data.zone }
       : failure(result.status, result.error?.value);
-  });
+  }, expected);
 }
