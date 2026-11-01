@@ -100,40 +100,40 @@ non-Terra context. The latter is Sol wherever present. A dash means no subsequen
 non-Terra context was observed before cutoff, not that the model was still
 actively generating. An idle interval does not establish continuous execution.
 
-| Session | Manager | First Terra context | Last Terra context | Last associated output | Next Sol context | Context records |
-| --- | --- | --- | --- | --- | --- | ---: |
-| S1 | semantic | 00:20:28.051 | 00:34:45.702 | 00:34:45.563 | — | 74 |
-| S2 | search | 00:20:30.509 | 00:29:27.295 | 00:29:27.213 | — | 67 |
-| S3 | control-plane | 00:21:52.718 | 00:30:13.332 | 00:30:13.178 | — | 17 |
-| S4 | web | 00:20:14.925 | 02:46:30.610 | 02:46:44.237 | — | 22 |
-| S5 | commerce | 00:19:36.998 | 03:47:52.788 | 04:35:36.897 | 04:37:44.601 | 9 |
-| S6 | content | 00:19:39.386 | 03:49:38.487 | 04:35:37.208 | 04:38:45.787 | 14 |
-| S7 | accounts | 00:19:37.856 | 03:47:52.694 | 04:36:15.361 | 04:37:50.529 | 9 |
-| S8 | performance | 00:19:36.384 | 03:47:52.906 | 04:35:39.053 | 04:37:44.751 | 6 |
-| S9 | search, replacement session | 00:54:27.211 | 04:00:32.021 | 04:35:39.565 | 04:37:50.497 | 8 |
-| S10 | semantic, replacement session | 00:54:29.419 | 03:47:52.849 | 04:35:37.503 | 04:37:44.218 | 8 |
-| S11 | control-plane, replacement session | 03:12:20.086 | 04:14:11.834 | 04:35:51.483 | 04:37:44.779 | 5 |
-| S12 | web, replacement session | 03:12:20.573 | 04:15:23.065 | 04:15:33.587 | — | 11 |
+| Session | Manager                            | First Terra context | Last Terra context | Last associated output | Next Sol context | Context records |
+| ------- | ---------------------------------- | ------------------- | ------------------ | ---------------------- | ---------------- | --------------: |
+| S1      | semantic                           | 00:20:28.051        | 00:34:45.702       | 00:34:45.563           | —                |              74 |
+| S2      | search                             | 00:20:30.509        | 00:29:27.295       | 00:29:27.213           | —                |              67 |
+| S3      | control-plane                      | 00:21:52.718        | 00:30:13.332       | 00:30:13.178           | —                |              17 |
+| S4      | web                                | 00:20:14.925        | 02:46:30.610       | 02:46:44.237           | —                |              22 |
+| S5      | commerce                           | 00:19:36.998        | 03:47:52.788       | 04:35:36.897           | 04:37:44.601     |               9 |
+| S6      | content                            | 00:19:39.386        | 03:49:38.487       | 04:35:37.208           | 04:38:45.787     |              14 |
+| S7      | accounts                           | 00:19:37.856        | 03:47:52.694       | 04:36:15.361           | 04:37:50.529     |               9 |
+| S8      | performance                        | 00:19:36.384        | 03:47:52.906       | 04:35:39.053           | 04:37:44.751     |               6 |
+| S9      | search, replacement session        | 00:54:27.211        | 04:00:32.021       | 04:35:39.565           | 04:37:50.497     |               8 |
+| S10     | semantic, replacement session      | 00:54:29.419        | 03:47:52.849       | 04:35:37.503           | 04:37:44.218     |               8 |
+| S11     | control-plane, replacement session | 03:12:20.086        | 04:14:11.834       | 04:35:51.483           | 04:37:44.779     |               5 |
+| S12     | web, replacement session           | 03:12:20.573        | 04:15:23.065       | 04:15:33.587           | —                |              11 |
 
 Log filenames below are relative to
 `/home/edge/.codex/sessions/2026/11/01/`. The line pairs locate first/last Terra
 contexts; the final number, where present, locates the following Sol context.
 Record timestamps, not the local-clock filenames, define the windows.
 
-| Session | JSONL file | Context lines; following Sol line |
-| --- | --- | --- |
-| S1 | `rollout-2026-11-01T04-42-40-01a193b3-3eec-77f1-a956-850d4e1ca138.jsonl` | 2950 / 4350; — |
-| S2 | `rollout-2026-11-01T04-42-41-01a193b3-4345-76b3-8b02-a9f61aa07182.jsonl` | 3115 / 4395; — |
-| S3 | `rollout-2026-11-01T04-42-48-01a193b3-60a9-7322-ab29-6e5dfe5fd670.jsonl` | 3501 / 4153; — |
-| S4 | `rollout-2026-11-01T07-00-37-01a19431-8a4f-7d10-9222-5e6c0e0664b3.jsonl` | 2132 / 2904; — |
-| S5 | `rollout-2026-11-01T07-00-38-01a19431-9182-7681-a016-c42363f20e06.jsonl` | 1034 / 3096; 3567 |
-| S6 | `rollout-2026-11-01T07-00-40-01a19431-95ea-7f72-843b-c3bc9d642bd2.jsonl` | 1494 / 3547; 3978 |
-| S7 | `rollout-2026-11-01T07-00-42-01a19431-a07e-7380-b61c-e744e85f0684.jsonl` | 1598 / 3896; 4263 |
-| S8 | `rollout-2026-11-01T07-31-22-01a1944d-b3c3-7fa1-8d1d-79ba79b9ab89.jsonl` | 663 / 2449; 2844 |
-| S9 | `rollout-2026-11-01T08-29-27-01a19482-dfcb-78a2-8ca0-3caa3332ab93.jsonl` | 357 / 2276; 2644 |
-| S10 | `rollout-2026-11-01T08-34-45-01a19487-bb92-7141-9864-3cfcbbad87a4.jsonl` | 513 / 2692; 3217 |
-| S11 | `rollout-2026-11-01T10-54-08-01a19507-5696-76a2-8a9b-646f171d5902.jsonl` | 595 / 1903; 2182 |
-| S12 | `rollout-2026-11-01T10-54-10-01a19507-5eed-7ab1-8f14-5a76e38079be.jsonl` | 365 / 1177; — |
+| Session | JSONL file                                                               | Context lines; following Sol line |
+| ------- | ------------------------------------------------------------------------ | --------------------------------- |
+| S1      | `rollout-2026-11-01T04-42-40-01a193b3-3eec-77f1-a956-850d4e1ca138.jsonl` | 2950 / 4350; —                    |
+| S2      | `rollout-2026-11-01T04-42-41-01a193b3-4345-76b3-8b02-a9f61aa07182.jsonl` | 3115 / 4395; —                    |
+| S3      | `rollout-2026-11-01T04-42-48-01a193b3-60a9-7322-ab29-6e5dfe5fd670.jsonl` | 3501 / 4153; —                    |
+| S4      | `rollout-2026-11-01T07-00-37-01a19431-8a4f-7d10-9222-5e6c0e0664b3.jsonl` | 2132 / 2904; —                    |
+| S5      | `rollout-2026-11-01T07-00-38-01a19431-9182-7681-a016-c42363f20e06.jsonl` | 1034 / 3096; 3567                 |
+| S6      | `rollout-2026-11-01T07-00-40-01a19431-95ea-7f72-843b-c3bc9d642bd2.jsonl` | 1494 / 3547; 3978                 |
+| S7      | `rollout-2026-11-01T07-00-42-01a19431-a07e-7380-b61c-e744e85f0684.jsonl` | 1598 / 3896; 4263                 |
+| S8      | `rollout-2026-11-01T07-31-22-01a1944d-b3c3-7fa1-8d1d-79ba79b9ab89.jsonl` | 663 / 2449; 2844                  |
+| S9      | `rollout-2026-11-01T08-29-27-01a19482-dfcb-78a2-8ca0-3caa3332ab93.jsonl` | 357 / 2276; 2644                  |
+| S10     | `rollout-2026-11-01T08-34-45-01a19487-bb92-7141-9864-3cfcbbad87a4.jsonl` | 513 / 2692; 3217                  |
+| S11     | `rollout-2026-11-01T10-54-08-01a19507-5696-76a2-8a9b-646f171d5902.jsonl` | 595 / 1903; 2182                  |
+| S12     | `rollout-2026-11-01T10-54-10-01a19507-5eed-7ab1-8f14-5a76e38079be.jsonl` | 365 / 1177; —                     |
 
 Every listed session first recorded Sol and then one contiguous sequence of Terra
 contexts; seven later recorded Sol again. These fields establish the recorded
@@ -394,13 +394,13 @@ review. The adopted sum is reproduced in
 [identity-source-consumer-custody-contract.md](../../services/kernel/src/semantic/identity-source-consumer-custody-contract.md),
 lines 143–155 and 246–255:
 
-| Component | Rows | Points | Statements | Bytes |
-| --- | ---: | ---: | ---: | ---: |
-| Original Source, binding, directory and local verification | 249 | 249 | 81 | 286720 |
-| Account settlement read | 64 | 64 | 20 | 65536 |
-| Two Account same-home verifications from Source | 128 | 128 | 30 | 131072 |
-| Two complete History Source checks | 136 | 136 | 42 | 147456 |
-| Total | 577 | 577 | 173 | 630784 |
+| Component                                                  | Rows | Points | Statements |  Bytes |
+| ---------------------------------------------------------- | ---: | -----: | ---------: | -----: |
+| Original Source, binding, directory and local verification |  249 |    249 |         81 | 286720 |
+| Account settlement read                                    |   64 |     64 |         20 |  65536 |
+| Two Account same-home verifications from Source            |  128 |    128 |         30 | 131072 |
+| Two complete History Source checks                         |  136 |    136 |         42 | 147456 |
+| Total                                                      |  577 |    577 |        173 | 630784 |
 
 The total uses zero engine requests. It is a conservative composition, not a
 claim of minimal cost or successful native execution. Inbox 21081 at 01:01:27
@@ -476,18 +476,18 @@ be retained on the inspected evidence, with their original verification status
 preserved. This table is not whole-Goal acceptance or an assertion that every
 behavior in each owner area has been audited.
 
-| Area and representative commits | Evidence and disposition |
-| --- | --- |
-| Mixed Home, Following and kind: `b9491c103f`, `95a7a1f8f7`, `4e9df33f3d`, `6db386f5e5` | Real activity producers, bounded deterministic merging, native kind candidate selection and page consumption. The 30-day/2,000-reference window matches scope; no archive backfill is claimed. Retain, with the missing Source/Space/Context qualification above. |
-| Definition catalogue: `a678ead48b`, `64679c6b32` | Implements catalogue artifact publication/activation and bounded page traversal. Default discovery still reads `activeRelease`; catalogue producer delivery alone does not establish that all default consumers have escaped the older bounded release. Retain producer; finish its real consumer dependency before claiming the whole upper-bound journey. |
-| Batched Subjects: `542a5f2782` | Implements grouped physical reads with a repeatable snapshot, matching the architecture's batched per-database read rule. This is a concrete engine-use improvement, not a new vertical framework. |
-| Collection membership: `d0036d8d4c` | Replaces the 5,000-member stopping behavior with bounded resumable order work. The requirement concerns total finite input, not an unbounded single request; retain that distinction. |
-| Library and commerce: `8d9652fb42`, `b8d84ee149`, `d0e06a0233`, `807d3dcc15`, `3f383a4c1a` | Shelf states, continued reading and purchase/receipt presentation have actual consumer changes. These do not establish the separate identity-scope seal implementation. |
-| Account and settings: `bf8fdc07be`, `5a2bd4c68c`, `7667d83424`, `02d7231f38`, `b4a75eb14a`, `f5fd4b0c60`, `13607684a2` | Concrete phone reflow, deletion/current-identity, consent and settings interaction changes. Retain; neither settings copy nor erasure preflight proves the pending full History retirement path. |
-| Community reading: `6b6227ab1e`, `c3a2ab6475`, `abb5852c8a` | Moderation evidence and reply context use admitted current context and improve the reader journey. No inspected evidence justifies reverting these as speculative abstraction. |
-| Shared web presentation: `605d7ac4d8`, `1cfdc4bceb`, `1a3a9c222a`, `80d0344233`, `d893df4117`, `4e82c06ec4`, `50985960` | Portrait/default-cover, filter entrance, header and typography changes correspond to explicit resume and shared-design directions. Keep authored behavior distinct from deployed visual proof. |
-| Storybook MCP: `8dc28baae1`, `16f799c23d` | Real developer access/setup change requested first by the resume direction; it is not a claim of product browser verification. |
-| Landing cleanup: `b538d99e0c` | Preserves the committed landing outcome when worktree cleanup fails, while retaining failed cleanup evidence. Its tests exercise the release/locked-worktree behavior; test volume alone is not evidence of padding. |
+| Area and representative commits                                                                                         | Evidence and disposition                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mixed Home, Following and kind: `b9491c103f`, `95a7a1f8f7`, `4e9df33f3d`, `6db386f5e5`                                  | Real activity producers, bounded deterministic merging, native kind candidate selection and page consumption. The 30-day/2,000-reference window matches scope; no archive backfill is claimed. Retain, with the missing Source/Space/Context qualification above.                                                                                           |
+| Definition catalogue: `a678ead48b`, `64679c6b32`                                                                        | Implements catalogue artifact publication/activation and bounded page traversal. Default discovery still reads `activeRelease`; catalogue producer delivery alone does not establish that all default consumers have escaped the older bounded release. Retain producer; finish its real consumer dependency before claiming the whole upper-bound journey. |
+| Batched Subjects: `542a5f2782`                                                                                          | Implements grouped physical reads with a repeatable snapshot, matching the architecture's batched per-database read rule. This is a concrete engine-use improvement, not a new vertical framework.                                                                                                                                                          |
+| Collection membership: `d0036d8d4c`                                                                                     | Replaces the 5,000-member stopping behavior with bounded resumable order work. The requirement concerns total finite input, not an unbounded single request; retain that distinction.                                                                                                                                                                       |
+| Library and commerce: `8d9652fb42`, `b8d84ee149`, `d0e06a0233`, `807d3dcc15`, `3f383a4c1a`                              | Shelf states, continued reading and purchase/receipt presentation have actual consumer changes. These do not establish the separate identity-scope seal implementation.                                                                                                                                                                                     |
+| Account and settings: `bf8fdc07be`, `5a2bd4c68c`, `7667d83424`, `02d7231f38`, `b4a75eb14a`, `f5fd4b0c60`, `13607684a2`  | Concrete phone reflow, deletion/current-identity, consent and settings interaction changes. Retain; neither settings copy nor erasure preflight proves the pending full History retirement path.                                                                                                                                                            |
+| Community reading: `6b6227ab1e`, `c3a2ab6475`, `abb5852c8a`                                                             | Moderation evidence and reply context use admitted current context and improve the reader journey. No inspected evidence justifies reverting these as speculative abstraction.                                                                                                                                                                              |
+| Shared web presentation: `605d7ac4d8`, `1cfdc4bceb`, `1a3a9c222a`, `80d0344233`, `d893df4117`, `4e82c06ec4`, `50985960` | Portrait/default-cover, filter entrance, header and typography changes correspond to explicit resume and shared-design directions. Keep authored behavior distinct from deployed visual proof.                                                                                                                                                              |
+| Storybook MCP: `8dc28baae1`, `16f799c23d`                                                                               | Real developer access/setup change requested first by the resume direction; it is not a claim of product browser verification.                                                                                                                                                                                                                              |
+| Landing cleanup: `b538d99e0c`                                                                                           | Preserves the committed landing outcome when worktree cleanup fails, while retaining failed cleanup evidence. Its tests exercise the release/locked-worktree behavior; test volume alone is not evidence of padding.                                                                                                                                        |
 
 ## Sol controls and attribution limits
 
@@ -496,16 +496,16 @@ landing timestamps. Files in the first five rows are relative to
 `/home/edge/.codex-1/sessions/2026/11/01/`; the last three are relative to
 `/home/edge/.codex/sessions/2026/11/01/`.
 
-| Worker contribution | Session JSONL | Recorded Sol context examples |
-| --- | --- | --- |
-| Mixed-feed producer | `rollout-2026-11-01T03-02-05-01a19357-2908-7681-af17-bb5ba820718b.jsonl` | 19:02:07.415, 19:12:29.236, 19:27:42.827 on October 31 |
-| Home consumer | `rollout-2026-11-01T04-03-03-01a1938e-fbec-7001-ab2c-3658f2264203.jsonl` | 20:03:05.580, 20:13:48.087 on October 31 |
-| Kind feed consumer during Terra manager period | `rollout-2026-11-01T08-20-26-01a1947a-9e03-7010-a608-23882ce9643d.jsonl` | 00:20:28.347 |
-| Edition query/fence correction | `rollout-2026-11-01T08-22-40-01a1947c-a575-77d1-a8e2-9bb1f9ea52aa.jsonl` | 00:22:42.145, 00:36:35.769 |
-| SDK transaction fence | `rollout-2026-11-01T10-12-20-01a194e1-0e65-76f0-81ec-4073d0aee9aa.jsonl` | 02:12:22.721 |
-| Credit readability correction | `rollout-2026-11-01T12-13-31-01a1954f-f95f-7682-961b-12a3328bde46.jsonl` | 04:13:42.123 |
-| Catalogue phone correction | `rollout-2026-11-01T12-13-30-01a1954f-ed5f-7b03-9783-de2eb736e148.jsonl` | 04:13:42.266 |
-| Optional Zone translation controls | `rollout-2026-11-01T12-13-35-01a1954f-ff8e-7b41-87b0-2612b0e942b2.jsonl` | 04:13:47.949 |
+| Worker contribution                            | Session JSONL                                                            | Recorded Sol context examples                          |
+| ---------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------ |
+| Mixed-feed producer                            | `rollout-2026-11-01T03-02-05-01a19357-2908-7681-af17-bb5ba820718b.jsonl` | 19:02:07.415, 19:12:29.236, 19:27:42.827 on October 31 |
+| Home consumer                                  | `rollout-2026-11-01T04-03-03-01a1938e-fbec-7001-ab2c-3658f2264203.jsonl` | 20:03:05.580, 20:13:48.087 on October 31               |
+| Kind feed consumer during Terra manager period | `rollout-2026-11-01T08-20-26-01a1947a-9e03-7010-a608-23882ce9643d.jsonl` | 00:20:28.347                                           |
+| Edition query/fence correction                 | `rollout-2026-11-01T08-22-40-01a1947c-a575-77d1-a8e2-9bb1f9ea52aa.jsonl` | 00:22:42.145, 00:36:35.769                             |
+| SDK transaction fence                          | `rollout-2026-11-01T10-12-20-01a194e1-0e65-76f0-81ec-4073d0aee9aa.jsonl` | 02:12:22.721                                           |
+| Credit readability correction                  | `rollout-2026-11-01T12-13-31-01a1954f-f95f-7682-961b-12a3328bde46.jsonl` | 04:13:42.123                                           |
+| Catalogue phone correction                     | `rollout-2026-11-01T12-13-30-01a1954f-ed5f-7b03-9783-de2eb736e148.jsonl` | 04:13:42.266                                           |
+| Optional Zone translation controls             | `rollout-2026-11-01T12-13-35-01a1954f-ff8e-7b41-87b0-2612b0e942b2.jsonl` | 04:13:47.949                                           |
 
 The controls show both useful and incomplete Sol delivery, including Sol workers
 implementing Terra-dispatched corrections. The Context authority split predates
