@@ -83,7 +83,7 @@ export function useShelfList<T extends { id: string }>(
           shelfTicket !== null &&
           lifetime.owns(ticket) &&
           lifetime.shelfReadOwns(shelfTicket))) &&
-      (!requireReaderOrigin || !!lifetime || (!!shelfTicket && standaloneShelfReadIsCurrent(shelfTicket))));
+      (!requireReaderOrigin || !!lifetime || (!!shelfTicket && standaloneShelfReadIsCurrent(shelfTicket)));
     if (!owns()) {
       if (active.current === request) active.current = null;
       return;
