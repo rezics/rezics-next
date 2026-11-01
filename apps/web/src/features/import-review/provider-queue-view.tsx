@@ -121,7 +121,7 @@ export function ProviderQueue({
             return;
           const scope = { source: source.trim(), context: choice?.id ?? '', status };
           if (!validQueueScope(scope)) {
-            setInvalidSource(!/^[a-z][a-z0-9_-]{0,31}$/.test(scope.source));
+            setInvalidSource(!/^[a-z][a-z0-9_-]{0,31}$/.test(source.trim()));
             return;
           }
           if (!choice) return;
@@ -589,7 +589,7 @@ export function ProviderQueueView({
       ) : (
         <ContentItemFrame as="div" role="alert" className="flex flex-col gap-3 p-4">
           <ContentItemHeading level={2}>{providerOutcomeText(current, locale)}</ContentItemHeading>
-          <Button variant="outline" className="min-h-11" disabled={busy || custodyLocked} onClick={() => void retry()}>
+          <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void retry()}>
             {m.provider_refresh({}, o)}
           </Button>
         </ContentItemFrame>
