@@ -4059,5 +4059,10 @@
   "moderation_bulk_refreshing": "正在刷新列表…",
   "moderation_bulk_stale": "已确认的驳回仍然成功。举报列表刷新失败，当前数据已过时。",
   "moderation_bulk_refresh": "刷新列表",
-  "moderation_bulk_select_report": "选择举报{number}"
+  "moderation_bulk_select_report": "选择举报{number}",
+  "moderation_appeal_intent_uncertain": "响应丢失，此处理结果可能已经记录。处理结果和说明已锁定；只能重试完全相同的处理请求以确认结果。",
+  "moderation_appeal_intent_retry": "重试相同的处理请求",
+  "moderation_appeal_intent_forbidden_recovery": "你当前的权限不允许处理此申诉。请重新加载管理页面以检查访问权限；可能需要另一位符合条件的管理员审核。",
+  "moderation_appeal_intent_conflict_recovery": "申诉已更改或已处理。请重新加载管理页面，查看当前结果后再采取其他操作。",
+  "moderation_appeal_intent_retired": "此私密处理视图已结束。请使用当前账号重新加载管理页面，检查访问权限和申诉结果。"
 }

@@ -4058,5 +4058,10 @@
   "moderation_bulk_refreshing": "목록 새로고침 중…",
   "moderation_bulk_stale": "확인된 기각은 성공으로 유지됩니다. 목록을 새로고침하지 못해 데이터가 오래되었습니다.",
   "moderation_bulk_refresh": "목록 새로고침",
-  "moderation_bulk_select_report": "신고 {number} 선택"
+  "moderation_bulk_select_report": "신고 {number} 선택",
+  "moderation_appeal_intent_uncertain": "응답을 받지 못했습니다. 이 결정은 이미 기록되었을 수 있습니다. 결과와 설명은 잠겨 있습니다. 확인하려면 동일한 결정만 다시 전송하세요.",
+  "moderation_appeal_intent_retry": "동일한 결정 다시 전송",
+  "moderation_appeal_intent_forbidden_recovery": "현재 권한으로는 이 결정을 내릴 수 없습니다. 검토 페이지를 새로고침하여 접근 권한을 확인하세요. 다른 자격 있는 관리자가 검토해야 할 수 있습니다.",
+  "moderation_appeal_intent_conflict_recovery": "이의 신청이 변경되었거나 이미 처리되었습니다. 추가 작업 전에 검토 페이지를 새로고침하여 현재 결과를 확인하세요.",
+  "moderation_appeal_intent_retired": "이 비공개 결정 화면이 종료되었습니다. 현재 계정으로 검토 페이지를 새로고침하여 접근 권한과 이의 신청 결과를 확인하세요."
 }

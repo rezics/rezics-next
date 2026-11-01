@@ -4058,5 +4058,10 @@
   "moderation_bulk_refreshing": "正在重新整理清單…",
   "moderation_bulk_stale": "已確認的駁回仍然成功。檢舉清單重新整理失敗，目前資料已過時。",
   "moderation_bulk_refresh": "重新整理清單",
-  "moderation_bulk_select_report": "選擇檢舉{number}"
+  "moderation_bulk_select_report": "選擇檢舉{number}",
+  "moderation_appeal_intent_uncertain": "回應遺失，此處理結果可能已經記錄。處理結果和說明已鎖定；只能重試完全相同的處理請求以確認結果。",
+  "moderation_appeal_intent_retry": "重試相同的處理請求",
+  "moderation_appeal_intent_forbidden_recovery": "你目前的權限不允許處理此申訴。請重新載入管理頁面以檢查存取權限；可能需要另一位符合資格的管理員審核。",
+  "moderation_appeal_intent_conflict_recovery": "申訴已變更或已處理。請重新載入管理頁面，查看目前結果後再採取其他操作。",
+  "moderation_appeal_intent_retired": "此私密處理檢視已結束。請使用目前帳號重新載入管理頁面，檢查存取權限和申訴結果。"
 }

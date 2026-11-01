@@ -4061,5 +4061,10 @@
   "moderation_bulk_refreshing": "Refreshing queue…",
   "moderation_bulk_stale": "Confirmed dismissals remain successful. The queue could not be refreshed and its data is stale.",
   "moderation_bulk_refresh": "Refresh queue",
-  "moderation_bulk_select_report": "Select report {number}"
+  "moderation_bulk_select_report": "Select report {number}",
+  "moderation_appeal_intent_uncertain": "The response was lost. This resolution may already be recorded. The outcome and statement are locked; retry only this exact resolution to confirm it.",
+  "moderation_appeal_intent_retry": "Retry this exact resolution",
+  "moderation_appeal_intent_forbidden_recovery": "Your current authority does not permit this resolution. Reload the moderation page to check access; another eligible moderator may need to review it.",
+  "moderation_appeal_intent_conflict_recovery": "The appeal changed or was already resolved. Reload the moderation page to read its current outcome before taking any further action.",
+  "moderation_appeal_intent_retired": "This private resolution view has ended. Reload the moderation page with your current account to review access and the appeal's outcome."
 }

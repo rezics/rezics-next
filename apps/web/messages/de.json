@@ -4058,5 +4058,10 @@
   "moderation_bulk_refreshing": "Warteschlange wird aktualisiert…",
   "moderation_bulk_stale": "Bestätigte Schließungen bleiben erfolgreich. Die Warteschlange konnte nicht aktualisiert werden; ihre Daten sind veraltet.",
   "moderation_bulk_refresh": "Warteschlange aktualisieren",
-  "moderation_bulk_select_report": "Meldung {number} auswählen"
+  "moderation_bulk_select_report": "Meldung {number} auswählen",
+  "moderation_appeal_intent_uncertain": "Die Antwort ging verloren. Diese Entscheidung wurde möglicherweise bereits gespeichert. Ergebnis und Begründung sind gesperrt. Wiederhole nur genau diese Entscheidung, um sie zu bestätigen.",
+  "moderation_appeal_intent_retry": "Genau diese Entscheidung erneut senden",
+  "moderation_appeal_intent_forbidden_recovery": "Deine aktuellen Berechtigungen erlauben diese Entscheidung nicht. Lade die Moderationsseite neu, um den Zugriff zu prüfen. Möglicherweise muss ein anderer berechtigter Moderator die Prüfung übernehmen.",
+  "moderation_appeal_intent_conflict_recovery": "Der Einspruch wurde geändert oder bereits entschieden. Lade die Moderationsseite neu und lies das aktuelle Ergebnis, bevor du weitere Schritte unternimmst.",
+  "moderation_appeal_intent_retired": "Diese private Entscheidungsansicht wurde beendet. Lade die Moderationsseite mit deinem aktuellen Konto neu, um Zugriff und Einspruchsergebnis zu prüfen."
 }

@@ -1,23 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
 import { csrfHeaders } from '../../threads/composer';
+import { useSession } from '../../session/query';
 import { actionOnAppeal, type AppealResolutionResult } from '../actions';
-import { createModerationIntent } from '../command-intent';
+import { createAppealResolutionIntent, type ResolutionCommand } from './intent';
 
-export type ResolutionCommand = {
-  id: string;
-  outcome: 'uphold' | 'reverse';
-  statement: string;
-  idempotencyKey: string;
-};
+export type { ResolutionCommand } from './intent';
 export type ResolveAppeal = (input: ResolutionCommand) => Promise<AppealResolutionResult>;
 type Resolution = { outcome: 'upheld' | 'reversed'; statement: string };
 
 const resolveAppeal: ResolveAppeal = (data) => actionOnAppeal({ data, headers: csrfHeaders() });
 
-/** Shared by the queue page and its interactive pattern stories. Success stays visible until navigation. */
+/**
+ * One mounted form owns one private intent. Submission freezes the trimmed payload and UUID synchronously.
+ * A lost response permits only explicit exact retry; definitive refusals require a fresh authorized page read.
+ * Viewer/session, appeal or admission retirement discards private presentation and fences late settlement.
+ * Confirmation survives unrelated parent refreshes; this form never refreshes or automatically resumes a command.
+ * Unknown-session injected fixtures remain usable without granting the default action browser admission.
+ */
 export function AppealResolution({
   appealId,
   mayResolve,
@@ -30,39 +32,52 @@ export function AppealResolution({
   onResolve?: ResolveAppeal;
 }) {
   const [statement, setStatement] = useState('');
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
-  const [terminal, setTerminal] = useState(false);
-  const [confirmed, setConfirmed] = useState<Resolution | null>(null);
-  const [commandIntent] = useState(createModerationIntent);
-  const result = confirmed ?? resolution;
+  const [intent] = useState(() => createAppealResolutionIntent(appealId));
+  const [, redraw] = useReducer((version: number) => version + 1, 0);
+  const mounted = useRef(true);
+  const session = useSession();
+  const viewer = session.state === 'unknown' ? null : JSON.stringify([session.state, session.subject, session.csrfToken]);
+  intent.synchronize(appealId, viewer, mayResolve);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const admitted = mayResolve &&
+    ((session.state === 'signed-in' && Boolean(session.subject)) || (session.state === 'unknown' && onResolve !== resolveAppeal));
+  const pending = intent.phase === 'pending';
+  const uncertain = intent.phase === 'uncertain';
+  const terminal = intent.phase === 'settled';
+  const response = intent.result;
+  const result: Resolution | null | undefined = response?.state === 'resolved'
+    ? { outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed', statement: response.statement }
+    : resolution;
   const count = Array.from(statement.trim()).length;
+  const message = uncertain
+    ? m.moderation_appeal_intent_uncertain()
+    : response?.state === 'forbidden'
+      ? `${m.moderation_appeal_other_moderator()} ${m.moderation_appeal_intent_forbidden_recovery()}`
+      : response?.state === 'conflict'
+        ? `${m.moderation_appeal_conflict()} ${m.moderation_appeal_intent_conflict_recovery()}`
+        : '';
 
-  async function resolve(outcome: 'uphold' | 'reverse') {
-    if (count < 1 || count > 2000 || pending || terminal || !mayResolve || result) return;
-    const intent = { id: appealId, outcome, statement: statement.trim() };
-    setPending(true);
-    setMessage('');
+  async function resolve(outcome?: ResolutionCommand['outcome']) {
+    if (!mounted.current || !admitted || result) return;
+    const command = outcome === undefined ? intent.retry() : intent.begin(outcome, statement);
+    if (!command) return;
+    redraw();
     try {
-      const response = await onResolve({ ...intent, idempotencyKey: commandIntent.keyFor(intent) });
-      if (response.state === 'forbidden') {
-        setTerminal(true);
-        setMessage(m.moderation_appeal_other_moderator());
-      } else if (response.state === 'conflict') {
-        setTerminal(true);
-        setMessage(m.moderation_appeal_conflict());
-      } else {
-        setConfirmed({
-          outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed',
-          statement: response.statement,
-        });
-      }
+      const response = await onResolve(command);
+      if (mounted.current) intent.settle(response);
     } catch {
-      setMessage(m.moderation_appeal_action_failed());
+      if (mounted.current) intent.uncertain();
     } finally {
-      setPending(false);
+      if (mounted.current) redraw();
     }
   }
+
+  if (intent.phase === 'retired') return <p role="alert">{m.moderation_appeal_intent_retired()}</p>;
 
   if (result)
     return (
@@ -83,11 +98,10 @@ export function AppealResolution({
               required
               rows={4}
               value={statement}
-              disabled={pending || terminal || !mayResolve}
+              disabled={pending || uncertain || terminal || !admitted}
               aria-invalid={count > 2000}
               onChange={(event) => {
-                commandIntent.changed();
-                setStatement(event.target.value);
+                if (intent.phase === 'draft' && admitted) setStatement(event.target.value);
               }}
             />
           </label>
@@ -96,7 +110,7 @@ export function AppealResolution({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                disabled={pending || count < 1 || count > 2000}
+                disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
                 onClick={() => void resolve('uphold')}
               >
                 {m.moderation_appeal_uphold_action()}
@@ -104,7 +118,7 @@ export function AppealResolution({
               <Button
                 type="button"
                 variant="outline"
-                disabled={pending || count < 1 || count > 2000}
+                disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
                 onClick={() => void resolve('reverse')}
               >
                 {m.moderation_appeal_reverse_action()}
@@ -116,6 +130,11 @@ export function AppealResolution({
         <p className="text-sm text-muted-foreground">{m.moderation_appeal_other_moderator()}</p>
       )}
       {message ? <p role="alert">{message}</p> : null}
+      {uncertain ? (
+        <Button type="button" variant="outline" disabled={!admitted} onClick={() => void resolve()}>
+          {m.moderation_appeal_intent_retry()}
+        </Button>
+      ) : null}
     </div>
   );
 }

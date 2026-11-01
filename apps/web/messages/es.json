@@ -4058,5 +4058,10 @@
   "moderation_bulk_refreshing": "Actualizando cola…",
   "moderation_bulk_stale": "Las desestimaciones confirmadas siguen siendo válidas. No se pudo actualizar la cola y sus datos están desactualizados.",
   "moderation_bulk_refresh": "Actualizar cola",
-  "moderation_bulk_select_report": "Seleccionar denuncia {number}"
+  "moderation_bulk_select_report": "Seleccionar denuncia {number}",
+  "moderation_appeal_intent_uncertain": "Se perdió la respuesta. Es posible que esta resolución ya esté registrada. El resultado y la declaración están bloqueados; reintenta únicamente esta misma resolución para confirmarla.",
+  "moderation_appeal_intent_retry": "Reintentar esta misma resolución",
+  "moderation_appeal_intent_forbidden_recovery": "Tus permisos actuales no permiten esta resolución. Recarga la página de moderación para comprobar el acceso; puede que deba revisarla otro moderador autorizado.",
+  "moderation_appeal_intent_conflict_recovery": "La apelación cambió o ya se resolvió. Recarga la página de moderación para leer el resultado actual antes de realizar otra acción.",
+  "moderation_appeal_intent_retired": "Esta vista privada de resolución ha terminado. Recarga la página de moderación con tu cuenta actual para revisar el acceso y el resultado de la apelación."
 }

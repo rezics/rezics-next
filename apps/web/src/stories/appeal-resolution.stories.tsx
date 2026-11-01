@@ -12,7 +12,7 @@ const meta = {
   args: { appealId: '0192f3a0-6c1e-7b2a-9d4e-000000000001', mayResolve: true },
   decorators: [
     (Story) => (
-      <PatternStory>
+      <PatternStory visitor="Signed In">
         <div className="w-full max-w-3xl p-4">
           <Story />
         </div>
@@ -23,7 +23,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'An independent reviewer keeps their statement and command UUID after an uncertain response. A confirmed upheld or reversed outcome stays visible in its queue row until navigation. Current-authority refusals never become success. Review these same states using phone390/desktop1280, locale and theme globals.',
+          'One private form freezes its statement, outcome and command UUID before sending. A lost response locks edits and both outcomes, offering only explicit exact retry. Viewer/session, appeal or admission loss retires the view and fences late results. Confirmed outcomes survive unrelated refresh failures. Refusals and conflicts require a fresh authorized page read. Review these same states using phone390/desktop1280, locale and theme globals.',
       },
     },
   },
@@ -60,14 +60,14 @@ export const Reversed: Story = {
 
 function RetryExample() {
   const [resolve] = useState((): ResolveAppeal => {
-    let committedKey: string | undefined;
-    return async ({ idempotencyKey, outcome, statement }) => {
-      if (!committedKey) {
-        committedKey = idempotencyKey;
+    let committed: Parameters<ResolveAppeal>[0] | undefined;
+    return async (command) => {
+      if (!committed) {
+        committed = command;
         throw new Error('Response lost after commit');
       }
-      await expect(idempotencyKey).toBe(committedKey);
-      return { state: 'resolved', outcome, statement };
+      await expect(command).toEqual(committed);
+      return { state: 'resolved', outcome: command.outcome, statement: command.statement };
     };
   });
   return <AppealResolution appealId="0192f3a0-6c1e-7b2a-9d4e-000000000001" mayResolve onResolve={resolve} />;
@@ -80,7 +80,10 @@ export const LostResponseRetry: Story = {
     await userEvent.click(reverse);
     await view.findByRole('alert');
     await expect(view.getByRole('textbox')).toHaveValue('Independent review of the original decision.');
-    await userEvent.click(reverse);
+    await expect(view.getByRole('textbox')).toBeDisabled();
+    await expect(reverse).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.moderation_appeal_uphold_action() })).toBeDisabled();
+    await userEvent.click(view.getByRole('button', { name: m.moderation_appeal_intent_retry() }));
     await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_appeal_reversed());
   },
 };
@@ -112,3 +115,29 @@ export const Conflict: Story = {
   },
 };
 export const ReadOnly: Story = { args: { mayResolve: false } };
+
+function RetirementExample() {
+  const [mayResolve, setMayResolve] = useState(true);
+  return (
+    <div className="space-y-4">
+      <AppealResolution
+        appealId="0192f3a0-6c1e-7b2a-9d4e-000000000001"
+        mayResolve={mayResolve}
+        onResolve={async () => {
+          setMayResolve(false);
+          return { state: 'resolved', outcome: 'reverse', statement: 'Late private statement' };
+        }}
+      />
+    </div>
+  );
+}
+export const Retired: Story = {
+  render: () => <RetirementExample />,
+  play: async ({ canvasElement }) => {
+    const view = await enterStatement(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.moderation_appeal_reverse_action() }));
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_appeal_intent_retired());
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await expect(view.queryByRole('status')).toBeNull();
+  },
+};

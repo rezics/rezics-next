@@ -4058,5 +4058,10 @@
   "moderation_bulk_refreshing": "一覧を更新中…",
   "moderation_bulk_stale": "確認済みの却下は成功したままです。一覧を更新できず、表示データが古くなっています。",
   "moderation_bulk_refresh": "一覧を更新",
-  "moderation_bulk_select_report": "通報{number}を選択"
+  "moderation_bulk_select_report": "通報{number}を選択",
+  "moderation_appeal_intent_uncertain": "応答を受信できませんでした。この判断はすでに記録されている可能性があります。結果と説明は変更できません。同じ内容の判断のみ再送して確認してください。",
+  "moderation_appeal_intent_retry": "同じ内容の判断を再送",
+  "moderation_appeal_intent_forbidden_recovery": "現在の権限ではこの判断を行えません。モデレーションページを再読み込みしてアクセス権を確認してください。別の適格なモデレーターによる審査が必要な場合があります。",
+  "moderation_appeal_intent_conflict_recovery": "異議申し立てが変更されたか、すでに判断されています。別の操作を行う前に、モデレーションページを再読み込みして現在の結果を確認してください。",
+  "moderation_appeal_intent_retired": "この非公開の判断画面は終了しました。現在のアカウントでモデレーションページを再読み込みし、アクセス権と異議申し立ての結果を確認してください。"
 }
