@@ -399,13 +399,16 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   // scopes. It adds to the stored consent and never narrows it; only the reduction barrier does that.
   async function recordOpeningConsent(accountId: string, selected: Binding) {
     if ((await clientFor(selected.clientId)).first_party) return;
-    const previous = await withConsent(accountId, selected.clientId, async (connection) =>
-      (
-        await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
-          'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
-          [accountId, selected.clientId],
-        )
-      ).rows[0] ?? null,
+    const previous = await withConsent(
+      accountId,
+      selected.clientId,
+      async (connection) =>
+        (
+          await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
+            'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+            [accountId, selected.clientId],
+          )
+        ).rows[0] ?? null,
     );
     const previousScopes = previous?.scopes ?? [];
     const granted = [...new Set([...previousScopes, ...selected.scopes])].sort();
@@ -423,12 +426,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         clientId: selected.clientId,
         target: { operation: 'consent-upsert', scopes: granted, pendingScopes: null, pendingReference: null },
         async apply(connection) {
-          const current = (
-            await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
-              'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
-              [accountId, selected.clientId],
-            )
-          ).rows[0] ?? null;
+          const current =
+            (
+              await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
+                'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                [accountId, selected.clientId],
+              )
+            ).rows[0] ?? null;
           if (
             (current?.revision ?? '0') !== expectedRevision ||
             !sameScopes(current?.scopes ?? [], previousScopes) ||
@@ -1765,30 +1769,30 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           clientId: client.client_id,
           target: { operation: 'consent-upsert', scopes: granted },
           async apply(connection) {
-          const prior = (
-            await connection.query<{ scopes: string[] }>(
-              'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
-              [input.accountId, client.client_id],
+            const prior = (
+              await connection.query<{ scopes: string[] }>(
+                'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                [input.accountId, client.client_id],
+              )
+            ).rows[0];
+            if (!prior || granted.some((scope) => !prior.scopes.includes(scope))) throw new Denied();
+            const receipt = (
+              await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
+                'INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch) VALUES ($1,$2,$3,$4) ON CONFLICT (receipt_id) DO UPDATE SET receipt_id=EXCLUDED.receipt_id RETURNING account_id,purpose,minimum_authn_epoch',
+                [input.barrier.receiptId, input.accountId, 'consent-reduction', input.barrier.minimumAuthnEpoch],
+              )
+            ).rows[0]!;
+            if (
+              receipt.account_id !== input.accountId ||
+              receipt.purpose !== 'consent-reduction' ||
+              receipt.minimum_authn_epoch !== input.barrier.minimumAuthnEpoch
             )
-          ).rows[0];
-          if (!prior || granted.some((scope) => !prior.scopes.includes(scope))) throw new Denied();
-          const receipt = (
-            await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
-              'INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch) VALUES ($1,$2,$3,$4) ON CONFLICT (receipt_id) DO UPDATE SET receipt_id=EXCLUDED.receipt_id RETURNING account_id,purpose,minimum_authn_epoch',
-              [input.barrier.receiptId, input.accountId, 'consent-reduction', input.barrier.minimumAuthnEpoch],
-            )
-          ).rows[0]!;
-          if (
-            receipt.account_id !== input.accountId ||
-            receipt.purpose !== 'consent-reduction' ||
-            receipt.minimum_authn_epoch !== input.barrier.minimumAuthnEpoch
-          )
-            throw new Denied();
-          await connection.query('UPDATE auth_consent SET scopes=$3 WHERE account_id=$1 AND client_id=$2', [
-            input.accountId,
-            client.client_id,
-            granted,
-          ]);
+              throw new Denied();
+            await connection.query('UPDATE auth_consent SET scopes=$3 WHERE account_id=$1 AND client_id=$2', [
+              input.accountId,
+              client.client_id,
+              granted,
+            ]);
           },
         });
         if (changed.status !== 'applied') throw new Denied(503);
@@ -1807,11 +1811,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             [WEBSITE_CLIENT_ID],
           )
         ).rows[0];
-        if (
-          previous &&
-          previous.first_party &&
-          JSON.stringify(previous.scopes) === JSON.stringify(granted)
-        ) {
+        if (previous && previous.first_party && JSON.stringify(previous.scopes) === JSON.stringify(granted)) {
           await website.register({ ...registration, scopes: granted });
           return;
         }
@@ -1833,22 +1833,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             JSON.stringify(value.scopes) === JSON.stringify(desired.scopes)
           );
         };
-        const previousTransition = (
-          await database.query<{ transition_id: string }>(
-            `SELECT transition_id::text FROM auth_kind_consent_transition
+        const previousTransition =
+          (
+            await database.query<{ transition_id: string }>(
+              `SELECT transition_id::text FROM auth_kind_consent_transition
              WHERE client_id=$1 ORDER BY created_at DESC,transition_id DESC LIMIT 1`,
-            [WEBSITE_CLIENT_ID],
-          )
-        ).rows[0]?.transition_id ?? null;
-        const transitionKey = open && sameTarget(open.target)
-          ? open.transition_key
-          : `kind-consent:website-client:${digestOf([
-              previous?.scopes ?? null,
-              previous?.first_party ?? null,
-              granted,
-              previousTransition,
-              registration,
-            ])}`;
+              [WEBSITE_CLIENT_ID],
+            )
+          ).rows[0]?.transition_id ?? null;
+        const transitionKey =
+          open && sameTarget(open.target)
+            ? open.transition_key
+            : `kind-consent:website-client:${digestOf([
+                previous?.scopes ?? null,
+                previous?.first_party ?? null,
+                granted,
+                previousTransition,
+                registration,
+              ])}`;
         const changed = await kindConsent.writer.change({
           transitionKey,
           kind: 'client',
@@ -1871,23 +1873,28 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (typeof input.firstParty !== 'boolean') throw new Denied(400);
         const granted = scopes(input.scopes);
         if (id === WEBSITE_CLIENT_ID || granted.includes('media:complete')) throw new Denied(400);
-        const observed = (
-          await database.query<{ scopes: string[]; first_party: boolean }>(
-            'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
-            [id],
-          )
-        ).rows[0] ?? null;
-        const sameAuthority = !!observed && observed.first_party === input.firstParty &&
+        const observed =
+          (
+            await database.query<{ scopes: string[]; first_party: boolean }>(
+              'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+              [id],
+            )
+          ).rows[0] ?? null;
+        const sameAuthority =
+          !!observed &&
+          observed.first_party === input.firstParty &&
           JSON.stringify(observed.scopes) === JSON.stringify(granted);
         const applyRegistration = async (connection: PoolClient, expected: typeof observed) => {
           if ((await connection.query('SELECT client_id FROM auth_client_reduction WHERE client_id=$1', [id])).rowCount)
             throw new Denied();
-          const previous = (
-            await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE', [id])
-          ).rows[0] ?? null;
+          const previous =
+            (await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE', [id])).rows[0] ??
+            null;
           if (
             expected &&
-            (!previous || previous.first_party !== expected.first_party || JSON.stringify(previous.scopes) !== JSON.stringify(expected.scopes))
+            (!previous ||
+              previous.first_party !== expected.first_party ||
+              JSON.stringify(previous.scopes) !== JSON.stringify(expected.scopes))
           )
             return false;
           if (!expected && previous) return false;
@@ -1945,19 +1952,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const matchesTarget = (target: unknown) => {
           if (!target || typeof target !== 'object') return false;
           const value = target as Record<string, unknown>;
-          return value.operation === desired.operation && value.firstParty === desired.firstParty &&
-            JSON.stringify(value.scopes) === JSON.stringify(desired.scopes);
+          return (
+            value.operation === desired.operation &&
+            value.firstParty === desired.firstParty &&
+            JSON.stringify(value.scopes) === JSON.stringify(desired.scopes)
+          );
         };
-        const lastTransition = (
-          await database.query<{ transition_id: string }>(
-            `SELECT transition_id::text FROM auth_kind_consent_transition
+        const lastTransition =
+          (
+            await database.query<{ transition_id: string }>(
+              `SELECT transition_id::text FROM auth_kind_consent_transition
              WHERE client_id=$1 ORDER BY created_at DESC,transition_id DESC LIMIT 1`,
-            [id],
-          )
-        ).rows[0]?.transition_id ?? null;
-        const transitionKey = open && matchesTarget(open.target)
-          ? open.transition_key
-          : `kind-consent:client:${digestOf([id, observed.scopes, observed.first_party, desired, lastTransition])}`;
+              [id],
+            )
+          ).rows[0]?.transition_id ?? null;
+        const transitionKey =
+          open && matchesTarget(open.target)
+            ? open.transition_key
+            : `kind-consent:client:${digestOf([id, observed.scopes, observed.first_party, desired, lastTransition])}`;
         const changed = await kindConsent.writer.change({
           transitionKey,
           kind: 'client',
@@ -1974,7 +1986,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             [id],
           )
         ).rows[0];
-        if (!committed || committed.first_party !== input.firstParty || JSON.stringify(committed.scopes) !== JSON.stringify(granted))
+        if (
+          !committed ||
+          committed.first_party !== input.firstParty ||
+          JSON.stringify(committed.scopes) !== JSON.stringify(granted)
+        )
           throw new Denied(503);
       },
     },
@@ -2661,16 +2677,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               clientId,
               target: { operation: 'consent-upsert', scopes: granted, pendingScopes: null, pendingReference: null },
               async apply(connection) {
-                const current = (
-                  await connection.query<{
-                    scopes: string[];
-                    revision: string;
-                    pending_reference: string | null;
-                  }>(
-                    'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
-                    [outcome.accountId, clientId],
-                  )
-                ).rows[0] ?? null;
+                const current =
+                  (
+                    await connection.query<{
+                      scopes: string[];
+                      revision: string;
+                      pending_reference: string | null;
+                    }>(
+                      'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                      [outcome.accountId, clientId],
+                    )
+                  ).rows[0] ?? null;
                 if (
                   (current?.revision ?? '0') !== outcome.revision ||
                   JSON.stringify(current?.scopes ?? []) !== JSON.stringify(outcome.previousScopes) ||

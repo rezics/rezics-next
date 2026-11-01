@@ -308,38 +308,38 @@ export function clientAuthority(
           firstParty: input.firstParty,
         },
         async apply(connection) {
-        await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
-        const native = nativeReduction.getStore();
-        if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
-        const coverage = await connection.query(
-          'SELECT client_id FROM auth_client_coverage WHERE client_id=$1 AND ready',
-          [input.clientId],
-        );
-        if (!coverage.rowCount) deny();
-        await connection.query(
-          `INSERT INTO auth_client_reduction_progress (operation_id,client_id,scopes,first_party,consumer_version) VALUES ($1,$2,$3,$4,1)
-           ON CONFLICT (operation_id) DO NOTHING`,
-          [input.operationId, input.clientId, granted, input.firstParty],
-        );
-        const row = await progress(connection, input.clientId, input.operationId);
-        same(row, input);
-        if (row.completed) return;
-        const client = (
-          await connection.query<{ scopes: string[]; first_party: boolean }>(
-            'SELECT scopes,first_party FROM auth_client WHERE client_id=$1 FOR UPDATE',
+          await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
+          const native = nativeReduction.getStore();
+          if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
+          const coverage = await connection.query(
+            'SELECT client_id FROM auth_client_coverage WHERE client_id=$1 AND ready',
             [input.clientId],
-          )
-        ).rows[0];
-        if (!client || granted.some((s) => !client.scopes.includes(s)) || (!client.first_party && input.firstParty))
-          deny();
-        const gate = (
-          await connection.query<{ operation_id: string }>(
-            `INSERT INTO auth_client_reduction (client_id,operation_id,scopes,first_party) VALUES ($1,$2,$3,$4)
+          );
+          if (!coverage.rowCount) deny();
+          await connection.query(
+            `INSERT INTO auth_client_reduction_progress (operation_id,client_id,scopes,first_party,consumer_version) VALUES ($1,$2,$3,$4,1)
+           ON CONFLICT (operation_id) DO NOTHING`,
+            [input.operationId, input.clientId, granted, input.firstParty],
+          );
+          const row = await progress(connection, input.clientId, input.operationId);
+          same(row, input);
+          if (row.completed) return;
+          const client = (
+            await connection.query<{ scopes: string[]; first_party: boolean }>(
+              'SELECT scopes,first_party FROM auth_client WHERE client_id=$1 FOR UPDATE',
+              [input.clientId],
+            )
+          ).rows[0];
+          if (!client || granted.some((s) => !client.scopes.includes(s)) || (!client.first_party && input.firstParty))
+            deny();
+          const gate = (
+            await connection.query<{ operation_id: string }>(
+              `INSERT INTO auth_client_reduction (client_id,operation_id,scopes,first_party) VALUES ($1,$2,$3,$4)
            ON CONFLICT (client_id) DO UPDATE SET client_id=EXCLUDED.client_id RETURNING operation_id`,
-            [input.clientId, input.operationId, granted, input.firstParty],
-          )
-        ).rows[0]!;
-        if (gate.operation_id !== input.operationId) deny();
+              [input.clientId, input.operationId, granted, input.firstParty],
+            )
+          ).rows[0]!;
+          if (gate.operation_id !== input.operationId) deny();
         },
       });
       if (changed.status !== 'applied') deny();
@@ -479,44 +479,44 @@ export function clientAuthority(
           firstParty: input.firstParty,
         },
         async apply(connection) {
-        await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
-        const native = nativeReduction.getStore();
-        if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
-        const row = await progress(connection, input.clientId, input.operationId);
-        same(row, input);
-        if (row.completed) return;
-        if (row.terminal_ordinal === null || (row.consumer_version === 1 && row.page_count !== row.completed_count))
-          deny();
-        if (row.after_ordinal !== row.terminal_ordinal) {
-          const pending = await connection.query(
-            `SELECT 1 FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
+          await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
+          const native = nativeReduction.getStore();
+          if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
+          const row = await progress(connection, input.clientId, input.operationId);
+          same(row, input);
+          if (row.completed) return;
+          if (row.terminal_ordinal === null || (row.consumer_version === 1 && row.page_count !== row.completed_count))
+            deny();
+          if (row.after_ordinal !== row.terminal_ordinal) {
+            const pending = await connection.query(
+              `SELECT 1 FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
              AND traversal_ordinal<=$3 LIMIT 1`,
-            [input.clientId, row.after_ordinal, row.terminal_ordinal],
+              [input.clientId, row.after_ordinal, row.terminal_ordinal],
+            );
+            if (pending.rowCount) deny();
+          }
+          const gate = await connection.query(
+            'SELECT client_id FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2',
+            [input.clientId, input.operationId],
           );
-          if (pending.rowCount) deny();
-        }
-        const gate = await connection.query(
-          'SELECT client_id FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2',
-          [input.clientId, input.operationId],
-        );
-        if (!gate.rowCount) deny();
-        await connection.query('UPDATE auth_client SET scopes=$2,first_party=$3 WHERE client_id=$1', [
-          input.clientId,
-          row.scopes,
-          row.first_party,
-        ]);
-        await connection.query(
-          'UPDATE auth_client_reduction_progress SET completed=true,after_ordinal=terminal_ordinal WHERE operation_id=$1',
-          [input.operationId],
-        );
-        await connection.query(
-          'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
-          [input.operationId],
-        );
-        await connection.query('DELETE FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2', [
-          input.clientId,
-          input.operationId,
-        ]);
+          if (!gate.rowCount) deny();
+          await connection.query('UPDATE auth_client SET scopes=$2,first_party=$3 WHERE client_id=$1', [
+            input.clientId,
+            row.scopes,
+            row.first_party,
+          ]);
+          await connection.query(
+            'UPDATE auth_client_reduction_progress SET completed=true,after_ordinal=terminal_ordinal WHERE operation_id=$1',
+            [input.operationId],
+          );
+          await connection.query(
+            'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+            [input.operationId],
+          );
+          await connection.query('DELETE FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2', [
+            input.clientId,
+            input.operationId,
+          ]);
         },
       });
       if (changed.status !== 'applied') deny();

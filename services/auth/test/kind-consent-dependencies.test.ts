@@ -26,15 +26,15 @@ test('a native enrolled Kind consumer is fenced before consent/client authority 
     },
     access: { keys: 1, points: 4, witnesses: 1, rows: 2, bytes: 1024, emptySeeks: 1 },
   };
-  function receiverOperation<Input, Output>(run: (input: Input) => Promise<Output>): KindConsentOperation<Input, Output> {
+  function receiverOperation<Input, Output>(
+    run: (input: Input) => Promise<Output>,
+  ): KindConsentOperation<Input, Output> {
     return Object.assign(run, {
       bound: (_input: Input) => receiverWork,
       actual: (_input: Input, _output: Output) => receiverWork,
     });
   }
-  let paused:
-    | { entered(): void; wait: Promise<void>; resume(): void }
-    | undefined;
+  let paused: { entered(): void; wait: Promise<void>; resume(): void } | undefined;
   const receiver = {
     invalidate: receiverOperation(async (input: KindConsentInvalidationInput) => {
       const current = paused;
@@ -49,11 +49,15 @@ test('a native enrolled Kind consumer is fenced before consent/client authority 
     }),
     verify: receiverOperation(async (input: KindConsentInvalidationInput & { receiptReference: string }) => {
       const prior = committed.get(input.receiptReference);
-      if (!prior || JSON.stringify(prior) !== JSON.stringify({
-        reference: input.reference,
-        consumer: input.consumer,
-        transitionId: input.transitionId,
-      }))
+      if (
+        !prior ||
+        JSON.stringify(prior) !==
+          JSON.stringify({
+            reference: input.reference,
+            consumer: input.consumer,
+            transitionId: input.transitionId,
+          })
+      )
         return { status: 'pending' as const };
       verified.add(input.receiptReference);
       return { status: 'verified' as const, receiptReference: input.receiptReference };

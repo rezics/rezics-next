@@ -66,11 +66,13 @@ export interface KindConsentWriter {
   /** Selects one oldest pending transition and performs at most one page. */
   continuePending(): Promise<KindConsentChangeResult | null>;
   /** Closes all Auth enrollments across clients for restore/erasure. */
-  fenceAll(input: Readonly<{
-    transitionKey: string;
-    operation: 'restore-admission' | 'erasure-drain';
-    identity: string;
-  }>): Promise<KindConsentChangeResult>;
+  fenceAll(
+    input: Readonly<{
+      transitionKey: string;
+      operation: 'restore-admission' | 'erasure-drain';
+      identity: string;
+    }>,
+  ): Promise<KindConsentChangeResult>;
   /** Current Auth closure, for issuance and restore guards. */
   current(accountId: string, clientId: string): Promise<boolean>;
 }
@@ -143,15 +145,17 @@ function addWork(...parts: readonly KindConsentWorkDeclaration[]): KindConsentWo
 function withinWork(actual: KindConsentWorkDeclaration, bound: KindConsentWorkDeclaration) {
   if (!actual || typeof actual !== 'object' || !actual.source || !actual.access) return false;
   return (
-    Object.keys(bound.source).every((axis) =>
-      Number.isSafeInteger(actual.source[axis as keyof typeof bound.source]) &&
-      actual.source[axis as keyof typeof bound.source] >= 0 &&
-      actual.source[axis as keyof typeof bound.source] <= bound.source[axis as keyof typeof bound.source],
+    Object.keys(bound.source).every(
+      (axis) =>
+        Number.isSafeInteger(actual.source[axis as keyof typeof bound.source]) &&
+        actual.source[axis as keyof typeof bound.source] >= 0 &&
+        actual.source[axis as keyof typeof bound.source] <= bound.source[axis as keyof typeof bound.source],
     ) &&
-    Object.keys(bound.access).every((axis) =>
-      Number.isSafeInteger(actual.access[axis as keyof typeof bound.access]) &&
-      actual.access[axis as keyof typeof bound.access] >= 0 &&
-      actual.access[axis as keyof typeof bound.access] <= bound.access[axis as keyof typeof bound.access],
+    Object.keys(bound.access).every(
+      (axis) =>
+        Number.isSafeInteger(actual.access[axis as keyof typeof bound.access]) &&
+        actual.access[axis as keyof typeof bound.access] >= 0 &&
+        actual.access[axis as keyof typeof bound.access] <= bound.access[axis as keyof typeof bound.access],
     )
   );
 }
@@ -265,7 +269,15 @@ function sameJson(left: unknown, right: unknown) {
 
 function consumerHash(consumer: KindConsentConsumer) {
   return createHash('sha256')
-    .update(JSON.stringify([consumer.route, consumer.ownerAccountId, consumer.collectionId, consumer.preparationId, consumer.originId]))
+    .update(
+      JSON.stringify([
+        consumer.route,
+        consumer.ownerAccountId,
+        consumer.collectionId,
+        consumer.preparationId,
+        consumer.originId,
+      ]),
+    )
     .digest();
 }
 
@@ -289,140 +301,145 @@ export function createKindConsentParticipant(input: {
     return result.rowCount === 0;
   }
 
-  const enrollmentCharges = new WeakMap<object, { input: KindConsentEnrollmentInput; work: KindConsentWorkDeclaration }>();
+  const enrollmentCharges = new WeakMap<
+    object,
+    { input: KindConsentEnrollmentInput; work: KindConsentWorkDeclaration }
+  >();
   async function enroll(raw: KindConsentEnrollmentInput): Promise<KindConsentEnrollmentResult> {
-      const bound = kindConsentOperationBound(raw);
-      if (
-        !bound ||
-        !raw ||
-        !identifier(raw.accountId) ||
-        !identifier(raw.clientId) ||
-        !scopesValid(raw.requestedScopes) ||
-        !validConsumer(raw.consumer)
-      ) {
+    const bound = kindConsentOperationBound(raw);
+    if (
+      !bound ||
+      !raw ||
+      !identifier(raw.accountId) ||
+      !identifier(raw.clientId) ||
+      !scopesValid(raw.requestedScopes) ||
+      !validConsumer(raw.consumer)
+    ) {
       const result: KindConsentEnrollmentResult = Object.freeze({ status: 'unavailable' });
-        enrollmentCharges.set(result, { input: raw, work: ZERO_WORK });
-        return result;
-      }
-      const requestedScopes = [...raw.requestedScopes];
-      const effectiveRequest = [...new Set(requestedScopes)].sort();
-      let result: KindConsentEnrollmentResult;
-      try {
-        result = await withTransaction(database, async (connection) => {
-          await lockChange(connection, raw.clientId, raw.accountId);
-          if (!(await noOpenTransition(connection, raw.clientId, raw.accountId))) return { status: 'unavailable' };
-          const current = (
-            await connection.query<{
-              client_id: string;
-              client_scopes: string[];
-              first_party: boolean;
-              ready: boolean;
-              reducing: boolean;
-              consent_scopes: string[] | null;
-              pending_scopes: string[] | null;
-              revision: string | null;
-            }>(
-              `SELECT c.client_id,c.scopes AS client_scopes,c.first_party,v.ready,
+      enrollmentCharges.set(result, { input: raw, work: ZERO_WORK });
+      return result;
+    }
+    const requestedScopes = [...raw.requestedScopes];
+    const effectiveRequest = [...new Set(requestedScopes)].sort();
+    let result: KindConsentEnrollmentResult;
+    try {
+      result = await withTransaction(database, async (connection) => {
+        await lockChange(connection, raw.clientId, raw.accountId);
+        if (!(await noOpenTransition(connection, raw.clientId, raw.accountId))) return { status: 'unavailable' };
+        const current = (
+          await connection.query<{
+            client_id: string;
+            client_scopes: string[];
+            first_party: boolean;
+            ready: boolean;
+            reducing: boolean;
+            consent_scopes: string[] | null;
+            pending_scopes: string[] | null;
+            revision: string | null;
+          }>(
+            `SELECT c.client_id,c.scopes AS client_scopes,c.first_party,v.ready,
                 EXISTS(SELECT 1 FROM auth_client_reduction r WHERE r.client_id=c.client_id) AS reducing,
                 a.scopes AS consent_scopes,a.pending_scopes,a.revision::text AS revision
                FROM auth_client c
                LEFT JOIN auth_client_coverage v ON v.client_id=c.client_id
                LEFT JOIN auth_consent a ON a.account_id=$1 AND a.client_id=c.client_id
                WHERE c.client_id=$2`,
-              [raw.accountId, raw.clientId],
-            )
-          ).rows[0];
-          if (!current || !current.ready || current.reducing) return { status: 'unavailable' };
+            [raw.accountId, raw.clientId],
+          )
+        ).rows[0];
+        if (!current || !current.ready || current.reducing) return { status: 'unavailable' };
 
-          const digest = consumerHash(raw.consumer);
-          const existing = (
-            await connection.query<{
-              reference_id: string;
-              account_id: string;
-              client_id: string;
-              requested_scopes: string[];
-              effective_scopes: string[];
-              consumer_route: string;
-              owner_account_id: string;
-              collection_id: string;
-              preparation_id: string;
-              origin_id: string;
-              active: boolean;
-            }>(
-              `SELECT reference_id,account_id,client_id,requested_scopes,effective_scopes,
+        const digest = consumerHash(raw.consumer);
+        const existing = (
+          await connection.query<{
+            reference_id: string;
+            account_id: string;
+            client_id: string;
+            requested_scopes: string[];
+            effective_scopes: string[];
+            consumer_route: string;
+            owner_account_id: string;
+            collection_id: string;
+            preparation_id: string;
+            origin_id: string;
+            active: boolean;
+          }>(
+            `SELECT reference_id,account_id,client_id,requested_scopes,effective_scopes,
                 consumer_route,owner_account_id,collection_id,preparation_id,origin_id,active
                FROM auth_kind_consent_dependency
                WHERE consumer_key_hash=$1
                FOR UPDATE`,
-              [digest],
-            )
-          ).rows[0];
-          if (existing) {
-            const consumerMatches =
-              existing.account_id === raw.accountId &&
-              existing.client_id === raw.clientId &&
-              sameJson(existing.requested_scopes, requestedScopes) &&
-              existing.consumer_route === raw.consumer.route &&
-              existing.owner_account_id === raw.consumer.ownerAccountId &&
-              existing.collection_id === raw.consumer.collectionId &&
-              existing.preparation_id === raw.consumer.preparationId &&
-              existing.origin_id === raw.consumer.originId;
-            if (!consumerMatches || !existing.active) return { status: 'unavailable' };
-            return {
-              status: 'enrolled',
-              reference: referenceOf(existing.reference_id),
-              effectiveScopes: Object.freeze([...existing.effective_scopes]),
-            };
-          }
+            [digest],
+          )
+        ).rows[0];
+        if (existing) {
+          const consumerMatches =
+            existing.account_id === raw.accountId &&
+            existing.client_id === raw.clientId &&
+            sameJson(existing.requested_scopes, requestedScopes) &&
+            existing.consumer_route === raw.consumer.route &&
+            existing.owner_account_id === raw.consumer.ownerAccountId &&
+            existing.collection_id === raw.consumer.collectionId &&
+            existing.preparation_id === raw.consumer.preparationId &&
+            existing.origin_id === raw.consumer.originId;
+          if (!consumerMatches || !existing.active) return { status: 'unavailable' };
+          return {
+            status: 'enrolled',
+            reference: referenceOf(existing.reference_id),
+            effectiveScopes: Object.freeze([...existing.effective_scopes]),
+          };
+        }
 
-          // First-party status never creates consent here. It only controls
-          // materialization in the ordinary authenticated issuance path.
-          const stored = new Set(current.consent_scopes ?? []);
-          const client = new Set(current.client_scopes);
-          const pending = current.pending_scopes === null ? null : new Set(current.pending_scopes);
-          const effectiveScopes = effectiveRequest.filter(
-            (scope) => client.has(scope) && stored.has(scope) && (pending === null || pending.has(scope)),
-          );
-          const row = (
-            await connection.query<{ reference_id: string }>(
-              `INSERT INTO auth_kind_consent_dependency
+        // First-party status never creates consent here. It only controls
+        // materialization in the ordinary authenticated issuance path.
+        const stored = new Set(current.consent_scopes ?? []);
+        const client = new Set(current.client_scopes);
+        const pending = current.pending_scopes === null ? null : new Set(current.pending_scopes);
+        const effectiveScopes = effectiveRequest.filter(
+          (scope) => client.has(scope) && stored.has(scope) && (pending === null || pending.has(scope)),
+        );
+        const row = (
+          await connection.query<{ reference_id: string }>(
+            `INSERT INTO auth_kind_consent_dependency
                 (consumer_key_hash,account_id,client_id,requested_scopes,effective_scopes,consent_revision,client_scopes,client_first_party,
                  consumer_route,owner_account_id,collection_id,preparation_id,origin_id)
                VALUES ($1,$2,$3,$4,$5,COALESCE($6::bigint,0),$7,$8,$9,$10,$11,$12,$13)
                RETURNING reference_id::text`,
-              [
-                digest,
-                raw.accountId,
-                raw.clientId,
-                requestedScopes,
-                effectiveScopes,
-                current.revision,
-                current.client_scopes,
-                current.first_party,
-                raw.consumer.route,
-                raw.consumer.ownerAccountId,
-                raw.consumer.collectionId,
-                raw.consumer.preparationId,
-                raw.consumer.originId,
-              ],
-            )
-          ).rows[0];
-          if (!row) return { status: 'unavailable' };
-          return { status: 'enrolled', reference: referenceOf(row.reference_id), effectiveScopes };
-        });
-      } catch {
-        // Native coverage gaps, restore uncertainty and serialization failures
-        // are unavailable; they never become empty or a negative verdict.
-        result = { status: 'unavailable' };
-      }
-      result = result.status === 'enrolled'
+            [
+              digest,
+              raw.accountId,
+              raw.clientId,
+              requestedScopes,
+              effectiveScopes,
+              current.revision,
+              current.client_scopes,
+              current.first_party,
+              raw.consumer.route,
+              raw.consumer.ownerAccountId,
+              raw.consumer.collectionId,
+              raw.consumer.preparationId,
+              raw.consumer.originId,
+            ],
+          )
+        ).rows[0];
+        if (!row) return { status: 'unavailable' };
+        return { status: 'enrolled', reference: referenceOf(row.reference_id), effectiveScopes };
+      });
+    } catch {
+      // Native coverage gaps, restore uncertainty and serialization failures
+      // are unavailable; they never become empty or a negative verdict.
+      result = { status: 'unavailable' };
+    }
+    result =
+      result.status === 'enrolled'
         ? Object.freeze({ ...result, effectiveScopes: Object.freeze([...result.effectiveScopes]) })
         : Object.freeze(result);
-      enrollmentCharges.set(result, { input: raw, work: bound });
-      return result;
+    enrollmentCharges.set(result, { input: raw, work: bound });
+    return result;
   }
-  const enrollOperation: KindConsentOperation<KindConsentEnrollmentInput, KindConsentEnrollmentResult> =
-    Object.assign(enroll, {
+  const enrollOperation: KindConsentOperation<KindConsentEnrollmentInput, KindConsentEnrollmentResult> = Object.assign(
+    enroll,
+    {
       bound: kindConsentOperationBound,
       actual(raw: KindConsentEnrollmentInput, result: KindConsentEnrollmentResult) {
         const receipt = enrollmentCharges.get(result);
@@ -430,7 +447,8 @@ export function createKindConsentParticipant(input: {
         enrollmentCharges.delete(result);
         return receipt.work;
       },
-    });
+    },
+  );
   const participant: KindConsentParticipant = { enroll: enrollOperation };
 
   async function openTransition(change: KindConsentChange): Promise<Transition | null> {
@@ -482,7 +500,14 @@ export function createKindConsentParticipant(input: {
           `INSERT INTO auth_kind_consent_transition
             (transition_key,transition_kind,client_id,account_id,target,frontier_seq)
            VALUES ($1,$2,$3,$4,$5::jsonb,$6) RETURNING *`,
-          [change.transitionKey, change.kind, change.clientId, change.accountId ?? null, JSON.stringify(change.target), frontier],
+          [
+            change.transitionKey,
+            change.kind,
+            change.clientId,
+            change.accountId ?? null,
+            JSON.stringify(change.target),
+            frontier,
+          ],
         )
       ).rows[0];
       return transition ?? null;
@@ -505,7 +530,14 @@ export function createKindConsentParticipant(input: {
        WHERE active AND ($1::boolean OR (client_id=$2 AND ($3::text IS NULL OR account_id=$3)))
          AND enrollment_seq>$4 AND enrollment_seq<=$5
        ORDER BY enrollment_seq LIMIT $6`,
-      [row.transition_kind === 'restore', row.client_id, row.account_id, row.after_seq, row.frontier_seq, KIND_CONSENT_PAGE_SIZE],
+      [
+        row.transition_kind === 'restore',
+        row.client_id,
+        row.account_id,
+        row.after_seq,
+        row.frontier_seq,
+        KIND_CONSENT_PAGE_SIZE,
+      ],
     );
     if (!page.rows.length) {
       await withTransaction(database, async (connection) => {
@@ -549,9 +581,7 @@ export function createKindConsentParticipant(input: {
     if (planned.some((plan) => !plan.invalidationBound || !plan.verificationBound))
       return changeResult('pending', id, PAGE_CONTROL_WORK);
     const pageBound = kindConsentTransitionPageBound();
-    const reserved = addWork(
-      ...planned.flatMap((plan) => [plan.invalidationBound!, plan.verificationBound!]),
-    );
+    const reserved = addWork(...planned.flatMap((plan) => [plan.invalidationBound!, plan.verificationBound!]));
     if (!withinWork(addWork(PAGE_CONTROL_WORK, reserved), pageBound))
       return changeResult('pending', id, PAGE_CONTROL_WORK);
     let charged = PAGE_CONTROL_WORK;
@@ -570,7 +600,8 @@ export function createKindConsentParticipant(input: {
       } catch {
         invalidatedWork = undefined;
       }
-      const actualInvalidation = invalidatedWork && withinWork(invalidatedWork, invalidationBound) ? invalidatedWork : invalidationBound;
+      const actualInvalidation =
+        invalidatedWork && withinWork(invalidatedWork, invalidationBound) ? invalidatedWork : invalidationBound;
       charged = addWork(charged, actualInvalidation);
       if (result.status !== 'committed' || !identifier(result.receiptReference))
         return changeResult('pending', id, charged);
@@ -595,12 +626,10 @@ export function createKindConsentParticipant(input: {
       } catch {
         verifiedWork = undefined;
       }
-      const actualVerification = verifiedWork && withinWork(verifiedWork, exactVerifyBound) ? verifiedWork : exactVerifyBound;
+      const actualVerification =
+        verifiedWork && withinWork(verifiedWork, exactVerifyBound) ? verifiedWork : exactVerifyBound;
       charged = addWork(charged, actualVerification);
-      if (
-        verified.status !== 'verified' ||
-        verified.receiptReference !== result.receiptReference
-      )
+      if (verified.status !== 'verified' || verified.receiptReference !== result.receiptReference)
         return changeResult('pending', id, charged);
       try {
         await withTransaction(database, async (connection) => {
@@ -684,7 +713,12 @@ export function createKindConsentParticipant(input: {
             `SELECT min(enrollment_seq)::text AS enrollment_seq FROM auth_kind_consent_dependency
              WHERE active AND ($1::boolean OR (client_id=$2 AND ($3::text IS NULL OR account_id=$3)))
                AND enrollment_seq>$4`,
-            [transition.transition_kind === 'restore', transition.client_id, transition.account_id, transition.frontier_seq],
+            [
+              transition.transition_kind === 'restore',
+              transition.client_id,
+              transition.account_id,
+              transition.frontier_seq,
+            ],
           )
         ).rows[0]?.enrollment_seq;
         if (!later) return changeResult('applied', transition.transition_id);
@@ -693,9 +727,10 @@ export function createKindConsentParticipant(input: {
           .digest('hex')}`;
         return writer.change({ ...change, transitionKey: replayKey });
       }
-      const advanced = transition.state === 'pending'
-        ? await transitionPage(transition.transition_id)
-        : changeResult('applied', transition.transition_id);
+      const advanced =
+        transition.state === 'pending'
+          ? await transitionPage(transition.transition_id)
+          : changeResult('applied', transition.transition_id);
       const current = (
         await database.query<Transition>('SELECT * FROM auth_kind_consent_transition WHERE transition_id=$1', [
           transition.transition_id,
@@ -718,8 +753,7 @@ export function createKindConsentParticipant(input: {
       return transitionPage(transitionId);
     },
     async fenceAll(input) {
-      if (!identifier(input.transitionKey) || !identifier(input.identity))
-        return changeResult('pending', '');
+      if (!identifier(input.transitionKey) || !identifier(input.identity)) return changeResult('pending', '');
       return writer.change({
         transitionKey: input.transitionKey,
         kind: 'restore',
@@ -757,16 +791,18 @@ export function kindConsentOperationBound(input: KindConsentEnrollmentInput): Ki
     !validConsumer(input.consumer)
   )
     return undefined;
-  const inputBytes = 128 + [
-    input.accountId,
-    input.clientId,
-    input.consumer.route,
-    input.consumer.ownerAccountId,
-    input.consumer.collectionId,
-    input.consumer.preparationId,
-    input.consumer.originId,
-    ...input.requestedScopes,
-  ].reduce((sum, value) => sum + Buffer.byteLength(value), 0);
+  const inputBytes =
+    128 +
+    [
+      input.accountId,
+      input.clientId,
+      input.consumer.route,
+      input.consumer.ownerAccountId,
+      input.consumer.collectionId,
+      input.consumer.preparationId,
+      input.consumer.originId,
+      ...input.requestedScopes,
+    ].reduce((sum, value) => sum + Buffer.byteLength(value), 0);
   if (inputBytes > 80_000) return undefined;
   return enrollmentWork(inputBytes, input.requestedScopes.length);
 }
