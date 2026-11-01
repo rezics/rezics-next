@@ -156,9 +156,6 @@ export function CreatorStatementPage({
                         </div>
                         <dl className="grid min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                           {[
-                            [m.statements_transaction(), line.balanceTransactionId],
-                            [m.statements_order_source(), line.orderId],
-                            [m.statements_offer_source(), line.offerId],
                             [m.statements_recording_month(), line.period],
                             [
                               m.statements_royalty_basis(),
@@ -204,6 +201,27 @@ export function CreatorStatementPage({
                             </div>
                           ))}
                         </dl>
+                        <Accordion className="min-w-0">
+                          <AccordionItem value="source">
+                            <AccordionTrigger className="min-h-11">
+                              {m.statements_line_source_details()}
+                            </AccordionTrigger>
+                            <AccordionContent keepMounted>
+                              <dl className="grid min-w-0 gap-3 text-sm">
+                                {[
+                                  [m.statements_transaction(), line.balanceTransactionId],
+                                  [m.statements_order_source(), line.orderId],
+                                  [m.statements_offer_source(), line.offerId],
+                                ].map(([label, value]) => (
+                                  <div key={label} className="min-w-0">
+                                    <dt className="text-muted-foreground">{label}</dt>
+                                    <dd className="select-all break-all">{value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
                       </li>
                     ))}
                   </ul>
