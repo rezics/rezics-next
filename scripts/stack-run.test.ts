@@ -340,6 +340,36 @@ function scenario(hosts: Record<string, HostConfig>): {
   };
 }
 
+function assertMockProbeReady(fixture: ReturnType<typeof scenario>): void {
+  const probe = Bun.spawnSync(
+    [
+      join(root, 'bin', 'ssh'),
+      '-i',
+      '/keys/a',
+      '-o',
+      'IdentitiesOnly=yes',
+      '-o',
+      'BatchMode=yes',
+      '-o',
+      'ConnectTimeout=15',
+      '-o',
+      'ServerAliveInterval=15',
+      '-o',
+      'ServerAliveCountMax=4',
+      '-o',
+      'ControlMaster=no',
+      '-o',
+      'ControlPath=none',
+      'ops@a.test',
+      'MemAvailable',
+    ],
+    { env: fixture.env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+  );
+  expect(probe.exitCode, probe.stderr.toString()).toBe(0);
+  expect(probe.stdout.toString()).toContain('PROCESSORS 16');
+  writeFileSync(join(fixture.env.FAKE_DIR!, 'log.jsonl'), '');
+}
+
 function workspace(): string {
   const directory = mkdtempSync(join(root, 'workspace-'));
   const git = (...args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
@@ -550,6 +580,7 @@ test("a stack run goes to a free check host and returns the command's exit code"
 
 test('ordinary remote transport keeps the native outcome and declared returns/cleanup without generic prepared evidence', async () => {
   const fixture = scenario({ a: { available: 20e9, exit: 7 } });
+  assertMockProbeReady(fixture);
   const directory = workspace();
   const result = await stackWithFixtureDeadline(fixture, ['true'], ['--returns', 'missing-output.txt'], directory);
   expect(result.code, `${result.stderr} ${JSON.stringify(fixture.events())}`).toBe(7);
@@ -569,6 +600,7 @@ test('ordinary remote transport keeps the native outcome and declared returns/cl
 
 test('generic remote transport still requires explicitly requested prepared source evidence', async () => {
   const fixture = scenario({ a: { available: 20e9, exit: 7 } });
+  assertMockProbeReady(fixture);
   const result = await missingGenericEvidenceRun(fixture.env, workspace(), fixture.events);
   expect(result.outcome).toEqual({
     kind: 'error',
