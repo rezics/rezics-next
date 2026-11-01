@@ -234,6 +234,8 @@ export const RequiredReleaseUnavailable: Story = {
     await view.findByRole('dialog', { name: m.library_copy_edit() });
     await view.findByText(m.library_copy_status_unavailable());
     await view.findByRole('button', { name: m.library_copy_delete() });
+    await userEvent.click(view.getByRole('button', { name: m.library_copy_cancel() }));
+    expect(canvas.getByText(m.library_history_unavailable())).toBeVisible();
   },
 };
 export const DeniedDetail: Story = {
