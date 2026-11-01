@@ -13,13 +13,20 @@ import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
 import { usePreferenceRetry } from '../settings/preference-failure-retry';
 import {
+  confirmLoadedInboxSeen,
   emptyInboxPagination,
   nextInboxPage,
   readableInboxPage,
   receiveInboxPage,
   restartInboxPage,
 } from './inbox-pagination';
-import { inboxSeenFailure, type InboxSeenAttempt, type NativeInboxFailure, type ResolvedInboxPage } from './inbox-read';
+import {
+  inboxSeenFailure,
+  type InboxPage,
+  type InboxSeenAttempt,
+  type NativeInboxFailure,
+  type ResolvedInboxPage,
+} from './inbox-read';
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
   if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
@@ -162,6 +169,7 @@ export function ViewerInboxPage({
   const { cursor } = pagination;
   const markedThrough = useRef<string | null>(null);
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
+  const seenLoaded = useRef<ReadonlySet<string> | null>(null);
   const marking = useRef(false);
   const active = useRef(false);
   const [seenFailure, setSeenFailure] = useState<NativeInboxFailure>();
@@ -202,11 +210,26 @@ export function ViewerInboxPage({
       if (!csrfToken || marking.current || seenAttempt.current !== attempt || !viewer.isCurrent()) return;
       marking.current = true;
       setMarkingPending(true);
+      const loaded = seenLoaded.current;
       try {
         await markInboxViewerSeen(queryClient, viewer, attempt, csrfToken);
         if (!active.current || !viewer.isCurrent()) return;
+        setPagination((current) => {
+          if (!active.current || !viewer.isCurrent() || !loaded) return current;
+          // Invalidation has settled, but its response may not have rendered yet. Consume denials
+          // and authoritative replacements before touching retained local flags.
+          const refreshed = queryClient.getQueryState<InboxPage>([
+            ...inboxViewerQueryKey(viewer),
+            current.cursor ?? null,
+          ]);
+          return confirmLoadedInboxSeen(
+            receiveInboxPage(current, refreshed?.data, refreshed?.status === 'error'),
+            loaded,
+          );
+        });
         markedThrough.current = attempt.through;
         seenAttempt.current = null;
+        seenLoaded.current = null;
         setSeenFailure(undefined);
         setSeenConfirmed(true);
       } catch (error: unknown) {
@@ -241,6 +264,9 @@ export function ViewerInboxPage({
     if (!latest || markedThrough.current === latest.id) return;
     const attempt: InboxSeenAttempt = { through: latest.id, idempotencyKey: crypto.randomUUID() };
     seenAttempt.current = attempt;
+    // Native loaded order puts this target first. Keep its bounded eligible IDs with the
+    // original attempt across unknown outcomes; later arrivals cannot join an exact retry.
+    seenLoaded.current = new Set(readable.items.map((item) => item.id));
     setSeenConfirmed(false);
     void sendSeenAttempt(attempt);
   };

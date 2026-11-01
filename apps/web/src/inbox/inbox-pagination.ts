@@ -58,6 +58,23 @@ export function readableInboxPage(state: InboxPagination): ResolvedInboxPage | n
   return { items: [...items.values()], next: state.current.next };
 }
 
+/** Confirm only notices held by the deliberate attempt; a fresh current read always wins. */
+export function confirmLoadedInboxSeen(state: InboxPagination, loaded: ReadonlySet<string>): InboxPagination {
+  const fresh = state.result?.signedIn && state.result.state === 'ready' ? state.current : null;
+  const authoritative = new Set(fresh?.items.map((item) => item.id));
+  const reconcile = (page: ResolvedInboxPage | null) => {
+    if (!page || page === fresh) return page;
+    return {
+      ...page,
+      items: page.items.map((item) =>
+        item.unread && loaded.has(item.id) && !authoritative.has(item.id) ? { ...item, unread: false } : item,
+      ),
+    };
+  };
+  // Never restore rows removed by a denial or a first-page restart.
+  return { ...state, earlier: reconcile(state.earlier), current: reconcile(state.current) };
+}
+
 /** Advance only after a successful page; an empty page can still have a continuation. */
 export function nextInboxPage(state: InboxPagination): InboxPagination {
   if (!state.result?.signedIn || state.result.state !== 'ready') return state;
