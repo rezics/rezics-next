@@ -20,9 +20,11 @@ export declare function identitySourceConsumerNativeWork(pool: Pool, work: Ident
 export declare function identitySourceConsumerLibraryWork(pool: Pool, work: IdentitySourceConsumerMaintenanceWork | undefined, deadline: number): NativeCollectionWork | null;
 /** Current frame for a same-command Source verification whose public signature cannot change. */
 export declare function currentIdentitySourceConsumerMaintenance(pool: Pool, deadline: number): IdentitySourceConsumerMaintenanceWork | null;
-/** The live invocation's own allocation and deadline for internal nested History work.
- * This does not mint a frame: it returns only the current async invocation's existing token. */
-export declare function activeIdentitySourceConsumerMaintenance(pool: Pool): IdentitySourceConsumerMaintenanceContext | null;
+/** The current async invocation's original Source allocation and deadline for nested History work.
+ * Presence is provenance only: callers must still validate the token against the actual Pool,
+ * current async frame, and deadline before dispatch. A settled or foreign invocation remains
+ * observable so it cannot be mistaken for a genuinely absent Source frame. */
+export declare function activeIdentitySourceConsumerMaintenance(_pool: Pool): IdentitySourceConsumerMaintenanceContext | null;
 /** Source owns one configured frame for the entire actual default-maintenance callback. */
 export declare function withIdentitySourceConsumerMaintenance<T>(deps: Readonly<{
     pool: Pool;

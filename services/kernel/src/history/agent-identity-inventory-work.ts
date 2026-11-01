@@ -24,10 +24,17 @@ export async function reserveIdentityHistoryWork(
     | IdentitySourceConsumerMaintenanceContext,
 ): Promise<void> {
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const active = invocation?.identityConsumerWork ? invocation : owner.activeIdentitySourceConsumerMaintenance(pool);
+  if (invocation !== undefined && (!invocation || typeof invocation !== 'object'))
+    throw new IdentityHistoryWorkUnavailable();
+  const explicitSourceAuthority =
+    invocation !== undefined && 'identityConsumerWork' in invocation;
+  const active = explicitSourceAuthority
+    ? (invocation as IdentitySourceConsumerMaintenanceContext)
+    : owner.activeIdentitySourceConsumerMaintenance(pool);
   if (!active) return;
-  const deadline = invocation?.deadline ?? active.deadline;
+  const deadline = invocation === undefined ? active.deadline : invocation.deadline;
   if (
+    !Number.isFinite(deadline) ||
     deadline <= Date.now() ||
     !owner.isLiveIdentitySourceConsumerMaintenance(pool, active.identityConsumerWork, deadline) ||
     !owner.reserveIdentitySourceConsumerNativeWork(pool, active.identityConsumerWork, amount)

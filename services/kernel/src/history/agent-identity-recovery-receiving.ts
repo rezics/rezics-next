@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { currentCommandResources, type CommandTransaction } from '../command/command.ts';
+import { currentCommandResources, hasLiveCommandTransaction, type CommandTransaction } from '../command/command.ts';
 import { reserveIdentityHistoryWork, nativeWork } from './agent-identity-inventory-work.ts';
 import { readAgentIdentityRecoveryArtifactInTransaction } from './agent-identity-inventory.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
@@ -17,6 +17,11 @@ export async function verifyAgentIdentityRecoveryArtifactReadiness(
   barrier?: HistoryBarrier,
   pool?: Pool,
 ): Promise<AgentIdentityRecoveryArtifactReadiness> {
+  // The installed background History owner holds an operational transaction and job lease,
+  // not command resources or a native History budget. Keep that producer pending instead of
+  // treating missing Source context as permission or letting currentCommandResources throw.
+  if (!hasLiveCommandTransaction(tx))
+    return { state: 'pending', gap: 'agent-identity-recovery-command-resources-unavailable' };
   const resources = currentCommandResources(tx);
   if (pool && pool !== resources.pool) throw new TypeError('Recovery receiving pool differs from its command');
   const cut = await readAgentIdentityRecoveryArtifactInTransaction(tx, artifact, resources.pool);

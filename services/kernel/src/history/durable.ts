@@ -79,11 +79,17 @@ async function inspect(
   workId: string,
   context?: HistoryReceivingContext,
 ): Promise<{ empty: boolean; bounded: boolean }> {
+  if (context) {
+    historyDeadline(context, 0);
+    // Admit the complete closed inspection before checkout. The eight LIMIT+1 probes
+    // and their BEGIN/settings/COMMIT/ROLLBACK envelope are all reached by this call.
+    await reserveIdentityHistoryWork(pool, nativeWork(1, 0, 4, 128), context);
+    for (const table of TABLES)
+      await reserveIdentityHistoryWork(pool, nativeWork(table.limit + 1, 1, 1, (table.limit + 1) * 80), context);
+  }
   return withConnection(pool, async (tx) => {
     if (context) {
       historyDeadline(context, 0);
-      // BEGIN, one settings SELECT, COMMIT and the possible ROLLBACK are prepaid.
-      await reserveIdentityHistoryWork(pool, nativeWork(1, 0, 4, 128));
       await tx.query('BEGIN READ ONLY');
     }
     try {
@@ -105,10 +111,7 @@ async function inspect(
           .join(' AND ');
         // Only scalar lengths leave PostgreSQL. An old oversized value never becomes a new
         // private JavaScript copy just so the minimizer can reject its budget.
-        if (context) {
-          historyDeadline(context, 0);
-          await reserveIdentityHistoryWork(pool, nativeWork(table.limit + 1, 1, 1, (table.limit + 1) * 80));
-        }
+        if (context) historyDeadline(context, 0);
         const result = await tx.query<{ bytes: number; metadata_bytes: number; payload_valid: boolean }>(
           `SELECT octet_length(value::text) AS bytes,
           octet_length((value-ARRAY[${payloadFields}]::text[])::text) AS metadata_bytes,
@@ -314,7 +317,7 @@ export async function minimizeHistoryWork(
   if (key.artifactType !== 'durable-work/v1') throw new TypeError('Invalid durable locator');
   const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
   const unit = currentAgentIdentityHistoryUnit();
-  if (unit) await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 16384));
+  await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 16384), unit?.context);
   const mapping = await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
   const sdkWorkId = mapping?.workflowId ?? key.workId;
   if (mapping?.gap) return mapping.gap;

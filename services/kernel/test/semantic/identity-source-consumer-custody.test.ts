@@ -3,6 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { mergeVerifiedAgent } from '../../src/access/agent-verification.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
+import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/agent-identity-recovery-receiving.ts';
+import {
+  IdentityHistoryWorkUnavailable,
+  identityHistoryCommand,
+  nativeWork,
+  reserveIdentityHistoryWork,
+} from '../../src/history/agent-identity-inventory-work.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { readAccountIdentityUndo } from '../../src/semantic/identity-epoch-binding.ts';
@@ -13,6 +20,7 @@ import {
   type IdentitySourceConsumerReference,
 } from '../../src/semantic/identity-source-consumer-custody.ts';
 import {
+  activeIdentitySourceConsumerMaintenance,
   identitySourceConsumerLibraryWork,
   identitySourceConsumerNativeWork,
   isLiveIdentitySourceConsumerMaintenance,
@@ -733,4 +741,184 @@ test('independent Source verification prepays its complete nested body on every 
       },
     );
   }
+});
+
+test('Complete original-frame History accounting refuses implicit wrong-Pool expired settled copied or exhausted Source authority before IO while preserving original cumulative failure and repeat charging and genuine independently funded owner admission through real callers', async () => {
+  const { spyOn } = await import('bun:test');
+  const cost = nativeWork(1, 1, 1, 1);
+  let foreignCheckouts = 0;
+  const foreignPool = {
+    connect() {
+      foreignCheckouts++;
+      throw new Error('foreign Source Pool checkout sentinel');
+    },
+  } as unknown as Pool;
+  const deadline = Date.now() + 5000;
+  let ended:
+    | import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext
+    | undefined;
+
+  await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+    ended = funded;
+    expect(activeIdentitySourceConsumerMaintenance(f.pool)).toEqual(funded);
+    const before = identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, funded.deadline)!;
+    await reserveIdentityHistoryWork(f.pool, cost);
+    const after = identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, funded.deadline)!;
+    expect(after).toEqual({
+      rows: before.rows - 1,
+      points: before.points - 1,
+      statements: before.statements - 1,
+      bytes: before.bytes - 1,
+      engineRequests: before.engineRequests,
+    });
+    await expect(reserveIdentityHistoryWork(foreignPool, cost)).rejects.toBeInstanceOf(
+      IdentityHistoryWorkUnavailable,
+    );
+    await expect(
+      reserveIdentityHistoryWork(f.pool, cost, {
+        ...funded,
+        identityConsumerWork: { ...funded.identityConsumerWork },
+      }),
+    ).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
+    await expect(reserveIdentityHistoryWork(foreignPool, cost, funded)).rejects.toBeInstanceOf(
+      IdentityHistoryWorkUnavailable,
+    );
+    await expect(
+      reserveIdentityHistoryWork(f.pool, cost, {
+        deadline: funded.deadline,
+        identityConsumerWork: undefined as unknown as typeof funded.identityConsumerWork,
+      }),
+    ).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
+  });
+  await expect(reserveIdentityHistoryWork(f.pool, cost, ended!)).rejects.toBeInstanceOf(
+    IdentityHistoryWorkUnavailable,
+  );
+  expect(foreignCheckouts).toBe(0);
+
+  for (const [axis, property, value] of [
+    ['ROWS', 'rows', 1],
+    ['POINTS', 'points', 1],
+    ['STATEMENTS', 'statements', 1],
+    ['BYTES', 'bytes', 1],
+    ['ENGINE_REQUESTS', 'engineRequests', 0],
+  ] as const) {
+    let checkouts = 0;
+    const pool = {
+      connect() {
+        checkouts++;
+        throw new Error(`${axis} exhausted checkout sentinel`);
+      },
+    } as unknown as Pool;
+    await withIdentitySourceConsumerMaintenance(
+      {
+        pool,
+        env: { [`KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_${axis}`]: String(value) },
+      },
+      { deadline },
+      async () => {
+        const amount = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
+        amount[property] = 2;
+        await expect(reserveIdentityHistoryWork(pool, amount)).rejects.toBeInstanceOf(
+          IdentityHistoryWorkUnavailable,
+        );
+      },
+    );
+    expect(checkouts).toBe(0);
+  }
+
+  let expiredCheckouts = 0;
+  const expiredPool = {
+    connect() {
+      expiredCheckouts++;
+      throw new Error('expired Source checkout sentinel');
+    },
+  } as unknown as Pool;
+  const expiringDeadline = Date.now() + 20;
+  await withIdentitySourceConsumerMaintenance(
+    { pool: expiredPool, env: {} },
+    { deadline: expiringDeadline },
+    async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 30));
+      expect(activeIdentitySourceConsumerMaintenance(expiredPool)?.deadline).toBe(expiringDeadline);
+      await expect(reserveIdentityHistoryWork(expiredPool, cost)).rejects.toBeInstanceOf(
+        IdentityHistoryWorkUnavailable,
+      );
+    },
+  );
+  expect(expiredCheckouts).toBe(0);
+
+  let settledCheckouts = 0;
+  const settledPool = {
+    connect() {
+      settledCheckouts++;
+      throw new Error('settled Source checkout sentinel');
+    },
+  } as unknown as Pool;
+  let detached!: Promise<void>;
+  await withIdentitySourceConsumerMaintenance(
+    { pool: settledPool, env: {} },
+    { deadline: Date.now() + 5000 },
+    async (funded) => {
+      detached = new Promise<void>((resolve) => setTimeout(resolve, 0)).then(async () => {
+        expect(activeIdentitySourceConsumerMaintenance(settledPool)).toEqual(funded);
+        await reserveIdentityHistoryWork(settledPool, cost);
+      });
+    },
+  );
+  await expect(detached).rejects.toBeInstanceOf(IdentityHistoryWorkUnavailable);
+  expect(settledCheckouts).toBe(0);
+
+  const rollbackBudget = {
+    KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS: '3',
+    KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS: '1',
+    KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '8',
+    KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES: '256',
+  };
+  await withIdentitySourceConsumerMaintenance(
+    { pool: f.pool, env: rollbackBudget },
+    { deadline: Date.now() + 10_000 },
+    async (funded) => {
+      const failure = new Error('rollback must not refund History work');
+      await expect(identityHistoryCommand(f.pool, funded, async () => Promise.reject(failure))).rejects.toBe(failure);
+      expect(identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, funded.deadline)).toEqual({
+        rows: 0,
+        points: 0,
+        statements: 0,
+        bytes: 0,
+        engineRequests: 0,
+      });
+      const checkout = spyOn(f.pool, 'connect');
+      try {
+        await expect(identityHistoryCommand(f.pool, funded, async () => null)).rejects.toBeInstanceOf(
+          IdentityHistoryWorkUnavailable,
+        );
+        expect(checkout).not.toHaveBeenCalled();
+      } finally {
+        checkout.mockRestore();
+      }
+    },
+  );
+
+  // This real History owner call has no Source ALS frame. Its live native command
+  // and exact command resources remain its admission; absence alone is not used as
+  // evidence for this path.
+  expect(activeIdentitySourceConsumerMaintenance(f.pool)).toBeNull();
+  const artifact = {
+    partition: reference.source.partition,
+    locator: {
+      artifactType: 'command-receipt/v1' as const,
+      partitionNo: reference.source.partition,
+      principalKind: 'account' as const,
+      principalId: reference.receipt.account,
+      commandKindId: 1,
+      keyVersion: 0,
+      keyToken: '0'.repeat(64),
+    },
+    accounts: [],
+  };
+  const independent = await runCommand(f.pool, { partition: reference.source.partition }, async (tx) => {
+    expect(activeIdentitySourceConsumerMaintenance(f.pool)).toBeNull();
+    return noEffect(await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, undefined, f.pool));
+  });
+  expect(independent.value).toEqual({ state: 'not-recovery' });
 });
