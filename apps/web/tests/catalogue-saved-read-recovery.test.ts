@@ -169,7 +169,10 @@ test('A contributor retries only the failed reading after a confirmed save', asy
       const aliases = host.querySelector('#terms-aliases')!;
       expect(aliases.tagName).toBe('TEXTAREA');
       expect(aliases.getAttribute('rows')).toBe('3');
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(aliases, 'Primo\nSecondo');
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        aliases,
+        'Primo\nSecondo',
+      );
       aliases.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
     await select('terms-language', 'en');
