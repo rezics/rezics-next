@@ -14,7 +14,15 @@ BEGIN
  SELECT jsonb_build_object(
    'kind','identity-source-history-guard/v1',
    'custody',r.erasure_key::text,'sequence',t.sequence::text,
-   'reference',p_reference,
+   -- Reconstruct the closed address from ORIGINAL native fields. Extra caller
+   -- JSON must never become persisted payload in a later History consumer.
+   'reference',jsonb_build_object(
+     'receipt',c.receipt,'sourceDigest',r.source_digest,'erasedRole',r.erased_role,
+     'source',jsonb_build_object('partition',r.partition_no,'epoch',r.source_epoch,
+       'position',r.source_position::text,'transactionId',r.source_transaction_id),
+     'job',jsonb_build_object('jobId',r.job_id,'epoch',r.job_epoch::text),
+     'barrier',jsonb_build_object('accountId',r.barrier_account_id,
+       'accountRoute',r.barrier_account_route,'version',r.barrier_version,'at',r.barrier_at::text)),
    'generation',jsonb_build_object('replayGeneration',t.replay_generation::text,
      'undoGeneration',t.undo_generation::text,'restoreGeneration',t.restore_generation::text),
    'disposition',t.state,
