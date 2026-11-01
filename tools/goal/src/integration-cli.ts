@@ -744,6 +744,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
           kind: kind as ManagerEventKind,
           summary,
           from: sender.from,
+          ...(kind === 'decision' && sender.sessionId ? { senderSessionId: sender.sessionId } : {}),
           ...(sender.worker ? { senderProvenance: sender.worker } : {}),
           ...(taskId ? { taskId } : sender.worker ? { taskId: sender.worker.taskId } : {}),
           ...(values.get('--evidence')?.[0] ? { evidencePath: values.get('--evidence')![0] } : {}),
@@ -980,6 +981,7 @@ function parseInboxQueryOptions(args: string[]): InboxCliOptions {
 type ResolvedInboxSender = {
   from: string;
   managerId: string;
+  sessionId?: string;
   worker?: { kind: 'worker'; taskId: string; attempt: number; ownerManager: string };
 };
 
@@ -992,7 +994,7 @@ function resolveInboxSender(runtime: IntegrationRuntime): ResolvedInboxSender {
   if (hasWorkerIdentityMarkers(env)) return resolveWorkerInboxSender(runtime, env);
   const hasProviderIdentity = Boolean(env.CODEX_THREAD_ID || env.CLAUDE_CODE_SESSION_ID);
   const authenticated = authenticatedCallingManager(runtime, env);
-  if (authenticated) return { from: authenticated.id, managerId: authenticated.id };
+  if (authenticated) return { from: authenticated.id, managerId: authenticated.id, sessionId: authenticated.sessionId };
   if (hasProviderIdentity) throw new Error('inbox sender identity does not match an authenticated manager session');
   throw new Error('inbox send requires an authenticated manager session');
 }

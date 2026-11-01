@@ -3,6 +3,7 @@ import { createRuntime, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { installPrivate } from './shared-dependencies.ts';
+import { runPublicationCommand } from './publication-command.ts';
 
 const workerCommands = [
   'dispatch',
@@ -19,10 +20,10 @@ const workerCommands = [
   'import-attempt',
   'event',
 ];
-const integrationCommands = ['land', 'train', 'promote', 'verify', 'manager', 'inbox', '_manager-host'];
+const integrationCommands = ['land', 'train', 'promote', 'verify', 'manager', 'inbox', 'publication', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
 /** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
-export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox', 'amend']);
+export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox', 'publication', 'amend']);
 
 /** Runtime injection is confined to the programmatic test entry point. */
 export async function run(
@@ -69,6 +70,10 @@ export async function run(
         return 0;
       }
       return await runWorkerCommand(command, args, { runtime });
+    }
+    if (command === 'publication') {
+      if (!('settings' in runtime)) throw new Error('Publication commands require the configured Goal runtime');
+      return await runPublicationCommand(args, runtime);
     }
     return await runIntegration([command, ...args], runtime);
   } catch (error) {
