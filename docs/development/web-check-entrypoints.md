@@ -37,8 +37,11 @@ Semantic strings and newlines survive JSON; argv is never joined into shell text
 Goal/session credentials, publication credentials and placement bypass controls are excluded from the native overlay.
 `STORYBOOK_OUTPUT_DIR`, `GROWTH_PROFILE`, `WEB_TEST_STATE_DIR` and `WEB_CHECK_EVENTS` are explicitly relocated from
 contained workspace paths relative to the native cwd. Growth profiles, named test state and event outputs are also
-declared returns. Other host-absolute file settings, host-absolute argv dependencies and paths escaping through
-symlinks are unavailable. These restrictions are diagnostics, not permission to drop required semantics.
+declared returns. Treat only the ambient `NIX_SSL_CERT_FILE` as a host-only Nix toolchain setting: omit it from the
+native semantic overlay without opening the path or transferring the local path/certificate, and leave the caller's
+environment unchanged. The remote host uses its own trust configuration. Other host-absolute file settings,
+host-absolute argv dependencies and paths escaping through symlinks are unavailable. These restrictions are
+diagnostics, not permission to drop required semantics.
 
 The local driver process inherits its receipt fd 3 and nonce, signal/cancellation controls and stdout/stderr.
 The native environment overlay does not inherit receipt authority. INT/TERM/HUP and an invocation AbortSignal reach

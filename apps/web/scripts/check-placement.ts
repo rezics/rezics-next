@@ -77,6 +77,8 @@ const hostEnvironment = new Set([
   'BUN_RUNTIME_TRANSPILER_CACHE_PATH',
   'BUN_INSTALL_CACHE_DIR',
   'NODE_PATH',
+  // The ambient Nix trust bundle belongs to the local host, not the native check environment.
+  'NIX_SSL_CERT_FILE',
   'KERNEL_CHECK_REMOTE',
   'KERNEL_CHECK_ON_REMOTE',
   'WEB_CHECK_DRIVER_ROOT',

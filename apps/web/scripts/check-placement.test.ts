@@ -456,6 +456,78 @@ test('semantic strings/newlines survive JSON while host controls and receipt aut
   expect(f.calls[0]!.command).toContain('.temp/events');
 });
 
+test('ambient Nix trust path stays out of the remote overlay while semantics, argv and returns survive', async () => {
+  const f = fixture();
+  const certificatePath = '/nix/store/host-cacerts/etc/ssl/certs/ca-bundle.crt';
+  const env = {
+    NIX_SSL_CERT_FILE: certificatePath,
+    CI: '1',
+    MESSAGE: 'a\nb "quoted" $literal',
+    STORYBOOK_OUTPUT_DIR: resolve(app, 'storybook-static'),
+    GROWTH_PROFILE: resolve(app, '.temp/growth-profile.json'),
+    WEB_TEST_STATE_DIR: resolve(app, '.temp/web-test-state'),
+    WEB_CHECK_EVENTS: resolve(root, '.temp/web-check-events'),
+  };
+  const originalEnvironment = { ...env };
+  const command = ['bun', 'test', 'tests/check placement.test.ts', '--test-name-pattern', 'a "quote"'];
+
+  await routeWebCheck(
+    { root, cwd: app, command, returns: ['apps/web/reports/check.json'] },
+    env,
+    f.adapter,
+  );
+
+  expect(f.overlays).toHaveLength(1);
+  expect(f.overlays[0]).toEqual({
+    CI: '1',
+    MESSAGE: env.MESSAGE,
+    STORYBOOK_OUTPUT_DIR: 'storybook-static',
+    GROWTH_PROFILE: '.temp/growth-profile.json',
+    WEB_TEST_STATE_DIR: '.temp/web-test-state',
+    WEB_CHECK_EVENTS: '../../.temp/web-check-events',
+  });
+  expect(f.overlays[0]).not.toHaveProperty('NIX_SSL_CERT_FILE');
+  expect(JSON.stringify(f.overlays[0])).not.toContain(certificatePath);
+  expect(env).toEqual(originalEnvironment);
+  expect(f.calls[0]!.env).toBe(env);
+
+  const argv = f.calls[0]!.command;
+  const returns: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--returns') returns.push(argv[index + 1]!);
+  }
+  expect(returns).toEqual([
+    'apps/web/reports/check.json',
+    'apps/web/.temp/growth-profile.json',
+    'apps/web/.temp/web-test-state',
+    '.temp/web-check-events',
+  ]);
+  expect(argv.slice(argv.indexOf('--') + 1)).toEqual(command);
+});
+
+test('Nix certificate classification leaves unrelated absolute settings and option refusals intact', async () => {
+  const certificatePath = '/nix/store/host-cacerts/etc/ssl/certs/ca-bundle.crt';
+  const unsupported = [
+    ['SSL_CERT_FILE', '/nix/store/another-cacerts/etc/ssl/certs/ca-bundle.crt'],
+    ['APP_CONFIG_PATH', '/nix/store/app-config/config.json'],
+    ['NODE_OPTIONS', '--require=/nix/store/node-hook/register.cjs'],
+    ['BUN_OPTIONS', '--preload=/nix/store/bun-hook/register.ts'],
+  ] as const;
+
+  for (const [name, value] of unsupported) {
+    const f = fixture();
+    await expect(
+      routeWebCheck(
+        { root, cwd: app, command: ['bun', 'test'] },
+        { NIX_SSL_CERT_FILE: certificatePath, [name]: value },
+        f.adapter,
+      ),
+    ).rejects.toThrow(`unsupported host-path environment setting ${name}`);
+    expect(f.overlays).toHaveLength(0);
+    expect(f.calls).toHaveLength(0);
+  }
+});
+
 test('unsupported host dependencies and destinations fail before a driver or native process starts', async () => {
   expect(() => workspacePath(root, '/outside/screenshots')).toThrow('inside the candidate workspace');
   expect(() => webCheckEnvironment({ WEB_TEST_STATE_DIR: '/outside/state' }, root, app)).toThrow();
