@@ -240,7 +240,8 @@ function enrollmentInputValid(input: KindConsentEnrollmentInput): boolean {
     !identifier(input.consumer.collectionId) ||
     !identifier(input.consumer.preparationId) ||
     !identifier(input.consumer.originId)
-  ) return false;
+  )
+    return false;
   return enrollmentInputBytes(input) <= KIND_CONSENT_ENROLLMENT_INPUT_MAX_BYTES;
 }
 

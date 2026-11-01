@@ -173,12 +173,7 @@ function exactRecord(value: unknown, keys: readonly string[]): value is Record<s
   return Object.keys(record).length === keys.length && keys.every((key) => Object.hasOwn(record, key));
 }
 
-function boundedResponse(
-  value: unknown,
-  maxBytes: number,
-  status: number,
-  deadline?: number,
-): Response {
+function boundedResponse(value: unknown, maxBytes: number, status: number, deadline?: number): Response {
   if (deadline !== undefined && Date.now() >= deadline) throw new EnrollmentDeadlineError();
   const encoded = new TextEncoder().encode(JSON.stringify(value));
   if (encoded.byteLength > maxBytes) throw new ResourceLimitError();
@@ -222,10 +217,7 @@ async function boundedJwksFetch(
   usage: VerificationUsage,
 ): Promise<Response> {
   const requestHeaders = new Headers(options.headers);
-  const requestBytes =
-    bytesOf(url) +
-    bytesOf(options.method ?? 'GET') +
-    headerBytes(requestHeaders);
+  const requestBytes = bytesOf(url) + bytesOf(options.method ?? 'GET') + headerBytes(requestHeaders);
   if (requestBytes > KIND_CONSENT_ENROLLMENT_JWKS_REQUEST_MAX_BYTES) throw new ResourceLimitError();
   usage.jwksRequestBytes += requestBytes;
   if (usage.jwksRequestBytes > KIND_CONSENT_ENROLLMENT_JWKS_REQUEST_MAX_BYTES) throw new ResourceLimitError();
@@ -249,8 +241,7 @@ async function boundedJwksFetch(
     const contentLength = response.headers.get('content-length');
     if (contentLength !== null) {
       if (!/^\d+$/.test(contentLength)) throw new ResourceLimitError();
-      if (Number(contentLength) > KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES)
-        throw new ResourceLimitError();
+      if (Number(contentLength) > KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES) throw new ResourceLimitError();
     }
     if (!response.body) throw new ResourceLimitError();
     reader = response.body.getReader();
@@ -266,8 +257,7 @@ async function boundedJwksFetch(
     }
     if (controller.signal.aborted || Date.now() >= deadline) throw new EnrollmentDeadlineError();
     usage.jwksResponseBytes += size;
-    if (usage.jwksResponseBytes > KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES)
-      throw new ResourceLimitError();
+    if (usage.jwksResponseBytes > KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES) throw new ResourceLimitError();
     const body = new Uint8Array(size);
     let offset = 0;
     for (const chunk of chunks) {
@@ -355,8 +345,7 @@ export function createInternalConsentHandler(
         return unavailableEnrollment(deadline);
       const enrollmentKeys = createRemoteJWKSet(jwksUrl, {
         timeoutDuration: KIND_CONSENT_ENROLLMENT_MAX_DURATION_MS,
-        [customFetch]: (url, options) =>
-          boundedJwksFetch(url, options, deadline, operation.signal, verificationUsage),
+        [customFetch]: (url, options) => boundedJwksFetch(url, options, deadline, operation.signal, verificationUsage),
       });
       let token: string;
       try {
@@ -367,12 +356,12 @@ export function createInternalConsentHandler(
           throw new ResourceLimitError();
         if (!/^[\x21-\x7e]+$/.test(token)) throw new Error('Denied');
         const verification = jwtVerify(token, enrollmentKeys, {
-            issuer,
-            audience,
-            algorithms: ['RS256'],
-            requiredClaims: ['sub', 'iat', 'exp'],
-            clockTolerance: 0,
-          });
+          issuer,
+          audience,
+          algorithms: ['RS256'],
+          requiredClaims: ['sub', 'iat', 'exp'],
+          clockTolerance: 0,
+        });
         const { payload } = await withinDeadline(verification, deadline, operation.signal);
         if (
           payload.type !== 'app' ||
@@ -455,12 +444,7 @@ export function createInternalConsentHandler(
           !kindConsentWorkWithin(work, verifiedBound)
         )
           return unavailableEnrollment(deadline);
-        return boundedResponse(
-          { result, work },
-          KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES,
-          200,
-          deadline,
-        );
+        return boundedResponse({ result, work }, KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES, 200, deadline);
       } catch {
         return unavailableEnrollment(deadline);
       }

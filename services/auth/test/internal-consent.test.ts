@@ -258,12 +258,15 @@ test('short original deadline cancels verification and body work before native e
     kindConsentParticipant: participant,
   });
   let bodyRead = false;
-  const body = new ReadableStream<Uint8Array>({
-    pull() {
-      bodyRead = true;
-      return new Promise<void>(() => {});
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull() {
+        bodyRead = true;
+        return new Promise<void>(() => {});
+      },
     },
-  }, { highWaterMark: 0 });
+    { highWaterMark: 0 },
+  );
   const verificationDeadline = Date.now() + 100;
   const verificationResponse = await slowHandler(
     new Request(new URL('/internal/v1/kind-consents:enroll', server.url), {

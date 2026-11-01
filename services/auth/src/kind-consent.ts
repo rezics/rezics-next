@@ -141,11 +141,7 @@ async function enrollmentQuery<Row extends QueryResultRow>(
 const enrollmentScope = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 128 && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(value);
 
-function boundedEnrollmentMetadata(
-  value: QueryResultRow,
-  kind: EnrollmentQueryKind,
-  sql: string,
-): boolean {
+function boundedEnrollmentMetadata(value: QueryResultRow, kind: EnrollmentQueryKind, sql: string): boolean {
   const record = value as Record<string, unknown>;
   const exact = (keys: readonly string[]) =>
     Object.keys(record).length === keys.length && keys.every((key) => Object.hasOwn(record, key));
@@ -177,7 +173,11 @@ function boundedEnrollmentMetadata(
     );
   }
   if (sql.trimStart().startsWith('INSERT'))
-    return exact(['reference_id']) && typeof record.reference_id === 'string' && /^[\x21-\x7e]{1,36}$/.test(record.reference_id);
+    return (
+      exact(['reference_id']) &&
+      typeof record.reference_id === 'string' &&
+      /^[\x21-\x7e]{1,36}$/.test(record.reference_id)
+    );
   return (
     exact([
       'reference_id',
@@ -383,10 +383,7 @@ async function withTransaction<T>(
         trace,
         'control',
         "SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true)",
-        [
-        `${remaining}ms`,
-        `${remaining}ms`,
-        ],
+        [`${remaining}ms`, `${remaining}ms`],
       );
     }
     const result = await run(connection);
@@ -414,12 +411,7 @@ export function withKindConsentEnrollmentDeadline<T>(
   return enrollmentDeadline.run({ deadline, ...(signal ? { signal } : {}) }, run);
 }
 
-async function lockChange(
-  connection: PoolClient,
-  clientId: string,
-  accountId?: string,
-  trace?: EnrollmentTrace,
-) {
+async function lockChange(connection: PoolClient, clientId: string, accountId?: string, trace?: EnrollmentTrace) {
   // Close/snapshot operations share this short lock with enrollments. No foreign
   // Source call happens while this transaction lock is held.
   await enrollmentQuery(connection, trace, 'lock', 'SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
@@ -510,7 +502,8 @@ export function createKindConsentParticipant(input: {
         database,
         async (connection) => {
           await lockChange(connection, raw.clientId, raw.accountId, trace);
-          if (!(await noOpenTransition(connection, raw.clientId, raw.accountId, trace))) return { status: 'unavailable' };
+          if (!(await noOpenTransition(connection, raw.clientId, raw.accountId, trace)))
+            return { status: 'unavailable' };
           const current = (
             await enrollmentQuery<{
               client_id: string;
