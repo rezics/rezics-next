@@ -92,6 +92,49 @@ interface ReactionView {
   value: ReactionKind | null;
 }
 
+interface ReactionQueue {
+  active: boolean;
+  tail: Promise<void>;
+  pendingJobs: number;
+  overlay: ReactionView | null;
+  failure: string | null;
+}
+
+interface QueueView {
+  queue: ReactionQueue;
+  overlay: ReactionView | null;
+  failure: string | null;
+  busy: boolean;
+}
+
+interface AdmissionSignal {
+  disabled: boolean;
+  signInHref: string | undefined;
+  kinds: string;
+}
+
+function admittedKinds(kinds?: readonly ReactionKind[]): ReactionKind[] {
+  return kinds === undefined ? [...reactionKinds] : reactionKinds.filter((kind) => kinds.includes(kind));
+}
+
+function admissionSignal(props: ReactionsProps): AdmissionSignal {
+  return {
+    disabled: props.disabled === true,
+    signInHref: props.signInHref,
+    kinds: admittedKinds(props.kinds).join('\u001f'),
+  };
+}
+
+function sameAdmission(left: AdmissionSignal, right: AdmissionSignal): boolean {
+  return left.disabled === right.disabled && left.signInHref === right.signInHref && left.kinds === right.kinds;
+}
+
+function newReactionQueue(): ReactionQueue {
+  return { active: true, tail: Promise.resolve(), pendingJobs: 0, overlay: null, failure: null };
+}
+
+const useClientLayoutEffect = typeof document === 'undefined' ? React.useEffect : React.useLayoutEffect;
+
 /** Moves the viewer's one slot from `from` to `to`. */
 export function applyReactionChange(
   counts: Partial<Record<ReactionKind, number>>,
@@ -139,29 +182,81 @@ export const Reactions = (props: ReactionsProps) => {
   const labels = resolveLabels(props.labels);
   const signInHref = props.signInHref;
   const signedOut = signInHref !== undefined;
-  const kinds = props.kinds === undefined ? reactionKinds : reactionKinds.filter((kind) => props.kinds!.includes(kind));
+  const kinds = admittedKinds(props.kinds);
   const disabled = props.disabled === true;
   const propsRef = React.useRef(props);
-  propsRef.current = props;
   const labelsRef = React.useRef(labels);
-  labelsRef.current = labels;
 
-  const [overlay, setOverlay] = React.useState<ReactionView | null>(null);
-  const overlayRef = React.useRef<ReactionView | null>(null);
-  const [failure, setFailure] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const pendingJobs = React.useRef(0);
-  const gate = React.useRef(Promise.resolve());
+  const queueRef = React.useRef<ReactionQueue | null>(null);
+  const admissionRef = React.useRef<AdmissionSignal | null>(null);
+  const [view, setView] = React.useState<QueueView | null>(null);
+  const nextAdmission = admissionSignal(props);
+  if (queueRef.current === null) {
+    queueRef.current = newReactionQueue();
+    admissionRef.current = nextAdmission;
+  }
+  const queue = queueRef.current;
+
+  useClientLayoutEffect(() => {
+    propsRef.current = props;
+    labelsRef.current = labels;
+
+    const previousAdmission = admissionRef.current;
+    if (previousAdmission && !sameAdmission(previousAdmission, nextAdmission)) {
+      // Retire at commit, before another browser event or queued Promise job can use this visit.
+      queueRef.current!.active = false;
+      const replacement = newReactionQueue();
+      queueRef.current = replacement;
+      admissionRef.current = nextAdmission;
+      setView({ queue: replacement, overlay: null, failure: null, busy: false });
+    }
+  }, [labels, nextAdmission.disabled, nextAdmission.kinds, nextAdmission.signInHref, props]);
+
+  const isCurrent = (candidate: ReactionQueue, kind?: ReactionKind) => {
+    const current = propsRef.current;
+    if (
+      !candidate.active ||
+      queueRef.current !== candidate ||
+      current.disabled === true ||
+      current.signInHref !== undefined
+    )
+      return false;
+    return kind === undefined || admittedKinds(current.kinds).includes(kind);
+  };
+
+  const publish = (candidate: ReactionQueue) => {
+    if (!isCurrent(candidate)) return;
+    setView({
+      queue: candidate,
+      overlay: candidate.overlay,
+      failure: candidate.failure,
+      busy: candidate.pendingJobs > 0,
+    });
+  };
+
+  useClientLayoutEffect(() => {
+    // Re-enable the current queue on Strict Mode's development-only effect replay.
+    if (queueRef.current === queue) queue.active = true;
+    return () => {
+      queue.active = false;
+    };
+  }, [queue]);
+
+  const currentView: QueueView =
+    view?.queue === queue
+      ? view
+      : { queue, overlay: queue.overlay, failure: queue.failure, busy: queue.pendingJobs > 0 };
+  const { overlay, failure, busy } = currentView;
 
   // Drop the optimistic view once the controlled props echo it and nothing is queued.
   React.useEffect(() => {
-    if (busy) return;
-    const current = overlayRef.current;
+    if (!isCurrent(queue) || queue.pendingJobs > 0) return;
+    const current = queue.overlay;
     if (current && current.value === props.value) {
-      overlayRef.current = null;
-      setOverlay(null);
+      queue.overlay = null;
+      publish(queue);
     }
-  }, [busy, props.value, props.counts]);
+  }, [busy, overlay, props.value, props.counts, queue]);
 
   const shown = overlay ?? { counts: props.counts, value: props.value };
   // The kinds that stay in the row on a phone: the most used (ties keep the display order) and the viewer's own.
@@ -178,39 +273,41 @@ export const Reactions = (props: ReactionsProps) => {
   const phoneHidden = (kind: ReactionKind) => phoneRow !== null && !phoneRow.has(kind);
 
   const select = (kind: ReactionKind) => {
-    if (propsRef.current.signInHref !== undefined || propsRef.current.disabled === true) return;
-    pendingJobs.current += 1;
-    setBusy(true);
-    const job = gate.current.then(async () => {
-      const previous = overlayRef.current;
+    if (!isCurrent(queue, kind)) return;
+    const onChange = props.onChange;
+    queue.pendingJobs += 1;
+    publish(queue);
+    const job = queue.tail.then(async () => {
+      if (!isCurrent(queue, kind)) return;
+      const previous = queue.overlay;
       const base = previous ?? { counts: propsRef.current.counts, value: propsRef.current.value };
       const next = base.value === kind ? null : kind;
       const pending: ReactionView = {
         counts: applyReactionChange(base.counts, base.value, next),
         value: next,
       };
-      overlayRef.current = pending;
-      setOverlay(pending);
-      setFailure(null);
+      queue.overlay = pending;
+      queue.failure = null;
+      publish(queue);
       try {
-        await propsRef.current.onChange(next);
+        await onChange(next);
       } catch {
-        if (overlayRef.current === pending) {
-          overlayRef.current = previous;
-          setOverlay(previous);
-          setFailure(labelsRef.current.failed);
+        if (isCurrent(queue) && queue.overlay === pending) {
+          queue.overlay = previous;
+          queue.failure = labelsRef.current.failed;
+          publish(queue);
         }
       }
     });
     // The next click chains onto this job, so it waits until the change settles.
-    gate.current = job.then(
+    queue.tail = job.then(
       () => {
-        pendingJobs.current -= 1;
-        if (pendingJobs.current === 0) setBusy(false);
+        queue.pendingJobs = Math.max(0, queue.pendingJobs - 1);
+        publish(queue);
       },
       () => {
-        pendingJobs.current -= 1;
-        if (pendingJobs.current === 0) setBusy(false);
+        queue.pendingJobs = Math.max(0, queue.pendingJobs - 1);
+        publish(queue);
       },
     );
   };
@@ -287,6 +384,7 @@ export const Reactions = (props: ReactionsProps) => {
                   <Button
                     aria-pressed={pressed}
                     className={cn('relative w-full justify-start px-3 transition-none', pressed && pressedClass)}
+                    disabled={disabled}
                     key={kind}
                     onClick={() => select(kind)}
                     size="sm"
