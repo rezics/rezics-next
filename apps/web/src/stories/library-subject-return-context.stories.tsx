@@ -53,7 +53,7 @@ function LeafStory({ fallback = false }: { fallback?: boolean }) {
   return (
     <PatternStory path={fallback ? '/' : `${path}/editions?realm=${realm}&node=editions&cursor=opaque%2Bnext`}>
       <AppShell>
-        <h1 className="font-serif text-3xl font-semibold">{subject.label}</h1>
+        <h1 className="font-sans text-3xl font-semibold">{subject.label}</h1>
         <SubjectLibrarySlot subject={subject} locale={getLocale()} data={signedOut} />
       </AppShell>
     </PatternStory>

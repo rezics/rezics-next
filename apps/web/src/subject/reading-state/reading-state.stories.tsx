@@ -16,7 +16,7 @@ function UnavailableText() {
   return (
     <PatternStory>
       <section className="mx-auto w-full max-w-3xl space-y-4 p-4" aria-label={m.subject_about()}>
-        <h2 className="font-serif text-2xl">{m.subject_about()}</h2>
+        <h2 className="font-sans text-2xl">{m.subject_about()}</h2>
         <SubjectReadingState
           locale={locale}
           onRetry={(event) => {

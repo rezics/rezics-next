@@ -92,7 +92,7 @@ export function MangaCorrections({
       {subject && current && groups && (
         <>
           <header className="space-y-3 rounded-xl border bg-card p-5">
-            <h2 className="font-serif text-2xl font-semibold" lang={label?.lang ?? undefined}>
+            <h2 className="font-sans text-2xl font-semibold" lang={label?.lang ?? undefined}>
               <a className="underline" href={href}>
                 {label?.text || m.subject_value_unlabelled({}, o)}
               </a>
