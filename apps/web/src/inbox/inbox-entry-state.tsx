@@ -40,7 +40,7 @@ export function InboxEntryState({
 
   if (entry === 'signed-out')
     return (
-      <div className="mt-6">
+      <div className="mt-6 w-full max-w-full [&_a]:min-h-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:break-words [&_a]:py-2 [&_a]:leading-5">
         <SignInPrompt returnTo={inboxReturnDestination(location.publicHref)} label={m.inbox_sign_in()} compact />
       </div>
     );
@@ -55,6 +55,7 @@ export function InboxEntryState({
       <p className="text-muted-foreground">{m.inbox_session_unavailable()}</p>
       <Button
         variant="outline"
+        className="h-auto min-h-11 max-w-full whitespace-normal break-words py-2 text-left leading-5"
         disabled={pending}
         onClick={() => {
           setRetrying(true);
