@@ -75,7 +75,7 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
     const request = getRequest();
     try {
       await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
-      const authorization = viewerCredential(request);
+      const authorization = viewerCredential(request) ?? undefined;
       if (!authorization || sessionSubject(request) !== data.viewer)
         return { state: 'auth', code: 'authentication_required' };
       return readHomeFeedPage(
@@ -164,7 +164,7 @@ export const readHomeSpaceChoice = createServerFn({ method: 'GET' })
       if (data.viewer !== undefined) {
         const { env } = await import('cloudflare:workers');
         await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
-        authorization = viewerCredential(request);
+        authorization = viewerCredential(request) ?? undefined;
         if (!authorization || sessionSubject(request) !== data.viewer) return { status: 'auth' };
       }
       return readHomeSpace(kernelClient(data.locale), input, authorization, request.signal);

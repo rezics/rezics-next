@@ -7,7 +7,7 @@ export type HomeSpace = Pick<NativeSpace, 'spaceId' | 'title' | 'address' | 'hea
 export type HomeSpaceRequest = { address: string; spaceId?: never } | { spaceId: string; address?: never };
 export type HomeSpaceResult =
   | { status: 'ready'; space: HomeSpace }
-  | { status: 'invalid' | 'unavailable' | 'denied' | 'auth' | 'closed' };
+  | { status: 'invalid' | 'unavailable' | 'denied' | 'auth' | 'closed'; spaceId?: string };
 export type HomeSpaceReader = (input: HomeSpaceRequest, signal: AbortSignal) => Promise<HomeSpaceResult>;
 
 export function homeFeedId(value: unknown): string | undefined {
@@ -20,6 +20,8 @@ export function homeSpaceAddress(value: string, origin: string): string {
   if (!value || value.length > 2048 || value !== value.trim()) throw new Error('Invalid Space address');
   if (!value.includes('/') && !value.includes(':') && !/[?#\\]/u.test(value)) return value;
   if (value.includes('\\')) throw new Error('Invalid Space URL');
+  // Inspect the supplied path before URL normalizes dot segments away.
+  if (!/^(?:https?:\/\/[^/?#]+)?\/spaces\/[^/?#]+$/iu.test(value)) throw new Error('Invalid Space URL');
   const url = new URL(value, origin);
   if (url.origin !== new URL(origin).origin || url.username || url.password || url.search || url.hash)
     throw new Error('Invalid Space URL');
@@ -41,7 +43,8 @@ export async function readHomeSpace(
     ...(authorization ? { headers: { authorization } } : {}),
     fetch: { cache: 'no-store' as const, redirect: 'manual' as const, ...(signal ? { signal } : {}) },
   };
-  const failure = (status: number): HomeSpaceResult => ({
+  const failure = (status: number, spaceId?: string): HomeSpaceResult => ({
+    ...(spaceId ? { spaceId } : {}),
     status:
       status === 401
         ? 'auth'
@@ -54,13 +57,14 @@ export async function readHomeSpace(
   try {
     let spaceId = input.spaceId;
     if (spaceId === undefined) {
+      if (typeof input.address !== 'string') return { status: 'invalid' };
       const resolved = await client.spaceAddresses({ address: input.address }).get(options);
       if (resolved.status !== 200 || resolved.error || !resolved.data) return failure(resolved.status);
       spaceId = homeFeedId(resolved.data.spaceId)!;
     }
     if (signal?.aborted) return { status: 'unavailable' };
     const result = await client.spaces({ spaceId }).get(options);
-    if (result.status !== 200 || result.error || !result.data) return failure(result.status);
+    if (result.status !== 200 || result.error || !result.data) return failure(result.status, spaceId);
     const space = result.data.space;
     if (
       space.spaceId !== spaceId ||
@@ -72,7 +76,7 @@ export async function readHomeSpace(
       typeof space.title !== 'string' ||
       (space.address !== null && typeof space.address !== 'string')
     )
-      return { status: 'unavailable' };
+      return { status: 'unavailable', spaceId };
     return {
       status: 'ready',
       space: {
@@ -136,7 +140,12 @@ export function createHomeSpaceSelection(
     }
     if (generation !== current) return;
     pending = undefined;
-    if (refreshing) {
+    const observedSelected =
+      snapshot.selected &&
+      (result.status === 'ready'
+        ? result.space.spaceId === snapshot.selected.spaceId
+        : result.spaceId === snapshot.selected.spaceId);
+    if (refreshing || observedSelected) {
       if (result.status === 'ready') {
         const changed = homeSpaceGeneration(snapshot.selected!) !== homeSpaceGeneration(result.space);
         snapshot = { status: 'ready', selected: result.space, available: true, changed };
