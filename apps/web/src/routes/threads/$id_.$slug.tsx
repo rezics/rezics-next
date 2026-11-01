@@ -26,7 +26,7 @@ import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { QueryClientContext, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClientContext, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -57,6 +57,7 @@ import {
   ThreadPageCallerRetired,
   useThreadPageCaller,
   type ThreadPageAdmission,
+  type ThreadPageRefreshContinuation,
   type ThreadPageRouteIdentity,
 } from '../../threads/thread-page-caller';
 
@@ -120,10 +121,23 @@ export function ThreadReadingHeader({ page, title }: { page: ThreadReadingPage; 
   );
 }
 
+type ActiveThreadRefresh = {
+  active: boolean;
+  accepted: boolean;
+  provider: QueryClient;
+  navigationPath?: string;
+  navigationAuthorized?: boolean;
+  continuation?: ThreadPageRefreshContinuation;
+  nextCaller?: ThreadPageCaller;
+  invalidate(): void;
+  retire(): void;
+};
+
 export function ThreadPage() {
   const loadedPage = Route.useLoaderData();
   const [refreshed, setRefreshed] = useState<{
     source: typeof loadedPage;
+    scope: object;
     page: ThreadReadingPage;
     admission: ThreadPageAdmission;
   }>();
@@ -137,7 +151,12 @@ export function ThreadPage() {
   const cursor = Route.useSearch().cursor;
   const locale = getLocale();
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
-  const activeRefresh = refreshed?.source === loadedPage ? refreshed : undefined;
+  const routeSearch = JSON.stringify(location.search);
+  const readScope = useMemo(
+    () => ({}),
+    [id, cursor, slug, locale, location.pathname, routeSearch, queryClient, loadedPage.callerAdmission.id],
+  );
+  const activeRefresh = refreshed?.source === loadedPage && refreshed.scope === readScope ? refreshed : undefined;
   const activePage = activeRefresh?.page ?? loadedPage;
   const activeAdmission = activeRefresh?.admission ?? loadedPage.callerAdmission;
   const identity = useMemo<ThreadPageRouteIdentity>(
@@ -162,7 +181,6 @@ export function ThreadPage() {
     [caller, caller?.sessionRevision, caller?.connectionTicket],
   );
   const isCallbackCurrent = () => !!caller && !!callbackTicket && caller.isEffectTicketCurrent(callbackTicket);
-  const readScope = useMemo(() => ({}), [id]);
   const pageIsPrivate = activeAdmission.identity.credentialMode === 'session' || activePage.viewerId !== undefined;
   const currentPageUnavailable =
     !binding.current ||
@@ -204,13 +222,53 @@ export function ThreadPage() {
     session === 'signed-in' && subject && caller && personalAttempt
       ? (caller.selectPersonal(personalQuery.data, personalAttempt) as typeof personalQuery.data)
       : undefined;
-  const currentRead = useRef({ scope: readScope, sequence: 0 });
-  if (currentRead.current.scope !== readScope) currentRead.current = { scope: readScope, sequence: 0 };
+  const currentProvider = useRef(queryClient);
+  currentProvider.current = queryClient;
+  const currentRead = useRef<{ scope: object; sequence: number; operation?: ActiveThreadRefresh }>({
+    scope: readScope,
+    sequence: 0,
+  });
+  const retiredReadOperations = useRef<ActiveThreadRefresh[]>([]);
+  if (currentRead.current.scope !== readScope) {
+    if (currentRead.current.operation) retiredReadOperations.current.push(currentRead.current.operation);
+    currentRead.current = { scope: readScope, sequence: 0 };
+  }
+  const retireObsoleteOperation = (operation: ActiveThreadRefresh) => {
+    if (operation.accepted && operation.navigationAuthorized && currentProvider.current === operation.provider) {
+      operation.invalidate();
+      return;
+    }
+    operation.retire();
+  };
+  useLayoutEffect(() => {
+    for (const operation of retiredReadOperations.current.splice(0)) retireObsoleteOperation(operation);
+  }, [readScope]);
+  const routeRevision = useRef(0);
+  useLayoutEffect(() => {
+    const unsubscribe = router.subscribe('onBeforeLoad', ({ toLocation }) => {
+      const operation = currentRead.current.operation;
+      if (operation?.accepted && operation.navigationPath === toLocation.pathname) {
+        operation.navigationAuthorized = true;
+        return;
+      }
+      routeRevision.current++;
+      currentRead.current.sequence++;
+      operation?.retire();
+    });
+    return () => {
+      unsubscribe();
+      if (currentRead.current.operation) retireObsoleteOperation(currentRead.current.operation);
+    };
+  }, [router]);
   const mounted = useRef(true);
+  const mountedGeneration = useRef(0);
   useEffect(() => {
     mounted.current = true;
+    mountedGeneration.current++;
     return () => {
       mounted.current = false;
+      mountedGeneration.current++;
+      if (currentRead.current.operation) retireObsoleteOperation(currentRead.current.operation);
     };
   }, []);
   useEffect(() => {
@@ -233,25 +291,12 @@ export function ThreadPage() {
   }
 
   async function refreshThreadPage(recovery = false) {
-    if (!recovery && (!isCallbackCurrent() || !caller)) throw new ThreadPageCallerRetired();
+    if (!recovery && (!isCallbackCurrent() || !caller || !callbackTicket)) throw new ThreadPageCallerRetired();
     const currentCaller = caller;
     const currentTicket = callbackTicket;
-    const routeIsCurrent = () =>
-      mounted.current &&
-      getLocale() === locale &&
-      router.state.location.pathname === location.pathname &&
-      JSON.stringify(router.state.location.search) === JSON.stringify(location.search);
-    if (recovery && !routeIsCurrent()) throw new ThreadPageCallerRetired();
     const read = currentRead.current;
     const sequence = ++read.sequence;
-    let nextCaller: ThreadPageCaller | undefined;
-    const current = () =>
-      routeIsCurrent() &&
-      currentRead.current === read &&
-      read.sequence === sequence &&
-      (recovery
-        ? !!nextCaller && nextCaller.isRefreshContinuationCurrent({ session: nextCaller.admission.session })
-        : !!currentCaller && !!currentTicket && currentCaller.isRefreshContinuationCurrent(currentTicket));
+    read.operation?.retire();
     const mode = session === 'signed-in' ? 'session' : 'anonymous';
     const query = threadPageQuery(id, cursor, mode);
     const nextIdentity: ThreadPageRouteIdentity = {
@@ -261,14 +306,67 @@ export function ThreadPage() {
       locale,
       credentialMode: mode,
     };
-    nextCaller = ThreadPageCaller.capture(queryClient, nextIdentity, undefined, query.queryKey);
-    let accepted = false;
+    const nextCaller = ThreadPageCaller.capture(queryClient, nextIdentity, undefined, query.queryKey);
+    let continuation: ThreadPageRefreshContinuation;
     try {
-      await queryClient.cancelQueries({ queryKey: ['thread-page', id] });
+      continuation = recovery
+        ? nextCaller.beginRefreshContinuation({ session: nextCaller.admission.session })
+        : currentCaller!.beginRefreshContinuation(currentTicket!);
+    } catch (error) {
+      nextCaller.retireFromRouteChange();
+      throw error;
+    }
+    const routeTicket = routeRevision.current;
+    const mountedTicket = mountedGeneration.current;
+    let accepted = false;
+    const operation: ActiveThreadRefresh = {
+      active: true,
+      accepted: false,
+      provider: queryClient,
+      continuation,
+      nextCaller,
+      invalidate() {
+        if (!this.active) return;
+        this.active = false;
+        continuation.invalidate();
+      },
+      retire() {
+        this.invalidate();
+        nextCaller.retireFromRouteChange();
+      },
+    };
+    read.operation = operation;
+    const routeIsCurrent = () =>
+      operation.active &&
+      mounted.current &&
+      mountedGeneration.current === mountedTicket &&
+      currentProvider.current === queryClient &&
+      continuation.client === queryClient &&
+      continuation.sourceId === nextCaller.clientSourceId &&
+      getLocale() === locale &&
+      routeRevision.current === routeTicket &&
+      currentRead.current === read &&
+      read.scope === readScope &&
+      read.sequence === sequence &&
+      read.operation === operation &&
+      router.state.location.pathname === location.pathname &&
+      JSON.stringify(router.state.location.search) === routeSearch;
+    const sourceSession = recovery ? nextCaller.admission.session : currentTicket!.session;
+    const current = () =>
+      routeIsCurrent() &&
+      continuation.isCurrent() &&
+      nextCaller.isRefreshContinuationCurrent({ session: sourceSession });
+    nextCaller.setRefreshGuard(() => routeIsCurrent() && (recovery || continuation.isCurrent()));
+    try {
+      if (recovery && !routeIsCurrent()) throw new ThreadPageCallerRetired();
+      await continuation.runOwnedCacheBoundary('cancel', () =>
+        queryClient.cancelQueries({ queryKey: ['thread-page', id] }),
+      );
       if (!current()) throw new Error('Thread reader changed');
       // Retire pre-command pages as well as in-flight reads, so navigation cannot reuse their old bodies.
-      queryClient.removeQueries({ queryKey: ['thread-page', id] });
+      continuation.runOwnedCacheBoundary('remove', () => queryClient.removeQueries({ queryKey: ['thread-page', id] }));
       if (!current()) throw new Error('Thread reader changed');
+      continuation.handoffQueryAuthority(!recovery);
       const updated = await runThreadPageQuery(queryClient, nextCaller, query, (guarded) =>
         queryClient.fetchQuery({ ...guarded, staleTime: 0, retry: false }),
       );
@@ -276,13 +374,20 @@ export function ThreadPage() {
       if (session === 'signed-in' && updated.viewerId !== undefined && (!subject || updated.viewerId !== subject))
         throw new Error('Current thread reader unavailable');
       nextCaller.assertReadCurrent();
-      setRefreshed({ source: loadedPage, page: updated, admission: nextCaller.admission });
-      rememberThreadSlug(updated.thread.id, updated.thread.title);
-      nextCaller.assertReadCurrent();
       const destination = threadLocation(locale, { id: updated.thread.id, title: updated.thread.title }, cursor);
       if (!current()) throw new Error('Thread reader changed');
       accepted = true;
+      operation.accepted = true;
+      nextCaller.setRefreshGuard(routeIsCurrent);
+      const publicationCurrent = () =>
+        routeIsCurrent() && nextCaller.isRefreshContinuationCurrent({ session: sourceSession });
+      if (!publicationCurrent()) throw new Error('Thread reader changed');
+      setRefreshed({ source: loadedPage, scope: readScope, page: updated, admission: nextCaller.admission });
+      if (!publicationCurrent()) throw new Error('Thread reader changed');
+      rememberThreadSlug(updated.thread.id, updated.thread.title);
+      if (!publicationCurrent()) throw new Error('Thread reader changed');
       if (new URL(destination, window.location.origin).pathname !== location.pathname) {
+        operation.navigationPath = new URL(destination, window.location.origin).pathname;
         await router.navigate({ to: destination });
         if (router.state.location.pathname !== new URL(destination, window.location.origin).pathname)
           throw new Error('Thread navigation changed');
@@ -290,6 +395,10 @@ export function ThreadPage() {
       return updated;
     } finally {
       if (!accepted) nextCaller.retireFromRouteChange();
+      nextCaller.clearRefreshGuard();
+      continuation.release();
+      operation.invalidate();
+      if (read.operation === operation) read.operation = undefined;
     }
   }
 

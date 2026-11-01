@@ -13,6 +13,20 @@ be selected again after values happen to return to their earlier shape. The old 
 is still the exact entry owned by the caller. A current explicit refresh captures a new admission and uses the
 existing page query; it does not grant the old result new authority.
 
+An admitted refresh keeps the exact QueryClient, cache source, route scope, session stamp and mounted connection that
+started it. Its own synchronous cancellation and removal of bounded `thread-page` entries are recorded as owned cache
+boundaries, so they do not retire the refresh that requested them. A cancellation, removal, session transition,
+provider replacement, route or locale transition, connection change, superseding refresh or final unmount from outside
+that operation retires it. The original native read is guarded before and after its response, and the result must still
+belong to the same source before it can update route state, remember a slug or navigate. Refreshed route state is
+scoped to its original provider and route identity, including away-and-back provider transitions.
+
+Ordinary query fetch-status and observer changes do not by themselves retire a page result. A query cancellation,
+removal, error or replacement does. Once the refresh hands cache authority to its newly admitted caller, that caller
+guards the page query through result acceptance; the previous caller cannot accidentally clear or retire the new one
+during cleanup. `ThreadReading` keeps the same keyed posts and composer while these source scopes change, so stale
+disclosure is hidden without dropping dirty drafts or uncertain command intent.
+
 The anonymous page result carries no viewer authority and can survive session preparation and ordinary rerenders.
 Personal reads remain the existing bounded query over the visible page's post ids. A personal result is selectable
 only after its query function completed for the exact current target, session revision and mounted connection, and
@@ -41,3 +55,14 @@ while hydration must use a different browser QueryClient whose session-cache his
 that page during hydration would rebind private data to an unproven browser authority; hiding it means the server
 loader's private result cannot provide the same first paint. This change chooses redaction and a fresh client read as
 the safe runtime behavior, but does not claim that private SSR and private hydration share one authority.
+
+## Cost
+
+### Thread refresh and recovery
+
+- Touches: existing bounded page and personal query invalidation, cancellation, read and local result publication.
+- Bound: unchanged native request count, page limits, personal targets and cursor ordering; constant local state per
+  active refresh, with no per-row reads or polling.
+- Growth check: retain original page and personal bounds, prevent obsolete queued reads and publication, and exercise
+  healthy own-cancellation recovery. The connected regressions authored for this implementation remain UNRUN until
+  the deferred acceptance pass.

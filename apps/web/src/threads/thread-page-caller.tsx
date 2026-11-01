@@ -47,6 +47,36 @@ type QueryStamp = {
   dataUpdatedAt: number;
   errorUpdatedAt: number;
   terminalRevision: number;
+  cancelRevision: number;
+};
+
+type QueryCacheEvent = {
+  type: string;
+  query: { queryKey: QueryKey };
+  action?: { type?: string };
+};
+
+type RefreshContinuationState = {
+  active: boolean;
+  boundary?: 'cancel' | 'remove';
+  identity: ThreadPageRouteIdentity;
+  session: SessionStamp;
+  connectionOwner: object;
+  connectionGeneration: number;
+  requiresConnection: boolean;
+  queryRetired: boolean;
+  watchQueryEvents: boolean;
+  suppressQueryCheck: boolean;
+};
+
+export type ThreadPageRefreshContinuation = {
+  readonly client: QueryClient;
+  readonly sourceId: string;
+  isCurrent(): boolean;
+  runOwnedCacheBoundary<T>(kind: 'cancel' | 'remove', operation: () => T): T;
+  handoffQueryAuthority(preserveCaller?: boolean): void;
+  invalidate(): void;
+  release(): void;
 };
 
 type SessionSource = ReturnType<typeof observeThreadPageCache>;
@@ -82,7 +112,8 @@ function observeThreadPageCache(client: QueryClient) {
   let sessionRevision = 0;
   let observationRevision = 0;
   const terminalRevisions = new Map<string, number>();
-  const listeners = new Set<() => void>();
+  const cancelRevisions = new Map<string, number>();
+  const listeners = new Set<(event: QueryCacheEvent) => void>();
   const initial = sessionCache(client);
   let previousSession = JSON.stringify(initial);
   client.getQueryCache().subscribe((event) => {
@@ -104,7 +135,11 @@ function observeThreadPageCache(client: QueryClient) {
       const id = keyId(query.queryKey);
       terminalRevisions.set(id, (terminalRevisions.get(id) ?? 0) + 1);
     }
-    for (const listener of listeners) listener();
+    if (type === 'updated' && event.action.type === 'cancel') {
+      const id = keyId(query.queryKey);
+      cancelRevisions.set(id, (cancelRevisions.get(id) ?? 0) + 1);
+    }
+    for (const listener of listeners) listener(event as QueryCacheEvent);
   });
 
   return {
@@ -116,6 +151,9 @@ function observeThreadPageCache(client: QueryClient) {
     observationRevision: () => observationRevision,
     queryTerminalRevision(queryKey: QueryKey) {
       return terminalRevisions.get(keyId(queryKey)) ?? 0;
+    },
+    queryCancelRevision(queryKey: QueryKey) {
+      return cancelRevisions.get(keyId(queryKey)) ?? 0;
     },
     queryStamp(queryKey: QueryKey): QueryStamp | undefined {
       const query = client.getQueryCache().find({ queryKey, exact: true });
@@ -130,9 +168,10 @@ function observeThreadPageCache(client: QueryClient) {
         dataUpdatedAt: query.state.dataUpdatedAt,
         errorUpdatedAt: query.state.errorUpdatedAt,
         terminalRevision: terminalRevisions.get(keyId(queryKey)) ?? 0,
+        cancelRevision: cancelRevisions.get(keyId(queryKey)) ?? 0,
       };
     },
-    subscribe(listener: () => void) {
+    subscribe(listener: (event: QueryCacheEvent) => void) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
@@ -176,13 +215,13 @@ function sameQuery(left: QueryStamp | undefined, right: QueryStamp | undefined) 
     right !== undefined &&
     left.query === right.query &&
     left.status === right.status &&
-    left.fetchStatus === right.fetchStatus &&
     left.data === right.data &&
     left.dataUpdateCount === right.dataUpdateCount &&
     left.errorUpdateCount === right.errorUpdateCount &&
     left.dataUpdatedAt === right.dataUpdatedAt &&
     left.errorUpdatedAt === right.errorUpdatedAt &&
-    left.terminalRevision === right.terminalRevision
+    left.terminalRevision === right.terminalRevision &&
+    left.cancelRevision === right.cancelRevision
   );
 }
 
@@ -217,6 +256,18 @@ export class ThreadPageCallerRetired extends Error {
   }
 }
 
+function isThreadPageFor(queryKey: QueryKey, threadId: string) {
+  return queryKey[0] === 'thread-page' && queryKey[1] === threadId;
+}
+
+function isRetiringQueryEvent(event: QueryCacheEvent) {
+  return (
+    event.type === 'removed' ||
+    (event.type === 'updated' &&
+      (event.action?.type === 'cancel' || event.action?.type === 'error' || event.action?.type === 'setState'))
+  );
+}
+
 type Connection = { owner: object | null; connected: boolean; generation: number; retired: boolean };
 
 /** One original route/query reader. It observes authority and cache state without starting reads of its own. */
@@ -235,10 +286,13 @@ export class ThreadPageCaller {
   private inFlightQuery: object | undefined;
   private queryStarted = false;
   private queryStartTerminalRevision = 0;
+  private queryStartCancelRevision = 0;
   private releaseSource: (() => void) | undefined;
   private connection: Connection = { owner: null, connected: false, generation: 0, retired: false };
   private personalSequence = 0;
   private personalAttemptRevision = 0;
+  private readonly refreshContinuations = new Set<RefreshContinuationState>();
+  private refreshGuard: (() => boolean) | undefined;
   private readonly personalResults = new WeakMap<object, PersonalReadAttempt>();
   private readonly personalCacheOwners = new Map<string, PersonalCacheOwner>();
 
@@ -255,7 +309,8 @@ export class ThreadPageCaller {
     this.ownerSession = { ...admission.session };
     this.queryKey = admission.queryKey;
     this.queryState = queryState;
-    this.releaseSource = source.subscribe(() => {
+    this.releaseSource = source.subscribe((event) => {
+      this.observeRefreshQueryEvent(event);
       if (this.queryStarted && !this.inFlightQuery) this.inFlightQuery = this.source.queryStamp(this.queryKey)?.query;
       this.check();
       const personalChanged = !this.retired && this.observePersonalCache();
@@ -338,6 +393,8 @@ export class ThreadPageCaller {
   private retire(notify = true) {
     if (this.retired) return;
     this.retired = true;
+    for (const continuation of this.refreshContinuations) continuation.active = false;
+    this.refreshContinuations.clear();
     this.connection.retired = true;
     this.connection.connected = false;
     this.connection.generation++;
@@ -422,6 +479,7 @@ export class ThreadPageCaller {
   private queryCurrent() {
     if (this.queryStarted) {
       if (this.source.queryTerminalRevision(this.queryKey) !== this.queryStartTerminalRevision) return false;
+      if (this.source.queryCancelRevision(this.queryKey) !== this.queryStartCancelRevision) return false;
       const current = this.source.queryStamp(this.queryKey);
       if (this.inFlightQuery) return current?.query === this.inFlightQuery;
       return current === undefined;
@@ -441,15 +499,35 @@ export class ThreadPageCaller {
 
   private check() {
     if (this.retired) return;
-    if (
-      !sameIdentity(this.currentAdmission.identity, this.currentIdentity) ||
-      getLocale() !== this.currentAdmission.identity.locale ||
-      !this.queryCurrent()
-    ) {
+    if (!sameIdentity(this.currentAdmission.identity, this.currentIdentity) || getLocale() !== this.currentAdmission.identity.locale) {
       this.retire();
       return;
     }
+    if (!this.queryCurrent()) {
+      const continuation = [...this.refreshContinuations].find(
+        (candidate) => candidate.active && candidate.suppressQueryCheck,
+      );
+      if (!continuation || continuation.queryRetired) {
+        this.retire();
+        return;
+      }
+    }
     if (!this.publicResult && !this.authorityCurrent()) this.retire();
+  }
+
+  private observeRefreshQueryEvent(event: QueryCacheEvent) {
+    for (const continuation of this.refreshContinuations) {
+      if (
+        !continuation.active ||
+        !continuation.watchQueryEvents ||
+        !isThreadPageFor(event.query.queryKey, continuation.identity.id)
+      )
+        continue;
+      const ownBoundaryEvent =
+        (continuation.boundary === 'cancel' && event.type === 'updated' && event.action?.type === 'cancel') ||
+        (continuation.boundary === 'remove' && event.type === 'removed');
+      if (!ownBoundaryEvent && isRetiringQueryEvent(event)) continuation.queryRetired = true;
+    }
   }
 
   snapshot = () => {
@@ -527,8 +605,20 @@ export class ThreadPageCaller {
 
   assertReadCurrent() {
     this.check();
-    if (this.retired || !sessionCanRead(this.currentAdmission.identity.credentialMode, this.source.readSession()))
+    if (
+      this.retired ||
+      (this.refreshGuard !== undefined && !this.refreshGuard()) ||
+      !sessionCanRead(this.currentAdmission.identity.credentialMode, this.source.readSession())
+    )
       throw new ThreadPageCallerRetired();
+  }
+
+  setRefreshGuard(guard: () => boolean) {
+    this.refreshGuard = guard;
+  }
+
+  clearRefreshGuard() {
+    this.refreshGuard = undefined;
   }
 
   async read<T>(work: () => Promise<T>) {
@@ -608,6 +698,7 @@ export class ThreadPageCaller {
     if (keyId(queryKey) !== keyId(this.currentAdmission.queryKey)) throw new ThreadPageCallerRetired();
     this.inFlightQuery = this.source.queryStamp(queryKey)?.query;
     this.queryStartTerminalRevision = this.source.queryTerminalRevision(queryKey);
+    this.queryStartCancelRevision = this.source.queryCancelRevision(queryKey);
     this.queryStarted = true;
   }
 
@@ -693,13 +784,90 @@ export class ThreadPageCaller {
     return this.isEffectCurrent(ticket.session, ticket.ticket);
   }
 
-  /** A refresh already admitted before its own cache cancellation may finish only under the same route/session. */
-  isRefreshContinuationCurrent(ticket: { session: SessionStamp }) {
+  /** A read continuation remains bound to its caller, source, session, and mounted owner. */
+  isRefreshContinuationCurrent(ticket: { session: SessionStamp; ticket?: number }) {
+    this.check();
     return (
+      !this.retired &&
       sameIdentity(this.currentAdmission.identity, this.currentIdentity) &&
       sameSession(ticket.session, this.source.readSession()) &&
-      getLocale() === this.currentAdmission.identity.locale
+      getLocale() === this.currentAdmission.identity.locale &&
+      (ticket.ticket === undefined ||
+        (this.connection.connected &&
+          !this.connection.retired &&
+          this.connection.generation === ticket.ticket)) &&
+      (this.refreshGuard === undefined || this.refreshGuard())
     );
+  }
+
+  /** Admit a refresh from this mounted caller and distinguish its own cache boundaries from external retirement. */
+  beginRefreshContinuation(ticket: { session: SessionStamp; ticket?: number }): ThreadPageRefreshContinuation {
+    this.check();
+    if (
+      (ticket.ticket === undefined
+        ? this.retired || !sameSession(ticket.session, this.source.readSession())
+        : !this.isEffectTicketCurrent({ session: ticket.session, ticket: ticket.ticket }) || !this.connection.owner)
+    )
+      throw new ThreadPageCallerRetired();
+    const state: RefreshContinuationState = {
+      active: true,
+      identity: { ...this.currentAdmission.identity },
+      session: { ...ticket.session },
+      connectionOwner: this.connection.owner ?? this,
+      connectionGeneration: ticket.ticket ?? this.connection.generation,
+      requiresConnection: ticket.ticket !== undefined,
+      queryRetired: false,
+      watchQueryEvents: true,
+      suppressQueryCheck: true,
+    };
+    this.refreshContinuations.add(state);
+    const remove = () => this.refreshContinuations.delete(state);
+    return {
+      client: this.client,
+      sourceId: this.source.id,
+      isCurrent: () => {
+        this.check();
+        return (
+          state.active &&
+          !this.retired &&
+          (!state.requiresConnection ||
+            (this.connection.connected &&
+              !this.connection.retired &&
+              this.connection.owner === state.connectionOwner &&
+              this.connection.generation === state.connectionGeneration)) &&
+          sameIdentity(state.identity, this.currentAdmission.identity) &&
+          sameIdentity(state.identity, this.currentIdentity) &&
+          sameSession(state.session, this.source.readSession()) &&
+          getLocale() === state.identity.locale &&
+          !state.queryRetired
+        );
+      },
+      runOwnedCacheBoundary: <T>(kind: 'cancel' | 'remove', operation: () => T) => {
+        if (!state.active) throw new ThreadPageCallerRetired();
+        const previousBoundary = state.boundary;
+        state.boundary = kind;
+        try {
+          return operation();
+        } finally {
+          state.boundary = previousBoundary;
+        }
+      },
+      handoffQueryAuthority: (preserveCaller = false) => {
+        state.watchQueryEvents = false;
+        state.suppressQueryCheck = preserveCaller;
+      },
+      invalidate: () => {
+        if (!state.active) return;
+        state.active = false;
+        remove();
+      },
+      release: () => {
+        if (!state.active) return;
+        state.active = false;
+        remove();
+        this.check();
+      },
+    };
   }
 
   private personalCurrent(attempt: PersonalReadAttempt) {

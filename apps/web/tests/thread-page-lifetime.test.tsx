@@ -316,8 +316,11 @@ async function mountRoute({
     setOperation(value: Promise<unknown>) {
       operation = value;
     },
-    async rerender(provider = client) {
-      await act(async () => root.render(tree(provider)));
+    async rerender(provider = client, before?: () => void) {
+      await act(async () => {
+        before?.();
+        root.render(tree(provider));
+      });
     },
     async remount() {
       await act(async () => root.unmount());
@@ -354,6 +357,12 @@ function expectPrivatePageHidden(host: HTMLElement) {
   ])
     expect(host.innerHTML).not.toContain(text);
   expect(host.querySelector('[data-slot="document-image"]')).toBeNull();
+}
+
+function threadRefreshButton(host: HTMLElement) {
+  return [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent?.trim() === m.thread_post_refresh(),
+  );
 }
 
 afterAll(async () => {
@@ -703,6 +712,31 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
     expect(replyRegion!.querySelector('.ProseMirror')?.textContent).toContain('A retained reply draft');
     expect(replyRegion!.querySelector<HTMLInputElement>('input[name="idempotency_key"]')?.value).toBe(exactKey);
     expect(page.client.getQueryData(['thread-personal', threadId, null, id(41)])).toBeUndefined();
+
+    const editorAfterRetirement = replyRegion!.querySelector('.ProseMirror');
+    const refresh = threadRefreshButton(page.host);
+    expect(refresh).toBeDefined();
+    await act(async () => {
+      refresh!.click();
+      await Promise.resolve();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(pageReads).toHaveLength(2);
+    await act(async () => {
+      pageReads[1]!.work.reject(new Error('refresh unavailable'));
+      await pageReads[1]!.work.promise.catch(() => undefined);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expectPrivatePageHidden(page.host);
+    expect(page.host.querySelector(`section[aria-label="${m.thread_reply_label()}"]`)).toBe(replyRegion);
+    expect(replyRegion!.querySelector('.ProseMirror')).toBe(editorAfterRetirement);
+    expect(replyRegion!.querySelector('.ProseMirror')?.textContent).toContain('A retained reply draft');
+    expect(replyRegion!.querySelector<HTMLInputElement>('input[name="idempotency_key"]')?.value).toBe(exactKey);
+    expect(
+      [...page.host.querySelectorAll<HTMLButtonElement>('button')].some(
+        (button) => button.textContent?.trim() === m.thread_write_retry(),
+      ),
+    ).toBe(true);
   } finally {
     reply.mockRestore();
     await page.dispose();
@@ -730,12 +764,273 @@ test('a current explicit recovery starts a new bounded read with the original cu
     await act(async () => refresh!.click());
     expect(pageReads).toHaveLength(2);
     expect(pageReads[1]!.data).toEqual({ id: threadId, cursor, credentialMode: 'session' });
+    await page.rerender();
     await page.settlePage(1, pageFor(threadId, { privateRead: true, body: 'Fresh current page body' }));
     expect(personalReads).toHaveLength(2);
     await page.settlePersonal(1, personalFor(threadId, id(41)));
     expect(page.host.textContent).toContain('Fresh current page body');
     expect(page.host.textContent).not.toContain(m.thread_post_unavailable());
   } finally {
+    await page.dispose();
+  }
+});
+
+test('a provider replacement during cancellation prevents a queued refresh read after an away-and-back transition', async () => {
+  const threadId = id(142);
+  const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+  const replacement = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  replacement.setQueryData(sessionQuery.queryKey, signedIn());
+  try {
+    await page.settlePage(0, pageFor(threadId, { privateRead: true }));
+    await page.settlePersonal(0, personalFor(threadId, id(41)));
+    const queryKey = threadPageQuery(threadId, undefined, 'session', slug).queryKey;
+    await act(async () => page.client.removeQueries({ queryKey: ['thread-page', threadId] }));
+    const originalPath = page.router.state.location.pathname;
+    const rememberedBefore = rememberedThreadSlug(threadId);
+    const refresh = threadRefreshButton(page.host);
+    expect(refresh).toBeDefined();
+
+    await page.rerender(replacement, () => refresh!.click());
+    await page.rerender(page.client);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    expect(pageReads).toHaveLength(1);
+    expect(page.client.getQueryData(queryKey)).toBeUndefined();
+    expect(replacement.getQueryData(queryKey)).toBeUndefined();
+    expect(page.router.state.location.pathname).toBe(originalPath);
+    expect(rememberedThreadSlug(threadId)).toBe(rememberedBefore);
+  } finally {
+    replacement.clear();
+    await page.dispose();
+  }
+});
+
+test('a provider away-and-back while the refresh response is pending cannot publish or remember the old result', async () => {
+  const threadId = id(143);
+  const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+  const replacement = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  replacement.setQueryData(sessionQuery.queryKey, signedIn());
+  try {
+    await page.settlePage(0, pageFor(threadId, { privateRead: true }));
+    await page.settlePersonal(0, personalFor(threadId, id(41)));
+    const queryKey = threadPageQuery(threadId, undefined, 'session').queryKey;
+    await act(async () => page.client.removeQueries({ queryKey: ['thread-page', threadId] }));
+    const originalPath = page.router.state.location.pathname;
+    const rememberedBefore = rememberedThreadSlug(threadId);
+    const refresh = threadRefreshButton(page.host);
+    expect(refresh).toBeDefined();
+    await act(async () => {
+      refresh!.click();
+      await Promise.resolve();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(pageReads).toHaveLength(2);
+
+    await page.rerender(replacement);
+    await page.rerender(page.client);
+    await act(async () => {
+      pageReads[1]!.work.resolve(
+        pageFor(threadId, { privateRead: true, title: 'Obsolete provider title', body: 'Obsolete provider body' }),
+      );
+      await pageReads[1]!.work.promise;
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    expect(page.client.getQueryData(queryKey)).toBeUndefined();
+    expect(replacement.getQueryData(queryKey)).toBeUndefined();
+    expect(page.router.state.location.pathname).toBe(originalPath);
+    expect(rememberedThreadSlug(threadId)).toBe(rememberedBefore);
+    expect(page.host.textContent).not.toContain('Obsolete provider body');
+  } finally {
+    replacement.clear();
+    await page.dispose();
+  }
+});
+
+test('session, query, route, locale and mounted connection retirement reject pending refresh results', async () => {
+  for (const [index, retirement] of ['session', 'query', 'route', 'locale', 'connection'].entries()) {
+    const threadId = id(180 + index);
+    const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+    try {
+      await page.settlePage(0, pageFor(threadId, { privateRead: true }));
+      await page.settlePersonal(0, personalFor(threadId, id(41)));
+      const queryKey = threadPageQuery(threadId, undefined, 'session').queryKey;
+      await act(async () => page.client.removeQueries({ queryKey: ['thread-page', threadId] }));
+      const originalPath = page.router.state.location.pathname;
+      const rememberedBefore = rememberedThreadSlug(threadId);
+      const refresh = threadRefreshButton(page.host);
+      expect(refresh).toBeDefined();
+      await act(async () => {
+        refresh!.click();
+        await Promise.resolve();
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(pageReads).toHaveLength(2);
+
+      if (retirement === 'session') {
+        await act(async () => page.client.setQueryData(sessionQuery.queryKey, signedIn('replacement-csrf')));
+      } else if (retirement === 'query') {
+        await act(async () => page.client.removeQueries({ queryKey, exact: true }));
+      } else if (retirement === 'route') {
+        const away = page.router.navigate({ href: `/threads/${threadId}/${slug}?cursor=away` });
+        page.setOperation(away);
+        await Promise.resolve();
+        expect(pageReads).toHaveLength(3);
+        await page.settlePage(2, pageFor(threadId, { privateRead: true, body: 'Away route body' }));
+        const back = page.router.navigate({ href: `/threads/${threadId}/${slug}` });
+        page.setOperation(back);
+        await Promise.resolve();
+        expect(pageReads).toHaveLength(4);
+        await page.settlePage(3, pageFor(threadId, { privateRead: true, body: 'Returned route body' }));
+      } else if (retirement === 'locale') {
+        setLocale('zh-TW', { reload: false });
+        await page.rerender();
+        setLocale('en', { reload: false });
+        await page.rerender();
+      } else {
+        await page.remount();
+      }
+
+      await act(async () => {
+        pageReads[1]!.work.resolve(
+          pageFor(threadId, { privateRead: true, title: 'Retired refresh title', body: 'Retired refresh body' }),
+        );
+        await pageReads[1]!.work.promise;
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      if (retirement === 'route') {
+        expect(page.client.getQueryData(queryKey)).toEqual(
+          expect.objectContaining({ thread: expect.objectContaining({ title: 'Private page title' }) }),
+        );
+        expect(page.host.textContent).toContain('Returned route body');
+      } else {
+        expect(page.client.getQueryData(queryKey)).toBeUndefined();
+      }
+      expect(page.router.state.location.pathname).toBe(originalPath);
+      expect(rememberedThreadSlug(threadId)).toBe(rememberedBefore);
+      expect(page.host.textContent).not.toContain('Retired refresh body');
+    } finally {
+      setLocale('en', { reload: false });
+      for (const read of pageReads) read.work.resolve(pageFor(threadId, { privateRead: true }));
+      for (const read of personalReads) read.work.resolve(personalFor(threadId, id(41)));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await page.dispose();
+    }
+  }
+});
+
+test('a superseding refresh owns the result and the earlier response cannot publish', async () => {
+  const threadId = id(186);
+  const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+  try {
+    await page.settlePage(0, pageFor(threadId, { privateRead: true }));
+    await page.settlePersonal(0, personalFor(threadId, id(41)));
+    await act(async () => page.client.removeQueries({ queryKey: ['thread-page', threadId] }));
+    const queryKey = threadPageQuery(threadId, undefined, 'session').queryKey;
+    const refresh = threadRefreshButton(page.host);
+    expect(refresh).toBeDefined();
+
+    await act(async () => {
+      refresh!.click();
+      await Promise.resolve();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(pageReads).toHaveLength(2);
+    await act(async () => {
+      threadRefreshButton(page.host)!.click();
+      await Promise.resolve();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(pageReads).toHaveLength(3);
+
+    await act(async () => {
+      pageReads[1]!.work.resolve(
+        pageFor(threadId, { privateRead: true, title: 'Superseded refresh title', body: 'Superseded refresh body' }),
+      );
+      await pageReads[1]!.work.promise;
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(page.client.getQueryData(queryKey)).toBeUndefined();
+    expect(page.host.textContent).not.toContain('Superseded refresh body');
+    expect(rememberedThreadSlug(threadId)).toBe('Private page title');
+
+    await act(async () => {
+      pageReads[2]!.work.resolve(pageFor(threadId, { privateRead: true, body: 'Superseding refresh body' }));
+      await pageReads[2]!.work.promise;
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    if (personalReads.length > 1) await page.settlePersonal(1, personalFor(threadId, id(41)));
+    expect(page.host.textContent).toContain('Superseding refresh body');
+    expect(page.host.textContent).not.toContain('Superseded refresh body');
+    expect(page.client.getQueryData(queryKey)).toEqual(
+      expect.objectContaining({ thread: expect.objectContaining({ title: 'Private page title' }) }),
+    );
+  } finally {
+    for (const read of pageReads) read.work.resolve(pageFor(threadId, { privateRead: true }));
+    for (const read of personalReads) read.work.resolve(personalFor(threadId, id(41)));
+    await page.dispose();
+  }
+});
+
+test('a healthy restore refresh survives its own cancellation and removal of the page cache', async () => {
+  const threadId = id(145);
+  const restore = spyOn(actions, 'restorePost').mockImplementation(async () => ({ ok: true }) as never);
+  const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+  const storyRequire = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+  const { default: user } = await import(storyRequire.resolve('@testing-library/user-event'));
+  const userSession = user.setup({ document: window.document });
+  try {
+    const fixture = pageFor(threadId, { privateRead: true });
+    const erased = {
+      ...fixture.posts.posts[0]!,
+      body: null,
+      sha256: null,
+      availability: 'erased' as const,
+      restorableUntil: '2026-11-10T00:00:00.000Z',
+    } as ThreadReadingPage['posts']['posts'][number];
+    fixture.posts.posts = [erased];
+    await page.settlePage(0, fixture);
+    await page.settlePersonal(0, personalFor(threadId, id(41)));
+
+    const backgroundQuery = threadPageQuery(threadId, undefined, 'session', slug);
+    const backgroundRead = page.client.fetchQuery({ ...backgroundQuery, staleTime: 0, retry: false });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(pageReads).toHaveLength(2);
+
+    const restoreButton = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === m.thread_post_restore(),
+    );
+    expect(restoreButton).toBeDefined();
+    await act(async () => {
+      await userSession.click(restoreButton!);
+      await Promise.resolve();
+    });
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(pageReads).toHaveLength(3);
+    expect(pageReads[2]!.data).toEqual({ id: threadId, credentialMode: 'session' });
+
+    await act(async () => {
+      pageReads[1]!.work.resolve(pageFor(threadId, { privateRead: true, body: 'Cancelled background result' }));
+      await backgroundRead.catch(() => undefined);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      pageReads[2]!.work.resolve(pageFor(threadId, { privateRead: true, body: 'Healthy refreshed page' }));
+      await pageReads[2]!.work.promise;
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    if (personalReads.length > 1) await page.settlePersonal(1, personalFor(threadId, id(41)));
+    expect(page.host.textContent).toContain('Healthy refreshed page');
+    expect(page.host.textContent).not.toContain('Cancelled background result');
+    expect(page.client.getQueryData(threadPageQuery(threadId, undefined, 'session').queryKey)).toEqual(
+      expect.objectContaining({ thread: expect.objectContaining({ title: 'Private page title' }) }),
+    );
+  } finally {
+    restore.mockRestore();
     await page.dispose();
   }
 });
@@ -748,8 +1043,8 @@ test('cursor and locale changes retire the original mounted route before its old
     expect(page.host.textContent).toContain('Private page body disclosure');
     expect(personalReads).toHaveLength(1);
     await page.settlePersonal(0, personalFor(threadId, id(41)));
-    const next = page.router.navigate({ href: `/threads/${threadId}/${slug}?cursor=next-cursor` });
-    page.setOperation(next);
+    const nextCursorNavigation = page.router.navigate({ href: `/threads/${threadId}/${slug}?cursor=next-cursor` });
+    page.setOperation(nextCursorNavigation);
     await Promise.resolve();
     expect(pageReads).toHaveLength(2);
     expect(pageReads[1]!.data).toEqual({
@@ -766,8 +1061,8 @@ test('cursor and locale changes retire the original mounted route before its old
 
     const nextThreadId = id(151);
     const nextSlug = 'next-thread-title';
-    const next = page.router.navigate({ href: `/threads/${nextThreadId}/${nextSlug}` });
-    page.setOperation(next);
+    const nextThreadNavigation = page.router.navigate({ href: `/threads/${nextThreadId}/${nextSlug}` });
+    page.setOperation(nextThreadNavigation);
     await Promise.resolve();
     expect(pageReads).toHaveLength(3);
     expect(pageReads[2]!.data).toEqual({
