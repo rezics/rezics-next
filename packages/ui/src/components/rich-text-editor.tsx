@@ -749,7 +749,9 @@ export function RichTextEditor({
       }
     };
     editor.on('transaction', mapRange);
-    return () => editor.off('transaction', mapRange);
+    return () => {
+      editor.off('transaction', mapRange);
+    };
   }, [editor, setOwnedImagePosition, setOwnedLinkRange]);
 
   useLayoutEffect(() => {

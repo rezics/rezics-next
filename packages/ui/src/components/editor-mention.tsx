@@ -2,6 +2,7 @@
 
 import { Command, CommandItem, CommandList } from '@rezics/ui/shadcn/command';
 import { Extension, type Editor, type Extensions, type NodeViewRendererProps } from '@tiptap/core';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { RichTextEditorLabels } from './editor-labels.ts';
@@ -122,7 +123,7 @@ export function withMentionView(
               render(accountId);
               return {
                 dom,
-                update: (next) => {
+                update: (next: ProseMirrorNode) => {
                   if (next.type !== node.type) return false;
                   const nextAccountId = String(next.attrs.accountId);
                   if (accountId !== nextAccountId) {
@@ -223,6 +224,7 @@ export function MentionMenu({
     if (
       !attempt ||
       !account ||
+      !current ||
       latest.current.account !== account ||
       !attemptIsCurrent(attempt) ||
       !sameRange(current, attempt.range)
