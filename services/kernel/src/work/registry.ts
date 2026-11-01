@@ -7,6 +7,9 @@ import { WORK_QUEUES } from './queues.ts';
 import { HistoryRegistry } from '../history/registry.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createWorkerAuthorization, type WorkerAuthorization } from './authorization.ts';
+import type { KindConsentParticipant } from '@rezics/auth-contract';
+import { readAuthConsentConfig } from '../access/auth-consent.ts';
+import { createKindConsentParticipantTransport } from './kind-consent-transport.ts';
 
 export type WorkService = { stop(): Promise<void> };
 
@@ -18,6 +21,7 @@ export type WorkContext = {
   readonly clock: KernelClock;
   readonly history?: HistoryRegistry;
   getAuthorization(): WorkerAuthorization;
+  getKindConsentParticipant?(deadline: number): KindConsentParticipant | undefined;
   addEffects(effects: Effect[]): void;
   addNativeEffects?(effects: NativeEffect[]): void;
   addService(start: () => WorkService | Promise<WorkService>): void;
@@ -46,6 +50,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     names.add(module.name);
   }
   const clock = options.clock ?? systemClock;
+  const env = options.env ?? process.env;
   composed = true;
   DBOS.setConfig({
     name: WORK_APPLICATION,
@@ -71,17 +76,22 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     pool: options.pool,
     queues: WORK_QUEUES,
     client: options.client,
-    env: options.env ?? process.env,
+    env,
     clock,
     history,
     getAuthorization() {
       return (authorization ??= createWorkerAuthorization({
         pool: options.pool,
         client: options.client,
-        env: options.env ?? process.env,
+        env,
         clock,
         ...(options.receiptKeys === undefined ? {} : { receiptKeys: options.receiptKeys }),
       }));
+    },
+    getKindConsentParticipant(deadline) {
+      const config = readAuthConsentConfig(env);
+      if (!config) return undefined;
+      return createKindConsentParticipantTransport(config, deadline);
     },
     addEffects(effects) {
       if (!accepting) throw new Error('Cannot add effects after work composition');

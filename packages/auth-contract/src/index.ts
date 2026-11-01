@@ -1,5 +1,5 @@
 export type * from './auth-erasure-live.ts';
-export type * from './kind-consent.ts';
+export * from './kind-consent.ts';
 import type { AuthErasureObligationPorts } from './auth-erasure-obligations.ts';
 import type { ReadNativeCreationContext } from './native-creation-context.ts';
 export type * from './native-creation-context.ts';
@@ -12,11 +12,6 @@ export const AUTH_PAGE_OPERATION_SCOPES = Object.freeze({
   organization: Object.freeze(['organization:create'] as const),
   delete: Object.freeze(['account:delete'] as const),
 });
-
-/** Maximum consented scopes in a session or durable actor snapshot. */
-export const MAX_CONSENTED_SCOPES = 512;
-/** Maximum joined ASCII scope bytes, including the single-space separators. */
-export const MAX_CONSENTED_SCOPE_OCTETS = 66_047;
 
 export interface AccessAccount {
   accountId: string;

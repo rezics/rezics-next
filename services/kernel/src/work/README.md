@@ -190,3 +190,32 @@ refusal/rollback and late-writer cases remain UNRUN pending integration. This ad
 it consumes the existing producer's permanent fence, restore domain and native functions. History's compatible
 forward migration owns only its own original association and receiving guards. The detailed default wiring and
 same-frame Source cost handoff are in [Access](../access/README.md#cost-complete-selected-identity-unit).
+
+## Private Auth Kind enrollment participant
+
+The default `WorkContext` exposes the additive synchronous
+`getKindConsentParticipant(deadline)` getter. It reads the existing
+`KERNEL_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID` and
+`CF_ACCESS_CLIENT_SECRET` group. An absent group returns `undefined`; a partial
+or invalid group fails closed through the existing config validation. The URL
+continues to name `POST /internal/v1/consents:read`; enrollment derives the fixed
+`POST /internal/v1/kind-consents:enroll` path on that exact origin. No caller URL,
+Auth runtime, Pool or signing key enters Kernel.
+
+The returned Auth-contract participant closes over the same absolute deadline.
+Its `enroll.bound(input)` reserves the canonical Auth operation plus the maximum
+90,000-byte request and 80,000-byte response on both existing Source and Access
+byte axes. It does not create a local ledger. `enroll(input)` sends only the exact
+`{ input, deadline }` envelope with the configured Cloudflare Access service
+token, redirects disabled, bounded streamed JSON and the original deadline. Its
+one-use `enroll.actual(input, result)` checks the returned result and every native
+work axis, then adds the observed request and response body bytes. The Auth
+response's serialized work is descriptive; only this invocation association and
+the consumer's existing reservation settle the operation. Missing, malformed,
+late, dispatched-failure and repeated-call receipts return no actual charge, so
+the full reservation remains spent and a repeat must reserve again.
+
+This composes only the private Auth enrollment leg. Source invalidation and
+verification, Library adoption and restore fences, and native consent-erasure
+receiving remain with their original owners; an enrollment reference does not
+establish currentness or authorize those operations.

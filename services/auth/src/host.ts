@@ -31,6 +31,7 @@ import {
 } from './restore-admission.ts';
 import { reconcileRestoredAuthPage } from './restore-live.ts';
 import { createKindConsentParticipant } from './kind-consent.ts';
+import { createInternalConsentHandler, type InternalConsentAccessConfiguration } from './internal-consent.ts';
 
 /** Deployment lifecycle for an isolated restored database. It exposes no
  * handler, signer, SDK or maintenance writer. Durable native cursors, not this
@@ -102,7 +103,9 @@ export function createAuthRestoreHost(options: { database: Pool; restoredGenerat
 
 export class AuthHostConfigurationError extends Error {
   override readonly name = 'AuthHostConfigurationError';
-  constructor(readonly code: 'database' | 'staging-key' | 'schedule' | 'executor' | 'operation-client') {
+  constructor(
+    readonly code: 'database' | 'staging-key' | 'schedule' | 'executor' | 'operation-client' | 'private-consent',
+  ) {
     super(`Invalid Auth host configuration: ${code}`);
   }
 }
@@ -118,6 +121,8 @@ export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceO
   /** Kernel workflow approval and gate ports for the account-operation routes.
    * Absent, both routes answer 503 account_operation_denied. */
   accountOperations?: AccountOperationAccess;
+  /** Dedicated Cloudflare Access trust for the private consent listener. */
+  privateConsent?: InternalConsentAccessConfiguration;
   /** Independent native read binding; defaults to the additive accountOperations port. */
   accountManagementReads?: AccountManagementReadAccess;
   executorId?: string;
@@ -218,6 +223,24 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
   let stopping: Promise<void> | undefined;
   if (!service) throw new Error('Auth service did not start');
   const auth = service;
+  let privateConsentAccepting = false;
+  let privateConsentHandler: ((request: Request) => Promise<Response>) | undefined;
+  if (options.privateConsent) {
+    try {
+      const listener = createInternalConsentHandler({
+        ...options.privateConsent,
+        database: options.database,
+        kindConsentParticipant: auth.internal.kindConsentParticipant,
+      });
+      privateConsentHandler = (request) =>
+        privateConsentAccepting
+          ? listener(request)
+          : Promise.resolve(Response.json({ error: 'unavailable' }, { status: 503 }));
+    } catch {
+      await endPools();
+      throw new AuthHostConfigurationError('private-consent');
+    }
+  }
   // Point-read only. registerClient takes the client advisory lock on its own
   // connection, so holding that lock here would deadlock. An existing login
   // client is left unchanged, including one registered with scopes.
@@ -231,6 +254,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
   };
   const stop = () =>
     (stopping ??= (async () => {
+      privateConsentAccepting = false;
       process.off('SIGINT', interrupt);
       process.off('SIGTERM', interrupt);
       await starting?.catch(() => {});
@@ -247,6 +271,9 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     service,
     /** Private server composition; never mounted by any transport. */
     nativeLifecycleResults: createNativeLifecycleResults({ database: options.database, access: options.trustedAccess }),
+    /** Serve only on the separately configured private Tunnel/Access listener.
+     * The handler is gated by this host's start/stop lifecycle. */
+    privateConsentHandler,
     handler: accountOperationTransport(
       service,
       workflows,
@@ -298,9 +325,11 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
           await registerLoginClient();
           await workflows.start();
           await maintenance!.start(schedule);
+          privateConsentAccepting = true;
           process.once('SIGINT', interrupt);
           process.once('SIGTERM', interrupt);
         } catch (error) {
+          privateConsentAccepting = false;
           await workflows.close();
           await endPools();
           throw error;

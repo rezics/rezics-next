@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { kindConsentOperationBound } from '@rezics/auth-contract';
 import type {
   KindConsentConsumer,
   KindConsentEnrollmentInput,
@@ -79,24 +80,7 @@ export interface KindConsentWriter {
 
 const identifier = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 1024 && /^[\x21-\x7e]+$/.test(value);
-const scopePattern = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
-const scopesValid = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) &&
-  value.length <= MAX_CONSENTED_SCOPES &&
-  value.every((scope) => typeof scope === 'string' && scope.length <= 128 && scopePattern.test(scope));
-
-function validConsumer(value: unknown): value is KindConsentConsumer {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const consumer = value as Record<string, unknown>;
-  return (
-    Object.keys(consumer).length === 5 &&
-    identifier(consumer.route) &&
-    identifier(consumer.ownerAccountId) &&
-    identifier(consumer.collectionId) &&
-    identifier(consumer.preparationId) &&
-    identifier(consumer.originId)
-  );
-}
+const enrollmentDeadline = new AsyncLocalStorage<number>();
 
 function consumerOf(row: Dependency): KindConsentConsumer {
   return Object.freeze({
@@ -180,26 +164,6 @@ const PAGE_CONTROL_WORK: KindConsentWorkDeclaration = Object.freeze({
   access: Object.freeze({ keys: 0, points: 0, witnesses: 0, rows: 0, bytes: 8192, emptySeeks: 1 }),
 });
 
-function enrollmentWork(inputBytes: number, scopeCount: number): KindConsentWorkDeclaration | undefined {
-  if (![inputBytes, scopeCount].every((value) => Number.isSafeInteger(value) && value >= 0)) return undefined;
-  // The single exact Auth enrollment is one owner lookup and one dependency
-  // insert. Its declaration retains the existing shared Source/Access axes.
-  const bytes = inputBytes + scopeCount * 128;
-  return Object.freeze({
-    source: Object.freeze({
-      candidateKeys: 1,
-      nativeRows: 2,
-      identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 2,
-      witnessKeys: 1,
-      statements: 8,
-      bytes,
-    }),
-    access: Object.freeze({ keys: 1, points: 4, witnesses: 1, rows: 3, bytes, emptySeeks: 1 }),
-  });
-}
-
 /** One receiving page: 100 consumers, one invalidate plus one current verify
  * each, including page/lookahead and fixed control statements. */
 export function kindConsentTransitionPageBound(): KindConsentWorkDeclaration {
@@ -228,19 +192,73 @@ export function kindConsentTransitionPageBound(): KindConsentWorkDeclaration {
   });
 }
 
-async function withTransaction<T>(database: Pool, run: (connection: PoolClient) => Promise<T>): Promise<T> {
-  const connection = await database.connect();
+async function connectByDeadline(database: Pool, deadline?: number): Promise<PoolClient> {
+  if (deadline === undefined) return database.connect();
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('Kind consent enrollment deadline expired');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const pending = database.connect();
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('Kind consent enrollment deadline expired')), remaining);
+  });
   try {
+    return await Promise.race([pending, expired]);
+  } catch (error) {
+    void pending.then((connection) => connection.release(new Error('Kind consent enrollment deadline expired'))).catch(() => {});
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function withTransaction<T>(
+  database: Pool,
+  run: (connection: PoolClient) => Promise<T>,
+  deadline?: number,
+): Promise<T> {
+  const connection = await connectByDeadline(database, deadline);
+  let released = false;
+  const expire = () => {
+    if (released) return;
+    released = true;
+    connection.release(new Error('Kind consent enrollment deadline expired'));
+  };
+  const checkDeadline = () => {
+    if (deadline !== undefined && Date.now() >= deadline) {
+      expire();
+      throw new Error('Kind consent enrollment deadline expired');
+    }
+  };
+  const timer = deadline === undefined ? undefined : setTimeout(expire, Math.max(0, deadline - Date.now()));
+  try {
+    checkDeadline();
     await connection.query('BEGIN');
+    if (deadline !== undefined) {
+      checkDeadline();
+      const remaining = Math.max(1, deadline - Date.now());
+      await connection.query(
+        "SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true)",
+        [`${remaining}ms`, `${remaining}ms`],
+      );
+    }
     const result = await run(connection);
+    checkDeadline();
     await connection.query('COMMIT');
     return result;
   } catch (error) {
-    await connection.query('ROLLBACK');
+    if (!released) await connection.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
-    connection.release();
+    clearTimeout(timer);
+    if (!released) connection.release();
   }
+}
+
+/** Bind an absolute caller deadline to the installed native participant without
+ * changing its public enrollment callable signature. */
+export function withKindConsentEnrollmentDeadline<T>(deadline: number, run: () => Promise<T>): Promise<T> {
+  if (!Number.isSafeInteger(deadline)) return Promise.reject(new Error('Invalid Kind consent enrollment deadline'));
+  return enrollmentDeadline.run(deadline, run);
 }
 
 async function lockChange(connection: PoolClient, clientId: string, accountId?: string) {
@@ -307,16 +325,8 @@ export function createKindConsentParticipant(input: {
   >();
   async function enroll(raw: KindConsentEnrollmentInput): Promise<KindConsentEnrollmentResult> {
     const bound = kindConsentOperationBound(raw);
-    if (
-      !bound ||
-      !raw ||
-      !identifier(raw.accountId) ||
-      !identifier(raw.clientId) ||
-      !scopesValid(raw.requestedScopes) ||
-      !validConsumer(raw.consumer)
-    ) {
+    if (!bound) {
       const result: KindConsentEnrollmentResult = Object.freeze({ status: 'unavailable' });
-      enrollmentCharges.set(result, { input: raw, work: ZERO_WORK });
       return result;
     }
     const requestedScopes = [...raw.requestedScopes];
@@ -424,7 +434,7 @@ export function createKindConsentParticipant(input: {
         ).rows[0];
         if (!row) return { status: 'unavailable' };
         return { status: 'enrolled', reference: referenceOf(row.reference_id), effectiveScopes };
-      });
+      }, enrollmentDeadline.getStore());
     } catch {
       // Native coverage gaps, restore uncertainty and serialization failures
       // are unavailable; they never become empty or a negative verdict.
@@ -776,33 +786,4 @@ export function createKindConsentParticipant(input: {
   return { participant, writer };
 }
 
-export function kindConsentOperationBound(input: KindConsentEnrollmentInput): KindConsentWorkDeclaration | undefined {
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    Object.keys(input).length !== 4 ||
-    !Object.hasOwn(input, 'accountId') ||
-    !Object.hasOwn(input, 'clientId') ||
-    !Object.hasOwn(input, 'requestedScopes') ||
-    !Object.hasOwn(input, 'consumer') ||
-    !identifier(input.accountId) ||
-    !identifier(input.clientId) ||
-    !scopesValid(input.requestedScopes) ||
-    !validConsumer(input.consumer)
-  )
-    return undefined;
-  const inputBytes =
-    128 +
-    [
-      input.accountId,
-      input.clientId,
-      input.consumer.route,
-      input.consumer.ownerAccountId,
-      input.consumer.collectionId,
-      input.consumer.preparationId,
-      input.consumer.originId,
-      ...input.requestedScopes,
-    ].reduce((sum, value) => sum + Buffer.byteLength(value), 0);
-  if (inputBytes > 80_000) return undefined;
-  return enrollmentWork(inputBytes, input.requestedScopes.length);
-}
+export { kindConsentOperationBound };

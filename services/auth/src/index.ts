@@ -105,6 +105,8 @@ export type {
 } from './security-inventory.ts';
 export { createAuthHost, createAuthRestoreHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
+export { createInternalConsentHandler } from './internal-consent.ts';
+export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';
 export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';

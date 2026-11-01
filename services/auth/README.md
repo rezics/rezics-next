@@ -1784,6 +1784,34 @@ Missing trust configuration fails startup. Runtime denial and unavailability are
 sanitized, and every response is `private, no-store`. No credentials, emails,
 other owners or history are selected or returned.
 
+The same private listener can also serve the installed Auth Kind enrollment
+participant at `POST /internal/v1/kind-consents:enroll`. Set
+`AuthHostOptions.privateConsent` to the trusted Access `issuer`, `jwksUrl`,
+`audience` and `allowedServiceTokenIds`. After `host.start()`, serve
+`host.privateConsentHandler` on its own Tunnel-only listener; it is not mounted
+on `host.handler` and returns 503 before host start or after shutdown. Host
+start/stop gates the handler and owns the existing Auth pool and the one
+`service.internal.kindConsentParticipant` instance. The listener does not make
+a second participant or pool. Kernel sends exactly `{ input, deadline }`, where
+`input` is the canonical enrollment input and `deadline` is the caller's
+absolute millisecond deadline. Auth validates the exact canonical shape before
+dispatch and returns the bounded `{ result, work }` envelope only when the
+participant's one-use actual declaration is valid; timeout, dispatched failure
+or missing charge returns an unavailable envelope without a reusable charge.
+Enrollment request bodies are bounded at 90,000 bytes for the 80,000-byte
+canonical input, and response bodies at 80,000 bytes. The separate
+`/consents:read` body keeps its existing 16,384-byte ceiling.
+
+Auth holds the same frontier, client and account-consent locks around the
+enrollment. The supplied deadline bounds pool checkout and the transaction;
+Auth installs statement and lock timeouts inside that transaction. Enrollment
+uses the canonical shared operation bound, including its input, keyed lookup,
+insert and control work. Its actual callable returns the associated native
+declaration once; an uncertain retry uses the same consumer identity and a new
+caller reservation. This private transport does not implement Source
+invalidation/verification, same-home adoption fences, restore recovery or
+consent-erasure receiving.
+
 The Cost table derives the standalone exact current-consent reader and cites its
 native growth series. The private listener adds one bounded HTTP request/response
 per durable step; unauthorized requests execute zero SQL. No issuance, refresh,
