@@ -13,9 +13,16 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
+import {
+  progressIndexAdmission,
+  progressIndexSession,
+  useProgressAction,
+  useProgressEpisode,
+  type ProgressAuthority,
+} from './progress-index-origin';
 import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -50,21 +57,6 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
 
-type ProgressAuthority = { key: unknown; isCurrent: () => boolean };
-type PageLifetime = { identity: unknown; pending: boolean };
-
-function usePageLifetime(identity: unknown) {
-  const lifetime = useRef<PageLifetime | null>(null);
-  if (lifetime.current?.identity !== identity) lifetime.current = { identity, pending: false };
-  useLayoutEffect(() => {
-    const origin = (lifetime.current ??= { identity, pending: false });
-    return () => {
-      if (lifetime.current === origin) lifetime.current = null;
-    };
-  }, [identity]);
-  return lifetime;
-}
-
 const subscribe = () => () => {};
 
 /** Mounted by the real route: loader provenance is authority only for SSR/initial hydration. */
@@ -75,7 +67,9 @@ export function CurrentViewerProgressIndexPage({
   loader: CurrentViewerProgressIndex;
   requested: { subjectId?: string; cursor?: string };
 }) {
-  const session = useSession();
+  const renderedSession = useSession();
+  const client = useQueryClient();
+  const session = progressIndexSession(client, renderedSession);
   const admitted = useOperation('progress_session.list');
   const hydrated = useSyncExternalStore(
     subscribe,
@@ -86,19 +80,23 @@ export function CurrentViewerProgressIndexPage({
   const subjectId = requested.subjectId || '';
   const cursor = requested.cursor || null;
   const viewer = hydrated ? (session.state === 'signed-in' ? (session.subject ?? null) : null) : loader.viewer;
-  const allowed = hydrated ? admitted : loader.page.signedIn;
+  const allowed = hydrated
+    ? !!session.csrfToken && progressIndexAdmission(client, 'progress_session.list', admitted)
+    : loader.page.signedIn;
   const scope = JSON.stringify([viewer, allowed, subjectId, cursor, locale]);
-  const observed = useRef<{ scope: string; generation: number; mounted: boolean } | null>(null);
-  if (observed.current?.scope !== scope) {
-    observed.current = { scope, generation: (observed.current?.generation ?? 0) + 1, mounted: true };
-  }
-  const origin = observed.current;
-  useLayoutEffect(() => {
-    origin.mounted = true;
-    return () => {
-      origin.mounted = false;
-    };
-  }, [origin]);
+  const origin = useProgressEpisode(scope, () => {
+    if (getLocale() !== locale) return false;
+    if (!hydrated) return !!viewer && allowed;
+    const now = progressIndexSession(client, renderedSession);
+    return (
+      !!viewer &&
+      allowed &&
+      now.state === 'signed-in' &&
+      now.subject === viewer &&
+      !!now.csrfToken &&
+      progressIndexAdmission(client, 'progress_session.list', admitted)
+    );
+  });
   const matches = (result: CurrentViewerProgressIndex | undefined) =>
     !!viewer &&
     allowed &&
@@ -112,16 +110,31 @@ export function CurrentViewerProgressIndexPage({
   // loader cannot seed another lifetime after identity/admission retirement.
   const loaderSource = useRef({ loader, origin });
   if (loaderSource.current.loader !== loader) loaderSource.current = { loader, origin };
+  const queryKey = [
+    'library',
+    'progress',
+    'current-viewer',
+    viewer,
+    allowed,
+    subjectId,
+    cursor,
+    locale,
+    origin.generation,
+  ] as const;
   const query = useQuery({
     ...personalRead,
-    queryKey: ['library', 'progress', 'current-viewer', viewer, allowed, subjectId, cursor, locale, origin.generation],
-    queryFn: () =>
-      readCurrentViewerProgressIndex({
+    queryKey,
+    queryFn: async () => {
+      if (!origin.isCurrent()) throw new Error('Progress index read retired');
+      const result = await readCurrentViewerProgressIndex({
         data: {
           ...(subjectId ? { subjectId } : {}),
           ...(cursor ? { cursor } : {}),
         },
-      }),
+      });
+      if (!origin.isCurrent()) throw new Error('Progress index read retired');
+      return result;
+    },
     enabled: personalRead.enabled && hydrated && !!viewer && allowed,
     // Do not duplicate the bounded loader read on hydration. Invalidations still refetch.
     initialData: loaderSource.current.origin === origin && matches(loader) ? loader : undefined,
@@ -139,7 +152,7 @@ export function CurrentViewerProgressIndexPage({
   } else {
     if (latest.current.loader !== loader) {
       latest.current.loader = loader;
-      if (matches(loader)) latest.current.result = loader;
+      latest.current.result = loader;
     }
     if (latest.current.query !== query.data) {
       latest.current.query = query.data;
@@ -147,36 +160,62 @@ export function CurrentViewerProgressIndexPage({
     }
   }
   const result = hydrated ? latest.current.result : loader;
-  if (!matches(result)) return <PageHeading>{m.library_progress_heading()}</PageHeading>;
-  return (
-    <ProgressIndexPage
-      key={origin.generation}
-      page={result!.page}
-      authority={{ key: origin, isCurrent: () => observed.current === origin && origin.mounted }}
-    />
-  );
+  // A cache delivery can replace provenance before React commits its notification.
+  // Retire the page operand without automatically replaying the bounded list read.
+  const source = useProgressEpisode(origin, () => {
+    const state = client.getQueryState<CurrentViewerProgressIndex>(queryKey);
+    const delivered = state?.data !== query.data ? state?.data : result;
+    return !origin.retired && origin.validate() && state?.status !== 'error' && matches(delivered);
+  });
+  const authority: ProgressAuthority = {
+    key: source,
+    isCurrent: () => origin.isCurrent() && source.isCurrent(),
+    permits: (operation, rendered) =>
+      !source.retired && source.validate() && hydrated && progressIndexAdmission(client, operation, rendered),
+    headers: () => {
+      if (!origin.isCurrent() || !source.isCurrent() || !hydrated) return null;
+      const now = progressIndexSession(client, renderedSession);
+      return now.csrfToken ? { 'x-csrf-token': now.csrfToken } : null;
+    },
+  };
+  if (origin.retired || source.retired || query.isError || !matches(result))
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        {viewer && allowed ? (
+          <>
+            <p role="status">{m.library_progress_unavailable()}</p>
+            <Button
+              variant="outline"
+              disabled={query.isFetching}
+              onClick={() => {
+                if (origin.isCurrent()) void query.refetch();
+              }}
+            >
+              {m.library_progress_retry()}
+            </Button>
+          </>
+        ) : null}
+      </article>
+    );
+  return <ProgressIndexPage key={source.generation} page={result!.page} authority={authority} />;
 }
 
 export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; authority?: ProgressAuthority }) {
   const router = useRouter();
   const identity = authority?.key ?? page;
-  const lifetime = usePageLifetime(identity);
   const creatable = useOperation('progress_session.create');
   const admission = useRef(creatable);
   admission.current = creatable;
-  const current = (origin: PageLifetime | null): origin is PageLifetime =>
-    !!origin &&
-    lifetime.current === origin &&
-    origin.identity === identity &&
-    authority?.isCurrent() !== false &&
-    admission.current;
+  const episode = useProgressAction(authority, 'progress_session.create', creatable, identity);
+  const current = () => episode.isCurrent() && admission.current;
   const intent = useRef<ProgressStartInput | null>(null);
   const sessions = progressIndexSubjects(page.sessions);
   const [chosen, setChosen] = useState(() => {
     const subject = page.selectedSubject;
     return subject ? [pickerSubject(subject)] : [];
   });
-  const [seenIdentity, setSeenIdentity] = useState(identity);
+  const [seenIdentity, setSeenIdentity] = useState(episode);
   const [version, setVersion] = useState<ProgressPickerSubject[]>([]);
   const subject = chosen[0]?.id ?? '';
   const [choices, setChoices] = useState<ProgressChoices>(page.progressChoices);
@@ -195,8 +234,8 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
   const [alert, setAlert] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  if (seenIdentity !== identity) {
-    setSeenIdentity(identity);
+  if (seenIdentity !== episode) {
+    setSeenIdentity(episode);
     intent.current = null;
     setChoices(page.progressChoices);
     setChoicesUnavailable(page.choicesUnavailable ?? false);
@@ -206,17 +245,30 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
     setTotal('');
     setUnit('');
     setMode(page.progressChoices?.[0]?.mode);
-    setKey(page.idempotencyKey);
+    setKey(authority ? crypto.randomUUID() : page.idempotencyKey);
     setAlert(null);
     setPending(false);
     const next = page.selectedSubject;
     setChosen(next ? [pickerSubject(next)] : []);
   }
 
+  const [, renderDraft] = useState(0);
+  const draftScope = JSON.stringify([subject, chosen[0]?.type, version[0]?.id, mode, unit, total]);
+  const draftRef = useRef<{ scope: string; token: object }>({ scope: draftScope, token: {} });
+  if (draftRef.current.scope !== draftScope) draftRef.current = { scope: draftScope, token: {} };
+  const draft = draftRef.current;
+  const draftCurrent = () => current() && draftRef.current === draft;
+  const changeDraft = (change: () => void) => {
+    if (!draftCurrent() || episode.pending) return;
+    draftRef.current = { scope: draftScope, token: {} };
+    renderDraft((value) => value + 1);
+    change();
+  };
+
   async function onStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const origin = lifetime.current;
-    if (!current(origin) || origin.pending || (!intent.current && (!mode || !pair))) return;
+    const origin = episode;
+    if (!current() || !draftCurrent() || origin.pending || (!intent.current && (!mode || !pair))) return;
     origin.pending = true;
     setAlert(null);
     setPending(true);
@@ -230,8 +282,10 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
       ...(totalValue ? { total: totalValue } : {}),
     });
     try {
-      const result = await startProgressSession({ data: payload, headers: csrfHeaders() });
-      if (!current(origin)) return;
+      const headers = authority ? authority.headers() : csrfHeaders();
+      if (!headers || !current()) return;
+      const result = await startProgressSession({ data: payload, headers });
+      if (!draftCurrent()) return;
       if (!result.ok) {
         setAlert(progressFailureMessage(result.reason));
         if (authority && result.reason !== 'unavailable') {
@@ -241,11 +295,12 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
         return;
       }
       setKey(crypto.randomUUID());
+      if (!draftCurrent()) return;
       window.location.assign(router.buildLocation({ to: '/library/progress/$id', params: { id: result.id } }).href);
     } catch {
-      if (current(origin)) setAlert(m.library_progress_unavailable());
+      if (draftCurrent()) setAlert(m.library_progress_unavailable());
     } finally {
-      if (current(origin)) {
+      if (draftCurrent()) {
         origin.pending = false;
         setPending(false);
       }
@@ -294,12 +349,15 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
             <Field>
               <FieldLabel>{m.library_progress_subject()}</FieldLabel>
               <ProgressPicker
+                key={episode.generation}
+                isCurrent={draftCurrent}
                 value={chosen}
                 onValueChange={async (value) => {
-                  const origin = lifetime.current;
-                  if (!current(origin)) return;
+                  if (!draftCurrent() || episode.pending) return;
+                  draftRef.current = { scope: draftScope, token: {} };
+                  renderDraft((value) => value + 1);
                   const request = ++choiceRequest.current;
-                  const latest = () => current(origin) && request === choiceRequest.current;
+                  const latest = () => current() && request === choiceRequest.current;
                   setChosen(value);
                   setVersion([]);
                   setTotal('');
@@ -308,6 +366,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                   setChoosing(true);
                   setAlert(null);
                   try {
+                    if (!latest()) return;
                     const next = value[0]
                       ? await readProgressChoices({ data: value[0].type ?? value[0].types[0] ?? '' })
                       : undefined;
@@ -317,7 +376,10 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                     setUnit('');
                     setTotal('');
                   } catch {
-                    if (latest()) setAlert(m.library_progress_unavailable());
+                    if (latest()) {
+                      setChoicesUnavailable(true);
+                      setAlert(m.library_progress_unavailable());
+                    }
                   } finally {
                     if (latest()) setChoosing(false);
                   }
@@ -338,10 +400,12 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                 <Field>
                   <FieldLabel>{m.library_progress_version()}</FieldLabel>
                   <ProgressPicker
+                    key={episode.generation}
+                    isCurrent={draftCurrent}
                     label={m.library_progress_version()}
                     value={version}
                     onValueChange={(value) => {
-                      if (current(lifetime.current)) setVersion(value);
+                      changeDraft(() => setVersion(value));
                     }}
                   />
                   <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
@@ -367,7 +431,7 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                     name="progress-mode"
                     value={mode}
                     onValueChange={(value) => {
-                      if (current(lifetime.current)) setMode(value as ProgressMode);
+                      changeDraft(() => setMode(value as ProgressMode));
                     }}
                     className="flex flex-wrap gap-x-6 gap-y-3"
                   >
@@ -388,7 +452,10 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                       id="progress-unit"
                       name="unit"
                       value={unit}
-                      onChange={(event) => setUnit(event.currentTarget.value)}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        changeDraft(() => setUnit(value));
+                      }}
                     >
                       {units.map((choice) => (
                         <NativeSelectOption key={choice.id} value={choice.id}>
@@ -409,7 +476,10 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
                         step={pair?.step}
                         required={pair?.total === 'required'}
                         value={total}
-                        onChange={(event) => setTotal(event.target.value)}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          changeDraft(() => setTotal(value));
+                        }}
                       />
                     </Field>
                   ) : null}
@@ -461,32 +531,69 @@ function SessionRow({
   admission.current = { completable, abandonable };
   // Only a meaningful fresh row invalidates a completion within an observed viewer lifetime.
   const identity = authority ? JSON.stringify(initial) : sourcePage;
-  const lifetime = usePageLifetime(identity);
-  const current = (origin: PageLifetime | null, action?: 'complete' | 'abandon'): origin is PageLifetime =>
-    !!origin &&
-    lifetime.current === origin &&
-    origin.identity === identity &&
+  const complete = useProgressAction(authority, 'progress_session.complete', completable, identity);
+  const abandon = useProgressAction(authority, 'progress_session.abandon', abandonable, identity);
+  const row = useProgressEpisode(identity, () => true);
+  const current = (action?: 'complete' | 'abandon') =>
+    row.isCurrent() &&
     authority?.isCurrent() !== false &&
-    (!action || (action === 'complete' ? admission.current.completable : admission.current.abandonable));
+    (!action ||
+      (action === 'complete'
+        ? complete.isCurrent() && admission.current.completable
+        : abandon.isCurrent() && admission.current.abandonable));
   const intent = useRef<ProgressFinishInput | null>(null);
   const [session, setSession] = useState(initial);
-  const [seenIdentity, setSeenIdentity] = useState(identity);
+  const [seenIdentity, setSeenIdentity] = useState({ identity, complete, abandon, row });
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const [key, setKey] = useState(() => crypto.randomUUID());
-  if (identity !== seenIdentity) {
-    setSeenIdentity(identity);
-    if (!authority) intent.current = null;
-    setSession(initial);
-    setConfirming(authority ? (intent.current?.action ?? null) : null);
-    setError(!!authority && !!intent.current);
-    setPending(false);
+  if (
+    identity !== seenIdentity.identity ||
+    complete !== seenIdentity.complete ||
+    abandon !== seenIdentity.abandon ||
+    row !== seenIdentity.row
+  ) {
+    const sameRow = identity === seenIdentity.identity;
+    const action = intent.current?.action ?? confirming;
+    const previousAction = action === 'complete' ? seenIdentity.complete : seenIdentity.abandon;
+    const nextAction = action === 'complete' ? complete : abandon;
+    setSeenIdentity({ identity, complete, abandon, row });
+    // A sibling admission change cannot release this action's pending lease.
+    if (!sameRow || row !== seenIdentity.row || (action && previousAction !== nextAction)) {
+      if (!authority || previousAction.revoked) {
+        intent.current = null;
+        if (authority) setKey(crypto.randomUUID());
+      }
+      if (!sameRow) setSession(initial);
+      setConfirming(intent.current?.action ?? null);
+      setError(!!intent.current);
+      setPending(false);
+    }
   }
+  const renderedRow = useRef(session);
+  renderedRow.current = session;
+  const confirmation = useRef({ value: confirming, token: {} });
+  if (confirmation.current.value !== confirming) confirmation.current = { value: confirming, token: {} };
+  const confirmed = confirmation.current;
+  const rowCurrent = (action?: 'complete' | 'abandon') => current(action) && renderedRow.current === session;
+  const confirm = (action: 'complete' | 'abandon' | null) => {
+    if (!rowCurrent(action ?? undefined) || complete.pending || abandon.pending) return;
+    if (confirmation.current.value === action) return;
+    confirmation.current = { value: action, token: {} };
+    setConfirming(action);
+  };
   const progress = progressView(session, getLocale());
   async function finish(action: 'complete' | 'abandon') {
-    const origin = lifetime.current;
-    if (!current(origin, action) || origin.pending || (intent.current && intent.current.action !== action)) return;
+    const origin = action === 'complete' ? complete : abandon;
+    if (
+      !rowCurrent(action) ||
+      confirmation.current !== confirmed ||
+      confirmed.value !== action ||
+      origin.pending ||
+      (intent.current && intent.current.action !== action)
+    )
+      return;
     origin.pending = true;
     setPending(true);
     setError(false);
@@ -497,17 +604,20 @@ function SessionRow({
         idempotencyKey: key,
         action,
       });
-      const result = await finishProgressSession({
-        data: payload,
-        headers: csrfHeaders(),
-      });
-      if (!current(origin, action)) return;
+      const headers = authority ? authority.headers() : csrfHeaders();
+      if (!headers || !rowCurrent(action)) return;
+      const result = await finishProgressSession({ data: payload, headers });
+      if (!rowCurrent(action)) return;
       if (!result.ok) {
         setError(true);
         if (authority && result.reason !== 'unavailable') {
           intent.current = null;
           setKey(crypto.randomUUID());
         }
+        return;
+      }
+      if (result.session.id !== payload.sessionId) {
+        setError(true);
         return;
       }
       intent.current = null;
@@ -519,9 +629,9 @@ function SessionRow({
       setKey(crypto.randomUUID());
       setConfirming(null);
     } catch {
-      if (current(origin, action)) setError(true);
+      if (rowCurrent(action)) setError(true);
     } finally {
-      if (current(origin, action)) {
+      if (rowCurrent(action)) {
         origin.pending = false;
         setPending(false);
       }
@@ -550,7 +660,9 @@ function SessionRow({
               value={progress?.percent == null ? null : progress.percent / 100}
               label={progress?.text ?? m.home_continue_in_progress()}
               menu={
-                <Exposure operation="progress_session.complete">
+                <Exposure
+                  operation={authority && !completable ? 'progress_session.abandon' : 'progress_session.complete'}
+                >
                   <ListRowControl>
                     <Menu
                       title={m.library_collection_actions()}
@@ -577,20 +689,28 @@ function SessionRow({
                           : []),
                         ...(session.state === 'active'
                           ? [
-                              {
-                                type: 'item' as const,
-                                label: m.library_progress_complete(),
-                                onSelect: () => {
-                                  if (current(lifetime.current, 'complete')) setConfirming('complete');
-                                },
-                              },
-                              {
-                                type: 'item' as const,
-                                label: m.library_progress_abandon(),
-                                onSelect: () => {
-                                  if (current(lifetime.current, 'abandon')) setConfirming('abandon');
-                                },
-                              },
+                              ...(!authority || completable
+                                ? [
+                                    {
+                                      type: 'item' as const,
+                                      label: m.library_progress_complete(),
+                                      onSelect: () => {
+                                        confirm('complete');
+                                      },
+                                    },
+                                  ]
+                                : []),
+                              ...(!authority || abandonable
+                                ? [
+                                    {
+                                      type: 'item' as const,
+                                      label: m.library_progress_abandon(),
+                                      onSelect: () => {
+                                        confirm('abandon');
+                                      },
+                                    },
+                                  ]
+                                : []),
                             ]
                           : []),
                       ]}
@@ -609,7 +729,11 @@ function SessionRow({
             </p>
           ) : null}
           {confirming ? (
-            <Exposure operation="progress_session.complete">
+            <Exposure
+              operation={
+                authority && confirming === 'abandon' ? 'progress_session.abandon' : 'progress_session.complete'
+              }
+            >
               <ListRowControl className="flex flex-wrap gap-2">
                 <Button disabled={pending} onClick={() => void finish(confirming)}>
                   {confirming === 'complete'
@@ -619,7 +743,7 @@ function SessionRow({
                 <Button
                   variant="outline"
                   onClick={() => {
-                    if (current(lifetime.current)) setConfirming(null);
+                    if (confirmation.current === confirmed) confirm(null);
                   }}
                 >
                   {m.library_progress_cancel()}

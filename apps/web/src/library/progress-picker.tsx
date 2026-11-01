@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { pickText } from '@rezics/composition';
 import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { coverOf, coverSubject } from '../media/summary';
@@ -22,14 +23,20 @@ export function pickerSubject(subject: LibrarySubject): ProgressPickerSubject {
   };
 }
 
-async function search(text: string, signal: AbortSignal): Promise<ProgressPickerSubject[]> {
+async function search(text: string, signal: AbortSignal, isCurrent: () => boolean): Promise<ProgressPickerSubject[]> {
+  const check = () => {
+    if (signal.aborted || !isCurrent()) throw new Error('Progress choice search retired');
+  };
+  check();
   const locale = getLocale();
   const response = await fetch(
     `/api/search/suggestions?q=${encodeURIComponent(text)}&locale=${encodeURIComponent(locale)}`,
     { signal },
   );
+  check();
   if (!response.ok) throw new Error('Suggestions unavailable');
   const result = (await response.json()) as SuggestionResult;
+  check();
   return result.subjects.map((subject) => ({
     type: subject.type,
     id: subject.id,
@@ -41,14 +48,32 @@ async function search(text: string, signal: AbortSignal): Promise<ProgressPicker
   }));
 }
 
+const publicChoice = () => true;
+
 export function ProgressPicker({
   value,
   onValueChange,
   label = m.library_progress_subject(),
+  isCurrent = publicChoice,
 }: {
   value: readonly ProgressPickerSubject[];
   onValueChange: (value: ProgressPickerSubject[]) => void;
   label?: string;
+  isCurrent?: () => boolean;
 }) {
-  return <EntityPicker label={label} search={search} src={coverSrc} value={value} onValueChange={onValueChange} />;
+  const guardedSearch = useCallback(
+    (text: string, signal: AbortSignal) => search(text, signal, isCurrent),
+    [isCurrent],
+  );
+  return (
+    <EntityPicker
+      label={label}
+      search={guardedSearch}
+      src={coverSrc}
+      value={value}
+      onValueChange={(next) => {
+        if (isCurrent()) onValueChange(next);
+      }}
+    />
+  );
 }
