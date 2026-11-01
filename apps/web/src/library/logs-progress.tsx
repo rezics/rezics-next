@@ -2,7 +2,8 @@ import { Exposure } from '../kernel/exposure';
 import { getLocale } from '../paraglide/runtime.js';
 import { fullDateTime } from '../threads/byline';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import type { ProgressDetailOrigin } from './progress-session';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { publishProgressLog } from './logs-server';
@@ -38,38 +39,80 @@ export function RelativeTime({ value }: { value: string }) {
   );
 }
 
-function PublishLog({ page }: { page: Extract<ProgressSessionPage, { signedIn: true }> }) {
+function PublishLog({
+  page,
+  originating,
+}: {
+  page: Extract<ProgressSessionPage, { signedIn: true }>;
+  originating?: ProgressDetailOrigin;
+}) {
   const router = useRouter();
   const [note, setNote] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  type Lifetime = {
+    page: typeof page;
+    originating?: ProgressDetailOrigin;
+    pending: boolean;
+    intent?: { sessionId: string; note?: string; idempotencyKey: string };
+  };
+  const lifetime = useRef<Lifetime | null>({ page, originating, pending: false });
+  const [seenPage, setSeenPage] = useState(page);
+  const originChanged = lifetime.current !== null && lifetime.current.originating !== originating;
+  if (page !== seenPage || originChanged) {
+    setSeenPage(page);
+    if (!originating || originChanged) {
+      lifetime.current = { page, originating, pending: false };
+      setNote('');
+      setIdempotencyKey(crypto.randomUUID());
+      setPending(false);
+      setError(null);
+    }
+  }
+  useLayoutEffect(() => {
+    const origin = (lifetime.current ??= { page, originating, pending: false });
+    return () => {
+      if (lifetime.current === origin) lifetime.current = null;
+    };
+  }, [originating ?? page]);
 
+  function isCurrent(origin: Lifetime | null): origin is Lifetime {
+    return Boolean(
+      origin &&
+      lifetime.current === origin &&
+      origin.originating === originating &&
+      (originating ? originating.isCurrent(true) : origin.page === page),
+    );
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    const origin = lifetime.current;
+    if (!isCurrent(origin) || origin.pending) return;
+    const cleanNote = note.trim();
+    origin.intent ??= { sessionId: page.session.id, ...(cleanNote ? { note: cleanNote } : {}), idempotencyKey };
+    origin.pending = true;
     setPending(true);
     setError(null);
     try {
-      const cleanNote = note.trim();
-      const result = await publishProgressLog({
-        data: {
-          sessionId: page.session.id,
-          ...(cleanNote ? { note: cleanNote } : {}),
-          idempotencyKey,
-        },
-        headers: csrfHeaders(),
-      });
+      const result = await publishProgressLog({ data: origin.intent, headers: csrfHeaders() });
+      if (!isCurrent(origin)) return;
       if (!result.ok) {
         setError(result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed());
         return;
       }
+      origin.intent = undefined;
       setIdempotencyKey(crypto.randomUUID());
+      if (!isCurrent(origin)) return;
       window.location.assign(router.buildLocation({ to: '/logs/$id', params: { id: result.id } }).href);
     } catch {
+      if (!isCurrent(origin)) return;
       setError(m.library_logs_write_failed());
     } finally {
-      setPending(false);
+      if (isCurrent(origin)) {
+        origin.pending = false;
+        setPending(false);
+      }
     }
   }
 
@@ -188,15 +231,17 @@ export function ProgressLogs({
   progress,
   logs,
   search,
+  originating,
 }: {
   progress: ProgressSessionPage;
   logs: PublishedLogPage;
   search: { changes?: string; units?: string; logs?: string };
+  originating?: ProgressDetailOrigin;
 }) {
   const page = progress as Extract<ProgressSessionPage, { signedIn: true }>;
   return (
     <>
-      <PublishLog page={page} />
+      <PublishLog page={page} originating={originating} />
       <PublishedLogs
         page={logs}
         sessionId={page.session.id}

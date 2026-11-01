@@ -1,4 +1,9 @@
-import { Exposure } from '../kernel/exposure';
+import * as exposure from '../kernel/exposure';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { personalRead } from '../kernel/query';
+import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import type { ProgressDetail, ProgressDetailAddress } from './progress-detail-server';
+import { ProgressLogs } from './logs-progress';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import type { ReactNode } from 'react';
@@ -6,7 +11,7 @@ import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { isNotFound, Link } from '@tanstack/react-router';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Menu } from '@rezics/ui/menu';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -16,7 +21,14 @@ import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import { parseUnitBatch, type ProgressFailure, type ProgressSessionPage, type ProgressState } from './progress-reads';
+import {
+  parseUnitBatch,
+  type ProgressFailure,
+  type ProgressSessionPage,
+  type ProgressState,
+  type ProgressRecordInput,
+  type ProgressFinishInput,
+} from './progress-reads';
 import { finishProgressSession, recordProgressSession, readProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
@@ -27,9 +39,221 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
 
+const { Exposure } = exposure;
+const readDetail = async (data: ProgressDetailAddress, isCurrent: () => boolean) => {
+  if (!isCurrent()) throw new Error('Progress detail read retired');
+  const { readProgressDetail } = await import('./progress-detail-server');
+  if (!isCurrent()) throw new Error('Progress detail read retired');
+  const result = await readProgressDetail({ data });
+  if (!isCurrent()) throw new Error('Progress detail read retired');
+  return result;
+};
+
+const detailOperations = [
+  'progress_session.read',
+  'progress_session.changes',
+  'progress_session.units',
+  'published_log.list',
+  'progress_session.record',
+  'progress_session.complete',
+  'progress_session.abandon',
+  'published_log.create',
+] as const;
+const subscribe = () => () => {};
+
+function sameAddress(a: ProgressDetailAddress, b: ProgressDetailAddress) {
+  return a.id === b.id && a.changes === b.changes && a.units === b.units && a.logs === b.logs;
+}
+
+function matchingDetail(
+  detail: ProgressDetail | undefined,
+  viewer: string | null,
+  address: ProgressDetailAddress,
+): detail is Extract<ProgressDetail, { state: 'ready' }> {
+  return (
+    detail?.state === 'ready' &&
+    detail.viewer === viewer &&
+    sameAddress(detail.address, address) &&
+    detail.progress.signedIn &&
+    detail.logs.signedIn &&
+    detail.progress.session.id === address.id
+  );
+}
+
+/** An originating operand is stable across token rotation and ordinary authoritative refreshes. */
+export type ProgressDetailOrigin = {
+  viewer: string;
+  address: ProgressDetailAddress;
+  isCurrent: (write?: boolean) => boolean;
+  refresh: () => Promise<ProgressSessionPage>;
+};
+
+/** The route's mounted composition observes the actual session, independently of loader retention. */
+export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDetail; address: ProgressDetailAddress }) {
+  const observed = useSession();
+  const client = useQueryClient();
+  const hydrated = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
+  const read = exposure.useOperation('progress_session.read');
+  const changes = exposure.useOperation('progress_session.changes');
+  const units = exposure.useOperation('progress_session.units');
+  const logs = exposure.useOperation('published_log.list');
+  const record = exposure.useOperation('progress_session.record');
+  const complete = exposure.useOperation('progress_session.complete');
+  const abandon = exposure.useOperation('progress_session.abandon');
+  const publish = exposure.useOperation('published_log.create');
+  const admission = [read, changes, units, logs, record, complete, abandon, publish];
+  const viewer = hydrated
+    ? observed.state === 'signed-in' && observed.subject
+      ? observed.subject
+      : null
+    : loaded.viewer;
+  const allowed = !hydrated || admission.slice(0, 4).every(Boolean);
+  const locale = getLocale();
+  const signature = JSON.stringify([
+    viewer,
+    address.id,
+    address.changes,
+    address.units,
+    address.logs,
+    locale,
+    hydrated ? admission : null,
+    hydrated && Boolean(observed.csrfToken),
+  ]);
+  const [instance] = useState(() => crypto.randomUUID());
+  type Boundary = { signature: string; active: boolean; hydrated: boolean; epoch: number; seed?: ProgressDetail };
+  const boundaryRef = useRef<Boundary | null>(null);
+  const [, renderRetired] = useState(0);
+  const seeded = useRef<ProgressDetail | null>(null);
+  if (boundaryRef.current?.signature !== signature || !boundaryRef.current.active) {
+    const previous = boundaryRef.current;
+    if (previous) previous.active = false;
+    const handover = previous && !previous.hydrated && hydrated;
+    const seed =
+      allowed && matchingDetail(loaded, viewer, address) && (loaded !== seeded.current || handover)
+        ? loaded
+        : undefined;
+    if (seed) seeded.current = seed;
+    boundaryRef.current = { signature, active: true, hydrated, epoch: (previous?.epoch ?? 0) + 1, seed };
+  }
+  const boundary = boundaryRef.current;
+  useLayoutEffect(() => {
+    boundary.active = true;
+    const observe = () => {
+      // Retire even an away/back identity change batched before React's next render.
+      if (hydrated && viewer && allowed && boundary.active && !isCurrent()) {
+        boundary.active = false;
+        renderRetired((value) => value + 1);
+      }
+    };
+    const unsubscribe = client.getQueryCache().subscribe(observe);
+    observe();
+    return () => {
+      unsubscribe();
+      boundary.active = false;
+    };
+  }, [boundary, client]);
+  const queryKey = ['progress-detail', instance, signature, boundary.epoch] as const;
+  const query = useQuery({
+    ...personalRead,
+    queryKey,
+    queryFn: () => readDetail(address, isCurrent),
+    enabled: personalRead.enabled && hydrated && Boolean(viewer) && allowed,
+    initialData: boundary.seed,
+    staleTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  function isCurrent(write = false) {
+    if (boundaryRef.current !== boundary || !boundary.active || !viewer || !allowed) return false;
+    if (!hydrated) return !write;
+    const now = client.getQueryData(sessionQuery.queryKey);
+    const groups = client.getQueryData(exposureQuery.queryKey);
+    return (
+      now?.state === 'signed-in' &&
+      now.subject === viewer &&
+      Boolean(now.csrfToken) === Boolean(observed.csrfToken) &&
+      (!write || Boolean(now.csrfToken)) &&
+      detailOperations.every((operation, index) => exposure.operationIsAdmitted(operation, groups) === admission[index])
+    );
+  }
+  // The operand belongs to this admission episode, never to a response object or CSRF string.
+  const originRef = useRef<{ boundary: Boundary; value: ProgressDetailOrigin } | null>(null);
+  if (originRef.current?.boundary !== boundary && viewer) {
+    originRef.current = {
+      boundary,
+      value: {
+        viewer,
+        address,
+        isCurrent,
+        refresh: async () => {
+          if (!isCurrent()) return { signedIn: false, idempotencyKey: '' };
+          const fresh = await readDetail(address, isCurrent);
+          if (!isCurrent() || !matchingDetail(fresh, viewer, address)) return { signedIn: false, idempotencyKey: '' };
+          return fresh.progress;
+        },
+      },
+    };
+  }
+  let detail = matchingDetail(query.data, viewer, address) ? query.data : undefined;
+  if (
+    detail &&
+    matchingDetail(loaded, viewer, address) &&
+    loaded.progress.session.revision > detail.progress.session.revision
+  )
+    detail = loaded;
+  if (!viewer || !allowed || !detail)
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <p role="status">{m.library_progress_unavailable()}</p>
+        {viewer && allowed ? (
+          <Button
+            variant="outline"
+            disabled={query.isFetching}
+            onClick={() => {
+              if (isCurrent()) void query.refetch();
+            }}
+          >
+            {m.library_progress_retry()}
+          </Button>
+        ) : null}
+      </article>
+    );
+  const originating = originRef.current!.value;
+  return (
+    <ProgressSessionPage
+      key={`${instance}:${boundary.epoch}`}
+      page={detail.progress}
+      logsCursor={address.logs}
+      originating={originating}
+    >
+      <ProgressLogs progress={detail.progress} logs={detail.logs} search={address} originating={originating} />
+    </ProgressSessionPage>
+  );
+}
+
 type LoadedPage = Extract<ProgressSessionPage, { signedIn: true }>;
-type EditorLifetime = { page: LoadedPage; pending: boolean; history: symbol | null };
-const editorLifetime = (page: LoadedPage): EditorLifetime => ({ page, pending: false, history: null });
+type CapturedIntent =
+  | { kind: 'record' | 'add' | 'remove'; data: ProgressRecordInput }
+  | { kind: 'finish'; data: ProgressFinishInput };
+type EditorLifetime = {
+  page: LoadedPage;
+  originating?: ProgressDetailOrigin;
+  pending: boolean;
+  history: symbol | null;
+  retry?: CapturedIntent;
+};
+const editorLifetime = (page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime => ({
+  page,
+  originating,
+  pending: false,
+  history: null,
+});
 
 function stateLabel(state: ProgressState): string {
   if (state === 'completed') return m.library_progress_state_completed();
@@ -41,14 +265,16 @@ export function ProgressSessionPage({
   page,
   children,
   logsCursor,
+  originating,
 }: {
   page: ProgressSessionPage;
   children?: ReactNode;
   logsCursor?: string | undefined;
+  originating?: ProgressDetailOrigin;
 }) {
   if (!page.signedIn) return null;
   return (
-    <SessionEditor page={page} logsCursor={logsCursor}>
+    <SessionEditor page={page} logsCursor={logsCursor} originating={originating}>
       {children}
     </SessionEditor>
   );
@@ -58,10 +284,12 @@ function SessionEditor({
   page,
   children,
   logsCursor,
+  originating,
 }: {
   page: LoadedPage;
   children?: ReactNode;
   logsCursor?: string | undefined;
+  originating?: ProgressDetailOrigin;
 }) {
   const [session, setSession] = useState(page.session);
   const [seenPage, setSeenPage] = useState(page);
@@ -78,7 +306,7 @@ function SessionEditor({
   const [readDenied, setReadDenied] = useState(false);
   const offered = !unsupported && session.meaning === 'known' && session.recordingState === 'supported';
   const [phone, setPhone] = useState(false);
-  const lifetime = useRef<EditorLifetime | null>(editorLifetime(page));
+  const lifetime = useRef<EditorLifetime | null>(editorLifetime(page, originating));
   const addId = useId();
   const removeId = useId();
   const addHint = useId();
@@ -89,11 +317,11 @@ function SessionEditor({
 
   useLayoutEffect(() => {
     // Restore an identity after React's development effect cleanup/setup cycle.
-    const origin = (lifetime.current ??= editorLifetime(page));
+    const origin = (lifetime.current ??= editorLifetime(page, originating));
     return () => {
       if (lifetime.current === origin) lifetime.current = null;
     };
-  }, [page]);
+  }, [originating ? originating : page]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px), (pointer: coarse)');
@@ -110,26 +338,39 @@ function SessionEditor({
     setEditing(true);
   }
 
-  if (page !== seenPage) {
-    // Retire old work during replacement, before the new page can accept an operation.
-    lifetime.current = editorLifetime(page);
+  const originChanged = lifetime.current !== null && lifetime.current.originating !== originating;
+  if (page !== seenPage || originChanged) {
     setSeenPage(page);
-    setUnsupported(false);
-    setReadDenied(false);
-    setSession(page.session);
-    setKey(page.idempotencyKey);
-    setAmount('');
-    setLocator('');
-    setPosition('');
-    setAddText('');
-    setRemoveText('');
-    setEditing(false);
-    setAlert(null);
-    setConfirming(null);
+    if (originating && !originChanged) {
+      // A current refresh reconciles revision without rebuilding an unresolved command.
+      if (page.session.revision >= session.revision) setSession(page.session);
+      if (lifetime.current) lifetime.current.history = null;
+      setReadDenied(false);
+    } else {
+      // Compatible standalone pages retain their page replacement fence.
+      lifetime.current = editorLifetime(page, originating);
+      setUnsupported(false);
+      setReadDenied(false);
+      setSession(page.session);
+      setKey(page.idempotencyKey);
+      setAmount('');
+      setLocator('');
+      setPosition('');
+      setAddText('');
+      setRemoveText('');
+      setEditing(false);
+      setAlert(null);
+      setConfirming(null);
+    }
   }
 
   function isCurrent(origin: EditorLifetime | null): origin is EditorLifetime {
-    return origin !== null && lifetime.current === origin && origin.page === page;
+    return (
+      origin !== null &&
+      lifetime.current === origin &&
+      origin.originating === originating &&
+      (originating ? originating.isCurrent() : origin.page === page)
+    );
   }
 
   function explain(reason: ProgressFailure['reason'], recording = false) {
@@ -150,16 +391,18 @@ function SessionEditor({
     origin.history = request;
     const isLatest = () => isCurrent(origin) && origin.history === request;
     try {
-      const fresh = await readProgressSession({
-        data: {
-          id: session.id,
-          ...(page.changesCursor ? { changes: page.changesCursor } : {}),
-          ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
-        },
-      });
+      const fresh = originating
+        ? await originating.refresh()
+        : await readProgressSession({
+            data: {
+              id: session.id,
+              ...(page.changesCursor ? { changes: page.changesCursor } : {}),
+              ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
+            },
+          });
       if (!isLatest()) return;
       if (fresh.signedIn) {
-        setSession(fresh.session);
+        setSession((current) => (!originating || fresh.session.revision >= current.revision ? fresh.session : current));
         setReadDenied(false);
         setAlert(null);
       } else {
@@ -179,30 +422,46 @@ function SessionEditor({
     }
   }
 
-  async function onRecord() {
-    const origin = lifetime.current;
-    if (!isCurrent(origin) || origin.pending || session.state !== 'active' || !offered) return;
+  async function dispatch(intent: CapturedIntent, origin: EditorLifetime) {
+    if (!isCurrent(origin) || (originating && !originating.isCurrent(true)) || origin.pending) return;
+    origin.retry ??= intent;
+    const captured = origin.retry;
+    if (
+      captured.kind !== intent.kind ||
+      (captured.kind === 'finish' && intent.kind === 'finish' && captured.data.action !== intent.data.action)
+    )
+      return;
     setAlert(null);
-    const intent =
-      session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
     origin.pending = true;
     origin.history = null;
     try {
-      const result = await recordProgressSession({
-        data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent },
-        headers: csrfHeaders(),
-      });
-      // Dispatched native work may have committed; retirement only ignores its UI completion.
-      if (!isCurrent(origin)) return;
+      const result =
+        captured.kind === 'finish'
+          ? await finishProgressSession({ data: captured.data, headers: csrfHeaders() })
+          : await recordProgressSession({ data: captured.data, headers: csrfHeaders() });
+      // Native work may commit after retirement; its completion has no replacement UI authority.
+      if (!isCurrent(origin) || (originating && !originating.isCurrent(true))) return;
       if (!result.ok) {
-        explain(result.reason, true);
+        explain(result.reason, captured.kind !== 'finish');
         return;
       }
+      if (originating && result.session.id !== originating.address.id) {
+        setReadDenied(true);
+        return;
+      }
+      origin.retry = undefined;
       setKey(crypto.randomUUID());
-      setAmount('');
-      setLocator('');
-      setPosition('');
-      setSession((current) => ({ ...current, ...result.session }));
+      if (captured.kind === 'record') {
+        setAmount('');
+        setLocator('');
+        setPosition('');
+      }
+      if (captured.kind === 'add') setAddText('');
+      if (captured.kind === 'remove') setRemoveText('');
+      if (captured.kind === 'finish') setConfirming(null);
+      setSession((current) =>
+        !originating || result.session.revision >= current.revision ? { ...current, ...result.session } : current,
+      );
       await refreshHistory(origin);
       if (!isCurrent(origin)) return;
       setEditing(false);
@@ -214,74 +473,50 @@ function SessionEditor({
     }
   }
 
+  async function onRecord() {
+    const origin = lifetime.current;
+    if (!isCurrent(origin) || session.state !== 'active' || !offered) return;
+    const intent =
+      session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
+    await dispatch(
+      { kind: 'record', data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent } },
+      origin,
+    );
+  }
+
   async function onUnits(kind: 'add' | 'remove') {
     const origin = lifetime.current;
     if (!isCurrent(origin) || origin.pending || session.state !== 'active' || !offered) return;
+    if (origin.retry) {
+      if (origin.retry.kind === kind) await dispatch(origin.retry, origin);
+      return;
+    }
     const parsed = parseUnitBatch(kind === 'add' ? addText : removeText);
     if (!parsed.ok) {
       setAlert(parsed.reason === 'limit' ? m.library_progress_batch_limit() : m.library_progress_invalid());
       return;
     }
-    setAlert(null);
-    origin.pending = true;
-    origin.history = null;
-    try {
-      const result = await recordProgressSession({
+    await dispatch(
+      {
+        kind,
         data: {
           sessionId: session.id,
           revision: session.revision,
           idempotencyKey: key,
           ...(kind === 'add' ? { add: parsed.ids } : { remove: parsed.ids }),
         },
-        headers: csrfHeaders(),
-      });
-      if (!isCurrent(origin)) return;
-      if (!result.ok) {
-        explain(result.reason, true);
-        return;
-      }
-      setKey(crypto.randomUUID());
-      if (kind === 'add') setAddText('');
-      else setRemoveText('');
-      setSession((current) => ({ ...current, ...result.session }));
-      await refreshHistory(origin);
-      if (!isCurrent(origin)) return;
-      setEditing(false);
-    } catch {
-      if (!isCurrent(origin)) return;
-      setAlert(m.library_progress_unavailable());
-    } finally {
-      if (isCurrent(origin)) origin.pending = false;
-    }
+      },
+      origin,
+    );
   }
 
   async function onFinish(action: 'complete' | 'abandon') {
     const origin = lifetime.current;
-    if (!isCurrent(origin) || origin.pending || session.state !== 'active') return;
-    setAlert(null);
-    origin.pending = true;
-    origin.history = null;
-    try {
-      const result = await finishProgressSession({
-        data: { sessionId: session.id, action, revision: session.revision, idempotencyKey: key },
-        headers: csrfHeaders(),
-      });
-      if (!isCurrent(origin)) return;
-      if (!result.ok) {
-        explain(result.reason);
-        return;
-      }
-      setKey(crypto.randomUUID());
-      setConfirming(null);
-      setSession((current) => ({ ...current, ...result.session }));
-      await refreshHistory(origin);
-      if (!isCurrent(origin)) return;
-    } catch {
-      if (!isCurrent(origin)) return;
-      setAlert(m.library_progress_unavailable());
-    } finally {
-      if (isCurrent(origin)) origin.pending = false;
-    }
+    if (!isCurrent(origin) || session.state !== 'active') return;
+    await dispatch(
+      { kind: 'finish', data: { sessionId: session.id, action, revision: session.revision, idempotencyKey: key } },
+      origin,
+    );
   }
 
   if (readDenied) {
