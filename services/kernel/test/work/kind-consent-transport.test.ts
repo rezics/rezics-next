@@ -172,8 +172,12 @@ test('default Work composition enrolls the original Kind consumer through privat
     assert.deepEqual(result.effectiveScopes, ['books:read', 'catalogue:read']);
     const actual = participant.enroll.actual(input, result);
     assert.ok(actual);
-    assert.ok(actual.source.bytes <= bound.source.bytes);
-    assert.ok(actual.access.bytes <= bound.access.bytes);
+    for (const group of ['source', 'access']) {
+      assert.deepEqual(Object.keys(actual[group]).sort(), Object.keys(bound[group]).sort());
+      for (const [axis, value] of Object.entries(actual[group])) {
+        assert.ok(Number.isSafeInteger(value) && value >= 0 && value <= bound[group][axis], group + '.' + axis);
+      }
+    }
     assert.equal(participant.enroll.actual(input, result), undefined);
     await pool.end();
     process.stdout.write(JSON.stringify({ result, bound, actual, deadline: Number(process.env.TEST_DEADLINE) }));
