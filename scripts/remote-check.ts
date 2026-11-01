@@ -4737,7 +4737,11 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
         host,
         prepared.directory,
         prepared.connectionId,
-        { workspace: options.workspace, returns: options.returns, transferTimeoutMs: options.transferTimeoutMs },
+        {
+          workspace: options.workspace,
+          ...(options.returns === undefined ? {} : { returns: options.returns }),
+          ...(options.transferTimeoutMs === undefined ? {} : { transferTimeoutMs: options.transferTimeoutMs }),
+        },
         signal,
       );
     } catch (error) {
