@@ -65,6 +65,20 @@ test('Header search stays centered and forms one coherent surface across desktop
       expect(await owner.count()).toBe(1);
       expect(await owner.locator('input:not([type="hidden"])').count()).toBe(1);
 
+      // At the compact breakpoint the real AppShell trigger's name must match all of its visible text.
+      await page.setViewportSize({ width: 980, height: 560 });
+      const compactTrigger = owner.locator('.header-search-trigger');
+      const compactName = (await compactTrigger.innerText()).replace(/\s+/gu, ' ').trim();
+      expect(await compactTrigger.isVisible()).toBe(true);
+      expect(await compactTrigger.getAttribute('aria-label')).toBe(compactName);
+      expect(await page.getByRole('button', { name: compactName, exact: true }).count()).toBe(1);
+      expect(await compactTrigger.getAttribute('aria-keyshortcuts')).toBe('Control+k Meta+k');
+      const helpId = await compactTrigger.getAttribute('aria-describedby');
+      const help = owner.locator('[id$="-keyboard-help"]');
+      expect(helpId).toBeTruthy();
+      expect(await help.getAttribute('id')).toBe(helpId);
+      expect((await help.innerText()).trim().length).toBeGreaterThan(0);
+
       // Unequal translated control groups must not move the field or intrude into it.
       for (const width of [1280, 1024]) {
         await page.setViewportSize({ width, height: 900 });

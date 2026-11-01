@@ -115,6 +115,9 @@ export function HeaderSearchView({
   const action = headerSearchAction(locale, scope);
   const count = new Intl.NumberFormat(locale).format(region?.activeCount ?? 0);
   const subjects = suggestions === 'ready' ? (result?.subjects ?? []) : [];
+  const triggerLabel = query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global());
+  const shortcutLabel = 'Ctrl/⌘ K';
+  const triggerName = keyboardShortcut ? `${triggerLabel} ${shortcutLabel}` : triggerLabel;
   const status = !action
     ? m.header_search_scope_unavailable()
     : suggestions === 'closed'
@@ -159,7 +162,7 @@ export function HeaderSearchView({
         ref={triggerRef}
         type="button"
         onClick={onOpen}
-        aria-labelledby={`${id}-trigger-label${keyboardShortcut ? ` ${id}-trigger-shortcut` : ''}`}
+        aria-label={triggerName}
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
         aria-keyshortcuts={keyboardShortcut ? 'Control+k Meta+k' : undefined}
@@ -172,13 +175,9 @@ export function HeaderSearchView({
         )}
       >
         <RezicsMark />
-        <span id={`${id}-trigger-label`} className="truncate">
-          {query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global())}
-        </span>
+        <span className="truncate">{triggerLabel}</span>
         {keyboardShortcut && (
-          <Kbd id={`${id}-trigger-shortcut`} className="ms-auto shrink-0">
-            Ctrl/⌘ K
-          </Kbd>
+          <Kbd className="ms-auto shrink-0">{shortcutLabel}</Kbd>
         )}
       </button>
       <form

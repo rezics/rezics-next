@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { HeaderSearchView } from '../src/search/header-search/header-search';
+import { HeaderSearch, HeaderSearchView } from '../src/search/header-search/header-search';
 import { headerSearchAction } from '../src/search/header-search/authority';
 import { initialHeaderSearchState, reduceHeaderSearchState } from '../src/search/header-search/state';
 import type { SearchScope, SearchScopeKind } from '../src/search/header-search/types';
@@ -110,4 +110,30 @@ test('desktop search remains one named search form at rest and while expanded wi
     expect(markup.match(/<form\b/g)).toHaveLength(1);
     expect(markup.match(/role="combobox"/g)).toHaveLength(1);
   }
+});
+
+test('separate HeaderSearch instances keep their shortcut help and form references unique', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      'div',
+      null,
+      createElement(HeaderSearch, { locale: 'en', keyboardShortcut: true }),
+      createElement(HeaderSearch, {
+        locale: 'en',
+        keyboardShortcut: true,
+        scope: { kind: 'Collection', id: 'reading', name: 'Reading list' },
+      }),
+    ),
+  );
+  const ids = [...markup.matchAll(/\bid="([^"]+)"/gu)].map(([, id]) => id!);
+  expect(ids.length).toBeGreaterThan(0);
+  expect(new Set(ids).size).toBe(ids.length);
+
+  const references = [...markup.matchAll(/\baria-(?:controls|describedby|activedescendant)="([^"]+)"/gu)]
+    .flatMap(([, value]) => value!.split(/\s+/u))
+    .filter(Boolean);
+  for (const reference of references) expect(ids.filter((id) => id === reference)).toHaveLength(1);
+
+  expect(markup).toContain(`aria-label="${m.header_search_global()} Ctrl/⌘ K"`);
+  expect(markup).toContain(`aria-label="${m.header_search_in_scope({ scope: 'Reading list' })} Ctrl/⌘ K"`);
 });

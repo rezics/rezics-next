@@ -75,40 +75,99 @@ test('Recent omits routine storage copy while retaining history actions and trut
   }
 });
 
-test('the phone trigger is named by its exact visible localized brand, query or scope text', () => {
+test('the phone trigger name keeps its exact visible localized brand, query or scope text with a separate localized shortcut description', () => {
   const previousLocale = getLocale();
   try {
     for (const locale of locales) {
       setLocale(locale, { reload: false });
       let state = initialHeaderSearchState();
-      const named = (label: string) => {
-        const markup = present(state, { locale });
+      const named = (label: string, keyboardShortcut = false) => {
+        const markup = present(state, { locale, keyboardShortcut });
         const trigger = markup.match(/<button\b[^>]*class="header-search-trigger[^>]*>[\s\S]*?<\/button>/)?.[0];
         expect(trigger).toBeDefined();
         expect(trigger).toContain('type="button"');
-        expect(trigger).toContain('aria-labelledby="header-trigger-label"');
-        expect(trigger).not.toContain('aria-label=');
-        expect(trigger).toContain(
-          renderToStaticMarkup(createElement('span', { id: 'header-trigger-label', className: 'truncate' }, label)),
-        );
+        const triggerName = keyboardShortcut ? `${label} Ctrl/⌘ K` : label;
+        expect(trigger).toContain(renderToStaticMarkup(createElement('button', { 'aria-label': triggerName })));
+        expect(trigger).not.toContain('aria-labelledby=');
+        expect(trigger).toContain(renderToStaticMarkup(createElement('span', { className: 'truncate' }, label)));
+        const input = markup.match(/<input\b(?=[^>]*role="combobox")[^>]*>/)?.[0];
+        expect(input).toBeDefined();
+        expect(input).toContain(`aria-label="${m.search_label()}"`);
+        if (keyboardShortcut) {
+          expect(trigger).toContain('>Ctrl/⌘ K</kbd>');
+          expect(trigger).toContain('aria-describedby="header-keyboard-help"');
+          expect(trigger).toContain('aria-keyshortcuts="Control+k Meta+k"');
+          expect(markup).toContain(`id="header-keyboard-help" class="sr-only">${m.header_search_keyboard_help()}</span>`);
+        } else {
+          expect(trigger).not.toContain('aria-describedby=');
+        }
         expect(trigger).toContain('<svg aria-hidden="true"');
         expect(inputCount(markup)).toBe(1);
       };
       named(m.header_search_global());
+      named(m.header_search_global(), true);
       state = reduceHeaderSearchState(state, { type: 'sync-scope', scope });
       named(m.header_search_in_scope({ scope: scope.name }));
+      named(m.header_search_in_scope({ scope: scope.name }), true);
       state = reduceHeaderSearchState(state, { type: 'open-phone' });
       state = reduceHeaderSearchState(state, { type: 'query', query: 'Prince & fox' });
+      named('Prince & fox', true);
       state = reduceHeaderSearchState(state, { type: 'escape' });
       named('Prince & fox');
+      named('Prince & fox', true);
       state = reduceHeaderSearchState(state, { type: 'query', query: '' });
       named(m.header_search_in_scope({ scope: scope.name }));
+      named(m.header_search_in_scope({ scope: scope.name }), true);
       state = reduceHeaderSearchState(state, { type: 'remove-scope' });
       named(m.header_search_global());
+      named(m.header_search_global(), true);
     }
   } finally {
     setLocale(previousLocale, { reload: false });
   }
+});
+
+test('the single input keeps its search purpose name and associates shortcut help and expanded status descriptions', () => {
+  const input = (markup: string) => markup.match(/<input\b(?=[^>]*role="combobox")[^>]*>/)?.[0] ?? '';
+  const shortcut = { keyboardShortcut: true };
+
+  const globalRest = present(initialHeaderSearchState(), shortcut);
+  expect(input(globalRest)).toContain(`aria-label="${m.search_label()}"`);
+  expect(input(globalRest)).toContain(`placeholder="${m.header_search_global()}"`);
+  expect(input(globalRest)).toContain('aria-describedby="header-keyboard-help"');
+  expect(globalRest).toContain(m.header_search_keyboard_help());
+
+  let globalExpanded = reduceHeaderSearchState(initialHeaderSearchState(), { type: 'focus' });
+  globalExpanded = reduceHeaderSearchState(globalExpanded, { type: 'suggestions', state: 'loading' });
+  const loading = present(globalExpanded, shortcut);
+  expect(input(loading)).toContain(`aria-label="${m.search_label()}"`);
+  expect(input(loading)).toContain(`placeholder="${m.header_search_global()}"`);
+  expect(input(loading)).toContain('aria-describedby="header-keyboard-help header-status"');
+  expect(loading).toContain(`id="header-status" role="status"`);
+  expect(loading).toContain(m.header_search_loading());
+  expect(inputCount(loading)).toBe(1);
+
+  let scoped = reduceHeaderSearchState(initialHeaderSearchState(scope), { type: 'focus' });
+  scoped = reduceHeaderSearchState(scoped, { type: 'query', query: 'Prince & fox' });
+  const scopedExpanded = present(scoped, { ...shortcut, locale: 'en' });
+  expect(input(scopedExpanded)).toContain(`aria-label="${m.search_label()}"`);
+  expect(input(scopedExpanded)).toContain(`placeholder="${m.header_search_in_scope({ scope: scope.name })}"`);
+  expect(input(scopedExpanded)).toContain('aria-describedby="header-keyboard-help header-status"');
+  expect(scopedExpanded).toContain(m.header_search_scope_unavailable());
+  expect(inputCount(scopedExpanded)).toBe(1);
+
+  const collapsed = reduceHeaderSearchState(scoped, { type: 'escape' });
+  const scopedCollapsed = present(collapsed, shortcut);
+  expect(input(scopedCollapsed)).toContain(`aria-label="${m.search_label()}"`);
+  expect(input(scopedCollapsed)).toContain(`placeholder="${m.header_search_in_scope({ scope: scope.name })}"`);
+  expect(inputCount(scopedCollapsed)).toBe(1);
+
+  const phone = reduceHeaderSearchState(initialHeaderSearchState(undefined, 'Prince'), { type: 'open-phone' });
+  const phoneSheet = present(phone, shortcut);
+  expect(phoneSheet).toContain('role="dialog" aria-modal="true"');
+  expect(input(phoneSheet)).toContain(`aria-label="${m.search_label()}"`);
+  expect(input(phoneSheet)).toContain('aria-describedby="header-keyboard-help"');
+  expect(inputCount(phoneSheet)).toBe(1);
 });
 
 test('one actual query surface renders and transitions through scoped expanded and failure states without a duplicate input or authority widening', async () => {

@@ -134,6 +134,7 @@ async function expand({ canvasElement }: { canvasElement: HTMLElement }, trigger
     await userEvent.click(await canvas.findByRole('button', { name: triggerName }));
   else await userEvent.click(await canvas.findByRole('combobox', { name: m.search_label() }));
   const input = await canvas.findByRole('combobox', { name: m.search_label() });
+  await expect(input).toHaveAccessibleName(m.search_label());
   await expect(input).toHaveAttribute('aria-expanded', 'true');
   await expect(canvasElement.querySelectorAll('input[role="combobox"]')).toHaveLength(1);
   return { canvas, input };
@@ -198,7 +199,9 @@ export const Rest: Story = {
 export const ScopeChip: Story = {
   render: () => <Example scope={scope} />,
   play: async (context) => {
-    const { canvas } = await expand(context, m.header_search_in_scope({ scope: scope.name }));
+    const { canvas, input } = await expand(context, m.header_search_in_scope({ scope: scope.name }));
+    await expect(input).toHaveAttribute('placeholder', m.header_search_in_scope({ scope: scope.name }));
+    await expect(input).toHaveAccessibleName(m.search_label());
     await expect(
       canvas.getByRole('button', { name: m.header_search_remove_scope({ scope: scope.name }) }),
     ).toBeVisible();
@@ -218,6 +221,7 @@ export const Typing: Story = {
     const { input } = await expand(context);
     await userEvent.type(input, 'The');
     await expect(input).toHaveValue('The');
+    await expect(input).toHaveAccessibleName(m.search_label());
   },
 };
 export const ScopeRemoved: Story = {
@@ -229,6 +233,7 @@ export const ScopeRemoved: Story = {
       canvas.queryByRole('button', { name: m.header_search_remove_scope({ scope: scope.name }) }),
     ).toBeNull();
     await expect(input).toHaveAttribute('placeholder', m.header_search_global());
+    await expect(input).toHaveAccessibleName(m.search_label());
   },
 };
 export const FiltersOpen: Story = {

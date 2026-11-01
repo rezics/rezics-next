@@ -22,6 +22,7 @@ export const KeyboardEntry: Story = {
     await userEvent.keyboard('{Control>}k{/Control}');
     const input = await canvas.findByRole('combobox', { name: m.search_label() });
     await waitFor(() => expect(input).toHaveFocus());
+    await expect(input).toHaveAccessibleName(m.search_label());
     await expect(input).toHaveAttribute('aria-keyshortcuts', 'Control+k Meta+k');
     await expect(context.canvasElement.querySelectorAll('[data-header-search]')).toHaveLength(1);
     await userEvent.clear(input);
@@ -29,6 +30,11 @@ export const KeyboardEntry: Story = {
     await userEvent.type(input, 'A retained draft');
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(origin).toHaveFocus());
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      const trigger = canvas.getByRole('button', { name: 'A retained draft Ctrl/⌘ K', exact: true });
+      await expect(trigger).toBeVisible();
+      await expect(trigger).toHaveAccessibleDescription(m.header_search_keyboard_help());
+    }
     await userEvent.keyboard('{Meta>}k{/Meta}');
     await waitFor(() => expect(input).toHaveFocus());
     await expect(input).toHaveValue('A retained draft');
