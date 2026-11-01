@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -14,6 +14,7 @@ import {
 } from '../src/platform/exposure/data';
 import { PlatformExposurePage } from '../src/platform/exposure/page';
 import { ExposureOperation } from '../src/platform/exposure/operation';
+import * as exposureData from '../src/platform/exposure/data';
 
 const at = '2026-10-31T00:00:00.123456Z';
 const row = { group: 'collections', open: true, at };
@@ -160,4 +161,71 @@ test('paging reload and denied current reads preserve the original uncertain ope
   expect(controller.intent).toBe(original);
   expect(controller.outcome?.status).toBe('uncertain');
   expect(native.calls.filter((url) => url.pathname.endsWith(':open'))).toHaveLength(1);
+});
+
+test('production reader envelope binds the actual same prepared request and keeps a healthy null-CSRF reader', async () => {
+  const request = new Request('https://site.test/en/platform/exposure');
+  const observed: { prepared?: Request; credential?: Request; subject?: Request; authorization?: string } = {};
+  const page: Page = {
+    status: 'ready',
+    groups: ['collections'],
+    inventory: 'visible-only',
+    current: { status: 'unavailable', missing: 'native-current-exposure-management-read' },
+    authority: { status: 'unavailable' },
+  };
+  mock.module('@tanstack/react-start', () => ({
+    createServerFn: (_options: unknown) => {
+      let validate = (value: unknown) => value;
+      const chain = {
+        validator(next: (value: unknown) => unknown) {
+          validate = next;
+          return chain;
+        },
+        handler<T extends (input: { data: unknown }) => unknown>(handler: T) {
+          return (input: { data: unknown }) =>
+            Promise.resolve(handler({ ...input, data: validate(input.data) }));
+        },
+      };
+      return chain;
+    },
+  }));
+  mock.module('@tanstack/react-start/server', () => ({
+    getRequest: () => request,
+    setResponseHeader: () => undefined,
+  }));
+  mock.module('cloudflare:workers', () => ({ env: { KERNEL_ORIGIN: 'https://kernel.example.test' } }));
+  mock.module('../src/session/request', () => ({
+    prepareSession: async (prepared: Request) => {
+      observed.prepared = prepared;
+      return false;
+    },
+    viewerCredential: (prepared: Request) => {
+      observed.credential = prepared;
+      return (observed.authorization = 'Bearer actual-reader');
+    },
+    sessionSubject: (prepared: Request) => {
+      observed.subject = prepared;
+      return 'actual-reader-subject';
+    },
+  }));
+  mock.module('../src/kernel/client', () => ({ kernelClient: () => ({}) }));
+  mock.module('../src/platform/exposure/data', () => ({
+    ...exposureData,
+    loadExposure: async (_client: unknown, authorization: string) => {
+      observed.authorization = authorization;
+      return page;
+    },
+  }));
+
+  try {
+    const { readPlatformExposureBound } = await import('../src/platform/exposure/actions');
+    const result = await readPlatformExposureBound({ data: { limit: 1 } });
+    expect(result).toEqual({ page, sessionSubject: 'actual-reader-subject' });
+    expect(observed.prepared).toBe(request);
+    expect(observed.credential).toBe(request);
+    expect(observed.subject).toBe(request);
+    expect(observed.authorization).toBe('Bearer actual-reader');
+  } finally {
+    mock.restore();
+  }
 });

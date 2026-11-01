@@ -3,66 +3,48 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
-import {
-  hasExposureGroup,
-  parseIntent,
-  type ExposureQuery,
-  type Action,
-  type Intent,
-  type Outcome,
-  type Page,
-} from './data';
+import type { Action, ExposureQuery, ExposureReaderEnvelope, Intent, Outcome, Page } from './data';
 import { ExposureOperation } from './operation';
+import { useExposureVisit, type ExposureBoundIO } from './lifetime';
 
-type IO = {
+type StandaloneIO = {
   read(query?: ExposureQuery): Promise<Page>;
   change(intent: Intent, query?: ExposureQuery): Promise<Outcome>;
 };
 const actionLabel = (action: Action) => (action === 'open' ? m.exposure_open() : m.exposure_close());
 
-export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO }) {
-  const [page, setPage] = useState(initial);
-  const [operation] = useState(() => new ExposureOperation());
-  const [, render] = useState(0);
-  const [reading, setReading] = useState(false);
-  const [selection, setSelection] = useState<ExposureQuery>({});
-  const inFlight = useRef(false);
-  const intent = operation.intent;
-  const outcome = operation.outcome;
-  const busy = operation.busy || reading;
+type ViewProps = {
+  page: Page;
+  selection: ExposureQuery;
+  intent: Intent | null;
+  outcome: Outcome | null;
+  busy: boolean;
+  canReview: boolean;
+  canSend: boolean;
+  onReload(): void;
+  onFirstPage(): void;
+  onNextPage(): void;
+  onReview(group: string, action: Action): void;
+  onConfirm(): void;
+  onCancel(): void;
+};
+
+function ExposureView({
+  page,
+  selection,
+  intent,
+  outcome,
+  busy,
+  canReview,
+  canSend,
+  onReload,
+  onFirstPage,
+  onNextPage,
+  onReview,
+  onConfirm,
+  onCancel,
+}: ViewProps) {
   const offered = page.status === 'ready' && page.authority.status === 'available' ? page.authority.offered : [];
-  const canSend =
-    intent && page.status === 'ready' && hasExposureGroup(page, intent.group) && offered.includes(intent.action);
-  const update = () => render((value) => value + 1);
-
-  async function read(query: ExposureQuery = selection) {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    setReading(true);
-    try {
-      setSelection(query);
-      setPage(await io.read(query));
-    } catch {
-      setPage({ status: 'unavailable' });
-    } finally {
-      inFlight.current = false;
-      setReading(false);
-    }
-  }
-  async function send() {
-    if (inFlight.current || !canSend) return;
-    inFlight.current = true;
-    const pending = operation.send((intent) => io.change(intent, selection));
-    update();
-    try {
-      const result = await pending;
-      if (result) setPage(result.current);
-    } finally {
-      inFlight.current = false;
-      update();
-    }
-  }
-
   return (
     <article className="mx-auto w-full max-w-3xl space-y-6 pb-8">
       <header className="space-y-3">
@@ -72,7 +54,7 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
       {(page.status !== 'ready' || page.current.status === 'unavailable') && (
         <p role="status">{m.exposure_current_unavailable()}</p>
       )}
-      <Button variant="outline" disabled={busy} onClick={() => void read()}>
+      <Button variant="outline" disabled={busy} onClick={onReload}>
         {m.exposure_reload()}
       </Button>
       {page.status !== 'ready' ? (
@@ -93,19 +75,12 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
           </p>
           <div className="flex flex-wrap gap-3">
             {selection.cursor && (
-              <Button variant="outline" disabled={busy} onClick={() => void read({ limit: selection.limit ?? 20 })}>
+              <Button variant="outline" disabled={busy} onClick={onFirstPage}>
                 {m.exposure_first_page()}
               </Button>
             )}
             {page.current.status === 'available' && page.current.next && (
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  if (page.current.status === 'available' && page.current.next)
-                    void read({ cursor: page.current.next, limit: selection.limit ?? 20 });
-                }}
-              >
+              <Button variant="outline" disabled={busy} onClick={onNextPage}>
                 {m.exposure_next_page()}
               </Button>
             )}
@@ -140,12 +115,9 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
                     <Button
                       key={action}
                       variant="outline"
-                      disabled={busy || intent !== null}
+                      disabled={busy || !canReview || intent !== null}
                       aria-label={m.exposure_action_group({ action: actionLabel(action), group })}
-                      onClick={() => {
-                        operation.review(parseIntent({ group, action, key: crypto.randomUUID(), body: {} }));
-                        update();
-                      }}
+                      onClick={() => onReview(group, action)}
                     >
                       {actionLabel(action)}
                     </Button>
@@ -171,17 +143,10 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
           </p>
           {outcome === null && (
             <div className="flex flex-wrap gap-3">
-              <Button disabled={busy || !canSend} onClick={() => void send()}>
+              <Button disabled={busy || !canSend} onClick={onConfirm}>
                 {m.exposure_confirm()}
               </Button>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  operation.cancel();
-                  update();
-                }}
-              >
+              <Button variant="outline" disabled={busy} onClick={onCancel}>
                 {m.exposure_cancel()}
               </Button>
             </div>
@@ -189,7 +154,7 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
           {outcome?.status === 'uncertain' && (
             <>
               <p>{m.exposure_keep_operation()}</p>
-              <Button variant="outline" disabled={busy || !canSend} onClick={() => void send()}>
+              <Button variant="outline" disabled={busy || !canSend} onClick={onConfirm}>
                 {m.exposure_retry()}
               </Button>
             </>
@@ -212,4 +177,135 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
       )}
     </article>
   );
+}
+
+/** Compatibility surface for isolated Page/IO hosts without a fabricated session binding. */
+export function PlatformExposurePage({ initial, io }: { initial: Page; io: StandaloneIO }) {
+  const [page, setPage] = useState(initial);
+  const [operation, setOperation] = useState(() => new ExposureOperation());
+  const [, render] = useState(0);
+  const [reading, setReading] = useState(false);
+  const [selection, setSelection] = useState<ExposureQuery>({});
+  const inFlight = useRef(false);
+  const input = useRef(initial);
+  const generation = useRef(0);
+
+  if (input.current !== initial) {
+    input.current = initial;
+    generation.current++;
+    inFlight.current = false;
+    setPage(initial);
+    setOperation(new ExposureOperation());
+    setReading(false);
+    setSelection({});
+  }
+
+  const intent = operation.intent;
+  const outcome = operation.outcome;
+  const busy = operation.busy || reading;
+  const offered = page.status === 'ready' && page.authority.status === 'available' ? page.authority.offered : [];
+  const canReview = page.status === 'ready' && page.authority.status === 'available';
+  const canSend =
+    intent && page.status === 'ready' && hasGroup(page, intent.group) && offered.includes(intent.action) ? true : false;
+  const update = () => render((value) => value + 1);
+
+  async function read(query: ExposureQuery = selection) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    const ticket = generation.current;
+    setReading(true);
+    try {
+      const result = await io.read(query);
+      if (ticket === generation.current) {
+        setSelection(query);
+        setPage(result);
+      }
+    } catch {
+      if (ticket === generation.current) setPage(unavailablePage());
+    } finally {
+      if (ticket === generation.current) {
+        inFlight.current = false;
+        setReading(false);
+      }
+    }
+  }
+
+  async function send() {
+    if (inFlight.current || !canSend) return;
+    inFlight.current = true;
+    const ticket = generation.current;
+    const pending = operation.send((submitted) => io.change(submitted, selection));
+    update();
+    try {
+      const result = await pending;
+      if (ticket === generation.current && result) setPage(result.current);
+    } finally {
+      if (ticket === generation.current) {
+        inFlight.current = false;
+        update();
+      }
+    }
+  }
+
+  return (
+    <ExposureView
+      page={page}
+      selection={selection}
+      intent={intent}
+      outcome={outcome}
+      busy={busy}
+      canReview={canReview}
+      canSend={!!canSend}
+      onReload={() => void read()}
+      onFirstPage={() => void read({ limit: selection.limit ?? 20 })}
+      onNextPage={() => {
+        if (page.status === 'ready' && page.current.status === 'available' && page.current.next)
+          void read({ cursor: page.current.next, limit: selection.limit ?? 20 });
+      }}
+      onReview={(group, action) => {
+        operation.review({ group, action, key: crypto.randomUUID(), body: {} });
+        update();
+      }}
+      onConfirm={() => void send()}
+      onCancel={() => {
+        operation.cancel();
+        update();
+      }}
+    />
+  );
+}
+
+/** Route-only path: its initial page and every continuation carry a same-request reader binding. */
+export function PlatformExposureBoundPage({ initial, io }: { initial: ExposureReaderEnvelope; io: ExposureBoundIO }) {
+  const visit = useExposureVisit(initial, io);
+  const page = visit.currentPage;
+  return (
+    <ExposureView
+      page={page}
+      selection={visit.selection}
+      intent={visit.intent}
+      outcome={visit.outcome}
+      busy={visit.busy}
+      canReview={visit.canReview}
+      canSend={visit.canSend}
+      onReload={() => void visit.read()}
+      onFirstPage={() => void visit.read({ limit: visit.selection.limit ?? 20 })}
+      onNextPage={() => {
+        if (page.status === 'ready' && page.current.status === 'available' && page.current.next)
+          void visit.read({ cursor: page.current.next, limit: visit.selection.limit ?? 20 });
+      }}
+      onReview={(group, action) => visit.review(group, action)}
+      onConfirm={() => void visit.send()}
+      onCancel={() => visit.cancel()}
+    />
+  );
+}
+
+function hasGroup(page: Extract<Page, { status: 'ready' }>, group: string) {
+  return page.groups.includes(group) ||
+    (page.current.status === 'available' && page.current.exposureGroups.some((row) => row.group === group));
+}
+
+function unavailablePage(): Page {
+  return { status: 'unavailable' };
 }

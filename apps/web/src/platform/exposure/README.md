@@ -52,6 +52,23 @@ errors are unavailable, never denied by inference.
 The session guard also classifies this route as private so the root cannot prepare anonymous exposure during SSR.
 Messages currently use English fallbacks in every supported locale.
 
+The production route uses `readPlatformExposureBound` to return a serializable `{ page, sessionSubject }` envelope.
+`sessionSubject` is captured from the same prepared request that supplied the credential for that read; an absent
+subject remains unbound. The original `Page`, `readPlatformExposure` and `changePlatformExposure` contracts stay
+unchanged for standalone callers. The mounted page compares the envelope's actual reader with the existing
+successful session-cache observation before showing private rows or admitting a command. That comparison does not
+authenticate the route or create browser authority from loader data. The page keeps the existing private first-render
+boundary: SSR can render only a reader-bound page from the signed-in route's session cache, and mutation controls stay
+disabled until the mounted browser owner connects.
+
+The feature-local lifetime observes only committed session success, error and removal events. Ordinary fetch and
+observer notifications and route IO closure allocation do not retire it. A same-subject successful replacement keeps
+healthy read-only rows but retires its pending read and frozen CSRF continuation; a different subject, sign-out,
+retained-data error, removal, provider replacement or real unmount retires the rows and continuation. An eligible
+fresh visit must perform a new bound read before it can act. Confirm and explicit retry retain the first CSRF token
+and the exact frozen operation. Retired or late command results remain hidden historical state, and cannot settle a
+successor. Standalone `PlatformExposurePage` keeps its injected Page/IO path without claiming session authority.
+
 Retained integration acceptance: `bun scripts/worker-check.ts --local -- bun run --cwd apps/auth test`, including
 “Manage existing platform exposure data through native open and close actions preserves exact current native
 authority target privacy and immutable operation readback”. The focused local transport tests exercise the web

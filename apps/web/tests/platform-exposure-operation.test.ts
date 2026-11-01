@@ -34,3 +34,32 @@ test('confirmation freezes a copy, rejects newline keys, and excludes double sub
   expect(controller.review({ ...input, action: 'close' })).toBe(false);
   expect(controller.cancel()).toBe(false);
 });
+
+test('explicit retry keeps its first CSRF continuation and retirement preserves an unresolved immutable source record', async () => {
+  const controller = new ExposureOperation();
+  expect(controller.review(input)).toBe(true);
+  const original = controller.intent;
+  const tokens: string[] = [];
+  const uncertain: Outcome = { status: 'uncertain', operation: original!, current: { status: 'unavailable' } };
+  expect((await controller.send(async (_intent, token) => {
+    tokens.push(token ?? '');
+    return uncertain;
+  }, 'csrf-original'))?.status).toBe('uncertain');
+  expect((await controller.send(async (_intent, token) => {
+    tokens.push(token ?? '');
+    return { status: 'uncertain', operation: original!, current: { status: 'unavailable' } };
+  }, 'csrf-replacement'))?.status).toBe('uncertain');
+  expect(tokens).toEqual(['csrf-original', 'csrf-original']);
+  expect(controller.intent).toBe(original);
+
+  let finish!: (result: Outcome) => void;
+  const pending = controller.send(() => new Promise<Outcome>((resolve) => (finish = resolve)), 'csrf-original');
+  controller.retire();
+  expect(controller.intent).toBe(original);
+  expect(controller.outcome?.status).toBe('uncertain');
+  expect(await controller.send(async () => ({ status: 'not-sent', current: { status: 'unavailable' } }))).toBeNull();
+  finish({ status: 'not-sent', current: { status: 'unavailable' } });
+  expect(await pending).toBeNull();
+  expect(controller.intent).toBe(original);
+  expect(controller.outcome?.status).toBe('uncertain');
+});

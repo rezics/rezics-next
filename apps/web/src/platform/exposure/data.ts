@@ -27,6 +27,8 @@ export function parseExposureQuery(value: unknown = {}): ExposureQuery {
 export type Page =
   | { status: 'ready'; groups: string[]; inventory: 'visible-only'; current: CurrentExposure; authority: Authority }
   | { status: 'signed-out' | 'denied' | 'unavailable' };
+/** The production reader identity captured from the same prepared request as its credential. */
+export type ExposureReaderEnvelope = Readonly<{ page: Page; sessionSubject: string | null }>;
 export type Outcome =
   | {
       status: 'recorded';

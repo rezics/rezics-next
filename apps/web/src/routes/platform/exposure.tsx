@@ -1,29 +1,27 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { changePlatformExposure, readPlatformExposure } from '../../platform/exposure/actions';
-import { PlatformExposurePage } from '../../platform/exposure/page';
+import { changePlatformExposure, readPlatformExposureBound } from '../../platform/exposure/actions';
+import { PlatformExposureBoundPage } from '../../platform/exposure/page';
 import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
-import { useSession } from '../../session/query';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/platform/exposure')({
   beforeLoad: requireSignedIn,
-  loader: () => readPlatformExposure({ data: {} }),
+  loader: () => readPlatformExposureBound({ data: {} }),
   head: ({ match }) =>
     pageHead({ title: m.exposure_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ExposureRoute,
 });
 function ExposureRoute() {
   const initial = Route.useLoaderData();
-  const { csrfToken } = useSession();
   return (
-    <PlatformExposurePage
+    <PlatformExposureBoundPage
       initial={initial}
       io={{
-        read: (data = {}) => readPlatformExposure({ data }),
-        change: (operation, query = {}) =>
-          changePlatformExposure({ data: { operation, query }, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        read: (query = {}) => readPlatformExposureBound({ data: query }),
+        change: (operation, query, csrfToken) =>
+          changePlatformExposure({ data: { operation, query }, headers: { 'X-CSRF-Token': csrfToken } }),
       }}
     />
   );
