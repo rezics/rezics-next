@@ -22,6 +22,7 @@ export type FollowCountsRead = {
 };
 export type FollowCountsViewer = { subject: string; csrfToken: string };
 export type FollowCountsPage = FollowCountsRead & { viewer: FollowCountsViewer | null };
+export type FollowCountsReader = (input: { data: FollowCountsSearch }) => Promise<FollowCountsPage>;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function record(value: unknown): value is Record<string, unknown> {
@@ -158,13 +159,15 @@ export const readPrivateFollowCountsPage = createServerFn({ method: 'GET' })
     return page;
   });
 
-/** Browser-only, one explicit load per identity/context; no retries, polling or stale account fallback. */
+/** Browser-only read, optionally partitioned by mounted admission; no retries, polling or stale account fallback. */
 export function privateFollowCountsQuery(
   viewer: FollowCountsViewer,
   input: FollowCountsSearch,
-  read: (input: { data: FollowCountsSearch }) => Promise<FollowCountsPage> = readPrivateFollowCountsPage,
+  read: FollowCountsReader = readPrivateFollowCountsPage,
+  lifetime?: { key: string; isCurrent: () => boolean },
 ) {
   const context = followCountsSearch(input);
+  const retired: FollowCountsPage = { viewer: null, context, outgoing: { state: 'unavailable' }, target: null };
   return queryOptions({
     ...personalRead,
     queryKey: [
@@ -174,16 +177,21 @@ export function privateFollowCountsQuery(
       context.targetType ?? '',
       context.targetId ?? '',
       !!context.invalidContext,
+      ...(lifetime ? [lifetime.key] : []),
     ],
     queryFn: async ({ signal }): Promise<FollowCountsPage> => {
+      signal.throwIfAborted();
+      if (lifetime && !lifetime.isCurrent()) return retired;
       const page = await read({ data: context });
       signal.throwIfAborted();
+      if (lifetime && !lifetime.isCurrent()) return retired;
+      const actualContext = followCountsSearch(page.context);
       if (
         page.viewer?.subject !== viewer.subject ||
         page.viewer.csrfToken !== viewer.csrfToken ||
-        page.context.targetType !== context.targetType ||
-        page.context.targetId !== context.targetId ||
-        !!page.context.invalidContext !== !!context.invalidContext
+        actualContext.targetType !== context.targetType ||
+        actualContext.targetId !== context.targetId ||
+        !!actualContext.invalidContext !== !!context.invalidContext
       )
         return {
           viewer: null,

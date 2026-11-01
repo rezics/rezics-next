@@ -1,13 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
+import { useEffect, useRef } from 'react';
+import { useOperation } from '../kernel/exposure';
+import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 import { PageHeading } from '../shell/page-heading';
 import { privateFollowCountsHref } from './private-follow-counts-link';
 import {
+  followCountsSearch,
   privateFollowCountsQuery,
   type FollowCountsRead,
+  type FollowCountsReader,
   type FollowCountsSearch,
   type FollowCountState,
 } from './private-follow-counts';
@@ -128,33 +133,82 @@ export function PrivateFollowCountsPageView({
   );
 }
 
-export function PrivateFollowCountsPage({ context }: { context: FollowCountsSearch }) {
+type CurrentRead = { identity: string; key: string; isCurrent: () => boolean };
+
+export function PrivateFollowCountsPage({
+  context: input,
+  read,
+}: {
+  context: FollowCountsSearch;
+  read?: FollowCountsReader;
+}) {
   const session = useSession();
+  // Both native count routes belong to personal_library. This is UI admission only.
+  const admitted = useOperation('follow.list');
+  const context = followCountsSearch(input);
   const viewer = { subject: session.subject ?? '', csrfToken: session.csrfToken ?? '' };
+  const identity =
+    session.state === 'signed-in' && viewer.subject && viewer.csrfToken && admitted
+      ? JSON.stringify([viewer.subject, viewer.csrfToken, context, getLocale()])
+      : null;
+  const mounted = useRef(true);
+  const current = useRef<CurrentRead | null>(null);
+  // Retire during render, before a stale callback or pending completion can act.
+  // A return to the same identity/context receives a new, unseeded cache entry.
+  if (identity === null) current.current = null;
+  else if (current.current?.identity !== identity) {
+    const lifetime: CurrentRead = {
+      identity,
+      key: crypto.randomUUID(),
+      isCurrent: () => mounted.current && current.current === lifetime,
+    };
+    current.current = lifetime;
+  }
+  const lifetime = current.current;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const query = useQuery({
-    ...privateFollowCountsQuery(viewer, context),
-    enabled: session.state === 'signed-in' && !!viewer.subject && !!viewer.csrfToken,
+    ...privateFollowCountsQuery(viewer, context, read, lifetime ?? undefined),
+    enabled: personalRead.enabled && lifetime !== null,
   });
-  const preparing =
-    session.state === 'unknown' ||
-    (session.state === 'signed-in' && !!viewer.subject && !!viewer.csrfToken && query.isPending);
-  // Hide the previous scalar during refresh, identity changes, session failure and sign-out.
+  const busy = session.state === 'unknown' || (lifetime !== null && (query.isPending || query.isFetching));
+  const outcome: FollowCountState = {
+    state:
+      session.state === 'unknown'
+        ? 'loading'
+        : session.state === 'signed-out'
+          ? 'signed-out'
+          : session.state !== 'signed-in' || !viewer.subject || !viewer.csrfToken
+            ? 'unavailable'
+            : !admitted
+              ? 'closed'
+              : busy
+                ? 'loading'
+                : 'unavailable',
+  };
   const page: FollowCountsRead =
-    session.state === 'signed-in' && !query.isFetching && !query.isError && query.data
+    lifetime?.isCurrent() && !query.isFetching && !query.isError && query.data
       ? query.data
       : {
           context,
-          outgoing: {
-            state:
-              preparing || query.isFetching ? 'loading' : session.state === 'signed-out' ? 'signed-out' : 'unavailable',
-          },
-          target: null,
+          outgoing: outcome,
+          target: context.targetType && context.targetId ? outcome : null,
         };
   return (
     <PrivateFollowCountsPageView
       page={page}
-      busy={preparing || query.isFetching}
-      {...(session.state === 'signed-in' ? { onReload: () => void query.refetch() } : {})}
+      busy={busy}
+      {...(lifetime
+        ? {
+            onReload: () => {
+              if (lifetime.isCurrent() && !query.isFetching) void query.refetch();
+            },
+          }
+        : {})}
     />
   );
 }
