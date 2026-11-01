@@ -63,9 +63,7 @@ function sameQueryKey(left: readonly unknown[], right: readonly unknown[]): bool
 }
 
 function removePrivateObservation(client: QueryClient, queryKey: AgentReaderQueryKey): void {
-  void client
-    .cancelQueries({ queryKey, exact: true })
-    .finally(() => client.removeQueries({ queryKey, exact: true }));
+  void client.cancelQueries({ queryKey, exact: true }).finally(() => client.removeQueries({ queryKey, exact: true }));
 }
 
 /** The public profile routes share this browser-only private query lifetime. */
@@ -95,16 +93,7 @@ export function useAgentReaderScope({
   if (!current.current || current.current.identity !== identity) {
     current.current?.observation.invalidate(false);
     const generation = ++nextGeneration;
-    const queryKey: AgentReaderQueryKey = [
-      'agent-reader',
-      handle,
-      locale,
-      route,
-      reader,
-      revision,
-      mount,
-      generation,
-    ];
+    const queryKey: AgentReaderQueryKey = ['agent-reader', handle, locale, route, reader, revision, mount, generation];
     let observation!: AgentReaderObservation;
     let retired = false;
     let active = true;
@@ -151,11 +140,7 @@ export function useAgentReaderScope({
   }
 
   const observation = current.current.observation;
-  const observationVersion = useSyncExternalStore(
-    observation.subscribe,
-    observation.version,
-    observation.version,
-  );
+  const observationVersion = useSyncExternalStore(observation.subscribe, observation.version, observation.version);
 
   useEffect(() => {
     observation.activate();
@@ -176,8 +161,7 @@ export function useAgentReaderScope({
   }, [client, observation]);
 
   useEffect(() => {
-    if (observationVersion > 0 || observation.invalidated())
-      removePrivateObservation(client, observation.queryKey);
+    if (observationVersion > 0 || observation.invalidated()) removePrivateObservation(client, observation.queryKey);
   }, [client, observation, observationVersion]);
 
   return observation;

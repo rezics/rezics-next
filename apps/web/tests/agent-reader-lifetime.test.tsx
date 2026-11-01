@@ -169,13 +169,7 @@ function markCoversWithheld(value: unknown): void {
   }
   if (typeof value !== 'object' || value === null) return;
   for (const [key, entry] of Object.entries(value)) {
-    if (
-      key === 'cover' &&
-      typeof entry === 'object' &&
-      entry !== null &&
-      'media' in entry &&
-      'variants' in entry
-    )
+    if (key === 'cover' && typeof entry === 'object' && entry !== null && 'media' in entry && 'variants' in entry)
       (entry as { withheld?: 'suitability' }).withheld = 'suitability';
     markCoversWithheld(entry);
   }
@@ -212,14 +206,14 @@ test('public account readers retire old admissions across sign-out, replacement,
     subjectModule,
     fixtures,
   ] = await Promise.all([
-      import('react-dom/client'),
-      import('@tanstack/react-query'),
-      import('../src/session/query'),
-      import('../src/features/pages/agent-queries'),
-      import('../src/features/pages/agent-reader'),
-      import('../src/features/pages/subject'),
-      import('../src/stories/pages/accounts-public-profile/fixtures'),
-    ]);
+    import('react-dom/client'),
+    import('@tanstack/react-query'),
+    import('../src/session/query'),
+    import('../src/features/pages/agent-queries'),
+    import('../src/features/pages/agent-reader'),
+    import('../src/features/pages/subject'),
+    import('../src/stories/pages/accounts-public-profile/fixtures'),
+  ]);
 
   const page = fixtures.profilePage({ verified: true });
   markCoversWithheld(page.reads);
@@ -258,7 +252,11 @@ test('public account readers retire old admissions across sign-out, replacement,
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const render = (props: { handle?: string; locale?: string; path?: import('../src/features/pages/agent-reader').AgentReaderPath }) =>
+  const render = (props: {
+    handle?: string;
+    locale?: string;
+    path?: import('../src/features/pages/agent-reader').AgentReaderPath;
+  }) =>
     root.render(
       createElement(
         QueryClientProvider,
