@@ -500,7 +500,9 @@ test('subject preferences and own rating retire across the complete mounted read
         concurrent.writes[0]!.resolve(true);
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
-      expect(concurrent.client.getQueryData<SubjectOwnRating>(currentKey(concurrent, 'data-rating-query', 'panel-1'))).toEqual({
+      expect(
+        concurrent.client.getQueryData<SubjectOwnRating>(currentKey(concurrent, 'data-rating-query', 'panel-1')),
+      ).toEqual({
         reader: 'reader-a',
         kind: 'ready',
         units: 12,

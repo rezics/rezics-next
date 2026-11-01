@@ -377,11 +377,7 @@ export function SubjectRatingControl({
         },
       });
     } finally {
-      if (
-        isCurrentBinding() &&
-        activePending.current?.scope === scope &&
-        activePending.current.id === id
-      ) {
+      if (isCurrentBinding() && activePending.current?.scope === scope && activePending.current.id === id) {
         activePending.current = null;
         setPendingState(null);
       }

@@ -415,10 +415,12 @@ class SubjectPersonalReaderRegistry {
       observer.active = false;
       scopeState.observers.delete(observer);
       let restoreRating = false;
-      for (const [id, state] of observer.operations)
-        if (this.releaseOperation(state, id)) restoreRating = true;
+      for (const [id, state] of observer.operations) if (this.releaseOperation(state, id)) restoreRating = true;
       observer.operations.clear();
-      if (restoreRating && this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation)) {
+      if (
+        restoreRating &&
+        this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation)
+      ) {
         const owner = scopeState.writeState.owner;
         const rating =
           (owner === null ? undefined : scopeState.writeState.pending.get(owner)?.value) ??
