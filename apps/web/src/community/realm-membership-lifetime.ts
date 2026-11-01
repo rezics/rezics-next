@@ -243,47 +243,42 @@ export function useRealmMembershipCaller(
 
   owner.scope = scope;
 
-  useEffect(
-    () => {
-      owner.active = true;
-      store.registerOwner(owner, scope);
-      return () => {
-        store.unregisterOwner(owner, scope);
-        if (owner.scope === scope) owner.active = false;
-        store.retireOwner(owner, scope);
-      };
-    },
-    [owner, store, scope],
-  );
+  useEffect(() => {
+    owner.active = true;
+    store.registerOwner(owner, scope);
+    return () => {
+      store.unregisterOwner(owner, scope);
+      if (owner.scope === scope) owner.active = false;
+      store.retireOwner(owner, scope);
+    };
+  }, [owner, store, scope]);
 
   return useMemo<RealmMembershipCaller>(
-    () => ({
-      client,
-      realmId,
-      subject,
-      csrfToken,
-      revision,
-      store,
-      owner,
-      scope,
-      isCurrent: () =>
-        owner.active &&
-        owner.scope === scope &&
-        store.scopeIsCurrent(scope),
-      isReadCurrent: () =>
-        store.scopeIsCurrent(scope) &&
-        scope.session.state === 'signed-in' &&
-        !!subject &&
-        !!csrfToken &&
-        ((owner.active && owner.scope === scope) || store.hasOtherCurrentOwner(owner, scope)),
-      isReady: () =>
-        owner.active &&
-        owner.scope === scope &&
-        store.scopeIsCurrent(scope) &&
-        scope.session?.state === 'signed-in' &&
-        !!subject &&
-        !!csrfToken,
-    }) as RealmMembershipCaller,
+    () =>
+      ({
+        client,
+        realmId,
+        subject,
+        csrfToken,
+        revision,
+        store,
+        owner,
+        scope,
+        isCurrent: () => owner.active && owner.scope === scope && store.scopeIsCurrent(scope),
+        isReadCurrent: () =>
+          store.scopeIsCurrent(scope) &&
+          scope.session.state === 'signed-in' &&
+          !!subject &&
+          !!csrfToken &&
+          ((owner.active && owner.scope === scope) || store.hasOtherCurrentOwner(owner, scope)),
+        isReady: () =>
+          owner.active &&
+          owner.scope === scope &&
+          store.scopeIsCurrent(scope) &&
+          scope.session?.state === 'signed-in' &&
+          !!subject &&
+          !!csrfToken,
+      }) as RealmMembershipCaller,
     [client, realmId, subject, csrfToken, revision, store, owner, scope],
   );
 }
@@ -310,8 +305,7 @@ export function beginRealmMembershipRead(caller: RealmMembershipCaller, signal: 
   signal.addEventListener('abort', onAbort, { once: true });
   return {
     assertCurrent() {
-      if (signal.aborted || read.retired || !caller.isReadCurrent())
-        throw new Error('Realm membership caller retired');
+      if (signal.aborted || read.retired || !caller.isReadCurrent()) throw new Error('Realm membership caller retired');
     },
     finish() {
       signal.removeEventListener('abort', onAbort);

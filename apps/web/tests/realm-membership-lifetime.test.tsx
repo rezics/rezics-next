@@ -86,11 +86,12 @@ function MembershipSurface({ config }: { config: SurfaceConfig }) {
     availability: 'available',
     visibility: 'published',
   } as Parameters<typeof BoardStartThread>[0]['board'];
-  const boardRealm = config.realmAvailable === false
-    ? undefined
-    : boardRealmId
-      ? { id: boardRealmId, title: 'Realm', visibility: 'public' as const, state: 'active' }
-      : undefined;
+  const boardRealm =
+    config.realmAvailable === false
+      ? undefined
+      : boardRealmId
+        ? { id: boardRealmId, title: 'Realm', visibility: 'public' as const, state: 'active' }
+        : undefined;
   return createElement(
     'div',
     null,
@@ -262,17 +263,17 @@ test('queued standing imports and late reads retire across notification-time A-B
   };
   const surface = await makeSurface({ realmId }, undefined, { transitionWhileImportIsQueued: true });
   try {
-    await surface.until(() => standingReads.length === 1 && surface.hasBoardEntry(), 'the current read after queued import retirement');
+    await surface.until(
+      () => standingReads.length === 1 && surface.hasBoardEntry(),
+      'the current read after queued import retirement',
+    );
     expect(standingReads).toEqual([realmId]);
     expect(surface.button(m.realm_leave()).disabled).toBe(false);
 
     const membershipKey = ['realm-membership', realmId, subject] as const;
     void surface.client.refetchQueries({ queryKey: membershipKey, exact: true });
     await surface.until(() => standingReads.length === 2, 'a deferred old standing read');
-    await surface.setSessions(
-      signedIn(replacementSubject, 'csrf-other'),
-      signedIn(),
-    );
+    await surface.setSessions(signedIn(replacementSubject, 'csrf-other'), signedIn());
     await surface.until(() => standingReads.length === 3, 'a fresh standing read for the returned account');
     expect(surface.hasText(m.realm_membership_loading())).toBe(true);
     expect(surface.host.textContent).not.toContain(m.realm_leave());
@@ -331,7 +332,10 @@ test('late accepted and failed commands cannot update a replacement CSRF lifetim
       headers: { 'X-CSRF-Token': 'csrf-original' },
     });
     await surface.setSessions(signedIn(subject, 'csrf-next'));
-    await surface.until(() => standingReads.length === 3 && surface.hasBoardEntry(), 'standing after the next credential change');
+    await surface.until(
+      () => standingReads.length === 3 && surface.hasBoardEntry(),
+      'standing after the next credential change',
+    );
     failed.resolve({ outcome: 'refused', detail: 'late failure detail' });
     await surface.settle();
     expect(surface.hasText(m.realm_leave_refused())).toBe(false);
@@ -392,7 +396,10 @@ test('an uncertain leave check retires on transition, then exact retry and curre
       return 0;
     }) as typeof globalThis.setTimeout;
     await click(surface, m.realm_leave_retry_same());
-    await surface.until(() => surface.host.textContent?.includes(m.realm_join()) ?? false, 'current accepted leave settlement');
+    await surface.until(
+      () => surface.host.textContent?.includes(m.realm_join()) ?? false,
+      'current accepted leave settlement',
+    );
 
     expect(membershipCommands).toEqual([
       { data: { realmId, action: 'leave', idempotencyKey }, headers: { 'X-CSRF-Token': 'csrf-original' } },
@@ -419,8 +426,10 @@ test('refused leave recovery requires a current standing check before it release
     await surface.until(() => surface.hasText(m.realm_leave_refused()), 'refused leave recovery');
     const before = standingReads.length;
     await click(surface, m.realm_membership_retry());
-    await surface.until(() => !surface.hasText(m.realm_leave_refused()) && surface.button(m.realm_leave()).disabled === false,
-      'current standing after refusal');
+    await surface.until(
+      () => !surface.hasText(m.realm_leave_refused()) && surface.button(m.realm_leave()).disabled === false,
+      'current standing after refusal',
+    );
     expect(standingReads.length).toBe(before + 1);
     expect(membershipCommands).toHaveLength(1);
   } finally {

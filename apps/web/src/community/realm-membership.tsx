@@ -250,9 +250,10 @@ function PersonalMembership({
     const current = () => operation.caller.isCurrent() && inFlight.current === operation;
     setProblem(null);
     setLeaveCheck(null);
-    const input = attempt.current?.action === action
-      ? attempt.current
-      : { action, idempotencyKey: viewer.idempotencyKey, csrfToken };
+    const input =
+      attempt.current?.action === action
+        ? attempt.current
+        : { action, idempotencyKey: viewer.idempotencyKey, csrfToken };
     attempt.current = input;
     try {
       if (!current()) return;

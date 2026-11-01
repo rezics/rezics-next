@@ -51,15 +51,10 @@ export function BoardStartThread({
   if (session === 'signed-out') return <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />;
   if (!subject) return null;
   // A cached earlier success cannot override a failed refresh.
-  const standingIsCurrent =
-    board.realmId === null || hasCurrentRealmMembership(client, realmId, subject, caller);
+  const standingIsCurrent = board.realmId === null || hasCurrentRealmMembership(client, realmId, subject, caller);
   if (
     board.realmId !== null &&
-    (membership.isPending ||
-      membership.isFetching ||
-      membership.isError ||
-      !standingIsCurrent ||
-      !membership.data)
+    (membership.isPending || membership.isFetching || membership.isError || !standingIsCurrent || !membership.data)
   )
     return (
       <p role="status" className="text-sm text-muted-foreground">
