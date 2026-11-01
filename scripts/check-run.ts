@@ -518,7 +518,11 @@ function relocateEnvironment(
   return relocated;
 }
 
-function preparationCommands(workspace: string, cwd: string, argv: readonly string[]): RemoteCheck['prepare'] {
+function preparationCommands(
+  workspace: string,
+  cwd: string,
+  argv: readonly string[],
+): NonNullable<RemoteCheck['prepare']> {
   const referencedDirectories = new Set<string>([cwd]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
