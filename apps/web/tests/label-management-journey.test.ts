@@ -207,7 +207,8 @@ test('Default private label management keeps filter rename delete undo and conti
     next.searchParams.get('q')!,
   );
   expect(fake.calls.filter((call) => call.path === '/v1/libraryLabels').at(-1)).toMatchObject({
-    method: 'GET', query: { q: 'Winter', cursor: 'opaque+next/cursor', limit: '100' },
+    method: 'GET',
+    query: { q: 'Winter', cursor: 'opaque+next/cursor', limit: '100' },
   });
   expect(page.labels).toEqual([]);
   expect(page.next).toBeNull();

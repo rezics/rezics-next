@@ -415,7 +415,10 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
                           open={fieldError(operation, label.id) || undefined}
                         >
                           <summary
-                            className={buttonVariants({ variant: 'outline', className: `${actionClass} cursor-pointer` })}
+                            className={buttonVariants({
+                              variant: 'outline',
+                              className: `${actionClass} cursor-pointer`,
+                            })}
                           >
                             {operation === 'rename' ? m.library_label_rename() : m.library_label_delete()}
                           </summary>
