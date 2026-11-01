@@ -247,11 +247,12 @@ test('InboxRows preserves complete localized information and announces the exact
           const actor = item.unavailable
             ? catalog.inbox_actor_unknown
             : item.actorName || (item.actorId ? catalog.inbox_actor_unknown : catalog.inbox_actor_moderation);
-          const kind = item.reportId || item.kind === 'moderation_decision'
-            ? catalog.inbox_kind_moderation
-            : item.kind === 'mention'
-              ? catalog.inbox_kind_mention
-              : catalog.inbox_kind_reply;
+          const kind =
+            item.reportId || item.kind === 'moderation_decision'
+              ? catalog.inbox_kind_moderation
+              : item.kind === 'mention'
+                ? catalog.inbox_kind_mention
+                : catalog.inbox_kind_reply;
           const readState = item.unread ? catalog.inbox_notice_unread : catalog.inbox_notice_read;
           const relativeTime = row.locator('span[aria-hidden="true"] time');
 
