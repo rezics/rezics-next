@@ -661,3 +661,64 @@ test('The original Source owner durably guards exact History readiness and closu
     await client.close();
   }
 }, 60_000);
+
+test('independent Source verification prepays its complete nested body on every entry and refuses an insufficient frame before SQL', async () => {
+  const { spyOn } = await import('bun:test');
+  const { IDENTITY_SOURCE_CONSUMER_VERIFY_COST } =
+    await import('../../src/semantic/identity-source-consumer-custody.ts');
+  // A copied object grants no authority. It still consumes the full admitted
+  // verification reservation, rather than benefiting from the History wrapper's
+  // reservation or a previous miss. No native verdict is injected here.
+  const copied = Object.freeze({}) as IdentitySourceConsumerCustody;
+  const deadline = Date.now() + 10_000;
+  await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+    const balance = () => identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline)!;
+    await runCommand(f.pool, { partition: reference.source.partition, deadline }, async (tx) => {
+      const queries = spyOn(tx, 'query');
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const before = balance();
+          expect(await verifyIdentitySourceConsumerCustody(tx, reference, copied)).toBe(false);
+          expect(balance()).toEqual({
+            rows: before.rows - 100,
+            points: before.points - 100,
+            statements: before.statements - 22,
+            bytes: before.bytes - 139264,
+            engineRequests: 0,
+          });
+        }
+        expect(queries).not.toHaveBeenCalled();
+      } finally {
+        queries.mockRestore();
+      }
+      return noEffect(null);
+    });
+  });
+  // Every axis must fund the native body before its first SQL statement. This
+  // includes direct initial/post-commit callers, outside the composed History H.
+  for (const [axis, available] of [
+    ['ROWS', IDENTITY_SOURCE_CONSUMER_VERIFY_COST.rows - 1],
+    ['POINTS', IDENTITY_SOURCE_CONSUMER_VERIFY_COST.points - 1],
+    ['STATEMENTS', IDENTITY_SOURCE_CONSUMER_VERIFY_COST.statements - 1],
+    ['BYTES', IDENTITY_SOURCE_CONSUMER_VERIFY_COST.bytes - 1],
+  ] as const) {
+    await withIdentitySourceConsumerMaintenance(
+      { pool: f.pool, env: { [`KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_${axis}`]: String(available) } },
+      { deadline },
+      async (funded) => {
+        const before = identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline);
+        await runCommand(f.pool, { partition: reference.source.partition, deadline }, async (tx) => {
+          const queries = spyOn(tx, 'query');
+          try {
+            expect(await verifyIdentitySourceConsumerCustody(tx, reference, copied)).toBe(false);
+            expect(queries).not.toHaveBeenCalled();
+          } finally {
+            queries.mockRestore();
+          }
+          return noEffect(null);
+        });
+        expect(identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline)).toEqual(before);
+      },
+    );
+  }
+});

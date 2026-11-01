@@ -140,17 +140,13 @@ verification. This Account proof closes only Account-native reversal dependencie
 it does not close Library scopes, Semantic's own cut, History copies, SDK custody,
 or Account root/copy erasure.
 
-The one default History invocation uses an existing native frame of 577 rows, 577
-points, 173 statements, 630784 bytes and zero engine requests. This is a fixed
-per-invocation ceiling, independent of input size. It funds the existing Source,
-binding, directory and local Source verification allowance (249 rows/points, 81
-statements, 286720 bytes), the actual Account reversal-settlement read (64/64/20/65536),
-both Account same-home verification calls (128/128/30/131072), and both History Source
-checks around SDK retirement and fence observation (136/136/42/147456). Each History
-check includes Source custody verification and the actual same-home Account verifier.
-Their sum is exactly 577/577/173/630784 with zero engine requests. The frame is created
-once for the real History callback, remains live across released-home work, and is not
-replaced, refunded or extended by a second allocator.
+The configured native frame retains its historical baseline ceiling of
+577/577/173/630784/0. The former two-check composition used that allocation;
+it is not sufficient for the installed staged History consumer or the now-complete
+independent Source verifier. Final admission must use the complete composition and
+original producer declarations described below. The frame is created once for the
+real History callback, remains live across released-home work, and is not replaced,
+refunded or extended by a second allocator.
 
 The Semantic retained-directory reader, scoped fence, and Accounts technical receiver
 are present and consumed through these original ports. Their native receipts remain
@@ -337,7 +333,7 @@ replay/undo/restore generations, disposition, original terminal native commit an
 technical receiving commit, if any. Bigint fields are decimal strings. The
 address is reconstructed from native columns and the actual claim receipt; extra
 caller JSON is not copied into it. Barrier time uses the native timestamp text.
-History's future native guard must resolve this address with `expected` on every transition;
+History's installed native guard resolves this address with `expected` on every transition;
 an equal JSON value, a released successful call or a copied terminal is insufficient.
 It must independently revalidate its own association, receiving identity and physical
 roles, current erasure barrier, native Source/Account prerequisites and actual SDK
@@ -402,8 +398,8 @@ There is no cached positive verdict, second frame, local ledger or engine reques
 | One dispatch / allowance | Rows | Points | Statements | Bytes | Engine |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | New native Source guard | 17 | 15 | 2 | 32768 | 0 |
-| History recheck and complete nested Source verifier envelope | 128 | 128 | 24 | 262144 | 0 |
-| Existing Source proof verification, independently reserved | 4 | 4 | 6 | 8192 | 0 |
+| History-only source/association recheck | 32 | 32 | 8 | 131072 | 0 |
+| Complete Source proof verification, independently reserved at its own entry | 100 | 100 | 22 | 139264 | 0 |
 | Existing subject Account verification, independently reserved | 64 | 64 | 15 | 65536 | 0 |
 | Real receiving binding, including native mapping, roles and barrier | 160 | 80 | 6 | 131072 | 0 |
 | Work current same-command lock | 4 | 2 | 4 | 8192 | 0 |
@@ -431,14 +427,17 @@ including its subquery (5), current consumer claim with its CTE and nested nativ
 trigger lookup (12), original Account source including technical fallback (20),
 terminal match including its outer SELECT, nested hook and native joined SELECT (8),
 and technical receiver/accepted binding/physical roles (15). Those are at most 74 rows
-and 16 statements. The complete new envelope rounds their sum, 106 rows and 24
-statements, to 128 rows/128 points/24 statements. Its 262144-byte allowance combines
-the History 131072-byte bound and sixteen Source projections of at most 8192 bytes;
-Account identity admission captures only its at-most-two closed endpoint records,
-not group membership. Existing Source and subject Account verification still reserve
-their separate charges shown above; these are retained conservative reservations,
-not refunds, replacement allocations or a claim that the prior Source charge alone
-funds this nested work.
+and 16 statements. The nested Source allowance rounds 74 rows to 96 rows/96 points/16 statements,
+with sixteen Source projections of at most 8192 bytes (131072). Account identity
+admission captures only its at-most-two closed endpoint records, not group membership.
+`IDENTITY_SOURCE_CONSUMER_VERIFY_COST` combines that allowance with the prior
+4/4/6/8192 reservation: **100/100/22/139264/0**, reserved at the entry to
+`verifyIdentitySourceConsumerCustody` before any SQL, including a rejected opaque
+proof. This is essential for initial History verification and Source post-commit
+reconstruction, which do not enter the H wrapper. The H wrapper now reserves only
+32/32/8/131072 for its History-owned work. Their combined charge is unchanged;
+subject Account verification still reserves 64/64/15/65536 separately in its owner.
+No previously spent charge is refunded or reallocated at runtime.
 The receiving allowance covers three mapping/current-partition/domain statements,
 one mapping/history-work join, the native locator read capped at 65 rows (including
 its refusal sentinel), and one barrier statement. Counting 72 keyed input rows plus
@@ -446,47 +445,200 @@ its refusal sentinel), and one barrier statement. Counting 72 keyed input rows p
 with six statements and bounded original association/role projections. Native JSON
 contains only the owner's bounded reference, generations and locators, not payload.
 
-The complete future History sequence has **no established count or final sum**.
-Its readiness write/native guard, later final adoption guard, receiving commit,
-physical probes and nested trigger work are absent from the paid stopped body.
-For illustration only, baseline Source preparation without its old two History
-checks is 441/441/131/483328/0. If integration replaces those two checks with two
-complete new composed calls and performs one released observation, the arithmetic
-subtotal is 1198/1029/246/1507328/0. That conditional subtotal excludes the missing
-History operations and is **not** a sufficient aggregate or a funded default.
-The paid stopped path's one current SDK lock plus one observation is independently
-7/4/5/16384/0; it also establishes no full-completion count.
+### Installed History consumer and positive preflight
 
-The baseline configured/hard aggregate therefore remains 577/577/173/630784/0;
-new calls refuse its exhausted balance rather than create funding. No replacement
-aggregate is guessed before the original History owner delivers its actual two-stage
-native transitions, exact statement/trigger costs and failure/retry sequence. That
-owner can consume the implemented Source interface above and report the remaining
-fixed charges for Source's subsequent aggregate derivation. Directory envelope and
-children, all Library units/ceilings and unknown-SQL refusal remain unchanged.
+The original consumer is installed. Its exact call is
+`lockAgentIdentityHistoryHandoff(tx, actualClient, stage, binding, writer, phase)`,
+which invokes the unchanged Source export above. Its structural port accepts the
+Source result, including the address's decimal bigint fields; the additional
+Source `phase` field requires no adapter. The native function has exactly the
+`(reference jsonb, expected jsonb)` signature used by
+`core.check_agent_identity_history`. No second producer or Source operation is needed.
 
-### Pending owner stages and verification
+A supported positive handoff requires all of the following actual owner state:
 
-Original Accounts History must implement guarded readiness persisted under the
-Source and generation-1 SDK locks, permit SDK retirement only after genuine readiness,
-then guard exact generation-2 closure and the later receiving transaction by resolving
-the stored original Source address and all independent prerequisites again. Its native
-`core.guard_agent_identity_sdk_retirement` remains closed; this producer does not edit
-it or foreign SDK/History tables. Until that consumer exists, there is no durable
-SDK-bound History handoff, and neither new export authorizes original History closure.
-Its missing native transitions and complete bounded funding are a precise pending
-branch, independent of the Library seal, real Account settlement and physical probes.
+1. The original native Account receipt, exact source tuple/digest and enrolled roles,
+   accepted live claim/job, original admission/undo commits, current replay/undo/restore
+   generations, and native retained/terminal Source enrollment must match. A subject
+   needs actual discharged custody and a current Account reversal-settlement proof;
+   a requester/decider needs transferred custody and the actual technical receiver.
+   The terminal is produced only after the exhaustive original directory cut and
+   durable scoped consumer fences, including the real Library seal where required.
+2. The actual immutable History source association, receiving identity, role union,
+   request digest, partition/domain generation and current erasure barrier must agree.
+   Original source, barrier and receiver are all home 0, and the SDK client uses the
+   actual same configured Pool. Matching URLs or table placement do not suffice.
+3. Readiness uses actual SDK generation 1 with null closure fields under the current
+   restore-domain/fence locks. History persists the returned Source address and
+   binding/writer on its original association; its ALWAYS guards resolve the native
+   Source function and SDK check again while setting its separate real work readiness.
+   Locks last through that command's COMMIT. Technical generation 1 alone is not readiness.
+4. Only committed readiness permits the one released bounded SDK retirement attempt.
+   The next Source command re-enters the same producer with exact actual generation 2,
+   closure UUID/time and the original readiness restore domain. History persists
+   closure only under its native guard. Permanent SDK fences survive execution deletion.
+5. Preparation, retirement, physical selection, absence and locator minimization each
+   re-enter current Source/SDK authority. Two independent eight-table inspections and
+   exact bounded SDK deletion remain necessary. Later receiving checks the actual
+   selected job/cursor/barrier, re-enters Source/SDK twice, and writes the native proof
+   and cursor in one receiving COMMIT. The native receiving guard repeats Source/SDK,
+   original association/roles, physical absence and minimized-locator checks.
 
-The focused real-default regression uses actual Account admission and SDK enqueue,
-checks unready custody and exact stale source/job/role/barrier, wrong association,
-wrong writer phase and funding refusal, repeated precharges and preservation of
-History/SDK state. It deliberately fabricates no positive Source terminal or Library
-seal. Genuine positive staged readiness/closure, restore/writer non-revival and native
-receiving closure still require the original owner work and native verification;
-local compiler success alone cannot establish those acceptance obligations.
+The original History migration
+[`20261101083500_agent_identity_history_closure.sql`](../../db/migrations/20261101083500_agent_identity_history_closure.sql)
+persists authority on the original `agent_identity_work` association, rather than
+creating a new ledger. It installs `core.check_agent_identity_history` and the native
+readiness/closure/work/locator/receiving guards. The production call sites are
+`agent-identity-sdk-fence.ts`, `agent-identity-retirement.ts`, `durable.ts`, `receiving.ts`
+and `access/shared-history.ts`. A later native call with `expected` must reconstruct
+exactly the stored Source address. Changed Source generations or supported SDK restore
+rotation cannot revive a previous stage. Unsupported replacement of current Source
+custody or permanent SDK fences by an old backup remains closed; no cross-home
+atomicity is asserted. Source authority, genuine History readiness and physical
+absence are separate facts throughout the sequence.
 
-Implementation source references: the integrated Work README and
-`sdk-retirement-fence.ts`; the original paid History retirement/fence source; and
-`search-worker-outcome-harness/dbos-transact-ts/src/client.ts` in the repository's
-reference directory, for actual client shared-Pool construction and deletion APIs.
-No upstream reference code is copied into this owner.
+### Literal dispatch identities and failure prefixes
+
+The Source native outer statement is exactly:
+
+```sql
+SELECT semantic.lock_identity_source_history_handoff($1::jsonb,$2::jsonb) AS authority;
+```
+
+Its only nested statement is the fixed fifteen-input joined SELECT in the Source
+forward migration. It reads no foreign History/SDK table and fires no row trigger.
+The Source verification dispatch identities are the tracked
+`identity-source-consumer-custody-select.sql`, `-claim.sql`, `-progress.sql`,
+`identity-epoch-binding-consumer.sql` and `-consumer-terminal.sql`. The consumer
+claim calls the native installed-hook lookup; the terminal SELECT calls
+`semantic.identity_source_consumer_terminal_matches`, which repeats that lookup
+and its fixed dynamic joined SELECT. Current Account source verification uses
+`access.account ... FOR SHARE`, `agent-verification-identity-read.sql`, and the
+original bounded technical-source/binding/physical-role fallback when needed.
+No Source verification writes or triggers are hidden in the read charge.
+
+History-only H work is `lockHistoryBarrier`, the original current Account source
+read, and `agent-identity-retirement-source.sql` (source/partition/domain with its
+parameter CTE). Receiving uses `resolveAgentIdentitySDKWork`'s three statements,
+the original `agent_identity_work/history_work` join, locator `LIMIT 65 FOR SHARE`,
+and the current barrier. SDK dispatch is exactly Work's outer
+`SELECT * FROM dbos.check_workflow_writer_state($1,$2,$3,$4,$5)`, its domain SHARE
+and permanent-fence UPDATE locks, and native return SELECT. Their bodies and
+literal identities remain in their original owners; unknown SQL is never admitted
+by text similarity, structural footprint or a copied foreign statement.
+
+Each H reserves History 32/32/8/131072 before its first read. If Source verification
+is reached, its own entry reserves 100/100/22/139264. A missing consumer handle
+stops before that entry; a copied handle spends it and returns false without SQL.
+The subsequent conservative subject prefixes are:
+
+| Last admitted operation | Cumulative rows / points / statements / bytes / engine |
+| --- | --- |
+| History-only verification | 32/32/8/131072/0 |
+| Independent Source verification | 132/132/30/270336/0 |
+| Current subject Account settlement verification | 196/196/45/335872/0 |
+| Receiving binding | 356/276/51/466944/0 |
+| Original Source native guard | 373/291/53/499712/0 |
+| Current SDK lock | 377/293/57/507904/0 |
+
+These are admitted-prefix maxima, not guaranteed work on every early failure.
+An insufficient next reservation dispatches none of that operation and leaves the
+previous prefix spent. SQL/serialization/deadlock errors propagate for whole-command
+rollback; there is no statement retry, refund or cached verdict. The History unit
+uses its existing one-attempt command wrapper and prepays control/rollback work.
+A later ordinary scheduling admission starts a new frame and reads committed native
+state; it does not retry an ambiguous retirement inside the earlier frame.
+
+### Full consumer counts and final-frame handoff
+
+The owning [Access cost table](../access/README.md#cost-complete-selected-identity-unit)
+and [Work dispatch table](../work/README.md#bounded-selected-identity-maintenance)
+own the installed foreign body and its literal dispatches. Its fresh path invokes
+H eight times: readiness, closure, two preparation checks, bound physical selection,
+absence and two later receiving checks. Six of these enter through
+`lockRecordedAgentIdentityHistory` (L); each L adds its original capped-state read
+and outer native guard SELECT. Thirteen G native guards repeat the original Source
+and current SDK functions, independently of H. Their 92/87/11/40960/0 reservation
+conservatively includes the standalone Source17/15/2/32768 and SDK4/2/4/8192.
+Those native calls do not enter the TS Source verifier and must not be charged as
+another H. Each current subject Account verification inside H remains paid once.
+
+Eight H sum to **3016/2344/456/4063232/0**, including eight current subject Account
+checks (512/512/120/524288/0). Together with thirteen G they cause twenty-one
+current SDK checks, plus three independently charged released observations O.
+The five R receiving calls include four bracketing the two SDK receipt reads and
+one initial later receiving call. Two inspections, three work invalidations W,
+two wakeups K, one locator invalidation T, one receiving invalidation P and two
+seals remain in History's stated envelope. Its published expansion counts fourteen
+separate C controls; accepted-original lookup already includes its three command
+controls. Initial rows that include C must not be charged that control twice.
+
+History's **11588/9856/2731/6843136/0** is a consumer dispatch envelope, not a final
+Source allocation. It excludes independently reserved Source staging and current
+Source verification, additional independent receiving/inventory calls, and the sole
+Library producer's original declaration. The moved reservation leaves H's envelope
+unchanged but makes each independently reached Source verifier explicitly spend
+100/100/22/139264/0, plus subject Account 64/64/15/65536 when that stage is reached
+(**164/164/37/204800/0** for a complete subject check). This applies to initial
+History verification, terminal reconstruction and Source post-commit verification;
+none may borrow the eight H calls' allowance.
+
+Source staging separately reserves its fixed admission/progress/cleanup prefix
+32/32/29/32768 before checkout. The original binding work reader additionally
+reserves 9/9/5/8192, then 4/4/5/8192 before its two released snapshots; a missing
+first result spends only the first reservation. A discharged terminal reconstruction
+reads actual Account settlement at 64/64/20/65536 and invokes the independently
+funded current Source verifier above. Newly finished Source custody likewise
+re-enters that verifier after native COMMIT. Directory actual dispatches and scoped
+Library work retain their existing reservations; a planning allowance is not a
+reservation. The old four-point/six-statement directory holdback is only a planning
+floor, not sufficient funding for the current full verifier.
+
+Every extra released receiving read spends 76/75/17/132000 + G + A; its same-command
+verifier spends 76/75/13/131872 + G + A, with caller controls paid separately.
+Mapping inventory snapshots spend 6/5/8/16640; complete saved SDK/work/mapping
+snapshots spend 7/6/8/33024. These are separate calls, never cached certificates.
+An admitted delayed reschedule adds C + 1/1/1/0. A refused or rolled-back prefix
+retains all reservations and the same cumulative remainder/deadline.
+
+The existing final-frame composition owner must reconcile those actual call counts,
+initial Source work, repeated Account checks, and the sole Library producer's final
+literal page/verifier/locked-plan/seal/current-plan SQL and failure/repeat/rollback/
+fence declaration before adopting fixed aggregate defaults, recognition and ceilings.
+No final funding is inferred from 577, 585, the earlier conditional subtotal 1198, or History's
+11588. Baseline configured/hard native limits remain 577/577/173/630784/0, so an
+insufficient balance refuses. Directory parent 100/200/36/229376 and effective
+children 50/100/18/114688, Library child caps and the native 100-row page ceiling are
+unchanged. No extra local ledger creates Source funding.
+
+### Verification and remaining admission requirements
+
+The existing acceptance named in
+[`identity-source-consumer-custody.test.ts`](../../test/semantic/identity-source-consumer-custody.test.ts)
+is preserved. The added direct-verifier regression covers repeated full reservations,
+all four funded-axis refusals before SQL, and rejection of copied handles without
+creating authority. The original real-default case covers stale source/job/role/
+barrier, wrong association/writer phase, missing native custody and funding refusal.
+The integrated original History positive journey in
+[`agent-verification-reversal.test.ts`](../../test/access/agent-verification-reversal.test.ts)
+uses the actual selected unit, observes committed generation1 readiness before SDK
+retirement, then requires exact generation2, physical absence, minimized locators,
+native receiving proof and cursor progress. It also rejects changed source, receiver,
+Source sequence, restore UUID and closure, and tests permanent enqueue refusal.
+Those existing owner tests are not modified or replaced here.
+
+All authored regressions remain UNRUN at this source boundary. Only changed-Kernel
+typing is permitted. Native concurrency/restore, positive default journey, original
+acceptance/browser campaigns and Goal closure require later integrated verification.
+Remaining runtime admission conditions are real Source/Library consumer cuts and
+Account settlement, supported preserved physical custody, final Source-frame SQL
+recognition/funding, and independent History receiving/physical checks. The History
+consumer's former absence is no longer a blocker or a missing implementation claim.
+This Source interface is implemented and consumed; installed code is not native proof.
+
+Implementation sources reviewed: integrated Access/Work READMEs; original History
+retirement, fence, inventory, durable and receiving bodies and its forward closure
+migration; retained original Source SQL/implementation and prior attempt evidence;
+and `search-worker-outcome-harness/dbos-transact-ts/src/client.ts` in the indexed
+reference directory for actual shared-Pool construction and deletion APIs. No foreign
+History/SDK/Library body or upstream reference code is copied or changed by this owner.

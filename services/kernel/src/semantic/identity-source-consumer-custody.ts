@@ -1091,6 +1091,18 @@ async function finishConsumers(
     : null;
 }
 
+/** Original 4/4/6/8192 reservation plus 96/96/16/131072 for the complete
+ * nested Source verifier. Reserve here, rather than only in the History wrapper:
+ * initial staging, post-commit reconstruction and independent History checks also
+ * invoke this verifier. Subject Account settlement reserves separately in its owner. */
+export const IDENTITY_SOURCE_CONSUMER_VERIFY_COST: NativeStepWork = Object.freeze({
+  rows: 100,
+  points: 100,
+  statements: 22,
+  bytes: 139264,
+  engineRequests: 0,
+});
+
 /** Same genuine live original-home command, fixed indexed points, no foreign checkout. */
 export async function verifyIdentitySourceConsumerCustody(
   tx: CommandTransaction,
@@ -1102,13 +1114,7 @@ export async function verifyIdentitySourceConsumerCustody(
   if (
     !frame ||
     !isLiveIdentitySourceConsumerMaintenance(resources.pool, frame, resources.deadline) ||
-    !reserveIdentitySourceConsumerNativeWork(resources.pool, frame, {
-      rows: 4,
-      points: 4,
-      statements: 6,
-      bytes: 8192,
-      engineRequests: 0,
-    })
+    !reserveIdentitySourceConsumerNativeWork(resources.pool, frame, IDENTITY_SOURCE_CONSUMER_VERIFY_COST)
   )
     return false;
   if (
@@ -1200,14 +1206,14 @@ export const IDENTITY_SOURCE_HISTORY_GUARD_COST: NativeStepWork = Object.freeze(
   engineRequests: 0,
 });
 
-// History recheck plus the complete nested Source verifier, including technical
-// fallback and both native terminal-hook lookups. Existing Source/Account charges
-// still apply separately; no prior reservation is refunded or reallocated here.
+// History-only recheck. The Source verifier now reserves its entire native body at
+// its own entry, including independent calls outside this handoff. The combined
+// composition remains 377/293/57/507904/0; every repeated entry is charged again.
 export const IDENTITY_SOURCE_HISTORY_RECHECK_COST: NativeStepWork = Object.freeze({
-  rows: 128,
-  points: 128,
-  statements: 24,
-  bytes: 262144,
+  rows: 32,
+  points: 32,
+  statements: 8,
+  bytes: 131072,
   engineRequests: 0,
 });
 export const IDENTITY_SOURCE_HISTORY_RECEIVER_COST: NativeStepWork = Object.freeze({
@@ -1235,7 +1241,7 @@ function reserveHistoryWork(tx: CommandTransaction, cost: NativeStepWork): boole
 }
 
 /** Resolve durable ORIGINAL Source state, not a copied terminal receipt. This same
- * function is the supported native Source half of History's future row guard:
+ * function is the supported native Source half of History's installed row guard:
  * semantic.lock_identity_source_history_handoff(reference, expectedAuthority).
  * It locks original custody, current binding/generations and native enrollment until
  * COMMIT. It does not supply Account verification, SDK closure or History readiness. */

@@ -11,9 +11,10 @@ export type IdentitySourceMaintenanceConfig = Readonly<{
 const prefix = 'KERNEL_IDENTITY_SOURCE_MAINTENANCE_';
 
 // Baseline invocation: original Account settlement and two History Source checks.
-// This is NOT the allocation for the still-incomplete guarded History handoff.
-// Its final native transitions/receiving costs must be delivered before deriving a
-// replacement fixed aggregate. New Source locks refuse an insufficient live balance.
+// This is NOT the allocation for the installed guarded History handoff. Final frame
+// adoption also requires initial/repeated Source verification and the sole Library
+// producer's exact SQL declaration. Insufficient balances continue to refuse; the
+// final composition owner derives the replacement aggregate and hard ceilings.
 // Directory planning stays independently capped below.
 // No PostgreSQL engine request is dispatched.
 const nativeDefaults = {
