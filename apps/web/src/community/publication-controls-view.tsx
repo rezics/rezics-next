@@ -111,6 +111,7 @@ export function usePublicationControls(
     session.state === 'signed-in' &&
     typeof session.subject === 'string' &&
     session.subject.length > 0 &&
+    (!reader || reader === session.subject) &&
     typeof session.csrfToken === 'string' &&
     session.csrfToken.length > 0;
   const identity = JSON.stringify([
@@ -135,6 +136,7 @@ export function usePublicationControls(
       const current = () => {
         const live = source?.read();
         return (
+          ready &&
           currentIdentity.current === identity &&
           getLocale() === locale &&
           !!queryClient &&
