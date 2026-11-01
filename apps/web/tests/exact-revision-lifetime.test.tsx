@@ -63,9 +63,10 @@ let activeClient: import('@tanstack/react-query').QueryClient | undefined;
 mock.module('../src/threads/exact-revision-read', () => ({
   readExactRevision: ({ data }: { data: (typeof reads)[number]['data'] }) => {
     const session = activeClient?.getQueryData<{ state?: string; subject?: string | null }>(['session']);
-    const actualReader: HistoricalActualReader = data.credentialMode === 'session' && session?.state === 'signed-in'
-      ? { credentialMode: 'session', subject: session.subject ?? null, complete: !!session.subject }
-      : { credentialMode: 'anonymous', subject: null, complete: true };
+    const actualReader: HistoricalActualReader =
+      data.credentialMode === 'session' && session?.state === 'signed-in'
+        ? { credentialMode: 'session', subject: session.subject ?? null, complete: !!session.subject }
+        : { credentialMode: 'anonymous', subject: null, complete: true };
     const work = deferred<HistoricalReadEnvelope<ExactRevisionState>>();
     reads.push({ data: { ...data }, actualReader, work });
     return work.promise;
@@ -285,9 +286,14 @@ afterAll(async () => {
 test('actual exact route keeps healthy anonymous and signed-in reads and an explicit current retry', async () => {
   const anonymous = await mount();
   try {
-    expect(reads.map(({ data }) => ({ postId: data.postId, revisionId: data.revisionId, locale: data.locale, credentialMode: data.credentialMode }))).toEqual([
-      { postId: selected.id, revisionId: selected.revisionId, locale: 'en', credentialMode: 'anonymous' },
-    ]);
+    expect(
+      reads.map(({ data }) => ({
+        postId: data.postId,
+        revisionId: data.revisionId,
+        locale: data.locale,
+        credentialMode: data.credentialMode,
+      })),
+    ).toEqual([{ postId: selected.id, revisionId: selected.revisionId, locale: 'en', credentialMode: 'anonymous' }]);
     await anonymous.settle(0, readyPage);
     expect(anonymous.host.textContent).toContain('The original edition leaves room for the reader to pause.');
     expect(anonymous.host.querySelector('a[href*="/threads/"]')).not.toBeNull();

@@ -79,7 +79,13 @@ const publicPost = {
   },
 };
 
-type NativeCall = { path: string; method: string; cursor: string | null; limit: string | null; authorization: string | null };
+type NativeCall = {
+  path: string;
+  method: string;
+  cursor: string | null;
+  limit: string | null;
+  authorization: string | null;
+};
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void };
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
@@ -112,11 +118,21 @@ const env = {
     get: () => ({
       credential: async () =>
         activeServerSubject && activeServerToken
-          ? { status: 'active' as const, subject: activeServerSubject, accessToken: activeServerToken, csrfToken: activeServerCsrf }
+          ? {
+              status: 'active' as const,
+              subject: activeServerSubject,
+              accessToken: activeServerToken,
+              csrfToken: activeServerCsrf,
+            }
           : { status: 'absent' as const },
       credentialIfFresh: async () =>
         activeServerSubject && activeServerToken
-          ? { status: 'active' as const, subject: activeServerSubject, accessToken: activeServerToken, csrfToken: activeServerCsrf }
+          ? {
+              status: 'active' as const,
+              subject: activeServerSubject,
+              accessToken: activeServerToken,
+              csrfToken: activeServerCsrf,
+            }
           : { status: 'absent' as const },
     }),
   },
@@ -185,7 +201,10 @@ async function nativeFetch(input: RequestInfo | URL, init?: RequestInit): Promis
       deferredHistory = deferred<Response>();
       return deferredHistory.promise;
     }
-    return Response.json({ revisions: call.cursor ? [later] : [privatePost], next: call.cursor ? null : 'history/cursor+1' });
+    return Response.json({
+      revisions: call.cursor ? [later] : [privatePost],
+      next: call.cursor ? null : 'history/cursor+1',
+    });
   }
 
   if (url.pathname === `/v1/threads/${selected.threadId}`) return Response.json(current);
@@ -310,12 +329,7 @@ function createHarness(client: InstanceType<typeof QueryClient>, visit: ExactRev
           loading={false}
           onRetry={retry}
         />
-        <PostHistory
-          postId={props.postId}
-          viewerId={props.viewerId}
-          readAuthority={props.readAuthority}
-          review
-        />
+        <PostHistory postId={props.postId} viewerId={props.viewerId} readAuthority={props.readAuthority} review />
       </QueryClientProvider>
     </StrictMode>
   );
@@ -344,7 +358,9 @@ function createHarness(client: InstanceType<typeof QueryClient>, visit: ExactRev
 }
 
 function retainButton(host: HTMLElement, label: string) {
-  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label);
+  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent?.trim() === label,
+  );
   expect(button).toBeDefined();
   const key = Object.getOwnPropertyNames(button!).find((name) => name.startsWith('__reactProps$'));
   const props = (button as unknown as Record<string, { onClick?: () => void }>)[key!];
@@ -353,7 +369,9 @@ function retainButton(host: HTMLElement, label: string) {
 }
 
 async function click(host: HTMLElement, label: string) {
-  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label);
+  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent?.trim() === label,
+  );
   expect(button).toBeDefined();
   await act(async () => {
     button!.click();
@@ -489,7 +507,11 @@ test('exact revision and history share actual reader provenance, serialized admi
     expect(harness.host.querySelectorAll('section > ol > li')).toHaveLength(1);
 
     // A signed-in read-only cache with null CSRF still performs the bounded native history read.
-    expect(historyCalls.at(-1)).toMatchObject({ path: `/v1/posts/${selected.id}/revisions`, limit: '20', cursor: null });
+    expect(historyCalls.at(-1)).toMatchObject({
+      path: `/v1/posts/${selected.id}/revisions`,
+      limit: '20',
+      cursor: null,
+    });
     expect(historyCalls.at(-1)?.authorization).toBe(`Bearer ${privateToken}`);
     expect(harness.host.textContent).toContain('Private history author');
     expect(harness.host.textContent).toContain('CC-BY-SA-4.0');
@@ -530,7 +552,9 @@ test('exact revision and history share actual reader provenance, serialized admi
     expect(harness.host.querySelectorAll('section > ol > li')).toHaveLength(1);
     expect(harness.host.querySelector('section [role="status"]')?.textContent).toContain(m.thread_history_loading());
     expect(
-      [...harness.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === m.thread_history_more())?.disabled,
+      [...harness.host.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === m.thread_history_more(),
+      )?.disabled,
     ).toBe(true);
     successorHistory.resolve(Response.json({ code: 'dependency_unavailable' }, { status: 503 }));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -566,7 +590,9 @@ test('exact revision and history share actual reader provenance, serialized admi
     await click(harness.host, m.thread_history_show());
     privateDisclosure(harness.host);
     const sameTupleQuery = browserClient.getQueryCache().find({ queryKey: ['session'], exact: true })!;
-    await act(async () => sameTupleQuery.setState({ ...sameTupleQuery.state, status: 'error', error: new Error('session failed') }));
+    await act(async () =>
+      sameTupleQuery.setState({ ...sameTupleQuery.state, status: 'error', error: new Error('session failed') }),
+    );
     retiredDisclosure(harness.host);
     await act(async () => browserClient.setQueryData(['session'], { ...session }, { updatedAt: 1_700_000_000_000 }));
     retiredDisclosure(harness.host);

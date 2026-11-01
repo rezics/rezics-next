@@ -68,5 +68,9 @@ export const readExactRevision = createServerFn({ method: 'GET' })
       authorization,
     );
     if (page.state === 'unavailable' || page.state === 'problem') setResponseStatus(page.status);
-    return historicalReadEnvelope(data.binding as HistoricalReadBinding, preparedReaderProvenance(authorization, subject), page);
+    return historicalReadEnvelope(
+      data.binding as HistoricalReadBinding,
+      preparedReaderProvenance(authorization, subject),
+      page,
+    );
   });

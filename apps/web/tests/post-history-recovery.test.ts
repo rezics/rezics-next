@@ -599,9 +599,9 @@ test('healthy authenticated history without CSRF supports first-page reads, cont
     });
     await finish(page, { revisions: [second], next: null });
     await versions(page, 2);
-    const links = await page.locator('section > ol h4 a').evaluateAll((entries) =>
-      entries.map((entry) => entry.getAttribute('href')),
-    );
+    const links = await page
+      .locator('section > ol h4 a')
+      .evaluateAll((entries) => entries.map((entry) => entry.getAttribute('href')));
     expect(links).toEqual([
       `/en/posts/${first.id}/revisions/${first.revisionId}`,
       `/en/posts/${second.id}/revisions/${second.revisionId}`,
@@ -612,7 +612,9 @@ test('healthy authenticated history without CSRF supports first-page reads, cont
       { cursor, limit: '20' },
       { cursor, limit: '20' },
     ]);
-    expect(await page.evaluate(() => (window as unknown as { historyCsrfToken: string | null }).historyCsrfToken)).toBeNull();
+    expect(
+      await page.evaluate(() => (window as unknown as { historyCsrfToken: string | null }).historyCsrfToken),
+    ).toBeNull();
   } finally {
     await page.close();
   }

@@ -132,12 +132,9 @@ export async function readExactRevisionVisit(
   }
 
   const provenance = validProvenance(result?.provenance) ? result.provenance : undefined;
-  const bindingMatches =
-    provenance !== undefined &&
-    sameHistoricalReadBinding(binding, provenance.binding);
+  const bindingMatches = provenance !== undefined && sameHistoricalReadBinding(binding, provenance.binding);
   const actualMatches = bindingMatches && historicalActualMatches(binding, provenance.actualReader);
-  const observationMatches =
-    actualMatches && historicalBindingCurrent(source, binding, provenance.actualReader);
+  const observationMatches = actualMatches && historicalBindingCurrent(source, binding, provenance.actualReader);
   return {
     admission,
     page: observationMatches
@@ -260,13 +257,14 @@ export function ExactRevisionCaller({
   const admissionMatches = targetMatches && sessionAdmissionCurrent(visit, source);
   const generationCurrent = targetMatches && observationCurrent;
   if (!generationCurrent && !retiredVisits.has(visit)) retireVisit(visit);
-  const page = loading || retiredVisits.has(visit) || !admissionMatches
-    ? !loading && targetMatches && generationCurrent
-      ? visit.page.state === 'ready'
-        ? unavailableForProvenance()
-        : visit.page
-      : { state: 'loading' as const }
-    : visit.page;
+  const page =
+    loading || retiredVisits.has(visit) || !admissionMatches
+      ? !loading && targetMatches && generationCurrent
+        ? visit.page.state === 'ready'
+          ? unavailableForProvenance()
+          : visit.page
+        : { state: 'loading' as const }
+      : visit.page;
 
   const [generation, setGeneration] = useState(0);
   useLayoutEffect(() => {
@@ -302,10 +300,7 @@ export function ExactRevisionCaller({
   };
 
   const ready =
-    page.state === 'ready' &&
-    admissionMatches &&
-    ownsConnection(visit, generation) &&
-    !retiredVisits.has(visit);
+    page.state === 'ready' && admissionMatches && ownsConnection(visit, generation) && !retiredVisits.has(visit);
   return (
     <>
       <ExactRevisionView identity={identity} page={page} onRetry={retry} />

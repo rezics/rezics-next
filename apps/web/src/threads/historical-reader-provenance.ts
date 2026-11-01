@@ -220,19 +220,20 @@ export function createHistoricalReadBinding(
   expectedSubject?: string,
 ): HistoricalReadBinding {
   const originObservation = source?.read() ?? unknownObservation();
-  const expected = !source && target.credentialMode === 'session' && expectedSubject
-    ? {
-        credentialMode: 'session' as const,
-        state: 'signed-in' as const,
-        subject: expectedSubject,
-        csrfReady: false,
-      }
-    : {
-        credentialMode: target.credentialMode,
-        state: originObservation.state,
-        subject: originObservation.subject,
-        csrfReady: originObservation.csrfReady,
-      };
+  const expected =
+    !source && target.credentialMode === 'session' && expectedSubject
+      ? {
+          credentialMode: 'session' as const,
+          state: 'signed-in' as const,
+          subject: expectedSubject,
+          csrfReady: false,
+        }
+      : {
+          credentialMode: target.credentialMode,
+          state: originObservation.state,
+          subject: originObservation.subject,
+          csrfReady: originObservation.csrfReady,
+        };
   return {
     id: `${originObservation.sourceId}:${++bindingSequence}`,
     target: { ...target },
@@ -350,7 +351,10 @@ export function historicalBindingCurrent(
 
   // A separate browser QueryClient can adopt only the same serialized query lineage and generation.
   if (!origin.healthy || !current.healthy) return false;
-  const portable = origin.sourceId === current.sourceId && origin.generation === current.generation && sameObservation(origin, current);
+  const portable =
+    origin.sourceId === current.sourceId &&
+    origin.generation === current.generation &&
+    sameObservation(origin, current);
   if (portable) return true;
 
   // SSR starts without a session query. One first signed-out browser preparation is the same
@@ -358,7 +362,8 @@ export function historicalBindingCurrent(
   const firstAnonymousPreparation =
     (current.state === 'unknown' && current.dataUpdateCount === 0 && current.generation === 0) ||
     (current.state === 'signed-out' && current.dataUpdateCount === 1 && current.generation === 1);
-  return !!actualReader &&
+  return (
+    !!actualReader &&
     actualReader.complete &&
     actualReader.credentialMode === 'anonymous' &&
     actualReader.subject === null &&
@@ -371,14 +376,14 @@ export function historicalBindingCurrent(
     firstAnonymousPreparation &&
     current.subject === null &&
     !current.csrfReady &&
-    current.healthy;
+    current.healthy
+  );
 }
 
 export function historicalReaderCanRead(observation: HistoricalReaderObservation): boolean {
   return (
     observation.healthy &&
-    ((observation.state === 'signed-in' && observation.subject !== null) ||
-      observation.state === 'signed-out')
+    ((observation.state === 'signed-in' && observation.subject !== null) || observation.state === 'signed-out')
   );
 }
 
@@ -437,12 +442,11 @@ export function validateHistoricalReadBinding(
     !['unknown', 'signed-in', 'signed-out', 'preparing', 'unavailable'].includes(expected.state) ||
     (expected.subject !== null && typeof expected.subject !== 'string') ||
     typeof expected.csrfReady !== 'boolean'
-  ) return undefined;
+  )
+    return undefined;
 
   const expectedMatchesOrigin =
-    expected.state === origin.state &&
-    expected.subject === origin.subject &&
-    expected.csrfReady === origin.csrfReady;
+    expected.state === origin.state && expected.subject === origin.subject && expected.csrfReady === origin.csrfReady;
   const standaloneExpectedSession =
     origin.sourceId === 'standalone' &&
     origin.generation === 0 &&

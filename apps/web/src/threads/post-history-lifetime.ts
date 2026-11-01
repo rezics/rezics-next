@@ -23,11 +23,7 @@ export function historySessionReady(source: HistoricalReaderSource | undefined, 
   const session = source.read();
   if (!session.healthy) return false;
   if (session.state === 'signed-out') return viewerId === undefined;
-  return (
-    session.state === 'signed-in' &&
-    !!session.subject &&
-    (viewerId === undefined || viewerId === session.subject)
-  );
+  return session.state === 'signed-in' && !!session.subject && (viewerId === undefined || viewerId === session.subject);
 }
 
 export type HistoryView = {
