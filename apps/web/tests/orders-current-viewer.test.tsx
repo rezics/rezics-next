@@ -208,14 +208,20 @@ test('Actual history provenance belongs to its one prepared native dispatch, pre
     await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toMatchObject({ isNotFound: true });
     await expect(orders.readBuyerOrders({ data: {} })).rejects.toMatchObject({ isNotFound: true });
     status = 503;
-    await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toThrow('Native order history is unavailable');
+    await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toThrow(
+      'Native order history is unavailable',
+    );
     status = 200;
     body = { orders: Array.from({ length: 21 }, () => order('A')), next: null };
-    await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toThrow('Invalid native order history response');
+    await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toThrow(
+      'Invalid native order history response',
+    );
     body = { orders: [{ ...order('A'), settlement: 'invented' }], next: null };
     await expect(orders.readBuyerOrders({ data: {} })).rejects.toThrow('Invalid native order history response');
     fail = true;
-    await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toThrow('Native order history is unavailable');
+    await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toThrow(
+      'Native order history is unavailable',
+    );
     fail = false;
     body = { orders: [], next: null };
     expect(await orders.readBuyerOrders({ data: {} })).toEqual(body);
@@ -270,12 +276,18 @@ test('The actual Orders history route retires replaced-buyer history and rejects
   expect(historical.querySelectorAll('[data-order-row]')).toHaveLength(4);
   expect(historical.querySelector('[data-settlement="paid"]')!.textContent).toContain(m.orders_entitlement_recorded());
   expect(historical.querySelector('[data-settlement="pending"]')!.textContent).toContain('¥500');
-  expect(historical.querySelector('[data-settlement="pending"]')!.textContent).toContain(m.orders_entitlement_pending());
-  expect(historical.querySelector('[data-settlement="failed"]')!.textContent).toContain(m.statements_amount_unavailable());
+  expect(historical.querySelector('[data-settlement="pending"]')!.textContent).toContain(
+    m.orders_entitlement_pending(),
+  );
+  expect(historical.querySelector('[data-settlement="failed"]')!.textContent).toContain(
+    m.statements_amount_unavailable(),
+  );
   expect(historical.querySelector('[data-settlement="failed"]')!.textContent).toContain(m.commerce_tax_unknown());
   expect(historical.querySelector('[data-settlement="failed"]')!.textContent).toContain(m.orders_entitlement_none());
   expect(historical.querySelector('[data-settlement="unknown"]')!.textContent).toContain(m.orders_status_unknown());
-  expect(historical.querySelector('[data-settlement="unknown"]')!.textContent).toContain(m.orders_entitlement_pending());
+  expect(historical.querySelector('[data-settlement="unknown"]')!.textContent).toContain(
+    m.orders_entitlement_pending(),
+  );
 
   // Seed from the actual loader and its real prepared native read, not a claimed expected viewer.
   const native = spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(response('A').page));
@@ -306,7 +318,8 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     retry = props?.onRetry;
     return <NativeErrorPage {...props} />;
   });
-  const reads: (ReturnType<typeof deferred<BuyerOrdersCurrentRead>> & { data: { cursor?: string; locale: string } })[] = [];
+  const reads: (ReturnType<typeof deferred<BuyerOrdersCurrentRead>> & { data: { cursor?: string; locale: string } })[] =
+    [];
   const read = spyOn(orders, 'readBuyerOrdersCurrent').mockImplementation(({ data }) => {
     const work = { ...deferred<BuyerOrdersCurrentRead>(), data };
     reads.push(work);
@@ -318,19 +331,26 @@ test('The actual Orders history route retires replaced-buyer history and rejects
   const tree = () => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RouterContextProvider router={router}><Page /></RouterContextProvider>
+        <RouterContextProvider router={router}>
+          <Page />
+        </RouterContextProvider>
       </QueryClientProvider>
     </StrictMode>
   );
   const viewer = (subject: string) => ({ state: 'signed-in', subject, csrfToken: `csrf-${subject}` });
-  const tick = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  const tick = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
   const show = (session: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
-    act(() => flushSync(() => {
-      client.setQueryData(['session'], session);
-      client.setQueryData(['exposure', 'viewer'], admitted ? ['purchases'] : []);
-      client.setQueryData(['exposure', 'anonymous'], []);
-      root!.render(tree());
-    }));
+    act(() =>
+      flushSync(() => {
+        client.setQueryData(['session'], session);
+        client.setQueryData(['exposure', 'viewer'], admitted ? ['purchases'] : []);
+        client.setQueryData(['exposure', 'anonymous'], []);
+        root!.render(tree());
+      }),
+    );
   };
   const absent = (who: string) => {
     expect(host.textContent).not.toContain(`Captured purchase ${who}`);
@@ -345,7 +365,9 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     expect(host.textContent).not.toContain(m.orders_empty());
   };
   const settle = async (work: (typeof reads)[number], value: BuyerOrdersCurrentRead) => {
-    await act(async () => { work.resolve(value); });
+    await act(async () => {
+      work.resolve(value);
+    });
     await tick();
   };
   try {
@@ -363,7 +385,9 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     initial = certified;
     host.innerHTML = html;
     const hydrationErrors: unknown[] = [];
-    await act(async () => { root = hydrateRoot(host, tree(), { onRecoverableError: (e) => hydrationErrors.push(e) }); });
+    await act(async () => {
+      root = hydrateRoot(host, tree(), { onRecoverableError: (e) => hydrationErrors.push(e) });
+    });
     await tick();
     expect(hydrationErrors).toEqual([]);
     expect(host.textContent).toContain('Captured purchase A');
@@ -402,7 +426,9 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     show(viewer('B'));
     await tick();
     await settle(reads.at(-1)!, response('B'));
-    await act(async () => { lateFailureA.reject(new Error('late A failure')); });
+    await act(async () => {
+      lateFailureA.reject(new Error('late A failure'));
+    });
     await tick();
     expect(host.textContent).toContain('Captured purchase B');
     expect(host.textContent).not.toContain(m.error_heading());
@@ -479,7 +505,9 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     show(viewer('B'));
     absent('B');
     await tick();
-    await act(async () => { reads.at(-1)!.reject(notFound()); });
+    await act(async () => {
+      reads.at(-1)!.reject(notFound());
+    });
     await tick();
     unknown();
     expect(host.textContent).toContain(m.not_found_heading());
