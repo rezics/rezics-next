@@ -13,6 +13,11 @@ import { StatementFields, PartValue, EditorFailure, type StatementFieldsRead } f
 import { statementInput, type SnakInput, type StatementInput } from './statement-editor';
 import { factChanged, factLocked, sealFacts, sendFacts, type FactDraft, type FactsTransport } from './subject-facts';
 
+const gameActionClass =
+  'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
+const gamePropertySelectClass =
+  'w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full [@media(max-width:639px)_and_(pointer:coarse)]:[&>select]:min-h-11';
+
 type Ready = Extract<GameRead, { ok: true }>;
 export function gameGroupLabel(group: string, locale: string) {
   const o = { locale: locale as never };
@@ -124,12 +129,15 @@ export function GameInitialFacts({
   const groups = gameGroups(release, type);
   const context: StatementFieldsRead = { release, source: null, public: { subject: { type }, related: {} } };
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-5">
+    <fieldset disabled={disabled} className="min-w-0 max-w-full space-y-5">
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
-      <Field>
-        <FieldLabel>{m.character_add_fact({}, o)}</FieldLabel>
+      <Field className="min-w-0 max-w-full">
+        <FieldLabel className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
+          {m.character_add_fact({}, o)}
+        </FieldLabel>
         <NativeSelect
+          className={gamePropertySelectClass}
           aria-label={m.character_add_fact({}, o)}
           value={property}
           onChange={(event) => setProperty(event.target.value)}
@@ -159,6 +167,7 @@ export function GameInitialFacts({
       </Field>
       <Button
         type="button"
+        className={gameActionClass}
         variant="outline"
         disabled={!Object.values(groups).flat().includes(property) || statements.length >= 32}
         onClick={() => {
@@ -183,8 +192,14 @@ export function GameInitialFacts({
       {statements.map((row) => {
         const label = pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale);
         return (
-          <section key={row.key} className="space-y-4 rounded-xl border border-border p-4">
-            <h2 className="font-sans text-lg font-semibold" lang={label.lang ?? undefined}>
+          <section
+            key={row.key}
+            className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4 [overflow-wrap:anywhere]"
+          >
+            <h2
+              className="max-w-full whitespace-normal break-words font-sans text-lg font-semibold"
+              lang={label.lang ?? undefined}
+            >
               {label.text}
             </h2>
             <GameStatementFields
@@ -198,6 +213,7 @@ export function GameInitialFacts({
             />
             <Button
               type="button"
+              className={gameActionClass}
               variant="ghost"
               onClick={() => change(statements.filter((item) => item.key !== row.key))}
             >
@@ -247,7 +263,7 @@ export function GameClassifications({
     }
   }
   return (
-    <section className="space-y-5" aria-busy={busy}>
+    <section className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
       <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
       <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
       {fields.map((property) => {
@@ -276,36 +292,57 @@ export function GameClassifications({
           ]);
         };
         return (
-          <section key={property} className="space-y-4 rounded-xl border border-border bg-card p-4">
-            <h3 className="font-sans font-semibold" lang={label.lang ?? undefined}>
+          <section
+            key={property}
+            className="min-w-0 max-w-full space-y-4 rounded-xl border border-border bg-card p-4"
+          >
+            <h3
+              className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans font-semibold"
+              lang={label.lang ?? undefined}
+            >
               {label.text}
             </h3>
             {!selected.length && <p>{m.facts_no_value({}, o)}</p>}
             {selected.map((statement) => (
-              <div key={statement.id} className="space-y-2 border-s-2 ps-3">
+              <div
+                key={statement.id}
+                className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]"
+              >
                 <PartValue part={statement} read={context} locale={locale} />
                 {statement.qualifiers.map((part, i) => (
-                  <div key={i}>
+                  <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
                     <span>{pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}: </span>
                     <PartValue part={part} read={context} locale={locale} />
                   </div>
                 ))}
                 {statement.references.map((reference, i) => (
-                  <div key={i}>
+                  <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
                     {reference.parts.map((part, j) => (
                       <PartValue key={j} part={part} read={context} locale={locale} />
                     ))}
                   </div>
                 ))}
                 {!draft && (
-                  <Button type="button" variant="outline" disabled={busy} onClick={() => stage(statement)}>
+                  <Button
+                    className={gameActionClass}
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => stage(statement)}
+                  >
                     {m.facts_edit_field({}, o)}
                   </Button>
                 )}
               </div>
             ))}
             {!draft && (!selected.length || read.release.properties[property]!.multivalued) && (
-              <Button type="button" variant="outline" disabled={busy} onClick={() => stage(null)}>
+              <Button
+                className={gameActionClass}
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => stage(null)}
+              >
                 {m.facts_add_value({}, o)}
               </Button>
             )}
@@ -333,6 +370,7 @@ export function GameClassifications({
                   <div role="status">
                     <p>{m.correction_proposed({}, o)}</p>
                     <Button
+                      className={gameActionClass}
                       type="button"
                       onClick={() => {
                         if (draft.result?.ok) {
@@ -347,6 +385,7 @@ export function GameClassifications({
                 )}
                 {draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
                   <Button
+                    className={gameActionClass}
                     type="button"
                     variant="outline"
                     onClick={() =>
@@ -366,6 +405,7 @@ export function GameClassifications({
         );
       })}
       <Button
+        className={gameActionClass}
         type="button"
         disabled={
           busy ||

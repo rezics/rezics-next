@@ -22,6 +22,11 @@ import type { StatementInput } from './statement-editor';
 import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
 import { gameDefinitions, gameDraft, gameGroups, type GameCommand, type GameRead } from './game-profile';
 
+const gameActionClass =
+  'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
+const gameDisclosureSummaryClass =
+  'max-w-full cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:py-3';
+
 export type GameProfileTransport = {
   load: () => Promise<GameRead>;
   create: (command: GameCommand) => Promise<CreateResult>;
@@ -53,14 +58,16 @@ export function GameProfile({
   const read = query.data;
   if (!read || !read.ok)
     return (
-      <article className="mx-auto max-w-4xl space-y-5">
+      <article className="mx-auto min-w-0 max-w-4xl space-y-5">
         <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
         {query.isPending ? (
           <p role="status">{m.catalogue_create_loading({}, o)}</p>
         ) : (
           <>
             <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
-            <Button onClick={() => void query.refetch()}>{m.correction_reload({}, o)}</Button>
+            <Button className={gameActionClass} onClick={() => void query.refetch()}>
+              {m.correction_reload({}, o)}
+            </Button>
           </>
         )}
       </article>
@@ -161,19 +168,28 @@ function GameCorrection({
     [read.public, read.release, fields],
   );
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-8">
+    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-8">
       <header className="space-y-4">
         <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
-        <a className="font-sans text-xl underline" lang={title.lang ?? undefined} href={href}>
+        <a
+          className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-xl underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          lang={title.lang ?? undefined}
+          href={href}
+        >
           {title.text || m.subject_value_unlabelled({}, o)}
         </a>
-        <p lang={type.lang ?? undefined}>{type.text}</p>
+        <p className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]" lang={type.lang ?? undefined}>
+          {type.text}
+        </p>
         <p className="break-all font-mono text-xs text-muted-foreground">
           {subject.id} · {subject.type}
         </p>
         <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
-        <nav className="flex flex-wrap gap-2" aria-label={m.facts_other_editors({}, o)}>
-          <a className={buttonVariants({ variant: 'outline' })} href={href}>
+        <nav
+          className="flex min-w-0 max-w-full flex-wrap gap-2 [overflow-wrap:anywhere]"
+          aria-label={m.facts_other_editors({}, o)}
+        >
+          <a className={`${buttonVariants({ variant: 'outline' })} ${gameActionClass}`} href={href}>
             {m.candidate_view_public({}, o)}
           </a>
           <SubjectTermsEntry id={subject.id} label={title.text} locale={locale} />
@@ -182,7 +198,7 @@ function GameCorrection({
           ) && <AuthoredFieldEntry id={subject.id} title={title.text} locale={locale} />}
           {subject.type !== 'wd:Q20631656' && <PublicationEditorEntry work={subject.id} locale={locale} />}
           <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/game` }} />
-          <Button type="button" variant="outline" onClick={() => void refresh()}>
+          <Button className={gameActionClass} type="button" variant="outline" onClick={() => void refresh()}>
             {m.correction_reload({}, o)}
           </Button>
         </nav>
@@ -237,8 +253,10 @@ function GameCorrection({
         <p role="status">{session === 'signed-out' ? m.relation_sign_in({}, o) : m.catalogue_create_loading({}, o)}</p>
       ) : (
         <>
-          <details className="rounded-xl border border-border p-4">
-            <summary className="cursor-pointer font-sans font-semibold">{m.game_profile_facts({}, o)}</summary>
+          <details className="min-w-0 max-w-full rounded-xl border border-border p-4">
+            <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+              {m.game_profile_facts({}, o)}
+            </summary>
             <SubjectFacts
               initial={{ ...read, source: null }}
               locale={locale}
@@ -247,8 +265,8 @@ function GameCorrection({
             />
           </details>
           {!!groups.classification.length && (
-            <details className="space-y-4 rounded-xl border border-border p-4">
-              <summary className="cursor-pointer font-sans font-semibold">
+            <details className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4">
+              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
                 {m.game_profile_classification({}, o)}
               </summary>
               <GameClassifications
@@ -261,8 +279,10 @@ function GameCorrection({
             </details>
           )}
           {!!fields.length && (
-            <details className="rounded-xl border border-border p-4">
-              <summary className="cursor-pointer font-sans font-semibold">{m.game_profile_relations({}, o)}</summary>
+            <details className="min-w-0 max-w-full rounded-xl border border-border p-4">
+              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+                {m.game_profile_relations({}, o)}
+              </summary>
               <RelationEditor
                 id={subject.id}
                 locale={locale}

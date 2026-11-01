@@ -156,21 +156,71 @@ export const ReaderUnavailable: Story = {
 };
 export const Proposed: Story = {
   args: { correction: true },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const name = m.game_profile_classification();
     const [summary] = await canvas.findAllByText(name, { selector: 'summary' });
-    await userEvent.click(summary!);
+    const article = canvas.getByRole('article');
+    const view = canvasElement.ownerDocument.defaultView;
+    if (!view) throw new Error('Game profile story requires a browser window.');
+    const viewportWidth = view.innerWidth;
+    const coarsePointer = view.matchMedia('(pointer: coarse)').matches;
+    const largeTouchTargets = viewportWidth <= 639 && coarsePointer;
+    const bounds = article.getBoundingClientRect();
+    const contained = async (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      await expect(element).toBeVisible();
+      await expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+      await expect(rect.right).toBeLessThanOrEqual(bounds.right);
+      await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+      await expect(element.scrollHeight).toBeLessThanOrEqual(element.clientHeight + 1);
+    };
+    const target = async (element: HTMLElement) => {
+      await contained(element);
+      if (largeTouchTargets) {
+        await expect(element.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+        await expect(element.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      } else {
+        await expect(element.getBoundingClientRect().height).toBeLessThan(44);
+      }
+    };
+    const navigation = article.querySelector('nav');
+    if (!navigation) throw new Error('Game profile navigation is missing.');
+    await contained(navigation);
+    const publicProfile = within(navigation).getByRole('link', { name: m.candidate_view_public() });
+    const reload = within(navigation).getByRole('button', { name: m.correction_reload() });
+    await target(publicProfile);
+    await target(reload);
+    const factsSummary = article.querySelector<HTMLElement>('details > summary');
+    if (!factsSummary) throw new Error('Game profile facts disclosure is missing.');
+    await target(factsSummary);
+    await target(summary!);
+
+    reload.focus();
+    await userEvent.tab();
+    await expect(factsSummary).toHaveFocus();
+    await userEvent.tab();
+    await expect(summary!).toHaveFocus();
+    await expect(view.getComputedStyle(summary!).outlineWidth).not.toBe('0px');
+    await userEvent.keyboard('{Enter}');
+    await expect(summary!.closest('details')).toHaveAttribute('open', '');
+
     const region = within(summary!.closest('details')!);
     const platformLabel = pickText(definitions.release.properties['schema:gamePlatform'].labels, getLocale()).text;
     const platform = within(region.getByRole('heading', { name: platformLabel }).closest('section')!);
+    await target(platform.getByRole('button', { name: m.facts_edit_field() }));
+    await target(region.getAllByRole('button', { name: m.facts_add_value() })[0]!);
+    await target(region.getByRole('button', { name: m.facts_submit() }));
     await userEvent.click(platform.getByRole('button', { name: m.facts_edit_field() }));
     const value = platform.getByRole('textbox', { name: m.correction_value() });
     await userEvent.clear(value);
     await userEvent.type(value, 'fr');
     await userEvent.click(region.getByRole('button', { name: m.facts_submit() }));
     await expect(await platform.findByText(m.correction_proposed())).toBeVisible();
-    await userEvent.click(platform.getByRole('button', { name: m.correction_review() }));
+    const review = platform.getByRole('button', { name: m.correction_review() });
+    await target(review);
+    await userEvent.click(review);
     await userEvent.click(region.getByRole('button', { name: m.candidate_entry() }));
     await expect(await region.findByText(m.candidate_proposed())).toBeVisible();
   },
