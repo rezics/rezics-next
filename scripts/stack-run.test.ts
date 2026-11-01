@@ -434,7 +434,42 @@ async function stack(
   return { code, stdout, stderr, directory };
 }
 
-async function missingGenericEvidenceRun(environment: Record<string, string>, directory: string) {
+async function stackWithFixtureDeadline(
+  fixture: ReturnType<typeof scenario>,
+  command: string[],
+  options: string[] = [],
+  directory = workspace(),
+): Promise<{ code: number; stdout: string; stderr: string; directory: string }> {
+  const child = Bun.spawn(
+    ['bun', stackRun, ...options, 'the run', directory, join(directory, 'src'), '--', ...command],
+    {
+      cwd: repository,
+      env: fixture.env,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
+  const result = Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]).then(([code, stdout, stderr]) => ({ code, stdout, stderr, directory }));
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline && !fixture.events().some((event) => event.kind === 'run')) await Bun.sleep(10);
+  if (!fixture.events().some((event) => event.kind === 'run')) {
+    child.kill('SIGTERM');
+    const stopped = await result;
+    throw new Error(`mock did not reach its native run; events=${JSON.stringify(fixture.events())}; stderr=${stopped.stderr}`);
+  }
+  return result;
+}
+
+async function missingGenericEvidenceRun(
+  environment: Record<string, string>,
+  directory: string,
+  events: () => Event[],
+) {
   const source = `const { remoteCheck } = await import(${JSON.stringify(join(repository, 'scripts/remote-check.ts'))});
 let settlement;
 let outcome;
@@ -461,11 +496,19 @@ process.stdout.write(JSON.stringify({ outcome, settlement }) + '\\n');
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const [code, stdout, stderr] = await Promise.all([
+  const result = Promise.all([
     child.exited,
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
   ]);
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline && !events().some((event) => event.kind === 'run')) await Bun.sleep(10);
+  if (!events().some((event) => event.kind === 'run')) {
+    child.kill('SIGTERM');
+    const [, , stderr] = await result;
+    throw new Error(`mock did not reach its native run; events=${JSON.stringify(events())}; stderr=${stderr}`);
+  }
+  const [code, stdout, stderr] = await result;
   expect(code, stderr).toBe(0);
   return {
     ...(JSON.parse(stdout.trim()) as {
@@ -508,7 +551,7 @@ test("a stack run goes to a free check host and returns the command's exit code"
 test('ordinary remote transport keeps the native outcome and declared returns/cleanup without generic prepared evidence', async () => {
   const fixture = scenario({ a: { available: 20e9, exit: 7 } });
   const directory = workspace();
-  const result = await stack(fixture.env, ['true'], ['--returns', 'missing-output.txt'], directory);
+  const result = await stackWithFixtureDeadline(fixture, ['true'], ['--returns', 'missing-output.txt'], directory);
   expect(result.code, `${result.stderr} ${JSON.stringify(fixture.events())}`).toBe(7);
   const events = fixture.events();
   expect(events.some((event) => event.kind === 'prepared-inputs')).toBe(false);
@@ -526,7 +569,7 @@ test('ordinary remote transport keeps the native outcome and declared returns/cl
 
 test('generic remote transport still requires explicitly requested prepared source evidence', async () => {
   const fixture = scenario({ a: { available: 20e9, exit: 7 } });
-  const result = await missingGenericEvidenceRun(fixture.env, workspace());
+  const result = await missingGenericEvidenceRun(fixture.env, workspace(), fixture.events);
   expect(result.outcome).toEqual({
     kind: 'error',
     message: 'remote-check: prepared source/generated input evidence is unavailable',
