@@ -32,7 +32,10 @@ export async function placeCompilerRun(
   const recognition = (dependencies.recognize ?? recognizeCheckHostRun)(physicalDirectory);
   if (recognition.outcome === 'admitted') return null;
   if (env.DATABASE_URL)
-    return unavailable(run.label, 'an explicit DATABASE_URL requires an already admitted check-host run; its credentials cannot be relocated');
+    return unavailable(
+      run.label,
+      'an explicit DATABASE_URL requires an already admitted check-host run; its credentials cannot be relocated',
+    );
   const placed = await (dependencies.place ?? runOnCheckHost)(run, env);
   // A placement dependency cannot turn an unrecognized source checkout into an admitted run.
   return placed ?? unavailable(run.label, `physical run recognition refused (${recognition.reason})`);
@@ -42,7 +45,13 @@ export async function placeCompilerRun(
 export function compilerConfigArgs(env: NodeJS.ProcessEnv, root: string, directories: readonly string[]): string[] {
   const config = env.REYLO_CONFIG;
   if (config === undefined) return [];
-  if (!config || config.length > 4096 || /[\x00-\x1f\x7f]/.test(config) || config.startsWith('/') || config.includes('\\'))
+  if (
+    !config ||
+    config.length > 4096 ||
+    /[\x00-\x1f\x7f]/.test(config) ||
+    config.startsWith('/') ||
+    config.includes('\\')
+  )
     throw new Error('Unsupported REYLO_CONFIG: expected a bounded repository-relative project path');
   for (const directory of directories) {
     const path = relative(root, resolve(directory, config));
@@ -53,17 +62,27 @@ export function compilerConfigArgs(env: NodeJS.ProcessEnv, root: string, directo
 }
 
 export function compilerEnvironment(env: NodeJS.ProcessEnv, args: readonly string[]): NodeJS.ProcessEnv {
-  const configs = args.filter(arg => arg.startsWith('--reylo-config='));
+  const configs = args.filter((arg) => arg.startsWith('--reylo-config='));
   if (configs.length > 1) throw new Error('Duplicate --reylo-config descriptor');
   return configs.length === 0 ? env : { ...env, REYLO_CONFIG: configs[0]!.slice('--reylo-config='.length) };
 }
 
 function validateSelection(value: unknown): readonly string[] | undefined {
   if (value === null) return undefined;
-  if (!Array.isArray(value) || value.length > 4096 || value.some(file =>
-    typeof file !== 'string' || !file || file.length > 4096 || /[\x00-\x1f\x7f\\]/.test(file) ||
-    file.startsWith('/') || file.split('/').some(part => part === '..' || part === '.')
-  )) throw new Error('Invalid typecheck selection: expected bounded workspace-relative changed files');
+  if (
+    !Array.isArray(value) ||
+    value.length > 4096 ||
+    value.some(
+      (file) =>
+        typeof file !== 'string' ||
+        !file ||
+        file.length > 4096 ||
+        /[\x00-\x1f\x7f\\]/.test(file) ||
+        file.startsWith('/') ||
+        file.split('/').some((part) => part === '..' || part === '.'),
+    )
+  )
+    throw new Error('Invalid typecheck selection: expected bounded workspace-relative changed files');
   return value as string[];
 }
 
@@ -76,16 +95,23 @@ export function typecheckSelectionArgument(changedFiles: readonly string[] | und
 
 /** Decoding never grants placement or expands a selected path into executable code. */
 export function parseTypecheckSelection(args: readonly string[]): { changedFiles?: readonly string[] } {
-  const descriptors = args.filter(arg => arg.startsWith('--selection='));
-  if (args.some(arg => !arg.startsWith('--selection=') && !arg.startsWith('--reylo-config=')) || descriptors.length > 1)
+  const descriptors = args.filter((arg) => arg.startsWith('--selection='));
+  if (
+    args.some((arg) => !arg.startsWith('--selection=') && !arg.startsWith('--reylo-config=')) ||
+    descriptors.length > 1
+  )
     throw new Error('Unsupported or duplicate typecheck arguments');
   if (descriptors.length === 0) return {};
   const descriptor = descriptors[0]!.slice('--selection='.length);
   if (Buffer.byteLength(descriptor) > 65_536) throw new Error('Typecheck selection descriptor exceeds 65536 bytes');
   const value: unknown = JSON.parse(descriptor);
-  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
     Object.keys(value).sort().join(',') !== 'changedFiles,version' ||
-    (value as { version: unknown }).version !== 1)
+    (value as { version: unknown }).version !== 1
+  )
     throw new Error('Invalid typecheck selection descriptor');
   // An explicit all-workspace descriptor must override TYPECHECK_CHANGED at the destination.
   const changedFiles = validateSelection((value as { changedFiles: unknown }).changedFiles);
@@ -328,9 +354,7 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   };
   const changed =
     options.changedFiles ??
-    (env.TYPECHECK_CHANGED === undefined
-      ? undefined
-      : env.TYPECHECK_CHANGED.split('\n').filter(Boolean));
+    (env.TYPECHECK_CHANGED === undefined ? undefined : env.TYPECHECK_CHANGED.split('\n').filter(Boolean));
   const all = await loadWorkspaces(root);
   const workspaces = affectedWorkspaces(root, all, changed);
   if (workspaces.length < all.length)
@@ -341,12 +365,23 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   if (!workspaces.some((workspace) => workspace.needsDatabase)) return run(env);
   if (root !== repository && !options.place && !options.recognize)
     return unavailable('root typecheck', 'database-backed checks require the source checkout root');
-  const config = compilerConfigArgs(env, root, workspaces.filter(w => w.needsDatabase).map(w => w.directory));
-  const placed = await placeCompilerRun({
-    label: 'root typecheck', root, cwd: root,
-    command: ['bun', 'scripts/typecheck.ts', typecheckSelectionArgument(changed), ...config],
-    returns: [],
-  }, repository, env, options);
+  const config = compilerConfigArgs(
+    env,
+    root,
+    workspaces.filter((w) => w.needsDatabase).map((w) => w.directory),
+  );
+  const placed = await placeCompilerRun(
+    {
+      label: 'root typecheck',
+      root,
+      cwd: root,
+      command: ['bun', 'scripts/typecheck.ts', typecheckSelectionArgument(changed), ...config],
+      returns: [],
+    },
+    repository,
+    env,
+    options,
+  );
   if (placed !== null) return placed;
   if (env.DATABASE_URL) return run(env);
   if (options.startDatabase) return withStartedDatabase(options.startDatabase, run, env);
@@ -359,7 +394,7 @@ if (import.meta.main) {
     const args = process.argv.slice(2);
     const env = { ...compilerEnvironment(process.env, args) };
     // The descriptor is authoritative over any unrelated destination-side environment selection.
-    if (args.some(arg => arg.startsWith('--selection='))) delete env.TYPECHECK_CHANGED;
+    if (args.some((arg) => arg.startsWith('--selection='))) delete env.TYPECHECK_CHANGED;
     process.exit(await typecheck({ ...parseTypecheckSelection(args), env }));
   } catch (error) {
     console.error(error);

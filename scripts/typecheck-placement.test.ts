@@ -9,7 +9,9 @@ import { runOnCheckHost } from './stack-run.ts';
 const repository = resolve(import.meta.dir, '..');
 const temporaryDirectories: string[] = [];
 const physicalAdmission = {
-  outcome: 'admitted' as const, runId: 'fixture', scope: 'fixture.scope',
+  outcome: 'admitted' as const,
+  runId: 'fixture',
+  scope: 'fixture.scope',
   supervisor: { pid: 1, started: '1', group: 1 },
 };
 const recognize = () => physicalAdmission;
@@ -18,15 +20,18 @@ const recognize = () => physicalAdmission;
 // under explicitly injected physical evidence rather than an environment-only URL bypass.
 function admittedEntrypoint(workspace: string, directory: string): string {
   const fixture = join(directory, `${workspace}-admitted.ts`);
-  writeFileSync(fixture, `
+  writeFileSync(
+    fixture,
+    `
 import { run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck } from ${JSON.stringify(join(repository, `services/${workspace}/scripts/typecheck.ts`))};
 process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(physicalAdmission)}),
   place: async () => { throw new Error('nested host admission'); },
 });
-`);
+`,
+  );
   return fixture;
-} 
+}
 
 function temporaryDirectory(): string {
   mkdirSync(join(repository, '.temp'), { recursive: true });
@@ -137,7 +142,9 @@ test('admitted Kernel client emission preserves output modes without nested host
       },
       {
         recognize,
-        place: async () => { throw new Error('nested host discovery'); },
+        place: async () => {
+          throw new Error('nested host discovery');
+        },
         withThrowawayDatabase: async (work) => {
           databaseStarts++;
           return work(databaseEnv);
@@ -169,8 +176,12 @@ test.each([false, true])('local opt-out still places the compiler with its emiss
         expect(run.command.includes('--emit-client')).toBe(emitClient);
         return 19;
       },
-      withThrowawayDatabase: async () => { throw new Error('local database'); },
-      typecheck: async () => { throw new Error('local compiler'); },
+      withThrowawayDatabase: async () => {
+        throw new Error('local database');
+      },
+      typecheck: async () => {
+        throw new Error('local compiler');
+      },
     },
     emitClient ? ['--emit-client'] : [],
   );
@@ -224,8 +235,12 @@ test('Kernel compiler placement returns only its genuinely required bounded outp
             place: async (run, receivedEnv) => {
               placements++;
               expect(receivedEnv).toBe(env);
-              expect(run.command).toEqual(['bun', 'scripts/typecheck.ts', ...mode.command,
-                ...(project.REYLO_CONFIG ? [`--reylo-config=${project.REYLO_CONFIG}`] : [])]);
+              expect(run.command).toEqual([
+                'bun',
+                'scripts/typecheck.ts',
+                ...mode.command,
+                ...(project.REYLO_CONFIG ? [`--reylo-config=${project.REYLO_CONFIG}`] : []),
+              ]);
               expect(run.keepsFiles).toBe(mode.keepsFiles);
               expect(run.returns).toEqual(mode.returns);
               return compilerStatus;
@@ -252,7 +267,9 @@ test('admitted typecheck and construct share the host throwaway database', async
     {},
     {
       recognize,
-      place: async () => { throw new Error('nested placement'); },
+      place: async () => {
+        throw new Error('nested placement');
+      },
       withThrowawayDatabase: async (work) => work({ DATABASE_URL: 'postgres://throwaway.test/db' }),
       typecheck: async (_env) => {
         receivedUrl = _env.DATABASE_URL;
@@ -296,16 +313,30 @@ test('admitted explicit DATABASE_URL retains its SQL semantics without provision
 
 test('unreturnable client output and external projects are explicitly unavailable without local SQL execution', async () => {
   for (const args of [['--emit-client'], ['--emit-client', '--emit-schema=semantic']]) {
-    await expect(runKernelTypecheck({}, {
-      place: runOnCheckHost,
-      withThrowawayDatabase: async () => { throw new Error('local database'); },
-      typecheck: async () => { throw new Error('local compiler'); },
-    }, args)).rejects.toThrow('the run keeps files it writes and declares no returns');
+    await expect(
+      runKernelTypecheck(
+        {},
+        {
+          place: runOnCheckHost,
+          withThrowawayDatabase: async () => {
+            throw new Error('local database');
+          },
+          typecheck: async () => {
+            throw new Error('local compiler');
+          },
+        },
+        args,
+      ),
+    ).rejects.toThrow('the run keeps files it writes and declares no returns');
   }
   for (const REYLO_CONFIG of ['/external/project/.reylo.yaml', '../../../external/.reylo.yaml']) {
     const dependencies = {
-      place: async () => { throw new Error('unsupported project placement'); },
-      typecheck: async () => { throw new Error('unsupported project compiler'); },
+      place: async () => {
+        throw new Error('unsupported project placement');
+      },
+      typecheck: async () => {
+        throw new Error('unsupported project compiler');
+      },
     };
     await expect(runKernelTypecheck({ REYLO_CONFIG }, dependencies, [])).rejects.toThrow('Unsupported REYLO_CONFIG');
     await expect(runAuthTypecheck({ REYLO_CONFIG }, dependencies, [])).rejects.toThrow('Unsupported REYLO_CONFIG');
@@ -314,17 +345,25 @@ test('unreturnable client output and external projects are explicitly unavailabl
 
 test('admitted argv project configuration survives database preparation without nested placement', async () => {
   let compiled = false;
-  expect(await runKernelTypecheck({}, {
-    recognize,
-    place: async () => { throw new Error('nested placement'); },
-    withThrowawayDatabase: async work => work({ DATABASE_URL: 'postgres://fixture/config' }),
-    typecheck: async env => {
-      compiled = true;
-      expect(env.REYLO_CONFIG).toBe('../../.temp/project/.reylo.yaml');
-      expect(env.DATABASE_URL).toBe('postgres://fixture/config');
-      return 0;
-    },
-  }, ['--reylo-config=../../.temp/project/.reylo.yaml'])).toBe(0);
+  expect(
+    await runKernelTypecheck(
+      {},
+      {
+        recognize,
+        place: async () => {
+          throw new Error('nested placement');
+        },
+        withThrowawayDatabase: async (work) => work({ DATABASE_URL: 'postgres://fixture/config' }),
+        typecheck: async (env) => {
+          compiled = true;
+          expect(env.REYLO_CONFIG).toBe('../../.temp/project/.reylo.yaml');
+          expect(env.DATABASE_URL).toBe('postgres://fixture/config');
+          return 0;
+        },
+      },
+      ['--reylo-config=../../.temp/project/.reylo.yaml'],
+    ),
+  ).toBe(0);
   expect(compiled).toBe(true);
 });
 
@@ -388,7 +427,9 @@ test('without DATABASE_URL, auth uses kernel placement and the host owns its mig
       expect(receivedEnv).toBe(env);
       return runAuthTypecheck(env, {
         recognize,
-      place: async () => { throw new Error('nested placement'); },
+        place: async () => {
+          throw new Error('nested placement');
+        },
         prepareCompilerDatabase: async () => {
           events.push('host database');
           return {
@@ -420,7 +461,9 @@ test('admitted auth uses and closes its throwaway database', async () => {
     { PATH: process.env.PATH },
     {
       recognize,
-      place: async () => { throw new Error('nested placement'); },
+      place: async () => {
+        throw new Error('nested placement');
+      },
       prepareCompilerDatabase: async () => {
         events.push('database');
         return {
@@ -493,11 +536,12 @@ process.exitCode = await runAuthTypecheck(process.env, {
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${directory}:${process.env.PATH}` };
     delete env.DATABASE_URL;
     if (placement === 'existing') env.DATABASE_URL = 'postgres://existing.test/auth';
-    const result = spawnSync(
-      process.execPath,
-      [fixture, placement],
-      { cwd: repository, encoding: 'utf8', env, timeout: 60_000 },
-    );
+    const result = spawnSync(process.execPath, [fixture, placement], {
+      cwd: repository,
+      encoding: 'utf8',
+      env,
+      timeout: 60_000,
+    });
 
     expect(result.status).toBe(23);
     expect(result.stdout).toBe(diagnostic);
@@ -529,7 +573,9 @@ test('auth removes its compiler database when starting tsc fails', async () => {
     {},
     {
       recognize,
-      place: async () => { throw new Error('nested placement'); },
+      place: async () => {
+        throw new Error('nested placement');
+      },
       prepareCompilerDatabase: async () => ({
         url: 'postgres://throwaway.test/auth',
         remove: async () => {

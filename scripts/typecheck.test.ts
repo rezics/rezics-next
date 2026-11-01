@@ -197,8 +197,15 @@ await Bun.write('database-url', url);
     const code = await typecheck({
       root,
       env: {},
-      recognize: () => ({ outcome: 'admitted', runId: 'fixture', scope: 'fixture.scope', supervisor: { pid: 1, started: '1', group: 1 } }),
-      place: async () => { throw new Error('nested host admission'); },
+      recognize: () => ({
+        outcome: 'admitted',
+        runId: 'fixture',
+        scope: 'fixture.scope',
+        supervisor: { pid: 1, started: '1', group: 1 },
+      }),
+      place: async () => {
+        throw new Error('nested host admission');
+      },
       stdout: output.stdout,
       startDatabase: async () => {
         starts += 1;

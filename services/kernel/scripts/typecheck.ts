@@ -2,7 +2,12 @@ import { statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withThrowawayDatabase } from './derived.ts';
-import { compilerConfigArgs, compilerEnvironment, placeCompilerRun, type CompilerPlacementDependencies } from '../../../scripts/typecheck.ts';
+import {
+  compilerConfigArgs,
+  compilerEnvironment,
+  placeCompilerRun,
+  type CompilerPlacementDependencies,
+} from '../../../scripts/typecheck.ts';
 import { schemaDumps, validateMigrationVersions } from './database.ts';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -95,28 +100,33 @@ export async function runKernelTypecheck(
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
   const compile = (databaseEnv: NodeJS.ProcessEnv) => {
-    const compilerEnv = env.REYLO_CONFIG === undefined ? databaseEnv : { ...databaseEnv, REYLO_CONFIG: env.REYLO_CONFIG };
-    return emitSchema === undefined ? runCommands(compilerEnv, emitClient) : runCommands(compilerEnv, emitClient, emitSchema);
+    const compilerEnv =
+      env.REYLO_CONFIG === undefined ? databaseEnv : { ...databaseEnv, REYLO_CONFIG: env.REYLO_CONFIG };
+    return emitSchema === undefined
+      ? runCommands(compilerEnv, emitClient)
+      : runCommands(compilerEnv, emitClient, emitSchema);
   };
   const config = compilerConfigArgs(env, repository, [directory]);
   const returns = returnedPaths(env, emitClient, emitSchema);
   const placed = await placeCompilerRun(
-          {
-            label: 'kernel typecheck',
-            root: repository,
-            cwd: directory,
-            command: [
-              'bun',
-              'scripts/typecheck.ts',
-              ...(emitClient ? ['--emit-client'] : []),
-              ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
-              ...config,
-            ],
-            keepsFiles: emitClient || emitSchema !== undefined || returns === undefined,
-            ...(returns === undefined ? {} : { returns }),
-          },
-          directory, env, dependencies,
-        );
+    {
+      label: 'kernel typecheck',
+      root: repository,
+      cwd: directory,
+      command: [
+        'bun',
+        'scripts/typecheck.ts',
+        ...(emitClient ? ['--emit-client'] : []),
+        ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
+        ...config,
+      ],
+      keepsFiles: emitClient || emitSchema !== undefined || returns === undefined,
+      ...(returns === undefined ? {} : { returns }),
+    },
+    directory,
+    env,
+    dependencies,
+  );
   if (placed !== null) return placed;
   // The compiler database applies the same migrations as derived generation, in admitted custody only.
   validateMigrationVersions(

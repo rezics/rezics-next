@@ -1,7 +1,12 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareCompilerDatabase } from '../../../scripts/compiler-database.ts';
-import { compilerConfigArgs, compilerEnvironment, placeCompilerRun, type CompilerPlacementDependencies } from '../../../scripts/typecheck.ts';
+import {
+  compilerConfigArgs,
+  compilerEnvironment,
+  placeCompilerRun,
+  type CompilerPlacementDependencies,
+} from '../../../scripts/typecheck.ts';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repository = resolve(directory, '../..');
@@ -35,7 +40,9 @@ export async function runAuthTypecheck(
       cwd: directory,
       command: ['bun', 'scripts/typecheck.ts', ...config],
     },
-    directory, env, dependencies,
+    directory,
+    env,
+    dependencies,
   );
   if (placed !== null) return placed;
   if (env.DATABASE_URL) return runCommands(env);
