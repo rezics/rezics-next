@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import {
@@ -50,22 +50,44 @@ export function CollectionExport({
   context: CollectionPublicContext;
   laterPage?: boolean;
 }) {
-  const descriptionId = useId();
+  const { origin, locale } = context;
   const available = collectionPublicDocument(page, context, laterPage) !== null;
-  const [pending, setPending] = useState(false);
-  const [notice, setNotice] = useState<{
-    page: CollectionPublicPage;
-    origin: string;
-    locale: string;
-    message: string;
-  } | null>(null);
+  const [lifetime, setLifetime] = useState({ page, origin, locale, laterPage, available, key: 0 });
+  if (
+    lifetime.page !== page ||
+    lifetime.origin !== origin ||
+    lifetime.locale !== locale ||
+    lifetime.laterPage !== laterPage ||
+    lifetime.available !== available
+  ) {
+    // Reset before committing the replacement view, including a return to an earlier payload.
+    setLifetime({ page, origin, locale, laterPage, available, key: lifetime.key + 1 });
+  }
 
   if (!available) return null;
+  return <CollectionExportActions key={lifetime.key} page={page} context={context} laterPage={laterPage} />;
+}
+
+/** A retired instance may finish clipboard IO, but its state cannot reach the replacement controls. */
+function CollectionExportActions({
+  page,
+  context,
+  laterPage,
+}: {
+  page: CollectionPublicPage;
+  context: CollectionPublicContext;
+  laterPage: boolean;
+}) {
+  const descriptionId = useId();
+  const inFlight = useRef(false);
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState('');
 
   async function perform(kind: 'download' | 'copy') {
-    if (!available || pending) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPending(true);
-    setNotice(null);
+    setNotice('');
     let message: string;
     try {
       const done =
@@ -80,9 +102,10 @@ export function CollectionExport({
     } catch {
       message = m.library_collection_export_failed();
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
-    setNotice({ page, origin: context.origin, locale: context.locale, message });
+    setNotice(message);
   }
 
   return (
@@ -111,9 +134,7 @@ export function CollectionExport({
         {m.library_collection_export_note()}
       </p>
       <p role="status" aria-live="polite" aria-atomic="true" className="text-sm">
-        {notice?.page === page && notice.origin === context.origin && notice.locale === context.locale
-          ? notice.message
-          : ''}
+        {notice}
       </p>
     </div>
   );
