@@ -3,11 +3,13 @@ import type { FakeRoute } from '../fake-modules';
 
 // Contract-shaped story responses only; these do not establish native authorization or payment evidence.
 const id = (n: number) => `019a2100-0000-7000-8000-${String(n).padStart(12, '0')}`;
+const capturedMoneyUnit = { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' } as const;
 export const creatorStatementFixture: CreatorStatement = {
   id: id(3),
   creatorAccountId: id(20),
   period: '2026-10',
   currency: 'usd',
+  moneyUnit: capturedMoneyUnit,
   grossMinor: -200,
   taxMinor: 100,
   feeMinor: 50,
@@ -55,6 +57,7 @@ export const creatorLineFixture: CreatorStatementLine = {
   creatorAccountId: creatorStatementFixture.creatorAccountId,
   statementId: creatorStatementFixture.id,
   currency: 'usd',
+  moneyUnit: capturedMoneyUnit,
   kind: 'charge',
   created: '2026-09-30T23:30:00Z',
   recordedAt: '2026-10-01T00:01:00Z',
@@ -78,8 +81,27 @@ const refund: CreatorStatementLine = {
   netReceiptsMinor: -1100,
 };
 
+// Historical evidence has no recorded unit. Keep its captured amounts and external-payment meaning.
+export const historicalCreatorStatementFixture: CreatorStatement = {
+  ...paidCreatorStatementFixture,
+  id: id(4),
+  period: '2025-09',
+  moneyUnit: null,
+  paidAt: '2025-10-04T09:00:00Z',
+  paidReference: 'External bank reference • 2025-09 / USD',
+};
+export const historicalCreatorLineFixture: CreatorStatementLine = {
+  ...creatorLineFixture,
+  statementId: historicalCreatorStatementFixture.id,
+  period: historicalCreatorStatementFixture.period,
+  created: '2025-09-30T23:30:00Z',
+  recordedAt: '2025-09-30T23:31:00Z',
+  moneyUnit: null,
+};
+
 export type CreatorStatementStory =
   | 'creator'
+  | 'unknown-unit'
   | 'empty'
   | 'denied'
   | 'unavailable'
@@ -108,32 +130,49 @@ export const routes: FakeRoute[] = [
           payoutStatements:
             selected === 'empty'
               ? []
-              : url.searchParams.has('cursor')
-                ? [paidCreatorStatementFixture]
-                : [creatorStatementFixture, euro],
-          next: selected === 'empty' || url.searchParams.has('cursor') ? null : 'story-statements-next',
+              : selected === 'unknown-unit'
+                ? [historicalCreatorStatementFixture]
+                : url.searchParams.has('cursor')
+                  ? [paidCreatorStatementFixture]
+                  : [creatorStatementFixture, euro],
+          next:
+            selected === 'empty' || selected === 'unknown-unit' || url.searchParams.has('cursor')
+              ? null
+              : 'story-statements-next',
         };
-      const statement = [creatorStatementFixture, euro, paidCreatorStatementFixture].find(
-        (row) => row.id === statementId,
-      );
+      const statements =
+        selected === 'unknown-unit'
+          ? [historicalCreatorStatementFixture]
+          : [creatorStatementFixture, euro, paidCreatorStatementFixture];
+      const statement = statements.find((row) => row.id === statementId);
       if (!statement) return { status: 404, code: 'not_found' };
       if (!match?.[2]) return { status: 200, statement };
       if (selected === 'lines-unavailable') return { status: 503, code: 'overloaded' };
       const line = {
-        ...creatorLineFixture,
+        ...(selected === 'unknown-unit' ? historicalCreatorLineFixture : creatorLineFixture),
         statementId,
         currency: statement.currency,
         period: statement.period,
-        ...(statement.state === 'paid' ? { recordedAt: '2026-09-30T23:31:00Z' } : {}),
+        ...(statement.id === paidCreatorStatementFixture.id ? { recordedAt: '2026-09-30T23:31:00Z' } : {}),
       };
       return {
         status: 200,
         lines:
           selected === 'empty'
             ? []
-            : url.searchParams.has('cursor')
-              ? [{ ...refund, statementId, currency: statement.currency, period: statement.period }]
-              : [line],
+            : selected === 'unknown-unit'
+              ? [line]
+              : url.searchParams.has('cursor')
+                ? [
+                    {
+                      ...refund,
+                      statementId,
+                      currency: statement.currency,
+                      period: statement.period,
+                      moneyUnit: line.moneyUnit,
+                    },
+                  ]
+                : [line],
         next:
           selected === 'empty' ||
           statement.state === 'paid' ||

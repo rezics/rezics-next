@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import {
   creatorStatementFixture,
+  historicalCreatorStatementFixture,
   paidCreatorStatementFixture,
   selectCreatorStatementStory,
   type CreatorStatementStory,
@@ -59,6 +60,15 @@ export const ExternalPayment: Story = {
     const view = within(within(context.canvasElement).getByRole('main'));
     await expect(await view.findByText(paidCreatorStatementFixture.paidReference!)).toBeVisible();
     await expect(view.getByText(m.statements_payment_meaning())).toBeVisible();
+  },
+};
+export const UnknownHistoricalMoney: Story = {
+  render: () => render('unknown-unit', historicalCreatorStatementFixture.id),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await expect((await view.findAllByText(m.statements_amount_unavailable()))[0]).toBeVisible();
+    await expect(view.getByText(historicalCreatorStatementFixture.paidReference!)).toBeVisible();
   },
 };
 function stateReady(label: () => string) {

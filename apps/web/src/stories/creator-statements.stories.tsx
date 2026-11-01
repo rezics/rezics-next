@@ -46,6 +46,15 @@ export const InspectAndBack: Story = {
     await expect(view.getByText(m.statements_paid())).toBeVisible();
   },
 };
+export const UnknownHistoricalMoney: Story = {
+  render: () => render('unknown-unit'),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await expect(await view.findByText(m.statements_amount_unavailable())).toBeVisible();
+    await expect(view.getByText(m.statements_paid())).toBeVisible();
+  },
+};
 function stateReady(label: () => string) {
   return async (context: { canvasElement: HTMLElement }) => {
     await pageReady(context);

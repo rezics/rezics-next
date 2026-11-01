@@ -7,14 +7,13 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { UUID } from './price';
-import type { StripeMoneyUnit } from './money-schema';
 
 export const STATEMENT_PAGE_SIZE = 20;
 type NativePage = NonNullable<Awaited<ReturnType<KernelClient['payoutStatements']['get']>>['data']>;
 type StatementApi = ReturnType<KernelClient['payoutStatements']>;
 type NativeLines = NonNullable<Awaited<ReturnType<StatementApi['lines']['get']>>['data']>;
-export type CreatorStatement = NativePage['payoutStatements'][number] & { moneyUnit?: StripeMoneyUnit | null };
-export type CreatorStatementLine = NativeLines['lines'][number] & { moneyUnit?: StripeMoneyUnit | null };
+export type CreatorStatement = NativePage['payoutStatements'][number];
+export type CreatorStatementLine = NativeLines['lines'][number];
 export type StatementFailure = { kind: 'denied' | 'unavailable' | 'error' | 'stale' };
 export type CreatorStatementsData = ({ kind: 'ready' } & NativePage) | StatementFailure;
 export type CreatorLinesData = ({ kind: 'ready' } & NativeLines) | StatementFailure;
@@ -112,12 +111,13 @@ export async function loadCreatorStatements(
 ): Promise<CreatorStatementsData> {
   try {
     const query = statementSearch(input);
-    await prepareSession(request, sessionEnv);
+    if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
     const authorization = viewerCredential(request);
     if (!authorization) return { kind: 'denied' };
     const result = await client.payoutStatements.get({
       query: { limit: STATEMENT_PAGE_SIZE, ...query },
       headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     if (result.error) return failure(result.status);
     const page = result.data;
@@ -144,11 +144,14 @@ export async function loadCreatorStatement(
 ): Promise<CreatorStatementData> {
   try {
     const { id, ...query } = detailInput(input);
-    await prepareSession(request, sessionEnv);
+    if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
     const authorization = viewerCredential(request);
     if (!authorization) return { kind: 'denied' };
     const api = client.payoutStatements({ statementId: id });
-    const result = await api.get({ headers: { authorization } });
+    const result = await api.get({
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
     if (result.error) return failure(result.status);
     const statement = result.data?.statement;
     if (!statement || !validStatement(statement) || statement.id !== id) return { kind: 'unavailable' };
@@ -157,6 +160,7 @@ export async function loadCreatorStatement(
       const result = await api.lines.get({
         query: { limit: STATEMENT_PAGE_SIZE, ...query },
         headers: { authorization },
+        fetch: { cache: 'no-store', redirect: 'manual' },
       });
       if (result.error) {
         lines = failure(result.status);
