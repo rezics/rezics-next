@@ -32,7 +32,8 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
   if (!client) return closed;
   const session = client.getQueryState(sessionQuery.queryKey);
   const data = session?.status === 'success' ? session.data : undefined;
-  const subject = data?.state === 'signed-in' ? data.subject || null : null;
+  const subject = data?.state === 'signed-in' && typeof data.subject === 'string' && data.subject.trim()
+    ? data.subject : null;
   const lifetime = viewerExposureLifetime(client).getSnapshot();
   const observation = lifetime.state === 'signed-in' && lifetime.observation.subject === subject
     ? lifetime.observation : undefined;
@@ -40,7 +41,7 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
   return {
     state: session?.status === 'error' ? 'unavailable' : data?.state ?? 'unknown',
     subject,
-    csrfToken: subject ? data?.csrfToken || null : null,
+    csrfToken: subject && typeof data?.csrfToken === 'string' && data.csrfToken.trim() ? data.csrfToken : null,
     observation: observation?.id ?? null,
     admission: exposure?.status === 'error' ? 'unavailable'
       : exposure?.status !== 'success' ? 'preparing'
@@ -135,22 +136,24 @@ export function useCreatorCurrentOrigin(operation: Operation, address: string, e
   const hydrated = useSyncExternalStore(subscribe, () => true, serverSnapshot);
   const view = observe(client, operation);
   const [scope, setScope] = useState(() => ({
-    client, address, expected, generation: 0,
+    client, operation, address, expected, generation: 0,
     origin: new CreatorCurrentOrigin(client, operation, {
       ...workspace(view.subject), initial: view.state !== 'signed-out' && view.state !== 'unavailable',
     }, expected),
   }));
   scope.origin.observe();
   let current = scope;
-  if (scope.client !== client || scope.address !== address || scope.expected !== expected || scope.origin.retired) {
+  if (scope.client !== client || scope.operation !== operation || scope.address !== address ||
+      scope.expected !== expected || scope.origin.retired) {
     const previous = scope.origin.workspace;
-    const sameWorkspace = scope.client === client && scope.address === address && scope.expected === expected &&
+    const sameWorkspace = scope.client === client && scope.operation === operation &&
+      scope.address === address && scope.expected === expected &&
       (!view.subject || !previous.subject || previous.subject === view.subject);
     scope.origin.retire(false);
     const owner = sameWorkspace ? previous : workspace(view.subject);
     owner.subject = view.subject ?? owner.subject;
     if (!sameWorkspace) owner.initial = false;
-    current = { client, address, expected, generation: scope.generation + 1,
+    current = { client, operation, address, expected, generation: scope.generation + 1,
       origin: new CreatorCurrentOrigin(client, operation, owner, expected) };
     setScope(current);
   }

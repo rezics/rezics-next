@@ -263,6 +263,18 @@ describe('Creator workspace retires observed stale read and command origins befo
     expect(p.host.textContent).not.toContain(m.creator_saved());
     await p.settle(p.editorReads.at(-1)!, editor());
     await p.submit(); expect(p.writes[2]!.data).toEqual(p.writes[0]!.data);
+    const retainedCreate = p.submitCallback();
+    await act(async () => {
+      p.session(B, 'csrf-B'); p.admit(); retainedCreate({ preventDefault() {} });
+      expect(p.writes).toHaveLength(3);
+    }); await p.tick();
+    await p.settle(p.editorReads.at(-1)!, editor(B));
+    await p.createDraft(); await p.submit(); expect(p.writes[3]!.csrf).toBe('csrf-B');
+    await p.settle(p.writes[2]!.work, { kind: 'saved', id: id(88) });
+    expect(p.host.querySelector(`a[href="/en/offers/${id(88)}"]`)).toBeNull();
+    expect(p.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+    expect(p.host.querySelector<HTMLInputElement>('input[name="title"]')!.value).toBe('Captured title');
+    await act(async () => { p.session(); p.admit(); }); await p.tick();
     await p.show('offers');
     await p.fill('price', '12.99'); await p.submit();
     const reprice = p.writes.at(-1)!; await p.settle(reprice.work, { kind: 'retry' });
@@ -299,7 +311,7 @@ describe('Creator workspace retires observed stale read and command origins befo
       const bRead = p.statementReads.at(-1)!;
       await p.settle(bRead.work, mode === 'detail' ? detail(B, cursor ?? null) : statementList(B, cursor ?? null));
       expect(visible(mode, B)).toBe(true);
-      await p.settle(pendingA.work, new Error('Retired statement failure'));
+      await p.settle(pendingA.work, mode === 'detail' ? new Error('Retired statement failure') : statementList(A, cursor ?? null));
       expect(await first).toBeNull();
       expect(visible(mode, B)).toBe(true);
       if (mode === 'detail') {
