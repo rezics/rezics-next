@@ -114,10 +114,7 @@ export function ContentItem({
     <ListRow
       {...liProps}
       forceOverlay={forceOverlay}
-      className={cn(
-        'flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4',
-        className,
-      )}
+      className={cn('flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4', className)}
     >
       {href !== undefined && (
         <ListRowLink href={href} lang={titleLang} aria-labelledby={titleId}>

@@ -13,18 +13,8 @@ const RouterLink: CoverCardLink = ({ href, children, ...props }) =>
 const qualifiedCredit: ReactNode = createElement(
   'ul',
   { className: 'flex min-w-0 flex-col gap-1' },
-  createElement(
-    'li',
-    { key: 'role' },
-    'Writer: ',
-    createElement('a', { href: '/credits/writer' }, 'A. Author'),
-  ),
-  createElement(
-    'li',
-    { key: 'character' },
-    'Character: ',
-    createElement('a', { href: '/credits/character' }, 'Mira'),
-  ),
+  createElement('li', { key: 'role' }, 'Writer: ', createElement('a', { href: '/credits/writer' }, 'A. Author')),
+  createElement('li', { key: 'character' }, 'Character: ', createElement('a', { href: '/credits/character' }, 'Mira')),
 );
 
 test('CoverCard adapts shared tile semantics in grids and rows while preserving ContentItem row behavior', () => {
@@ -32,51 +22,45 @@ test('CoverCard adapts shared tile semantics in grids and rows while preserving 
     createElement(
       'main',
       null,
-      createElement(
-        CoverGrid,
-        {
-          ratio: '2:3',
-          children: [
-            createElement(CoverCard, {
-              key: 'linked',
-              href: '/works/book',
-              link: RouterLink,
-              title: 'A translated book',
-              titleLang: 'ja',
-              linkLabel: 'Continue A translated book',
-              cover,
-              status: { label: 'Reading', href: '/library/book' },
-              progress: { value: null, label: 'Progress unknown' },
-              menuEntries: [{ type: 'item', label: 'Remove', onSelect: () => {} }],
-            }),
-            createElement(CoverCard, {
-              key: 'selected',
-              href: '/works/selected',
-              title: 'Selected book',
-              cover,
-              selectable: true,
-              selected: true,
-              onSelectedChange: () => {},
-            }),
-          ],
-        },
-      ),
-      createElement(
-        CoverRow,
-        {
-          ratio: '2:3',
-          label: 'Continue',
-          children: createElement(CoverCard, {
-            href: '/works/credit',
+      createElement(CoverGrid, {
+        ratio: '2:3',
+        children: [
+          createElement(CoverCard, {
+            key: 'linked',
+            href: '/works/book',
             link: RouterLink,
-            title: 'Qualified credit book',
+            title: 'A translated book',
+            titleLang: 'ja',
+            linkLabel: 'Continue A translated book',
             cover,
-            essentialCredit: qualifiedCredit,
-            onSelect: () => {},
-            menuEntries: [{ type: 'item', label: 'Manage credit', onSelect: () => {} }],
+            status: { label: 'Reading', href: '/library/book' },
+            progress: { value: null, label: 'Progress unknown' },
+            menuEntries: [{ type: 'item', label: 'Remove', onSelect: () => {} }],
           }),
-        },
-      ),
+          createElement(CoverCard, {
+            key: 'selected',
+            href: '/works/selected',
+            title: 'Selected book',
+            cover,
+            selectable: true,
+            selected: true,
+            onSelectedChange: () => {},
+          }),
+        ],
+      }),
+      createElement(CoverRow, {
+        ratio: '2:3',
+        label: 'Continue',
+        children: createElement(CoverCard, {
+          href: '/works/credit',
+          link: RouterLink,
+          title: 'Qualified credit book',
+          cover,
+          essentialCredit: qualifiedCredit,
+          onSelect: () => {},
+          menuEntries: [{ type: 'item', label: 'Manage credit', onSelect: () => {} }],
+        }),
+      }),
       createElement(
         'ul',
         null,
@@ -94,9 +78,7 @@ test('CoverCard adapts shared tile semantics in grids and rows while preserving 
 
   expect(html.match(/<article\b[^>]*data-slot="cover-card"/g)).toHaveLength(3);
   expect(html).toContain('<div data-slot="cover-grid"');
-  expect(html).toMatch(
-    /<div role="region" aria-label="Continue" tabindex="0" data-slot="cover-row"[^>]*><article\b/,
-  );
+  expect(html).toMatch(/<div role="region" aria-label="Continue" tabindex="0" data-slot="cover-row"[^>]*><article\b/);
   expect(html).toMatch(
     /<h3\b[^>]*lang="ja"[^>]*><a\b[^>]*href="\/works\/book"[^>]*aria-label="Continue A translated book"[^>]*data-slot="cover-card-title"/,
   );
