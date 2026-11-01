@@ -7,11 +7,16 @@ import { readFollowState, setFollow } from './follow-actions';
 import { FollowControl } from './follow-control';
 import type { FollowState } from './follow-records';
 
-export const followStateQuery = (targetId: string) =>
+export const followStateQuery = (subject: string | null, targetId: string) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['follow-state', targetId],
-    queryFn: () => readFollowState({ data: { targetId } }),
+    queryKey: ['follow-state', subject, targetId],
+    queryFn: async ({ signal }) => {
+      const state = await readFollowState({ data: { targetId } });
+      // Consume cancellation so a retired observer cannot publish its late private read.
+      signal.throwIfAborted();
+      return state;
+    },
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -32,19 +37,21 @@ export function FollowTargetControl({
   menuTitle?: string;
   onRemoved?: () => void;
 }) {
-  const { state: session, csrfToken } = useSession();
+  const { state: session, csrfToken, subject } = useSession();
+  const viewer = session === 'signed-in' && subject ? subject : null;
   const canFollow = useOperation('follow.put');
   const canRemove = useOperation('follow.delete');
   const canRead = useOperation('follow.get');
+  const readViewer = canRead && following === undefined ? viewer : null;
   const queryClient = useContext(QueryClientContext) ?? previewClient;
   const read = useQuery(
     {
-      ...followStateQuery(targetId),
-      enabled: personalRead.enabled && session === 'signed-in' && canRead && following === undefined,
+      ...followStateQuery(readViewer, targetId),
+      enabled: personalRead.enabled && readViewer !== null,
     },
     queryClient,
   );
-  if (session !== 'signed-in' || (!canFollow && !canRemove)) return null;
+  if (viewer === null || (!canFollow && !canRemove)) return null;
   const initial: FollowState =
     following !== undefined
       ? following === null
@@ -57,7 +64,7 @@ export function FollowTargetControl({
           : (read.data ?? { state: 'unavailable' });
   return (
     <FollowControl
-      key={targetId}
+      key={JSON.stringify([viewer, targetId])}
       targetId={targetId}
       initial={initial}
       canFollow={canFollow && !onRemoved}
@@ -68,7 +75,7 @@ export function FollowTargetControl({
       {...(following === undefined && canRead ? { onRetry: () => void read.refetch() } : {})}
       write={(input) => setFollow({ data: input, headers: { 'X-CSRF-Token': csrfToken ?? '' } })}
       onChange={(next) => {
-        queryClient.setQueryData<FollowState>(followStateQuery(targetId).queryKey, (): FollowState => ({
+        queryClient.setQueryData<FollowState>(followStateQuery(viewer, targetId).queryKey, (): FollowState => ({
           state: 'ready',
           following: next,
         }));

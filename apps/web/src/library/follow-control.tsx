@@ -1,7 +1,7 @@
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { EllipsisIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
 
@@ -26,7 +26,11 @@ export type FollowControlProps = {
 };
 
 /** The same presenter serves a target button and a Following row's responsive menu. */
-export function FollowControl({
+export function FollowControl(props: FollowControlProps) {
+  return <FollowControlState key={props.targetId} {...props} />;
+}
+
+function FollowControlState({
   targetId,
   initial,
   canFollow,
@@ -43,39 +47,84 @@ export function FollowControl({
   const [failure, setFailure] = useState<Exclude<FollowWriteResult, { ok: true }>['reason'] | null>(null);
   const [removed, setRemoved] = useState(false);
   const attempt = useRef<FollowWriteInput | null>(null);
-  const inFlight = useRef(false);
+  const conflict = useRef(false);
+  const inFlight = useRef<{ input: FollowWriteInput } | null>(null);
+  const committed = useRef<Pick<FollowControlProps, 'ready' | 'canFollow' | 'canRemove' | 'write' | 'onChange'> | null>(
+    null,
+  );
+  const signedOut = initial.state === 'signed-out';
+  // Callback identities may refresh without starting a new request lifetime.
+  useLayoutEffect(() => {
+    committed.current = { ready: ready && !signedOut, canFollow, canRemove, write, onChange };
+    const running = inFlight.current;
+    if (running && (!ready || signedOut || !(running.input.following ? canFollow : canRemove))) {
+      // The dispatched intent remains uncertain; only its retired completion loses authority.
+      inFlight.current = null;
+      setPending(false);
+      setFailure('unavailable');
+    }
+  });
+  useLayoutEffect(
+    () => () => {
+      committed.current = null;
+      inFlight.current = null;
+    },
+    [],
+  );
   const following = initial.state === 'ready' ? initial.following : undefined;
   useEffect(() => {
     if (attempt.current) return;
     setCurrent((previous) => (initial.state !== 'ready' && previous.state === 'ready' ? previous : initial));
   }, [initial.state, following]);
-  const action = followAction(current, canFollow, canRemove);
+  const action = signedOut
+    ? null
+    : attempt.current
+      ? attempt.current.following
+        ? canFollow
+          ? 'follow'
+          : null
+        : canRemove
+          ? 'remove'
+          : null
+      : followAction(current, canFollow, canRemove);
   const disabled = !ready || pending || failure === 'conflict';
   async function submit() {
-    if (disabled || inFlight.current || !action) return;
-    inFlight.current = true;
-    setPending(true);
-    setFailure(null);
-    if (current.state === 'pending') setCurrent({ state: 'unavailable' });
+    const live = committed.current;
+    if (!live?.ready || disabled || conflict.current || inFlight.current || !action) return;
     const input = attempt.current ?? {
       targetId,
       following: action === 'follow',
       idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
     };
+    if (!(input.following ? live.canFollow : live.canRemove)) return;
+    const running = { input };
+    inFlight.current = running;
     attempt.current = input;
+    setPending(true);
+    setFailure(null);
+    if (current.state === 'pending') setCurrent({ state: 'unavailable' });
+    let result: FollowWriteResult;
     try {
-      const result = await write(input);
+      result = await live.write(input);
+    } catch {
+      result = { ok: false, reason: 'unavailable' };
+    }
+    if (inFlight.current !== running) return;
+    try {
       if (result.ok) {
         attempt.current = null;
         setCurrent({ state: 'ready', following: result.following });
         setRemoved(!result.following);
-        onChange?.(result.following);
-      } else setFailure(result.reason);
-    } catch {
-      setFailure('unavailable');
+        committed.current?.onChange?.(result.following);
+      } else {
+        conflict.current = result.reason === 'conflict';
+        setFailure(result.reason);
+      }
     } finally {
-      inFlight.current = false;
-      setPending(false);
+      if (inFlight.current === running) {
+        inFlight.current = null;
+        setPending(false);
+      }
     }
   }
   const label = action === 'follow' ? m.library_follow() : m.library_follow_unfollow();
