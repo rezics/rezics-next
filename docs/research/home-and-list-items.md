@@ -68,7 +68,7 @@ The following existing evidence was reconciled with the current owner contracts:
 
 | Capability | Specified | Backend evidence in this inspection | Interface exposed | Tested evidence available here |
 | --- | --- | --- | --- | --- |
-| One mixed Home | Adopted scope | Typed `KernelClient.feedItems.get` port consumed by `home-feed-read.ts`; producer completion is not inferred | `HomeFeedPage` renders returned order | Recorded stories exist; no new native proof |
+| One mixed Home | Adopted scope | Typed `KernelClient.feedItems.get` port consumed by `home-feed-read.ts`; producer completion is not inferred | `HomeFeed` renders returned order | Recorded stories exist; no new native proof |
 | Kind, Space and question Context selection | Exact, conjunctive; question identity is not an arbitrary tag or minimum score | Existing feed/directory ports and question metadata contract | Separate bounded choice controls | Existing source scenarios; not executed here |
 | Following and Continue privacy | Signed-in only, current viewer and authority | Reader rejects private lanes in a public response and retires old generations | Both appear in Home; Following is also a dedicated mode | No new signed-in/out acceptance run |
 | Hover-overlay row | Maintainer requirement, existing primitive | No backend needed | Many consumers, but Home bypasses it | Component stories exist; family-wide equivalence not established |
@@ -104,6 +104,12 @@ own component/story surface. Retire this parallel phone contract after its usefu
 `MemberListRow`, `ShelfListRow` or `CoverCard` is already used. Both need migration to a consistent slot contract;
 they are not equally severe defects. No row gets a navigation link if its current purpose is only an action.
 
+`apps/web/src/library/subject-row.tsx` (`SubjectIdentity`/`SubjectCover`) and
+`collection-member-row.tsx` (`CollectionMemberDetails`) are additional shared partial anatomies. They are used by
+Collection publication/editing, progress-session and log reading. Move their identity/fact parts into the family
+adapters; preserve their supplied-facts and unavailable-subject rules. A single destination document such as a log
+may reuse these parts without becoming a stretched-link content row.
+
 | Surface and concrete renderer | Present implementation | Consolidation and retained slots |
 | --- | --- | --- |
 | Home: `apps/web/src/features/pages/home-feed.tsx` (`FeedRow`) | Raw bordered `li`, 80/96 px covers, separate avatar branch, title-only link; no `ListRow` | First new consumer: native feed adapter to shared row; subject/account/discussion/Collection bodies; source context, preview and Continue action |
@@ -134,7 +140,7 @@ they are not equally severe defects. No row gets a navigation link if its curren
 | Orders: `apps/web/src/checkout/orders-page.tsx` | Raw list with persistent border/dividers and own cover/title link | Purchase summary adapter; preserve order destination, amount and recorded state |
 | Statements: `apps/web/src/checkout/{creator-statements-page,creator-statement-page}.tsx` | Raw list/ledger rows and payment panels | Statement summaries use shared non-cover row; detailed accounting lines retain ledger semantics and currency alignment |
 | Creator editions: `apps/web/src/content-editions/creator-editions-view.tsx` | Raw divided list, local multicolumn layout, title not primary link | Edition adapter; state, subject title, fixed date, licence and Resume/Read/Create offer controls; only make title a link when a readable destination exists |
-| Provider candidates: `apps/web/src/features/import-review/provider-review-actions-view.tsx` | Shared shell; independent evidence/actions | Candidate adapter retains comparison, source, citations and acceptance/rejection controls; no promotion into ordinary Home cards |
+| Provider queue and candidates: `apps/web/src/features/import-review/{provider-queue-view,provider-review-actions-view}.tsx` | Queue article and candidate shared shell; independent evidence/actions | Candidate adapter retains comparison, source, citations and acceptance/rejection controls; no promotion into ordinary Home cards |
 
 Routes and composition layers for Subject Members, Relations, type lists, mounted Zone content and agents use the
 `CoverList`/qualified-credit renderers above. Consolidate their shared renderer once, then exercise each caller;
@@ -147,17 +153,17 @@ cover, metadata or state parts; they must not acquire an unrelated stretched nav
 
 | Rendering class | Files under `apps/web/src` unless otherwise stated | Treatment |
 | --- | --- | --- |
-| Navigation, choices and search controls | `shell/shell.tsx`; `settings/sections-nav.tsx`; `search/{discovery-kinds,header-search,recent-panel,recent,refinement,search,trending-section}.tsx`; `search/header-search/header-search.tsx`; `features/pages/view-tabs.tsx`; `community/setup-context-picker.tsx` | Navigation, listbox/combobox or buttons; preserve keyboard selection, active item and focus. Search history/suggestions are controls, not content cards |
+| Navigation, choices and search controls | `shell/shell.tsx`; `settings/sections-navigation.tsx`; `search/{discovery-kinds,recent-panel,recent,search,trending-section}.tsx`; `search/refinement/refinement.tsx`; `search/header-search/header-search.tsx`; `features/pages/view-tabs.tsx`; `community/setup-context-picker-field.tsx` | Navigation, listbox/combobox or buttons; preserve keyboard selection, active item and focus. Search history/suggestions are controls, not content cards |
 | Editor lists and selections | `threads/{composer,thread-subjects}.tsx`; `library/{shelf-labels,subject-slot-view}.tsx`; `features/pages/{editor,curate-view-editor,curation-publish-view}.tsx` | Form rows, attachment chips and validation lists. Reuse item summary parts inside a choice only when semantics allow |
-| Catalogue profile forms and document sections | `features/catalogue/{addon-profile-view,album-profile-view,character-profile-view,game-profile-view,literary-profile-view,manga-profile-view,people-profile-view,recipe-profile-view,screen-profile-view,story-arc-profile-view}.tsx`; `character-profile-create.tsx`; `create-subject-form.tsx`; `publication-editor-form.tsx`; `relation-editor-view.tsx`; `statement-editor-view.tsx`; `statement-consent-view.tsx` | Field groups and exact statements are editors/comparisons. Keep their field labels, qualified values, error anchors and explicit confirmations |
-| Catalogue reference/history/facts | `features/catalogue/{authored-field-view,definition-guide-view,editorial-context-route,subject-changes-page,subject-facts-page,subject-sources-page,subject-terms-view,value-explanation-page,work-parts-view}.tsx` | Documents, revision choices, source lists and comparisons. Summary results may use family parts; citations/history do not become all-clickable cards |
+| Catalogue profile forms and document sections | `features/catalogue/{addon-profile-view,album-profile-view,character-profile-view,game-profile-view,literary-profile-view,manga-profile-view,people-profile-view,recipe-editor-view,screen-profile-view,story-arc-profile-view}.tsx`; `character-profile-create.tsx`; `story-arc-profile-session.tsx`; `create-subject-form.tsx`; `publication-editor-form.tsx`; `relation-editor.tsx`; `statement-editor-view.tsx`; `statement-consent-view.tsx` | Field groups and exact statements are editors/comparisons. Keep their field labels, qualified values, error anchors and explicit confirmations |
+| Catalogue reference/history/facts | `features/catalogue/{authored-field-view,definition-guide-view,editorial-context-route,subject-changes-page,subject-facts-view,subject-sources-page,subject-terms-page,value-explanation-page,work-parts-page}.tsx` | Documents, revision choices, source lists and comparisons. Summary results may use family parts; citations/history do not become all-clickable cards |
 | Subject overview and data | `features/pages/{data,layout,overview,rating-distribution,subject-community-view,subject-ratings-view}.tsx` | Definition lists, charts, rating distribution, page layout and embedded discussions. Move any embedded content listing through its adapter, not the whole article |
-| Zone document/configuration | `features/zones/{editor,view}.tsx`; `features/zones/manage/create.tsx`; `zones/zone-shell.tsx` | Page document and editor. Mounted content listings inherit the same shared item system; navigation/configuration remains a form |
+| Zone document/configuration | `features/zones/editor/view.tsx`; `features/zones/manage/create.tsx`; `zones/zone-shell.tsx` | Page document and editor. Mounted content listings inherit the same shared item system; navigation/configuration remains a form |
 | Account/settings panels | `account-verification/pages.tsx`; `accounts/{erasure-progress/view,lifecycle-controls/page,management/pages,profile-editor/page}.tsx`; `settings/{account-safety,display-preferences,managed-account-actions,managed-account-detail,notifications,profile,profile-preview,public-views,reading-card,settings-page,verification}.tsx` | Settings cards, evidence lists, confirmations and progress sections. Retain card grouping; embedded identity lists use adapters |
-| Community management | `community/{realm-bans-control,realm-claim-review-page,realm-claim-status,space-setup-page}.tsx` | Bans, ownership claims, status and setup forms. Domain case body stays explicit; available identity summaries can share parts |
+| Community management | `community/{realm-bans-control,realm-claim-review-page,realm-claim-status-page,space-setup-page}.tsx` | Bans, ownership claims, status and setup forms. Domain case body stays explicit; available identity summaries can share parts |
 | Moderation cases | `moderation/{appeals-tab,decision-page,reporter-status-view,reports-bulk-controls,reports-page,reports-view-card}.tsx`; `platform/exposure/page.tsx`; `subject/{candidate-review,view-error,write-review}.tsx` | Evidence/case cards, action forms and errors. Do not stretch a link over report evidence or destructive buttons; preserve selected revision and decision reason |
 | Long reading and provenance | `threads/{author-erasure-operation,board-community,exact-revision-view,post-history,revision-provenance-view,thread-reading}.tsx` | Document bodies, revision timeline, deletion progress and thread wrapper; preserve document selection, citations and anchors |
-| Library documents/forms | `library/{collection-rule-editor,dynamic-collection-page,entry-undo,log-page,private-follow-counts}.tsx` | Rule editor, recovered state, immutable log and privacy panel. A dynamic Collection's actual results delegate to shared listing |
+| Library documents/forms | `library/{collection-rule-editor,dynamic-collection-page,entry-undo,log-page,private-follow-counts-page}.tsx` | Rule editor, recovered state, immutable log and privacy panel. A dynamic Collection's actual results delegate to shared listing |
 | Commerce single destinations | `checkout/{creator-offer-editor,entitlement-page,offer-page,order-page}.tsx`; `content-editions/{edition-create-view,edition-view}.tsx` | Offer/purchase/edition document, terms, confirmation and recovery. Shared summary parts are useful; page-level card remains a document |
 | Route page shells | `routes/boards/$id_.new.tsx`; `routes/collections/new.tsx`; `routes/subjects/$id_.$slug_.{context-review,relation-edit}.tsx` | Composition of the editors above, not additional item contracts |
 | UI control/document lists | `packages/ui/src/components/{document-body,entity-picker,rating}.tsx`; editor menus/toolbars; `packages/ui/src/components/shelf-table.tsx` | Keep semantic lists inside authored documents, picker options, rating populations and actual table rows |
@@ -461,7 +467,7 @@ the same copy sweep. Human-authored post text, citations and moderation reasons 
 | `accounts/erasure-progress/view.tsx`: `state`, `at`, `completedAt`, `retentionOutstanding`, `lateItems`, `effectsFrontier`, `pendingParticipants`, raw participant names/account ID | Existing closed Technical status details is appropriate; main progress must retain localized pending/retention/completion meaning. Do not promote raw booleans or `null` into summary text |
 | `content-editions/{edition-identity,edition-create-view}.tsx`: SHA-256, revision/subject/edition IDs | Keep copyable exact references in existing technical details; title/date/licence remain the ordinary identity. Hash is not a subtitle |
 | `features/catalogue/{game-profile-view,literary-profile-view,manga-profile-view,manga-profile-corrections}.tsx`: raw Subject ID/Type in page hierarchy | Title/type label first; exact IDs in Catalogue technical details or source information. Keep explicit technical-entry controls where the workflow actually requires them |
-| `community/{space-setup-form,realm-appearance-controls}.tsx` and related reference pickers: Context/SKOS/post/media IDs, current heads | Use named search/selection when available; retain advanced ID entry as a labelled explicit alternative, with validation. Never relabel a raw ID as a human title |
+| `community/{space-setup-form,realm-presentation-settings}.tsx` and related reference pickers: Context/SKOS/post/media IDs, current heads | Use named search/selection when available; retain advanced ID entry as a labelled explicit alternative, with validation. Never relabel a raw ID as a human title |
 | `threads/revision-provenance-view.tsx`: revision and Subject references, question ID/vote revision | Keep exact-revision/source details. Ordinary discussion header should prioritize author/time/content, not the reference tuple |
 | `moderation/{appeals-tab,reporter-status-view,decision-page}.tsx`: target kind+ID, report/decision references | Human-readable target and decision first; stable case references remain useful in case details/support. Never reveal undisclosed target identity to fill a missing title |
 | `checkout/{order-page,creator-statement-page}.tsx`: order/offer/provider-transaction IDs, recorded revisions | Receipt/statement source details; amount, currency, dates and actual payment state remain visible. A provider identifier is not evidence of payout completion |
@@ -565,7 +571,10 @@ The following inventory is keyed to `apps/web/messages/en.json` in the inspected
 limits, preparation/readiness, retention, revisions/protocol references and internal status, plus adjacent
 decision-critical terms found in the same sweep. Translated source files (`zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`,
 `fr`, `es`, alongside English) inherit the placement decision. Keys are locators, not proposed visible wording.
-Entries which describe legitimate history, terms or field constraints are retained explicitly. The direct-render
+Entries which describe legitimate history, terms or field constraints are retained explicitly. Message-catalogue
+presence alone does not establish a currently reachable route: follow the owning callsite before editing, do not
+revive dormant keys, and apply the decision to every active caller. The inventory includes adjacent unavailable
+labels and pending states so these cannot be accidentally erased by the technical-copy sweep. The direct-render
 table above covers values not stored in this catalogue. No generated translation files are authorities.
 
 Placement codes used below:
@@ -573,7 +582,8 @@ Placement codes used below:
 - **None**: remove successful internal scaffolding; no substitute status prose.
 - **Help**: optional help/information beside the relevant filter/sort or a linked help page, not the ordinary stream.
 - **Field**: the affected input/selection and its validation or advanced-field help.
-- **Error**: conditional affected-region error, incomplete-result or recovery state, in human terms.
+- **Error**: conditional affected-region error, incomplete-result or recovery state, in human terms. An ordinary
+  in-flight control uses a local progress status, not an error alert.
 - **Settings**: the owning management/editor settings page; technical mechanism in explicit details/help.
 - **Source**: the object's own history, edition, provenance, receipt or progress page; retain meaningful facts.
 - **Decision**: retain the consequence beside the applicable confirmation, purchase, consent or privacy decision.
@@ -584,7 +594,7 @@ Placement codes used below:
 | `moderation_appeals_read_unavailable` | Appeals are unavailable right now. Retry this page. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `moderation_appeals_read_stale` | This appeals page has expired. Start again from the first page. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `moderation_appeals_read_closed` | Appeals are not available with your current session or access. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `library_collections_cursor_reset` | The saved page has expired. This view now starts from the first page. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
+| `library_collections_cursor_reset` | The saved page has expired. This view now starts from the first page. | **Error** — page expired; current first-page results and a brief restart notice, no cursor jargon. |
 | `library_collections_preparing` | Your Collections are being prepared. Retry this page in a moment. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_collections_start_unavailable` | Creating Collections isn't available right now. You can still explore. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `creator_editions_unavailable` | Your editions are unavailable right now. Try this page again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -592,7 +602,7 @@ Placement codes used below:
 | `creator_editions_empty` | You have no editions to return to yet. Create an edition from one of your authored revisions. | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
 | `creator_editions_version` | Version {version} | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
 | `creator_editions_revision` | Fixed revision | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
-| `prq_pending` | Awaiting decision | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `prq_pending` | Awaiting decision | **Source** — legitimate Awaiting decision status on a suggestion in its review queue; keep. |
 | `prq_preparing` | Preparation is in progress. Check again when ready, or continue the bounded review. | **Error** — conditional suggestions-not-yet-available state; omit bounded-review jargon. |
 | `prq_unavailable` | Suggestions are unavailable. Retry, or prepare the provider index explicitly. | **Error** — retry suggestions; index preparation is a separate authorized operator action. |
 | `prq_prepare` | Prepare index | **Settings** — authorized provider/index management, not a general reader task. |
@@ -609,7 +619,7 @@ Placement codes used below:
 | `facts_uncertain` | Delivery is uncertain. Retry keeps the exact statement and request key. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `facts_selection` | Included field changes: {count} · maximum {limit} | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `container_lifecycle_unavailable` | Lifecycle controls are unavailable. Your work is kept. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `container_lifecycle_removed_state` | Removed. Restoration depends on current permission and the native restore window. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
+| `container_lifecycle_removed_state` | Removed. Restoration depends on current permission and the native restore window. | **Source** — actual removed status with available restoration action/deadline; detailed permission rules in help. |
 | `container_lifecycle_link_unavailable` | The restored page is unavailable. Current container and Context access must both be available. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `container_lifecycle_uncertain` | The response is uncertain. Retry keeps the same target, reason, head and request key. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `container_lifecycle_conflict` | The current state conflicts with this request. Refresh and review before starting a new intent. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
@@ -638,7 +648,7 @@ Placement codes used below:
 | `managed_transfer_unavailable` | Operator transfer and acceptance are not available here yet. A transfer requires current authority and the new operator’s fresh approval; an old request is not permission. | **Settings** — unavailable transfer workflow and real approval requirement; omit protocol exposition. |
 | `managed_operation_status` | Operation history is not available here. A pending request, cancellation or lost response does not establish completion. Return to the original Auth operation to continue it; refresh here to check current relationships. | **Settings** — owning advanced editor/management page; name current choice/outcome, move protocol explanation to details/help. |
 | `candidate_converter` | Converter revision | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
-| `candidate_pending` | Selection submitted. The public reader has not confirmed this suggestion yet. Reload to check again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `candidate_pending` | Selection submitted. The public reader has not confirmed this suggestion yet. Reload to check again. | **Source** — submitted selection awaits public confirmation; keep truthful review status and Reload. |
 | `candidate_source_revision` | Source revision | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
 | `candidate_stale` | This review is out of date or conflicts with the current selection. Reload and review again before confirming. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `candidate_unavailable` | The result could not be confirmed. Retry the same confirmation or reload current values. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -666,7 +676,7 @@ Placement codes used below:
 | `library_dynamic_preparing` | Your list is being prepared. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_dynamic_unavailable` | This list is unavailable right now. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_follow_conflict` | This request conflicts with an earlier change. Reload before trying again. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
-| `library_follow_pending` | Saving follow… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `library_follow_pending` | Saving follow… | **Source** — local in-flight status on the affected control/region; not an error and not a permanent readiness label. |
 | `library_follow_unavailable` | Your follow state is unavailable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_label_shelf_closed` | The personal library and reading progress features must be open to view this shelf. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_logs_description` | A log is a public snapshot and does not change afterwards. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
@@ -674,7 +684,7 @@ Placement codes used below:
 | `library_pin_limit` | You have reached the 100 Collection pin limit. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `library_pin_unavailable` | Unavailable Collection | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_progress_batch_limit` | Add or remove at most 100 units at a time. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
-| `library_progress_conflict` | This progress was recorded against an old revision. Your entry is still here. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
+| `library_progress_conflict` | This progress was recorded against an old revision. Your entry is still here. | **Error** — progress refers to an older work version; preserve entry and offer review, no false verified progress. |
 | `library_progress_mode_cursor` | Cursor position | **Field** — real saved-position mode in progress editor; do not confuse with pagination cursor. |
 | `library_subject_closed` | This part of REZICS is not open yet. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_subject_collection_full` | Collections can contain up to 5,000 members. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
@@ -684,15 +694,15 @@ Placement codes used below:
 | `library_subject_label_restore_stale` | This label changed. The current labels are shown. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `library_subject_label_unavailable` | Labels could not be loaded. Try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_subject_unavailable` | Unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `offer_acquisition_pending` | An existing payment for this benefit is still in progress or unresolved. Open that order to check its status. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `offer_acquisition_pending` | An existing payment for this benefit is still in progress or unresolved. Open that order to check its status. | **Decision** — direct the buyer to the unresolved existing order; do not initiate a second payment. |
 | `offer_terms_revision` | Offer revision {revision} | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
 | `offer_start_closed` | This part of REZICS is not open yet. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `offer_unavailable` | This offer is unavailable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `order_pending` | Waiting for payment | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `order_pending` | Waiting for payment | **Source** — genuine Waiting for payment state on the order; keep. |
 | `order_entitlement_unavailable` | Current access could not be checked. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `order_receipt` | Receipt | **Source** — commercial receipt destination; this is a user document, not an internal transport receipt. |
-| `orders_entitlement_pending` | No entitlement yet | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `orders_status_pending` | Pending | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `orders_entitlement_pending` | No entitlement yet | **Source** — truthful access not yet granted on the order; keep, do not imply payment failure. |
+| `orders_status_pending` | Pending | **Source** — meaningful pending purchase state in the orders list; keep. |
 | `platform_closed_heading` | Not open yet | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `platform_closed_message` | This part of REZICS is not open yet. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `reaction_unavailable` | This reaction could not be saved. Please try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -703,8 +713,8 @@ Placement codes used below:
 | `realm_leave_not_settled` | This read does not confirm that you have left. The same leave request is retained. | **Source** — own draft/history/progress page, with concise human state; preserve actual saved-versus-current distinction. |
 | `realm_membership_unavailable` | Membership status is unavailable right now. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_published_unavailable` | Some published subjects are unavailable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `realm_state_pending` | Pending | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `realm_state_pending_note` | Your request is being processed. Reload in a moment to see the result. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `realm_state_pending` | Pending | **Source** — current pending membership/request state on its own page; keep. |
+| `realm_state_pending_note` | Your request is being processed. Reload in a moment to see the result. | **Source** — truthful request-in-progress status and Refresh on membership page. |
 | `report_unavailable` | Reports are temporarily unavailable. Please try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `settings_account_auth_unavailable` | Security settings and account deletion are unavailable on this site right now. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `settings_account_csrf_unavailable` | Sign out is unavailable because this page could not prepare a secure request. Reload the page and try again. | **Error** — sign-out could not be completed; Reload and retry. Security mechanism stays internal. |
@@ -750,12 +760,12 @@ Placement codes used below:
 | `inbox_closed` | Your inbox is currently closed. Try again later. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `inbox_unavailable_item` | This item is no longer available. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `decision_appeal_count` | {count} / 2,000 characters | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
-| `decision_appeal_pending` | Your appeal is pending review. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `decision_appeal_pending` | Your appeal is pending review. | **Source** — actual appeal-awaiting-review status on the decision page; keep. |
 | `decision_appeal_too_long` | Use no more than 2,000 characters. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `decision_appeal_unavailable` | Your appeal could not be submitted. Try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `decision_status_pending` | Appeal awaiting review | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `decision_status_pending` | Appeal awaiting review | **Source** — meaningful appeal status on its own decision; keep. |
 | `decision_appeal_explanation` | The original author may appeal once, up to and including the deadline, 183 days after the decision. A different moderator reviews the appeal. | **Decision** — keep the actual deadline/irreversible or privacy consequence beside its action; mechanism in help. |
-| `decision_pending_explanation` | The decision read confirms an appeal exists. An independent moderator has not recorded an outcome yet. You cannot submit another appeal for this decision. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `decision_pending_explanation` | The decision read confirms an appeal exists. An independent moderator has not recorded an outcome yet. You cannot submit another appeal for this decision. | **Source** — appeal exists, no outcome yet, second appeal unavailable; concise status and consequence. |
 | `decision_appeal_conflict` | The appeal was not accepted because the decision or appeal state conflicts with this request. Your draft is kept. Refresh current state before continuing. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `decision_appeal_uncertain` | The outcome could not be confirmed. The appeal may have been submitted. Your draft is kept; retry the exact same appeal to confirm, or refresh current state. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `thread_media_unavailable` | An image in this draft cannot be used yet. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -770,11 +780,11 @@ Placement codes used below:
 | `settings_privacy_conflict_text` | Your change was not saved. Reload this Collection to see its current visibility. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `search_facet_index_not_ready` | Filters are still being prepared. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `search_facet_unavailable` | Filters could not be loaded. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `search_stale_cursor_restarted` | Results changed. Showing the first page. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
+| `search_stale_cursor_restarted` | Results changed. Showing the first page. | **Error** — results restarted at first page after change; brief contextual notice. |
 | `subject_ratings_unavailable` | Ratings are not open yet. When they open, you can be the first to rate this. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `subject_reviews_unavailable` | Reviews are not open yet. When they open, you can write the first one. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `subject_threads_unavailable` | Discussion is not open yet. When it opens, you can start the first thread. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `settings_profile_preview_invalid_link` | This link stays inactive until its label and HTTPS URL are valid. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
+| `settings_profile_preview_invalid_link` | This link stays inactive until its label and HTTPS URL are valid. | **Field** — inactive link validation by the profile-link editor/preview; retain label/address recovery. |
 | `settings_profile_crop_preparing` | Preparing image locally… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `settings_profile_avatar_too_large` | Choose an image no larger than 20 MiB. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `settings_profile_avatar_closed` | Image uploads are currently closed. Try again when uploads reopen. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -789,21 +799,21 @@ Placement codes used below:
 | `settings_verification_withdraw_details` | Technical details of the saved withdrawal | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
 | `settings_verification_statement_limit` | Shorten the statement to 2000 characters or fewer. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `settings_verification_label_limit` | Shorten the link label to 64 characters or fewer. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
-| `settings_verification_url_required` | Add the HTTPS URL for this link. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
+| `settings_verification_url_required` | Add the HTTPS URL for this link. | **Field** — required URL validation next to the link input. |
 | `settings_verification_url_limit` | Shorten the URL to 2048 characters or fewer. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `settings_verification_url_https` | Use an absolute HTTPS URL without a username, password, spaces or control characters. | **Field** — relevant URL validation; concise accepted-address rules. |
 | `settings_verification_links_hint` | Add up to five links. Labels can contain up to 64 characters and HTTPS URLs up to 2048. Leave both fields empty to skip a row. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `settings_verification_characters` | {count} of 2000 characters | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `settings_verification_read_closed` | Verification is currently closed. Reload the current status after it becomes available. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `settings_verification_read_unavailable` | Try reloading the current verification status. Reloading does not send or withdraw a verification request. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `settings_verification_pending` | Request for {subject} is pending. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `settings_verification_pending` | Request for {subject} is pending. | **Settings** — actual verification request status, naming the selected subject; keep. |
 | `settings_verification_validation` | Choose a catalogue entry, write a statement of at most 2000 characters, and add up to five links with labels and URLs. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `library_restore_stale` | This removal has changed. The entry was not restored. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `moderation_appeal_conflict` | This appeal was already resolved. Refresh the queue before continuing. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `header_search_filters_unavailable` | Filters are not available on this page. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `header_search_scope_unavailable` | Search is not available in this scope. Remove the scope to search REZICS. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_collection_preview_unavailable` | Preview unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `library_collection_save_pending` | Saving… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `library_collection_save_pending` | Saving… | **Source** — local in-flight status on the affected control/region; not an error and not a permanent readiness label. |
 | `library_collection_cover_unavailable` | Choosing a Collection cover is not supported yet. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_collection_move_unavailable` | No available destination. Reload and try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_collection_types_unavailable` | Type choices are unavailable. The stored choice is preserved. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -842,7 +852,7 @@ Placement codes used below:
 | `settings_reading_read_closed_text` | Reading settings are currently closed. Your draft is kept. Try again later. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_membership_still_pending` | Your request is still pending. Check again to refresh membership. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_membership_current_pending` | Current membership is still pending. Check again to read the latest status. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `realm_membership_pending_unavailable` | Your request was accepted, but current membership is unavailable. Check again; this will not resend the request. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `realm_membership_pending_unavailable` | Your request was accepted, but current membership is unavailable. Check again; this will not resend the request. | **Error** — request accepted, current membership cannot be read; Check again must not resend. |
 | `sources_conflict` | The selected facts changed. Reload their current sources. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `sources_unavailable` | Sources are unavailable. Try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `sources_metadata_unavailable` | Provider name, URL, licence and attribution metadata are unavailable. Any citations above remain usable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -855,11 +865,11 @@ Placement codes used below:
 | `entitlements_unavailable` | Purchased access could not be loaded. Try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `relation_unresolved` | Unresolved target. Keep its original external reference or choose a real subject. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `relation_stale` | This slot changed. Your draft and comparison are retained. Reload before confirming again. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
-| `relation_confirm_reject` | Reject this suggestion using the current decision head. This does not delete the statement. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
+| `relation_confirm_reject` | Reject this suggestion using the current decision head. This does not delete the statement. | **Decision** — rejection confirmation must preserve that the statement is not deleted; current-head mechanism in details. |
 | `relation_unresolved_selection` | This slot has no resolved selection. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `space_setup_context` | Existing Context ID | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
-| `space_setup_scheme_id` | Existing SKOS scheme ID | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
-| `space_setup_concept` | Existing SKOS Concept ID | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
+| `space_setup_context` | Existing Context ID | **Field** — advanced existing-Context reference entry; named picker first where available. |
+| `space_setup_scheme_id` | Existing SKOS scheme ID | **Field** — advanced SKOS scheme reference entry and validation; human name first in selected summary. |
+| `space_setup_concept` | Existing SKOS Concept ID | **Field** — advanced SKOS concept reference entry and validation; human name first. |
 | `space_setup_conflict` | The current state changed, or the address or board is already in use. Refresh the current heads and review before retrying. Your entries and created identities are retained. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `space_setup_denied` | This action is not currently permitted, or the resource is unavailable to you. Your entries are retained. | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
 | `space_setup_unavailable` | The request could not be confirmed. Keep this page open and retry the saved request or refresh. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -894,12 +904,12 @@ Placement codes used below:
 | `av_unavailable` | Verification could not be loaded. Try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `av_profile_unavailable` | Account profile unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `av_subject_unavailable` | Catalogue subject unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `av_pending` | Awaiting review | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `av_pending` | Awaiting review | **Source** — actual Awaiting review state on verification request; keep. |
 | `av_reason_help` | Explain your decision for the account holder. Maximum 500 characters. Do not include confidential documents. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `av_uncertain` | The response was lost or incomplete. The result is unconfirmed. Resume the same operation. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `av_conflict` | The request or verification changed. Refresh and review the current state before deciding again. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `av_public_unavailable` | Current public verification could not be confirmed. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `av_publication_pending` | Approval and public publication are separate. Publication has not been confirmed; refresh later. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `av_publication_pending` | Approval and public publication are separate. Publication has not been confirmed; refresh later. | **Source** — approval is not confirmed publication; keep partial-outcome distinction and Refresh. |
 | `search_suggestions_unavailable` | Suggestions are unavailable right now. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `search_suggestions_invalid` | Suggestions support up to 64 characters. Submit to search the full query. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `moderation_reported_revision_label` | Reported revision | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
@@ -910,14 +920,14 @@ Placement codes used below:
 | `shell_creation_unavailable` | No creation actions are available here. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `shell_avatar_unavailable` | Account avatar unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `shell_account_unavailable` | Account status unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `header_search_history_pending` | Saved on this device. Sync pending. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `header_search_history_pending` | Saved on this device. Sync pending. | **Source** — actual local saved/sync state in search history, not a Home banner. |
 | `realm_bans_closed` | Realm ban management is not available on this platform. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_bans_cursor_invalid` | This page has expired or is invalid. Refresh to start again. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
 | `realm_bans_unavailable` | Current bans could not be loaded. Try refreshing. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `realm_bans_removal_pending` | Membership removal queued. Completion has not been confirmed; refreshing current bans cannot confirm it. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `realm_bans_removal_pending` | Membership removal queued. Completion has not been confirmed; refreshing current bans cannot confirm it. | **Source** — membership removal queued, completion unknown; no inference from refreshing bans. |
 | `realm_bans_conflict` | This request conflicts with an earlier change. Refresh current bans before trying again. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `realm_bans_write_unavailable` | The result could not be confirmed. Retry the same request to safely finish it. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `reporter_status_pending` | Pending review | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `reporter_status_pending` | Pending review | **Source** — actual report-awaiting-review state on report status page; keep. |
 | `reporter_status_revision` | Submitted revision | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
 | `reporter_status_unavailable` | Your report could not be loaded. Try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_labels_preparing` | Your labels are being prepared. Try again shortly. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -944,7 +954,7 @@ Placement codes used below:
 | `library_continue_unavailable` | Your Continue list is unavailable right now. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `reporter_status_review_time_unavailable` | Review date unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `reporter_status_report_id` | Report ID | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
-| `reporter_status_pending_explanation` | Your report was received and is waiting for review. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `reporter_status_pending_explanation` | Your report was received and is waiting for review. | **Source** — received versus reviewed distinction on report status; keep concise. |
 | `exact_revision_heading` | Recorded revision | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
 | `exact_revision_read_only` | This is a recorded version of this post. | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
 | `exact_revision_id` | Revision | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
@@ -957,12 +967,12 @@ Placement codes used below:
 | `space_setup_board_choice_stale` | These options have changed. Retry to start a current page. Your entries are retained. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `space_setup_board_choice_unavailable` | Board options are unavailable right now. Your saved setup is kept. Retry to load current options. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `space_setup_picker_unavailable` | Browsing existing options is not available here yet. Load a reference to see its current name before choosing it. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `space_setup_reference` | Existing reference ID | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
+| `space_setup_reference` | Existing reference ID | **Field** — explicit advanced reference entry; retain validation, not an ordinary page subtitle. |
 | `subject_relation_unavailable` | This relation is unavailable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `moderation_queue_projection_pending` | Report status may take a moment to update. This confirmation stays here until you leave the page. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `moderation_queue_projection_pending` | Report status may take a moment to update. This confirmation stays here until you leave the page. | **Source** — confirmed action versus lagging queue state; retain confirmation until leaving. |
 | `moderation_queue_reason_invalid` | Enter a reason of 1 to 1,024 characters. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `moderation_queue_reason_hint` | Required for takedown, up to 1,024 characters. Dismissal does not need a reason. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
-| `moderation_queue_pending` | Submitting action… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `moderation_queue_pending` | Submitting action… | **Source** — local in-flight status on the affected control/region; not an error and not a permanent readiness label. |
 | `thread_reading_preparing` | Preparing reply controls… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `thread_reading_participation_unavailable` | Reply controls are unavailable. Refresh to try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `contribution_window` | Restoration is available only within 30 days of the original server deletion. Retrying does not extend that window. | **Decision** — keep the actual deadline/irreversible or privacy consequence beside its action; mechanism in help. |
@@ -978,11 +988,11 @@ Placement codes used below:
 | `context_unresolved` | The native reading is unresolved. No value is chosen here. | **Source** — unresolved field reading; say no value has been selected, without native terminology. |
 | `context_empty_selection` | This mode submits an empty selection. Your replacement draft is retained. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `context_read_unavailable` | The command was saved, but the current Context reading is unavailable. Reload before another action. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `context_pending` | The Context selection is not yet confirmed by its reading. Reload to compare again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `context_pending` | The Context selection is not yet confirmed by its reading. Reload to compare again. | **Source** — selection not yet confirmed; keep current comparison/Reload, not a false selected value. |
 | `context_rejected` | Suggestion rejected in this Context. The assertion is retained. | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
 | `statement_consent_conflict` | This request conflicts with the current state. Reload and review before confirming again. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `statement_consent_unavailable` | This read or request is unavailable. No successful change is confirmed. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `statement_consent_pending` | Retraction is confirmed; the public reader still reports this assertion. Its value is withheld here. Retry the public read. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `statement_consent_pending` | Retraction is confirmed; the public reader still reports this assertion. Its value is withheld here. Retry the public read. | **Source** — retraction confirmed while public read lags; keep value withheld and retry read. |
 | `statement_consent_authority` | Eligibility is not supplied by this reader. The native request checks the current account and target. A source or proposal author does not establish ownership. | **Help** — consent/ownership eligibility guidance; current actionable eligibility by the control. |
 | `statement_consent_retract_help` | Retraction ends this assertion permanently in the consent flow. It cannot be disclosed again. This is not contribution deletion and has no 30-day restore or undo. | **Decision** — keep the actual deadline/irreversible or privacy consequence beside its action; mechanism in help. |
 | `statement_consent_uncertain` | The response is uncertain. Retry keeps the exact assertion, operation and request key. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
@@ -1012,9 +1022,9 @@ Placement codes used below:
 | `realm_appearance_rules_unavailable` | Rules unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_appearance_rules_help` | Write or revise rules in the existing post composer, then select the published post and its exact revision. Later edits are not adopted automatically. | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
 | `realm_appearance_open_revision` | Read selected revision | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
-| `realm_appearance_post_id` | Post ID | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
-| `realm_appearance_revision_id` | Revision ID | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
-| `realm_appearance_media_id` | Media ID | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
+| `realm_appearance_post_id` | Post ID | **Field** — advanced exact post selection entry; ordinary selected title first. |
+| `realm_appearance_revision_id` | Revision ID | **Field** — explicit exact rules revision selection; retain version choice at adoption decision. |
+| `realm_appearance_media_id` | Media ID | **Field** — advanced media reference entry; preview/name first. |
 | `realm_appearance_selection_unavailable` | This selection could not be confirmed. Your draft is preserved. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_appearance_upload_pending` | The uploaded reference is kept. We could not confirm an available image. Check it again before saving. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_appearance_uncertain` | The save response was not confirmed. Your draft and original request are kept. Retry the same request to learn its outcome. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
@@ -1023,7 +1033,7 @@ Placement codes used below:
 | `zone_editor_live_note` | Save replaces the current version. Saves to public and unlisted Zones are immediately visible. An unlisted link may be read anonymously. | **Decision** — public/unlisted visibility and immediate-save consequence by Save/visibility controls. |
 | `zone_editor_signed_out` | Sign in again to continue. Your local edits are retained. | **Settings** — owning advanced editor/management page; name current choice/outcome, move protocol explanation to details/help. |
 | `zone_editor_closed` | This operation is currently closed for this account. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `zone_editor_conflict` | The saved version changed. Your edits are retained. Reload to discard them, or explicitly reapply them to the server version before saving again. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
+| `zone_editor_conflict` | The saved version changed. Your edits are retained. Reload to discard them, or explicitly reapply them to the server version before saving again. | **Error** — saved version changed; explicit discard/reapply draft choice, machine references secondary. |
 | `zone_editor_source_unavailable` | Source execution is not ready. The server has not produced a preview. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `zone_editor_saved_head` | Saved version: {revision} | **Details** — editor saved-version reference. |
 | `zone_editor_actions_unavailable` | Current action availability could not be read. Editing is disabled; retry the read. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -1036,7 +1046,7 @@ Placement codes used below:
 | `trending_unavailable` | Trending searches are unavailable right now. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `moderation_queue_conflict` | The report or target has changed. Refresh the current state and review it before making a new decision. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `moderation_queue_uncertain` | The response was lost. The action may have completed. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
-| `library_collection_move_pending` | {count} members will move to {title} when you save. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `library_collection_move_pending` | {count} members will move to {title} when you save. | **Decision** — draft move applies on Save; keep this consequence by the selected members/save action. |
 | `content_edition_unavailable` | This edition is unavailable right now. Its document could not be read from the protected source. Try again later. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `content_edition_version_mismatch` | The source did not match this edition’s fixed version. The document has not been displayed. Try reading it again. | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
 | `content_edition_image_unavailable` | Image unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -1088,12 +1098,12 @@ Placement codes used below:
 | `realm_claim_unavailable` | Current Realm ownership is unavailable. Refresh before requesting review. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_claim_admission_unavailable` | Current request permission is unavailable. Refresh to check access. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_claim_eligibility` | The original waiting period is 720 hours. Dates are informational; eligibility and access are checked when you request review. Waiting or requesting does not grant ownership. | **Decision** — actual waiting/eligibility consequence at claim action; express duration readably, not protocol hours. |
-| `realm_claim_pending` | Ownership request pending | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `realm_claim_pending` | Ownership request pending | **Source** — actual ownership request pending state, not granted ownership; keep. |
 | `realm_claim_uncertain` | The reply was lost or unavailable. Submission is unconfirmed. Retry the same request to recover its result; your request key has been kept. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `realm_claim_conflict` | The request conflicts with current eligibility or Realm state. Refresh, then review the current source before preparing another request. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `settings_account_rename_policy` | Your former handle forwards to your current handle for 30 days, then stops forwarding. It remains permanently unavailable to other accounts. | **Decision** — keep the actual deadline/irreversible or privacy consequence beside its action; mechanism in help. |
 | `settings_account_rename_unavailable` | Handle rename is unavailable. Reload to check your current account, permissions and Auth configuration. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `realm_review_pending` | Pending review | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `realm_review_pending` | Pending review | **Source** — pending review in the ownership queue; keep. |
 | `realm_review_sparse_help` | The queue has another page. Continue when you are ready; this does not mean the queue is empty. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
 | `realm_review_unavailable` | The review queue is unavailable. Refresh to try again before reviewing an approval. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_review_closed` | Ownership claim review is currently closed. Refresh to check again later. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -1195,10 +1205,10 @@ Placement codes used below:
 | `work_parts_not_admitted` | The current holder Type does not admit this relation. The draft is retained. | **Source** — own draft/history/progress page, with concise human state; preserve actual saved-versus-current distinction. |
 | `managed_actions_unavailable` | This management action is currently unavailable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `search_recovery_source` | The catalogue source is not ready. Your search is retained; try again later. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `subject_purchase_pending` | Loading offers… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `subject_purchase_pending` | Loading offers… | **Source** — local in-flight status on the affected control/region; not an error and not a permanent readiness label. |
 | `subject_purchase_preparing` | Offer listings are being prepared. You can review any offers already shown. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `subject_purchase_unavailable` | Offer listings are unavailable right now. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `creator_sales_pending` | Payment pending | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `creator_sales_pending` | Payment pending | **Source** — actual payment-pending sales state; keep. |
 | `creator_sales_stale` | This sales page has changed. Start again to read the current history. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `creator_sales_error` | This sales page could not be read. Start again without the saved cursor. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
 | `creator_sales_unavailable` | Sales history is unavailable. Try again later. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -1243,7 +1253,7 @@ Placement codes used below:
 | `library_rule_labels_unavailable` | Personal labels are unavailable. Existing label conditions are retained. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_rule_conflict` | The rule changed elsewhere. Load its current version before saving again. Your draft is retained. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `library_rule_reloaded` | Current version loaded. Review your retained draft before saving. | **Source** — own draft/history/progress page, with concise human state; preserve actual saved-versus-current distinction. |
-| `realm_claim_status_old_pending` | This request remains recorded as pending from an earlier orphan episode. It does not request ownership for the current episode. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `realm_claim_status_old_pending` | This request remains recorded as pending from an earlier orphan episode. It does not request ownership for the current episode. | **Source** — historical request does not apply to current claim episode; keep concise distinction on request history. |
 | `realm_claim_status_closed` | Realm claim requests are currently closed. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `realm_claim_status_unavailable` | The current request status is unavailable. Check again to read the native outcome. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_progress_version` | Version reference (optional) | **Field** — optional real version selection for progress. |
@@ -1258,8 +1268,8 @@ Placement codes used below:
 | `manga_relation_help` | Use the shared relation editor below to propose membership or credit changes and compare the exact native slot. Review and public selection remain separate. | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
 | `literary_terms_help` | Names, descriptions and aliases use the existing multilingual terms editor. A missing native terms producer remains unavailable; a name statement is not a title-map edit. | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
 | `people_profile_terms` | Names, descriptions and aliases use Edit names and descriptions. That native terms adapter may be unavailable; a name statement does not replace these terms. | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
-| `people_profile_disclosure` | Use public evidence for personal facts and relationships. Native disclosure, consent and target-owner eligibility decide whether a contribution is allowed. A citation does not grant permission or rights. | **Help** — owning field/review/access workflow; retain proposal/selection/consent meaning, explain mechanisms only on demand. |
-| `screen_classification_pending` | Classification corrections are not connected here yet. Current classifications remain visible. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `people_profile_disclosure` | Use public evidence for personal facts and relationships. Native disclosure, consent and target-owner eligibility decide whether a contribution is allowed. A citation does not grant permission or rights. | **Decision** — public evidence does not grant consent/rights; concise warning by contribution action, detailed eligibility in help. |
+| `screen_classification_pending` | Classification corrections are not connected here yet. Current classifications remain visible. | **Settings** — correction capability unavailable in this editor; keep existing classifications readable. |
 | `erasure_details` | Technical status details | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
 | `erasure_participant_identifiers` | Pending service identifiers (pendingParticipants) | **Details** — existing closed technical status; localized cleanup meaning in summary. |
 | `erasure_session_unavailable` | We could not check your sign-in. Retry the sign-in check to continue. Whether account data removal has finished is still unknown. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -1267,9 +1277,9 @@ Placement codes used below:
 | `erasure_participant_other` | Other cleanup service | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
 | `catalogue_result_read_unavailable` | The current result could not be loaded. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `statement_consent_identity_unavailable` | Identity unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `realm_bans_target_pending` | Checking the current account… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `realm_bans_target_pending` | Checking the current account… | **Source** — local in-flight status on the affected control/region; not an error and not a permanent readiness label. |
 | `realm_bans_target_unavailable` | The current account could not be checked. Try an explicit lookup again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `library_sort_restarted` | This page link has expired or the Library changed. Showing the first page in the selected order. | **Source** — retain the useful product fact on its owning page/action; remove internal qualifiers from ordinary reading. |
+| `library_sort_restarted` | This page link has expired or the Library changed. Showing the first page in the selected order. | **Error** — expired/changed Library page restarted with current order; brief contextual notice. |
 | `library_sort_preparing` | Your Library is being prepared. Try again shortly. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `catalogue_technical_details` | Technical details | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
 | `catalogue_statement_id` | Statement ID | **Details** — exact reference/diagnostic on the owning page; human identity and outcome lead. |
@@ -1291,7 +1301,7 @@ Placement codes used below:
 | `order_paid_total_unavailable` | The charged total was not recorded or is unavailable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `order_tax_unavailable` | Tax information is unavailable. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `zone_name_invalid` | Enter a name in {language} using 1–80 characters, without markup or control characters. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
-| `library_collection_boundary_pending` | Moving {title}… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `library_collection_boundary_pending` | Moving {title}… | **Source** — local in-flight status on the affected control/region; not an error and not a permanent readiness label. |
 | `library_collection_boundary_unknown` | The move of {title} could not be confirmed. Keep this page open and retry the same move; its occurrence, placement and key are retained. | **Error** — move unconfirmed; retry same move. Occurrence/placement/key belong in details. |
 | `edition_identity_unavailable` | Subject identity unavailable | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `edition_identity_date_missing` | Revision date unavailable | **Source** — meaningful history/fixed-edition/case fact on its own page; machine reference secondary, not Home prose. |
@@ -1303,10 +1313,10 @@ Placement codes used below:
 | `library_types_preparing` | Library Types are being prepared. Try again shortly. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `library_types_unavailable` | Library Types could not be loaded. Your current shelf and filter are kept. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `home_space_unavailable` | This Space or its readable Realm is unavailable. Refresh or clear the selection. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `moderation_filter_pending` | Pending | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `moderation_filter_pending` | Pending | **Field** — useful Pending filter label; this is selection terminology, not service-health prose. |
 | `moderation_queue_stale` | This report page has expired or belongs to another selection. Start again with the selected filters. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
-| `thread_authoring_leave_pending` | Your local writing has not been saved. The result of a submission is still unknown; leaving removes its local retry recovery. The request may still finish, and leaving does not cancel or undo it. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
-| `thread_authoring_discard_pending` | The result of this edit submission is still unknown. Discarding removes its local retry recovery; the request may still finish. This does not cancel or undo it. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `thread_authoring_leave_pending` | Your local writing has not been saved. The result of a submission is still unknown; leaving removes its local retry recovery. The request may still finish, and leaving does not cancel or undo it. | **Decision** — leave/discard confirmation must retain unknown submission and loss of local retry recovery; leaving is not cancellation. |
+| `thread_authoring_discard_pending` | The result of this edit submission is still unknown. Discarding removes its local retry recovery; the request may still finish. This does not cancel or undo it. | **Decision** — leave/discard confirmation must retain unknown submission and loss of local retry recovery; leaving is not cancellation. |
 | `home_question_metadata` | {label} · Revision {revision} · {grain} · Scale {min}–{max}, step {step} | **Field** — selected name; scale/grain information control; revision on question details. |
 | `home_questions_unavailable` | Questions are unavailable. Try again. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 | `catalogue_terms_validation_name` | Enter a Name of 1–250 characters, without leading or trailing spaces. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
@@ -1314,7 +1324,7 @@ Placement codes used below:
 | `catalogue_terms_validation_alias_count` | Use at most 32 aliases, one per line. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `catalogue_terms_validation_alias` | Enter one alias per line, each 1–250 characters without leading or trailing spaces. | **Field** — local input/selection helper or validation; keep relevant bound and scope, no unrelated page banner. |
 | `moderation_bulk_bound` | Choose up to 20 pending reports on this loaded page only. Other pages are never selected. | **Field** — bulk-selection control, current-page scope and actual maximum. |
-| `moderation_bulk_pending` | Submitting… | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
+| `moderation_bulk_pending` | Submitting… | **Source** — local in-flight status on the affected control/region; not an error and not a permanent readiness label. |
 | `moderation_bulk_uncertain` | Outcome unknown. Retry this exact command to confirm it. Later reports were not attempted. Queue refresh waits until this outcome is known. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `moderation_bulk_conflict` | Refused: the report changed. Refresh before a new decision. | **Error** — conditional recovery beside the affected action; retain draft/original retry, put keys and heads in details. |
 | `moderation_bulk_unavailable` | Refused: report unavailable. Refresh before a new decision. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
@@ -1327,3 +1337,174 @@ Placement codes used below:
 | `reporter_status_read_closed` | Report status is not available on this platform. | **Error** — conditional affected-region state and recovery; distinguish loading/incomplete/unavailable from empty, omit internal mechanism. |
 
 The keyed sweep contains 744 entries. Literal diagnostics and identifier renderers are inventoried separately above.
+
+## Appendix: concrete renderer index
+
+This index makes the markup sweep reproducible at the inspected revision. It supplements the migration/exception
+tables, rather than assigning feed semantics from tags. It excludes `*.stories.*`, tests, generated output and
+`shadcn` toolkit internals; two production-directory story wrappers are explicitly labelled examples. Delegating
+route/layout components and partial identity/fact renderers are identified in the main inventory. A shared shell
+without a stretched link can be intentional for an action-only or full-document row.
+
+| File | Rendered list/card primitives | Shared family evidence / classification |
+| --- | --- | --- |
+| `apps/web/src/account-verification/pages.tsx` | `Card`, `CardContent`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/accounts/erasure-progress/view.tsx` | `Card`, `CardContent`, `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/accounts/lifecycle-controls/page.tsx` | `Card`, `CardContent`, `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/accounts/management/pages.tsx` | `Card`, `CardContent`, `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/accounts/profile-editor/page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/accounts/public-profile/view.tsx` | `ListRow`, `article`, `ul` | hover shell + stretched link |
+| `apps/web/src/accounts/resource-access/page.tsx` | `ListRow`, `ul` | hover shell; no direct stretched-link use |
+| `apps/web/src/checkout/creator-offer-editor.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/checkout/creator-offers-page.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/checkout/creator-sales-page.tsx` | `ListRow`, `ul` | hover shell; no direct stretched-link use |
+| `apps/web/src/checkout/creator-statement-page.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/checkout/creator-statements-page.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/checkout/entitlement-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/checkout/entitlements-page.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/checkout/offer-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/checkout/order-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/checkout/orders-page.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/checkout/subject-offers-region.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/community/my-realms-page.tsx` | `ListRow`, `article`, `ul` | hover shell; no direct stretched-link use |
+| `apps/web/src/community/realm-bans-control.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/community/realm-claim-review-page.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/community/realm-claim-status-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/community/realm-discovery/RealmDiscoverySection.tsx` | `li`, `ul` | independent linked hover rows; migrate |
+| `apps/web/src/community/setup-context-picker-field.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/community/space-page.tsx` | `CoverCard`, `ListRow`, `article`, `ul` | shared tile anatomy; hover shell; no direct stretched-link use |
+| `apps/web/src/community/space-setup-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/content-editions/creator-editions-view.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/content-editions/edition-create-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/content-editions/edition-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/addon-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/album-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/authored-field-view.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/character-profile-create.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/character-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/context-curation-story.tsx` | `article` | example wrapper |
+| `apps/web/src/features/catalogue/create-subject-form.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/definition-guide-view.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/editorial-context-route.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/editorial-context-story.tsx` | `article` | example wrapper |
+| `apps/web/src/features/catalogue/game-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/literary-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/manga-profile-view.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/people-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/publication-editor-form.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/recipe-editor-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/relation-editor.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/screen-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/statement-consent-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/statement-editor-view.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/story-arc-profile-session.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/story-arc-profile-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/subject-changes-page.tsx` | `article`, `li`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/subject-facts-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/subject-sources-page.tsx` | `article`, `li`, `ol`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/subject-terms-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/value-explanation-page.tsx` | `article`, `li`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/catalogue/work-parts-page.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/contexts/view.tsx` | `ListRow`, `article`, `li`, `ul` | hover shell + stretched link |
+| `apps/web/src/features/import-review/provider-queue-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/import-review/provider-review-actions-view.tsx` | `ListRow`, `li`, `ul` | hover shell + stretched link |
+| `apps/web/src/features/pages/account.tsx` | `ListRow`, `li`, `ul` | hover shell + stretched link |
+| `apps/web/src/features/pages/cover-list.tsx` | `CoverCard`, `ListRow`, `ul` | shared tile anatomy; hover shell; no direct stretched-link use |
+| `apps/web/src/features/pages/curate-view-editor.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/curation-publish-view.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/data.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/editor.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/home-feed.tsx` | `article`, `li`, `ol`, `ul` | independent bordered feed rows; migrate first |
+| `apps/web/src/features/pages/layout.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/overview.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/qualified-credit.tsx` | `CoverCard`, `li`, `ul` | shared tile anatomy |
+| `apps/web/src/features/pages/rating-distribution.tsx` | `li`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/subject-community-view.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/subject-ratings-view.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/pages/view-tabs.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/zones/editor/view.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/zones/manage/create.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/features/zones/manage/workspace.tsx` | `ListRow`, `article`, `ul` | hover shell + stretched link |
+| `apps/web/src/inbox/inbox-page.tsx` | `ListRow`, `ol` | hover shell + stretched link |
+| `apps/web/src/library/collection-browser.tsx` | `CoverCard`, `ListRow`, `article`, `li`, `ul` | shared tile anatomy; hover shell; no direct stretched-link use |
+| `apps/web/src/library/collection-editor.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/library/collection-page.tsx` | `CoverCard`, `ListRow`, `MemberListRow`, `article`, `ul` | shared member anatomy; shared tile anatomy; hover shell; no direct stretched-link use |
+| `apps/web/src/library/collection-publication-page.tsx` | `ListRow`, `article`, `ul` | hover shell; no direct stretched-link use |
+| `apps/web/src/library/collection-rule-editor.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/library/continue.tsx` | `CoverCard` | shared tile anatomy |
+| `apps/web/src/library/copies-page.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/library/dynamic-collection-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/library/entry-undo.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/library/labels-page.tsx` | `ListRow`, `article`, `ul` | hover shell + stretched link |
+| `apps/web/src/library/log-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/library/logs-progress.tsx` | `ListRow`, `ol` | hover shell + stretched link |
+| `apps/web/src/library/mine-collections-page.tsx` | `article`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/library/mine-following-page.tsx` | `ListRow`, `article`, `ul` | hover shell + stretched link |
+| `apps/web/src/library/my-logs-page.tsx` | `ListRow`, `article`, `ol` | hover shell; no direct stretched-link use |
+| `apps/web/src/library/private-follow-counts-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/library/progress-page.tsx` | `ListRow`, `article`, `ol` | hover shell + stretched link |
+| `apps/web/src/library/progress-session.tsx` | `ListRow`, `article`, `ol`, `ul` | hover shell + stretched link |
+| `apps/web/src/library/shelf-labels.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/library/shelf-view.tsx` | `CoverCard`, `ShelfListRow`, `Table`, `TableRow`, `li`, `ul` | shared shelf anatomy; shared tile anatomy; semantic table preserved |
+| `apps/web/src/library/subject-slot-view.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/moderation/appeals-tab.tsx` | `article`, `li`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/moderation/decision-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/moderation/reporter-status-view.tsx` | `article`, `li`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/moderation/reports-bulk-controls.tsx` | `Card`, `CardContent`, `li`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/moderation/reports-page.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/moderation/reports-view-card.tsx` | `Card`, `CardContent` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/platform/exposure/page.tsx` | `Card`, `CardContent`, `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/routes/boards/$id_.new.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/routes/collections/new.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/routes/subjects/$id_.$slug_.context-review.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/routes/subjects/$id_.$slug_.relation-edit.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/routes/threads/$id_.$slug.tsx` | `ListRow` | hover shell; no direct stretched-link use |
+| `apps/web/src/search/discovery-kinds.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/search/discovery-results.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/search/header-search/header-search.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/search/recent-panel.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/search/recent.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/search/refinement/refinement.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/search/results.tsx` | `MemberListRow`, `ul` | shared member anatomy |
+| `apps/web/src/search/search.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/search/trending-section.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/account-safety.tsx` | `Card`, `CardContent` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/collection-privacy.tsx` | `Card`, `CardContent`, `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/settings/display-preferences.tsx` | `Card`, `CardContent` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/managed-account-actions.tsx` | `Card`, `CardContent`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/managed-account-detail.tsx` | `Card`, `CardContent`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/managed-accounts.tsx` | `Card`, `CardContent`, `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/settings/notifications.tsx` | `Card`, `CardContent`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/profile-preview.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/profile.tsx` | `Card`, `CardContent`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/public-views.tsx` | `Card`, `CardContent` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/reading-card.tsx` | `Card`, `CardContent` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/sections-navigation.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/settings-page.tsx` | `Card`, `CardContent`, `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/settings/verification.tsx` | `Card`, `CardContent`, `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/shell/shell.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/subject/candidate-review.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/subject/view-error.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/subject/write-review.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/author-erasure-operation.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/board-community.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/board-directory-view.tsx` | `ListRow`, `article`, `ul` | hover shell + stretched link |
+| `apps/web/src/threads/board-feed.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `apps/web/src/threads/composer.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/exact-revision-view.tsx` | `article` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/post-history.tsx` | `li`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/post-removed.tsx` | `ListRow` | hover shell; no direct stretched-link use |
+| `apps/web/src/threads/revision-provenance-view.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/thread-reading.tsx` | `article`, `ol` | local list/article/card; see semantic exception or migration table |
+| `apps/web/src/threads/thread-subjects.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `packages/ui/src/components/cover-card.tsx` | `article` | tile definition; independent title stretching |
+| `packages/ui/src/components/document-body.tsx` | `li` | local list/article/card; see semantic exception or migration table |
+| `packages/ui/src/components/entity-picker.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `packages/ui/src/components/list-presentation.tsx` | `ListRow` | hover shell + stretched link |
+| `packages/ui/src/components/list-row.tsx` | `li` | hover primitive definition |
+| `packages/ui/src/components/mobile-feed-card.tsx` | `article` | parallel bordered article; retire into family |
+| `packages/ui/src/components/rating.tsx` | `li`, `ul` | local list/article/card; see semantic exception or migration table |
+| `packages/ui/src/components/shelf-list.tsx` | `ListRow`, `ul` | hover shell + stretched link |
+| `packages/ui/src/components/shelf-table.tsx` | `Table`, `TableRow`, `li`, `ul` | semantic table preserved |
+
+The index contains 158 concrete renderers. Presence of a primitive is source evidence, not a visual or native test result.
