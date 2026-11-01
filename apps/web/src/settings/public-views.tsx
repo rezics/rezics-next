@@ -51,13 +51,7 @@ export function PublicViewsCard({
         <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4" aria-busy={busy}>
-        <ProfileFeedback
-          editor={editor}
-          scope="views"
-          writable={writable}
-          readable={canRead}
-          showReaderReload
-        />
+        <ProfileFeedback editor={editor} scope="views" writable={writable} readable={canRead} showReaderReload />
         {profile ? (
           <>
             {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (

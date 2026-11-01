@@ -284,7 +284,9 @@ test('A new or unready actor never receives a prior private profile and an expli
     expect(hidden).not.toContain('Retained unsent words');
     expect(hidden).not.toContain('<input');
     const explicitlyReadable = renderToStaticMarkup(
-      createElement('div', null,
+      createElement(
+        'div',
+        null,
         createElement(ProfileCard, { editor, writable: false, readable: true }),
         createElement(PublicViewsCard, { editor, writable: false, readable: true }),
       ),

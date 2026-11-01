@@ -321,7 +321,14 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveRead(firstReload, successRead(nativeProfile));
     expect(readOnlyEditor.snapshot().known).toEqual(nativeProfile);
     expect(saveRequests).toHaveLength(0);
-    expect(JSON.stringify(client.getQueryCache().getAll().map((item) => item.queryKey))).not.toContain('csrf-secret-one');
+    expect(
+      JSON.stringify(
+        client
+          .getQueryCache()
+          .getAll()
+          .map((item) => item.queryKey),
+      ),
+    ).not.toContain('csrf-secret-one');
 
     await act(async () => client!.setQueryData(sessionQuery.queryKey, session(accountA, 'csrf-secret-one')));
     await until(() => readRequests.length === firstReload + 2, 'a fresh writable observation');
@@ -336,9 +343,14 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(displayName?.isConnected).toBe(false);
     const currentName = host.querySelector<HTMLInputElement>('input[id$="-displayName"]');
     expect(currentName?.disabled).toBe(false);
-    expect(JSON.stringify(client.getQueryCache().getAll().map((item) => item.queryKey))).not.toContain(
-      'csrf-secret-one',
-    );
+    expect(
+      JSON.stringify(
+        client
+          .getQueryCache()
+          .getAll()
+          .map((item) => item.queryKey),
+      ),
+    ).not.toContain('csrf-secret-one');
 
     await act(async () =>
       writableEditor.edit({
@@ -438,7 +450,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     if (!fileInput) throw new Error('The connected profile avatar chooser was not rendered.');
     Object.defineProperty(fileInput, 'files', { configurable: true, value: [gif] });
     await act(async () => fileInput!.dispatchEvent(new window.Event('change', { bubbles: true })));
-    await until(() => host.textContent?.includes(m.settings_profile_crop_use_original()) === true, 'the original avatar option');
+    await until(
+      () => host.textContent?.includes(m.settings_profile_crop_use_original()) === true,
+      'the original avatar option',
+    );
     await click(button(m.settings_profile_crop_use_original()));
     await until(() => uploadRequests.length === 1, 'the pending avatar upload');
     const oldUpload = uploadRequests[0]!;
@@ -485,7 +500,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(tokenTwoEditor.snapshot()).not.toBe(tokenTwoSnapshot);
     expect(tokenTwoEditor.snapshot().known).toBeNull();
     expect(tokenThreeEditor.snapshot().draft?.displayName).toBe(nativeProfile.displayName);
-    const currentOwnerKey = client.getQueryCache().findAll({ queryKey: ['settings', 'profile'] }).at(-1)?.queryKey;
+    const currentOwnerKey = client
+      .getQueryCache()
+      .findAll({ queryKey: ['settings', 'profile'] })
+      .at(-1)?.queryKey;
     expect(currentOwnerKey).toBeDefined();
     expect(client.getQueryData(currentOwnerKey!)).toEqual(nativeProfile);
 
@@ -655,13 +673,20 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       nativeProfile,
     );
     const injectedMarkup = renderToStaticMarkup(
-      createElement('div', null, createElement(ProfileCard, { editor: standalone }), createElement(PublicViewsCard, { editor: standalone })),
+      createElement(
+        'div',
+        null,
+        createElement(ProfileCard, { editor: standalone }),
+        createElement(PublicViewsCard, { editor: standalone }),
+      ),
     );
     expect(injectedMarkup).toContain(`value="${nativeProfile.displayName}"`);
     expect(injectedMarkup).not.toMatch(/<input[^>]*disabled/);
     expect(injectedMarkup).not.toMatch(/role="switch"[^>]*disabled/);
     const hiddenMarkup = renderToStaticMarkup(
-      createElement('div', null,
+      createElement(
+        'div',
+        null,
         createElement(ProfileCard, { editor: standalone, writable: false }),
         createElement(PublicViewsCard, { editor: standalone, writable: false }),
       ),
@@ -669,7 +694,9 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(hiddenMarkup).not.toContain('Current organization biography');
     expect(hiddenMarkup).not.toContain('role="switch"');
     const readableMarkup = renderToStaticMarkup(
-      createElement('div', null,
+      createElement(
+        'div',
+        null,
         createElement(ProfileCard, { editor: standalone, writable: false, readable: true }),
         createElement(PublicViewsCard, { editor: standalone, writable: false, readable: true }),
       ),
