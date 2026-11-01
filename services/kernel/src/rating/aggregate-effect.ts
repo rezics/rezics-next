@@ -186,7 +186,10 @@ async function applyComponentDelta(
 }
 
 async function applyPartition(
-  pool: Pool, changes: readonly RatingChange[], partition: number, scales: ReadonlyMap<string, QuestionScale>,
+  pool: Pool,
+  changes: readonly RatingChange[],
+  partition: number,
+  scales: ReadonlyMap<string, QuestionScale>,
 ): Promise<void> {
   try {
     await runCommand(pool, { partition }, async (tx, command) => {
@@ -306,7 +309,7 @@ async function applyPartition(
       if (applied === 0) throw new NoAggregateChange();
       return {
         value: undefined,
-        events: [{ type: AGGREGATE_APPLIED, data: { applied } }, ...await totals.commit(tx)],
+        events: [{ type: AGGREGATE_APPLIED, data: { applied } }, ...(await totals.commit(tx))],
       };
     });
   } catch (error) {

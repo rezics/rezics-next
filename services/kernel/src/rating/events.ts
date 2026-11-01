@@ -12,16 +12,25 @@ const deliveryAddress = {
   serial,
 };
 const populationTotalDelivery = Type.Union([
-  Type.Object({
-    ...deliveryAddress,
-    action: Type.Literal('deliver'),
-    deltas: Type.Array(Type.Object({
-      questionId: Type.String({ pattern: UUID }),
-      shard: Type.Integer({ minimum: 0, maximum: 15 }),
-      count: signed,
-      sum: signed,
-    }, { additionalProperties: false }), { minItems: 1, maxItems: 200 }),
-  }, { additionalProperties: false }),
+  Type.Object(
+    {
+      ...deliveryAddress,
+      action: Type.Literal('deliver'),
+      deltas: Type.Array(
+        Type.Object(
+          {
+            questionId: Type.String({ pattern: UUID }),
+            shard: Type.Integer({ minimum: 0, maximum: 15 }),
+            count: signed,
+            sum: signed,
+          },
+          { additionalProperties: false },
+        ),
+        { minItems: 1, maxItems: 200 },
+      ),
+    },
+    { additionalProperties: false },
+  ),
   Type.Object({ ...deliveryAddress, action: Type.Literal('received') }, { additionalProperties: false }),
 ]);
 export type PopulationTotalEvent = Static<typeof populationTotalDelivery>;

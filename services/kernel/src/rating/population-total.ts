@@ -25,8 +25,14 @@ type CountedDelta = { questionId: string; shard: number; count: bigint; sum: big
 
 function address(data: Address): [number, string, number, string] {
   const route = routeOf(data.populationId);
-  if (route === null || !Number.isInteger(data.sourcePartition) || data.sourcePartition < 0 ||
-      data.sourcePartition > 4095 || !/^[1-9][0-9]*$/.test(data.serial) || BigInt(data.serial) > MAX_SERIAL)
+  if (
+    route === null ||
+    !Number.isInteger(data.sourcePartition) ||
+    data.sourcePartition < 0 ||
+    data.sourcePartition > 4095 ||
+    !/^[1-9][0-9]*$/.test(data.serial) ||
+    BigInt(data.serial) > MAX_SERIAL
+  )
     throw new TypeError('Invalid rating population delivery address');
   return [route, data.populationId, data.sourcePartition, data.serial];
 }
@@ -37,8 +43,12 @@ function parse(event: CloudEvent): PopulationTotalEvent {
   const data = event.data as PopulationTotalEvent;
   const [route] = address(data);
   const source = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);
-  if (!source || Number(source[1]) !== (data.action === 'deliver' ? data.sourcePartition : partitionOf(route)) ||
-      !/^\d{19}$/.test(event.sequence) || BigInt(event.sequence) < 1n)
+  if (
+    !source ||
+    Number(source[1]) !== (data.action === 'deliver' ? data.sourcePartition : partitionOf(route)) ||
+    !/^\d{19}$/.test(event.sequence) ||
+    BigInt(event.sequence) < 1n
+  )
     throw new TypeError('Invalid rating population delivery envelope');
   return data;
 }
@@ -47,9 +57,13 @@ function parse(event: CloudEvent): PopulationTotalEvent {
 export class PopulationTotalCapture {
   private readonly populations = new Map<string, Map<string, CountedDelta>>();
 
-  add(change: { questionId: string; populationId: string }, entries: readonly {
-    countingKey: string; delta: { count: bigint; sum: bigint };
-  }[]): void {
+  add(
+    change: { questionId: string; populationId: string },
+    entries: readonly {
+      countingKey: string;
+      delta: { count: bigint; sum: bigint };
+    }[],
+  ): void {
     const shards = this.populations.get(change.populationId) ?? new Map<string, CountedDelta>();
     for (const { countingKey, delta } of entries) {
       const shard = Number.parseInt(countingKey.slice(0, 2), 16) % 16;
@@ -75,19 +89,30 @@ export class PopulationTotalCapture {
       const sequence = await tx.query<{ serial: string }>(
         `INSERT INTO rating.population_total_source(partition_no,population_id,serial) VALUES($1,$2,1)
          ON CONFLICT(partition_no,population_id) DO UPDATE SET serial=rating.population_total_source.serial+1
-         RETURNING serial::text`, [sourcePartition, populationId]);
+         RETURNING serial::text`,
+        [sourcePartition, populationId],
+      );
       const data: PopulationTotalDelivery = {
-        action: 'deliver', sourcePartition, populationId, serial: sequence.rows[0]!.serial, deltas,
+        action: 'deliver',
+        sourcePartition,
+        populationId,
+        serial: sequence.rows[0]!.serial,
+        deltas,
       };
       await tx.query(
         `INSERT INTO rating.population_total_delivery(partition_no,population_id,serial,payload)
-         VALUES($1,$2,$3,$4::jsonb)`, [sourcePartition, populationId, data.serial, JSON.stringify(data)]);
+         VALUES($1,$2,$3,$4::jsonb)`,
+        [sourcePartition, populationId, data.serial, JSON.stringify(data)],
+      );
       events.push({ type: POPULATION_TOTAL_DELIVERY, data });
     }
-    if (events.length) await tx.query(
-      `INSERT INTO rating.population_total_clock(partition_no,generation,pending) VALUES($1,1,$2)
+    if (events.length)
+      await tx.query(
+        `INSERT INTO rating.population_total_clock(partition_no,generation,pending) VALUES($1,1,$2)
        ON CONFLICT(partition_no) DO UPDATE SET generation=rating.population_total_clock.generation+1,
-       pending=rating.population_total_clock.pending+EXCLUDED.pending`, [sourcePartition, events.length]);
+       pending=rating.population_total_clock.pending+EXCLUDED.pending`,
+        [sourcePartition, events.length],
+      );
     return events;
   }
 }
@@ -102,7 +127,8 @@ async function admit(client: Queryable, data: PopulationTotalDelivery): Promise<
      ON CONFLICT(route,population_id,source_partition,serial) DO UPDATE
      SET payload=rating.population_total_inbox.payload
      WHERE rating.population_total_inbox.payload=EXCLUDED.payload RETURNING serial`,
-    [...key, JSON.stringify(data)]);
+    [...key, JSON.stringify(data)],
+  );
   if (result.rowCount !== 1) throw new Error('Rating population delivery identity changed');
 }
 
@@ -112,16 +138,22 @@ async function receive(pool: Pool, item: Address): Promise<boolean> {
   const result = await runCommand(pool, { partition: partitionOf(key[0]) }, async (tx) => {
     const inbox = await tx.query<{ payload: PopulationTotalDelivery; applied: boolean }>(
       `SELECT payload,applied FROM rating.population_total_inbox
-       WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`, key);
+       WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`,
+      key,
+    );
     const row = inbox.rows[0];
     if (!row) return noEffect(false);
     if (row.applied) return noEffect(true);
     await tx.query(
       `INSERT INTO rating.population_total_received(route,population_id,source_partition)
-       VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, key.slice(0, 3));
+       VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+      key.slice(0, 3),
+    );
     const stream = await tx.query<{ serial: string }>(
       `SELECT serial::text FROM rating.population_total_received
-       WHERE route=$1 AND population_id=$2 AND source_partition=$3 FOR UPDATE`, key.slice(0, 3));
+       WHERE route=$1 AND population_id=$2 AND source_partition=$3 FOR UPDATE`,
+      key.slice(0, 3),
+    );
     if (BigInt(stream.rows[0]!.serial) + 1n !== BigInt(item.serial)) {
       // The initial stream insert must roll back too: noEffect may not conceal a domain write.
       throw new PredecessorPending();
@@ -133,23 +165,43 @@ async function receive(pool: Pool, item: Address): Promise<boolean> {
       await tx.query(
         `INSERT INTO rating.population_total_component(route,question_id,population_id,shard,count,sum)
          VALUES($1,$2,$3,$4,0,0) ON CONFLICT DO NOTHING`,
-        [key[0], delta.questionId, item.populationId, delta.shard]);
+        [key[0], delta.questionId, item.populationId, delta.shard],
+      );
       const updated = await applyTotal.run(tx, {
-        population_route: key[0], question_id: delta.questionId, population_id: item.populationId,
-        shard: delta.shard, count_delta: delta.count, sum_delta: delta.sum,
+        population_route: key[0],
+        question_id: delta.questionId,
+        population_id: item.populationId,
+        shard: delta.shard,
+        count_delta: delta.count,
+        sum_delta: delta.sum,
         check_epoch: delta.questionId === STANDARD_QUESTION_ID,
       });
       if (!updated.length) throw new Error('Rating population total shard unavailable');
     }
     await tx.query(
       `UPDATE rating.population_total_inbox SET applied=true
-       WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`, key);
+       WHERE route=$1 AND population_id=$2 AND source_partition=$3 AND serial=$4`,
+      key,
+    );
     await tx.query(
       `UPDATE rating.population_total_received SET serial=$4
-       WHERE route=$1 AND population_id=$2 AND source_partition=$3`, key);
-    return { value: true, events: [{ type: POPULATION_TOTAL_DELIVERY,
-      data: { action: 'received', sourcePartition: item.sourcePartition, populationId: item.populationId,
-        serial: item.serial } satisfies PopulationTotalEvent }] };
+       WHERE route=$1 AND population_id=$2 AND source_partition=$3`,
+      key,
+    );
+    return {
+      value: true,
+      events: [
+        {
+          type: POPULATION_TOTAL_DELIVERY,
+          data: {
+            action: 'received',
+            sourcePartition: item.sourcePartition,
+            populationId: item.populationId,
+            serial: item.serial,
+          } satisfies PopulationTotalEvent,
+        },
+      ],
+    };
   }).catch((error: unknown) => {
     if (error instanceof PredecessorPending) return { value: false };
     throw error;
@@ -164,11 +216,14 @@ async function acknowledge(pool: Pool, item: Address): Promise<void> {
     const changed = await tx.query(
       `UPDATE rating.population_total_delivery SET pending=false
        WHERE partition_no=$1 AND population_id=$2 AND serial=$3 AND pending RETURNING serial`,
-      [item.sourcePartition, item.populationId, item.serial]);
+      [item.sourcePartition, item.populationId, item.serial],
+    );
     if (!changed.rowCount) return noEffect(undefined);
     const clock = await tx.query(
       `UPDATE rating.population_total_clock SET generation=generation+1,pending=pending-1
-       WHERE partition_no=$1 AND pending>0 RETURNING generation`, [item.sourcePartition]);
+       WHERE partition_no=$1 AND pending>0 RETURNING generation`,
+      [item.sourcePartition],
+    );
     if (!clock.rowCount) throw new Error('Rating population delivery clock unavailable');
     return { value: undefined, events: [{ type: AGGREGATE_APPLIED, data: { applied: 1 } }] };
   });
@@ -190,7 +245,9 @@ async function deliver(pool: Pool, data: PopulationTotalDelivery): Promise<void>
 
 /** Shared foreground completion and registered worker recovery use the identical inbox/receipt commands. */
 export async function flushPopulationTotalDeliveries(
-  pool: Pool, partition: number, populations?: readonly string[],
+  pool: Pool,
+  partition: number,
+  populations?: readonly string[],
 ): Promise<void> {
   if (populations && (populations.length === 0 || populations.length > PAGE))
     throw new RangeError('Rating population delivery selection must contain 1 to 100 populations');
@@ -203,7 +260,8 @@ export async function flushPopulationTotalDeliveries(
              AND population_id=ANY($3::uuid[]) ORDER BY population_id,serial LIMIT $2`
           : `SELECT payload FROM rating.population_total_delivery WHERE partition_no=$1 AND pending
              ORDER BY population_id,serial LIMIT $2`,
-        populations ? [partition, PAGE, populations] : [partition, PAGE]);
+        populations ? [partition, PAGE, populations] : [partition, PAGE],
+      );
     });
     if (page.rows.length === 0) return;
     for (const { payload } of page.rows) await deliver(pool, payload);
@@ -212,7 +270,8 @@ export async function flushPopulationTotalDeliveries(
 
 export function createPopulationTotalEffect(pool: Pool): Effect {
   return {
-    name: 'rating_population_total', types: [POPULATION_TOTAL_DELIVERY],
+    name: 'rating_population_total',
+    types: [POPULATION_TOTAL_DELIVERY],
     async admit(client, event) {
       const data = parse(event);
       if (data.action === 'deliver') await admit(client, data);
@@ -223,8 +282,11 @@ export function createPopulationTotalEffect(pool: Pool): Effect {
       await acknowledge(pool, data);
       // One successor probe, not a receipt/history scan. Its commit emits its own continuation.
       if (BigInt(data.serial) < MAX_SERIAL) {
-        const next = { sourcePartition: data.sourcePartition, populationId: data.populationId,
-          serial: String(BigInt(data.serial) + 1n) };
+        const next = {
+          sourcePartition: data.sourcePartition,
+          populationId: data.populationId,
+          serial: String(BigInt(data.serial) + 1n),
+        };
         if (await receive(pool, next)) await acknowledge(pool, next);
       }
     },
@@ -232,10 +294,16 @@ export function createPopulationTotalEffect(pool: Pool): Effect {
 }
 
 /** Exact subject-home readiness observation; absence means the untouched cutover baseline. */
-export async function readPopulationTotalClock(client: Queryable, partition: number): Promise<{
-  generation: string; pending: string;
+export async function readPopulationTotalClock(
+  client: Queryable,
+  partition: number,
+): Promise<{
+  generation: string;
+  pending: string;
 }> {
   const result = await client.query<{ generation: string; pending: string }>(
-    `SELECT generation::text,pending::text FROM rating.population_total_clock WHERE partition_no=$1`, [partition]);
+    `SELECT generation::text,pending::text FROM rating.population_total_clock WHERE partition_no=$1`,
+    [partition],
+  );
   return result.rows[0] ?? { generation: '0', pending: '0' };
 }
