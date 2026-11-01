@@ -106,9 +106,7 @@ export function CollectionAddMembers(props: CollectionAddMembersProps) {
   }
   if (!ready) return null;
   // A nonempty token rotation preserves the occurrence; viewer/admission/address replacement retires it.
-  return (
-    <CollectionAddMembersForm key={origin.generation} {...props} currentCsrf={currentCsrf} onClose={close} />
-  );
+  return <CollectionAddMembersForm key={origin.generation} {...props} currentCsrf={currentCsrf} onClose={close} />;
 }
 
 type AddReceipt = {

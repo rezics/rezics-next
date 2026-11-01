@@ -477,4 +477,3 @@ test('Accepted recovery reloads only; a healthy repeated subject and deliberate 
     expect(page.events.closes).toBe(3);
   });
 });
-
