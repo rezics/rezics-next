@@ -799,11 +799,16 @@ export function createPublicFilterSourceBinding(
   }
   async function advanceCreationBridge(
     bootstrap: string, state: RepairState, db: Pool, context: PublicFilterConsumerContext,
-    accounts: boolean, retained?: RepairState,
+    accounts: boolean, cost: BindingCost, retained?: RepairState,
   ): Promise<RepairState> {
     if (state.resumeBridge || state.subject !== null || state.projection !== null)
       throw new BindingError('binding_mismatch');
     if (state.phase === 'window') {
+      // measuredPool charges the projected row. The original enrollment, native
+      // owner and retention checkpoint are three separately keyed inputs.
+      cost.rows += 2;
+      cost.dependencyPoints += 2;
+      cost.inputKeys++;
       const window = await readPublicFilterCreationWindow(db,
         { bootstrap: nativeId(bootstrap), partition: state.partition }, context, retained?.bridge);
       return { ...state, epoch: window.epoch, phase: 'bridge', bridge: window };
@@ -811,6 +816,13 @@ export function createPublicFilterSourceBinding(
     if (state.phase !== 'bridge' || !state.bridge || state.partition !== state.bridge.partition ||
       state.epoch !== state.bridge.epoch)
       throw new BindingError('binding_mismatch');
+    // An exhausted interval still revalidates all three binding rows. A live
+    // event additionally reads its exact outbox point; neither is a packed-row
+    // exemption from native control/point accounting.
+    const extraRows = state.bridge.position > state.bridge.through ? 2 : 3;
+    cost.rows += extraRows;
+    cost.dependencyPoints += extraRows;
+    cost.inputKeys++;
     const result = await readPublicFilterCreationEvent(db,
       { bootstrap: nativeId(bootstrap), window: state.bridge }, context);
     if (result.event === null) {
@@ -818,7 +830,7 @@ export function createPublicFilterSourceBinding(
       return { ...rest, partition: state.partition+1, epoch: null, phase: 'window' };
     }
     const event = result.event;
-    const subject = event.type.startsWith('com.rezics.subject.');
+    const subject = event.type.startsWith('com.rezics.subject.') || event.type.startsWith('com.rezics.statement.');
     const account = accounts &&
       ['com.rezics.access.account-updated.v1','com.rezics.access.account-tombstoned.v1',
         'com.rezics.access.account-discovery-changed.v1'].includes(event.type);
@@ -963,8 +975,7 @@ export function createPublicFilterSourceBinding(
       }
     } else if (state.phase === 'window' || state.phase === 'bridge') {
       next = await advanceCreationBridge(bootstrap.id,state,db,context,
-        'representation' in bootstrap.definition.capture,replay?.next);
-      cost.inputKeys++;
+        'representation' in bootstrap.definition.capture,cost,replay?.next);
     } else {
       const owner = await readPartition(db, state.partition);
       if (!owner || owner.writeState !== 'active') throw new BindingError('owner_unavailable');
@@ -1442,9 +1453,8 @@ export function createPublicFilterSourceBinding(
         } else if (record.input.phase === 'window' || record.input.phase === 'bridge') {
           if (receiptDigests.length !== 0 || record.input.partition >= 4096 ||
             encode(await advanceCreationBridge(input.bootstrap,record.input,db,{ deadline },
-              'representation' in cut.definition.capture,record.next)) !== encode(record.next))
+              'representation' in cut.definition.capture,cost,record.next)) !== encode(record.next))
             throw new BindingError('binding_mismatch');
-          cost.inputKeys++;
         } else if (
           (record.input.phase !== 'scan' && record.input.phase !== 'advance') ||
           receiptDigests.length !== 0
