@@ -1,5 +1,13 @@
 import { useMemo } from 'react';
-import { Link, Outlet, RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import {
+  Link,
+  Outlet,
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { FeedResults, type FeedResultsAvailability, type FeedResultsMessages } from '../features/feed/feed-results';
@@ -49,7 +57,9 @@ function realmPresentation(realm: MyRealmSummary, locale: string) {
   return {
     title: realm.name,
     href: `/${locale}/realms/${encodeURIComponent(realm.realmId)}`,
-    preview: realm.description ? <p className="text-sm leading-relaxed text-muted-foreground">{realm.description}</p> : undefined,
+    preview: realm.description ? (
+      <p className="text-sm leading-relaxed text-muted-foreground">{realm.description}</p>
+    ) : undefined,
   };
 }
 
@@ -137,7 +147,10 @@ export const MyRealmsSummaries: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('region', { name: m.realms_heading() })).toBeVisible();
     await expect(canvas.getByRole('list', { name: m.realms_heading() }).querySelectorAll('h2')).toHaveLength(2);
-    await expect(canvas.getByRole('link', { name: m.realms_more() })).toHaveAttribute('href', expect.stringContaining('cursor='));
+    await expect(canvas.getByRole('link', { name: m.realms_more() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('cursor='),
+    );
   },
 };
 

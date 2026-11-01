@@ -36,7 +36,13 @@ An embedded owner list can use the same body without claiming a native mixed-fee
   messages={messages}
   getItemKey={(realm) => realm.realmId}
   itemPresentation={(realm) => ({ title: realm.name, href: realmHref(realm.realmId) })}
-  nextControl={page.next ? <Link to="/realms" search={{ cursor: page.next }}>More Realms</Link> : undefined}
+  nextControl={
+    page.next ? (
+      <Link to="/realms" search={{ cursor: page.next }}>
+        More Realms
+      </Link>
+    ) : undefined
+  }
 />
 ```
 

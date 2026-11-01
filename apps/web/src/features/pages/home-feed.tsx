@@ -62,19 +62,20 @@ export function HomeFeed({
   const page = result.state === 'ready' ? result.page : undefined;
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
   const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
-  const results: FeedResultsResult<FeedItem> = result.state === 'ready'
-    ? {
-        state: 'ready',
-        items: result.page.feedItems,
-        hasNext: result.page.next !== null,
-        availability: {
-          state: hasPreparing || hasUnavailable ? 'partial' : 'complete',
-          sources: result.page.sources,
-        },
-      }
-    : result.state === 'loading'
-      ? { state: 'loading', code: result.code }
-      : { state: result.state, code: result.code };
+  const results: FeedResultsResult<FeedItem> =
+    result.state === 'ready'
+      ? {
+          state: 'ready',
+          items: result.page.feedItems,
+          hasNext: result.page.next !== null,
+          availability: {
+            state: hasPreparing || hasUnavailable ? 'partial' : 'complete',
+            sources: result.page.sources,
+          },
+        }
+      : result.state === 'loading'
+        ? { state: 'loading', code: result.code }
+        : { state: result.state, code: result.code };
   const resultMessages = {
     loading: m.home_feed_loading({}, options),
     partial: m.home_presentation_partial({}, options),

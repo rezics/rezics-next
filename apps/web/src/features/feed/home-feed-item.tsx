@@ -59,7 +59,10 @@ export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedIt
     state: progress?.text,
     actions:
       resume === undefined ? undefined : (
-        <a href={resume} className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4">
+        <a
+          href={resume}
+          className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+        >
           {m.home_continue_label({ title }, options)}
         </a>
       ),

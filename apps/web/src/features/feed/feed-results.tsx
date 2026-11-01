@@ -118,9 +118,7 @@ export function FeedResults<T>({
               {messages.partial}
             </p>
           ) : null}
-          {noItems && !partial ? (
-            <p role="status">{result.hasNext ? messages.sparse : messages.empty}</p>
-          ) : null}
+          {noItems && !partial ? <p role="status">{result.hasNext ? messages.sparse : messages.empty}</p> : null}
           {noItems && emptyActions ? <div data-feed-slot="empty-actions">{emptyActions}</div> : null}
           <div className="flex flex-wrap items-center gap-2">
             {partial && onRetry ? (

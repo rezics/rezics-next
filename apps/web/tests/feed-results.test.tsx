@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { Link, Outlet, RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import {
+  Link,
+  Outlet,
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { FeedResults, type FeedResultsMessages, type FeedResultsResult } from '../src/features/feed/feed-results';
@@ -102,7 +110,12 @@ test('generic results render genuine MyRealms summaries with the installed headi
           regionLabel="My Realms"
           itemHeadingLevel={2}
           listAs="ul"
-          result={{ state: 'ready', items: page.realms, hasNext: page.next !== null, availability: { state: 'complete' } }}
+          result={{
+            state: 'ready',
+            items: page.realms,
+            hasNext: page.next !== null,
+            availability: { state: 'complete' },
+          }}
           messages={messages}
           getItemKey={(realm) => realm.realmId}
           itemPresentation={(realm) => realmPresentation(realm, locale)}
@@ -144,7 +157,9 @@ test('generic results render genuine MyRealms summaries with the installed headi
       '/en/realms/realm-1',
       '/en/realms/realm-2',
     ]);
-    const next = [...surface.host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.textContent === 'More Realms');
+    const next = [...surface.host.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (link) => link.textContent === 'More Realms',
+    );
     expect(next).not.toBeUndefined();
     expect(next?.getAttribute('href')).toContain('/realms?cursor=');
     expect(new URL(next!.href).searchParams.get('cursor')).toBe(opaqueCursor);
@@ -282,10 +297,12 @@ test('shared results preserve order and occurrence keys while covering source av
 
     await act(async () => surface.root.render(resultRegion({ state: 'cursor', code: 'stale_cursor' }, callbacks)));
     expect(surface.host.querySelector('[role="alert"]')?.textContent).toContain('This page can no longer continue');
-    expect([...surface.host.querySelectorAll('button')].some((button) => button.textContent === 'Restart this list')).toBe(
-      true,
+    expect(
+      [...surface.host.querySelectorAll('button')].some((button) => button.textContent === 'Restart this list'),
+    ).toBe(true);
+    expect([...surface.host.querySelectorAll('button')].some((button) => button.textContent === 'Try again')).toBe(
+      false,
     );
-    expect([...surface.host.querySelectorAll('button')].some((button) => button.textContent === 'Try again')).toBe(false);
     await act(async () =>
       [...surface.host.querySelectorAll<HTMLButtonElement>('button')]
         .find((button) => button.textContent === 'Restart this list')!
@@ -293,7 +310,9 @@ test('shared results preserve order and occurrence keys while covering source av
     );
     expect(restartCalls).toBe(1);
 
-    await act(async () => surface.root.render(resultRegion({ state: 'request', code: 'unsupported_query' }, callbacks)));
+    await act(async () =>
+      surface.root.render(resultRegion({ state: 'request', code: 'unsupported_query' }, callbacks)),
+    );
     expect(surface.host.querySelector('[role="alert"]')?.textContent).toContain('The request could not be completed');
     await act(async () =>
       [...surface.host.querySelectorAll<HTMLButtonElement>('button')]
