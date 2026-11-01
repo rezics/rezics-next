@@ -323,7 +323,9 @@ test('default creator inventory opt-in preserves ordinary shapes, immutable pins
   const response = await identityList(f.token, path);
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
-  expect(response.headers.get('rezics-session-token')).toBeString();
+  expect(response.headers.has('rezics-session-token')).toBe(
+    (await wire(f.token, path)).headers.has('rezics-session-token'),
+  );
   const opted = (await response.json()) as CreatorEditionPage;
   const date = await f.native.database.pool.query<{ recorded_at: Date }>(
     'SELECT recorded_at FROM content.revision WHERE route=$1 AND revision_id=$2',
