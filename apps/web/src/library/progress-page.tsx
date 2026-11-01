@@ -12,7 +12,7 @@ import { ProgressRow } from '@rezics/ui/progress-row';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
@@ -40,8 +40,25 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
 
+type PageLifetime = { page: ProgressIndex; pending: boolean };
+
+function usePageLifetime(page: ProgressIndex) {
+  const lifetime = useRef<PageLifetime | null>(null);
+  // Retire work as soon as a replacement loader page renders, before it accepts input.
+  if (lifetime.current?.page !== page) lifetime.current = { page, pending: false };
+  useLayoutEffect(() => {
+    // React's development cleanup/setup cycle also needs a fresh identity.
+    const origin = (lifetime.current ??= { page, pending: false });
+    return () => {
+      if (lifetime.current === origin) lifetime.current = null;
+    };
+  }, [page]);
+  return lifetime;
+}
+
 export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   const router = useRouter();
+  const lifetime = usePageLifetime(page);
   const sessions = progressIndexSubjects(page.sessions);
   const [chosen, setChosen] = useState(() => {
     const subject = page.selectedSubject;
@@ -78,13 +95,16 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
     setMode(page.progressChoices?.[0]?.mode);
     setKey(page.idempotencyKey);
     setAlert(null);
+    setPending(false);
     const next = page.selectedSubject;
     setChosen(next ? [pickerSubject(next)] : []);
   }
 
   async function onStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !mode || !pair) return;
+    const origin = lifetime.current;
+    if (!origin || origin.page !== page || origin.pending || !mode || !pair) return;
+    origin.pending = true;
     setAlert(null);
     setPending(true);
     const totalValue = pair.total !== 'forbidden' ? total.trim() : '';
@@ -100,6 +120,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
         },
         headers: csrfHeaders(),
       });
+      if (lifetime.current !== origin) return;
       if (!result.ok) {
         setAlert(progressFailureMessage(result.reason));
         return;
@@ -107,9 +128,12 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
       setKey(crypto.randomUUID());
       window.location.assign(router.buildLocation({ to: '/library/progress/$id', params: { id: result.id } }).href);
     } catch {
-      setAlert(m.library_progress_unavailable());
+      if (lifetime.current === origin) setAlert(m.library_progress_unavailable());
     } finally {
-      setPending(false);
+      if (lifetime.current === origin) {
+        origin.pending = false;
+        setPending(false);
+      }
     }
   }
 
@@ -151,7 +175,10 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
               <ProgressPicker
                 value={chosen}
                 onValueChange={async (value) => {
+                  const origin = lifetime.current;
+                  if (!origin || origin.page !== page) return;
                   const request = ++choiceRequest.current;
+                  const current = () => lifetime.current === origin && request === choiceRequest.current;
                   setChosen(value);
                   setVersion([]);
                   setTotal('');
@@ -163,15 +190,15 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                     const next = value[0]
                       ? await readProgressChoices({ data: value[0].type ?? value[0].types[0] ?? '' })
                       : undefined;
-                    if (request !== choiceRequest.current) return;
+                    if (!current()) return;
                     setChoices(next);
                     setMode(next?.[0]?.mode);
                     setUnit('');
                     setTotal('');
                   } catch {
-                    if (request === choiceRequest.current) setAlert(m.library_progress_unavailable());
+                    if (current()) setAlert(m.library_progress_unavailable());
                   } finally {
-                    if (request === choiceRequest.current) setChoosing(false);
+                    if (current()) setChoosing(false);
                   }
                 }}
               />
@@ -297,6 +324,7 @@ function SessionRow({
   sourcePage: ProgressIndex;
 }) {
   const readable = useOperation('progress_session.read');
+  const lifetime = usePageLifetime(sourcePage);
   const [session, setSession] = useState(initial);
   const [seenPage, setSeenPage] = useState(sourcePage);
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
@@ -308,10 +336,13 @@ function SessionRow({
     setSession(initial);
     setConfirming(null);
     setError(false);
+    setPending(false);
   }
   const progress = progressView(session, getLocale());
   async function finish(action: 'complete' | 'abandon') {
-    if (pending) return;
+    const origin = lifetime.current;
+    if (!origin || origin.page !== sourcePage || origin.pending) return;
+    origin.pending = true;
     setPending(true);
     setError(false);
     try {
@@ -319,6 +350,7 @@ function SessionRow({
         data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, action },
         headers: csrfHeaders(),
       });
+      if (lifetime.current !== origin) return;
       if (!result.ok) {
         setError(true);
         return;
@@ -327,9 +359,12 @@ function SessionRow({
       setKey(crypto.randomUUID());
       setConfirming(null);
     } catch {
-      setError(true);
+      if (lifetime.current === origin) setError(true);
     } finally {
-      setPending(false);
+      if (lifetime.current === origin) {
+        origin.pending = false;
+        setPending(false);
+      }
     }
   }
   return (
