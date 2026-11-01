@@ -1,18 +1,15 @@
 import { expect, test } from 'bun:test';
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { PublicationController, type PublicationControllerOptions, type PublicationProcessObservation } from './publication.ts';
+import {
+  PublicationController,
+  type PublicationControllerOptions,
+  type PublicationProcessObservation,
+} from './publication.ts';
 import { run } from './cli.ts';
 import type { Runtime } from './config.ts';
 import { sameProcess, groupMembers, waitForProcess, waitForProcessGroup, type ProcessIdentity } from './process.ts';
@@ -64,7 +61,12 @@ type Fixture = {
   readyFile: string;
 };
 
-type RuntimeOverrides = Partial<Omit<PublicationControllerOptions, 'db' | 'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'operationsManager'>> & {
+type RuntimeOverrides = Partial<
+  Omit<
+    PublicationControllerOptions,
+    'db' | 'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'operationsManager'
+  >
+> & {
   failReceiptDelivery?: boolean;
   useDefaultDependencyPreparation?: boolean;
 };
@@ -247,7 +249,13 @@ function writeHistoricalEvidence(fixture: Fixture): Array<Record<string, unknown
     return value;
   };
   receipt('storybook-publication-20261031-2100', '2026-10-31T21:00:08.997Z', 1, 987_650_101, 'failed-no-repeat');
-  receipt('storybook-publication-20261031-2200', '2026-10-31T22:25:11.141Z', 0, 987_650_102, 'normal-workflow-terminal-zero');
+  receipt(
+    'storybook-publication-20261031-2200',
+    '2026-10-31T22:25:11.141Z',
+    0,
+    987_650_102,
+    'normal-workflow-terminal-zero',
+  );
   receipt('storybook-publication-20261031-2300', '2026-10-31T23:16:13.332Z', 1, 987_650_103, 'failed-no-repeat');
   const oldPublisher = processFixtureIdentity(987_650_104);
   const duplicateIdentity = processFixtureIdentity(987_650_105);
@@ -278,7 +286,12 @@ function writeHistoricalEvidence(fixture: Fixture): Array<Record<string, unknown
     laterKnownTreeGone: true,
   };
   writeJson(historyRoot(duplicatePath), duplicate);
-  histories.push({ kind: 'publisher', path: duplicatePath, identityEvidencePath: duplicatePath, identityField: 'observed' });
+  histories.push({
+    kind: 'publisher',
+    path: duplicatePath,
+    identityEvidencePath: duplicatePath,
+    identityField: 'observed',
+  });
   const successLog = join(state, 'web/resume-20261101/publication-1940.log');
   mkdirSync(join(successLog, '..'), { recursive: true });
   writeFileSync(successLog, 'retained successful legacy workflow log\n');
@@ -314,11 +327,17 @@ function writeHistoricalEvidence(fixture: Fixture): Array<Record<string, unknown
     disposition: 'No launch until native custody is known.',
   });
   writeJson(historyRoot('web/resume-20261101/publication-0100-owner-decision.json'), historicalOwnerDecision());
-  writeJson(historyRoot('web/resume-20261101/publication-1940.json'), JSON.parse(readFileSync(historyRoot(priorSuccessPath), 'utf8')));
+  writeJson(
+    historyRoot('web/resume-20261101/publication-1940.json'),
+    JSON.parse(readFileSync(historyRoot(priorSuccessPath), 'utf8')),
+  );
   return histories;
 }
 
-function writeBootstrap(fixture: Fixture, options: { records?: Array<Record<string, unknown>>; historyPaths?: string[] } = {}): void {
+function writeBootstrap(
+  fixture: Fixture,
+  options: { records?: Array<Record<string, unknown>>; historyPaths?: string[] } = {},
+): void {
   const records = options.records ?? writeHistoricalEvidence(fixture);
   const historyEvidencePaths = options.historyPaths ?? HISTORIES;
   const manifest = {
@@ -336,15 +355,21 @@ function initializeManagers(fixture: Fixture): void {
   const db = openDb(fixture.dbPath);
   try {
     db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
-    for (const [id, threadId] of [[OWNER, 'web-thread'], [OPERATIONS, 'control-plane-thread']] as const) {
-      db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run(id, JSON.stringify({
+    for (const [id, threadId] of [
+      [OWNER, 'web-thread'],
+      [OPERATIONS, 'control-plane-thread'],
+    ] as const) {
+      db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run(
         id,
-        kind: 'managed',
-        provider: 'codex',
-        status: 'running',
-        threadId,
-        history: [],
-      }));
+        JSON.stringify({
+          id,
+          kind: 'managed',
+          provider: 'codex',
+          status: 'running',
+          threadId,
+          history: [],
+        }),
+      );
     }
     new SqliteManagerInbox(db, fixture.stateDirectory);
   } finally {
@@ -365,7 +390,8 @@ function runtimeFor(fixture: Fixture, overrides: RuntimeOverrides = {}): Runtime
   }
   const prepareDependencies = overrides.useDefaultDependencyPreparation
     ? undefined
-    : overrides.prepareDependencies ?? ((_main, sourceTree, worktreeRoot) => fixtureDependencies(sourceTree, worktreeRoot));
+    : (overrides.prepareDependencies ??
+      ((_main, sourceTree, worktreeRoot) => fixtureDependencies(sourceTree, worktreeRoot)));
   const controller = new PublicationController({
     db,
     mainCheckout: fixture.mainCheckout,
@@ -395,7 +421,9 @@ function runtimeFor(fixture: Fixture, overrides: RuntimeOverrides = {}): Runtime
     settings: { integration: { operationsManager: OPERATIONS }, integrationBranch: 'dev' },
     fence: {
       assertCurrent() {},
-      commitMerge<T>(_ref: unknown, merge: () => T): T { return merge(); },
+      commitMerge<T>(_ref: unknown, merge: () => T): T {
+        return merge();
+      },
     },
     sink: { onGateOutcome() {} },
     landing: () => ({}) as never,
@@ -422,7 +450,12 @@ async function withManager<T>(manager: string, action: () => Promise<T>): Promis
   }
 }
 
-async function invoke(fixture: Fixture, argv: string[], manager = OPERATIONS, overrides: RuntimeOverrides = {}): Promise<number> {
+async function invoke(
+  fixture: Fixture,
+  argv: string[],
+  manager = OPERATIONS,
+  overrides: RuntimeOverrides = {},
+): Promise<number> {
   return withManager(manager, () => run(argv, () => runtimeFor(fixture, overrides)));
 }
 
@@ -442,7 +475,11 @@ async function invokeWithManagerHintOnly(fixture: Fixture, argv: string[]): Prom
   }
 }
 
-function stateRow<T extends Record<string, unknown>>(fixture: Fixture, sql: string, ...params: (string | number)[]): T | null {
+function stateRow<T extends Record<string, unknown>>(
+  fixture: Fixture,
+  sql: string,
+  ...params: (string | number)[]
+): T | null {
   const db = openDb(fixture.dbPath);
   try {
     return db.query(sql).get(...params) as T | null;
@@ -452,7 +489,10 @@ function stateRow<T extends Record<string, unknown>>(fixture: Fixture, sql: stri
 }
 
 function readAuthorityId(fixture: Fixture): string {
-  const row = stateRow<{ id: string }>(fixture, 'SELECT id FROM publication_authorities ORDER BY received_at DESC LIMIT 1');
+  const row = stateRow<{ id: string }>(
+    fixture,
+    'SELECT id FROM publication_authorities ORDER BY received_at DESC LIMIT 1',
+  );
   if (!row) throw new Error('fixture authority was not received');
   fixture.authorityId = row.id;
   return row.id;
@@ -461,7 +501,15 @@ function readAuthorityId(fixture: Fixture): string {
 async function sendRetainedAuthority(fixture: Fixture): Promise<number> {
   const code = await invoke(
     fixture,
-    ['inbox', 'send', OPERATIONS, 'decision', 'Retained conditional Storybook authority', '--document', fixture.authorityRelativePath],
+    [
+      'inbox',
+      'send',
+      OPERATIONS,
+      'decision',
+      'Retained conditional Storybook authority',
+      '--document',
+      fixture.authorityRelativePath,
+    ],
     OWNER,
   );
   expect(code).toBe(0);
@@ -505,7 +553,8 @@ function fixtureDependencies(sourceTree: string, worktreeRoot: string) {
 
 async function waitForFile(path: string, timeoutMs = 2000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!existsSync(path) && Date.now() < deadline) await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+  while (!existsSync(path) && Date.now() < deadline)
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
   if (!existsSync(path)) throw new Error(`fixture child did not create ${path}`);
 }
 
@@ -609,11 +658,14 @@ function sameFixtureIdentity(left: ProcessIdentity, right: ProcessIdentity): boo
   return left.pid === right.pid && left.start === right.start && left.boot === right.boot && left.group === right.group;
 }
 
-function observedFixtureProcess(identity: ProcessIdentity, members: ProcessIdentity[] = [identity]): PublicationProcessObservation {
+function observedFixtureProcess(
+  identity: ProcessIdentity,
+  members: ProcessIdentity[] = [identity],
+): PublicationProcessObservation {
   return {
-    identity: (pid) => pid === identity.pid ? identity : null,
+    identity: (pid) => (pid === identity.pid ? identity : null),
     same: (candidate) => sameFixtureIdentity(candidate, identity),
-    members: (group) => group === identity.group ? members : [],
+    members: (group) => (group === identity.group ? members : []),
   };
 }
 
@@ -627,15 +679,23 @@ test('Authenticated retained authority reaches one exclusive managed workflow an
   try {
     initializeManagers(fixture);
     const authorityId = await bootstrapAndReceive(fixture);
-    const message = stateRow<{ id: number }>(fixture,
-      'SELECT id FROM manager_inbox WHERE manager=? AND sender=? ORDER BY id DESC LIMIT 1', OPERATIONS, OWNER);
+    const message = stateRow<{ id: number }>(
+      fixture,
+      'SELECT id FROM manager_inbox WHERE manager=? AND sender=? ORDER BY id DESC LIMIT 1',
+      OPERATIONS,
+      OWNER,
+    );
     expect(message).not.toBeNull();
     expect(await invokeWithManagerHintOnly(fixture, ['publication', 'receive', String(message!.id)])).toBe(1);
     expect(await invoke(fixture, ['publication', 'receive', String(message!.id)])).toBe(0);
-    expect(stateRow<{ count: number }>(fixture, 'SELECT COUNT(*) AS count FROM publication_authorities')?.count).toBe(1);
+    expect(stateRow<{ count: number }>(fixture, 'SELECT COUNT(*) AS count FROM publication_authorities')?.count).toBe(
+      1,
+    );
 
     await withFixtureEnvironment(fixture, '0.15', async () => {
-      expect(await invoke(fixture, ['publication', 'start', authorityId], OPERATIONS, { failReceiptDelivery: true })).toBe(1);
+      expect(
+        await invoke(fixture, ['publication', 'start', authorityId], OPERATIONS, { failReceiptDelivery: true }),
+      ).toBe(1);
     });
 
     const invocation = stateRow<{
@@ -661,33 +721,61 @@ test('Authenticated retained authority reaches one exclusive managed workflow an
     expect(receipt.success).toBe(true);
     expect(receipt.exitCode).toBe(0);
     expect(receipt.live).toEqual({ status: 'match', commit: fixture.sourceCommit });
-    expect(receipt.process).toEqual(JSON.parse(stateRow<{ process_identity: string }>(fixture,
-      'SELECT process_identity FROM publication_invocations WHERE id=?', invocation!.id)!.process_identity));
+    expect(receipt.process).toEqual(
+      JSON.parse(
+        stateRow<{ process_identity: string }>(
+          fixture,
+          'SELECT process_identity FROM publication_invocations WHERE id=?',
+          invocation!.id,
+        )!.process_identity,
+      ),
+    );
     expect(receipt.deadlineSeconds).toBe(1800);
 
     const argv = JSON.parse(invocation!.argv) as string[];
     expect(argv).toEqual([
-      'timeout', '--signal=TERM', '--kill-after=30s', '1800s', invocation!.bun_executable,
-      'run', 'storybook:deploy', '--force',
+      'timeout',
+      '--signal=TERM',
+      '--kill-after=30s',
+      '1800s',
+      invocation!.bun_executable,
+      'run',
+      'storybook:deploy',
+      '--force',
     ]);
     expect(readFileSync(fixture.invocationLog, 'utf8').trim()).toBe('run storybook:deploy --force');
     expect(invocationCount(fixture)).toBe(1);
     for (const workflow of WORKFLOW_BLOBS)
-      expect(readFileSync(join(fixture.worktreeRoot, 'storybook-publications', invocation!.id, workflow.path), 'utf8'))
-        .toBe(retainedBlob(workflow.blob));
+      expect(
+        readFileSync(join(fixture.worktreeRoot, 'storybook-publications', invocation!.id, workflow.path), 'utf8'),
+      ).toBe(retainedBlob(workflow.blob));
     const smoke = retainedBlob(WORKFLOW_BLOBS[2].blob);
     for (const requiredSmoke of [
-      'Signed out, account menu open', 'Member, account menu open', 'Components/Cover Card',
-      'locale:ja;theme:dark', 'Pages/Subjects/Subject', 'Pages/Library/Copies', 'copies?.[1]',
-    ]) expect(smoke).toContain(requiredSmoke);
+      'Signed out, account menu open',
+      'Member, account menu open',
+      'Components/Cover Card',
+      'locale:ja;theme:dark',
+      'Pages/Subjects/Subject',
+      'Pages/Library/Copies',
+      'copies?.[1]',
+    ])
+      expect(smoke).toContain(requiredSmoke);
 
     expect(await invoke(fixture, ['publication', 'recover', invocation!.id])).toBe(0);
     expect(readFileSync(invocation!.receipt_path, 'utf8')).toBe(firstReceipt);
     expect(invocationCount(fixture)).toBe(1);
-    expect(stateRow<{ count: number }>(fixture,
-      'SELECT COUNT(*) AS count FROM publication_receipt_deliveries WHERE invocation_id=?', invocation!.id)?.count).toBe(2);
-    const finalStatus = stateRow<{ state: string; delivered_at: string | null }>(fixture,
-      'SELECT state, delivered_at FROM publication_invocations WHERE id=?', invocation!.id);
+    expect(
+      stateRow<{ count: number }>(
+        fixture,
+        'SELECT COUNT(*) AS count FROM publication_receipt_deliveries WHERE invocation_id=?',
+        invocation!.id,
+      )?.count,
+    ).toBe(2);
+    const finalStatus = stateRow<{ state: string; delivered_at: string | null }>(
+      fixture,
+      'SELECT state, delivered_at FROM publication_invocations WHERE id=?',
+      invocation!.id,
+    );
     expect(finalStatus?.state).toBe('terminal-success');
     expect(finalStatus?.delivered_at).not.toBeNull();
     expect(await invoke(fixture, ['publication', 'status', authorityId])).toBe(0);
@@ -707,7 +795,9 @@ test('Concurrent publisher or capture custody and unknown legacy handles refuse 
       expect(await first).toBe(0);
     });
     expect(invocationCount(concurrent)).toBe(1);
-    expect(stateRow<{ count: number }>(concurrent, 'SELECT COUNT(*) AS count FROM publication_invocations')?.count).toBe(1);
+    expect(
+      stateRow<{ count: number }>(concurrent, 'SELECT COUNT(*) AS count FROM publication_invocations')?.count,
+    ).toBe(1);
   } finally {
     concurrent.temporary.close();
   }
@@ -717,13 +807,23 @@ test('Concurrent publisher or capture custody and unknown legacy handles refuse 
     const captureIdentity = processFixtureIdentity(987_650_401);
     const observation = observedFixtureProcess(captureIdentity);
     const authorityId = await setupRetainedAuthority(capture);
-    writeJson(temporaryStatePath(capture, 'captures/active-capture.json'), { owner: 'fixture', purpose: 'custody only' });
-    expect(await invoke(capture, ['publication', 'capture-register', String(captureIdentity.pid), 'captures/active-capture.json'], OPERATIONS,
-      { process: observation })).toBe(0);
+    writeJson(temporaryStatePath(capture, 'captures/active-capture.json'), {
+      owner: 'fixture',
+      purpose: 'custody only',
+    });
+    expect(
+      await invoke(
+        capture,
+        ['publication', 'capture-register', String(captureIdentity.pid), 'captures/active-capture.json'],
+        OPERATIONS,
+        { process: observation },
+      ),
+    ).toBe(0);
     expect(await invoke(capture, ['publication', 'start', authorityId], OPERATIONS, { process: observation })).toBe(1);
     expect(invocationCount(capture)).toBe(0);
-    expect(stateRow<{ state: string }>(capture,
-      'SELECT state FROM publication_authorities WHERE id=?', authorityId)?.state).toBe('received');
+    expect(
+      stateRow<{ state: string }>(capture, 'SELECT state FROM publication_authorities WHERE id=?', authorityId)?.state,
+    ).toBe('received');
   } finally {
     capture.temporary.close();
   }
@@ -736,17 +836,26 @@ test('Concurrent publisher or capture custody and unknown legacy handles refuse 
     const observation: PublicationProcessObservation = {
       identity: () => null,
       same: () => false,
-      members: (group) => group === identity.group ? [survivingMember] : [],
+      members: (group) => (group === identity.group ? [survivingMember] : []),
     };
     const histories = writeHistoricalEvidence(reused);
     writeJson(temporaryStatePath(reused, 'control-plane/unregistered-legacy-publisher.json'), {
-      state: 'running', launcher: identity, log: temporaryStatePath(reused, 'control-plane/unregistered-legacy-publisher.log'),
+      state: 'running',
+      launcher: identity,
+      log: temporaryStatePath(reused, 'control-plane/unregistered-legacy-publisher.log'),
     });
-    writeFileSync(temporaryStatePath(reused, 'control-plane/unregistered-legacy-publisher.log'), 'legacy group still visible\n');
-    writeBootstrap(reused, { records: [...histories, { kind: 'publisher', path: 'control-plane/unregistered-legacy-publisher.json' }] });
+    writeFileSync(
+      temporaryStatePath(reused, 'control-plane/unregistered-legacy-publisher.log'),
+      'legacy group still visible\n',
+    );
+    writeBootstrap(reused, {
+      records: [...histories, { kind: 'publisher', path: 'control-plane/unregistered-legacy-publisher.json' }],
+    });
     expect(await invoke(reused, ['publication', 'bootstrap'], OPERATIONS, { process: observation })).toBe(0);
     const inboxId = await sendRetainedAuthority(reused);
-    expect(await invoke(reused, ['publication', 'receive', String(inboxId)], OPERATIONS, { process: observation })).toBe(0);
+    expect(
+      await invoke(reused, ['publication', 'receive', String(inboxId)], OPERATIONS, { process: observation }),
+    ).toBe(0);
     const authorityId = readAuthorityId(reused);
     expect(await invoke(reused, ['publication', 'start', authorityId], OPERATIONS, { process: observation })).toBe(1);
     expect(invocationCount(reused)).toBe(0);
@@ -808,8 +917,10 @@ test('Crash and restart retain once-only authority and original process identity
         }
 
         expect(await invoke(fixture, ['publication', 'recover', invocation!.id])).toBe(1);
-        expect(stateRow<{ state: string }>(fixture,
-          'SELECT state FROM publication_invocations WHERE id=?', invocation!.id)?.state).toBe('unknown');
+        expect(
+          stateRow<{ state: string }>(fixture, 'SELECT state FROM publication_invocations WHERE id=?', invocation!.id)
+            ?.state,
+        ).toBe('unknown');
         expect(await invoke(fixture, ['publication', 'start', authorityId])).toBe(1);
         expect(invocationCount(fixture)).toBe(expectedCalls);
       });
@@ -827,8 +938,14 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
       expect(await invoke(success, ['publication', 'start', authorityId])).toBe(0);
     });
     const row = stateRow<{
-      id: string; source_commit: string; dependency_key: string; dependency_store: string;
-      bun_version: string; argv: string; receipt: string; receipt_path: string;
+      id: string;
+      source_commit: string;
+      dependency_key: string;
+      dependency_store: string;
+      bun_version: string;
+      argv: string;
+      receipt: string;
+      receipt_path: string;
     }>(success, 'SELECT * FROM publication_invocations WHERE authority_id=?', authorityId);
     expect(row).not.toBeNull();
     expect(row!.source_commit).toBe(success.sourceCommit);
@@ -849,8 +966,13 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
     const authorityId = await setupRetainedAuthority(stale);
     expect(await invoke(stale, ['publication', 'start', authorityId])).toBe(1);
     expect(invocationCount(stale)).toBe(0);
-    expect(stateRow<{ state: string; invocation_id: string | null }>(stale,
-      'SELECT state, invocation_id FROM publication_authorities WHERE id=?', authorityId)).toEqual({ state: 'received', invocation_id: null });
+    expect(
+      stateRow<{ state: string; invocation_id: string | null }>(
+        stale,
+        'SELECT state, invocation_id FROM publication_authorities WHERE id=?',
+        authorityId,
+      ),
+    ).toEqual({ state: 'received', invocation_id: null });
     expect(stateRow<{ count: number }>(stale, 'SELECT COUNT(*) AS count FROM publication_invocations')?.count).toBe(0);
   } finally {
     stale.temporary.close();
@@ -861,8 +983,11 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
     const authorityId = await setupRetainedAuthority(changedWorkflow);
     expect(await invoke(changedWorkflow, ['publication', 'start', authorityId])).toBe(1);
     expect(invocationCount(changedWorkflow)).toBe(0);
-    const row = stateRow<{ receipt: string; spawn_intent_at: string | null }>(changedWorkflow,
-      'SELECT receipt, spawn_intent_at FROM publication_invocations WHERE authority_id=?', authorityId);
+    const row = stateRow<{ receipt: string; spawn_intent_at: string | null }>(
+      changedWorkflow,
+      'SELECT receipt, spawn_intent_at FROM publication_invocations WHERE authority_id=?',
+      authorityId,
+    );
     expect(row?.spawn_intent_at).toBeNull();
     expect(JSON.parse(row!.receipt).terminalCause).toBe('preparation-failed-before-workflow-spawn');
   } finally {
@@ -872,15 +997,20 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
   const mismatchedDependencies = createFixture();
   try {
     const authorityId = await setupRetainedAuthority(mismatchedDependencies);
-    expect(await invoke(mismatchedDependencies, ['publication', 'start', authorityId], OPERATIONS, {
-      prepareDependencies: (_main, sourceTree, worktreeRoot) => {
-        const prepared = fixtureDependencies(sourceTree, worktreeRoot);
-        writeFileSync(join(prepared.store, 'package.json'), '{"name":"different-dependencies"}\n');
-        return prepared;
-      },
-    })).toBe(1);
-    const row = stateRow<{ receipt: string; spawn_intent_at: string | null }>(mismatchedDependencies,
-      'SELECT receipt, spawn_intent_at FROM publication_invocations WHERE authority_id=?', authorityId);
+    expect(
+      await invoke(mismatchedDependencies, ['publication', 'start', authorityId], OPERATIONS, {
+        prepareDependencies: (_main, sourceTree, worktreeRoot) => {
+          const prepared = fixtureDependencies(sourceTree, worktreeRoot);
+          writeFileSync(join(prepared.store, 'package.json'), '{"name":"different-dependencies"}\n');
+          return prepared;
+        },
+      }),
+    ).toBe(1);
+    const row = stateRow<{ receipt: string; spawn_intent_at: string | null }>(
+      mismatchedDependencies,
+      'SELECT receipt, spawn_intent_at FROM publication_invocations WHERE authority_id=?',
+      authorityId,
+    );
     expect(row?.spawn_intent_at).toBeNull();
     expect(JSON.parse(row!.receipt).error).toContain('dependency store does not match');
     expect(invocationCount(mismatchedDependencies)).toBe(0);
@@ -892,12 +1022,19 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
   try {
     const authorityId = await setupRetainedAuthority(mismatchedLive);
     await withFixtureEnvironment(mismatchedLive, '0.08', async () => {
-      expect(await invoke(mismatchedLive, ['publication', 'start', authorityId], OPERATIONS, {
-        fetchLiveBuild: async () => ({ commit: 'e'.repeat(40) }),
-      })).toBe(1);
+      expect(
+        await invoke(mismatchedLive, ['publication', 'start', authorityId], OPERATIONS, {
+          fetchLiveBuild: async () => ({ commit: 'e'.repeat(40) }),
+        }),
+      ).toBe(1);
     });
-    const receipt = JSON.parse(stateRow<{ receipt: string }>(mismatchedLive,
-      'SELECT receipt FROM publication_invocations WHERE authority_id=?', authorityId)!.receipt);
+    const receipt = JSON.parse(
+      stateRow<{ receipt: string }>(
+        mismatchedLive,
+        'SELECT receipt FROM publication_invocations WHERE authority_id=?',
+        authorityId,
+      )!.receipt,
+    );
     expect(receipt.exitCode).toBe(0);
     expect(receipt.live).toEqual({ status: 'mismatch', commit: 'e'.repeat(40) });
     expect(receipt.success).toBe(false);
@@ -910,12 +1047,21 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
   try {
     const authorityId = await setupRetainedAuthority(unavailableLive);
     await withFixtureEnvironment(unavailableLive, '0.08', async () => {
-      expect(await invoke(unavailableLive, ['publication', 'start', authorityId], OPERATIONS, {
-        fetchLiveBuild: async () => { throw new Error('live Storybook metadata HTTP 403'); },
-      })).toBe(1);
+      expect(
+        await invoke(unavailableLive, ['publication', 'start', authorityId], OPERATIONS, {
+          fetchLiveBuild: async () => {
+            throw new Error('live Storybook metadata HTTP 403');
+          },
+        }),
+      ).toBe(1);
     });
-    const receipt = JSON.parse(stateRow<{ receipt: string }>(unavailableLive,
-      'SELECT receipt FROM publication_invocations WHERE authority_id=?', authorityId)!.receipt);
+    const receipt = JSON.parse(
+      stateRow<{ receipt: string }>(
+        unavailableLive,
+        'SELECT receipt FROM publication_invocations WHERE authority_id=?',
+        authorityId,
+      )!.receipt,
+    );
     expect(receipt.exitCode).toBe(0);
     expect(receipt.live.status).toBe('unavailable');
     expect(receipt.live.reason).toContain('403');
@@ -929,12 +1075,19 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
   try {
     const authorityId = await setupRetainedAuthority(unavailableDependencies);
     await withFixtureEnvironment(unavailableDependencies, '0.05', async () => {
-      expect(await invoke(unavailableDependencies, ['publication', 'start', authorityId], OPERATIONS, {
-        useDefaultDependencyPreparation: true,
-      })).toBe(1);
+      expect(
+        await invoke(unavailableDependencies, ['publication', 'start', authorityId], OPERATIONS, {
+          useDefaultDependencyPreparation: true,
+        }),
+      ).toBe(1);
     });
-    const receipt = JSON.parse(stateRow<{ receipt: string }>(unavailableDependencies,
-      'SELECT receipt FROM publication_invocations WHERE authority_id=?', authorityId)!.receipt);
+    const receipt = JSON.parse(
+      stateRow<{ receipt: string }>(
+        unavailableDependencies,
+        'SELECT receipt FROM publication_invocations WHERE authority_id=?',
+        authorityId,
+      )!.receipt,
+    );
     expect(receipt.terminalCause).toBe('preparation-failed-before-workflow-spawn');
     expect(receipt.error).toContain('pinned Bun artifact is unavailable');
     expect(receipt.workflowInvocationCount).toBe(0);
@@ -955,8 +1108,9 @@ test('Legacy bootstrap binds terminal workflow PIDs and validates cancellation i
     writeJson(receiptPath, receipt);
     writeBootstrap(mismatchedWorkflow, { records });
     expect(await invoke(mismatchedWorkflow, ['publication', 'bootstrap'])).toBe(1);
-    expect(stateRow<{ count: number }>(mismatchedWorkflow,
-      'SELECT COUNT(*) AS count FROM publication_inventory')?.count).toBe(0);
+    expect(
+      stateRow<{ count: number }>(mismatchedWorkflow, 'SELECT COUNT(*) AS count FROM publication_inventory')?.count,
+    ).toBe(0);
   } finally {
     mismatchedWorkflow.temporary.close();
   }
@@ -971,8 +1125,9 @@ test('Legacy bootstrap binds terminal workflow PIDs and validates cancellation i
     writeJson(cancellationPath, cancellation);
     writeBootstrap(invalidCancellation, { records });
     expect(await invoke(invalidCancellation, ['publication', 'bootstrap'])).toBe(1);
-    expect(stateRow<{ count: number }>(invalidCancellation,
-      'SELECT COUNT(*) AS count FROM publication_inventory')?.count).toBe(0);
+    expect(
+      stateRow<{ count: number }>(invalidCancellation, 'SELECT COUNT(*) AS count FROM publication_inventory')?.count,
+    ).toBe(0);
   } finally {
     invalidCancellation.temporary.close();
   }
@@ -986,10 +1141,10 @@ test('Legacy bootstrap binds terminal workflow PIDs and validates cancellation i
     cancellationRecord!.identityField = 'firstPublisher';
     writeBootstrap(arbitraryPointer, { records });
     expect(await invoke(arbitraryPointer, ['publication', 'bootstrap'])).toBe(1);
-    expect(stateRow<{ count: number }>(arbitraryPointer,
-      'SELECT COUNT(*) AS count FROM publication_inventory')?.count).toBe(0);
+    expect(
+      stateRow<{ count: number }>(arbitraryPointer, 'SELECT COUNT(*) AS count FROM publication_inventory')?.count,
+    ).toBe(0);
   } finally {
     arbitraryPointer.temporary.close();
   }
 }, 30_000);
-

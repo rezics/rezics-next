@@ -282,11 +282,13 @@ export function dependencyInstallationMatches(worktree: string): boolean {
 /** Validate a published immutable dependency store itself, without accepting a consumer's receipt as proof. */
 export function dependencyStoreMatches(store: string, expectedKey: string): boolean {
   try {
-    return basename(resolve(store)) === expectedKey &&
+    return (
+      basename(resolve(store)) === expectedKey &&
       existsSync(join(store, 'package.json')) &&
       dependencyKey(store) === expectedKey &&
       !bunInstallationFailure(store) &&
-      dependencyLinksMatch(store);
+      dependencyLinksMatch(store)
+    );
   } catch {
     return false;
   }

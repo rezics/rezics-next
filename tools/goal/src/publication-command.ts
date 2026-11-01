@@ -3,9 +3,10 @@ import { PublicationController } from './publication.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
 import type { Runtime } from './config.ts';
 
-type CommandRuntime = IntegrationRuntime & Pick<Runtime, 'settings' | 'inbox'> & {
-  publicationController?: PublicationController;
-};
+type CommandRuntime = IntegrationRuntime &
+  Pick<Runtime, 'settings' | 'inbox'> & {
+    publicationController?: PublicationController;
+  };
 
 function configuredController(runtime: CommandRuntime): PublicationController {
   if (runtime.publicationController) return runtime.publicationController;
@@ -43,7 +44,8 @@ function statusCode(status: Record<string, unknown>): number {
 
 export async function runPublicationCommand(args: string[], runtime: CommandRuntime): Promise<number> {
   const [subcommand, first, second] = args;
-  if (!subcommand) throw new Error('usage: goal publication <receive|bootstrap|capture-register|capture-retire|start|status|recover>');
+  if (!subcommand)
+    throw new Error('usage: goal publication <receive|bootstrap|capture-register|capture-retire|start|status|recover>');
   if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
     throw new Error('worker sessions cannot receive or operate native publication custody');
   const operationsManager = runtime.settings.integration.operationsManager;
@@ -65,13 +67,15 @@ export async function runPublicationCommand(args: string[], runtime: CommandRunt
     return 0;
   }
   if (subcommand === 'capture-register') {
-    if (!first || !second || args.length !== 3) throw new Error('usage: goal publication capture-register <pid> <retained-registration-evidence-path>');
+    if (!first || !second || args.length !== 3)
+      throw new Error('usage: goal publication capture-register <pid> <retained-registration-evidence-path>');
     const pid = positiveId(first, 'capture PID');
     console.log(JSON.stringify(controller.registerCapture(actor, pid, second)));
     return 0;
   }
   if (subcommand === 'capture-retire') {
-    if (!first || !second || args.length !== 3) throw new Error('usage: goal publication capture-retire <custody-id> <terminal-evidence-path>');
+    if (!first || !second || args.length !== 3)
+      throw new Error('usage: goal publication capture-retire <custody-id> <terminal-evidence-path>');
     console.log(JSON.stringify(controller.retireCapture(actor, first, second)));
     return 0;
   }
@@ -88,11 +92,11 @@ export async function runPublicationCommand(args: string[], runtime: CommandRunt
     return 0;
   }
   if (subcommand === 'recover') {
-    if (!first || second || args.length !== 2) throw new Error('usage: goal publication recover <original-invocation-id>');
+    if (!first || second || args.length !== 2)
+      throw new Error('usage: goal publication recover <original-invocation-id>');
     const status = await controller.recover(first, actor);
     console.log(JSON.stringify(status));
     return statusCode(status);
   }
   throw new Error(`unknown publication subcommand: ${subcommand}`);
 }
-
