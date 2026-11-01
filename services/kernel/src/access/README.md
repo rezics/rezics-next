@@ -4249,7 +4249,7 @@ ledger is permitted. SQL recognition and smaller configured/remainder caps stay 
 | `lockRecordedAgentIdentityHistory` | original mapped row, current Source/SDK H, saved authority comparison and native G closure SELECT | 1/1/1/122880/0 + H + 1/0/1/256/0 + G; H's internal reservations are not added twice |
 | `verifyCurrentHistoryReceiving` original durable artifact | same final command; current mapping, root, full roles, exact receiving proof, native closure and physical absence | Rcurrent = 76/75/13/131872/0 + G + A |
 | `historyReceivingGap` outbox consumer SELECT | same local home; complete fanout LIMIT33 FOR SHARE | 33/33/1/65536/0 |
-| Original outbox receiving association SQL in `history/receiving.ts` | each consumer: unique workflow -> full obligation key, exact outbox/receipt, original source declaration, optional exact native inventory kind; all FOR SHARE | 7/7/1/16384/0 |
+| Original outbox receiving association SQL in `history/receiving.ts` | each consumer: unique workflow -> full obligation key, exact outbox/receipt, original source declaration, exact native inventory and full original receipt key; all FOR SHARE | 8/8/1/16384/0 |
 | `lockAgentIdentityReceivingArtifact` | original mapping/work/partition/domain then native LIMIT65 role union | 69/69/4/24576/0 per associated consumer |
 | Associated consumer `nativeReceipt` | full durable receiving validation, never a completion flag | Rcurrent per actual consumer invocation |
 | Recovery preflight SELECT | exact original key FOR SHARE in final command | 1/1/1/0/0 |
@@ -4270,7 +4270,7 @@ Source verify both execute and each spends again. H remains 377/293/57/507904/0;
 92/87/11/40960/0 and A remains 9/9/9/0/0. Every outbox receiving invocation repeats its own fanout and associated
 receiving guards, including released point/native reads and final point/inventory reads. For q outbox events and
 c actual associated consumers, that expansion is q*(33/33/1/65536/0) +
-c*(7/7/1/16384/0 + 69/69/4/24576/0 + Rcurrent), with q <= 2 and c <= 64 per complete native cut.
+c*(8/8/1/16384/0 + 69/69/4/24576/0 + Rcurrent), with q <= 2 and c <= 64 per complete native cut.
 It is additional to each enclosing validator's own rows/control cost.
 
 For k <= 8 keys the two native commands spend 2*C + 2*B(k); each staged key then spends every reached row above.

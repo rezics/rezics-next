@@ -210,6 +210,7 @@ export async function advanceSharedHistory(
                   proof,
                   partition,
                   decodeLocator(first.artifact_type, first.locator),
+                  deps.pool,
                 );
               await scannedArtifact(tx, job, first.artifact_type, first.locator, gap);
               answer = result('more');
@@ -301,6 +302,7 @@ export async function advanceSharedHistory(
               proof,
               job.scan_partition,
               decodeLocator('durable-work/v1', work),
+              deps.pool,
             );
             if (receivingGap) return result('more', receivingGap);
             await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
@@ -340,7 +342,7 @@ export async function advanceSharedHistory(
         return result('more', gap);
       }
       if (!gap)
-        gap = await recordHistoryReceivingProof(tx, proof, job.scan_partition, decodeLocator('durable-work/v1', work));
+        gap = await recordHistoryReceivingProof(tx, proof, job.scan_partition, decodeLocator('durable-work/v1', work), deps.pool);
       await scannedArtifact(tx, job, 'durable-work/v1', work, gap);
       await tx.query('COMMIT');
       return result('more');

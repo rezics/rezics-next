@@ -124,6 +124,7 @@ export async function recordHistoryReceivingProof(
   barrier: HistoryBarrier,
   partition: number,
   locator: HistoryArtifact['locator'],
+  pool?: Pool,
 ): Promise<string | null> {
   if (locator.artifactType === 'durable-work/v1') {
     const { currentAgentIdentityHistoryUnit } = await import('./agent-identity-retirement.ts');
@@ -133,7 +134,6 @@ export async function recordHistoryReceivingProof(
   }
   if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
   const encoded = Buffer.from(encodeLocator(locator));
-  const { pool } = (await import('../command/command.ts')).currentCommandResources(tx);
   const custodyGap = await historyReceivingGap(tx, partition, locator, barrier, pool);
   if (custodyGap) return custodyGap;
   if (!(await historyPhysicalProof(tx, partition, locator))) throw new TypeError('History physical copy remains');
@@ -215,7 +215,6 @@ export async function historyReceivingGap(
   if (identityGap) return identityGap;
   if (locator.artifactType === 'durable-work/v1') return mapping?.gap ?? null;
   if (locator.artifactType !== 'outbox-event/v1') return null;
-  if (partition !== 0 || !barrier) return 'outbox-receiving-custody-unavailable';
   const charge = async (rows: number, points: number, statements: number, bytes: number) => {
     if (!pool) return;
     const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
@@ -236,11 +235,12 @@ export async function historyReceivingGap(
   ).rows;
   if (consumers.length > 32) return 'outbox-receiving-custody-unavailable';
   for (const consumer of consumers) {
+    if (partition !== 0 || !barrier) return 'outbox-receiving-custody-unavailable';
     if (consumer.state !== 'transferred' && consumer.state !== 'completed')
       return 'outbox-receiving-custody-unavailable';
     // Resolve the ORIGINAL outbox handoff, never parse a workflow name or treat a
     // successful wrapper as the mapped receiving execution. Unknown wrappers refuse.
-    await charge(7, 7, 1, 16384);
+    await charge(8, 8, 1, 16384);
     const association = (
       await tx.query(
         `SELECT m.custody_id FROM core.agent_identity_work m
@@ -253,19 +253,18 @@ export async function historyReceivingGap(
        JOIN core.outbox e ON e.partition_no=o.handoff_partition AND e.epoch=o.handoff_epoch
          AND e.position=o.handoff_position
          AND e.type=o.handoff_event_type
+       JOIN core.agent_identity_inventory i ON i.partition_no=o.partition_no AND i.source_route=o.source_route
+         AND i.source_account_id=o.source_account_id AND i.source_direction=o.source_direction
+         AND i.source_receipt_id=o.source_receipt_id
        JOIN core.receipt r ON r.partition_no=o.handoff_partition AND r.epoch=o.handoff_epoch
          AND r.position=o.handoff_position AND r.transaction_id=o.handoff_transaction_id
-         AND r.principal_kind='account' AND r.command_kind=CASE WHEN $5='agent_verification'
-           THEN 'access.agent-verification.approve' ELSE (SELECT native_command_kind FROM core.agent_identity_inventory i
-               WHERE i.partition_no=o.partition_no AND i.source_route=o.source_route
-                 AND i.source_account_id=o.source_account_id AND i.source_direction=o.source_direction
-                 AND i.source_receipt_id=o.source_receipt_id) END
+         AND r.principal_kind=i.native_principal_kind AND r.principal_id=i.native_principal_id
+         AND r.command_kind=i.native_command_kind AND r.idempotency_key=i.native_receipt_key
        JOIN core.agent_identity_work_source s ON s.partition_no=o.partition_no AND s.source_key=m.source_key
          AND s.custody_id=m.custody_id AND s.source=m.source AND s.source_generation=m.receiver_generation
        WHERE m.workflow_id=$4 AND m.creation_captured AND o.handoff_partition=$1 AND o.handoff_position=$2 AND e.event_seq=$3
-         AND (($5='agent_verification' AND e.type='com.rezics.access.agent-verification.approved.v1')
-           OR ($5='agent_verification_reversal' AND e.type='com.rezics.access.agent-verification.reversing.v1'))
-       ORDER BY o.source_route,o.source_account_id,o.source_direction,o.source_receipt_id LIMIT 2 FOR SHARE OF o,e,r,m,s`,
+         AND $5='agent_verification_reversal' AND e.type='com.rezics.access.agent-verification.reversing.v1'
+       ORDER BY o.source_route,o.source_account_id,o.source_direction,o.source_receipt_id LIMIT 2 FOR SHARE OF o,e,r,m,s,i`,
         [partition, locator.position.toString(), locator.eventSeq, consumer.workflow_id, consumer.consumer],
       )
     ).rows;

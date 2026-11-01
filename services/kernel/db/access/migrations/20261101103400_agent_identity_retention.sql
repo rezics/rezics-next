@@ -132,11 +132,11 @@ BEGIN
    (history_authority->'reference'->'barrier'->>'accountId')::uuid INTO role,erased
    FROM core.agent_identity_work WHERE source_key=OLD.delivery_key FOR SHARE;
  PERFORM access.check_agent_identity_retention(OLD,role);
- IF NEW.requested_by IS DISTINCT FROM CASE WHEN OLD.requested_by=erased THEN NULL ELSE OLD.requested_by END OR
-    NEW.decided_by IS DISTINCT FROM CASE WHEN OLD.decided_by=erased THEN NULL ELSE OLD.decided_by END OR
-    NEW.reason IS DISTINCT FROM CASE WHEN OLD.decided_by=erased THEN NULL ELSE OLD.reason END OR
+ IF NEW.requested_by IS DISTINCT FROM (CASE WHEN OLD.requested_by=erased THEN NULL ELSE OLD.requested_by END) OR
+    NEW.decided_by IS DISTINCT FROM (CASE WHEN OLD.decided_by=erased THEN NULL ELSE OLD.decided_by END) OR
+    NEW.reason IS DISTINCT FROM (CASE WHEN OLD.decided_by=erased THEN NULL ELSE OLD.reason END) OR
     NEW.minimized IS DISTINCT FROM (OLD.minimized OR role='subject') OR
-    NEW.intent IS DISTINCT FROM CASE WHEN role='subject' THEN '{}'::jsonb ELSE OLD.intent END THEN
+    NEW.intent IS DISTINCT FROM (CASE WHEN role='subject' THEN '{}'::jsonb ELSE OLD.intent END) THEN
    RAISE EXCEPTION 'identity retention may minimize only the erased personal role' USING ERRCODE='23514'; END IF;
  RETURN NEW;
 END $$;
