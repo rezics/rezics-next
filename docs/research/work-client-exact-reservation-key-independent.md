@@ -39,6 +39,15 @@ costed candidate to make the decision reviewable. It is not a claim that the
 stopped implementation, a replacement producer or an extension has been executed
 or authorized.
 
+The scope of that unresolved result is deliberately narrow: the model uses
+ordinary relational node/edge rows reached through PostgreSQL B-tree points,
+and its asymptotic coefficients cannot depend on an unspecified maximum admitted
+string length. In that model a length-q path costs q indexed points, each priced
+against the global population. The additive requirement and a claim that this
+particular representation meets it are incompatible. This does not rule out a
+different SQL algorithm, a different built-in opclass with a proved bound, or a
+new native producer. None is certified by the inspected source here.
+
 The independent Library producer remains unavailable in the inspected source.
 Its literal cost and the absent exhaustive native maintenance body prevent a
 truthful fixed numeric maximum for the complete successful Source invocation.
@@ -469,20 +478,29 @@ history. Additional constraint/FK probes must either be absent from this schema
 or explicitly added by the implementation; no hidden relational cascades are
 included in these constants.
 
-For the source/group layer in the short-ID submodel, reserve an additional
-`F=(32 rows, 32 points, 32 statements)` per changed actual ID: source mirror
+For the source/group layer in the short-ID submodel, the following conditional
+ledger has `F=(20 rows, 20 points, 20 statements)` per changed actual ID: source mirror
 read/write (2), complementary half metadata read (1), old candidate read (1),
 old candidate delete/new insert (2), at most two group-state locks/upserts (2),
 two refresh selections with two component successor seeks each (4), up to two
 old eligible deletes and two inserts (4), two group-state updates/deletes (2),
-source candidate-pointer update (1), source empty-state removal (1), and up to
-12 additional exact-key constraint/existence operations. All are explicit fixed
-keys. The 12 are a declared maximum for this schema's constraint operations, not
-permission for a function to perform unspecified work; a physical implementation
-must list its actual constraints and demonstrate it stays within that slot.
-If source mirrors store only IDs of native halves, reading/parsing the opposite
-input adds that input's bytes; it cannot be called free. A minimal model stores
-its parsed counterpart metadata, versions and retained terminal ID instead.
+source candidate-pointer update (1), and source empty-state removal (1). All are
+explicit fixed keys. This model has only the declared PK/UNIQUE indexes: their
+index maintenance belongs in the design-visible logarithmic work below. It has
+no extra FK, RLS or trigger SQL beyond the listed operations. A physical schema
+adding any such body must add its literal cost rather than use this F unchanged.
+
+F is conditional on having already derived, live complementary-half metadata.
+It is not a complete price for first-half insertion, recovery or backfill. If
+source mirrors store only IDs of native halves, reading/parsing the opposite
+input adds that input's bytes; it cannot be called free. If they retain parsed
+metadata or intern references before a complete candidate exists, those are
+additional copies/references whose creation, deletion and source-half liveness
+must be charged. They are not included in this candidate-only F. In particular,
+a status reinsert over a retained native input may require reading input bytes
+that were not changed by that status write. The final producer must either prove
+an admissible live metadata protocol, or explicitly price this reread under its
+chosen model. Do not silently redefine B to include all encountered history.
 
 Thus the **candidate model's** per-mutation upper reservation is
 `M(Lold,Lnew)=F + (9q(Lold)+2) + (9q(Lnew)+2) + outer`, componentwise for
@@ -493,8 +511,8 @@ unless a smaller separately proved dispatch distinguishes it before I/O. Identit
 or name changes are remove+insert, not a supposedly free status update.
 
 For 16,384-byte old and new reservations, each `q=128`, so the declared M bound
-is 2,341 rows, 2,340 points and 2,341 statements when `outer=(1,0,1)`; D is
-1,187 rows, 1,186 points and 1,187 statements. These are source-derived
+is 2,329 rows, 2,328 points and 2,329 statements when `outer=(1,0,1)`; D is
+1,175 rows, 1,174 points and 1,175 statements. These are source-derived
 reservations for this deliberately simple model, not measured SQL counts or
 proposed production constants. Equal-value/no-op paths can be separately priced
 only after their complete bodies exist.
@@ -503,9 +521,9 @@ The existing SDK byte axis counts returned content, not table/WAL storage. A
 server-only dictionary function can return only terminal IDs/counts. If reservation
 bytes are fetched into JavaScript, retain/release/repair must instead reserve
 those returned bytes **before that fetch**. For the short-ID model, the fixed
-source/group operations return at most 32 rows, each bounded by two 1,024-byte
+source/group operations return at most 20 rows, each bounded by two 1,024-byte
 IDs, two 36-byte strings, four int8 fields and small flags: reserve 2,160 bytes
-per row, hence 69,120 bytes, plus 16 bytes for the dictionary return. This is a
+per row, hence 43,200 bytes, plus 16 bytes for the dictionary return. This is a
 conservative return bound for the model, not the full unrestricted-ID domain.
 
 Store each 128-byte label once per dictionary node. Excluding physical tuple and
@@ -530,7 +548,7 @@ obligations, not optimizations assumed without evidence.
 
 Let d count actual native source-row changes, including both halves separately.
 Let B sum the lengths of the old and new changed input values, including bytes
-needed for parsing. Let N include **all** live dictionary, free-range, source,
+available to the extraction step. Let N include **all** live dictionary, free-range, source,
 candidate and group rows, rather than just the selected realm's history.
 
 With ordinary indexed SQL, each chunk hop/allocator/GC point is `O(log N)`
@@ -539,10 +557,23 @@ maintenance is therefore:
 
 ```text
 logical rows/points/statements: O(d + sum q)
-label/input bytes:              O(B + d)
+dictionary label/buffer bytes:  O(B + d), after extraction
 design-visible index work:      O((d + sum q) log N)
                               = O(d log N + B log N)
 ```
+
+Full input extraction has a separate cost P(input). Calling `inputs::jsonb`
+does not prove P is linear: at the same PostgreSQL pin,
+[`src/backend/utils/adt/jsonb_util.c:uniqueifyJsonbObject`](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/utils/adt/jsonb_util.c)
+sorts object pairs with a string comparator and keeps the last duplicate key.
+Structured reservation rendering must preserve this behavior. The source-level
+comparison sort must be accounted for; this report supplies no linear-time
+replacement extractor or proof that every accepted JSON shape makes that cast
+linear. Consequently the full conditional baseline is the displayed dictionary
+cost **plus** P and any complementary-half reread/metadata work above. Even an
+additive native dictionary alone would not certify complete maintenance without
+that extraction/copy derivation. This is another explicit obligation for the
+chosen producer, not a reason to narrow structured JSON compatibility.
 
 Patricia compression can reduce q on particular data. It cannot replace this
 worst-case proof with `O(d log N+B)` merely by naming the structure. Equal values
@@ -553,7 +584,7 @@ exactly the multiplicative term the uniform additive model forbids.
 
 In the **literal fixed-domain model**, every successfully extracted reservation
 has `L <= H`, so `q <= Q = ceil(H/128) = 8,388,608`. The candidate model's M maximum
-is consequently 150,994,981 rows, 150,994,980 points, 150,994,981 statements,
+is consequently 150,994,969 rows, 150,994,968 points, 150,994,969 statements,
 before native/source controls and constraints outside this model. These maxima
 are finite safe integers. Thus one can explicitly write an `O(d Q log N+B)`
 bound and call Q a fixed engine-domain coefficient. No new length cap is needed.
