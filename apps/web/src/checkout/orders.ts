@@ -4,14 +4,21 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { locales } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 
 export const ORDER_HISTORY_PAGE_SIZE = 20;
 
 type NativeOrderHistory = NonNullable<Awaited<ReturnType<KernelClient['orders']['get']>>['data']>;
 export type BuyerOrder = NativeOrderHistory['orders'][number];
 export type BuyerOrderPage = Pick<NativeOrderHistory, 'orders' | 'next'>;
+export type BuyerOrdersAddress = { cursor: string | null; locale: string };
+export type BuyerOrdersCurrentRead = {
+  sessionSubject: string | null;
+  requested: BuyerOrdersAddress;
+  page: BuyerOrderPage;
+};
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const settlements = new Set(['pending', 'paid', 'failed', 'unknown']);
@@ -23,6 +30,13 @@ function validateCursor(value: unknown): { cursor?: string } {
   if (cursor === undefined || cursor === '') return {};
   if (typeof cursor !== 'string' || cursor.length > 4096) throw notFound();
   return { cursor };
+}
+
+function validateCurrentInput(value: unknown): { cursor?: string; locale: string } {
+  const cursor = validateCursor(value);
+  if (!value || typeof value !== 'object' || !('locale' in value) || !locales.some((l) => l === value.locale))
+    throw notFound();
+  return { ...cursor, locale: String(value.locale) };
 }
 
 function isBuyerOrder(value: unknown): value is BuyerOrder {
@@ -70,9 +84,21 @@ export async function loadBuyerOrders(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<BuyerOrderPage> {
+  return (await loadPreparedBuyerOrders(client, request, sessionEnv, input)).page;
+}
+
+async function loadPreparedBuyerOrders(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { cursor?: string },
+): Promise<{ sessionSubject: string | null; page: BuyerOrderPage }> {
   if (await prepareSession(request, sessionEnv)) throw notFound();
   const authorization = viewerCredential(request);
   if (!authorization) throw notFound();
+  // Capture the subject associated with the credential this dispatch actually consumes.
+  // An explicit API credential alone cannot certify a browser session.
+  const subject = request.headers.has('authorization') ? null : (sessionSubject(request) ?? null);
 
   // Keep the history read on the generated owner-self Treaty route with no account selector.
   let result: Awaited<ReturnType<KernelClient['orders']['get']>>;
@@ -90,7 +116,7 @@ export async function loadBuyerOrders(
     if (status === 404) throw notFound();
     throw new Error('Native order history is unavailable');
   }
-  return buyerOrderPage(result.data);
+  return { sessionSubject: subject, page: buyerOrderPage(result.data) };
 }
 
 export const readBuyerOrders = createServerFn({ method: 'GET' })
@@ -98,4 +124,19 @@ export const readBuyerOrders = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<BuyerOrderPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadBuyerOrders(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+/** Actual-reader provenance for the private route; legacy callers keep their original page API. */
+export const readBuyerOrdersCurrent = createServerFn({ method: 'GET' })
+  .validator(validateCurrentInput)
+  .handler(async ({ data }): Promise<BuyerOrdersCurrentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    // A fresh Request prevents a missing preparation from certifying retained WeakMap entries.
+    const read = await loadPreparedBuyerOrders(
+      kernelClient(data.locale),
+      new Request(getRequest()),
+      env as Partial<SessionEnv>,
+      data,
+    );
+    return { ...read, requested: { cursor: data.cursor ?? null, locale: data.locale } };
   });

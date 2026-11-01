@@ -2,8 +2,8 @@ import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, notFound } from '@tanstack/react-router';
-import { OrdersPage } from '../../checkout/orders-page';
-import { readBuyerOrders } from '../../checkout/orders';
+import { OrdersCurrent } from '../../checkout/orders-current';
+import { readBuyerOrdersCurrent } from '../../checkout/orders';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 
@@ -22,10 +22,12 @@ export const Route = createFileRoute('/orders/')({
   beforeLoad: requireSignedIn,
   validateSearch: validateOrdersSearch,
   loaderDeps: ({ search }) => validateOrdersSearch(search),
-  loader: ({ deps }) => readBuyerOrders({ data: deps }),
+  loader: ({ deps }) => readBuyerOrdersCurrent({ data: { ...deps, locale: getLocale() } }),
   head: ({ match }) =>
     pageHead({ title: m.orders_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
-  component: function OrdersRoute() {
-    return <OrdersPage page={Route.useLoaderData()} locale={getLocale()} />;
-  },
+  component: OrdersRoute,
 });
+
+function OrdersRoute() {
+  return <OrdersCurrent initial={Route.useLoaderData()} search={Route.useSearch()} locale={getLocale()} />;
+}
