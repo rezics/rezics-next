@@ -58,7 +58,11 @@ async function readPage(
   };
   let result: Awaited<ReturnType<KernelClient['collections']['get']>>;
   try {
-    result = await client.collections.get({ query, headers: { authorization } });
+    result = await client.collections.get({
+      query,
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(2_000) },
+    });
   } catch (error) {
     if (isPlatformClosedError(error)) throw error;
     throw new MineCollectionsReadError('unavailable');
@@ -139,7 +143,7 @@ export async function loadMineCollectionsPage(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string; layout?: 'rows' | 'previews' },
 ): Promise<MineCollectionsPage> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { signedIn: false, collections: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, collections: [], next: null };

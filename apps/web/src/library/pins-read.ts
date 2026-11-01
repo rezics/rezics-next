@@ -77,7 +77,7 @@ export async function readLibraryPins(
   try {
     const exposed = await client['openapi.json'].get({
       headers: { authorization },
-      fetch: { signal: AbortSignal.timeout(2_000) },
+      fetch: { cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(2_000) },
     });
     if (exposed.error || !exposed.data) return { state: 'unavailable' };
     if (!libraryPinsListExposed(exposed.data)) return { state: 'closed' };
@@ -85,9 +85,10 @@ export async function readLibraryPins(
     const result = await client.libraryPins.get({
       query: { limit },
       headers: { authorization },
-      fetch: { signal: AbortSignal.timeout(2_000) },
+      fetch: { cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(2_000) },
     });
     const status = resultStatus(result);
+    if (status === 202) return { state: 'preparing' };
     if (result.error || (status !== undefined && status >= 400) || !result.data) return { state: 'unavailable' };
     return {
       state: 'loaded',
@@ -112,7 +113,8 @@ export async function loadLibraryNavigation(
   sessionEnv: Partial<SessionEnv>,
   limit: 8 | 100 = 8,
 ): Promise<LibraryNavigationRead> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv))
+    return { pins: { state: 'closed' }, collections: [], collectionsState: 'loaded' };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { pins: { state: 'closed' }, collections: [], collectionsState: 'loaded' };
@@ -149,7 +151,7 @@ export const readLibraryPinsPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
+    if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'closed' } as const;
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'closed' } as const;
     return readLibraryPins(kernelClient(), authorization, data);
