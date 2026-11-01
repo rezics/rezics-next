@@ -41,6 +41,8 @@ export function SubjectLabelMore({
   query,
   next,
   onPage,
+  isCurrent,
+  acceptPage,
 }: {
   query: string;
   next: string | null;
@@ -49,6 +51,12 @@ export function SubjectLabelMore({
     next?: string | null;
     state: 'loaded' | 'closed' | 'signed-out' | 'unavailable';
   }) => void;
+  /** Optional owning Subject workflow fences; existing shelf callers retain their page behavior. */
+  isCurrent?: () => boolean;
+  acceptPage?: (
+    page: Awaited<ReturnType<typeof readSubjectLabelPage>>,
+    request: { query: string; cursor?: string },
+  ) => boolean;
 }) {
   const requestId = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -70,20 +78,25 @@ export function SubjectLabelMore({
         variant="outline"
         disabled={busy}
         onClick={async () => {
-          if (busy) return;
+          if (busy || (isCurrent && !isCurrent())) return;
           const id = ++requestId.current;
+          const request = { query, ...(failure === 'stale_cursor' ? {} : { cursor: next }) };
           setBusy(true);
           try {
             const page = await readSubjectLabelPage({
-              data: { query, ...(failure === 'stale_cursor' ? {} : { cursor: next }) },
+              data: request,
             });
-            if (id !== requestId.current) return;
+            if (id !== requestId.current || (isCurrent && !isCurrent())) return;
+            if (acceptPage && !acceptPage(page, request)) {
+              setFailure('unavailable');
+              return;
+            }
             if (page.state === 'loaded') onPage(page);
             else setFailure(page.reason ?? page.state);
           } catch {
-            if (id === requestId.current) setFailure('unavailable');
+            if (id === requestId.current && (!isCurrent || isCurrent())) setFailure('unavailable');
           } finally {
-            if (id === requestId.current) setBusy(false);
+            if (id === requestId.current && (!isCurrent || isCurrent())) setBusy(false);
           }
         }}
       >

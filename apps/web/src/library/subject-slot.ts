@@ -53,7 +53,11 @@ export type SubjectLibrarySlotResult =
   | 'label-restore-capacity'
   | 'label-removed';
 export type SubjectLabelUndo = { labelId: string; assignmentId: string; revision: number };
+/** Identity of the session actually used by this read, never an expected browser identity. */
+export type SubjectLibraryReadIdentity = { viewer: string; csrfToken: string };
+export type SubjectLibraryReadProvenance = SubjectLibraryReadIdentity & { subjectId: string; readId: string };
 export type SubjectLibrarySlotData = {
+  provenance?: SubjectLibraryReadProvenance;
   session: 'signed-in' | 'signed-out' | 'unavailable';
   csrfToken: string | null;
   labelCreateKey?: string;
@@ -92,6 +96,7 @@ export type SubjectLibraryMutationResponse = {
   undo?: { deletionId: string; revision: number };
 };
 export type SubjectSlotCollectionsResult = {
+  provenance?: SubjectLibraryReadIdentity;
   state: 'loaded' | 'closed' | 'unavailable';
   collections: SubjectSlotCollection[] | null;
 };
@@ -167,9 +172,14 @@ export async function loadSubjectLibraryCollections(
     return {
       state: 'loaded',
       collections: await readCollections(client, identity.subject, identity.authorization),
+      provenance: { viewer: identity.subject, csrfToken: identity.csrfToken },
     };
   } catch (error) {
-    return { state: isPlatformClosedError(error) ? 'closed' : 'unavailable', collections: null };
+    return {
+      state: isPlatformClosedError(error) ? 'closed' : 'unavailable',
+      collections: null,
+      provenance: { viewer: identity.subject, csrfToken: identity.csrfToken },
+    };
   }
 }
 
@@ -274,6 +284,16 @@ export async function loadSubjectLibrarySlot(
     labelUndoKey: crypto.randomUUID(),
     session: identity.state,
     csrfToken: identity.csrfToken,
+    ...(identity.state === 'signed-in'
+      ? {
+          provenance: {
+            viewer: identity.subject,
+            csrfToken: identity.csrfToken,
+            subjectId,
+            readId: crypto.randomUUID(),
+          },
+        }
+      : {}),
     entryAvailable,
     entry,
     stateOptions,

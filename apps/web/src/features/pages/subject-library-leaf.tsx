@@ -1,6 +1,10 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useLocation } from '@tanstack/react-router';
+import { useOperation } from '../../kernel/exposure';
+import { subjectSlotReturnTo } from '../../library/subject-slot-return-context';
 import type { SubjectLibrarySlotData } from '../../library/subject-slot';
-import { SubjectLibrarySlot } from '../../library/subject-slot-view';
+import { SubjectLibrarySlot, useSubjectLibraryObservation } from '../../library/subject-slot-view';
 import type { useSession } from '../../session/query';
 import type { SubjectFrameData } from './subject-frame';
 import { subjectLibraryQuery } from './subject-queries';
@@ -21,20 +25,49 @@ const unavailable: SubjectLibrarySlotData = {
 const signedOut: SubjectLibrarySlotData = { ...unavailable, session: 'signed-out' };
 
 /** Reuse the bounded BFF query and its invalidation prefix, partitioning personal results by viewer and session. */
-export function subjectLibraryLeafQuery(frame: SubjectFrameData, locale: string, session: ReaderSession) {
+export function subjectLibraryLeafQuery(
+  frame: SubjectFrameData,
+  locale: string,
+  session: ReaderSession,
+  mounted?: {
+    lifetime: string;
+    admitted: boolean;
+    isCurrent: () => boolean;
+  },
+) {
   const query = subjectLibraryQuery(frame.id, locale, false, undefined, undefined, frame.type);
-  const ready = session.state === 'signed-in' && !!session.subject && !!session.csrfToken;
+  const ready =
+    session.state === 'signed-in' && !!session.subject && !!session.csrfToken && (!mounted || mounted.admitted);
   const currentData = (data: SubjectLibrarySlotData): SubjectLibrarySlotData =>
     ready &&
     data.session === 'signed-in' &&
     data.csrfToken === session.csrfToken &&
+    (!mounted || mounted.isCurrent()) &&
+    ((!mounted && !data.provenance) ||
+      (data.provenance?.viewer === session.subject &&
+        data.provenance?.subjectId === frame.id &&
+        data.provenance?.csrfToken === session.csrfToken &&
+        !!data.provenance?.readId)) &&
     (!data.entry || data.entry.subjectId === frame.id)
       ? data
-      : unavailable;
+      : {
+          ...unavailable,
+          publicCollections: data.publicCollections,
+          publicCollectionsNext: data.publicCollectionsNext,
+        };
   return queryOptions({
-    queryKey: [...query.queryKey, ready ? { viewer: session.subject, credential: session.csrfToken } : null] as const,
+    queryKey: [
+      ...query.queryKey,
+      ready
+        ? {
+            viewer: session.subject,
+            credential: session.csrfToken,
+            ...(mounted ? { lifetime: mounted.lifetime } : {}),
+          }
+        : null,
+    ] as const,
     queryFn: async (context) => {
-      if (!ready || typeof query.queryFn !== 'function') return unavailable;
+      if (!ready || (mounted && !mounted.isCurrent()) || typeof query.queryFn !== 'function') return unavailable;
       const data = await query.queryFn({ ...context, queryKey: query.queryKey });
       context.signal.throwIfAborted();
       return currentData(data);
@@ -59,15 +92,93 @@ export function SubjectLibraryLeaf({
   locale: string;
   session: ReaderSession;
 }) {
-  const query = subjectLibraryLeafQuery(frame, locale, session);
+  const entryAdmitted = useOperation('library_entry.get');
+  const observation = useSubjectLibraryObservation({ id: frame.id, type: frame.type, label: frame.title.text }, locale);
+  const admitted = entryAdmitted && observation.value.entryAdmitted;
+  const currentHref = useLocation({ select: (location) => location.publicHref });
+  const returnTo = subjectSlotReturnTo(currentHref, { id: frame.id, label: frame.title.text }, locale);
+  const addressScope = JSON.stringify([
+    frame.id,
+    frame.type,
+    locale,
+    returnTo,
+    session.state,
+    session.subject,
+    !!session.csrfToken,
+    observation.owner,
+    observation.value.scope,
+  ]);
+  const signature = JSON.stringify([
+    addressScope,
+    admitted,
+    observation.value.entry,
+    observation.value.labels,
+    observation.value.collections,
+  ]);
+  const readScope = useRef({ signature, id: crypto.randomUUID(), active: true });
+  if (readScope.current.signature !== signature) {
+    readScope.current.active = false;
+    readScope.current = { signature, id: crypto.randomUUID(), active: true };
+  }
+  const lifetime = readScope.current;
+  const credential = useRef(session.csrfToken);
+  credential.current = session.csrfToken;
+  useEffect(() => {
+    lifetime.active = true;
+    return () => {
+      lifetime.active = false;
+    };
+  }, [lifetime]);
+  const query = subjectLibraryLeafQuery(frame, locale, session, {
+    lifetime: lifetime.id,
+    admitted,
+    isCurrent: () => {
+      const current = observation.read();
+      return (
+        lifetime.active &&
+        credential.current === session.csrfToken &&
+        current.scope === observation.value.scope &&
+        current.entry === observation.value.entry &&
+        current.labels === observation.value.labels &&
+        current.collections === observation.value.collections
+      );
+    },
+  });
   const { data, isError } = useQuery(query);
+  const accepted = useRef<{ lifetime: string; data: SubjectLibrarySlotData } | null>(null);
+  if (data?.session === 'signed-in' && query.enabled && !isError) accepted.current = { lifetime: addressScope, data };
+  const publicAddress = JSON.stringify([frame.id, locale]);
+  const publicPage = useRef({
+    address: publicAddress,
+    collections: unavailable.publicCollections,
+    next: unavailable.publicCollectionsNext,
+  });
+  if (publicPage.current.address !== publicAddress)
+    publicPage.current = { address: publicAddress, collections: null, next: null };
+  if (data?.publicCollections)
+    publicPage.current = {
+      address: publicAddress,
+      collections: data.publicCollections,
+      next: data.publicCollectionsNext,
+    };
   // SSR and unprepared viewers reserve the control space without exposing cached personal values or a sign-in flash.
-  const current =
-    session.state === 'signed-out' ? signedOut : query.enabled && !isError ? (data ?? unavailable) : unavailable;
+  const retained = accepted.current?.lifetime === addressScope ? accepted.current.data : unavailable;
+  const privateData =
+    session.state === 'signed-out'
+      ? signedOut
+      : !isError && observation.value.sessionReady
+        ? query.enabled
+          ? (data ?? retained)
+          : retained
+        : unavailable;
+  const current = {
+    ...privateData,
+    publicCollections: publicPage.current.collections,
+    publicCollectionsNext: publicPage.current.next,
+  };
   return (
     <div className="min-h-9">
       <SubjectLibrarySlot
-        key={JSON.stringify([frame.id, locale, query.queryKey])}
         subject={{ id: frame.id, type: frame.type, label: frame.title.text }}
         locale={locale}
         data={current}

@@ -3,7 +3,7 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { normalizeLibraryLabelName } from './subject-label-name';
-import { readSubjectSlotSession } from './subject-slot';
+import { readSubjectSlotSession, type SubjectLibraryReadIdentity } from './subject-slot';
 
 export { normalizeLibraryLabelName } from './subject-label-name';
 
@@ -86,6 +86,7 @@ export async function searchSubjectLabels(input: {
   query: string;
   cursor?: string;
 }): Promise<{
+  provenance?: SubjectLibraryReadIdentity & { query: string; cursor?: string };
   labels: LibraryLabelSummary[];
   next?: string | null;
   reason?: string;
@@ -94,18 +95,25 @@ export async function searchSubjectLabels(input: {
   const identity = await readSubjectSlotSession(input.request, input.sessionEnv);
   if (identity.state !== 'signed-in')
     return { labels: [], state: identity.state === 'signed-out' ? 'signed-out' : 'unavailable' };
+  const provenance = {
+    viewer: identity.subject,
+    csrfToken: identity.csrfToken,
+    query: input.query,
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+  };
   try {
     const result = await input.client.libraryLabels.get({
       query: { q: input.query, limit: 20, ...(input.cursor ? { cursor: input.cursor } : {}) },
       headers: { authorization: identity.authorization },
     });
     if (!result.error && result.data && statusOf(result) !== undefined && statusOf(result)! < 400)
-      return { labels: result.data.labels, next: result.data.next, state: 'loaded' };
-    if (isPlatformClosedProblem(statusOf(result), result.error?.value)) return { labels: [], state: 'closed' };
+      return { labels: result.data.labels, next: result.data.next, state: 'loaded', provenance };
+    if (isPlatformClosedProblem(statusOf(result), result.error?.value))
+      return { labels: [], state: 'closed', provenance };
     const reason = problemCode(result);
-    return { labels: [], state: 'unavailable', ...(reason !== undefined ? { reason } : {}) };
+    return { labels: [], state: 'unavailable', provenance, ...(reason !== undefined ? { reason } : {}) };
   } catch (error) {
-    return { labels: [], state: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
+    return { labels: [], state: isPlatformClosedError(error) ? 'closed' : 'unavailable', provenance };
   }
 }
 

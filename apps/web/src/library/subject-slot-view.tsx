@@ -1,9 +1,10 @@
 import { SubjectLabelMore } from './subject-labels.tsx';
 import { labelReadMessage, SubjectLabelReadNotice } from './subject-labels.tsx';
 import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-undo';
-import { Exposure, useOperation } from '../kernel/exposure';
+import { Exposure, operationIsAdmitted, useOperation } from '../kernel/exposure';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { ContentItem } from '@rezics/ui/content-item';
 import { useQueryClient } from '@tanstack/react-query';
 import { Menu } from '@rezics/ui/menu';
 import {
@@ -15,12 +16,13 @@ import {
   SelectValue,
 } from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
-import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 import { subjectHref } from '../subject/subject-href';
 import { subjectSlotReturnTo } from './subject-slot-return-context';
+import { useSession } from '../session/query';
 import { AccountRef } from './account-ref';
 import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
@@ -52,6 +54,275 @@ const primaryClass = buttonVariants({ variant: 'default' });
 const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
 const removeValue = 'remove';
 const otherStateValue = '__library_other__';
+const subscribe = () => () => {};
+type SlotLifetime = { active: boolean; current: () => boolean };
+type SlotAdmission = {
+  signature: string;
+  lifetime: SlotLifetime;
+  seen: Set<string>;
+  retired: Set<string>;
+  accepted?: string;
+};
+
+/** Remember actual cache/address transitions, including replacements React batches into an ABA render. */
+export function useSubjectLibraryObservation(subject: SubjectReference, locale: string) {
+  const client = useQueryClient();
+  const router = useRouter();
+  const observation = useMemo(() => {
+    let address = subjectSlotReturnTo(router.state.location.publicHref, subject, locale);
+    let value = {
+      scope: 0,
+      entry: 0,
+      labels: 0,
+      collections: 0,
+      sessionReady: false,
+      entryAdmitted: false,
+      labelsAdmitted: false,
+      collectionsAdmitted: false,
+    };
+    let previous: string[] | undefined;
+    const read = () => {
+      const session = client.getQueryState<ReturnType<typeof useSession>>(['session']);
+      const exposure = client.getQueryState<string[]>(['exposure', 'viewer']);
+      const viewer = session?.data;
+      const sessionReady =
+        session?.status === 'success' && viewer?.state === 'signed-in' && !!viewer.subject && !!viewer.csrfToken;
+      const admitted = sessionReady && exposure?.status === 'success' ? exposure.data : undefined;
+      const allowed = (operation: Parameters<typeof operationIsAdmitted>[0]) =>
+        operationIsAdmitted(operation, admitted);
+      const next = [
+        JSON.stringify([address, session?.status, viewer?.state, viewer?.subject, !!viewer?.csrfToken]),
+        JSON.stringify(
+          ['library_entry.get', 'library_entry.put', 'library_entry.delete', 'library_entry.restore'].map((op) =>
+            allowed(op as Parameters<typeof allowed>[0]),
+          ),
+        ),
+        JSON.stringify(
+          [
+            'library_label.assignment_list',
+            'library_label.list',
+            'library_label.assign',
+            'library_label.create',
+            'library_label.unassign',
+          ].map((op) => allowed(op as Parameters<typeof allowed>[0])),
+        ),
+        JSON.stringify([allowed('collection.list'), allowed('collection_member.create')]),
+      ];
+      if (!previous || next.some((key, index) => key !== previous![index])) {
+        value = {
+          scope: value.scope + (previous && next[0] !== previous[0] ? 1 : 0),
+          entry: value.entry + (previous && next[1] !== previous[1] ? 1 : 0),
+          labels: value.labels + (previous && next[2] !== previous[2] ? 1 : 0),
+          collections: value.collections + (previous && next[3] !== previous[3] ? 1 : 0),
+          sessionReady,
+          entryAdmitted: allowed('library_entry.get'),
+          labelsAdmitted: allowed('library_label.assignment_list'),
+          collectionsAdmitted: allowed('collection.list') && allowed('collection_member.create'),
+        };
+        previous = next;
+      }
+      return value;
+    };
+    const server = value;
+    return {
+      owner: crypto.randomUUID(),
+      read,
+      server: () => server,
+      subscribe: (notify: () => void) => {
+        read();
+        const cache = client.getQueryCache().subscribe(({ query }) => {
+          if (query.queryKey[0] !== 'session' && query.queryKey[0] !== 'exposure') return;
+          const before = value;
+          if (read() !== before) notify();
+        });
+        const navigation = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+          const next = subjectSlotReturnTo(toLocation.publicHref, subject, locale);
+          if (address === next) return;
+          address = next;
+          read();
+          notify();
+        });
+        return () => {
+          cache();
+          navigation();
+        };
+      },
+    };
+  }, [client, router, subject.id, subject.type, locale]);
+  const value = useSyncExternalStore(observation.subscribe, observation.read, observation.server);
+  return { ...observation, value };
+}
+
+/** The shared owner observes the browser even when a direct Subject or Zone host retains its old props. */
+export function SubjectLibrarySlot(props: SubjectSlotProps) {
+  const session = useSession();
+  const observation = useSubjectLibraryObservation(props.subject, props.locale);
+  const observedScope = observation.value.scope;
+  const browser = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
+  const currentHref = useLocation({ select: (location) => location.publicHref });
+  const returnTo = subjectSlotReturnTo(currentHref, props.subject, props.locale);
+  const entryGet = useOperation('library_entry.get');
+  const entryPut = useOperation('library_entry.put');
+  const entryDelete = useOperation('library_entry.delete');
+  const entryRestore = useOperation('library_entry.restore');
+  const assignments = useOperation('library_label.assignment_list');
+  const labelList = useOperation('library_label.list');
+  const labelAssign = useOperation('library_label.assign');
+  const labelCreate = useOperation('library_label.create');
+  const labelUnassign = useOperation('library_label.unassign');
+  const collectionList = useOperation('collection.list');
+  const memberCreate = useOperation('collection_member.create');
+  const mounted = useRef(true);
+  const admissions = useRef<Partial<Record<'entry' | 'labels' | 'collections', SlotAdmission>>>({});
+  const scope = JSON.stringify([
+    props.subject.id,
+    props.subject.type,
+    props.locale,
+    returnTo,
+    browser ? session.state : 'presentation',
+    browser ? session.subject : null,
+    browser ? !!session.csrfToken : false,
+    observation.owner,
+    browser ? observedScope : 0,
+  ]);
+  const scopeSequence = useRef({ scope, value: 0 });
+  if (scopeSequence.current.scope !== scope) scopeSequence.current = { scope, value: scopeSequence.current.value + 1 };
+  const { data } = props;
+  const provenance = data.provenance;
+  const actualIdentity =
+    !browser ||
+    (observation.value.sessionReady &&
+      session.state === 'signed-in' &&
+      !!session.subject &&
+      !!session.csrfToken &&
+      data.session === 'signed-in' &&
+      provenance?.viewer === session.subject &&
+      provenance.subjectId === props.subject.id &&
+      !!provenance.readId &&
+      (!data.entry || data.entry.subjectId === props.subject.id) &&
+      (!data.undo || data.undo.subjectId === props.subject.id) &&
+      (!data.restore ||
+        !('entry' in data.restore) ||
+        !data.restore.entry ||
+        data.restore.entry.subjectId === props.subject.id));
+  // Separate native operation admissions. Changing a label gate cannot retire a healthy entry or Collection read.
+  const families = {
+    entry: {
+      admitted: entryGet && (!browser || observation.value.entryAdmitted),
+      operations: [entryGet, entryPut, entryDelete, entryRestore],
+      revision: observation.value.entry,
+    },
+    labels: {
+      admitted: assignments && (!browser || observation.value.labelsAdmitted),
+      operations: [assignments, labelList, labelAssign, labelCreate, labelUnassign],
+      revision: observation.value.labels,
+    },
+    collections: {
+      admitted: collectionList && memberCreate && (!browser || observation.value.collectionsAdmitted),
+      operations: [collectionList, memberCreate],
+      revision: observation.value.collections,
+    },
+  };
+  const ready = { entry: false, labels: false, collections: false };
+  for (const family of ['entry', 'labels', 'collections'] as const) {
+    let observed = admissions.current[family];
+    const credentialMatches =
+      !browser ||
+      (provenance?.csrfToken === session.csrfToken && data.csrfToken === session.csrfToken) ||
+      (!!provenance && observed?.accepted === provenance.readId);
+    const revision = families[family].revision;
+    const isCurrent = () => {
+      const current = observation.read();
+      return mounted.current && (!browser || (current.scope === observedScope && current[family] === revision));
+    };
+    const signature = JSON.stringify([
+      scope,
+      families[family].operations,
+      browser ? revision : 0,
+      actualIdentity && credentialMatches,
+    ]);
+    if (!observed || observed.signature !== signature) {
+      if (observed) observed.lifetime.active = false;
+      const retired = observed?.retired ?? new Set<string>();
+      for (const id of observed?.seen ?? []) retired.add(id);
+      const lifetime: SlotLifetime = { active: false, current: () => isCurrent() && lifetime.active };
+      observed = { signature, lifetime, seen: new Set(), retired };
+      admissions.current[family] = observed;
+    }
+    const accepted =
+      actualIdentity &&
+      credentialMatches &&
+      families[family].admitted &&
+      (!browser || (!!provenance && !observed.retired.has(provenance.readId)));
+    if (accepted !== observed.lifetime.active) {
+      observed.lifetime.active = false;
+      const lifetime: SlotLifetime = { active: accepted, current: () => isCurrent() && lifetime.active };
+      observed.lifetime = lifetime;
+    }
+    if (provenance) observed.seen.add(provenance.readId);
+    if (accepted && provenance) observed.accepted = provenance.readId;
+    ready[family] = accepted;
+  }
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const memberResult = data.result === 'added' || data.result === 'collection-full';
+  const current: SubjectLibrarySlotData = !browser
+    ? data
+    : {
+        session:
+          session.state === 'signed-out'
+            ? 'signed-out'
+            : actualIdentity && credentialReady(session) && (ready.entry || ready.labels || ready.collections)
+              ? 'signed-in'
+              : 'unavailable',
+        csrfToken: session.csrfToken,
+        ...(provenance ? { provenance } : {}),
+        entryAvailable: ready.entry && data.entryAvailable,
+        entry: ready.entry ? data.entry : null,
+        stateOptions: ready.entry ? (data.stateOptions ?? []) : [],
+        ...(ready.entry && data.entryStateLabel ? { entryStateLabel: data.entryStateLabel } : {}),
+        ...(ready.entry && data.undo ? { undo: data.undo } : {}),
+        ...(ready.entry && data.restore ? { restore: data.restore } : {}),
+        publicCollections: data.publicCollections,
+        publicCollectionsNext: data.publicCollectionsNext,
+        collectionsLoaded: ready.collections && data.collectionsLoaded,
+        collections: ready.collections ? data.collections : null,
+        labels: ready.labels ? data.labels : null,
+        ...(ready.labels
+          ? {
+              ...(data.labelCreateKey ? { labelCreateKey: data.labelCreateKey } : {}),
+              ...(data.labelAssignKey ? { labelAssignKey: data.labelAssignKey } : {}),
+              ...(data.labelRemoveKeys ? { labelRemoveKeys: data.labelRemoveKeys } : {}),
+              ...(data.labelUndoKey ? { labelUndoKey: data.labelUndoKey } : {}),
+              ...(data.labelUndo ? { labelUndo: data.labelUndo } : {}),
+              ...(data.labelResult ? { labelResult: data.labelResult } : {}),
+            }
+          : {}),
+        ...(data.result && (memberResult ? ready.collections : ready.entry) ? { result: data.result } : {}),
+      };
+  return (
+    <SubjectLibrarySlotView
+      key={scopeSequence.current.value}
+      {...props}
+      data={current}
+      entryLifetime={admissions.current.entry!.lifetime}
+      labelLifetime={admissions.current.labels!.lifetime}
+      collectionLifetime={admissions.current.collections!.lifetime}
+    />
+  );
+}
+
+function credentialReady(session: ReturnType<typeof useSession>) {
+  return session.state === 'signed-in' && !!session.subject && !!session.csrfToken;
+}
 
 function LibraryStateSelect({
   busy,
@@ -104,7 +375,18 @@ function LibraryStateSelect({
 }
 
 /** Compact subject-level Library controls rendered in the page's template action slot. */
-export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) {
+function SubjectLibrarySlotView({
+  subject,
+  locale,
+  data,
+  entryLifetime,
+  labelLifetime,
+  collectionLifetime,
+}: SubjectSlotProps & {
+  entryLifetime: SlotLifetime;
+  labelLifetime: SlotLifetime;
+  collectionLifetime: SlotLifetime;
+}) {
   const queryClient = useQueryClient();
   const action = subjectHref({ id: subject.id, label: subject.label }, locale).href;
   const currentHref = useLocation({ select: (location) => location.publicHref });
@@ -113,6 +395,12 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
   const [actionResult, setActionResult] = useState(data.result);
+  const [memberResult, setMemberResult] = useState<SubjectLibrarySlotData['result']>();
+  const entryFlight = useRef(false);
+  const memberFlight = useRef(false);
+  const pickerFlight = useRef(false);
+  const labelFlight = useRef(false);
+  const uncertainEntry = useRef<{ input: SubjectLibraryMutation; previous: string } | null>(null);
   const initialEntry =
     data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
   const [entry, setEntry] = useState(initialEntry);
@@ -125,6 +413,10 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const restoreAdmitted = useOperation('library_entry.restore');
   const entryPutAdmitted = useOperation('library_entry.put');
   const entryDeleteAdmitted = useOperation('library_entry.delete');
+  const labelListAdmitted = useOperation('library_label.list');
+  const labelAssignAdmitted = useOperation('library_label.assign');
+  const labelCreateAdmitted = useOperation('library_label.create');
+  const labelUnassignAdmitted = useOperation('library_label.unassign');
   const [labels, setLabels] = useState(data.labels ?? []);
   const [labelQuery, setLabelQuery] = useState('');
   const [labelNext, setLabelNext] = useState<string | null>(null);
@@ -154,6 +446,50 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     return key;
   }
   const latestLabelQuery = useRef('');
+  const searchOrigin = useRef({ query: labelQuery, open: labelPickerOpen, sequence: 0 });
+  if (searchOrigin.current.query !== labelQuery || searchOrigin.current.open !== labelPickerOpen)
+    searchOrigin.current = { query: labelQuery, open: labelPickerOpen, sequence: searchOrigin.current.sequence + 1 };
+  const searchSequence = searchOrigin.current.sequence;
+  const [entryOrigin, setEntryOrigin] = useState(entryLifetime);
+  const [labelOrigin, setLabelOrigin] = useState(labelLifetime);
+  const [collectionOrigin, setCollectionOrigin] = useState(collectionLifetime);
+  // Render-time retirement prevents a stale private value from surviving even one committed replacement render.
+  if (entryOrigin !== entryLifetime) {
+    setEntryOrigin(entryLifetime);
+    setEntry(initialEntry);
+    setSelectedState(initialEntry?.state ?? '');
+    setPending(false);
+    setActionResult(undefined);
+    setRestoreMessage(null);
+    uncertainEntry.current = null;
+    entryFlight.current = false;
+  }
+  if (labelOrigin !== labelLifetime) {
+    setLabelOrigin(labelLifetime);
+    setLabels(data.labels ?? []);
+    setLabelPickerOpen(false);
+    setLabelQuery('');
+    latestLabelQuery.current = '';
+    setLabelChoices([]);
+    setLabelNext(null);
+    setLabelReadReason(undefined);
+    setLabelSearchState('idle');
+    setLabelPending(false);
+    setLabelNotice(undefined);
+    setLabelUndo(undefined);
+    labelUndoKeys.current.clear();
+    restoredLabelEpisodes.current.clear();
+    labelFlight.current = false;
+  }
+  if (collectionOrigin !== collectionLifetime) {
+    setCollectionOrigin(collectionLifetime);
+    setCollections(data.collections);
+    setCollectionsLoaded(data.collectionsLoaded);
+    setCollectionsProblem(null);
+    setMemberResult(undefined);
+    memberFlight.current = false;
+    pickerFlight.current = false;
+  }
   const stateOptions = (data.stateOptions ?? []).map(({ id, label }) => [id, label.text] as const);
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
@@ -176,17 +512,29 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     setLabelUndo(data.labelUndo);
   }, [data.labelResult, data.labelUndo]);
   useEffect(() => {
-    if (!hydrated || !labelPickerOpen || data.session !== 'signed-in') return;
+    if (!hydrated || !labelPickerOpen || !labelListAdmitted || !labelLifetime.current()) return;
     let current = true;
     const query = labelQuery;
+    const currentSearch = () => current && labelLifetime.current() && searchOrigin.current.sequence === searchSequence;
     setLabelNext(null);
     setLabelChoices([]);
     setLabelSearchState('idle');
     setLabelReadReason(undefined);
     const timeout = setTimeout(() => {
+      if (!currentSearch()) return;
+      const credential = data.csrfToken;
       void searchSubjectLabelsAction({ data: { query } })
         .then((response) => {
-          if (!current || latestLabelQuery.current !== query) return;
+          if (!currentSearch() || latestLabelQuery.current !== query) return;
+          if (
+            response.provenance?.viewer !== data.provenance?.viewer ||
+            !response.provenance ||
+            response.provenance.csrfToken !== credential ||
+            response.provenance.query !== query
+          ) {
+            setLabelSearchState('unavailable');
+            return;
+          }
           setLabelNext(response.next ?? null);
           setLabelChoices(response.labels);
           setLabelReadReason(response.reason);
@@ -197,15 +545,15 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
           setLabelSearchState(response.state);
         })
         .catch(() => {
-          if (current && latestLabelQuery.current === query) setLabelSearchState('unavailable');
+          if (currentSearch() && latestLabelQuery.current === query) setLabelSearchState('unavailable');
         });
     }, 250);
     return () => {
       current = false;
       clearTimeout(timeout);
     };
-  }, [data.session, hydrated, labelPickerOpen, labelQuery]);
-  const result = actionResult ?? data.result;
+  }, [labelLifetime, labelListAdmitted, hydrated, labelPickerOpen, labelQuery, searchSequence]);
+  const result = memberResult ?? actionResult ?? data.result;
   const resultText =
     result === 'saved'
       ? m.library_subject_saved()
@@ -225,7 +573,37 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                     ? m.library_subject_unavailable()
                     : null;
 
+  async function restoreEntry(receipt: { deletionId: string; revision: number }) {
+    if (!hydrated || !entryLifetime.current() || !restoreAdmitted) return;
+    try {
+      const restored = await restoreSubjectLibrarySlot({
+        data: { subjectId: subject.id, ...receipt },
+        headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+      });
+      if (!entryLifetime.current()) return;
+      void queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
+      if (restored.ok) {
+        setEntry(restored.entry);
+        setSelectedState(restored.entry.state);
+        setActionResult('saved');
+        setRestoreMessage(null);
+      } else if (restored.reason === 'occupied') {
+        if (restored.entry) {
+          setEntry(restored.entry);
+          setSelectedState(restored.entry.state);
+        }
+        setActionResult(undefined);
+        setRestoreMessage(m.library_restore_occupied());
+      } else if (restored.reason === 'stale') setRestoreMessage(m.library_restore_stale());
+      else if (restored.reason === 'expired') setRestoreMessage(m.library_restore_expired());
+      else setRestoreMessage(m.library_subject_unavailable());
+    } catch {
+      if (entryLifetime.current()) setRestoreMessage(m.library_subject_unavailable());
+    }
+  }
+
   function applyEntryResult(response: SubjectLibraryMutationResponse, previous: string) {
+    if (!entryLifetime.current()) return;
     if (response.result === 'saved' && response.entry) {
       setEntry(response.entry);
       setSelectedState(response.entry.state);
@@ -241,29 +619,8 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         undoToast(
           m.library_removed(),
           () => {
-            void restoreSubjectLibrarySlot({
-              data: { subjectId: subject.id, ...receipt },
-              headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
-            })
-              .then((restored) => {
-                void queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
-                if (restored.ok) {
-                  setEntry(restored.entry);
-                  setSelectedState(restored.entry.state);
-                  setActionResult('saved');
-                  setRestoreMessage(null);
-                } else if (restored.reason === 'occupied') {
-                  if (restored.entry) {
-                    setEntry(restored.entry);
-                    setSelectedState(restored.entry.state);
-                  }
-                  setActionResult(undefined);
-                  setRestoreMessage(m.library_restore_occupied());
-                } else if (restored.reason === 'stale') setRestoreMessage(m.library_restore_stale());
-                else if (restored.reason === 'expired') setRestoreMessage(m.library_restore_expired());
-                else setRestoreMessage(m.library_subject_unavailable());
-              })
-              .catch(() => setRestoreMessage(m.library_subject_unavailable()));
+            if (!entryLifetime.current() || !restoreAdmitted) return;
+            void restoreEntry(receipt);
           },
           { undo: m.editor_undo() },
         );
@@ -281,11 +638,22 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   }
 
   async function writeEntry(input: SubjectLibraryMutation, previous: string) {
+    if (
+      !entryLifetime.current() ||
+      entryFlight.current ||
+      (input.action === 'clear' ? !entryDeleteAdmitted : !entryPutAdmitted)
+    )
+      return;
+    entryFlight.current = true;
+    uncertainEntry.current = { input, previous };
+    setPending(true);
     try {
       const response = await mutateSubjectLibrarySlot({
         data: input,
         headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
       });
+      if (!entryLifetime.current()) return;
+      if (response.result !== 'unavailable') uncertainEntry.current = null;
       applyEntryResult(response, previous);
       if (
         response.result === 'saved' ||
@@ -295,19 +663,31 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         queryClient.setQueryData(
           ['subject-library', subject.id, locale],
           (current: SubjectLibrarySlotData | undefined) =>
-            current ? { ...current, entryAvailable: true, entry: response.entry ?? null } : current,
+            entryLifetime.current() &&
+            current?.provenance?.viewer === data.provenance?.viewer &&
+            current?.provenance?.subjectId === subject.id
+              ? { ...current, entryAvailable: true, entry: response.entry ?? null }
+              : current,
         );
       }
     } catch {
+      if (!entryLifetime.current()) return;
       setSelectedState(previous);
       setActionResult('unavailable');
     } finally {
-      setPending(false);
+      if (entryLifetime.current()) {
+        entryFlight.current = false;
+        setPending(false);
+      }
     }
   }
 
   function choose(value: string) {
-    if (!hydrated || pending || !value) return;
+    if (!hydrated || pending || !value || !entryLifetime.current()) return;
+    if (uncertainEntry.current) {
+      void writeEntry(uncertainEntry.current.input, uncertainEntry.current.previous);
+      return;
+    }
     if (value === 'remove') {
       if (!entry) return;
       const previous = selectedState;
@@ -345,16 +725,20 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   }
 
   async function mutate(input: SubjectLibraryMutation) {
-    if (!hydrated || pending) return;
+    if (!hydrated || !collectionLifetime.current() || memberFlight.current) return;
+    memberFlight.current = true;
     try {
       const response = await mutateSubjectLibrarySlot({
         data: input,
         headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
       });
-      setActionResult(response.result);
+      if (!collectionLifetime.current()) return;
+      setMemberResult(response.result);
       await queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
     } catch {
-      setActionResult('unavailable');
+      if (collectionLifetime.current()) setMemberResult('unavailable');
+    } finally {
+      if (collectionLifetime.current()) memberFlight.current = false;
     }
   }
 
@@ -369,28 +753,40 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
 
   async function loadCollections(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
+    if (!hydrated || !collectionLifetime.current() || pickerFlight.current) return;
+    pickerFlight.current = true;
+    const credential = data.csrfToken;
     try {
       const response = await readSubjectLibraryCollections({ data: { subjectId: subject.id } });
+      if (!collectionLifetime.current()) return;
+      if (
+        !response.provenance ||
+        response.provenance.viewer !== data.provenance?.viewer ||
+        response.provenance.csrfToken !== credential
+      ) {
+        setCollections(null);
+        setCollectionsLoaded(false);
+        setCollectionsProblem('unavailable');
+        return;
+      }
       setCollections(response.collections);
       setCollectionsLoaded(response.state === 'loaded');
       setCollectionsProblem(response.state === 'loaded' ? null : response.state);
     } catch {
-      setCollectionsProblem('unavailable');
+      if (collectionLifetime.current()) setCollectionsProblem('unavailable');
+    } finally {
+      if (collectionLifetime.current()) pickerFlight.current = false;
     }
   }
 
   function labelFailure(reason: string) {
+    if (!labelLifetime.current()) return;
     if (reason === 'restore-stale') {
       setLabelNotice('label-restore-stale');
       return;
     }
     if (reason === 'capacity') setLabelNotice('label-capacity');
-    else if (reason === 'restore-stale') {
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
-        router.invalidate(),
-      ]).then(() => setLabelNotice('label-restore-stale'));
-    } else if (reason === 'restore-expired') setLabelNotice('label-restore-expired');
+    else if (reason === 'restore-expired') setLabelNotice('label-restore-expired');
     else if (reason === 'restore-occupied') setLabelNotice('label-restore-occupied');
     else if (reason === 'restore-capacity') setLabelNotice('label-restore-capacity');
     else if (reason === 'closed') setLabelNotice('closed');
@@ -404,7 +800,15 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     assignment?: SubjectLabel;
     revision?: number;
   }) {
-    if (!hydrated || labelPending) return;
+    if (
+      !hydrated ||
+      !labelLifetime.current() ||
+      labelFlight.current ||
+      !labelAssignAdmitted ||
+      (input.intent === 'create-and-assign' && (!labelCreateAdmitted || !labelListAdmitted))
+    )
+      return;
+    labelFlight.current = true;
     setLabelPending(true);
     setLabelNotice(undefined);
     try {
@@ -448,6 +852,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                 },
                 headers,
               });
+      if (!labelLifetime.current()) return;
       if (!response.ok) {
         labelFailure(response.reason);
         return;
@@ -456,6 +861,14 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
       if (input.intent === 'restore' && input.assignment && input.revision !== undefined)
         restoredLabelEpisodes.current.add(labelEpisode(input.assignment.id, input.revision));
       if (input.intent !== 'restore') setLabelUndo(labelUndo);
+      const label = response.label ?? input.label;
+      if (label?.name) {
+        const labelId = 'labelId' in label ? label.labelId : label.id;
+        setLabels((current) => [
+          ...current.filter((row) => row.labelId !== labelId),
+          { id: response.assignment.id, labelId, name: label.name, revision: response.assignment.revision },
+        ]);
+      }
       setLabelPickerOpen(false);
       setLabelQuery('');
       latestLabelQuery.current = '';
@@ -465,16 +878,19 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         router.invalidate(),
       ]);
     } catch {
-      setLabelNotice('unavailable');
+      if (labelLifetime.current()) setLabelNotice('unavailable');
     } finally {
-      setLabelPending(false);
+      if (labelLifetime.current()) {
+        labelFlight.current = false;
+        setLabelPending(false);
+      }
     }
   }
 
   async function submitLabelName(event: FormEvent<HTMLFormElement>) {
     if (!hydrated) return;
     event.preventDefault();
-    if (labelSearchState !== 'loaded') return;
+    if (!labelLifetime.current() || !labelListAdmitted || labelSearchState !== 'loaded') return;
     const name = normalizeLibraryLabelName(labelQuery);
     if (!name) return;
     const existing = labelChoices.find((candidate) => normalizeLibraryLabelName(candidate.name) === name);
@@ -483,7 +899,8 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   }
 
   async function removeLabel(label: SubjectLabel) {
-    if (labelPending) return;
+    if (!hydrated || !labelLifetime.current() || labelFlight.current || !labelUnassignAdmitted) return;
+    labelFlight.current = true;
     setLabelPending(true);
     try {
       const response = await mutateSubjectLabelAction({
@@ -498,14 +915,17 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         },
         headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
       });
+      if (!labelLifetime.current()) return;
       if (!response.ok) {
         labelFailure(response.reason);
         return;
       }
+      setLabels((current) => current.filter((row) => row.id !== label.id));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
         router.invalidate(),
       ]);
+      if (!labelLifetime.current()) return;
       const restoreRevision = response.restoreRevision;
       if (restoreRevision === undefined) {
         setLabelNotice('unavailable');
@@ -524,9 +944,12 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         { undo: m.library_subject_label_undo() },
       );
     } catch {
-      setLabelNotice('unavailable');
+      if (labelLifetime.current()) setLabelNotice('unavailable');
     } finally {
-      setLabelPending(false);
+      if (labelLifetime.current()) {
+        labelFlight.current = false;
+        setLabelPending(false);
+      }
     }
   }
 
@@ -539,7 +962,15 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   return (
     <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
       {data.undo ? (
-        <EntryUndoForm undo={data.undo} locale={locale} csrfToken={data.csrfToken} returnTo={action} />
+        <div
+          onSubmit={(event) => {
+            if (!hydrated) return;
+            event.preventDefault();
+            if (data.undo && data.undo.subjectId === subject.id) void restoreEntry(data.undo);
+          }}
+        >
+          <EntryUndoForm undo={data.undo} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
+        </div>
       ) : null}
       {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}
       {entry && data.session === 'signed-in' ? (
@@ -551,7 +982,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             idempotencyKey={removeKey}
             locale={locale}
             csrfToken={data.csrfToken}
-            returnTo={action}
+            returnTo={returnTo}
           />
         </noscript>
       ) : null}
@@ -600,7 +1031,21 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         </div>
       ) : null}
 
-      {data.session === 'signed-in' ? (
+      {hydrated && !pending && entryLifetime.current() && uncertainEntry.current ? (
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={pending}
+          onClick={() => {
+            const original = uncertainEntry.current;
+            if (original && entryLifetime.current()) void writeEntry(original.input, original.previous);
+          }}
+        >
+          {m.library_selection_retry()}
+        </button>
+      ) : null}
+
+      {data.session === 'signed-in' && (!hydrated || collectionLifetime.current()) ? (
         <Exposure operation="collection_member.create">
           <Menu
             title={m.library_subject_add_collection()}
@@ -693,20 +1138,26 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
               {data.publicCollections.length ? (
                 <ul className="space-y-3">
                   {data.publicCollections.map((collection) => (
-                    <li key={collection.id} className="flex flex-col gap-1">
-                      <a
-                        className={linkClass}
-                        href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
-                      >
-                        {collection.title}
-                      </a>
-                      <span className="text-sm text-muted-foreground">
-                        <AccountRef account={collection.curator} />
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {m.library_subject_multiplicity({ count: collection.multiplicity })}
-                      </span>
-                    </li>
+                    <ContentItem
+                      key={collection.id}
+                      title={collection.title}
+                      headingLevel={3}
+                      href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
+                      metadata={
+                        <>
+                          {collection.curator?.handle ? (
+                            <a
+                              href={`/${encodeURIComponent(locale)}/@${encodeURIComponent(collection.curator.handle)}`}
+                            >
+                              <AccountRef account={collection.curator} />
+                            </a>
+                          ) : (
+                            <AccountRef account={collection.curator} />
+                          )}
+                          <span>{m.library_subject_multiplicity({ count: collection.multiplicity })}</span>
+                        </>
+                      }
+                    />
                   ))}
                 </ul>
               ) : (
@@ -773,7 +1224,17 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
               <details
                 data-subject-label-picker-details
                 open={labelPickerOpen}
-                onToggle={(event) => setLabelPickerOpen(event.currentTarget.open)}
+                onToggle={(event) => {
+                  if (hydrated && !labelLifetime.current()) return;
+                  const open = event.currentTarget.open;
+                  if (searchOrigin.current.open !== open)
+                    searchOrigin.current = {
+                      ...searchOrigin.current,
+                      open,
+                      sequence: searchOrigin.current.sequence + 1,
+                    };
+                  setLabelPickerOpen(open);
+                }}
                 className="min-w-0 max-w-md"
               >
                 <summary
@@ -808,6 +1269,15 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                         required
                         value={labelQuery}
                         onChange={(event) => {
+                          if (!labelLifetime.current()) return;
+                          searchOrigin.current = {
+                            ...searchOrigin.current,
+                            query: event.currentTarget.value,
+                            sequence: searchOrigin.current.sequence + 1,
+                          };
+                          setLabelChoices([]);
+                          setLabelNext(null);
+                          setLabelSearchState('idle');
                           latestLabelQuery.current = event.currentTarget.value;
                           setLabelQuery(event.currentTarget.value);
                         }}
@@ -824,6 +1294,12 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                         type="button"
                         className={buttonClass}
                         onClick={() => {
+                          if (!labelLifetime.current()) return;
+                          searchOrigin.current = {
+                            query: '',
+                            open: false,
+                            sequence: searchOrigin.current.sequence + 1,
+                          };
                           setLabelPickerOpen(false);
                           setLabelQuery('');
                           latestLabelQuery.current = '';
@@ -834,9 +1310,23 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                       </button>
                     </div>
                     <SubjectLabelMore
+                      key={searchSequence}
                       query={labelQuery}
                       next={labelNext}
+                      isCurrent={() =>
+                        labelLifetime.current() &&
+                        searchOrigin.current.sequence === searchSequence &&
+                        searchOrigin.current.open
+                      }
+                      acceptPage={(page, request) =>
+                        !!page.provenance &&
+                        page.provenance.viewer === data.provenance?.viewer &&
+                        page.provenance.csrfToken === data.csrfToken &&
+                        page.provenance.query === request.query &&
+                        page.provenance.cursor === request.cursor
+                      }
                       onPage={(page) => {
+                        if (!labelLifetime.current() || searchOrigin.current.sequence !== searchSequence) return;
                         setLabelNext(page.next ?? null);
                         setLabelChoices(page.labels);
                         setLabelSearchState(page.state);
@@ -897,7 +1387,28 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             </Exposure>
             <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
             {labelUndo ? (
-              <form data-label-undo method="post" action={action} className="flex items-center gap-2 text-sm">
+              <form
+                data-label-undo
+                method="post"
+                action={action}
+                className="flex items-center gap-2 text-sm"
+                onSubmit={(event) => {
+                  if (!hydrated) return;
+                  event.preventDefault();
+                  if (!labelLifetime.current()) return;
+                  void writeLabel({
+                    intent: 'restore',
+                    label: { id: labelUndo.labelId, name: '', revision: 1 },
+                    assignment: {
+                      id: labelUndo.assignmentId,
+                      labelId: labelUndo.labelId,
+                      name: '',
+                      revision: labelUndo.revision,
+                    },
+                    revision: labelUndo.revision,
+                  });
+                }}
+              >
                 <input type="hidden" name="intent" value="restore" />
                 <input type="hidden" name="subjectId" value={subject.id} />
                 <input type="hidden" name="labelId" value={labelUndo.labelId} />
