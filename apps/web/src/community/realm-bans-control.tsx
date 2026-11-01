@@ -104,11 +104,7 @@ function targetMessage(state: BanTargetState['state']) {
 function TargetPreview({ target, headingLevel = 3 }: { target: RealmBanTarget; headingLevel?: 3 | 4 }) {
   const { account, lookupHandle } = target;
   return (
-    <ContentItemFrame
-      as="div"
-      data-slot="realm-ban-target-preview"
-      className="flex min-w-0 items-center gap-3 p-4"
-    >
+    <ContentItemFrame as="div" data-slot="realm-ban-target-preview" className="flex min-w-0 items-center gap-3 p-4">
       <Avatar aria-hidden="true">
         <AvatarFallback>{initials(account.displayName || account.handle)}</AvatarFallback>
       </Avatar>

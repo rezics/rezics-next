@@ -223,10 +223,7 @@ export function RealmClaimReviewView({
             ) : null}
           </div>
           {confirming ? (
-            <section
-              aria-labelledby={`${id}-confirm`}
-              className="min-w-0"
-            >
+            <section aria-labelledby={`${id}-confirm`} className="min-w-0">
               <ContentItemFrame as="div" className="space-y-5 p-5 sm:p-6">
                 <div className="space-y-2">
                   <ContentItemHeading level={3} id={`${id}-confirm`} className="text-lg font-semibold">
@@ -262,7 +259,11 @@ export function RealmClaimReviewView({
                       className="[&_h3]:line-clamp-none [&_h3]:break-all [&_h3]:whitespace-normal"
                       context={<span>{m.realm_review_claimant()}</span>}
                       metadata={<RequestDetails request={request} />}
-                      state={<span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">{m.realm_review_pending()}</span>}
+                      state={
+                        <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
+                          {m.realm_review_pending()}
+                        </span>
+                      }
                       actions={
                         <Button
                           variant="outline"

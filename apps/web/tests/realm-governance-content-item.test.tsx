@@ -108,7 +108,8 @@ test('Realm governance views compose shared rows and case frames without truncat
   expect(review).toMatch(/<h3\b[^>]*data-content-item-slot="title"[^>]*>[^<]*01a1a000-0000-7000-8000-000000000033/u);
   expect(review).toContain(m.realm_review_claimant());
   expect(review).toContain(m.realm_review_pending());
-  for (const value of [orphanedAt, claimRow.claimEligibleAt, requestedAt]) expect(review).toContain(`dateTime="${value}"`);
+  for (const value of [orphanedAt, claimRow.claimEligibleAt, requestedAt])
+    expect(review).toContain(`dateTime="${value}"`);
   expect(review.match(/<time\b/gu)).toHaveLength(3);
   expect(review.match(/UTC/gu)).toHaveLength(3);
   expect(review).toContain(m.realm_review_review());
@@ -142,7 +143,9 @@ test('Realm governance views compose shared rows and case frames without truncat
     }),
   );
   expect(status.match(/<h1\b/gu)).toHaveLength(1);
-  expect(status).toMatch(/<article\b[^>]*aria-labelledby="[^"]+-case"[^>]*>[\s\S]*?<h2\b[^>]*data-content-item-slot="title"/u);
+  expect(status).toMatch(
+    /<article\b[^>]*aria-labelledby="[^"]+-case"[^>]*>[\s\S]*?<h2\b[^>]*data-content-item-slot="title"/u,
+  );
   expect(status).toContain(m.realm_claim_pending());
   expect(status).toContain(m.realm_claim_review_help());
   expect(status).toContain(requestId);
@@ -279,7 +282,9 @@ test('claim approval and ban target forms keep confirmation, uncertain retry and
     },
     approve: async (input) => {
       reviewCalls.push(input);
-      return firstClaimReply ? ((firstClaimReply = false), { kind: 'unavailable' }) : { kind: 'approved', claim: claimReceipt };
+      return firstClaimReply
+        ? ((firstClaimReply = false), { kind: 'unavailable' })
+        : { kind: 'approved', claim: claimReceipt };
     },
   };
   let rootMounted = false;
@@ -374,7 +379,10 @@ test('claim approval and ban target forms keep confirmation, uncertain retry and
                 return { ok: false, reason: 'unavailable' };
               }
               page = {
-                items: [previousBan, { accountId: input.accountId, reason: input.reason, actor: accountId, at: approvedAt }],
+                items: [
+                  previousBan,
+                  { accountId: input.accountId, reason: input.reason, actor: accountId, at: approvedAt },
+                ],
                 next: 'ban-page-1',
               };
               return {
