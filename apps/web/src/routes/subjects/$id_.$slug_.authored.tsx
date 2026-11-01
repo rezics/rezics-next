@@ -74,10 +74,15 @@ function AuthoredRoute() {
   const { property } = Route.useSearch();
   const locale = getLocale();
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
-  const editorWork = useCatalogueLifetime('transport');
+  const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property]));
   const { state } = useSession();
-  const read = (field = property, session?: string) =>
-    loadAuthoredField({ data: editorRequest({ id, property: field, session }, editorWork), headers: csrfHeaders() });
+  const read = async (field = property, session?: string) => {
+    const result = await loadAuthoredField({
+      data: editorRequest({ id, property: field, session }, editorWork),
+      headers: csrfHeaders(),
+    });
+    return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
+  };
   const query = useQuery({
     queryKey: ['authored-field', id, property, locale, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),

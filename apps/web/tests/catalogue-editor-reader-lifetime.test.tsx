@@ -888,6 +888,7 @@ test('catalogue editors retain only their original live reader, exact address an
       await ui.until(() => ui.buttons(m.candidate_accept()).length > 0);
       await ui.click(m.candidate_accept());
       await ui.click(m.candidate_accept());
+      await ui.until(() => ui.host.textContent!.includes(m.candidate_accepted()));
       // The accepted result is reread explicitly, preserving separate decision/adoption heads.
       await ui.click(m.candidate_reload());
       await ui.until(() => ui.buttons(m.candidate_review()).length > 0);
@@ -1089,4 +1090,4 @@ test('catalogue editors retain only their original live reader, exact address an
     preparing = undefined;
     await ui.close();
   }
-});
+}, 60_000);

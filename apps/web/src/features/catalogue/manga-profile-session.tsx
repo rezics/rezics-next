@@ -89,8 +89,13 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const [open, setOpen] = useState(false);
   const o = { locale: locale as never };
-  const read = (property = 'schema:abstract', session?: string) =>
-    loadAuthoredField({ data: editorRequest({ id, property, session }, editorWork), headers: csrfHeaders() });
+  const read = async (property = 'schema:abstract', session?: string) => {
+    const result = await loadAuthoredField({
+      data: editorRequest({ id, property, session }, editorWork),
+      headers: csrfHeaders(),
+    });
+    return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
+  };
   const query = useQuery({
     queryKey: ['manga-authored', id, locale, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),

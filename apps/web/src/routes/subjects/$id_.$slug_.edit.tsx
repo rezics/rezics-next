@@ -84,8 +84,13 @@ function CorrectionRoute() {
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property, statement]));
   const { state } = useSession();
-  const read = () =>
-    readCorrection({ data: editorRequest({ id, property, statement }, editorWork), headers: csrfHeaders() });
+  const read = async () => {
+    const result = await readCorrection({
+      data: editorRequest({ id, property, statement }, editorWork),
+      headers: csrfHeaders(),
+    });
+    return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
+  };
   const query = useQuery({
     queryKey: ['statement-editor', id, property, statement, locale, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),

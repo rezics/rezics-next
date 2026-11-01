@@ -25,8 +25,13 @@ import type { LiteraryCommand } from './literary-profile';
 function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
-  const read = (property?: string, session?: string) =>
-    loadAuthoredField({ data: editorRequest({ id, property, session }, editorWork), headers: csrfHeaders() });
+  const read = async (property?: string, session?: string) => {
+    const result = await loadAuthoredField({
+      data: editorRequest({ id, property, session }, editorWork),
+      headers: csrfHeaders(),
+    });
+    return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
+  };
   const query = useQuery({
     queryKey: ['literary-authored', id, locale, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
