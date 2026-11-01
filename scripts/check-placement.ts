@@ -1,10 +1,11 @@
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export const PERFORMANCE_HOST_NAMES = ['a', 'b'] as const;
 const MAX_SMALL_UNIT_FILES = 12;
 const MAX_SMALL_UNIT_SOURCE_BYTES = 256 * 1024;
 const MAX_SMALL_UNIT_IMPORTS = 64;
+const SAFE_SMALL_UNIT_IMPORTS = new Set(['bun:test', 'node:test', 'node:assert', 'node:assert/strict']);
 
 export type CheckPlacement = {
   placement: 'local' | 'remote';
@@ -201,17 +202,6 @@ function isPureRootTypecheck(directory: string, script: string, source: string |
   );
 }
 
-function suspiciousImport(specifier: string): boolean {
-  return (
-    /(?:^|[/@.-])(?:playwright|vitest\/browser|storybook|browser|server|database)(?:[/@.-]|$)/i.test(specifier) ||
-    /^(?:node:)?(?:pg|postgres|mysql2?|sqlite3?|better-sqlite3|drizzle-orm|kysely|mongodb|ioredis|redis)(?:\/|$)/i.test(
-      specifier,
-    ) ||
-    /^(?:node:)?(?:child_process|cluster|dgram|http2?|https|net|tls|worker_threads)(?:\/|$)/i.test(specifier) ||
-    specifier.startsWith('@prisma/client')
-  );
-}
-
 export function environmentPrefixIsSafe(prefix: readonly string[]): boolean {
   const executableControls = new Set([
     'PATH',
@@ -258,10 +248,69 @@ function importsOf(source: string): string[] {
   return imports;
 }
 
+function pathIsInside(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel === '' || !(rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel));
+}
+
+/** Reject symlinked source parents and paths that resolve outside the physical checkout. */
+function isPhysicalSourcePath(root: string, path: string): boolean {
+  const absoluteRoot = resolve(root);
+  const absolutePath = resolve(path);
+  if (!pathIsInside(absoluteRoot, absolutePath)) return false;
+  try {
+    let current = absoluteRoot;
+    for (const segment of relative(absoluteRoot, absolutePath).split(sep).filter(Boolean)) {
+      current = join(current, segment);
+      if (lstatSync(current).isSymbolicLink()) return false;
+    }
+    return pathIsInside(realpathSync(absoluteRoot), realpathSync(absolutePath));
+  } catch {
+    return false;
+  }
+}
+
+function configFileExistsOrIsUnknown(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    return (error as { code?: string }).code !== 'ENOENT';
+  }
+}
+
+/**
+ * Bun's project bunfig can preload code for the runtime or test runner. Until TOML config is verified,
+ * any bunfig on an effective source path is opaque. Inherited NODE_OPTIONS and BUN_OPTIONS can also
+ * inject runtime flags, so neither is accepted for local unit placement.
+ */
+function hasOpaqueTestRuntimeConfiguration(root: string, start: string): boolean {
+  const absoluteRoot = resolve(root);
+  let directory = resolve(start);
+  if (!isPhysicalSourcePath(absoluteRoot, directory)) return true;
+  if (process.env.NODE_OPTIONS?.trim() || process.env.BUN_OPTIONS?.trim()) return true;
+  while (pathIsInside(absoluteRoot, directory)) {
+    if (configFileExistsOrIsUnknown(join(directory, 'bunfig.toml'))) return true;
+    if (directory === absoluteRoot) return false;
+    const parent = dirname(directory);
+    if (parent === directory) return true;
+    directory = parent;
+  }
+  return true;
+}
+
 function smallUnitFile(root: string, file: string, seen: Set<string>): boolean {
   const absolute = resolve(file);
   const rel = relative(root, absolute);
-  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) || isNativeStackPath(absolute)) return false;
+  if (
+    rel === '..' ||
+    rel.startsWith(`..${sep}`) ||
+    isAbsolute(rel) ||
+    isNativeStackPath(absolute) ||
+    !isPhysicalSourcePath(root, absolute) ||
+    hasOpaqueTestRuntimeConfiguration(root, dirname(absolute))
+  )
+    return false;
   if (seen.has(absolute)) return true;
   if (seen.size >= MAX_SMALL_UNIT_IMPORTS) return false;
   seen.add(absolute);
@@ -275,16 +324,19 @@ function smallUnitFile(root: string, file: string, seen: Set<string>): boolean {
     return false;
   }
   if (
-    /\b(?:Bun\.(?:serve|spawn|spawnSync|listen)|Deno\.serve|chromium\.launch|firefox\.launch|webkit\.launch|createServer\s*\(|fetch\s*\(|new\s+Worker\s*\()/.test(
+    /\b(?:Bun\.(?:serve|spawn|spawnSync|listen|sql|file|write|connect)|Deno\.(?:serve|Command|connect|listen)|process\.(?:dlopen|binding|kill|exit|abort)|chromium\.launch|firefox\.launch|webkit\.launch|createServer\s*\(|fetch\s*\(|new\s+(?:Worker|WebSocket|EventSource)\s*\()/.test(
       source,
     )
   )
     return false;
   if (/\b(?:import|require)\s*\(\s*(?!['"])/.test(source)) return false;
   const imports = importsOf(source);
-  if (imports.some((specifier) => suspiciousImport(specifier))) return false;
+  if (imports.length > MAX_SMALL_UNIT_IMPORTS) return false;
   for (const specifier of imports) {
-    if (!specifier.startsWith('.')) continue;
+    if (!/^(?:\.{1,2})(?:\/|$)/.test(specifier)) {
+      if (!SAFE_SMALL_UNIT_IMPORTS.has(specifier)) return false;
+      continue;
+    }
     const target = resolve(absolute, '..', specifier);
     const candidates = /\.[cm]?[jt]sx?$/.test(target)
       ? [target]
@@ -304,7 +356,7 @@ function smallUnitFile(root: string, file: string, seen: Set<string>): boolean {
 function hasExplicitTestHarness(file: string): boolean {
   try {
     const source = readFileSync(file, 'utf8');
-    return /\b(?:from\s*|import\s*\(|require\s*\()\s*['"](?:bun:test|node:test)['"]/.test(source);
+    return importsOf(source).some((specifier) => specifier === 'bun:test' || specifier === 'node:test');
   } catch {
     return false;
   }
@@ -314,7 +366,7 @@ function testFilesAreSmall(args: readonly string[], cwd: string, root: string): 
   let directory = cwd;
   const files: string[] = [];
   const selectors = new Set(['-t', '--test-name-pattern']);
-  const preloadOptions = new Set(['--preload', '--require', '-r']);
+  const preloadOptions = new Set(['--preload', '--require', '--import', '-r']);
   const valueOptions = new Set([
     '--bail',
     '--coverage-dir',
@@ -344,9 +396,11 @@ function testFilesAreSmall(args: readonly string[], cwd: string, root: string): 
       const inlineValue = separator >= 0;
       if (selectors.has(option) || valueOptions.has(option) || preloadOptions.has(option)) {
         const value = inlineValue ? argument.slice(separator + 1) : args[index + 1];
-        if (value === undefined) return false;
+        if (value === undefined || value.length === 0) return false;
         if (!inlineValue) index += 1;
         if (preloadOptions.has(option)) return false;
+      } else {
+        return false;
       }
       continue;
     }
@@ -358,6 +412,7 @@ function testFilesAreSmall(args: readonly string[], cwd: string, root: string): 
     return false;
   }
   if (files.length === 0 || files.length > MAX_SMALL_UNIT_FILES || isNativeStackPath(directory)) return false;
+  if (hasOpaqueTestRuntimeConfiguration(root, directory)) return false;
   const seen = new Set<string>();
   return files.every((file) => hasExplicitTestHarness(file) && smallUnitFile(root, file, seen));
 }
