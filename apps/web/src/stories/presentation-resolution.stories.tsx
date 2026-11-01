@@ -8,9 +8,10 @@ import {
   type CompositionDocument,
   type PresentationProfile,
 } from '@rezics/composition';
-import { CurationView } from '../features/pages/curate-view';
+import { PresentationViewEditor } from '../features/pages/curate-view-editor';
 import type { PresentationPreview } from '../features/pages/presentation-preview';
-import { PresentationPreviewContext } from '../features/pages/presentation-preview-view';
+import { PresentationPreviewPanel } from '../features/pages/presentation-preview-view';
+import type { PublicationTransport } from '../features/pages/curation-publish';
 import { withTemplate } from '../features/pages/curate';
 import recorded from '../kernel/recorded/subject.json';
 import { m } from '../paraglide/messages.js';
@@ -90,12 +91,21 @@ function ConnectedCuration({
           },
         )
       : published;
+  const initial = { ok: true as const, reader: subject, profile: draft, digest, head };
+  const transport: PublicationTransport = {
+    read: async () => initial,
+    publish: async () => ({ ok: false, reason: 'forbidden' }),
+  };
   return (
     <PatternStory visitor="Signed In" path="/curate/presentation">
       <div className="mx-auto max-w-6xl p-4 sm:p-8">
-        <PresentationPreviewContext.Provider value={{ initial: result, read: async () => result }}>
-          <CurationView initial={{ ok: true, profile: draft, digest, head }} />
-        </PresentationPreviewContext.Provider>
+        <PresentationViewEditor
+          initial={initial}
+          observedSession={{ state: 'signed-in', subject }}
+          locale={locale}
+          transport={transport}
+          preview={<PresentationPreviewPanel locale={locale} read={async () => result} initial={result} />}
+        />
       </div>
     </PatternStory>
   );
