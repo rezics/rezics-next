@@ -46,18 +46,30 @@ type OrderPageProps = {
 export function OrderPage(props: OrderPageProps) {
   const locale = getLocale();
   const address = JSON.stringify([props.order.id, props.order.offerId, locale]);
-  const session = useBuyerCurrentOrigin('order.get', JSON.stringify([address, props.order.canReconcile === true]));
+  const session = useBuyerCurrentOrigin(
+    'order.get',
+    JSON.stringify([address, props.order.canReconcile === true]),
+    address,
+  );
   const benefit = useBuyerCurrentOrigin('entitlement.get', address);
-  return <OrderReceipt key={props.order.id} {...props} session={session} benefit={benefit} />;
+  // Keep the bound across viewer, admission and address ABA, including revisiting an order.
+  const budgets = useRef(new Map<string, { polls: { current: number }; accepted: boolean }>());
+  let budget = budgets.current.get(props.order.id);
+  if (!budget) {
+    budget = { polls: { current: 0 }, accepted: false };
+    budgets.current.set(props.order.id, budget);
+  }
+  return <OrderReceipt key={props.order.id} {...props} session={session} benefit={benefit} budget={budget} />;
 }
 
 function OrderReceipt(
   props: OrderPageProps & {
     session: ReturnType<typeof useBuyerCurrentOrigin>;
     benefit: ReturnType<typeof useBuyerCurrentOrigin>;
+    budget: { polls: { current: number }; accepted: boolean };
   },
 ) {
-  const { session, benefit } = props;
+  const { session, benefit, budget } = props;
   const [loaded, setLoaded] = useState(props.order);
   const [order, setOrder] = useState(props.order);
   if (loaded !== props.order) {
@@ -75,11 +87,19 @@ function OrderReceipt(
     accessOrigin = benefit.origin.isCurrent() ? benefit.origin : null;
     setAccess({ loaded: props.order, origin: accessOrigin });
   }
-  const [gaveUp, setGaveUp] = useState(false);
-  // Admission/session changes retire work, but cannot replenish this loaded order's read allowance.
-  const polls = useRef(0);
-  // The enqueue addresses the order ID, so even an offer/address ABA cannot repeat its accepted command.
-  const enqueue = useRef({ accepted: false });
+  const [gaveUp, setGaveUp] = useState(budget.polls.current >= recheckLimit);
+  // The command belongs to the viewer/address, independently of each admission read.
+  const newCommand = () => ({
+    operation: null as ReturnType<typeof createReconciliationRequest> | null,
+    dispatch: null as { origin: BuyerCurrentOrigin; send: ReconciliationSender } | null,
+    phase: (budget.accepted ? 'queued' : 'ready') as ReconciliationPhase,
+  });
+  const [enrolled, setEnrolled] = useState(() => ({ owner: session.intent, command: newCommand() }));
+  let command = enrolled.command;
+  if (enrolled.owner !== session.intent) {
+    command = newCommand();
+    setEnrolled({ owner: session.intent, command });
+  }
   return (
     <OrderLifetime
       key={session.origin.id}
@@ -91,11 +111,13 @@ function OrderReceipt(
       origin={session.origin}
       benefitOrigin={accessOrigin}
       canUseBenefit={!benefit.hydrated || accessOrigin?.isCurrent() === true}
+      hydrated={session.hydrated}
       canReadOrder={session.admitted}
       signedIn={session.state === 'signed-in' && !!session.subject}
       csrfToken={session.csrfToken}
-      polls={polls}
-      enqueue={enqueue.current}
+      polls={budget.polls}
+      enqueue={budget}
+      command={command}
     />
   );
 }
@@ -108,6 +130,7 @@ function OrderLifetime({
   checkout,
   reconcile,
   canReadOrder,
+  hydrated,
   signedIn,
   csrfToken,
   polls,
@@ -115,11 +138,13 @@ function OrderLifetime({
   benefitOrigin,
   canUseBenefit,
   enqueue,
+  command,
 }: OrderPageProps & {
   setOrder: Dispatch<SetStateAction<OrderPageData>>;
   gaveUp: boolean;
   setGaveUp: Dispatch<SetStateAction<boolean>>;
   canReadOrder: boolean;
+  hydrated: boolean;
   signedIn: boolean;
   csrfToken: string | null;
   polls: { current: number };
@@ -127,25 +152,27 @@ function OrderLifetime({
   benefitOrigin: BuyerCurrentOrigin | null;
   canUseBenefit: boolean;
   enqueue: { accepted: boolean };
+  command: {
+    operation: ReturnType<typeof createReconciliationRequest> | null;
+    dispatch: { origin: BuyerCurrentOrigin; send: ReconciliationSender } | null;
+    phase: ReconciliationPhase;
+  };
 }) {
   const order = initial;
-  const [reconciliation, setReconciliation] = useState<ReconciliationPhase>(enqueue.accepted ? 'queued' : 'ready');
+  const [reconciliation, setReconciliation] = useState<ReconciliationPhase>(() =>
+    enqueue.accepted ? 'queued' : command.phase === 'refreshing' ? 'retry' : command.phase,
+  );
   const [refreshQueued, setRefreshQueued] = useState(enqueue.accepted);
-  const operation = useRef<ReturnType<typeof createReconciliationRequest> | null>(null);
   const phase = useRef<ReconciliationPhase>(reconciliation);
   const lifetime = useRef({ active: false });
-  // Component cleanup complements the synchronous cache/address origin guard.
   useLayoutEffect(() => {
-    const current = { active: true };
-    lifetime.current = current;
+    const episode = { active: true };
+    lifetime.current = episode;
     return () => {
-      current.active = false;
-      operation.current = null;
+      episode.active = false;
     };
   }, []);
   const current = () => lifetime.current.active && origin.isCurrent();
-  const sender = useRef(reconcile);
-  sender.current = reconcile;
   async function checkStatus() {
     if (
       !current() ||
@@ -157,22 +184,30 @@ function OrderLifetime({
       ['refreshing', 'queued', 'denied', 'conflict'].includes(phase.current)
     )
       return;
-    operation.current ??= createReconciliationRequest(initial.id, (intent) => {
-      const token = origin.credential();
-      if (!current() || !token) return Promise.resolve({ kind: 'unavailable' });
-      return sender.current
-        ? sender.current(intent)
-        : requestOrderReconciliation({ data: intent, headers: { 'X-CSRF-Token': token } });
+    command.dispatch = {
+      origin,
+      send:
+        reconcile ??
+        ((intent) => {
+          const token = origin.credential();
+          if (!current() || !token) return Promise.resolve({ kind: 'unavailable' });
+          return requestOrderReconciliation({ data: intent, headers: { 'X-CSRF-Token': token } });
+        }),
+    };
+    command.operation ??= createReconciliationRequest(initial.id, (intent) => {
+      const dispatch = command.dispatch;
+      if (!dispatch?.origin.isCurrent()) return Promise.resolve({ kind: 'unavailable' });
+      return dispatch.send(intent);
     });
-    phase.current = 'refreshing';
+    command.phase = phase.current = 'refreshing';
     setReconciliation('refreshing');
-    const result = await operation.current();
-    if (!current() || !result) return;
-    phase.current = result.kind;
-    setReconciliation(result.kind);
-    if (result.kind === 'queued') {
+    const result = await command.operation();
+    if (!current()) return;
+    command.phase = phase.current = result?.kind ?? 'retry';
+    setReconciliation(phase.current);
+    if (result?.kind === 'queued') {
       enqueue.accepted = true;
-      setOrder((value) => (current() ? { ...value, entitlement: { kind: 'refresh' }, canUseBenefit: false } : value));
+      // Reconciliation enqueue is not settlement or current-access evidence.
       setRefreshQueued(true);
     }
   }
@@ -346,6 +381,7 @@ function OrderLifetime({
             locale={locale}
             active={
               canUseBenefit &&
+              (!hydrated || benefitOrigin?.isCurrent() === true) &&
               order.canUseBenefit === true &&
               order.entitlement.kind === 'current' &&
               order.entitlement.active

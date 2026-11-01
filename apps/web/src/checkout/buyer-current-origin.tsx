@@ -1,33 +1,57 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
-import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useRouter } from '@tanstack/react-router';
+import { createContext, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { operationIsAdmitted, useOperation } from '../kernel/exposure';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { viewerExposureLifetime, viewerExposureQuery, type ViewerExposure } from '../kernel/viewer-exposure';
+import { AnonymousSessionContext, sessionQuery, useSession } from '../session/query';
 
-type Operation = 'order.list' | 'order.get' | 'entitlement.get';
+type Operation = 'order.create' | 'order.list' | 'order.get' | 'entitlement.get';
 type Observation = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   subject: string | null;
   csrfToken: string | null;
   admitted: boolean;
+  readId?: number | undefined;
 };
 
-function observe(client: QueryClient, operation: Operation): Observation {
+function observe(client: QueryClient, operation: Operation, anonymous: boolean): Observation {
   const session = client.getQueryState(sessionQuery.queryKey);
-  const exposure = client.getQueryState(exposureQuery.queryKey);
   const data = session?.status === 'success' ? session.data : undefined;
+  const state = anonymous ? 'signed-out' : session?.status === 'error' ? 'unavailable' : (data?.state ?? 'unknown');
+  const subject = state === 'signed-in' && typeof data?.subject === 'string' && data.subject ? data.subject : null;
+  const csrfToken =
+    state === 'signed-in' && typeof data?.csrfToken === 'string' && data.csrfToken ? data.csrfToken : null;
+  if (state === 'signed-out') {
+    const exposure = client.getQueryState<readonly string[]>(['exposure', 'anonymous']);
+    return {
+      state,
+      subject: null,
+      csrfToken: null,
+      admitted: exposure?.status === 'success' && operationIsAdmitted(operation, exposure.data),
+    };
+  }
+  const lifetime = viewerExposureLifetime(client).getSnapshot();
+  const enrolled = lifetime.state === 'signed-in' ? lifetime.observation : undefined;
+  const exposure = enrolled ? client.getQueryState<ViewerExposure>(viewerExposureQuery(enrolled).queryKey) : undefined;
   return {
-    state: session?.status === 'error' ? 'unavailable' : (data?.state ?? 'unknown'),
-    subject: data?.state === 'signed-in' ? data.subject || null : null,
-    csrfToken: data?.state === 'signed-in' ? data.csrfToken || null : null,
-    admitted: exposure?.status === 'success' && operationIsAdmitted(operation, exposure.data),
+    state,
+    subject,
+    csrfToken,
+    readId: enrolled?.id,
+    admitted:
+      !!subject &&
+      !!csrfToken &&
+      enrolled?.subject === subject &&
+      exposure?.status === 'success' &&
+      exposure.data?.subject === enrolled.subject &&
+      operationIsAdmitted(operation, exposure.data.admitted),
   };
 }
 
-// Nonempty same-viewer token rotation is healthy. Credential loss is a lifetime boundary.
 const identity = (value: Observation) =>
-  JSON.stringify([value.state, value.subject, !!value.csrfToken, value.admitted]);
+  JSON.stringify([value.state, value.subject, !!value.csrfToken, value.admitted, value.readId]);
 
-/** Local buyer workflow authority. Cache events retire an origin before React can commit a replacement. */
+/** A read episode retires synchronously, including cache ABA before React commits. */
 export class BuyerCurrentOrigin {
   readonly id = crypto.randomUUID();
   readonly observed: Observation;
@@ -42,13 +66,22 @@ export class BuyerCurrentOrigin {
   constructor(
     private read: () => Observation,
     private client?: QueryClient,
+    // Intent ownership outlives unavailable/closed reads, but never a replacement viewer or address.
+    private intent = false,
   ) {
     this.observed = read();
     this.identity = identity(this.observed);
   }
 
   observe = () => {
-    if (!this.retired && identity(this.read()) !== this.identity) this.retire();
+    if (this.retired) return;
+    const next = this.read();
+    const replaced = this.intent
+      ? (!!next.subject && next.subject !== this.observed.subject) ||
+        (next.state === 'signed-out' && this.observed.state !== 'signed-out') ||
+        (this.observed.state === 'signed-out' && next.state === 'signed-in')
+      : identity(next) !== this.identity;
+    if (replaced) this.retire();
   };
 
   isObserved = () => {
@@ -61,7 +94,7 @@ export class BuyerCurrentOrigin {
     !!this.observed.subject &&
     !!this.observed.csrfToken &&
     this.observed.admitted;
-
+  isPublic = () => this.isObserved() && this.observed.state === 'signed-out' && this.observed.admitted;
   credential = () => (this.isCurrent() ? this.read().csrfToken : null);
   snapshot = () => this.retired;
   retire = (notify = true) => {
@@ -80,7 +113,6 @@ export class BuyerCurrentOrigin {
       this.cancellations.delete(cancel);
     };
   };
-
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -88,24 +120,27 @@ export class BuyerCurrentOrigin {
     };
   };
 
-  // Observe in layout, before children's passive query dispatch and polling effects.
   mount = () => {
     this.users++;
     this.mounted = true;
     if (!this.retired && !this.release && this.client) {
-      this.release = this.client.getQueryCache().subscribe(({ query }) => {
-        const key = query.queryKey;
-        if (
-          (key.length === 1 && key[0] === 'session') ||
-          (key.length === 2 && key[0] === 'exposure' && key[1] === 'viewer')
-        )
-          this.observe();
+      // Enroll in the installed lifetime, rather than treating its scoped key as a global cache.
+      const lifetime = viewerExposureLifetime(this.client).subscribe(this.observe);
+      const cache = this.client.getQueryCache().subscribe(({ query }) => {
+        if (query.queryKey[0] === 'session' || query.queryKey[0] === 'exposure') this.observe();
       });
+      if (this.retired) {
+        cache();
+        lifetime();
+      } else
+        this.release = () => {
+          cache();
+          lifetime();
+        };
     }
     this.observe();
     return () => {
       this.users--;
-      // StrictMode may reconnect the same observation. A retired observation is never reactivated.
       queueMicrotask(() => {
         if (this.users === 0) this.retire();
       });
@@ -113,12 +148,22 @@ export class BuyerCurrentOrigin {
   };
 }
 
+const previewAnonymous = createContext(false);
 const subscribe = () => () => {};
 const serverSnapshot = () => false;
 
-/** Existing hooks prepare the same session/exposure reads; this adds no transport or expected viewer. */
-export function useBuyerCurrentOrigin(operation: Operation, address: string) {
+/** Hooks prepare the installed reads; provider-free examples cannot establish production authority. */
+export function useBuyerCurrentOrigin(
+  operation: Operation,
+  address: string,
+  intentAddress = address,
+  routeMatches?: (pathname: string) => boolean,
+) {
   const client = useContext(QueryClientContext);
+  const anonymous = useContext(AnonymousSessionContext ?? previewAnonymous);
+  const router = useRouter({ warn: false });
+  const navigation = useRef({ router, pathname: router?.state.location.pathname });
+  if (navigation.current.router !== router) navigation.current = { router, pathname: router?.state.location.pathname };
   const session = useSession();
   const admitted = useOperation(operation);
   const hydrated = useSyncExternalStore(subscribe, () => true, serverSnapshot);
@@ -129,24 +174,64 @@ export function useBuyerCurrentOrigin(operation: Operation, address: string) {
     csrfToken: session.csrfToken,
     admitted,
   };
-  // Only provider-free component examples use hook inputs; actual pages always observe the cache itself.
-  const read = () => (client ? observe(client, operation) : fallback.current);
+  const read = () => {
+    const value = client ? observe(client, operation, anonymous) : fallback.current;
+    return router && routeMatches && !routeMatches(navigation.current.pathname ?? '')
+      ? { ...value, admitted: false }
+      : value;
+  };
   const view = read();
   const key = JSON.stringify([address, identity(view)]);
   const [scope, setScope] = useState(() => ({
     client,
+    anonymous,
     key,
+    address: intentAddress,
     generation: 0,
     origin: new BuyerCurrentOrigin(read, client),
+    intent: new BuyerCurrentOrigin(read, client, true),
   }));
   scope.origin.observe();
+  scope.intent.observe();
   let current = scope;
-  if (scope.client !== client || scope.key !== key || scope.origin.retired) {
+  const replaceIntent =
+    scope.client !== client || scope.anonymous !== anonymous || scope.address !== intentAddress || scope.intent.retired;
+  if (replaceIntent || scope.key !== key || scope.origin.retired) {
     scope.origin.retire(false);
-    current = { client, key, generation: scope.generation + 1, origin: new BuyerCurrentOrigin(read, client) };
+    if (replaceIntent) scope.intent.retire(false);
+    current = {
+      client,
+      anonymous,
+      key,
+      address: intentAddress,
+      generation: scope.generation + 1,
+      origin: new BuyerCurrentOrigin(read, client),
+      intent: replaceIntent ? new BuyerCurrentOrigin(read, client, true) : scope.intent,
+    };
     setScope(current);
   }
   useLayoutEffect(() => current.origin.mount(), [current.origin]);
+  useLayoutEffect(() => current.intent.mount(), [current.intent]);
+  useLayoutEffect(() => {
+    const href = router?.state.location.href;
+    return router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      navigation.current.pathname = toLocation.pathname;
+      if (toLocation.href !== href) {
+        current.origin.retire();
+        current.intent.retire();
+      }
+    });
+  }, [router, current.origin, current.intent]);
   useSyncExternalStore(current.origin.subscribe, current.origin.snapshot, serverSnapshot);
-  return { ...view, hydrated, origin: current.origin, generation: current.generation, seed: current.generation === 0 };
+  useSyncExternalStore(current.intent.subscribe, current.intent.snapshot, serverSnapshot);
+  const firstRead = useRef<BuyerCurrentOrigin | null>(null);
+  if (!firstRead.current && current.origin.isCurrent()) firstRead.current = current.origin;
+  return {
+    ...view,
+    hydrated,
+    origin: current.origin,
+    intent: current.intent,
+    generation: current.generation,
+    seed: !firstRead.current || firstRead.current === current.origin,
+  };
 }

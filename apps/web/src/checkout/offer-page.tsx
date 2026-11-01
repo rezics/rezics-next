@@ -1,10 +1,7 @@
-import { QueryClientContext } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
-import { operationIsAdmitted, useOperation } from '../kernel/exposure';
-import { AnonymousSessionContext, exposureQuery, sessionQuery, useSession } from '../session/query';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useRef, useState } from 'react';
+import { useBuyerCurrentOrigin, type BuyerCurrentOrigin } from './buyer-current-origin';
 import { m } from '../paraglide/messages.js';
 import type { OfferPageData } from './offer';
 import { PageHeading } from '../shell/page-heading';
@@ -15,111 +12,18 @@ import { isMoneyUnit } from './money-schema';
 import { createOfferRequest, type AcquisitionProblem } from './offer-recovery';
 
 type Phase = 'ready' | 'submitting' | 'retry' | 'terms-changed' | 'unavailable' | 'closed' | 'existing';
-type Authority = ReturnType<typeof useSession> & { admitted: boolean };
-type Origin = { isCurrent: () => boolean; credential: () => string | null };
-const subscribe = () => () => {};
-const anonymousExposureKey = ['exposure', 'anonymous'] as const;
-const offerAddress = (pathname: string) => pathname.match(/(?:^|\/)offers\/([^/]+)\/?$/)?.[1] ?? null;
-const identity = (offerId: string, authority: Authority) =>
-  JSON.stringify([
-    offerId,
-    authority.state,
-    authority.subject ?? null,
-    authority.admitted,
-    Boolean(authority.csrfToken),
-  ]);
+type Authority = ReturnType<typeof useBuyerCurrentOrigin>;
 
-export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
-  const session = useSession();
-  const admitted = useOperation('order.create');
-  const client = useContext(QueryClientContext);
-  const router = useRouter({ warn: false });
-  const anonymous = useContext(AnonymousSessionContext);
-  const address = useRef({ router, id: router ? offerAddress(router.state.location.pathname) : observedOffer.id });
-  if (address.current.router !== router)
-    address.current = { router, id: router ? offerAddress(router.state.location.pathname) : observedOffer.id };
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
+export function OfferPage({ offer }: { offer: OfferPageData }) {
+  const address = JSON.stringify([offer.id, getLocale()]);
+  const authority = useBuyerCurrentOrigin(
+    'order.create',
+    address,
+    address,
+    (pathname) => pathname.match(/(?:^|\/)offers\/([^/]+)\/?$/)?.[1] === offer.id,
   );
-  function authority(): Authority {
-    // Server HTML and standalone previews keep the public terms without inferring a viewer.
-    if (!hydrated || !client) return { ...session, admitted };
-    const sessionState = client.getQueryState<ReturnType<typeof useSession>>(sessionQuery.queryKey);
-    const current = anonymous
-      ? { state: 'signed-out' as const, subject: null, csrfToken: null }
-      : ((sessionState?.status === 'success' ? sessionState.data : undefined) ?? {
-          state: 'unknown' as const,
-          csrfToken: null,
-        });
-    const exposure = client.getQueryState<string[]>(
-      current.state === 'signed-out' ? anonymousExposureKey : exposureQuery.queryKey,
-    );
-    return {
-      ...current,
-      admitted:
-        current.state !== 'unknown' &&
-        current.state !== 'unavailable' &&
-        (!router || address.current.id === observedOffer.id) &&
-        operationIsAdmitted('order.create', exposure?.status === 'success' ? exposure.data : undefined),
-    };
-  }
-  const currentAuthority = authority();
-  const signature = identity(observedOffer.id, currentAuthority);
-  const [scope, setScope] = useState(() => ({
-    signature,
-    client,
-    anonymous,
-    generation: 0,
-    retired: false,
-    mounted: false,
-  }));
-  let current = scope;
-  if (scope.signature !== signature || scope.client !== client || scope.anonymous !== anonymous || scope.retired) {
-    // Address and rendered authority replacement retire retained handlers before commit.
-    scope.retired = true;
-    current = { signature, client, anonymous, generation: scope.generation + 1, retired: false, mounted: false };
-    setScope(current);
-  }
-  function isCurrent() {
-    if (current.retired || !current.mounted) return false;
-    if (identity(observedOffer.id, authority()) !== current.signature) current.retired = true;
-    return !current.retired;
-  }
-  const [, renderRetired] = useState(0);
-  useLayoutEffect(() => {
-    current.mounted = true;
-    const observe = () => {
-      if (!current.retired && !isCurrent()) renderRetired((version) => version + 1);
-    };
-    // Cache notifications are synchronous: A -> B -> A retires A even if React batches
-    // every notification into one render. No session/exposure IO is added here.
-    const unsubscribe = client?.getQueryCache().subscribe(({ query }) => {
-      if (query.queryKey[0] === 'session' || query.queryKey[0] === 'exposure') observe();
-    });
-    const navigation = router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
-      address.current.id = offerAddress(toLocation.pathname);
-      observe();
-    });
-    observe();
-    return () => {
-      current.mounted = false;
-      unsubscribe?.();
-      navigation?.();
-    };
-  }, [current, router]);
-  const origin: Origin = {
-    isCurrent,
-    credential: () => (isCurrent() ? authority().csrfToken : null),
-  };
   return (
-    <OfferPurchase
-      key={current.generation}
-      observedOffer={observedOffer}
-      authority={currentAuthority}
-      origin={origin}
-    />
+    <OfferPurchase key={authority.intent.id} observedOffer={offer} authority={authority} origin={authority.origin} />
   );
 }
 
@@ -130,13 +34,20 @@ function OfferPurchase({
 }: {
   observedOffer: OfferPageData;
   authority: Authority;
-  origin: Origin;
+  origin: BuyerCurrentOrigin;
 }) {
   const submittedOffer = useRef<OfferPageData | null>(null);
+  const dispatch = useRef<BuyerCurrentOrigin | null>(null);
   const submission = useRef<ReturnType<typeof createOfferRequest> | null>(null);
   const offer = submittedOffer.current ?? observedOffer;
   const [submissionPhase, setPhase] = useState<Phase>('ready');
-  const phase = submittedOffer.current ? submissionPhase : offer.state === 'delisted' ? 'unavailable' : 'ready';
+  const phase = submittedOffer.current
+    ? submissionPhase === 'submitting' && !dispatch.current?.isCurrent()
+      ? 'retry'
+      : submissionPhase
+    : offer.state === 'delisted'
+      ? 'unavailable'
+      : 'ready';
   const [existing, setExisting] = useState<AcquisitionProblem | null>(null);
   const [fullTitlesOpen, setFullTitlesOpen] = useState(false);
   const termsKnown =
@@ -147,31 +58,47 @@ function OfferPurchase({
       (authority.state === 'signed-in' && Boolean(authority.subject) && Boolean(authority.csrfToken)));
 
   async function start() {
-    if (!origin.isCurrent() || !canStart || !termsKnown || (phase !== 'ready' && phase !== 'retry')) return;
+    if (
+      (!origin.isCurrent() && !origin.isPublic()) ||
+      !canStart ||
+      !termsKnown ||
+      (phase !== 'ready' && phase !== 'retry')
+    )
+      return;
     if (authority.state === 'signed-out') {
       const returnTo = `${window.location.pathname}${window.location.search}`;
       window.location.assign(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
       return;
     }
     // A loader refresh cannot replace consent while the original creation outcome is uncertain.
+    dispatch.current = origin;
     submittedOffer.current ??= offer;
     submission.current ??= createOfferRequest(
       { offerId: offer.id, expectedOfferRevision: offer.revision, idempotencyKey: offer.idempotencyKey },
-      (intent) => {
-        const credential = origin.credential();
+      async (intent) => {
+        const episode = dispatch.current;
+        const credential = episode?.credential();
         if (!credential) throw new Error('Offer acquisition origin retired');
-        return fetch('/checkout', {
+        const response = await fetch('/checkout', {
           method: 'POST',
           credentials: 'same-origin',
+          cache: 'no-store',
+          redirect: 'manual',
           headers: { 'content-type': 'application/json', 'x-csrf-token': credential },
           body: JSON.stringify(intent),
         });
+        if (!episode?.isCurrent()) throw new Error('Offer acquisition origin retired');
+        return response;
       },
     );
     setPhase('submitting');
     const result = await submission.current();
     // Dispatched writes can still commit; only their originating UI may consume the result.
-    if (!origin.isCurrent() || !result) return;
+    if (!origin.isCurrent()) return;
+    if (!result) {
+      setPhase('retry');
+      return;
+    }
     if (result.kind === 'checkout') {
       window.location.assign(result.url);
       return;

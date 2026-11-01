@@ -151,7 +151,7 @@ function EntitlementsRead<T extends Page>({
   }));
   // Mismatched results are ignored, including their completion state. Only this lifetime's
   // accepted responses or actual transport failures can replace its current presentation.
-  if (query.data && query.data !== display.observed) {
+  if ((!hydrated || origin.isCurrent()) && query.data && query.data !== display.observed) {
     setDisplay({
       observed: query.data,
       page: query.data.kind === 'accepted' ? query.data.value.page : ({ kind: 'unavailable' } as T),
@@ -162,7 +162,7 @@ function EntitlementsRead<T extends Page>({
   }, [origin, query.refetch]);
   return (
     <Presentation
-      page={display.page}
+      page={hydrated && !origin.isCurrent() ? ({ kind: 'preparing' } as T) : display.page}
       locale={address.locale}
       continuation={address.kind === 'list' && address.cursor !== null}
       retry={retry}

@@ -84,12 +84,14 @@ function CurrentOrdersRead({
       return value;
     },
     initialData,
+    refetchOnMount: !initialData,
     gcTime: 0,
     retry: false,
     throwOnError: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  if (hydrated && !origin.isCurrent()) return <PendingPage />;
   if (query.isError || (query.data && !matches(query.data, subject, address)))
     return isNotFound(query.error) ? (
       <NotFoundPage />
