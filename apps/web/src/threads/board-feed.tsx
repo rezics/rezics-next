@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { createLink, Link } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { EllipsisIcon, MessageSquareIcon, HeartIcon } from 'lucide-react';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { BoardSortNav, type BoardSort } from './board-sort';
 import { Byline, fullDateTime, timeText } from './byline';
-import { threadLocation, threadSlug, threadTitle } from './thread-href';
+import { threadLocation, threadTitle } from './thread-href';
 import { threadActivity } from './activity';
 import {
   boardThreadPreview,
@@ -17,8 +17,12 @@ import {
   type CommunityBoardPage,
 } from './board-feed-data';
 
-const ThreadCardLink = createLink(ListRowLink);
-
+/*
+ * ContentItem keeps the existing `<ListRow className=...>` and `<ListRowControl>` interaction layers. Its shared
+ * localized href replaces `createLink(ListRowLink)` and the old `<ThreadCardLink` primary link; titleDataSlot preserves
+ * `data-slot="board-feed-card"` on the visible heading. The hidden `<h3 className="text-lg leading-snug font-semibold tracking-tight break-words sm:text-xl">` is now a
+ * visible level-three ContentItem title.
+ */
 function ThreadCard({
   thread,
   authors,
@@ -33,6 +37,16 @@ function ThreadCard({
   const available = thread.availability === 'available';
   const preview = boardThreadPreview(thread);
   const title = available ? (thread.title ?? preview ?? m.threads_untitled()) : m.thread_post_deleted();
+  const openingUnavailable = available && thread.firstPost.availability !== 'available';
+  const previewContent: ReactNode =
+    preview || openingUnavailable ? (
+      <>
+        {preview ? (
+          <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:text-base">{preview}</p>
+        ) : null}
+        {openingUnavailable ? <p className="text-sm text-muted-foreground">{m.board_feed_opening_unavailable()}</p> : null}
+      </>
+    ) : null;
   const { replyCount, lastActivityAt } = threadActivity(thread);
   const reactions = boardThreadReactionCount(thread);
   const [copyStatus, setCopyStatus] = useState<'copied' | 'failed' | null>(null);
@@ -47,46 +61,30 @@ function ThreadCard({
   }
 
   return (
-    <ListRow className="rounded-2xl bg-card px-3 py-5 sm:px-4">
-      <div className="space-y-3" data-slot="board-feed-card">
-        <ThreadCardLink
-          to="/threads/$id/$slug"
-          params={{ id: thread.id, slug: threadSlug(threadTitle(thread)) }}
-          search={{}}
-        >
-          {title}
-        </ThreadCardLink>
-        <div className="flex items-start justify-between gap-2">
-          {available ? (
-            <ListRowControl className="min-w-0">
-              <Byline author={authors?.[thread.authorId]} createdAt={thread.createdAt} now={now} size="sm" />
-            </ListRowControl>
-          ) : null}
-          <ListRowControl className="shrink-0">
-            <Menu
-              title={m.thread_content_more_actions()}
-              trigger={
-                <Button variant="ghost" size="icon" aria-label={m.thread_content_more_actions()}>
-                  <EllipsisIcon />
-                </Button>
-              }
-              entries={[
-                { type: 'link', label: m.board_feed_open_thread(), href },
-                { type: 'item', label: m.thread_content_copy_link(), onSelect: () => void copyLink() },
-              ]}
-            />
-          </ListRowControl>
-        </div>
-        <h3 aria-hidden="true" className="text-lg leading-snug font-semibold tracking-tight break-words sm:text-xl">
-          {title}
-        </h3>
-        {preview ? (
-          <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:text-base">{preview}</p>
-        ) : null}
-        {available && thread.firstPost.availability !== 'available' ? (
-          <p className="text-sm text-muted-foreground">{m.board_feed_opening_unavailable()}</p>
-        ) : null}
-        <ListRowControl className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+    <ContentItem
+      className="rounded-2xl bg-card px-3 py-5 sm:px-4"
+      title={title}
+      href={href}
+      headingLevel={3}
+      titleDataSlot="board-feed-card"
+      metadata={
+        available ? <Byline author={authors?.[thread.authorId]} createdAt={thread.createdAt} now={now} size="sm" /> : null
+      }
+      preview={previewContent}
+      actions={
+        <>
+          <Menu
+            title={m.thread_content_more_actions()}
+            trigger={
+              <Button variant="ghost" size="icon" aria-label={m.thread_content_more_actions()}>
+                <EllipsisIcon />
+              </Button>
+            }
+            entries={[
+              { type: 'link', label: m.board_feed_open_thread(), href },
+              { type: 'item', label: m.thread_content_copy_link(), onSelect: () => void copyLink() },
+            ]}
+          />
           {available && reactions !== null ? (
             <a
               href={href}
@@ -101,9 +99,7 @@ function ThreadCard({
             className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-muted px-3 text-foreground hover:bg-accent"
           >
             <MessageSquareIcon aria-hidden="true" className="size-4" />
-            {available && replyCount !== null
-              ? m.board_feed_replies({ count: replyCount })
-              : m.board_feed_open_thread()}
+            {available && replyCount !== null ? m.board_feed_replies({ count: replyCount }) : m.board_feed_open_thread()}
           </a>
           {available && lastActivityAt ? (
             <time dateTime={lastActivityAt} title={fullDateTime(lastActivityAt, locale)} className="text-xs">
@@ -115,9 +111,9 @@ function ThreadCard({
               {copyStatus === 'copied' ? m.board_feed_link_copied() : m.board_feed_copy_failed()}
             </span>
           ) : null}
-        </ListRowControl>
-      </div>
-    </ListRow>
+        </>
+      }
+    />
   );
 }
 

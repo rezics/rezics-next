@@ -32,6 +32,13 @@ export const Feed: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await view.findByRole('heading', { level: 1 });
+    const firstThread = threads.threads[0]!;
+    const title = firstThread.title!;
+    await expect(await view.findByRole('heading', { level: 3, name: title })).toBeVisible();
+    await expect(view.getByRole('link', { name: title })).toHaveAttribute(
+      'href',
+      expect.stringContaining(`/threads/${firstThread.id}/`),
+    );
     await expect(view.getByText('Flight notes Watch the baobabs')).toBeVisible();
     await expect(view.queryByRole('button', { name: m.realm_join() })).toBeNull();
   },

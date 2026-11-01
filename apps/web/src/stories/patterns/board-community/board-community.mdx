@@ -8,10 +8,13 @@ import * as Community from './board-community.stories';
 The board route uses `BoardCommunity` and `BoardFeed`: a banner fallback and initials, the native board title,
 optional Realm summary, current participation, sort links, disclosed opening text and supplied activity counts.
 The shared shell owns navigation. The About column follows the feed on a phone and sits alongside it on desktop.
-Each row reuses the existing batch author identity, shared byline, row overlay and adaptive overflow menu.
+Each Discussion row uses the shared `ContentItem` with a visible level-three title and a localized thread destination.
+Its supplied byline, disclosed preview, activity time and nullable counts remain in the row; author, reaction, reply and
+adaptive overflow controls keep separate targets above the primary link. Copy feedback remains local to its row.
 
 Plays open the actual thread and composer routes, change sort and continue the exact returned page. Overflow uses
-the shared dropdown or phone sheet. Use the same IDs at phone390/desktop1280, with locale and theme globals.
+the shared dropdown or phone sheet. Feed checks confirm the visible thread heading and localized primary route. Use
+the same IDs at phone390/desktop1280, with locale and theme globals.
 Loading, empty, error, protected and closed are separate states. SourceUnavailable removes optional Realm metadata,
 without creating Global authority. These recorded-response states do not prove native permissions or signing.
 
