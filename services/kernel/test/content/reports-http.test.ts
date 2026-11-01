@@ -540,7 +540,7 @@ describe('real migrated report HTTP and shared admission', () => {
     }
   });
 
-  test('the authorized default queue selects current status and advances sparse raw pages with selection-bound cursors', async () => {
+  test('The default authorized moderation Reports journey filters by current status and target type and pages in selected time order with selection-bound cursors, sparse-page honesty and private viewer isolation', async () => {
     await moderation(true);
     const bearer = await issue(moderator);
     const rows: ReportGrowthRow[] = Array.from({ length: 22 }, (_, index) => ({
@@ -553,6 +553,12 @@ describe('real migrated report HTTP and shared admission', () => {
       transactionId: randomUUID(),
       idempotencyKey: randomUUID(),
     }));
+    // Two equal timestamps require the report-id tie-break in both traversal directions.
+    const tied = rows.slice(0, 2).sort((left, right) => left.reportId.localeCompare(right.reportId));
+    rows[0] = tied[0]!;
+    rows[1] = tied[1]!;
+    rows[0]!.createdAt = '2026-01-01T00:00:00.000000Z';
+    rows[1]!.createdAt = rows[0]!.createdAt;
     await seedReportGrowth(db.admin, rows);
     await db.admin.query(
       `INSERT INTO content.board_report_candidate (route,board_id,report_route,report_id,target_kind,target_id,created_at)
@@ -573,9 +579,10 @@ describe('real migrated report HTTP and shared admission', () => {
     );
     // No candidate is rewritten: selection must use the now-resolved report, not projection state.
     await db.admin.query(
-      `UPDATE content.report SET outcome='dismissed',resolved_at=now(),resolved_by=$2
+      `UPDATE content.report SET outcome=CASE WHEN report_id=$4 THEN 'actioned' ELSE 'dismissed' END,
+         resolved_at=now(),resolved_by=$2,decision_id=CASE WHEN report_id=$4 THEN $5::uuid ELSE NULL END
        WHERE route=$1 AND report_id=ANY($3::uuid[])`,
-      [0x6234, moderator, rows.slice(2).map((row) => row.reportId)],
+      [0x6234, moderator, rows.slice(2).map((row) => row.reportId), rows[2]!.reportId, newId(0x4567)],
     );
     const sparse = await read('status=pending');
     expect(sparse.response.status).toBe(200);
@@ -600,6 +607,10 @@ describe('real migrated report HTTP and shared admission', () => {
     expect(oldestTail.body.reports.map((row: { id: string }) => row.id)).toEqual(
       rows.slice(20).map((row) => row.reportId),
     );
+    const oldestOne = await read('order=oldest&limit=1');
+    expect(oldestOne.body.reports.map((row: { id: string }) => row.id)).toEqual([rows[0]!.reportId]);
+    const oldestTwo = await read(`order=oldest&limit=1&cursor=${encodeURIComponent(oldestOne.body.next)}`);
+    expect(oldestTwo.body.reports.map((row: { id: string }) => row.id)).toEqual([rows[1]!.reportId]);
     // Explicit defaults and omission bind identically; each changed selector refuses.
     const omitted = await read();
     expect(
