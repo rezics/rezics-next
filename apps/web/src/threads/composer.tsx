@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -22,7 +23,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from './actions';
 import { checkDraftMediaStates, type DraftMediaState } from './media-state';
-import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from './upload';
+import { imageSources, replyImageLimit, UploadRefusal } from './upload';
 import { ReplyImageUploadRecovery, ReplyUploadRecoveryRefusal, type ReplyUploadTarget } from './media-upload-recovery';
 import { ExistingReviewNotice } from './write-prompts';
 import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
@@ -31,10 +32,66 @@ export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
 
+/** Cache notifications fence away/back changes even when React batches their renders. */
+function useComposerLifetime() {
+  const client = useContext(QueryClientContext);
+  const latestClient = useRef(client);
+  latestClient.current = client;
+  const [, renderRetired] = useState(false);
+  const [lifetime] = useState(() => {
+    const identity = () => {
+      const session = client?.getQueryData(sessionQuery.queryKey);
+      return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
+    };
+    const owner = identity();
+    const state = {
+      controller: new AbortController(),
+      retired: false,
+      retire() {
+        state.retired = true;
+        state.controller.abort();
+      },
+      current(signal = state.controller.signal) {
+        if (latestClient.current !== client || identity() !== owner) state.retire();
+        return !state.retired && !signal.aborted && signal === state.controller.signal;
+      },
+    };
+    return state;
+  });
+  useLayoutEffect(() => {
+    // Strict Effects may reconnect the mounted editor; old operation signals remain aborted.
+    if (!lifetime.retired && lifetime.controller.signal.aborted) lifetime.controller = new AbortController();
+    const observe = () => {
+      if (!lifetime.current()) renderRetired(true);
+    };
+    const unsubscribe = client?.getQueryCache().subscribe(observe);
+    const signingOut = (event: SubmitEvent) => {
+      const form = event.target;
+      if (event.defaultPrevented || !(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post') return;
+      const action = new URL(form.action, window.location.href);
+      if (action.origin === window.location.origin && action.pathname === '/auth/sign-out') {
+        lifetime.retire();
+        renderRetired(true);
+      }
+    };
+    document.addEventListener('submit', signingOut);
+    observe();
+    return () => {
+      unsubscribe?.();
+      document.removeEventListener('submit', signingOut);
+      lifetime.controller.abort();
+    };
+  }, [client, lifetime]);
+  return lifetime;
+}
+
+type ComposerLifetime = ReturnType<typeof useComposerLifetime>;
+
 function useComposerUpload(
   target: ReplyUploadTarget | undefined,
   owned: RefObject<Set<string>>,
   refusal: RefObject<UploadRefusal | null>,
+  lifetime: ComposerLifetime,
 ) {
   const client = useContext(QueryClientContext);
   const current = useRef(() => ({ target, session: null }) as import('./media-upload-recovery').ReplyUploadContext);
@@ -43,26 +100,66 @@ function useComposerUpload(
     return {
       target,
       session:
-        session?.state === 'signed-in' && session.subject && session.csrfToken
+        lifetime.current() && session?.state === 'signed-in' && session.subject && session.csrfToken
           ? { subject: session.subject, csrfToken: session.csrfToken }
           : null,
     };
   };
   const [recovery] = useState(() => new ReplyImageUploadRecovery(() => current.current()));
-  useEffect(() => {
+  const copies = useRef(new Map<string, { controller: AbortController; target: string; file?: File }>());
+  const removeCopy = (source: string) => {
+    copies.current.get(source)?.controller.abort();
+    copies.current.delete(source);
+  };
+  useLayoutEffect(() => {
     recovery.invalidate();
+    for (const [source, entry] of copies.current) if (entry.target !== JSON.stringify(target)) removeCopy(source);
   });
-  useEffect(() => () => recovery.clear(), [recovery]);
-  return async (file: File, signal: AbortSignal) => {
+  useLayoutEffect(
+    () => () => {
+      for (const source of copies.current.keys()) removeCopy(source);
+      recovery.clear();
+    },
+    [recovery],
+  );
+  const upload = async (file: File, signal: AbortSignal) => {
+    const owner = lifetime.controller.signal;
+    if (!lifetime.current(owner)) throw new DOMException('Editor retired', 'AbortError');
     refusal.current = null;
     try {
-      const uploaded = await recovery.upload(file, signal);
+      const uploaded = await recovery.upload(file, AbortSignal.any([signal, owner]));
+      if (!lifetime.current(owner)) throw new DOMException('Editor retired', 'AbortError');
       owned.current.add(uploaded.src);
       return uploaded;
     } catch (error) {
-      if (error instanceof UploadRefusal) refusal.current = error;
+      if (lifetime.current(owner) && error instanceof UploadRefusal) refusal.current = error;
       throw error;
     }
+  };
+  const copy = async (source: string, id: string) => {
+    const owner = lifetime.controller.signal;
+    if (!lifetime.current(owner) || !current.current().session) throw new UploadRefusal('unavailable');
+    let entry = copies.current.get(source);
+    if (!entry) {
+      if (copies.current.size >= replyImageLimit) throw new UploadRefusal('unavailable');
+      entry = { controller: new AbortController(), target: JSON.stringify(target) };
+      copies.current.set(source, entry);
+    }
+    const signal = AbortSignal.any([owner, entry.controller.signal]);
+    if (!entry.file) entry.file = await readExistingSiteImage(id, signal);
+    signal.throwIfAborted();
+    if (!lifetime.current(owner) || entry.target !== JSON.stringify(current.current().target))
+      throw new ReplyUploadRecoveryRefusal('target-changed');
+    const uploaded = await upload(entry.file, signal);
+    copies.current.delete(source);
+    return uploaded;
+  };
+  return {
+    upload,
+    copy,
+    removeCopy,
+    copySources: () => copies.current.keys(),
+    hasCopy: (source: string) => copies.current.has(source),
   };
 }
 
@@ -72,6 +169,7 @@ function useDraftMediaCheck(
   failure: EditFailure | null,
   owned: RefObject<Set<string>>,
   update: (media: DraftMediaState[]) => void,
+  lifetime: ComposerLifetime,
 ) {
   const client = useContext(QueryClientContext);
   const active = useRef<AbortController | null>(null);
@@ -80,23 +178,24 @@ function useDraftMediaCheck(
   latest.current = { target, failure };
   useEffect(() => () => active.current?.abort(), []);
   const check = async () => {
-    if (failure?.reason !== 'media-unavailable') return;
+    if (!lifetime.current() || failure?.reason !== 'media-unavailable') return;
     const snapshot = body.current;
     const ids = mediaIdsFromSources(imageSources(snapshot));
     if (ids.length > replyImageLimit) return;
     active.current?.abort();
     const controller = new AbortController();
+    const owner = lifetime.controller.signal;
     active.current = controller;
     const context = JSON.stringify(target);
     const session = client?.getQueryData(sessionQuery.queryKey);
     setChecking(true);
     let media: DraftMediaState[];
     try {
-      media = await checkDraftMediaStates({ data: ids, signal: controller.signal });
+      media = await checkDraftMediaStates({ data: ids, signal: AbortSignal.any([controller.signal, owner]) });
     } catch {
       media = ids.map((id) => ({ id, state: 'unavailable' }));
     }
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted || !lifetime.current(owner)) return;
     if (
       body.current === snapshot &&
       latest.current.failure === failure &&
@@ -199,17 +298,15 @@ function mediaIdsFromSources(sources: string[]): string[] {
   return [...new Set(sources.map((source) => siteMediaId(source) ?? source))];
 }
 
-async function uploadExistingSiteImage(
-  id: string,
-  target: string | { containerId: string } | { newThread: { boardId: string; idempotencyKey: string } },
-  signal: AbortSignal,
-) {
+async function readExistingSiteImage(id: string, signal: AbortSignal): Promise<File> {
+  signal.throwIfAborted();
   const response = await fetch(`/media/${encodeURIComponent(id)}/original`, { signal, credentials: 'same-origin' });
+  signal.throwIfAborted();
   if (!response.ok) throw new UploadRefusal('unavailable');
   const blob = await response.blob();
+  signal.throwIfAborted();
   const type = blob.type.split(';')[0] || 'image/png';
-  const file = new File([blob], 'pasted-image', { type });
-  return uploadReplyImage(target, file, signal);
+  return new File([blob], 'pasted-image', { type });
 }
 
 function replaceImageSource(snapshot: DocumentSnapshot, from: string, to: string): DocumentSnapshot {
@@ -392,7 +489,10 @@ type PostComposerProps<T, Context> = {
 export function PostComposer<T, Context = undefined>(props: PostComposerProps<T, Context>) {
   return (
     <AuthoringDepartureBoundary>
-      <PostComposerContent<T, Context> {...props} />
+      <PostComposerContent<T, Context>
+        key={JSON.stringify([props.containerId, props.boardId, props.initialKey])}
+        {...props}
+      />
     </AuthoringDepartureBoundary>
   );
 }
@@ -414,16 +514,15 @@ function PostComposerContent<T, Context = undefined>({
   onSuccess,
 }: PostComposerProps<T, Context>) {
   const formId = useId();
+  const lifetime = useComposerLifetime();
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
-  const initialForeignSources = useMemo(
-    () =>
-      initialBody
-        ? imageSources(initialBody)
-            .filter((source) => siteMediaId(source))
-            .slice(0, replyImageLimit)
-        : [],
-    [initialBody],
+  const [initialForeignSources] = useState(() =>
+    initialBody
+      ? imageSources(initialBody)
+          .filter((source) => siteMediaId(source))
+          .slice(0, replyImageLimit)
+      : [],
   );
   const [title, setTitle] = useState('');
   const [body, setBody] = useState(() => initialBody ?? fromPlainText('', 'blocks'));
@@ -447,7 +546,7 @@ function PostComposerContent<T, Context = undefined>({
   const editorPendingRef = useRef(0);
   const foreignPendingRef = useRef(initialForeignSources.length);
   const ownedMediaIds = useRef(new Set<string>());
-  const reuploading = useRef(new Set(initialForeignSources));
+  const reuploading = useRef(new Map(initialForeignSources.map((source) => [source, Symbol(source)])));
   const initialUploadsStarted = useRef(false);
   const refusalRef = useRef<UploadRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -481,20 +580,28 @@ function PostComposerContent<T, Context = undefined>({
     replyIntent.current.unresolved,
   ]);
   const departure = useAuthoringDeparture(
-    title !== '' ||
-      JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
-      JSON.stringify(submissionContext) !== initialSubmissionContext.current ||
-      (replyTargetId ?? null) !== initialReplyTarget.current ||
-      pendingRef.current > 0 ||
-      uncertainChanged,
-    submittingRef.current || replyIntent.current.unresolved,
+    lifetime.current() &&
+      (title !== '' ||
+        JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
+        JSON.stringify(submissionContext) !== initialSubmissionContext.current ||
+        (replyTargetId ?? null) !== initialReplyTarget.current ||
+        pendingRef.current > 0 ||
+        submittingRef.current ||
+        replyIntent.current.unresolved ||
+        uncertainChanged),
+    lifetime.current() && (submittingRef.current || replyIntent.current.unresolved),
     departureSignature,
   );
   const uploadTarget = containerId ?? (boardId ? { newThread: { boardId, idempotencyKey } } : undefined);
-  const recoverUpload = useComposerUpload(uploadTarget, ownedMediaIds, refusalRef);
-  const upload = uploadTarget ? recoverUpload : undefined;
-  const { check: checkMedia, checking } = useDraftMediaCheck(bodyRef, uploadTarget, failure, ownedMediaIds, (media) =>
-    setFailure((current) => (current?.reason === 'media-unavailable' ? { ...current, media } : current)),
+  const mediaUpload = useComposerUpload(uploadTarget, ownedMediaIds, refusalRef, lifetime);
+  const upload = uploadTarget ? mediaUpload.upload : undefined;
+  const { check: checkMedia, checking } = useDraftMediaCheck(
+    bodyRef,
+    uploadTarget,
+    failure,
+    ownedMediaIds,
+    (media) => setFailure((current) => (current?.reason === 'media-unavailable' ? { ...current, media } : current)),
+    lifetime,
   );
 
   useEffect(() => {
@@ -506,8 +613,14 @@ function PostComposerContent<T, Context = undefined>({
     initialUploadsStarted.current = true;
     for (const source of initialForeignSources) {
       const id = siteMediaId(source);
-      if (id) startForeignImageUpload(source, id);
+      if (id) {
+        reuploading.current.set(source, Symbol(source));
+        startForeignImageUpload(source, id);
+      }
     }
+    return () => {
+      initialUploadsStarted.current = false;
+    };
   }, [initialForeignSources]);
   useEffect(() => {
     const host = editorHost.current;
@@ -538,19 +651,23 @@ function PostComposerContent<T, Context = undefined>({
   }, [focusRequest, editorReady]);
 
   function updateBody(next: DocumentSnapshot) {
+    if (!lifetime.current()) return;
     bodyRef.current = next;
     setBody(next);
     setBodyCanSend(hasDocumentContent(next));
+    pruneCopiedImages(next);
     queueForeignImages(next);
   }
 
   function updatePending() {
+    if (!lifetime.current()) return;
     const count = editorPendingRef.current + foreignPendingRef.current;
     pendingRef.current = count;
     setPendingUploads(count);
   }
 
   function queueForeignImages(snapshot: DocumentSnapshot, explicitId?: string) {
+    if (!lifetime.current()) return;
     const sources = imageSources(snapshot);
     if (sources.length > replyImageLimit) setUploadNotice(m.thread_image_limit());
     for (const source of sources.slice(0, replyImageLimit)) {
@@ -558,7 +675,7 @@ function PostComposerContent<T, Context = undefined>({
       if (id !== explicitId && failure?.media?.some((item) => item.id === id || item.id === source)) continue;
       if (!id || ownedMediaIds.current.has(source) || ownedMediaIds.current.has(id) || reuploading.current.has(source))
         continue;
-      reuploading.current.add(source);
+      reuploading.current.set(source, Symbol(source));
       foreignPendingRef.current++;
       updatePending();
       startForeignImageUpload(source, id);
@@ -566,49 +683,73 @@ function PostComposerContent<T, Context = undefined>({
   }
 
   function startForeignImageUpload(source: string, id: string) {
+    const owner = lifetime.controller.signal;
+    const attempt = reuploading.current.get(source);
+    const current = () => lifetime.current(owner) && reuploading.current.get(source) === attempt;
     void (async () => {
       try {
-        const uploaded = await uploadExistingSiteImage(
-          id,
-          containerId ?? { newThread: { boardId: boardId!, idempotencyKey: idempotencyRef.current } },
-          new AbortController().signal,
-        );
-        ownedMediaIds.current.add(uploaded.src);
+        const uploaded = await mediaUpload.copy(source, id);
+        if (!current()) return;
         const next = replaceImageSource(bodyRef.current, source, uploaded.src);
         bodyRef.current = next;
         setBody(next);
         setBodyCanSend(hasDocumentContent(next));
-        setFailure((current) =>
-          current && 'media' in current
-            ? { ...current, media: current.media?.filter((item) => item.id !== source && item.id !== id) }
-            : current,
+        setFailure((failure) =>
+          failure && 'media' in failure
+            ? { ...failure, media: failure.media?.filter((item) => item.id !== source && item.id !== id) }
+            : failure,
         );
-      } catch {
-        setFailure((current) => ({
+      } catch (error) {
+        if (!current()) return;
+        setFailure((failure) => ({
           ok: false,
           reason: 'media-unavailable',
           media: [
-            ...(current && 'media' in current
-              ? (current.media ?? []).filter((item) => item.id !== source && item.id !== id)
+            ...(failure && 'media' in failure
+              ? (failure.media ?? []).filter((item) => item.id !== source && item.id !== id)
               : []),
-            { id: source, state: 'rejected' },
+            {
+              id: source,
+              state: error instanceof UploadRefusal && error.reason === 'rejected' ? 'rejected' : 'unavailable',
+            },
           ],
         }));
       } finally {
-        reuploading.current.delete(source);
-        foreignPendingRef.current--;
-        updatePending();
+        if (current()) {
+          reuploading.current.delete(source);
+          foreignPendingRef.current--;
+          updatePending();
+        }
       }
     })();
   }
 
+  function pruneCopiedImages(snapshot: DocumentSnapshot) {
+    const sources = new Set(imageSources(snapshot));
+    for (const source of new Set([...reuploading.current.keys(), ...mediaUpload.copySources()])) {
+      if (sources.has(source)) continue;
+      mediaUpload.removeCopy(source);
+      if (reuploading.current.delete(source)) foreignPendingRef.current--;
+    }
+    updatePending();
+  }
+
+  function retryMedia() {
+    const sources = imageSources(bodyRef.current).filter((source) => mediaUpload.hasCopy(source));
+    if (sources.length) for (const source of sources) queueForeignImages(bodyRef.current, siteMediaId(source));
+    else void checkMedia();
+  }
+
   function uploadAgain(id: string) {
+    if (!lifetime.current()) return;
     const source = imageSources(bodyRef.current).find((item) => item === id || siteMediaId(item) === id);
     if (source) queueForeignImages(bodyRef.current, id);
   }
 
   function removeIssueImage(id: string) {
+    if (!lifetime.current()) return;
     const next = withoutImage(bodyRef.current, id);
+    pruneCopiedImages(next);
     bodyRef.current = next;
     setBody(next);
     setBodyCanSend(hasDocumentContent(next) || imageSources(next).length > 0);
@@ -618,6 +759,7 @@ function PostComposerContent<T, Context = undefined>({
   }
 
   function captureEditorInput(event: FormEvent<HTMLDivElement>) {
+    if (!lifetime.current()) return;
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
     const next = fromPlainText(target.innerText, 'blocks');
@@ -630,6 +772,7 @@ function PostComposerContent<T, Context = undefined>({
   }
 
   function handleUploadState(state: UploadState, count: number) {
+    if (!lifetime.current()) return;
     editorPendingRef.current = count;
     updatePending();
     if (state === 'pending') setUploadNotice(null);
@@ -639,7 +782,14 @@ function PostComposerContent<T, Context = undefined>({
   async function submit(event?: FormEvent) {
     if (event && event.target !== event.currentTarget) return;
     event?.preventDefault();
-    if (pendingRef.current > 0 || !hasDocumentContent(bodyRef.current) || !ready || submittingRef.current) return;
+    if (
+      !lifetime.current() ||
+      pendingRef.current > 0 ||
+      !hasDocumentContent(bodyRef.current) ||
+      !ready ||
+      submittingRef.current
+    )
+      return;
     const sources = imageSources(bodyRef.current);
     if (sources.length > replyImageLimit) {
       setUploadNotice(m.thread_image_limit());
@@ -660,11 +810,15 @@ function PostComposerContent<T, Context = undefined>({
     setIdempotencyKey(command.idempotencyKey);
     submittingRef.current = true;
     setSubmitting(true);
+    const owner = lifetime.controller.signal;
     onIntentLockChange?.(true);
+    if (!lifetime.current(owner)) return;
     onPendingChange?.(true);
     setFailure(null);
     try {
+      if (!lifetime.current(owner)) return;
       const result = await onSubmit(command);
+      if (!lifetime.current(owner)) return;
       if (!result.ok) {
         replyIntent.current.settle(result.reason !== 'unavailable');
         setFailure({
@@ -678,6 +832,7 @@ function PostComposerContent<T, Context = undefined>({
       replyIntent.current.settle(true);
       setTitle('');
       const empty = fromPlainText('', 'blocks');
+      initialBodyRef.current = empty;
       bodyRef.current = empty;
       setBody(empty);
       setBodyCanSend(false);
@@ -691,15 +846,20 @@ function PostComposerContent<T, Context = undefined>({
       departure.release();
       onSuccess(result.value);
     } catch {
+      if (!lifetime.current(owner)) return;
       replyIntent.current.settle(false);
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
-      onIntentLockChange?.(replyIntent.current.unresolved);
-      onPendingChange?.(false);
+      if (lifetime.current(owner)) {
+        submittingRef.current = false;
+        setSubmitting(false);
+        onIntentLockChange?.(replyIntent.current.unresolved);
+        if (lifetime.current(owner)) onPendingChange?.(false);
+      }
     }
   }
+
+  if (!lifetime.current()) return <p role="alert">{m.thread_authoring_session_changed()}</p>;
 
   const bodyLabel = titleRequired ? m.thread_new_body_label() : m.thread_reply_label();
   const editorSize = titleRequired ? 'thread-opening-editor' : 'thread-reply-editor';
@@ -783,14 +943,7 @@ function PostComposerContent<T, Context = undefined>({
                   {m.thread_write_retry()}
                 </Button>
               ) : null}
-              {mediaIssueList(
-                failure.media,
-                bodyRef.current,
-                () => void checkMedia(),
-                uploadAgain,
-                removeIssueImage,
-                checking,
-              )}
+              {mediaIssueList(failure.media, bodyRef.current, retryMedia, uploadAgain, removeIssueImage, checking)}
             </>
           )}
         </div>
@@ -851,7 +1004,7 @@ type InlinePostEditorProps = {
 export function InlinePostEditor(props: InlinePostEditorProps) {
   return (
     <AuthoringDepartureBoundary>
-      <InlinePostEditorContent {...props} />
+      <InlinePostEditorContent key={JSON.stringify([props.containerId, props.idempotencyKey])} {...props} />
     </AuthoringDepartureBoundary>
   );
 }
@@ -866,6 +1019,7 @@ function InlinePostEditorContent({
   onCancel,
   onSuccess,
 }: InlinePostEditorProps) {
+  const lifetime = useComposerLifetime();
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
   const [body, setBody] = useState(initialBody);
@@ -875,12 +1029,13 @@ function InlinePostEditorContent({
   const [failure, setFailure] = useState<EditFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [pendingUploads, setPendingUploads] = useState(0);
   const pendingRef = useRef(0);
   const editorPendingRef = useRef(0);
   const foreignPendingRef = useRef(0);
   const ownedMediaIds = useRef(new Set(initialMediaIds));
-  const reuploading = useRef(new Set<string>());
+  const reuploading = useRef(new Map<string, symbol>());
   const refusalRef = useRef<UploadRefusal | null>(null);
   const editIntent = useRef(new ReplyIntent(idempotencyKey));
   const sessionClient = useContext(QueryClientContext);
@@ -900,32 +1055,43 @@ function InlinePostEditorContent({
     editIntent.current.unresolved,
   ]);
   const departure = useAuthoringDeparture(
-    JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
-      pendingRef.current > 0 ||
-      editIntent.current.unresolved ||
-      uncertainChanged,
-    submitting || editIntent.current.unresolved,
+    lifetime.current() &&
+      (JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
+        pendingRef.current > 0 ||
+        editIntent.current.unresolved ||
+        uncertainChanged),
+    lifetime.current() && (submitting || editIntent.current.unresolved),
     departureSignature,
     onCancel,
   );
-  const upload = useComposerUpload(containerId, ownedMediaIds, refusalRef);
-  const { check: checkMedia, checking } = useDraftMediaCheck(bodyRef, containerId, failure, ownedMediaIds, (media) =>
-    setFailure((current) => (current?.reason === 'media-unavailable' ? { ...current, media } : current)),
+  const mediaUpload = useComposerUpload(containerId, ownedMediaIds, refusalRef, lifetime);
+  const upload = mediaUpload.upload;
+  const { check: checkMedia, checking } = useDraftMediaCheck(
+    bodyRef,
+    containerId,
+    failure,
+    ownedMediaIds,
+    (media) => setFailure((current) => (current?.reason === 'media-unavailable' ? { ...current, media } : current)),
+    lifetime,
   );
 
   function updateBody(next: DocumentSnapshot) {
+    if (!lifetime.current()) return;
     bodyRef.current = next;
     setBody(next);
+    pruneCopiedImages(next);
     queueForeignImages(next);
   }
 
   function updatePending() {
+    if (!lifetime.current()) return;
     const count = editorPendingRef.current + foreignPendingRef.current;
     pendingRef.current = count;
     setPendingUploads(count);
   }
 
   function queueForeignImages(snapshot: DocumentSnapshot, explicitId?: string) {
+    if (!lifetime.current()) return;
     const sources = imageSources(snapshot);
     if (sources.length > replyImageLimit) setUploadNotice(m.editor_image_limit());
     for (const source of sources.slice(0, replyImageLimit)) {
@@ -939,48 +1105,80 @@ function InlinePostEditorContent({
         continue;
       if (!id || ownedMediaIds.current.has(source) || ownedMediaIds.current.has(id) || reuploading.current.has(source))
         continue;
-      reuploading.current.add(source);
+      reuploading.current.set(source, Symbol(source));
       foreignPendingRef.current++;
       updatePending();
-      void (async () => {
-        try {
-          const uploaded = await uploadExistingSiteImage(id, containerId, new AbortController().signal);
-          ownedMediaIds.current.add(uploaded.src);
-          const next = replaceImageSource(bodyRef.current, source, uploaded.src);
-          bodyRef.current = next;
-          setBody(next);
-          setFailure((current) =>
-            current && 'media' in current
-              ? { ...current, media: current.media?.filter((item) => item.id !== source && item.id !== id) }
-              : current,
-          );
-        } catch {
-          setFailure((current) => ({
-            ok: false,
-            reason: 'media-unavailable',
-            media: [
-              ...(current && 'media' in current
-                ? (current.media ?? []).filter((item) => item.id !== source && item.id !== id)
-                : []),
-              { id: source, state: 'rejected' },
-            ],
-          }));
-        } finally {
+      startForeignImageUpload(source, id);
+    }
+  }
+
+  function startForeignImageUpload(source: string, id: string) {
+    const owner = lifetime.controller.signal;
+    const attempt = reuploading.current.get(source);
+    const current = () => lifetime.current(owner) && reuploading.current.get(source) === attempt;
+    void (async () => {
+      try {
+        const uploaded = await mediaUpload.copy(source, id);
+        if (!current()) return;
+        const next = replaceImageSource(bodyRef.current, source, uploaded.src);
+        bodyRef.current = next;
+        setBody(next);
+        setFailure((failure) =>
+          failure && 'media' in failure
+            ? { ...failure, media: failure.media?.filter((item) => item.id !== source && item.id !== id) }
+            : failure,
+        );
+      } catch (error) {
+        if (!current()) return;
+        setFailure((failure) => ({
+          ok: false,
+          reason: 'media-unavailable',
+          media: [
+            ...(failure && 'media' in failure
+              ? (failure.media ?? []).filter((item) => item.id !== source && item.id !== id)
+              : []),
+            {
+              id: source,
+              state: error instanceof UploadRefusal && error.reason === 'rejected' ? 'rejected' : 'unavailable',
+            },
+          ],
+        }));
+      } finally {
+        if (current()) {
           reuploading.current.delete(source);
           foreignPendingRef.current--;
           updatePending();
         }
-      })();
+      }
+    })();
+  }
+
+  function pruneCopiedImages(snapshot: DocumentSnapshot) {
+    const sources = new Set(imageSources(snapshot));
+    for (const source of new Set([...reuploading.current.keys(), ...mediaUpload.copySources()])) {
+      if (sources.has(source)) continue;
+      mediaUpload.removeCopy(source);
+      if (reuploading.current.delete(source)) foreignPendingRef.current--;
     }
+    updatePending();
+  }
+
+  function retryMedia() {
+    const sources = imageSources(bodyRef.current).filter((source) => mediaUpload.hasCopy(source));
+    if (sources.length) for (const source of sources) queueForeignImages(bodyRef.current, siteMediaId(source));
+    else void checkMedia();
   }
 
   function uploadAgain(id: string) {
+    if (!lifetime.current()) return;
     const source = imageSources(bodyRef.current).find((item) => item === id || siteMediaId(item) === id);
     if (source) queueForeignImages(bodyRef.current, id);
   }
 
   function removeIssueImage(id: string) {
+    if (!lifetime.current()) return;
     const next = withoutImage(bodyRef.current, id);
+    pruneCopiedImages(next);
     bodyRef.current = next;
     setBody(next);
     setFailure((current) =>
@@ -989,6 +1187,7 @@ function InlinePostEditorContent({
   }
 
   function captureEditorInput(event: FormEvent<HTMLDivElement>) {
+    if (!lifetime.current()) return;
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
     // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
@@ -1000,23 +1199,29 @@ function InlinePostEditorContent({
 
   async function submit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (pendingRef.current > 0 || !ready || submitting) return;
+    if (!lifetime.current() || pendingRef.current > 0 || !ready || submittingRef.current) return;
     const sources = imageSources(bodyRef.current);
     if (sources.length > replyImageLimit) {
       setUploadNotice(m.editor_image_limit());
       return;
     }
     const mediaIds = mediaIdsFromSources(sources);
-    const command = editIntent.current.prepare({ title: '', body: bodyRef.current, mediaIds }, null, commandContext);
+    const draft = { title: '', body: bodyRef.current, mediaIds };
+    if (!editIntent.current.canPrepare(draft, null, commandContext)) return;
+    const command = editIntent.current.prepare(draft, null, commandContext);
+    editIntent.current.settle(false);
+    submittingRef.current = true;
     setSubmitting(true);
     setFailure(null);
+    const owner = lifetime.controller.signal;
     try {
       const result = await onSubmit({
-        body: bodyRef.current,
+        body: command.body,
         revisionId,
         idempotencyKey: command.idempotencyKey,
-        mediaIds,
+        mediaIds: command.mediaIds,
       });
+      if (!lifetime.current(owner)) return;
       if (!result.ok) {
         editIntent.current.settle(result.reason !== 'unavailable');
         setFailure({
@@ -1027,17 +1232,23 @@ function InlinePostEditorContent({
         });
         return;
       }
+      editIntent.current.settle(true);
       departure.release();
       onSuccess(result.post);
     } catch {
+      if (!lifetime.current(owner)) return;
       editIntent.current.settle(false);
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
-      setSubmitting(false);
+      if (lifetime.current(owner)) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   }
 
   async function loadCurrentVersion() {
+    if (!lifetime.current()) return;
     if (!failure || failure.reason !== 'stale' || !failure.currentPost) return;
     const current = failure.currentPost as CurrentPost;
     if (current.body === null) {
@@ -1054,11 +1265,14 @@ function InlinePostEditorContent({
   }
 
   function handleUploadState(state: UploadState, count: number) {
+    if (!lifetime.current()) return;
     editorPendingRef.current = count;
     updatePending();
     if (state === 'pending') setUploadNotice(null);
     if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
   }
+
+  if (!lifetime.current()) return <p role="alert">{m.thread_authoring_session_changed()}</p>;
 
   return (
     <div
@@ -1109,7 +1323,7 @@ function InlinePostEditorContent({
             {mediaIssueList(
               'media' in failure ? failure.media : undefined,
               bodyRef.current,
-              () => void checkMedia(),
+              retryMedia,
               uploadAgain,
               removeIssueImage,
               checking,
