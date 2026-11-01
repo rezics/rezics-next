@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ListRow } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { useLayoutEffect, useState, useRef } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 import { PageHeading } from '../shell/page-heading';
+import { subjectHref } from '../subject/subject-href';
 import { CollectionMemberDetails } from './collection-member-row';
-import { SubjectIdentity, rowRatio } from './subject-row';
+import { SubjectCover, rowRatio } from './subject-row';
+import { displayLibraryTitle } from './title';
 import {
   collectionPublicationQuery,
   publicationCandidates,
@@ -234,36 +236,44 @@ function PublicationIntentView({ page, submit, onReload }: PublicationViewProps)
                 {candidates.map((member) => {
                   const id = member.subject!.id;
                   const checked = selected.includes(id);
+                  const title = displayLibraryTitle(member.subject!.label, getLocale());
                   return (
-                    <ListRow key={id} className="flex items-center gap-3 p-3">
-                      <input
-                        type="checkbox"
-                        className="size-5 shrink-0 accent-primary"
-                        checked={checked}
-                        aria-label={m.library_publication_select({
-                          title:
-                            typeof member.subject!.label === 'string'
-                              ? member.subject!.label
-                              : member.subject!.label.value,
-                        })}
-                        disabled={locked || (!checked && selected.length >= 100)}
-                        onChange={() => {
-                          update((previous) => {
-                            if (previous.busy || previous.attempt) return previous;
-                            const selected = previous.selected.includes(id)
-                              ? previous.selected.filter((value) => value !== id)
-                              : previous.selected.length < 100
-                                ? [...previous.selected, id]
-                                : previous.selected;
-                            return { ...previous, selected, confirmed: false, result: null };
-                          });
-                        }}
-                      />
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <SubjectIdentity subject={member.subject} ratio={ratio} />
+                    <ContentItem
+                      key={id}
+                      title={title.text}
+                      {...(title.lang ? { titleLang: title.lang } : {})}
+                      headingLevel={3}
+                      href={subjectHref({ id, label: title.text }, getLocale()).href}
+                      visual={<SubjectCover subject={member.subject} ratio={ratio} />}
+                      metadata={
                         <CollectionMemberDetails member={member} listPresentations={source.page.listPresentations} />
-                      </div>
-                    </ListRow>
+                      }
+                      trailing={
+                        <input
+                          type="checkbox"
+                          className="size-5 shrink-0 accent-primary"
+                          checked={checked}
+                          aria-label={m.library_publication_select({
+                            title:
+                              typeof member.subject!.label === 'string'
+                                ? member.subject!.label
+                                : member.subject!.label.value,
+                          })}
+                          disabled={locked || (!checked && selected.length >= 100)}
+                          onChange={() => {
+                            update((previous) => {
+                              if (previous.busy || previous.attempt) return previous;
+                              const selected = previous.selected.includes(id)
+                                ? previous.selected.filter((value) => value !== id)
+                                : previous.selected.length < 100
+                                  ? [...previous.selected, id]
+                                  : previous.selected;
+                              return { ...previous, selected, confirmed: false, result: null };
+                            });
+                          }}
+                        />
+                      }
+                    />
                   );
                 })}
               </ul>
