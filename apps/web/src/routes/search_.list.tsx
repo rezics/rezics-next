@@ -35,9 +35,7 @@ export const Route = createFileRoute('/search_/list')({
         mode: 'current',
       };
     }
-    return context.queryClient.fetchQuery(
-      typeListQuery(getLocale(), deps.list, deps.page, deps.cursor, admission),
-    );
+    return context.queryClient.fetchQuery(typeListQuery(getLocale(), deps.list, deps.page, deps.cursor, admission));
   },
   head: () => ({ meta: [{ name: 'robots', content: 'noindex, follow' }] }),
   component: ConfiguredListRoute,

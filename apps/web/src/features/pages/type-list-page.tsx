@@ -28,13 +28,15 @@ function sameReaderRequest(
   page: string,
   cursor?: string,
 ): request is ReaderRequest {
-  return !!request &&
+  return (
+    !!request &&
     request.locale === locale &&
     request.node === node &&
     request.page === page &&
     request.cursor === cursor &&
     request.state === input.state &&
-    request.expectedReader === input.expectedReader;
+    request.expectedReader === input.expectedReader
+  );
 }
 
 function freshIncarnation(): string {
@@ -49,11 +51,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   const selectedRealm = hasSelectedRealmTarget(target);
   const state: TypeListAdmissionInput['state'] = selectedRealm ? session.state : 'public';
   const expectedReader =
-    !selectedRealm || state === 'unknown'
-      ? undefined
-      : state === 'signed-in'
-        ? (session.subject ?? null)
-        : null;
+    !selectedRealm || state === 'unknown' ? undefined : state === 'signed-in' ? (session.subject ?? null) : null;
   const requestMatches = sameReaderRequest(
     initialData?.admission.request,
     { state, expectedReader },
@@ -62,19 +60,22 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     page,
     cursor,
   );
-  const mode: TypeListAdmissionInput['mode'] =
-    !selectedRealm
-      ? 'public'
-      : state === 'unknown' && requestMatches && initialData.admission.request.mode === 'initial-hydration'
-        ? 'initial-hydration'
-        : 'current';
+  const mode: TypeListAdmissionInput['mode'] = !selectedRealm
+    ? 'public'
+    : state === 'unknown' && requestMatches && initialData.admission.request.mode === 'initial-hydration'
+      ? 'initial-hydration'
+      : 'current';
   const readerScope = JSON.stringify([
     locale,
     list,
     page,
     cursor ?? null,
     state,
-    expectedReader === undefined ? ['unobserved'] : expectedReader === null ? ['anonymous'] : ['reader', expectedReader],
+    expectedReader === undefined
+      ? ['unobserved']
+      : expectedReader === null
+        ? ['anonymous']
+        : ['reader', expectedReader],
     mode,
   ]);
   type TrackedAdmission = {
@@ -97,12 +98,11 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   let current = tracked;
   if (tracked.readerScope !== readerScope || tracked.sourceToken !== sourceToken) {
     const usedLoaderTokens = new Set(tracked.usedLoaderTokens);
-    const incarnation =
-      !selectedRealm
-        ? 'public'
-        : matchingLoaderToken && !usedLoaderTokens.has(matchingLoaderToken)
-          ? matchingLoaderToken
-          : freshIncarnation();
+    const incarnation = !selectedRealm
+      ? 'public'
+      : matchingLoaderToken && !usedLoaderTokens.has(matchingLoaderToken)
+        ? matchingLoaderToken
+        : freshIncarnation();
     if (matchingLoaderToken) usedLoaderTokens.add(matchingLoaderToken);
     current = { readerScope, incarnation, sourceToken, usedLoaderTokens };
     setTracked(current);

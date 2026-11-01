@@ -136,13 +136,14 @@ test('configured full lists retire private reads across reader, target, node, cu
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-  const [{ createRoot }, { QueryClient, QueryClientProvider }, sessionModule, pageModule, composition] = await Promise.all([
-    import('react-dom/client'),
-    import('@tanstack/react-query'),
-    import('../src/session/query'),
-    import('../src/features/pages/type-list-page'),
-    import('@rezics/composition'),
-  ]);
+  const [{ createRoot }, { QueryClient, QueryClientProvider }, sessionModule, pageModule, composition] =
+    await Promise.all([
+      import('react-dom/client'),
+      import('@tanstack/react-query'),
+      import('../src/session/query'),
+      import('../src/features/pages/type-list-page'),
+      import('@rezics/composition'),
+    ]);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const host = window.document.createElement('div');
   window.document.body.append(host);
@@ -211,7 +212,10 @@ test('configured full lists retire private reads across reader, target, node, cu
             body: {
               subjects: [
                 {
-                  id: label === 'Public SSR' ? '0192f3a0-6c1e-7b2a-9d4e-000000000301' : '0192f3a0-6c1e-7b2a-9d4e-000000000302',
+                  id:
+                    label === 'Public SSR'
+                      ? '0192f3a0-6c1e-7b2a-9d4e-000000000301'
+                      : '0192f3a0-6c1e-7b2a-9d4e-000000000302',
                   type: 'schema:Book',
                   labels: { en: label },
                   summary: null,

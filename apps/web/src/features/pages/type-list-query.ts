@@ -50,7 +50,9 @@ export type TypeListQueryResult =
   | { kind: 'admission-mismatch'; node: string; admission: { request: TypeListReadRequest } };
 
 function selectedRealmReader(value: unknown): value is string | null | undefined {
-  return value === undefined || value === null || (typeof value === 'string' && value.length > 0 && value.length <= 128);
+  return (
+    value === undefined || value === null || (typeof value === 'string' && value.length > 0 && value.length <= 128)
+  );
 }
 
 function readRequest(data: {
@@ -90,7 +92,8 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
       !/^[A-Za-z0-9_-]{1,64}$/.test(value.node) ||
       typeof value.page !== 'string' ||
       value.page.length > 2048 ||
-      (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 4864)) ||
+      (value.cursor !== undefined &&
+        (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 4864)) ||
       (value.expectedReader !== undefined && !selectedRealmReader(value.expectedReader)) ||
       !['unknown', 'signed-in', 'signed-out', 'unavailable', 'public'].includes(value.state as string) ||
       typeof value.incarnation !== 'string' ||
@@ -115,7 +118,10 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
           ((value.state === 'signed-out' || value.state === 'unavailable') && value.expectedReader !== null) ||
           (value.mode === 'initial-hydration' && value.state !== 'unknown'))) ||
       (!selectedRealm &&
-        (value.state !== 'public' || value.mode !== 'public' || value.expectedReader !== undefined || value.incarnation !== 'public'))
+        (value.state !== 'public' ||
+          value.mode !== 'public' ||
+          value.expectedReader !== undefined ||
+          value.incarnation !== 'public'))
     )
       throw notFound();
     return {
@@ -125,9 +131,7 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
       target,
       ...(value.cursor !== undefined ? { cursor: value.cursor } : {}),
       state: value.state as TypeListReaderState,
-      ...(value.expectedReader !== undefined
-        ? { expectedReader: value.expectedReader as string | null }
-        : {}),
+      ...(value.expectedReader !== undefined ? { expectedReader: value.expectedReader as string | null } : {}),
       incarnation: value.incarnation,
       mode: value.mode as TypeListAdmissionMode,
     };
@@ -163,9 +167,7 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
         languages: requestLanguages(data.locale),
         ...(data.cursor !== undefined ? { continuation: { node: data.node, cursor: data.cursor } } : {}),
       },
-      authorization
-        ? { fetch: { redirect: 'manual' }, headers: { authorization } }
-        : { fetch: { redirect: 'manual' } },
+      authorization ? { fetch: { redirect: 'manual' }, headers: { authorization } } : { fetch: { redirect: 'manual' } },
     );
     if (result.status === 404) throw notFound();
     if (result.status === 308) {
@@ -224,19 +226,13 @@ export const typeListQuery = (
   const incarnation = selectedRealm ? admission.incarnation : 'public';
   const mode: TypeListAdmissionMode = selectedRealm ? admission.mode : 'public';
   const expectedReaderKey =
-    expectedReader === undefined ? ['unobserved'] : expectedReader === null ? ['anonymous'] : ['reader', expectedReader];
+    expectedReader === undefined
+      ? ['unobserved']
+      : expectedReader === null
+        ? ['anonymous']
+        : ['reader', expectedReader];
   return queryOptions({
-    queryKey: [
-      'configured-type-list',
-      locale,
-      node,
-      page,
-      cursor ?? null,
-      state,
-      expectedReaderKey,
-      mode,
-      incarnation,
-    ],
+    queryKey: ['configured-type-list', locale, node, page, cursor ?? null, state, expectedReaderKey, mode, incarnation],
     staleTime: 0,
     gcTime: 0,
     retry: false,
