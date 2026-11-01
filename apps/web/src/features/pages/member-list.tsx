@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
 import { useSession } from '../../session/query';
-import { useContext, useRef, useState } from 'react';
+import { useContext, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
 import type { SubjectSummary } from '../../media/summary';
 import type { Fact } from '../../search/results';
@@ -71,7 +72,7 @@ export function Members(props: Record<string, unknown>) {
   const section = needsViewer ? (current.isError ? { ok: false as const } : (current.data ?? initial)) : initial;
   return (
     <MemberList
-      key={JSON.stringify([target, props, section, viewer.subject])}
+      key={JSON.stringify([target, props, section, viewer.state, viewer.subject, value.locale])}
       value={value}
       section={section}
       node={node}
@@ -102,7 +103,32 @@ export function MemberList({
   const [pages, setPages] = useState<Section[]>([section]);
   const [error, setError] = useState<Section>();
   const [pending, setPending] = useState(false);
+  const [completion, setCompletion] = useState<{
+    added: number;
+    exhausted: boolean;
+    trigger: HTMLButtonElement | null;
+  }>();
   const active = useRef(false);
+  const alive = useRef(true);
+  const instance = useId();
+  const end = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const trigger = completion?.trigger;
+    // Replace only the requesting reader's removed trigger, after the exhausted page has rendered.
+    if (
+      completion?.exhausted &&
+      trigger &&
+      (trigger.ownerDocument.activeElement === trigger ||
+        trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
+    )
+      end.current?.focus({ preventScroll: true });
+  }, [completion]);
   const latest = pages.at(-1)!;
   const cursor = latest.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
   const failed = error && !error.ok ? error : !latest.ok ? latest : undefined;
@@ -123,30 +149,42 @@ export function MemberList({
   }
   const unique = new Map<string, Item>();
   for (const item of items) if (!unique.has(item.id)) unique.set(item.id, item);
-  async function more() {
+  async function more(event: MouseEvent<HTMLButtonElement>) {
     if (!target || active.current) return;
+    const trigger = event.currentTarget;
     active.current = true;
     setPending(true);
     setError(undefined);
+    setCompletion(undefined);
     const request: MemberListRequest = { target, locale: value.locale, node, ...(cursor ? { cursor } : {}) };
     try {
       const next = await queryClient.fetchQuery({
-        queryKey: ['composed-members', request],
+        // A retired node/viewer reading must not share an in-flight response with its replacement.
+        queryKey: ['composed-members', request, instance],
         staleTime: 0,
         gcTime: 0,
         retry: false,
         queryFn: () => loadMemberList({ data: request }),
       });
+      if (!alive.current) return;
       if (!next.ok) {
         setError(next);
         if ([401, 403, 404, 409].includes(next.status ?? 0)) setPages([next]);
-      } else if (cursor) setPages((previous) => [...previous, next]);
-      else setPages([next]);
+      } else {
+        const visible = new Set(unique.keys());
+        for (const item of memberItems(next, value)) visible.add(item.id);
+        setPages((previous) => (cursor ? [...previous, next] : [next]));
+        setCompletion({
+          added: visible.size - unique.size,
+          exhausted: !paged || typeof next.body.next !== 'string' || !next.body.next,
+          trigger: trigger.ownerDocument.activeElement === trigger ? trigger : null,
+        });
+      }
     } catch {
-      setError({ ok: false });
+      if (alive.current) setError({ ok: false });
     } finally {
       active.current = false;
-      setPending(false);
+      if (alive.current) setPending(false);
     }
   }
   if (failed?.status === 404) return null;
@@ -154,33 +192,66 @@ export function MemberList({
     <section
       data-slot="member-list"
       data-node={node}
-      aria-labelledby={`${node}-title`}
+      aria-labelledby={`${instance}-title`}
       aria-busy={pending}
       className="min-w-0 space-y-4"
     >
-      <h2 id={`${node}-title`} className="text-2xl font-semibold tracking-tight">
+      <h2 id={`${instance}-title`} className="text-2xl font-semibold tracking-tight">
         {title}
       </h2>
       {unique.size > 0 && (
         <CoverList items={[...unique.values()]} value={value} label={title} memberFacts={memberFacts} />
       )}
-      {failed ? (
-        <p role={failed.status === 202 ? 'status' : 'alert'}>
-          {failed.status === 202
-            ? m.collection_filter_preparing({}, options)
-            : failed.status === 409
-              ? m.subject_relation_changed({}, options)
-              : failed.status === 400 || failed.status === 422
-                ? m.subject_relation_invalid({}, options)
-                : m.subject_section_failed({}, options)}
+      {failed && failed.status !== 202 ? (
+        <p role="alert">
+          {failed.status === 409
+            ? m.subject_relation_changed({}, options)
+            : failed.status === 400 || failed.status === 422
+              ? m.subject_relation_invalid({}, options)
+              : m.subject_section_failed({}, options)}
         </p>
       ) : (
-        unique.size === 0 && <p role="status">{m.subject_relation_empty_page({}, options)}</p>
+        !failed && unique.size === 0 && <p>{m.subject_relation_empty_page({}, options)}</p>
       )}
-      {pending && <p role="status">{m.subject_relation_loading({}, options)}</p>}
+      <p
+        id={`${instance}-status`}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="text-sm text-muted-foreground"
+      >
+        {pending
+          ? m.subject_relation_loading({}, options)
+          : failed?.status === 202
+            ? m.collection_filter_preparing({}, options)
+            : completion
+              ? completion.exhausted
+                ? m.subject_relation_completed_end({ label: title, count: completion.added }, options)
+                : m.subject_relation_completed_more({ label: title, count: completion.added }, options)
+              : null}
+      </p>
+      {completion?.exhausted && (
+        <p
+          ref={end}
+          tabIndex={-1}
+          data-slot="member-list-end"
+          className="rounded-sm text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+        >
+          {m.subject_relation_end({ label: title }, options)}
+        </p>
+      )}
       {target && (failed || (paged && cursor)) && (
-        <button type="button" onClick={more} disabled={pending} className={buttonVariants({ variant: 'outline' })}>
-          {failed ? m.subject_section_retry({}, options) : m.subject_relations_more({}, options)}
+        <button
+          type="button"
+          onClick={more}
+          aria-disabled={pending}
+          aria-describedby={`${instance}-status`}
+          className={cn(
+            buttonVariants({ variant: 'outline' }),
+            'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+          )}
+        >
+          {failed ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
         </button>
       )}
     </section>

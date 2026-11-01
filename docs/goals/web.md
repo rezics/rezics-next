@@ -239,6 +239,33 @@ remain distinct evidence categories.
 - Growth check: authored regression asserts exact selectors, page bounds and cursor retirement/retention, preserving
   existing privacy assertions. Native examined-work/growth and positive default-path proof are separate obligations.
 
+## Composed Collection and Library member continuation
+
+Each composed Members node owns its explicit More/Retry request, opaque cursor and retained pages. A request makes
+one existing bounded page read, without prefetch, refill, member scans or per-row reads. Keep native row order,
+deduplicate by canonical subject identity and render supplied facts without deriving additional authority or totals.
+
+A persistent node-local polite status stays empty on hydration. After each successful explicit request it reports
+the actual number of newly visible unique items and whether continuation remains, including zero for duplicate-only
+or empty pages. Reuse the localized relation completion and end messages in all launch locales. Loading clears the
+previous completion; failures keep the existing preparing, invalid, unavailable and changed-reading semantics.
+Retiring responses remove retained private rows as before; concealed nodes remain absent. Recovery uses the current
+native reading and never reuses a retired cursor.
+
+More and Retry have wrapped labels, visible keyboard focus and targets at least 44px in both dimensions. Keep the
+trigger focusable while pending and guard repeated activation. While More remains, focus stays on that button.
+When it disappears after exhaustion, a reader still focused on that requesting button moves to a local, visibly
+focusable end marker after the rows; Tab then continues in document order. A reader who moved elsewhere keeps
+their focus. Target, node/configuration, initial section, viewer state/identity and locale boundaries retire the
+accumulated pages, completion and any late request's focus effects. Each mounted node's request cache identity is
+isolated so a new reading cannot inherit an old in-flight page.
+
+The canonical composed-member Continued and Exhausted stories use explicit illustrative native-format responses
+through the default renderer. The focused `apps/web/tests/member-list-continuation.test.tsx` regression authors
+unique/duplicate/empty completions, independent streams, keyboard focus, request bounds, reading retirement and
+native-status recovery. These fixtures and authored interactions are not native proof; execution, visual review,
+assistive-technology review and original acceptance remain separate integration obligations.
+
 ## Dependencies
 
 Requires the typed kernel client and real owner APIs, exposure discovery, BFF sessions, definition releases,
