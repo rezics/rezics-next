@@ -87,6 +87,51 @@ test('requires three increasing scales with an equal ratio of at least four', ()
   expect(() => growthViolations(series([1, 8, 64], [1, Number.NaN, 1]), allBounds('constant'))).toThrow(TypeError);
 });
 
+test('growth bounds reject negative measured work and invalid optional evidence', () => {
+  for (const metric of ['rows', 'blocks', 'statements'] as const) {
+    const samples = [1, 8, 64].map((scale) => ({
+      scale,
+      cost: { rows: 0, blocks: 0, statements: 0, [metric]: -1 },
+    }));
+    expect(() => growthViolations(samples, allBounds('constant'))).toThrow(TypeError);
+  }
+  expect(() =>
+    growthViolations(
+      [1, 8, 64].map((scale) => ({ scale, cost: { rows: 0, blocks: 0, statements: 0, requestBytes: -1 } })),
+      allBounds('constant'),
+    ),
+  ).toThrow(TypeError);
+  expect(() =>
+    growthViolations(
+      [1, 8, 64].map((scale) => ({
+        scale,
+        cost: { rows: 0, blocks: 0, statements: 0, relations: { 'app.items': { rows: -1, blocks: 0 } } },
+      })),
+      allBounds('constant'),
+    ),
+  ).toThrow(TypeError);
+  expect(growthViolations(series([1, 8, 64], [0, 0, 0]), allBounds('constant'))).toEqual([]);
+});
+
+test('growth-bound arithmetic refuses overflow in scale ratios, slack and derived allowance', () => {
+  expect(() =>
+    growthViolations(
+      [Number.MIN_VALUE, 1, 4096].map((scale) => ({ scale, cost: { rows: 1, blocks: 1, statements: 1 } })),
+      allBounds('constant'),
+    ),
+  ).toThrow(TypeError);
+  expect(() =>
+    growthViolations(series([1, 8, 64], [Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE]), allBounds('constant'), {
+      rows: { absolute: 0, relative: 2 },
+    }),
+  ).toThrow(/Relative rows growth slack/);
+  expect(() =>
+    growthViolations(series([1, 8, 64], [0, Number.MAX_VALUE, Number.MAX_VALUE]), allBounds('linear'), {
+      rows: { absolute: 0, relative: 0 },
+    }),
+  ).toThrow(/rows growth allowance/);
+});
+
 test('names the metric, values and largest relations in the error', () => {
   const samples = series([1, 8, 64], [1, 8, 64]).map((sample, index) => ({
     ...sample,

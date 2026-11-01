@@ -431,3 +431,130 @@ test('median cost takes the lower median of each measure and matching relations'
   });
   expect(() => medianCost([])).toThrow(RangeError);
 });
+
+test('plan measurements reject negative and non-finite physical work', () => {
+  const plan = (fields: Record<string, unknown>) => ({
+    'Node Type': 'Seq Scan',
+    'Actual Rows': 1,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': 0,
+    'Shared Read Blocks': 0,
+    ...fields,
+  });
+  for (const field of [
+    'Actual Rows',
+    'Actual Loops',
+    'Shared Hit Blocks',
+    'Shared Read Blocks',
+    'Rows Removed by Filter',
+    'Rows Removed by Index Recheck',
+  ]) {
+    for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(() => costOf({ statements: [], plans: [{ Plan: plan({ [field]: value }) }] })).toThrow(TypeError);
+  }
+});
+
+test('plan extraction refuses overflow in row, block, relation and CTE accumulators', () => {
+  const seqPlan = (rows: number, blocks = 0, extra: Record<string, unknown> = {}) => ({
+    'Node Type': 'Seq Scan',
+    Schema: 'app',
+    'Relation Name': 'items',
+    'Actual Rows': rows,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': blocks,
+    'Shared Read Blocks': 0,
+    ...extra,
+  });
+  expect(() =>
+    costOf({ statements: [], plans: [{ Plan: seqPlan(Number.MAX_VALUE, 0, { 'Actual Loops': 2 }) }] }),
+  ).toThrow(/Rows examined/);
+  expect(() => costOf({ statements: [], plans: [{ Plan: seqPlan(Number.MAX_VALUE) }, { Plan: seqPlan(Number.MAX_VALUE) }] })).toThrow(
+    /Total examined rows|Rows for relation/,
+  );
+  expect(() =>
+    costOf({ statements: [], plans: [{ Plan: seqPlan(0, Number.MAX_VALUE) }, { Plan: seqPlan(0, Number.MAX_VALUE) }] }),
+  ).toThrow(/Blocks for relation|Total shared hit blocks/);
+  expect(() =>
+    costOf({
+      statements: [],
+      backgroundPlans: [
+        { Plan: seqPlan(Number.MAX_VALUE) },
+        { Plan: seqPlan(Number.MAX_VALUE) },
+      ],
+    }),
+  ).toThrow(/Total background examined rows/);
+});
+
+test('catalog filtering cannot hide malformed physical plan measurements', () => {
+  const query = 'select relname from pg_catalog.pg_class';
+  expect(() =>
+    costOf({
+      statements: [query],
+      planStatements: [0],
+      plans: [
+        {
+          'Query Text': query,
+          Plan: {
+            'Node Type': 'Seq Scan',
+            Schema: 'pg_catalog',
+            'Relation Name': 'pg_class',
+            'Actual Rows': -1,
+            'Actual Loops': 1,
+            'Shared Hit Blocks': 1,
+            'Shared Read Blocks': 0,
+          },
+        },
+      ],
+    }),
+  ).toThrow(TypeError);
+});
+
+test('byte aggregation rejects non-representable totals and preserves absent optional bytes', () => {
+  expect(() =>
+    costOf({
+      statements: ['select 1', 'select 2'],
+      requestBytes: [Number.MAX_VALUE, Number.MAX_VALUE],
+      plans: [],
+    }),
+  ).toThrow(/Request bytes/);
+  expect(() =>
+    costOf({
+      statements: [],
+      plans: [],
+      backgroundStatements: ['update app.items', 'update app.items'],
+      backgroundResponseBytes: [Number.MAX_VALUE, Number.MAX_VALUE],
+    }),
+  ).toThrow(/Background response bytes/);
+  expect(costOf({ statements: [], plans: [] })).not.toHaveProperty('requestBytes');
+});
+
+test('median cost validates supplied core, relation and background evidence before aggregation', () => {
+  const valid: Cost = {
+    statements: 0,
+    controlStatements: 0,
+    catalogStatements: 0,
+    plans: 0,
+    rows: 0,
+    blocks: 0,
+    sharedHit: 0,
+    sharedRead: 0,
+    relations: {},
+  };
+  expect(medianCost([valid, valid, valid])).toMatchObject({ rows: 0, blocks: 0, relations: {} });
+  expect(() => medianCost([{ ...valid, rows: -1 }, valid, valid])).toThrow(/Cost rows/);
+  expect(() =>
+    medianCost([
+      { ...valid, relations: { 'app.items': { rows: Number.NaN, blocks: 0, nodes: 1, sequentialScans: 0 } } },
+      valid,
+      valid,
+    ]),
+  ).toThrow(/relation app.items rows/);
+  expect(() =>
+    medianCost([
+      { ...valid, backgroundCosts: { vacuum: { rows: 0, blocks: -1, bounded: true } } },
+      valid,
+      valid,
+    ]),
+  ).toThrow(/Background blocks/);
+  expect(() => medianCost([{ ...valid, requestBytes: Number.POSITIVE_INFINITY }, valid, valid])).toThrow(/requestBytes/);
+});

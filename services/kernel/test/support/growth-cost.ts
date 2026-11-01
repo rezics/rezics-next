@@ -1,3 +1,11 @@
+import {
+  checkedAdd,
+  checkedMultiply,
+  checkedSubtract,
+  requireNonNegativeFiniteNumber,
+  sumFinite,
+} from './growth-numeric.ts';
+
 export type Capture = {
   readonly statements: readonly string[];
   readonly requestBytes?: readonly number[];
@@ -82,14 +90,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function requiredNumber(node: PlanNode, field: string): number {
   const value = node[field];
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new TypeError(`Plan node is missing ${field}`);
+  requireNonNegativeFiniteNumber(value, `Plan node ${field}`);
   return value;
 }
 
 function optionalNumber(node: PlanNode, field: string, fallback = 0): number {
   const value = node[field];
   if (value === undefined) return fallback;
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new TypeError(`Plan node has invalid ${field}`);
+  requireNonNegativeFiniteNumber(value, `Plan node ${field}`);
   return value;
 }
 
@@ -378,8 +386,8 @@ export function withoutCatalogTexts(
 
 function addBlocks(blocks: Map<string, Blocks>, name: string, hit: number, read: number): void {
   const total = blocks.get(name) ?? { hit: 0, read: 0 };
-  total.hit += hit;
-  total.read += read;
+  total.hit = checkedAdd(total.hit, hit, `Inclusive hit blocks for CTE ${name}`);
+  total.read = checkedAdd(total.read, read, `Inclusive read blocks for CTE ${name}`);
   blocks.set(name, total);
 }
 
@@ -405,17 +413,30 @@ function costNode(
       return costNode(child, false, relations, ctes);
     }) ?? [];
 
-  const childHit = children.reduce((sum, child) => sum + child.inclusiveHit, 0);
-  const childRead = children.reduce((sum, child) => sum + child.inclusiveRead, 0);
-  const exclusiveHit = Math.max(0, hit - childHit);
-  const exclusiveRead = Math.max(0, read - childRead);
+  const childHit = children.reduce(
+    (sum, child) => checkedAdd(sum, child.inclusiveHit, 'Child shared hit blocks'),
+    0,
+  );
+  const childRead = children.reduce(
+    (sum, child) => checkedAdd(sum, child.inclusiveRead, 'Child shared read blocks'),
+    0,
+  );
+  const exclusiveHit = Math.max(0, checkedSubtract(hit, childHit, 'Exclusive shared hit blocks'));
+  const exclusiveRead = Math.max(0, checkedSubtract(read, childRead, 'Exclusive shared read blocks'));
   const producer = typeof node['Subplan Name'] === 'string' ? /^CTE (.+)$/.exec(node['Subplan Name']) : null;
   if (producer) addBlocks(ctes.producers, producer[1]!, hit, read);
   if (nodeType === 'CTE Scan' && typeof node['CTE Name'] === 'string')
     addBlocks(ctes.scans, node['CTE Name'], exclusiveHit, exclusiveRead);
   const removedByFilter = optionalNumber(node, 'Rows Removed by Filter');
   const removedByRecheck = optionalNumber(node, 'Rows Removed by Index Recheck');
-  const examined = rowScans.has(nodeType) ? (actualRows + removedByFilter + removedByRecheck) * loops : 0;
+  const rowsPerLoop = rowScans.has(nodeType)
+    ? checkedAdd(
+        checkedAdd(actualRows, removedByFilter, 'Rows examined before recheck'),
+        removedByRecheck,
+        'Rows examined per loop',
+      )
+    : 0;
+  const examined = rowScans.has(nodeType) && loops > 0 ? checkedMultiply(rowsPerLoop, loops, 'Rows examined') : 0;
 
   if (rowScans.has(nodeType) || nodeType === 'ModifyTable') {
     const relationName = node['Relation Name'];
@@ -425,18 +446,23 @@ function costNode(
       addRelation(
         relations,
         key,
-        nodeType === 'ModifyTable' ? actualRows * loops : examined,
-        exclusiveHit + exclusiveRead,
+        nodeType === 'ModifyTable' && loops > 0
+          ? checkedMultiply(actualRows, loops, 'Rows modified')
+          : nodeType === 'ModifyTable'
+            ? 0
+            : examined,
+        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive relation blocks'),
         nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
       );
     }
   } else if (nodeType === 'Bitmap Index Scan') {
     const indexName = node['Index Name'];
-    if (typeof indexName === 'string') addRelation(relations, `index:${indexName}`, 0, exclusiveHit + exclusiveRead);
+    if (typeof indexName === 'string')
+      addRelation(relations, `index:${indexName}`, 0, checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'));
   }
 
   return {
-    rows: examined + children.reduce((sum, child) => sum + child.rows, 0),
+    rows: children.reduce((sum, child) => checkedAdd(sum, child.rows, 'Child rows examined'), examined),
     inclusiveHit: hit,
     inclusiveRead: read,
   };
@@ -450,14 +476,32 @@ function addRelation(
   sequentialScans = 0,
 ): void {
   const relation = relations.get(key) ?? { rows: 0, blocks: 0, nodes: 0, sequentialScans: 0 };
-  relation.rows += rows;
-  relation.blocks += blocks;
+  relation.rows = checkedAdd(relation.rows, rows, `Rows for relation ${key}`);
+  relation.blocks = checkedAdd(relation.blocks, blocks, `Blocks for relation ${key}`);
   relation.nodes++;
-  relation.sequentialScans += sequentialScans;
+  relation.sequentialScans = checkedAdd(relation.sequentialScans, sequentialScans, `Sequential scans for relation ${key}`);
   relations.set(key, relation);
 }
 
+function validateByteMeasurements(values: readonly number[] | undefined, expected: number, label: string): void {
+  if (values === undefined) return;
+  if (values.length !== expected) throw new TypeError(`${label} must have one value per statement`);
+  values.forEach((value, index) => requireNonNegativeFiniteNumber(value, `${label} at index ${index}`));
+}
+
 export function costOf(capture: Capture): Cost {
+  validateByteMeasurements(capture.requestBytes, capture.statements.length, 'Request bytes');
+  validateByteMeasurements(capture.responseBytes, capture.statements.length, 'Response bytes');
+  validateByteMeasurements(
+    capture.backgroundRequestBytes,
+    capture.backgroundStatements?.length ?? 0,
+    'Background request bytes',
+  );
+  validateByteMeasurements(
+    capture.backgroundResponseBytes,
+    capture.backgroundStatements?.length ?? 0,
+    'Background response bytes',
+  );
   const relations = new Map<string, MutableRelationCost>();
   let rows = 0;
   let sharedHit = 0;
@@ -473,6 +517,7 @@ export function costOf(capture: Capture): Cost {
     const backend = capture.planBackends?.[index];
     const owner = capture.planStatements?.[index];
     for (const { queryText, plan } of documentEntries(document)) {
+      let included = true;
       if (capture.planStatements !== undefined) {
         if (
           owner !== undefined &&
@@ -480,24 +525,32 @@ export function costOf(capture: Capture): Cost {
           owner >= 0 &&
           owner < capture.statements.length &&
           nativeCatalogIndexes?.has(owner) === true
-        )
-          continue;
+        ) included = false;
       } else {
-        if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) continue;
-        if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
+        if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) included = false;
+        if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) included = false;
       }
-      plans++;
       const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
-      const totals = costNode(plan, true, relations, ctes);
-      rows += totals.rows;
-      sharedHit += totals.inclusiveHit;
-      sharedRead += totals.inclusiveRead;
+      const totals = costNode(plan, true, included ? relations : new Map<string, MutableRelationCost>(), ctes);
+      if (!included) continue;
+      plans++;
+      rows = checkedAdd(rows, totals.rows, 'Total examined rows');
+      sharedHit = checkedAdd(sharedHit, totals.inclusiveHit, 'Total shared hit blocks');
+      sharedRead = checkedAdd(sharedRead, totals.inclusiveRead, 'Total shared read blocks');
       // A producer runs lazily inside the scans that read it, so those buffers are already in the root. What no scan
       // pulled (a data-modifying CTE that runs at the end of the statement) is not.
       for (const [name, producer] of ctes.producers) {
         const scans = ctes.scans.get(name);
-        sharedHit += Math.max(0, producer.hit - (scans?.hit ?? 0));
-        sharedRead += Math.max(0, producer.read - (scans?.read ?? 0));
+        sharedHit = checkedAdd(
+          sharedHit,
+          Math.max(0, checkedSubtract(producer.hit, scans?.hit ?? 0, `Unscanned CTE ${name} hit blocks`)),
+          'Total shared hit blocks including CTE work',
+        );
+        sharedRead = checkedAdd(
+          sharedRead,
+          Math.max(0, checkedSubtract(producer.read, scans?.read ?? 0, `Unscanned CTE ${name} read blocks`)),
+          'Total shared read blocks including CTE work',
+        );
       }
     }
   }
@@ -516,19 +569,19 @@ export function costOf(capture: Capture): Cost {
     const document = capture.backgroundPlans![index];
     const backend = capture.backgroundPlanBackends?.[index];
     for (const entry of documentEntries(document)) {
-      if (
+      const included = !(
         capture.backgroundPlanStatements === undefined &&
         backgroundBackendAware &&
         !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)
-      )
-        continue;
+      );
       const key = entry.queryText ?? '<unknown background statement>';
       const planCost = costOf({
         statements: [],
-        plans: [{ Plan: entry.plan, 'Query Text': entry.queryText }],
+        plans: [[{ Plan: entry.plan, ...(entry.queryText === undefined ? {} : { 'Query Text': entry.queryText }) }]],
       });
-      backgroundRows += planCost.rows;
-      backgroundBlocks += planCost.blocks;
+      if (!included) continue;
+      backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
+      backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');
       const prior = backgroundCosts.get(key) ?? { rows: 0, blocks: 0, bounded: true };
       backgroundCosts.set(key, {
         rows: Math.max(prior.rows, planCost.rows),
@@ -540,6 +593,7 @@ export function costOf(capture: Capture): Cost {
     }
   }
 
+  const totalBlocks = checkedAdd(sharedHit, sharedRead, 'Total shared blocks');
   const cost = {
     statements: capture.statements.filter(
       (statement, index) =>
@@ -552,19 +606,26 @@ export function costOf(capture: Capture): Cost {
     catalogStatements: catalog.catalogStatements,
     plans,
     rows: Math.round(rows),
-    blocks: sharedHit + sharedRead,
+    blocks: totalBlocks,
     sharedHit,
     sharedRead,
     relations: Object.fromEntries(relations),
   };
-  const requestBytes = capture.requestBytes?.reduce((sum, value) => sum + value, 0);
-  const responseBytes = capture.responseBytes?.reduce((sum, value) => sum + value, 0);
+  const requestBytes = capture.requestBytes === undefined ? undefined : sumFinite(capture.requestBytes, 'Request bytes');
+  const responseBytes =
+    capture.responseBytes === undefined ? undefined : sumFinite(capture.responseBytes, 'Response bytes');
   const hasBackgroundWork =
     (capture.backgroundStatements?.length ?? 0) > 0 ||
     (capture.backgroundRequestBytes?.length ?? 0) > 0 ||
     (capture.backgroundResponseBytes?.length ?? 0) > 0;
-  const backgroundRequestBytes = capture.backgroundRequestBytes?.reduce((sum, value) => sum + value, 0);
-  const backgroundResponseBytes = capture.backgroundResponseBytes?.reduce((sum, value) => sum + value, 0);
+  const backgroundRequestBytes =
+    capture.backgroundRequestBytes === undefined
+      ? undefined
+      : sumFinite(capture.backgroundRequestBytes, 'Background request bytes');
+  const backgroundResponseBytes =
+    capture.backgroundResponseBytes === undefined
+      ? undefined
+      : sumFinite(capture.backgroundResponseBytes, 'Background response bytes');
   const failedStatements = new Map<string, number>();
   for (const error of capture.statementErrors ?? [])
     if (error !== null) failedStatements.set(error, (failedStatements.get(error) ?? 0) + 1);
@@ -590,11 +651,66 @@ export function costOf(capture: Capture): Cost {
 }
 
 function lowerMedian(values: readonly number[]): number {
+  if (values.length === 0) throw new RangeError('Cannot take the median of no values');
   return [...values].sort((left, right) => left - right)[(values.length - 1) >> 1]!;
+}
+
+function validateCostEvidence(cost: Cost, index: number): void {
+  if (!isRecord(cost)) throw new TypeError(`Cost repetition ${index} must be an object`);
+  const coreFields = [
+    'statements',
+    'controlStatements',
+    'catalogStatements',
+    'plans',
+    'rows',
+    'blocks',
+    'sharedHit',
+    'sharedRead',
+  ] as const;
+  for (const field of coreFields) requireNonNegativeFiniteNumber(cost[field], `Cost ${field} at repetition ${index}`);
+  const optionalFields = [
+    'requestBytes',
+    'responseBytes',
+    'backgroundStatements',
+    'backgroundRequestBytes',
+    'backgroundResponseBytes',
+    'backgroundRows',
+    'backgroundBlocks',
+  ] as const;
+  for (const field of optionalFields)
+    if (cost[field] !== undefined)
+      requireNonNegativeFiniteNumber(cost[field], `Cost ${field} at repetition ${index}`);
+
+  if (!isRecord(cost.relations)) throw new TypeError(`Cost relations at repetition ${index} must be an object`);
+  for (const [name, relation] of Object.entries(cost.relations)) {
+    if (!isRecord(relation)) throw new TypeError(`Cost relation ${name} at repetition ${index} must be an object`);
+    for (const field of ['rows', 'blocks', 'nodes', 'sequentialScans'] as const)
+      requireNonNegativeFiniteNumber(relation[field], `Cost relation ${name} ${field} at repetition ${index}`);
+  }
+
+  if (cost.failedStatements !== undefined) {
+    if (!isRecord(cost.failedStatements))
+      throw new TypeError(`Cost failed statement counts at repetition ${index} must be an object`);
+    for (const [sqlstate, value] of Object.entries(cost.failedStatements))
+      requireNonNegativeFiniteNumber(value, `Failed statement count ${sqlstate} at repetition ${index}`);
+  }
+  if (cost.backgroundCosts !== undefined) {
+    if (!isRecord(cost.backgroundCosts))
+      throw new TypeError(`Cost background costs at repetition ${index} must be an object`);
+    for (const [name, background] of Object.entries(cost.backgroundCosts)) {
+      if (!isRecord(background))
+        throw new TypeError(`Background cost ${name} at repetition ${index} must be an object`);
+      requireNonNegativeFiniteNumber(background.rows, `Background rows for ${name} at repetition ${index}`);
+      requireNonNegativeFiniteNumber(background.blocks, `Background blocks for ${name} at repetition ${index}`);
+      if (typeof background.bounded !== 'boolean')
+        throw new TypeError(`Background bounded flag for ${name} at repetition ${index} must be boolean`);
+    }
+  }
 }
 
 export function medianCost(costs: readonly Cost[]): Cost {
   if (costs.length === 0) throw new RangeError('Cannot take the median of no costs');
+  costs.forEach(validateCostEvidence);
   const blocks = lowerMedian(costs.map((cost) => cost.blocks));
   const representative = costs.find((cost) => cost.blocks === blocks)!;
   const requestBytes = costs.flatMap(({ requestBytes }) => (requestBytes === undefined ? [] : [requestBytes]));

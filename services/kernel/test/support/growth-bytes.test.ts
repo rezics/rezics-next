@@ -9,6 +9,7 @@ import {
   type GrowthCheck,
   type GrowthDatabase,
 } from './growth.ts';
+import { growthByteViolations } from './growth-bound.ts';
 import { capture } from './growth-capture.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -255,3 +256,21 @@ test('enforces a declared response byte bound while checks without byte bounds r
   });
   expect(overridden.byteBounds).toEqual({ responseBytes: 'constant' });
 }, 60_000);
+
+test('byte bounds reject malformed and non-representable measurements while preserving zero and fractional values', () => {
+  const samples = (values: readonly number[]) =>
+    values.map((requestBytes, index) => ({
+      scale: [1, 8, 64][index]!,
+      cost: { rows: 0, blocks: 0, statements: 0, requestBytes },
+    }));
+
+  for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY])
+    expect(() => growthByteViolations(samples([0, value, 0]), { requestBytes: 'constant' })).toThrow(TypeError);
+  expect(growthByteViolations(samples([0, 0, 0]), { requestBytes: 'constant' })).toEqual([]);
+  expect(growthByteViolations(samples([0.5, 0.5, 0.5]), { requestBytes: 'constant' })).toEqual([]);
+  expect(() =>
+    growthByteViolations(samples([0, Number.MAX_VALUE, Number.MAX_VALUE]), { requestBytes: 'linear' }, {
+      requestBytes: { absolute: 0, relative: 0 },
+    }),
+  ).toThrow(/requestBytes growth allowance/);
+});

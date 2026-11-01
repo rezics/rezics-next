@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withConnection } from '../../src/database/pool.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthCheck, type GrowthDatabase } from './growth.ts';
+import { countedSample, countedViolations, medianCounted, validateCountedRun } from './growth-counters.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -107,3 +108,52 @@ test('connections counts distinct operation backends and requires backend captur
     'Counted unit connections is unavailable at scale 1: capture did not include backends',
   );
 }, 60_000);
+
+test('counted medians require complete matching non-negative safe-integer repetitions', () => {
+  expect(() => medianCounted([{ examined: 1 }, {}, { examined: 3 }])).toThrow(/missing or mismatched unit names/);
+  expect(() => medianCounted([{ examined: 1 }, { rows: 2 }])).toThrow(/missing or mismatched unit names/);
+  expect(() => medianCounted([{ examined: -1 }])).toThrow(/non-negative safe integer/);
+  expect(() => medianCounted([{ examined: Number.NaN }])).toThrow(/non-negative safe integer/);
+  expect(medianCounted([{ examined: 1 }, { examined: 2 }])).toEqual({ examined: 1.5 });
+  expect(countedSample([{ examined: 1 }, { examined: 2 }])).toEqual({
+    examined: { value: 1.5, repetitions: [1, 2] },
+  });
+  expect(() =>
+    medianCounted([{ examined: Number.MAX_SAFE_INTEGER - 1 }, { examined: Number.MAX_SAFE_INTEGER }]),
+  ).toThrow(/not exactly representable/);
+  expect(medianCounted([{ examined: 0 }])).toEqual({ examined: 0 });
+});
+
+test('counted runs validate their configuration, supplied units and scale before aggregation', () => {
+  const check = { read: () => ({}), limits: { slots: 3 } };
+  expect(validateCountedRun(check, { slots: 0 }, 1)).toEqual({ slots: 0 });
+  expect(() => validateCountedRun(check, { slots: -1 }, 1)).toThrow(/non-negative safe integer/);
+  expect(() => validateCountedRun(check, {}, 1)).toThrow(/was not reported/);
+  expect(() => validateCountedRun(check, { slots: 1 }, Number.POSITIVE_INFINITY)).toThrow(/scale/);
+});
+
+test('counted comparisons require configured medians and coherent scale repetitions', () => {
+  const check = { read: () => ({}), bounds: { examined: 'constant' as const } };
+  const makeSample = (scale: number, values: number[]) => ({
+    scale,
+    counted: countedSample(values.map((examined) => ({ examined }))),
+  });
+  const valid = [makeSample(1, [1, 2]), makeSample(8, [1, 2]), makeSample(64, [1, 2])];
+  expect(countedViolations(check, valid)).toEqual([]);
+  expect(() => countedViolations(check, valid.map(({ scale }) => ({ scale, counted: {} })))).toThrow(/missing/);
+  expect(() =>
+    countedViolations(check, [valid[0]!, valid[1]!, { scale: 64, counted: countedSample([{ examined: 1 }]) }]),
+  ).toThrow(/incoherent/);
+  expect(() => countedViolations(check, [valid[0]!, valid[1]!, { ...valid[2]!, scale: Number.NaN }])).toThrow(/scale/);
+  expect(() =>
+    countedViolations(
+      { ...check, slack: { examined: { absolute: 0, relative: Number.MAX_VALUE } } },
+      [
+        makeSample(1, [Number.MAX_SAFE_INTEGER]),
+        makeSample(8, [Number.MAX_SAFE_INTEGER]),
+        makeSample(64, [Number.MAX_SAFE_INTEGER]),
+      ],
+    ),
+  ).toThrow(/growth slack/);
+  expect(countedViolations({ read: () => ({}) }, [])).toEqual([]);
+});

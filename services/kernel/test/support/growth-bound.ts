@@ -1,3 +1,5 @@
+import { checkedAdd, checkedDivide, checkedMultiply, checkedSubtract, requireNonNegativeFiniteNumber } from './growth-numeric.ts';
+
 export type Metric = 'rows' | 'blocks' | 'statements';
 export type ByteMetric = 'requestBytes' | 'responseBytes';
 export type GrowthMetric = Metric | ByteMetric;
@@ -73,19 +75,61 @@ function validateSamples(samples: readonly GrowthSample[]): void {
     throw new TypeError('Growth scales must be finite, positive and strictly increasing');
   }
   if (scales.at(-1)! > 4096) throw new TypeError('The largest growth scale must be no greater than 4096');
-  const firstRatio = scales[1]! / scales[0]!;
+  const firstRatio = checkedDivide(scales[1]!, scales[0]!, 'Growth scale ratio');
+  if (!Number.isFinite(firstRatio)) throw new TypeError('Growth scale ratios must be finite');
   if (
     firstRatio < 4 ||
     scales.slice(2).some((scale, index) => {
-      const ratio = scale / scales[index + 1]!;
-      return Math.abs(firstRatio - ratio) / Math.max(firstRatio, ratio) >= 1e-9;
+      const ratio = checkedDivide(scale, scales[index + 1]!, 'Growth scale ratio');
+      if (!Number.isFinite(ratio)) throw new TypeError('Growth scale ratios must be finite');
+      const difference = Math.abs(checkedSubtract(firstRatio, ratio, 'Growth scale ratio difference'));
+      return checkedDivide(difference, Math.max(firstRatio, ratio), 'Relative growth scale ratio difference') >= 1e-9;
     })
   ) {
     throw new TypeError('Growth scales must have equal ratios of at least four');
   }
   for (const sample of samples) {
+    if (typeof sample.cost !== 'object' || sample.cost === null)
+      throw new TypeError('Growth cost evidence must be an object');
     for (const metric of METRICS) {
-      if (!Number.isFinite(sample.cost[metric])) throw new TypeError(`Growth value for ${metric} must be finite`);
+      requireNonNegativeFiniteNumber(sample.cost[metric], `Growth value for ${metric}`);
+    }
+    for (const metric of ['requestBytes', 'responseBytes'] as const)
+      if (sample.cost[metric] !== undefined)
+        requireNonNegativeFiniteNumber(sample.cost[metric], `Growth value for ${metric}`);
+    if (sample.cost.relations !== undefined) {
+      if (typeof sample.cost.relations !== 'object' || sample.cost.relations === null)
+        throw new TypeError('Growth relation evidence must be an object');
+      for (const [name, relation] of Object.entries(sample.cost.relations)) {
+        if (typeof relation !== 'object' || relation === null)
+          throw new TypeError(`Growth relation ${name} must be an object`);
+        requireNonNegativeFiniteNumber(relation.rows, `Growth relation ${name} rows`);
+        requireNonNegativeFiniteNumber(relation.blocks, `Growth relation ${name} blocks`);
+        if (relation.sequentialScans !== undefined)
+          requireNonNegativeFiniteNumber(relation.sequentialScans, `Growth relation ${name} sequential scans`);
+      }
+    }
+    if (sample.repetitions !== undefined) {
+      if (!Array.isArray(sample.repetitions)) throw new TypeError('Growth repetitions must be an array');
+      sample.repetitions.forEach((repetition, index) => {
+        if (typeof repetition !== 'object' || repetition === null)
+          throw new TypeError(`Growth repetition ${index} must be an object`);
+        for (const metric of METRICS)
+          requireNonNegativeFiniteNumber(repetition[metric], `Growth repetition ${index} ${metric}`);
+        for (const metric of ['requestBytes', 'responseBytes'] as const)
+          if (repetition[metric] !== undefined)
+            requireNonNegativeFiniteNumber(repetition[metric], `Growth repetition ${index} ${metric}`);
+      });
+    }
+    if (sample.relationSizes !== undefined) {
+      if (typeof sample.relationSizes !== 'object' || sample.relationSizes === null)
+        throw new TypeError('Growth relation sizes must be an object');
+      for (const [name, size] of Object.entries(sample.relationSizes)) {
+        if (typeof size !== 'object' || size === null)
+          throw new TypeError(`Growth relation size ${name} must be an object`);
+        requireNonNegativeFiniteNumber(size.reltuples, `Growth relation ${name} reltuples`);
+        requireNonNegativeFiniteNumber(size.relpages, `Growth relation ${name} relpages`);
+      }
     }
   }
 }
@@ -117,16 +161,31 @@ export function growthViolations(
     for (let index = 0; index < samples.length - 2; index++) {
       const triple = samples.slice(index, index + 3);
       const scales = triple.map(({ scale }) => scale) as [number, number, number];
-      const ratio = scales[1] / scales[0];
+      const ratio = checkedDivide(scales[1], scales[0], 'Growth scale ratio');
       const values = triple.map(({ cost }) => cost[metric]) as [number, number, number];
-      const firstStep = values[1] - values[0];
-      const secondStep = values[2] - values[1];
-      const allowance = Math.max(tolerance.absolute, tolerance.relative * values[0]);
-      const observed = bound === 'constant' ? Math.max(values[1], values[2]) - values[0] : secondStep;
-      const allowed =
+      const firstStep = checkedSubtract(values[1], values[0], `First ${metric} growth step`);
+      const secondStep = checkedSubtract(values[2], values[1], `Second ${metric} growth step`);
+      const allowance = Math.max(
+        tolerance.absolute,
+        checkedMultiply(tolerance.relative, values[0], `Relative ${metric} growth slack`),
+      );
+      const observed =
+        bound === 'constant'
+          ? checkedSubtract(Math.max(values[1], values[2]), values[0], `Observed ${metric} growth`)
+          : secondStep;
+      const allowanceForStep =
         bound === 'constant'
           ? allowance
-          : (bound === 'logarithmic' ? 2 : 1.5 * ratio) * Math.max(firstStep, 0) + allowance;
+          : checkedAdd(
+              checkedMultiply(
+                bound === 'logarithmic' ? 2 : checkedMultiply(1.5, ratio, `${metric} linear scale allowance`),
+                Math.max(firstStep, 0),
+                `${metric} growth allowance`,
+              ),
+              allowance,
+              `Total ${metric} growth allowance`,
+            );
+      const allowed = allowanceForStep;
       if (observed > allowed) violations.push({ metric, bound, scales, values, observed, allowed });
     }
   }
@@ -155,16 +214,30 @@ export function growthByteViolations(
     for (let index = 0; index < samples.length - 2; index++) {
       const triple = samples.slice(index, index + 3);
       const scales = triple.map(({ scale }) => scale) as [number, number, number];
-      const ratio = scales[1] / scales[0];
+      const ratio = checkedDivide(scales[1], scales[0], 'Growth scale ratio');
       const values = triple.map(({ cost }) => cost[metric]!) as [number, number, number];
-      const firstStep = values[1] - values[0];
-      const secondStep = values[2] - values[1];
-      const allowance = Math.max(tolerance.absolute, tolerance.relative * values[0]);
-      const observed = bound === 'constant' ? Math.max(values[1], values[2]) - values[0] : secondStep;
+      const firstStep = checkedSubtract(values[1], values[0], `First ${metric} growth step`);
+      const secondStep = checkedSubtract(values[2], values[1], `Second ${metric} growth step`);
+      const allowance = Math.max(
+        tolerance.absolute,
+        checkedMultiply(tolerance.relative, values[0], `Relative ${metric} growth slack`),
+      );
+      const observed =
+        bound === 'constant'
+          ? checkedSubtract(Math.max(values[1], values[2]), values[0], `Observed ${metric} growth`)
+          : secondStep;
       const allowed =
         bound === 'constant'
           ? allowance
-          : (bound === 'logarithmic' ? 2 : 1.5 * ratio) * Math.max(firstStep, 0) + allowance;
+          : checkedAdd(
+              checkedMultiply(
+                bound === 'logarithmic' ? 2 : checkedMultiply(1.5, ratio, `${metric} linear scale allowance`),
+                Math.max(firstStep, 0),
+                `${metric} growth allowance`,
+              ),
+              allowance,
+              `Total ${metric} growth allowance`,
+            );
       if (observed > allowed) violations.push({ metric, bound, scales, values, observed, allowed });
     }
   }

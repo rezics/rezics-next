@@ -110,3 +110,62 @@ test('an index staircase admits bounded level changes on top of an allowed famil
   const unexplained = classifySeries(series([1, 4, 16, 64], [10, 10, 22, 22]), 'logarithmic', 2);
   expect(unexplained.outcome).toBe('violation');
 });
+
+test('zero and fractional work remain valid model evidence', () => {
+  const zero = classifySeries(series([1, 4, 16], [0, 0, 0]), 'constant');
+  expect(zero.outcome).toBe('compatible');
+  expect(zero.medians).toEqual([0, 0, 0]);
+
+  const fractional = classifySeries(
+    [
+      { scale: 1, repetitions: [0.5, 0.5], uncertainty: 0 },
+      { scale: 4, repetitions: [1, 1], uncertainty: 0 },
+      { scale: 16, repetitions: [1.5, 1.5], uncertainty: 0 },
+    ],
+    'linear',
+  );
+  expect(fractional.medians).toEqual([0.5, 1, 1.5]);
+  expect(fractional.adjacentDifferences).toEqual([0.5, 0.5]);
+  expect(fractional.outcome).toBe('compatible');
+});
+
+test('series arithmetic preserves a representable large regression and a negative diagnostic intercept', () => {
+  const maximum = Number.MAX_VALUE;
+  const large = classifySeries(series([1, 2, 3], [maximum / 4, maximum / 2, (maximum * 3) / 4]), 'linear');
+  expect(large.outcome).toBe('compatible');
+  expect(Number.isFinite(large.families.linear.a)).toBe(true);
+  expect(Number.isFinite(large.families.linear.b)).toBe(true);
+
+  const negativeIntercept = classifySeries(series([1, 4, 16], [0, 1, 100]), 'linear');
+  expect(negativeIntercept.families.linear.a).toBeLessThan(0);
+  expect(Number.isFinite(negativeIntercept.families.linear.a)).toBe(true);
+});
+
+test('series classification refuses overflowed intervals, coordinates and regression fits', () => {
+  const maximum = Number.MAX_VALUE;
+  expect(() => classifySeries(series([1, 4, 16], [maximum, maximum, maximum], maximum), 'constant')).toThrow(
+    /uncertainty upper bound/,
+  );
+  expect(() => classifySeries(series([Number.MIN_VALUE, 1, 2], [1, 1, 1]), 'linear')).toThrow(
+    /Linear scale (difference|coordinate)/,
+  );
+  expect(() =>
+    classifySeries(
+      series([1, 1 + Number.EPSILON, 1 + Number.EPSILON * 2], [0, maximum, maximum]),
+      'linear',
+    ),
+  ).toThrow(/Regression slope/);
+});
+
+test('finite uncertainty keeps legitimate unbounded slope ranges feasible', () => {
+  const result = classifySeries(
+    [1, 1 + Number.EPSILON, 1 + Number.EPSILON * 2].map((scale) => ({
+      scale,
+      repetitions: [0, 0, 0],
+      uncertainty: Number.MAX_VALUE,
+    })),
+    'linear',
+  );
+  expect(result.outcome).toBe('compatible');
+  expect(result.intervals.at(-1)).toEqual({ lower: 0, upper: Number.MAX_VALUE });
+});
