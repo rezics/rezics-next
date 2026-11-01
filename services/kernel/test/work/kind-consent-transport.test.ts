@@ -323,7 +323,10 @@ test('maximum stored scopes fit canonical private transport actual with one-use 
     new Response(child.stderr).text(),
   ]);
   expect(exitCode, errors).toBe(0);
-  const observed = JSON.parse(output) as { bound: { source: { bytes: number } }; actual: { source: { bytes: number } } };
+  const observed = JSON.parse(output) as {
+    bound: { source: { bytes: number } };
+    actual: { source: { bytes: number } };
+  };
   expect(observed.actual.source.bytes).toBeLessThanOrEqual(observed.bound.source.bytes);
   expect(observed.actual.source.bytes).toBeGreaterThan(67_073);
 }, 60_000);

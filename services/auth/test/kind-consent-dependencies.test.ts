@@ -23,10 +23,7 @@ import { testDatabase } from '../scripts/database.ts';
 import { createKindConsentParticipant, withKindConsentEnrollmentDeadline } from '../src/kind-consent.ts';
 
 test('canonical enrollment ceiling covers every admitted maximum JSON row-array path and native actual composition', async () => {
-  const scopes = Array.from(
-    { length: 512 },
-    (_, index) => `${index.toString(16).padStart(3, '0')}${'x'.repeat(125)}`,
-  );
+  const scopes = Array.from({ length: 512 }, (_, index) => `${index.toString(16).padStart(3, '0')}${'x'.repeat(125)}`);
   const identifier = '\\'.repeat(1024);
   const referenceId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
   const input: KindConsentEnrollmentInput = {
