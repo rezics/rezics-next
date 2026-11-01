@@ -488,7 +488,10 @@ export class ThreadPageCaller {
 
   private check() {
     if (this.retired) return;
-    if (!sameIdentity(this.currentAdmission.identity, this.currentIdentity) || getLocale() !== this.currentAdmission.identity.locale) {
+    if (
+      !sameIdentity(this.currentAdmission.identity, this.currentIdentity) ||
+      getLocale() !== this.currentAdmission.identity.locale
+    ) {
       this.retire();
       return;
     }
@@ -513,9 +516,7 @@ export class ThreadPageCaller {
       )
         continue;
       const ownBoundaryEvent =
-        (continuation.boundary === 'cancel' &&
-          event.type === 'updated' &&
-          event.action?.type === 'setState') ||
+        (continuation.boundary === 'cancel' && event.type === 'updated' && event.action?.type === 'setState') ||
         (continuation.boundary === 'remove' && event.type === 'removed');
       if (!ownBoundaryEvent && isRetiringQueryEvent(event)) continuation.queryRetired = true;
     }
@@ -783,9 +784,7 @@ export class ThreadPageCaller {
       sameSession(ticket.session, this.source.readSession()) &&
       getLocale() === this.currentAdmission.identity.locale &&
       (ticket.ticket === undefined ||
-        (this.connection.connected &&
-          !this.connection.retired &&
-          this.connection.generation === ticket.ticket)) &&
+        (this.connection.connected && !this.connection.retired && this.connection.generation === ticket.ticket)) &&
       (this.refreshGuard === undefined || this.refreshGuard())
     );
   }
@@ -794,9 +793,9 @@ export class ThreadPageCaller {
   beginRefreshContinuation(ticket: { session: SessionStamp; ticket?: number }): ThreadPageRefreshContinuation {
     this.check();
     if (
-      (ticket.ticket === undefined
+      ticket.ticket === undefined
         ? this.retired || !sameSession(ticket.session, this.source.readSession())
-        : !this.isEffectTicketCurrent({ session: ticket.session, ticket: ticket.ticket }) || !this.connection.owner)
+        : !this.isEffectTicketCurrent({ session: ticket.session, ticket: ticket.ticket }) || !this.connection.owner
     )
       throw new ThreadPageCallerRetired();
     const state: RefreshContinuationState = {
