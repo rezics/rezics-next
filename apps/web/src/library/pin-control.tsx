@@ -1,7 +1,7 @@
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { EllipsisIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
@@ -20,6 +20,18 @@ type PinControlInput = {
   mode: PinControlMode;
 };
 
+type PinAction = 'pin' | 'unpin' | 'up' | 'down';
+type PinAttempt = {
+  lifetime: symbol;
+  action: PinAction;
+  data: { collectionId: string; revision: number; after?: string | null; idempotencyKey: string };
+  pending: boolean;
+};
+
+function pinLifetime(key: string) {
+  return { key, lifetime: Symbol(), pending: false, notice: '', action: null as PinAction | null };
+}
+
 export function usePinControlActions({ collectionId, pins, mode }: PinControlInput): {
   canUpdate: boolean;
   entries: MenuEntry[];
@@ -29,88 +41,123 @@ export function usePinControlActions({ collectionId, pins, mode }: PinControlInp
   const canPut = useOperation('library_pin.put') && pins.state === 'loaded' && pins.canUpdate === true;
   const canRemove = useOperation('library_pin.delete') && pins.state === 'loaded' && pins.canRemove === true;
   const loadedPins = pins.state === 'loaded' ? pins : null;
-  const { csrfToken } = useSession();
+  const { state: session, subject, csrfToken } = useSession();
+  const viewer = session === 'signed-in' && subject ? subject : null;
+  const hasCsrf = Boolean(csrfToken);
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [pending, setPending] = useState(false);
-  const [notice, setNotice] = useState('');
+  const key = JSON.stringify([viewer, collectionId, canPut, canRemove, hasCsrf]);
+  const [control, setControl] = useState(() => pinLifetime(key));
+  const committed = useRef<symbol | null>(null);
+  const attempt = useRef<PinAttempt | null>(null);
+  const { lifetime, pending, notice, action: retainedAction } = control;
+
+  // A refresh or nonempty token rotation keeps the attempt; authority loss creates a fresh lifetime.
+  if (control.key !== key) setControl(pinLifetime(key));
+  useLayoutEffect(() => {
+    committed.current = lifetime;
+    return () => {
+      committed.current = null;
+      attempt.current = null;
+    };
+  }, [lifetime]);
+  const isCurrent = () => committed.current === lifetime;
+  const update = (change: Partial<typeof control>) =>
+    setControl((current) => (current.lifetime === lifetime ? { ...current, ...change } : current));
 
   const index = pins.state === 'loaded' ? pins.pins.findIndex((pin) => pin.collectionId === collectionId) : -1;
   const pinned = index >= 0;
-  const canUpdate = pinned ? canPut || canRemove : canPut;
   const orderedIds = loadedPins?.pins.map((pin) => pin.collectionId) ?? [];
   const pinCount = loadedPins?.pins.length ?? 0;
-  const perform = async (action: 'pin' | 'unpin' | 'up' | 'down') => {
-    if (!csrfToken || pending || !loadedPins || (action === 'unpin' ? !canRemove : !canPut)) return;
-    setPending(true);
-    setNotice('');
-    const after =
-      action === 'up'
-        ? index <= 1
-          ? null
-          : orderedIds[index - 2]!
-        : action === 'down'
-          ? orderedIds[index + 1]!
-          : undefined;
+  const perform = async (action: PinAction) => {
+    if (!isCurrent() || !viewer || !hasCsrf || !loadedPins || (action === 'unpin' ? !canRemove : !canPut)) return;
+    let current = attempt.current;
+    if (current) {
+      if (current.lifetime !== lifetime || current.pending || current.action !== action) return;
+    } else {
+      if ((action === 'up' && index <= 0) || (action === 'down' && (index < 0 || index >= pinCount - 1))) return;
+      const after = action === 'up' ? (index <= 1 ? null : orderedIds[index - 2]!) : orderedIds[index + 1]!;
+      current = {
+        lifetime,
+        action,
+        data: {
+          collectionId,
+          revision: loadedPins.revision,
+          ...(action === 'up' || action === 'down' ? { after } : {}),
+          idempotencyKey: crypto.randomUUID(),
+        },
+        pending: false,
+      };
+      attempt.current = current;
+    }
+    const captured = current;
+    const isCurrentAttempt = () => isCurrent() && attempt.current === captured;
+    // This synchronous lock also covers two selections before React commits the pending render.
+    captured.pending = true;
+    update({ pending: true, notice: '', action: captured.action });
+    let retain = true;
+    const refresh = () => {
+      if (!isCurrentAttempt()) return [];
+      const navigation = router.invalidate();
+      const cache = isCurrentAttempt()
+        ? queryClient.invalidateQueries({ queryKey: ['library-navigation'] })
+        : undefined;
+      return [navigation, cache];
+    };
     try {
       const result =
-        action === 'unpin'
-          ? await unpinCollection({
-              data: { collectionId, revision: loadedPins.revision, idempotencyKey: crypto.randomUUID() },
-              headers: csrfHeaders(),
-            })
-          : await pinCollection({
-              data: {
-                collectionId,
-                revision: loadedPins.revision,
-                ...(action === 'up' || action === 'down' ? { after } : {}),
-                idempotencyKey: crypto.randomUUID(),
-              },
-              headers: csrfHeaders(),
-            });
+        captured.action === 'unpin'
+          ? await unpinCollection({ data: captured.data, headers: csrfHeaders() })
+          : await pinCollection({ data: captured.data, headers: csrfHeaders() });
+      if (!isCurrentAttempt()) return;
+      retain = !result.ok && result.reason === 'unavailable';
       if (result.ok) {
-        await Promise.all([router.invalidate(), queryClient.invalidateQueries({ queryKey: ['library-navigation'] })]);
+        await Promise.all(refresh());
       } else if (result.reason === 'conflict') {
-        setNotice(m.library_pin_conflict());
-        await Promise.allSettled([
-          router.invalidate(),
-          queryClient.invalidateQueries({ queryKey: ['library-navigation'] }),
-        ]);
-      } else if (result.reason === 'full') setNotice(m.library_pin_limit());
-      else setNotice(m.error_message());
+        update({ notice: m.library_pin_conflict() });
+        await Promise.allSettled(refresh());
+      } else if (result.reason === 'full') update({ notice: m.library_pin_limit() });
+      else update({ notice: m.error_message() });
     } catch {
-      setNotice(m.error_message());
+      if (isCurrentAttempt()) update({ notice: m.error_message() });
     } finally {
-      setPending(false);
+      if (isCurrentAttempt()) {
+        captured.pending = false;
+        if (!retain) attempt.current = null;
+        update({ pending: false, action: retain ? captured.action : null });
+      }
     }
   };
 
-  const moves: MenuEntry[] = [
-    ...(canPut && mode === 'list' && index > 0
-      ? [{ type: 'item' as const, label: m.library_pin_move_up(), onSelect: () => void perform('up') }]
-      : []),
-    ...(canPut && mode === 'list' && index < pinCount - 1
-      ? [{ type: 'item' as const, label: m.library_pin_move_down(), onSelect: () => void perform('down') }]
-      : []),
-  ];
-  const entries: MenuEntry[] =
-    !canUpdate || pins.state !== 'loaded'
-      ? []
-      : pinned
-        ? [
-            ...moves,
-            ...(moves.length ? [{ type: 'separator' as const }] : []),
-            ...(canRemove
-              ? [{ type: 'destructive' as const, label: m.library_pin_unpin(), onSelect: () => void perform('unpin') }]
-              : []),
-          ]
-        : [{ type: 'item' as const, label: m.library_pin_pin(), onSelect: () => void perform('pin') }];
+  const actions: PinAction[] = [];
+  if (viewer && loadedPins) {
+    if (pinned) {
+      if (canPut && mode === 'list' && index > 0) actions.push('up');
+      if (canPut && mode === 'list' && index < pinCount - 1) actions.push('down');
+      if (canRemove) actions.push('unpin');
+    } else if (canPut) actions.push('pin');
+    // Keep an uncertain command explicitly retryable even if a refresh changes its menu placement.
+    if (retainedAction && !actions.includes(retainedAction)) actions.push(retainedAction);
+  }
+  const labels = {
+    pin: m.library_pin_pin(),
+    unpin: m.library_pin_unpin(),
+    up: m.library_pin_move_up(),
+    down: m.library_pin_move_down(),
+  };
+  const entries: MenuEntry[] = actions.flatMap((action, index) => [
+    ...(action === 'unpin' && index > 0 ? [{ type: 'separator' as const }] : []),
+    {
+      type: action === 'unpin' ? ('destructive' as const) : ('item' as const),
+      label: labels[action],
+      onSelect: () => void perform(action),
+      disabled: pending || !hasCsrf || (retainedAction !== null && retainedAction !== action),
+    },
+  ]);
 
   return {
-    canUpdate: Boolean(canUpdate),
-    entries: entries.map((entry) =>
-      entry.type === 'separator' ? entry : { ...entry, disabled: pending || !csrfToken },
-    ),
+    canUpdate: entries.length > 0,
+    entries,
     notice,
     pending,
   };
