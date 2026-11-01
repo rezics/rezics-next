@@ -1269,11 +1269,7 @@ function CollectionPageLifetime({
           {page.memberState === 'preparing' ? (
             <div className="space-y-3">
               <p role="status">{m.library_dynamic_preparing()}</p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void reloadFromControl()}
-              >
+              <Button type="button" variant="outline" onClick={() => void reloadFromControl()}>
                 {m.library_collection_reload()}
               </Button>
             </div>
@@ -1281,12 +1277,7 @@ function CollectionPageLifetime({
           {page.memberState === 'unavailable' ? (
             <div className="space-y-3">
               <p role="alert">{m.library_dynamic_unavailable()}</p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={() => void reloadFromControl()}
-              >
+              <Button type="button" variant="outline" disabled={pending} onClick={() => void reloadFromControl()}>
                 {m.library_collection_reload()}
               </Button>
             </div>

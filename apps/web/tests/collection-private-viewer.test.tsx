@@ -433,7 +433,8 @@ test('a dispatched native save cannot send its next member write with replacemen
 type MountedCollection = Awaited<ReturnType<typeof mount>>;
 async function changeValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
   await settle(() => {
-    const prototype = input.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    const prototype =
+      input.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(input, value);
     input.dispatchEvent(new window.Event('input', { bubbles: true }));
   });
@@ -448,9 +449,9 @@ async function clickNamed(ui: MountedCollection, name: string) {
 }
 async function submitDraft(ui: MountedCollection) {
   await settle(() =>
-    ui.host.querySelector('#collection-edit-form')!.dispatchEvent(
-      new window.Event('submit', { bubbles: true, cancelable: true }),
-    ),
+    ui.host
+      .querySelector('#collection-edit-form')!
+      .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
   );
 }
 async function stageDraft(ui: MountedCollection, next: 'transfer' | 'batch' | 'member' | 'chain') {
@@ -461,9 +462,12 @@ async function stageDraft(ui: MountedCollection, next: 'transfer' | 'batch' | 'm
   }
   if (next === 'transfer' || next === 'chain') {
     const destination = collectionRecording.collection;
-    await settle(() => ui.client.setQueryData(libraryNavigationQuery('en', 100).queryKey, {
-      pins: { state: 'closed' }, collections: [destination],
-    }));
+    await settle(() =>
+      ui.client.setQueryData(libraryNavigationQuery('en', 100).queryKey, {
+        pins: { state: 'closed' },
+        collections: [destination],
+      }),
+    );
     await settle(() => ui.host.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click());
     await settle(() => {
       const select = ui.host.querySelector<HTMLSelectElement>('[data-collection-selection] select')!;
@@ -487,8 +491,16 @@ test('originating parent saves stop transfer, batch and member continuations on 
       const ui = await mount();
       const parent = deferred<{ ok: true; id: string; revision: number }>();
       const update = spyOn(edits, 'updateCollection').mockImplementation(() => parent.promise);
-      const transfer = spyOn(commands, 'transferCollectionMembers').mockResolvedValue({ ok: true, revision: 3, destinationRevision: 2 });
-      const batch = spyOn(commands, 'batchRemoveCollectionMembers').mockResolvedValue({ ok: true, revision: 3, undo: [] });
+      const transfer = spyOn(commands, 'transferCollectionMembers').mockResolvedValue({
+        ok: true,
+        revision: 3,
+        destinationRevision: 2,
+      });
+      const batch = spyOn(commands, 'batchRemoveCollectionMembers').mockResolvedValue({
+        ok: true,
+        revision: 3,
+        undo: [],
+      });
       const note = spyOn(edits, 'updateMemberNote').mockResolvedValue({ ok: true, id: 'member' });
       const destination = spyOn(reads, 'readCollectionDestination').mockResolvedValue(collectionRecording.collection);
       try {
@@ -530,7 +542,11 @@ test('originating parent saves stop transfer, batch and member continuations on 
         expect(ui.invalidations).not.toHaveBeenCalled();
         expect(ui.host.innerHTML).toBe(currentMarkup);
       } finally {
-        update.mockRestore(); transfer.mockRestore(); batch.mockRestore(); note.mockRestore(); destination.mockRestore();
+        update.mockRestore();
+        transfer.mockRestore();
+        batch.mockRestore();
+        note.mockRestore();
+        destination.mockRestore();
         await ui.close();
       }
     }
@@ -548,7 +564,9 @@ test('retirement during transfer, batch or member IO keeps its native outcome wi
     const memberResult = deferred<{ ok: true; id: string }>();
     const update = spyOn(edits, 'updateCollection').mockResolvedValue({ ok: true, id: 'original', revision: 2 });
     const transfer = spyOn(commands, 'transferCollectionMembers').mockImplementation(() =>
-      pending === 'transfer' ? transferResult.promise : Promise.resolve({ ok: true, revision: 3, destinationRevision: 2 }),
+      pending === 'transfer'
+        ? transferResult.promise
+        : Promise.resolve({ ok: true, revision: 3, destinationRevision: 2 }),
     );
     const batch = spyOn(commands, 'batchRemoveCollectionMembers').mockImplementation(() =>
       pending === 'batch' ? batchResult.promise : Promise.resolve({ ok: true, revision: 4, undo: [] }),
@@ -580,7 +598,11 @@ test('retirement during transfer, batch or member IO keeps its native outcome wi
       expect(ui.host.textContent).toContain('bob private Collection');
       expect(ui.host.querySelector('[role="alert"]')).toBeNull();
     } finally {
-      update.mockRestore(); transfer.mockRestore(); batch.mockRestore(); note.mockRestore(); destination.mockRestore();
+      update.mockRestore();
+      transfer.mockRestore();
+      batch.mockRestore();
+      note.mockRestore();
+      destination.mockRestore();
       await ui.close();
     }
   }
@@ -618,7 +640,8 @@ test('a current editor keeps its exact uncertain save payload and key across non
     expect(ui.invalidations).toHaveBeenCalledTimes(1);
     expect(ui.host.querySelector('#collection-edit-form')).toBeNull();
   } finally {
-    update.mockRestore(); note.mockRestore();
+    update.mockRestore();
+    note.mockRestore();
     await ui.close();
   }
 });
