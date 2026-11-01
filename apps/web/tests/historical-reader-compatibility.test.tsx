@@ -644,6 +644,18 @@ test('exact revision and history share actual reader provenance, serialized admi
   // A current exact problem retries through the same route caller and gets a fresh admitted visit.
   hasSessionCookie = true;
   explicitAuthorization = null;
+  hasSessionCookie = false;
+  const anonymousFallback = await exactVisit(client, { postId: publicPostId, revisionId: publicRevisionId });
+  expect(anonymousFallback.provenance.actualReader).toEqual({
+    credentialMode: 'anonymous',
+    subject: null,
+    complete: true,
+  });
+  expect(anonymousFallback.page.state).toBe('ready');
+  if (anonymousFallback.page.state === 'ready')
+    expect(JSON.stringify(anonymousFallback.page)).toContain('Anonymous public revision');
+  expect(exactCalls.at(-1)?.authorization).toBeNull();
+  hasSessionCookie = true;
   failNextExact = true;
   const failedExact = await exactVisit(client);
   expect(failedExact.page).toMatchObject({ state: 'problem', status: 503 });

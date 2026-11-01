@@ -76,6 +76,7 @@ async function componentBundle() {
       window.historyCalls = [];
       window.historyRelatedCalls = [];
       window.pendingHistory = [];
+      window.historyCsrfToken = null;
       window.historyFetch = async (input, init) => {
         const request = new Request(input, init);
         const url = new URL(request.url);
@@ -108,6 +109,7 @@ async function componentBundle() {
       window.setHistorySession = (session, name = selectedClient ?? 'browser') => {
         const client = clientFor(name);
         window.historyViewer = session?.state === 'signed-in' ? session.subject : undefined;
+        window.historyCsrfToken = session?.csrfToken ?? null;
         if (session === null) client.removeQueries({ queryKey: ['session'], exact: true });
         else client.setQueryData(['session'], session);
       };
@@ -130,6 +132,7 @@ async function componentBundle() {
         selectedClient = client;
         const session = client ? clientFor(client).getQueryData(['session']) : undefined;
         window.historyViewer = client ? (session?.state === 'signed-in' ? session.subject : undefined) : viewerId;
+        window.historyCsrfToken = session?.csrfToken ?? null;
         if (!authorities.has(authority)) authorities.set(authority, {});
         root ??= createRoot(document.getElementById('app'));
         const history = <PostHistory postId={postId} viewerId={viewerId} readAuthority={authorities.get(authority)} review />;
@@ -174,7 +177,7 @@ async function componentBundle() {
                     ? `export const env = { AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test',
                       WEBSITE_SCOPES: 'openid', WEBSITE_CLIENT_ID: 'history-test', WEBSITE_CLIENT_KEY: '{}',
                       SESSIONS: { idFromName: id => id, get: () => ({ credential: async () => ({ status: 'active',
-                        subject: window.historyViewer, accessToken: window.historyViewer, csrfToken: 'test' }) }) } };`
+                        subject: window.historyViewer, accessToken: window.historyViewer, csrfToken: window.historyCsrfToken }) }) } };`
                     : `import { createKernelClient } from ${JSON.stringify(Bun.resolveSync('@rezics/client', app))};
                      export const kernelClient = () => createKernelClient('https://kernel.test', { fetch: window.historyFetch });`,
             }));
@@ -506,14 +509,13 @@ test('The default immutable revision history retires original session disclosure
   }
 }, 30_000);
 
-test('default history rejects unknown, preparing and tokenless authenticated admission and permits a fresh explicit recovery', async () => {
+test('default history rejects unknown, preparing and mismatched admission and permits a fresh explicit recovery', async () => {
   const page = await mounted();
   try {
     for (const value of [
       null,
       { state: 'unknown', csrfToken: null },
       { state: 'preparing', csrfToken: null },
-      { ...signedIn, csrfToken: null },
       { ...signedIn, subject: 'another-account' },
     ]) {
       await session(page, value);
@@ -549,6 +551,72 @@ test('default history rejects unknown, preparing and tokenless authenticated adm
     await page.close();
   }
 }, 30_000);
+
+test('healthy authenticated history without CSRF supports first-page reads, continuation and explicit recovery', async () => {
+  const page = await mounted();
+  try {
+    await session(page, { ...signedIn, csrfToken: null });
+    await mount(page, { client: 'browser', viewerId: first.authorId });
+    await open(page);
+    expect((await calls(page)).at(-1)).toMatchObject({
+      postId: first.id,
+      cursor: null,
+      limit: '20',
+      authorization: `Bearer ${first.authorId}`,
+    });
+    await finish(page, { revisions: [scored], next: cursor });
+    await versions(page, 1);
+    await page.getByText(m.thread_provenance_current_vote(), { exact: true }).waitFor();
+    expect(
+      await page.evaluate(
+        (reader) =>
+          (window as unknown as Driver).historyRelatedCalls.some(
+            ({ path, authorization }) => path.endsWith('/vote') && authorization === `Bearer ${reader}`,
+          ),
+        first.authorId,
+      ),
+    ).toBe(true);
+    expect(await page.locator('section > ol a').first().getAttribute('href')).toContain(first.revisionId);
+
+    await page.getByRole('button', { name: m.thread_history_more() }).click();
+    await pending(page);
+    expect((await calls(page)).at(-1)).toMatchObject({
+      postId: first.id,
+      cursor,
+      limit: '20',
+      authorization: `Bearer ${first.authorId}`,
+    });
+    await finish(page, { code: 'forbidden' }, 403);
+    await unavailable(page);
+
+    await page.getByRole('button', { name: m.exact_revision_retry() }).click();
+    await pending(page);
+    expect((await calls(page)).at(-1)).toMatchObject({
+      postId: first.id,
+      cursor,
+      limit: '20',
+      authorization: `Bearer ${first.authorId}`,
+    });
+    await finish(page, { revisions: [second], next: null });
+    await versions(page, 2);
+    const links = await page.locator('section > ol h4 a').evaluateAll((entries) =>
+      entries.map((entry) => entry.getAttribute('href')),
+    );
+    expect(links).toEqual([
+      `/en/posts/${first.id}/revisions/${first.revisionId}`,
+      `/en/posts/${second.id}/revisions/${second.revisionId}`,
+    ]);
+    expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
+    expect((await calls(page)).slice(-3).map(({ cursor: value, limit }) => ({ cursor: value, limit }))).toEqual([
+      { cursor: null, limit: '20' },
+      { cursor, limit: '20' },
+      { cursor, limit: '20' },
+    ]);
+    expect(await page.evaluate(() => (window as unknown as { historyCsrfToken: string | null }).historyCsrfToken)).toBeNull();
+  } finally {
+    await page.close();
+  }
+});
 
 test('queued and retained history callbacks cannot send across post, viewer, readAuthority, QueryClient replacement or unmount', async () => {
   const page = await mounted();
