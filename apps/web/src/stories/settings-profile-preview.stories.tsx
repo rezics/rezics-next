@@ -95,8 +95,8 @@ export const DraftPreview: Story = {
         const profile = within(await canvas.findByRole('region', { name: m.settings_profile_heading() }));
         const name = await profile.findByRole('textbox', { name: m.settings_profile_display_name() });
         const biography = profile.getByRole('textbox', { name: m.settings_profile_biography() });
-        const initialPublicReads = traffic.publicReads.length;
-        const initialEditableReads = traffic.editableReads.length;
+        const initialPublicReads = traffic.publicReads;
+        const initialEditableReads = traffic.editableReads;
 
         await userEvent.clear(name);
         await userEvent.type(name, draftName);
