@@ -172,9 +172,10 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 }
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
+  const kindConsentReceiver = options.kindConsentReceiver ?? options.restoredGeneration?.kindConsentReceiver;
   const kindConsent = createKindConsentParticipant({
     database: options.database,
-    receiver: options.kindConsentReceiver ?? options.restoredGeneration?.kindConsentReceiver,
+    ...(kindConsentReceiver ? { receiver: kindConsentReceiver } : {}),
   });
   if (options.restoredGeneration) {
     const fenced = await kindConsent.writer.fenceAll({
@@ -2759,7 +2760,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                       `UPDATE auth_consent SET scopes=$3,pending_scopes=NULL,pending_reference=NULL
                        WHERE account_id=$1 AND client_id=$2 AND revision=$4 AND pending_reference=$5
                        AND pending_scopes=$3 RETURNING account_id`,
-                      [proof.accountId, clientId, granted, reduction.revision, proof.reference],
+                      [proof.accountId, clientId, granted, outcome.revision, proof.reference],
                     )
                   ).rowCount
                 )

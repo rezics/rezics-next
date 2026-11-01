@@ -36,9 +36,10 @@ import { createKindConsentParticipant } from './kind-consent.ts';
  * handler, signer, SDK or maintenance writer. Durable native cursors, not this
  * timer or an in-memory ready bit, own all future reconciliation. */
 export function createAuthRestoreHost(options: { database: Pool; restoredGeneration: AuthRestoredGeneration }) {
+  const kindConsentReceiver = options.restoredGeneration.kindConsentReceiver;
   const kindConsent = createKindConsentParticipant({
     database: options.database,
-    receiver: options.restoredGeneration.kindConsentReceiver,
+    ...(kindConsentReceiver ? { receiver: kindConsentReceiver } : {}),
   }).writer;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<{ pending: AuthRestorePendingCode }> | undefined;

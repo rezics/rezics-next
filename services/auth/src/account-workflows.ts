@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { AUTH_CURSOR_VERSION, requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
 import { createHash } from 'node:crypto';
+import { createKindConsentParticipant } from './kind-consent.ts';
 import type { KindConsentWriter } from './kind-consent.ts';
 
 type Progress = {
@@ -120,8 +121,9 @@ export function clientAuthority(
   access: TrustedAccessPorts,
   deny: () => never,
   normalize: (value: unknown) => string[],
-  kindConsent: KindConsentWriter,
+  kindConsent?: KindConsentWriter,
 ) {
+  const kindConsentWriter = kindConsent ?? createKindConsentParticipant({ database: pool }).writer;
   const sameScopes = (left: readonly string[], right: readonly string[]) =>
     JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
   const issuance = new AsyncLocalStorage<{
@@ -199,7 +201,7 @@ export function clientAuthority(
         .update(JSON.stringify([accountId, clientId, granted]))
         .digest('hex')}`;
       await afterIssuance(async () => {
-        const changed = await kindConsent.change({
+        const changed = await kindConsentWriter.change({
           transitionKey,
           kind: 'consent',
           accountId,
@@ -295,7 +297,7 @@ export function clientAuthority(
     async beginClientReduction(input) {
       const granted = normalize(input.scopes);
       if (!input.operationId || typeof input.firstParty !== 'boolean') deny();
-      const changed = await kindConsent.change({
+      const changed = await kindConsentWriter.change({
         transitionKey: `kind-consent:client-reduction-start:${input.operationId}`,
         kind: 'client',
         clientId: input.clientId,
@@ -466,7 +468,7 @@ export function clientAuthority(
     },
     async finishClientReduction(input) {
       const granted = normalize(input.scopes);
-      const changed = await kindConsent.change({
+      const changed = await kindConsentWriter.change({
         transitionKey: `kind-consent:client-reduction-finish:${input.operationId}`,
         kind: 'client',
         clientId: input.clientId,
