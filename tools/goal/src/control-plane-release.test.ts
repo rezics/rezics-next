@@ -2991,3 +2991,90 @@ test('an external main CAS change spends the single continuation without overwri
     h.dispose();
   }
 }, 30_000);
+
+for (const passed of [true, false]) {
+  test(`ordinary release cleanup refusal preserves its ${passed ? 'published success' : 'failed lifecycle proof'} without another gate`, async () => {
+    const h = integrationHarness();
+    let retainedTree = '';
+    try {
+      h.ensureDev();
+      const main = h.head('main');
+      const task = dispatchControlPlane(h);
+      await h.start(task);
+      const source = h.head(task.branch);
+      const workerResult = h.store.attempt({ taskId: task.id, attempt: 1 }).result;
+      const entry = h.queue.entry({ taskId: task.id, attempt: 1 })!;
+      const commands: string[][] = [];
+      let launches = 0;
+      const native = new MergeTrain({
+        ...h.settings,
+        queue: h.queue,
+        fence: h.store,
+        sink: {
+          onGateOutcome(outcome) {
+            h.outcomes.push(outcome);
+          },
+        },
+        runGate: async (command, cwd, log) => {
+          commands.push([...command]);
+          return success(command, cwd, log);
+        },
+        runLaunchSmoke: async (command, cwd) => {
+          launches++;
+          // A real Git refusal is deterministic without changing permissions or leaving a live command behind.
+          git(h.root, 'worktree', 'lock', '--reason', 'fixture retains exact cleanup evidence', cwd);
+          retainedTree = cwd;
+          return passed
+            ? releaseEvidence(command, cwd)
+            : {
+                passed: false,
+                timedOut: false,
+                output: 'AssertionError: lifecycle failed before cleanup\n',
+              };
+        },
+      });
+      await native.run();
+      expect(commands.filter(isFullControlPlaneSuite)).toHaveLength(1);
+      expect(commands).toContainEqual(['bun', 'run', '--cwd', 'tools/goal', 'typecheck']);
+      expect(commands.some((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toBe(true);
+      expect(launches).toBe(1);
+      expect(h.outcomes).toHaveLength(1);
+      const outcome = h.outcomes[0]!;
+      expect(outcome.passed).toBe(passed);
+      expect(h.head(task.branch)).toBe(source);
+      expect(h.store.attempt({ taskId: task.id, attempt: 1 }).result).toBe(workerResult);
+      expect(existsSync(retainedTree)).toBe(true);
+      expect(readFileSync(outcome.logPath, 'utf8')).toContain(`Train tree cleanup deferred: ${retainedTree}:`);
+      expect(readFileSync(outcome.logPath, 'utf8')).toContain('locked');
+      expect(ordinaryProofs(h, entry.id).attempts).toMatchObject([{ status: 'finished', outcome: { passed } }]);
+      if (passed) {
+        expect(h.head('main')).not.toBe(main);
+        expect(outcome.mergedCommit).toBe(h.head('main'));
+        expect(releaseRecords(h)[0]).toMatchObject({ mainCommit: h.head('main') });
+        expect(git(h.root, 'merge-base', '--is-ancestor', h.head('main'), 'dev')).toBe('');
+      } else {
+        expect([h.head('main'), h.head('dev')]).toEqual([main, main]);
+        expect(outcome).toMatchObject({
+          stage: 'gate',
+          timedOut: false,
+          firstFailure: { assertion: expect.stringContaining('lifecycle failed before cleanup') },
+        });
+        expect(releaseRecords(h)).toEqual([]);
+      }
+      for (const name of ['train-main.lease', 'train.lease']) {
+        expect(existsSync(join(h.settings.stateDirectory, name))).toBe(false);
+      }
+      const completedCommands = commands.length;
+      await native.pump();
+      expect(commands).toHaveLength(completedCommands);
+      expect(launches).toBe(1);
+      expect(h.outcomes).toHaveLength(1);
+    } finally {
+      if (retainedTree) {
+        git(h.root, 'worktree', 'unlock', retainedTree);
+        git(h.root, 'worktree', 'remove', '--force', retainedTree);
+      }
+      h.dispose();
+    }
+  });
+}

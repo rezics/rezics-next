@@ -3157,7 +3157,12 @@ export class MergeTrain {
         try {
           git(trainTree, 'merge', '--abort');
         } catch {}
-        git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+        try {
+          git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+        } catch (error) {
+          // Retain the tree and exact cleanup failure without replacing a failed proof or a committed outcome.
+          appendFileSync(logPath, `Train tree cleanup deferred: ${trainTree}: ${error}\n`);
+        }
       }
     }
   }
