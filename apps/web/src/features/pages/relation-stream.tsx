@@ -1,12 +1,12 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
+import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { useRouter, useRouterState } from '@tanstack/react-router';
 import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { isView } from '@rezics/composition';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
 import { subjectViewHref } from '../../subject/subject-href';
-import { useSession } from '../../session/query';
+import { sessionQuery } from '../../session/query';
 import { CoverList } from './cover-list';
 import {
   holderItems,
@@ -20,7 +20,117 @@ import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from '
 
 let nextRelationIncarnation = 0;
 let nextSectionIncarnation = 0;
+let nextQueryClientIncarnation = 0;
 const sectionIncarnations = new WeakMap<object, number>();
+const queryClientIncarnations = new WeakMap<QueryClient, number>();
+const retiredPrivateSections = new WeakMap<object, { permanent: boolean; suspensions: number }>();
+const retiredPrivateReadingObjects = new WeakSet<object>();
+
+type OwnedQuery = { client: QueryClient; key: QueryKey };
+type StreamOwner = {
+  queryClient: QueryClient;
+  expectedReader: string | null;
+  sessionQuery: object | null;
+  generation: number;
+  mounted: boolean;
+  suspended: boolean;
+  cleanupMarked: boolean;
+  retired: boolean;
+  queries: Map<string, OwnedQuery>;
+  stopObserving: (() => void) | undefined;
+  matches(generation: number): boolean;
+  current(generation: number): boolean;
+  retire(updateState?: boolean): void;
+};
+
+function queryClientIncarnation(client: QueryClient): number {
+  let incarnation = queryClientIncarnations.get(client);
+  if (incarnation === undefined) {
+    incarnation = ++nextQueryClientIncarnation;
+    queryClientIncarnations.set(client, incarnation);
+  }
+  return incarnation;
+}
+
+function sessionReading(client: QueryClient, expectedReader: string) {
+  const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+  const data: unknown = query?.state.data;
+  const session = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : undefined;
+  return {
+    query: query ?? null,
+    admitted:
+      query?.state.status === 'success' &&
+      session?.state === 'signed-in' &&
+      session.subject === expectedReader,
+  };
+}
+
+function sameSessionKey(key: QueryKey): boolean {
+  return (
+    key.length === sessionQuery.queryKey.length &&
+    key.every((part: unknown, index: number) => part === sessionQuery.queryKey[index])
+  );
+}
+
+function privateSectionState(section: Section) {
+  return retiredPrivateSections.get(section);
+}
+
+function privateReadingObjects(section: Section): object[] {
+  const objects: object[] = [section];
+  if (!section.ok) return objects;
+  objects.push(section.body);
+  for (const key of ['links', 'relations']) {
+    const rows = section.body[key];
+    if (!Array.isArray(rows)) continue;
+    objects.push(rows);
+    for (const row of rows) {
+      if (typeof row !== 'object' || row === null) continue;
+      objects.push(row);
+      for (const nested of ['statement', 'summary', 'related']) {
+        const value = (row as Record<string, unknown>)[nested];
+        if (typeof value === 'object' && value !== null) objects.push(value);
+      }
+    }
+  }
+  return objects;
+}
+
+function isRetiredPrivateReading(section: Section): boolean {
+  return privateReadingObjects(section).some((object) => retiredPrivateReadingObjects.has(object));
+}
+
+function permanentlyRetirePrivateSection(section: Section): void {
+  const state = privateSectionState(section) ?? { permanent: false, suspensions: 0 };
+  state.permanent = true;
+  retiredPrivateSections.set(section, state);
+  for (const object of privateReadingObjects(section)) retiredPrivateReadingObjects.add(object);
+}
+
+function suspendPrivateSection(section: Section): boolean {
+  const state = privateSectionState(section) ?? { permanent: false, suspensions: 0 };
+  if (state.permanent) return false;
+  state.suspensions += 1;
+  retiredPrivateSections.set(section, state);
+  return true;
+}
+
+function resumePrivateSection(section: Section, marked: boolean): void {
+  if (!marked) return;
+  const state = privateSectionState(section);
+  if (!state || state.permanent) return;
+  state.suspensions = Math.max(0, state.suspensions - 1);
+  if (state.suspensions === 0) retiredPrivateSections.delete(section);
+}
+
+function clearOwnedQueries(owner: StreamOwner): void {
+  const queries = [...owner.queries.values()];
+  owner.queries.clear();
+  for (const { client, key } of queries) {
+    void client.cancelQueries({ queryKey: key, exact: true });
+    client.removeQueries({ queryKey: key, exact: true });
+  }
+}
 
 function sectionIncarnation(section: Section): number {
   let incarnation = sectionIncarnations.get(section);
@@ -34,34 +144,6 @@ function sectionIncarnation(section: Section): number {
 function useRelationIncarnation(): string {
   const [incarnation] = useState(() => `relations-${++nextRelationIncarnation}`);
   return incarnation;
-}
-
-function useReadingLifetime(onRetire: () => void) {
-  const lifetime = useRef({ generation: 0, mounted: false });
-  const onRetireRef = useRef(onRetire);
-  onRetireRef.current = onRetire;
-  useLayoutEffect(() => {
-    const generation = ++lifetime.current.generation;
-    lifetime.current.mounted = true;
-    return () => {
-      if (lifetime.current.generation === generation) {
-        lifetime.current.mounted = false;
-        lifetime.current.generation += 1;
-        onRetireRef.current();
-      }
-    };
-  }, []);
-  return useMemo(
-    () => ({
-      current(generation: number) {
-        return lifetime.current.mounted && lifetime.current.generation === generation;
-      },
-      generation() {
-        return lifetime.current.generation;
-      },
-    }),
-    [],
-  );
 }
 
 const actionClass =
@@ -95,8 +177,8 @@ export function RelationStream(props: {
   titleLang?: string | undefined;
 }) {
   const { value, node, view } = props;
-  const viewer = useSession();
-  const hasReader = value.cacheReader != null;
+  const queryClient = useQueryClient();
+  const routeHref = useRouterState({ select: (state) => state.location.href });
   const representation = pageRepresentation(value.context);
   const identity = JSON.stringify([
     value.subject,
@@ -104,33 +186,54 @@ export function RelationStream(props: {
     value.account ?? null,
     value.realm,
     value.cacheReader ?? null,
-    hasReader ? [viewer.state, viewer.subject ?? null] : null,
     representation,
     value.locale,
     value.reader,
     node,
     view,
     sectionIncarnation(props.section),
+    routeHref,
+    queryClientIncarnation(queryClient),
   ]);
-  return <StreamState key={identity} viewer={viewer} {...props} />;
+  const control = useRef<
+    { identity: string; retire?: ((updateState?: boolean) => void) | undefined } | null
+  >(null);
+  if (control.current?.identity !== identity) {
+    control.current?.retire?.(false);
+    control.current = { identity };
+  }
+  const registerOwner = useMemo(
+    () => (ownerIdentity: string, retire: (updateState?: boolean) => void) => {
+      const current = control.current;
+      if (current?.identity === ownerIdentity) current.retire = retire;
+      return () => {
+        const latest = control.current;
+        if (latest?.identity === ownerIdentity && latest.retire === retire) latest.retire = undefined;
+      };
+    },
+    [],
+  );
+  return <StreamState key={identity} identity={identity} registerOwner={registerOwner} {...props} />;
 }
 
 function StreamState({
   value,
-  viewer,
   section,
   node,
   view,
   title,
   titleLang,
+  identity,
+  registerOwner,
 }: {
   value: OverviewValue;
-  viewer: ReturnType<typeof useSession>;
   section: Section;
   node: string;
   view: string;
   title: string;
   titleLang?: string | undefined;
+  identity: string;
+  registerOwner: (identity: string, retire: (updateState?: boolean) => void) => () => void;
 }) {
   const queryClient = useQueryClient();
   const router = useRouter({ warn: false });
@@ -141,40 +244,169 @@ function StreamState({
     completion?: { added: number; exhausted: boolean; trigger: HTMLAnchorElement | null } | undefined;
   };
   const [state, setState] = useState<State>(() => ({ pages: [section], pending: false }));
+  const [, refreshOwner] = useState(0);
   const { pages, pending, error, completion } = state;
   const end = useRef<HTMLParagraphElement>(null);
+  const active = useRef(false);
   const incarnation = useRelationIncarnation();
-  const activeQueryKey = useRef<readonly unknown[] | undefined>(undefined);
-  const lifetime = useReadingLifetime(() => {
-    const key = activeQueryKey.current;
-    activeQueryKey.current = undefined;
-    if (key) void queryClient.cancelQueries({ queryKey: key, exact: true });
-  });
-  const readingGeneration = lifetime.generation();
+  const ownerRef = useRef<StreamOwner | null>(null);
+  if (ownerRef.current === null) {
+    const expectedReader = value.cacheReader ?? null;
+    const reading = expectedReader === null ? undefined : sessionReading(queryClient, expectedReader);
+    const sectionState = expectedReader === null ? undefined : privateSectionState(section);
+    const unavailable =
+      expectedReader !== null &&
+      (sectionState?.permanent === true ||
+        isRetiredPrivateReading(section) ||
+        (sectionState?.suspensions ?? 0) > 0 ||
+        !reading?.admitted ||
+        reading?.query == null);
+    const owner = {
+      queryClient,
+      expectedReader,
+      sessionQuery: reading?.query ?? null,
+      generation: 0,
+      mounted: false,
+      suspended: false,
+      cleanupMarked: false,
+      retired: unavailable,
+      queries: new Map<string, OwnedQuery>(),
+      stopObserving: undefined,
+    } as StreamOwner;
+    if (unavailable && expectedReader !== null && !sectionState?.suspensions)
+      permanentlyRetirePrivateSection(section);
+    owner.matches = (generation) =>
+      !owner.retired && !owner.suspended && owner.mounted && owner.generation === generation;
+    owner.current = (generation) => {
+      if (!owner.matches(generation)) return false;
+      if (owner.expectedReader !== null) {
+        const current = sessionReading(owner.queryClient, owner.expectedReader);
+        if (current.query !== owner.sessionQuery || !current.admitted) {
+          owner.retire();
+          return false;
+        }
+      }
+      return true;
+    };
+    owner.retire = (updateState = true) => {
+      if (owner.retired) return;
+      owner.retired = true;
+      owner.generation += 1;
+      active.current = false;
+      if (owner.expectedReader !== null) permanentlyRetirePrivateSection(section);
+      owner.stopObserving?.();
+      owner.stopObserving = undefined;
+      clearOwnedQueries(owner);
+      if (updateState) {
+        setState((previous) => ({
+          ...previous,
+          pages: [],
+          pending: false,
+          error: undefined,
+          completion: undefined,
+        }));
+        refreshOwner((version) => version + 1);
+      }
+    };
+    ownerRef.current = owner;
+  }
+  const owner = ownerRef.current;
+  const readingGeneration = owner.generation;
+  const actualReading =
+    owner.expectedReader === null ? undefined : sessionReading(owner.queryClient, owner.expectedReader);
+  const currentSession =
+    owner.expectedReader === null ||
+    (!owner.retired &&
+      !owner.suspended &&
+      actualReading?.query === owner.sessionQuery &&
+      actualReading?.admitted === true);
+  const readerUnavailable = owner.expectedReader !== null && !currentSession;
+  const visiblePages = currentSession ? pages : [];
+  const visiblePending = currentSession && pending;
+  const visibleError = currentSession ? error : undefined;
+  const visibleCompletion = currentSession ? completion : undefined;
+
   useLayoutEffect(() => {
-    const trigger = completion?.trigger;
+    if (owner.retired) return;
+    if (owner.suspended) {
+      const current =
+        owner.expectedReader === null
+          ? undefined
+          : sessionReading(owner.queryClient, owner.expectedReader);
+      const sectionState = owner.expectedReader === null ? undefined : privateSectionState(section);
+      if (
+        owner.expectedReader !== null &&
+        (current?.query !== owner.sessionQuery ||
+          current?.admitted !== true ||
+          sectionState?.permanent === true ||
+          (sectionState?.suspensions ?? 0) > (owner.cleanupMarked ? 1 : 0))
+      ) {
+        owner.retire();
+        return;
+      }
+      resumePrivateSection(section, owner.cleanupMarked);
+      owner.cleanupMarked = false;
+      owner.suspended = false;
+      owner.generation += 1;
+      refreshOwner((version) => version + 1);
+    }
+    owner.mounted = true;
+    const unsubscribe =
+      owner.expectedReader === null
+        ? undefined
+        : owner.queryClient.getQueryCache().subscribe((event) => {
+            if (!sameSessionKey(event.query.queryKey)) return;
+            if (event.type === 'removed' || event.type === 'added') {
+              owner.retire();
+              return;
+            }
+            if (event.type !== 'updated') return;
+            const current = sessionReading(owner.queryClient, owner.expectedReader!);
+            if (
+              event.action.type === 'error' ||
+              event.query !== owner.sessionQuery ||
+              current.query !== owner.sessionQuery ||
+              !current.admitted
+            )
+              owner.retire();
+          });
+    owner.stopObserving = unsubscribe;
+    if (owner.expectedReader !== null && !owner.retired && !owner.current(owner.generation)) owner.retire();
+    const unregister = registerOwner(identity, owner.retire);
+    return () => {
+      unsubscribe?.();
+      if (owner.stopObserving === unsubscribe) owner.stopObserving = undefined;
+      unregister();
+      owner.mounted = false;
+      owner.suspended = true;
+      owner.generation += 1;
+      active.current = false;
+      clearOwnedQueries(owner);
+      if (owner.expectedReader !== null) owner.cleanupMarked = suspendPrivateSection(section);
+    };
+  }, [identity, owner, registerOwner, section]);
+
+  useLayoutEffect(() => {
+    const trigger = visibleCompletion?.trigger;
     // Only replace focus lost with the activated anchor. A reader may have moved to another stream.
     if (
-      lifetime.current(readingGeneration) &&
-      completion?.exhausted &&
+      owner.current(readingGeneration) &&
+      visibleCompletion?.exhausted &&
       trigger &&
       (trigger.ownerDocument.activeElement === trigger ||
         trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
     )
       end.current?.focus({ preventScroll: true });
-  }, [completion, lifetime, readingGeneration]);
-  const active = useRef(false);
-  const latest = pages[pages.length - 1];
+  }, [owner, readingGeneration, visibleCompletion]);
+
+  const latest = visiblePages[visiblePages.length - 1];
   const cursor = latest?.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
-  const items = pages.flatMap((page) => relationStreamItems(page, value)?.items ?? []);
+  const items = visiblePages.flatMap((page) => relationStreamItems(page, value)?.items ?? []);
   const unique = new Map<string, Item>();
   for (const item of items) unique.set(item.statement ?? item.id, item);
-  const readerUnavailable =
-    value.cacheReader != null &&
-    viewer.state !== 'unknown' &&
-    !(viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
   const continuationEnabled =
-    value.cacheReader == null || (viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
+    owner.expectedReader === null ||
+    (currentSession && owner.matches(readingGeneration));
   const currentView = isView(view) ? view : 'relations';
   const base = value.subject
     ? subjectViewHref({ id: value.subject, label: value.subjectLabel ?? '' }, value.locale, currentView)
@@ -194,17 +426,20 @@ function StreamState({
       !value.subject
     )
       return;
-    // Keep native navigation available until this page has observed its authenticated reader.
-    if (!continuationEnabled) return;
+    const generation = readingGeneration;
+    // Keep the native restart path available when admission has changed but React has not committed yet.
+    if (!continuationEnabled || !owner.current(generation)) return;
     event.preventDefault();
     if (active.current) return;
-    const generation = lifetime.generation();
-    if (!lifetime.current(generation)) return;
     active.current = true;
     const trigger = event.currentTarget;
-    setState((previous) => ({ ...previous, pending: true, error: undefined, completion: undefined }));
+    setState((previous) =>
+      owner.matches(generation) ? { ...previous, pending: true, error: undefined, completion: undefined } : previous,
+    );
+    let queryKey: QueryKey | undefined;
+    let ownedKey: string | undefined;
     try {
-      if (!lifetime.current(generation)) return;
+      if (!owner.current(generation)) return;
       const representation = pageRepresentation(value.context);
       const request: RelationGroupRequest = {
         subject: value.subject,
@@ -218,23 +453,25 @@ function StreamState({
         population: representation.population,
         ...(representation.populationId ? { populationId: representation.populationId } : {}),
       };
-      const queryKey = relationGroupKey(request, incarnation);
-      activeQueryKey.current = queryKey;
+      queryKey = relationGroupKey(request, incarnation);
+      ownedKey = JSON.stringify(queryKey);
+      owner.queries.set(ownedKey, { client: queryClient, key: queryKey });
       const next = await queryClient.fetchQuery({
         queryKey,
         staleTime: 0,
         gcTime: 0,
         retry: false,
         queryFn: async ({ signal }) => {
+          if (!owner.current(generation)) throw new Error('Retired relation continuation');
           const result = await loadRelationGroup({ data: request });
-          if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired relation continuation');
+          if (signal.aborted || !owner.current(generation)) throw new Error('Retired relation continuation');
           return result;
         },
       });
-      if (!lifetime.current(generation)) return;
+      if (!owner.current(generation)) return;
       const focusTrigger = trigger.ownerDocument.activeElement === trigger ? trigger : null;
       setState((previous) => {
-        if (!lifetime.current(generation)) return previous;
+        if (!owner.matches(generation)) return previous;
         const visible = new Set(
           previous.pages.flatMap((page) =>
             (relationStreamItems(page, value)?.items ?? []).map((item) => item.statement ?? item.id),
@@ -256,28 +493,32 @@ function StreamState({
             : undefined,
         };
       });
-      if (!next.ok && lifetime.current(generation)) void router?.invalidate();
+      if (!next.ok && owner.current(generation)) void router?.invalidate();
     } catch {
-      if (lifetime.current(generation)) {
+      if (owner.current(generation)) {
         setState((previous) =>
-          lifetime.current(generation) ? { ...previous, pages: [], error: {}, completion: undefined } : previous,
+          owner.matches(generation) ? { ...previous, pages: [], error: {}, completion: undefined } : previous,
         );
-        if (lifetime.current(generation)) void router?.invalidate();
+        if (owner.current(generation)) void router?.invalidate();
       }
     } finally {
-      if (lifetime.current(generation)) {
-        if (activeQueryKey.current?.at(-1) === incarnation) activeQueryKey.current = undefined;
+      if (queryKey && ownedKey) {
+        owner.queries.delete(ownedKey);
+        queryClient.removeQueries({ queryKey, exact: true });
+      }
+      if (owner.current(generation)) {
         active.current = false;
-        setState((previous) => (lifetime.current(generation) ? { ...previous, pending: false } : previous));
+        setState((previous) => (owner.matches(generation) ? { ...previous, pending: false } : previous));
       }
     }
   }
+
   return (
     <section
       data-slot="relation-stream"
       data-node={node}
       aria-labelledby={`${node}-title`}
-      aria-busy={pending}
+      aria-busy={visiblePending}
       className="min-w-0 space-y-4"
     >
       <h2 id={`${node}-title`} lang={titleLang} className="text-2xl font-semibold tracking-tight">
@@ -287,7 +528,7 @@ function StreamState({
         <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
       ) : unique.size ? (
         <CoverList items={[...unique.values()]} value={value} label={title} />
-      ) : !readerUnavailable && !error ? (
+      ) : !visibleError ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}
         </p>
@@ -299,15 +540,15 @@ function StreamState({
         aria-atomic="true"
         className="text-sm text-muted-foreground"
       >
-        {pending
+        {visiblePending
           ? m.subject_relation_loading({}, options)
-          : completion
-            ? completion.exhausted
-              ? m.subject_relation_completed_end({ label: title, count: completion.added }, options)
-              : m.subject_relation_completed_more({ label: title, count: completion.added }, options)
+          : visibleCompletion
+            ? visibleCompletion.exhausted
+              ? m.subject_relation_completed_end({ label: title, count: visibleCompletion.added }, options)
+              : m.subject_relation_completed_more({ label: title, count: visibleCompletion.added }, options)
             : null}
       </p>
-      {completion?.exhausted && (
+      {visibleCompletion?.exhausted && (
         <p
           ref={end}
           tabIndex={-1}
@@ -317,20 +558,20 @@ function StreamState({
           {m.subject_relation_end({ label: title }, options)}
         </p>
       )}
-      {error && <p role="alert">{failure(error.status, value.locale)}</p>}
+      {visibleError && <p role="alert">{failure(visibleError.status, value.locale)}</p>}
       {href && cursor && (
         <a
           data-slot="continue-group"
           href={href}
           onClick={more}
-          aria-disabled={pending}
+          aria-disabled={visiblePending}
           aria-describedby={`${node}-status`}
           className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
         >
-          {error ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
+          {visibleError ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
         </a>
       )}
-      {(error || !section.ok) && base && (
+      {(visibleError || !section.ok || readerUnavailable) && base && (
         <a
           href={`${base}?${new URLSearchParams({ node, ...(realm ? { realm } : {}) })}`}
           className={cn(buttonVariants({ variant: 'link' }), actionClass)}
