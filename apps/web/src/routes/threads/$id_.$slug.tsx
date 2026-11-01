@@ -141,7 +141,13 @@ export function ThreadPage() {
   const activePage = activeRefresh?.page ?? loadedPage;
   const activeAdmission = activeRefresh?.admission ?? loadedPage.callerAdmission;
   const identity = useMemo<ThreadPageRouteIdentity>(
-    () => ({ id, ...(cursor === undefined ? {} : { cursor }), slug, locale, credentialMode: activeAdmission.identity.credentialMode }),
+    () => ({
+      id,
+      ...(cursor === undefined ? {} : { cursor }),
+      slug,
+      locale,
+      credentialMode: activeAdmission.identity.credentialMode,
+    }),
     [id, cursor, slug, locale, activeAdmission.identity.credentialMode],
   );
   const binding = useThreadPageCaller(activeAdmission, activePage, identity);
@@ -160,13 +166,13 @@ export function ThreadPage() {
   const pageIsPrivate = activeAdmission.identity.credentialMode === 'session' || activePage.viewerId !== undefined;
   const currentPageUnavailable =
     !binding.current ||
-    (pageIsPrivate && activePage.viewerId !== undefined &&
+    (pageIsPrivate &&
+      activePage.viewerId !== undefined &&
       (session !== 'signed-in' || activePage.viewerId !== subject));
   const page = activePage;
   const personalOptions = useMemo(() => threadPersonalQuery(id, cursor, postIds), [id, cursor, postIds]);
   const personalAttempt = useMemo(
-    () =>
-      caller?.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds])),
+    () => caller?.beginPersonalRead(personalOptions.queryKey, JSON.stringify([id, cursor ?? null, ...postIds])),
     [
       caller,
       personalOptions.queryKey,
@@ -245,9 +251,7 @@ export function ThreadPage() {
       read.sequence === sequence &&
       (recovery
         ? !!nextCaller && nextCaller.isRefreshContinuationCurrent({ session: nextCaller.admission.session })
-        : !!currentCaller &&
-          !!currentTicket &&
-          currentCaller.isRefreshContinuationCurrent(currentTicket));
+        : !!currentCaller && !!currentTicket && currentCaller.isRefreshContinuationCurrent(currentTicket));
     const mode = session === 'signed-in' ? 'session' : 'anonymous';
     const query = threadPageQuery(id, cursor, mode);
     const nextIdentity: ThreadPageRouteIdentity = {

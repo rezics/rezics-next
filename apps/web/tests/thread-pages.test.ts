@@ -25,7 +25,9 @@ test('board and thread titles use the shared page heading size, not the display 
   expect(board).toContain('<BoardCommunity');
   expect(community).toMatch(/<PageHeading\b[^>]*>\{title\}<\/PageHeading>/);
   expect(thread).toContain('{title ? <PageHeading>{title}</PageHeading> : null}');
-  expect(thread).toContain('renderHeader={(title, visiblePage) => <ThreadReadingHeader page={visiblePage} title={title} />}');
+  expect(thread).toContain(
+    'renderHeader={(title, visiblePage) => <ThreadReadingHeader page={visiblePage} title={title} />}',
+  );
   for (const source of [board, thread, community]) expect(source).not.toMatch(/text-5xl|text-6xl/);
 });
 

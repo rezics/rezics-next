@@ -1,11 +1,5 @@
 import { QueryClientContext, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import {
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useSyncExternalStore,
-} from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { getLocale } from '../paraglide/runtime.js';
 import { sessionQuery } from '../session/query';
@@ -98,19 +92,14 @@ function observeThreadPageCache(client: QueryClient) {
       const next = JSON.stringify(sessionCache(client));
       const action = type === 'updated' ? event.action.type : undefined;
       const authorityEvent =
-        type === 'added' ||
-        type === 'removed' ||
-        action === 'success' ||
-        action === 'error' ||
-        action === 'setState';
+        type === 'added' || type === 'removed' || action === 'success' || action === 'error' || action === 'setState';
       if (authorityEvent || next !== previousSession) {
         sessionRevision++;
         previousSession = next;
       }
     }
     const terminalEvent =
-      type === 'removed' ||
-      (type === 'updated' && (event.action.type === 'error' || event.action.type === 'setState'));
+      type === 'removed' || (type === 'updated' && (event.action.type === 'error' || event.action.type === 'setState'));
     if (terminalEvent) {
       const id = keyId(query.queryKey);
       terminalRevisions.set(id, (terminalRevisions.get(id) ?? 0) + 1);
@@ -267,8 +256,7 @@ export class ThreadPageCaller {
     this.queryKey = admission.queryKey;
     this.queryState = queryState;
     this.releaseSource = source.subscribe(() => {
-      if (this.queryStarted && !this.inFlightQuery)
-        this.inFlightQuery = this.source.queryStamp(this.queryKey)?.query;
+      if (this.queryStarted && !this.inFlightQuery) this.inFlightQuery = this.source.queryStamp(this.queryKey)?.query;
       this.check();
       const personalChanged = !this.retired && this.observePersonalCache();
       if (!this.retired && (this.publicResult || personalChanged)) {
@@ -281,7 +269,12 @@ export class ThreadPageCaller {
     return this.currentAdmission;
   }
 
-  static capture(client: QueryClient, identity: ThreadPageRouteIdentity, expectedSlug: string | undefined, queryKey: QueryKey) {
+  static capture(
+    client: QueryClient,
+    identity: ThreadPageRouteIdentity,
+    expectedSlug: string | undefined,
+    queryKey: QueryKey,
+  ) {
     const source = sourceFor(client);
     const session = source.readSession();
     const admission: ThreadPageAdmission = {
@@ -441,7 +434,9 @@ export class ThreadPageCaller {
 
   private authorityCurrent() {
     const session = this.source.readSession();
-    return sessionCanRead(this.currentAdmission.identity.credentialMode, session) && sameSession(this.ownerSession, session);
+    return (
+      sessionCanRead(this.currentAdmission.identity.credentialMode, session) && sameSession(this.ownerSession, session)
+    );
   }
 
   private check() {
@@ -508,20 +503,13 @@ export class ThreadPageCaller {
   isConnectedCurrent(ticket = this.connection.generation) {
     this.check();
     return (
-      !this.retired &&
-      !this.connection.retired &&
-      this.connection.connected &&
-      ticket === this.connection.generation
+      !this.retired && !this.connection.retired && this.connection.connected && ticket === this.connection.generation
     );
   }
 
   isDisclosureCurrent() {
     this.check();
-    return (
-      !this.retired &&
-      !this.connection.retired &&
-      (this.publicResult || this.connection.connected)
-    );
+    return !this.retired && !this.connection.retired && (this.publicResult || this.connection.connected);
   }
 
   isEffectCurrent(session = this.source.readSession(), ticket = this.connection.generation) {
@@ -573,12 +561,7 @@ export class ThreadPageCaller {
     }
   }
 
-  finishQuery(
-    queryKey: QueryKey,
-    result: unknown,
-    before: QueryStamp | undefined,
-    beforeTerminalRevision: number,
-  ) {
+  finishQuery(queryKey: QueryKey, result: unknown, before: QueryStamp | undefined, beforeTerminalRevision: number) {
     this.assertReadCurrent();
     const current = this.source.queryStamp(queryKey);
     if (
@@ -697,8 +680,7 @@ export class ThreadPageCaller {
       query.dataUpdateCount <= (attempt.query?.dataUpdateCount ?? 0) ||
       query.query !== attempt.owner.query ||
       (attempt.query &&
-        (query.query !== attempt.query.query ||
-          query.errorUpdateCount !== attempt.query.errorUpdateCount))
+        (query.query !== attempt.query.query || query.errorUpdateCount !== attempt.query.errorUpdateCount))
     )
       return undefined;
     const viewerId = 'viewerId' in value && typeof value.viewerId === 'string' ? value.viewerId : null;
@@ -808,8 +790,7 @@ export function useThreadPageCaller(
     [client, admission, page, identity.id, identity.cursor, identity.slug, identity.locale, identity.credentialMode],
   );
   const previousCaller = useRef<ThreadPageCaller | undefined>(undefined);
-  if (previousCaller.current && previousCaller.current !== caller)
-    previousCaller.current.retireFromRouteChange();
+  if (previousCaller.current && previousCaller.current !== caller) previousCaller.current.retireFromRouteChange();
   previousCaller.current = caller;
   caller?.setRouteIdentity(identity);
   const owner = useRef<object | null>(null);

@@ -179,7 +179,10 @@ function pageFor(
 }
 
 type ReadData = { id: string; cursor?: string; expectedSlug?: string; credentialMode: 'anonymous' | 'session' };
-const pageReads: { data: ReadData; work: ReturnType<typeof deferred<ThreadReadingPage | { redirect: { id: string; title: string | null } }>> }[] = [];
+const pageReads: {
+  data: ReadData;
+  work: ReturnType<typeof deferred<ThreadReadingPage | { redirect: { id: string; title: string | null } }>>;
+}[] = [];
 const slugReads: { data: ReadData; work: ReturnType<typeof deferred<{ id: string; title: string | null }>> }[] = [];
 const readModule = await import('../src/threads/reads');
 const personalReads: {
@@ -204,13 +207,8 @@ const personalReader = spyOn(readModule, 'readThreadPersonal').mockImplementatio
 });
 
 const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
-const {
-  createMemoryHistory,
-  createRootRouteWithContext,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToStaticMarkup } = await import('react-dom/server');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -270,14 +268,23 @@ async function mountRoute({
   let operation: Promise<unknown> = router.load();
   const tree = (provider = client) => (
     <QueryClientProvider client={provider}>
-      {strict ? <StrictMode><RouterProvider router={router} /></StrictMode> : <RouterProvider router={router} />}
+      {strict ? (
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>
+      ) : (
+        <RouterProvider router={router} />
+      )}
     </QueryClientProvider>
   );
   await act(async () => {
     root.render(tree());
     await Promise.resolve();
   });
-  const settlePage = async (index: number, result: ThreadReadingPage | { redirect: { id: string; title: string | null } }) => {
+  const settlePage = async (
+    index: number,
+    result: ThreadReadingPage | { redirect: { id: string; title: string | null } },
+  ) => {
     await act(async () => {
       pageReads[index]!.work.resolve(result);
       await operation.catch(() => undefined);
@@ -393,7 +400,9 @@ test('the actual route keeps the healthy anonymous page through SSR and a differ
   window.document.head.append(canonical);
   const host = window.document.createElement('main') as unknown as HTMLElement;
   host.innerHTML = renderToStaticMarkup(
-    <QueryClientProvider client={serverClient}><RouterProvider router={router} /></QueryClientProvider>,
+    <QueryClientProvider client={serverClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
   );
   window.document.body.append(host);
   const browserClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -402,7 +411,9 @@ test('the actual route keeps the healthy anonymous page through SSR and a differ
   await act(async () => {
     root = hydrateRoot(
       host,
-      <QueryClientProvider client={browserClient}><RouterProvider router={router} /></QueryClientProvider>,
+      <QueryClientProvider client={browserClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
     );
     await Promise.resolve();
   });
@@ -445,7 +456,9 @@ test('a private server result is redacted on both sides of hydration when browse
   });
   const host = window.document.createElement('main') as unknown as HTMLElement;
   host.innerHTML = renderToStaticMarkup(
-    <QueryClientProvider client={serverClient}><RouterProvider router={router} /></QueryClientProvider>,
+    <QueryClientProvider client={serverClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
   );
   window.document.body.append(host);
   expectPrivatePageHidden(host);
@@ -457,7 +470,9 @@ test('a private server result is redacted on both sides of hydration when browse
   await act(async () => {
     root = hydrateRoot(
       host,
-      <QueryClientProvider client={browserClient}><RouterProvider router={router} /></QueryClientProvider>,
+      <QueryClientProvider client={browserClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
     );
     await Promise.resolve();
   });
@@ -478,7 +493,11 @@ test('an original pending private route read cannot publish after same-account c
     expect(pageReads[0]!.data).toEqual({ id: threadId, expectedSlug: slug, credentialMode: 'session' });
     await act(async () => page.client.setQueryData(sessionQuery.queryKey, signedIn('replacement-csrf')));
     await page.settlePage(0, pageFor(threadId, { privateRead: true }));
-    expect(page.client.getQueryCache().find({ queryKey: threadPageQuery(threadId, undefined, 'session', slug).queryKey, exact: true })).toBeUndefined();
+    expect(
+      page.client
+        .getQueryCache()
+        .find({ queryKey: threadPageQuery(threadId, undefined, 'session', slug).queryKey, exact: true }),
+    ).toBeUndefined();
     expectPrivatePageHidden(page.host);
   } finally {
     await page.dispose();
@@ -486,11 +505,7 @@ test('an original pending private route read cannot publish after same-account c
 });
 
 test('a ready private page and pending personal result retire on readiness loss, sign-out and batched away/back', async () => {
-  const replacements: Session[] = [
-    signedIn(null),
-    signedOut,
-    signedIn(),
-  ];
+  const replacements: Session[] = [signedIn(null), signedOut, signedIn()];
   for (let index = 0; index < replacements.length; index++) {
     const threadId = id(110 + index);
     const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
@@ -508,7 +523,9 @@ test('a ready private page and pending personal result retire on readiness loss,
       }
       expectPrivatePageHidden(page.host);
       await page.settlePersonal(0, personalFor(threadId, id(41)));
-      expect(page.client.getQueryCache().find({ queryKey: ['thread-personal', threadId, null, id(41)], exact: true })).toBeUndefined();
+      expect(
+        page.client.getQueryCache().find({ queryKey: ['thread-personal', threadId, null, id(41)], exact: true }),
+      ).toBeUndefined();
       expectPrivatePageHidden(page.host);
     } finally {
       await page.dispose();
@@ -576,7 +593,11 @@ test('private route data does not cross a QueryClient replacement or an unmount/
     expect(page.host.textContent).toContain('Private page body disclosure');
     await page.rerender(replacementClient);
     expectPrivatePageHidden(page.host);
-    expect(page.client.getQueryCache().find({ queryKey: threadPageQuery(threadId, undefined, 'session', slug).queryKey, exact: true })).toBeUndefined();
+    expect(
+      page.client
+        .getQueryCache()
+        .find({ queryKey: threadPageQuery(threadId, undefined, 'session', slug).queryKey, exact: true }),
+    ).toBeUndefined();
     await page.remount();
     expectPrivatePageHidden(page.host);
     expect(pageReads).toHaveLength(1);
@@ -671,7 +692,10 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
     expect(input?.value).toBe(exactKey);
 
     await act(async () =>
-      page.client.removeQueries({ queryKey: threadPageQuery(threadId, undefined, 'session', slug).queryKey, exact: true }),
+      page.client.removeQueries({
+        queryKey: threadPageQuery(threadId, undefined, 'session', slug).queryKey,
+        exact: true,
+      }),
     );
     expectPrivatePageHidden(page.host);
     expect(page.host.querySelector(`section[aria-label="${m.thread_reply_label()}"]`)).toBe(replyRegion);
@@ -752,11 +776,14 @@ test('cursor and locale changes retire the original mounted route before its old
       credentialMode: 'session',
     });
     expectPrivatePageHidden(page.host);
-    await page.settlePage(2, pageFor(nextThreadId, {
-      privateRead: true,
-      title: 'Next thread title',
-      body: 'Page after id and slug transition',
-    }));
+    await page.settlePage(
+      2,
+      pageFor(nextThreadId, {
+        privateRead: true,
+        title: 'Next thread title',
+        body: 'Page after id and slug transition',
+      }),
+    );
     expect(personalReads).toHaveLength(3);
     await page.settlePersonal(2, personalFor(nextThreadId, id(41)));
     expect(page.host.textContent).toContain('Page after id and slug transition');
