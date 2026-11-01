@@ -539,6 +539,19 @@ conflict resolution, not assume that the attempted NEW input replaced a winner.
 stored input on that same connection. No helper may open a new transaction to
 make compatibility maintenance convenient.
 
+The SDK's `src/sysdb_migrations/internal/migrations.ts` supplies another actual
+writer: `113_enqueue_workflow_split_input` replaces `enqueue_workflow` with a
+status upsert followed by split-input INSERT/DO NOTHING in the calling SQL
+transaction. Its conflict branch changes status `updated_at`, not the retained
+input. Its portable `positionalArgs`/`namedArgs` serialization does not acquire
+the resolver's `json` path merely because the workflow has a relevant name.
+Migration `109_workflow_payload_tables` declares input TEXT without a foreign key
+to status. These bodies establish both a raw-SQL writer and legal orphan survival;
+they must not be replaced by an assumed application enqueue callback. Standalone
+`initWorkflowStatus` owns its original retried transaction; caller-supplied-client
+initialization joins the caller's transaction, while child initialization also
+records the parent's operation result before its original commit/rollback.
+
 | Native path | Required old/new/private behavior |
 | --- | --- |
 | Status INSERT, input absent | Record half-liveness; no joined candidate until actual input exists. |
