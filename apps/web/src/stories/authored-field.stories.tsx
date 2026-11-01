@@ -254,7 +254,7 @@ export const Unavailable: Story = {
           text.selectNodeContents(originalLabel);
           await expect(text.getClientRects().length).toBeGreaterThan(1);
         }
-        await userEvent.selectOptions(property, (property as HTMLSelectElement).value);
+        await userEvent.selectOptions(property, within(property).getByRole('option', { selected: true }));
         await waitFor(() => expect(reload).toBeEnabled());
         await userEvent.click(reload);
         await waitFor(() => expect(reload).toBeEnabled());
