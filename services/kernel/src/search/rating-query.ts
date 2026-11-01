@@ -2,6 +2,7 @@ import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { routeOf } from '../route/route.ts';
 import { assertCompleteSearch } from './complete-search.ts';
+import { ownQueryInput } from './query-input.ts';
 import { subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, type OpenSearch, SearchUnavailableError } from './opensearch.ts';
 import { HIT_TEMPLATE, type HitResult, type SearchPlan, type SearchResult } from './query.ts';
@@ -64,16 +65,7 @@ function admittedRating(value: unknown): PublicRatingEpoch {
   return properties as PublicRatingEpoch;
 }
 
-function validatePlan(
-  prefix: string,
-  plan: RatingQueryPlan,
-): {
-  rating: PublicRatingEpoch;
-  phase: Phase;
-  after?: readonly SortValue[];
-  query?: Record<string, unknown>;
-  filter?: Record<string, unknown>;
-} {
+function validatePlan(prefix: string, plan: RatingQueryPlan): RatingQueryPlan & { phase: Phase } {
   const rating = admittedRating(plan?.rating);
   if (!Number.isInteger(plan.size) || plan.size < 1 || plan.size > 200)
     throw new RangeError('Search size must be an integer from 1 to 200');
@@ -113,11 +105,9 @@ function validatePlan(
     throw new TypeError('Invalid rating overflow properties');
 
   return {
+    ...ownQueryInput(plan),
     rating,
     phase: phase ?? (rating.priorEpoch === null ? 'unscored' : 'scored'),
-    ...(after === undefined ? {} : { after }),
-    ...(plan.query === undefined ? {} : { query: plan.query }),
-    ...(plan.filter === undefined ? {} : { filter: plan.filter }),
   };
 }
 
@@ -228,8 +218,8 @@ function validateHits(
       index: actualIndex,
       partition: Number(source.partition),
       securityRevision: Number(source.security_revision),
-      matched: matchedQueries === undefined ? [] : matchedQueries,
-      sort: sort as SortValue[],
+      matched: matchedQueries === undefined ? [] : [...matchedQueries],
+      sort: [...tuple],
       ratingPhase: phase,
     });
   }
@@ -312,7 +302,7 @@ async function requestPhase(
   size: number,
   after?: readonly SortValue[],
   countOnly = false,
-): Promise<PhaseHits & { nativeHits: Record<string, unknown> }> {
+): Promise<PhaseHits & { nativeTotal: unknown }> {
   const filter = nativeQuery(baseFilter, phase, plan.rating.priorEpoch);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort = countOnly
@@ -342,7 +332,8 @@ async function requestPhase(
       `/${target}/_search/template`,
       {
         id: `${prefix}${templateId}`,
-        params,
+        // Each phase gives the transport its own containers, never the private plan.
+        params: structuredClone(params),
       },
       { query: { allow_partial_search_results: false } },
     );
@@ -358,12 +349,17 @@ async function requestPhase(
   assertCompleteSearch(body);
   if (!record(body) || !record(body.hits)) throw unavailable('OpenSearch rating response is malformed');
   const hits = validateHits(body.hits.hits, size, phase, target, countOnly ? undefined : after);
-  return { nativeHits: body.hits, hits, overflow: readOverflow(body, hasOverflow) };
+  const total = body.hits.total;
+  return {
+    nativeTotal: record(total) ? { value: total.value, relation: total.relation } : undefined,
+    hits,
+    overflow: readOverflow(body, hasOverflow),
+  };
 }
 
 async function searchPhase(...args: Parameters<typeof requestPhase>): Promise<NativePhase> {
-  const { nativeHits, hits, overflow } = await requestPhase(...args);
-  return { hits, overflow, total: readTotal(nativeHits.total) };
+  const { nativeTotal, hits, overflow } = await requestPhase(...args);
+  return { hits, overflow, total: readTotal(nativeTotal) };
 }
 
 /** Native hit-only phases share the ordinary immutable template and never issue a count request. */
@@ -373,8 +369,7 @@ export async function searchRatingSubjectHits(
   plan: RatingQueryPlan,
 ): Promise<HitResult> {
   const admitted = validatePlan(prefix, plan);
-  // Copy the admitted epoch so both phases use one context even across asynchronous engine I/O.
-  const pinned = { ...plan, rating: admitted.rating };
+  plan = admitted;
   const generation = await resolveGeneration(search, prefix, plan.generation);
   const target = subjectIndexName(prefix, generation);
   const phases: PhaseHits[] = [];
@@ -385,7 +380,7 @@ export async function searchRatingSubjectHits(
         prefix,
         target,
         HIT_TEMPLATE,
-        pinned,
+        plan,
         admitted.query,
         admitted.filter,
         'scored',
@@ -402,7 +397,7 @@ export async function searchRatingSubjectHits(
         prefix,
         target,
         HIT_TEMPLATE,
-        pinned,
+        plan,
         admitted.query,
         admitted.filter,
         'unscored',
@@ -434,6 +429,7 @@ export async function searchRatingSubjects(
   templateId: string,
 ): Promise<SearchResult> {
   const admitted = validatePlan(prefix, plan);
+  plan = admitted;
   const generation = await resolveGeneration(search, prefix, plan.generation);
   const target = subjectIndexName(prefix, generation);
   const epoch = admitted.rating.priorEpoch;

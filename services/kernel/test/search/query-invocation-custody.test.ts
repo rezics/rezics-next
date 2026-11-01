@@ -50,7 +50,10 @@ beforeAll(async () => {
       // Controlled native published scores, as in rating-query.test.ts. The stale score
       // belongs to the unscored complement; zero remains a scored result.
       if (n !== 3)
-        Object.assign(action.document, { rating_score: n === 1 ? 8 : n === 2 ? 0 : 10, rating_prior_epoch: n === 4 ? 6 : 7 });
+        Object.assign(action.document, {
+          rating_score: n === 1 ? 8 : n === 2 ? 0 : 10,
+          rating_prior_epoch: n === 4 ? 6 : 7,
+        });
       if (n === 4) action.document.name_sort = null;
     }
     expect(
@@ -63,13 +66,22 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await native.request('DELETE', `/${index}`);
-  for (const template of [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, 'subjects-suggest-v2', FACET_TEMPLATE, 'subjects-scope-hits-v1'])
+  for (const template of [
+    SEARCH_TEMPLATE,
+    HIT_TEMPLATE,
+    SUGGEST_TEMPLATE,
+    'subjects-suggest-v2',
+    FACET_TEMPLATE,
+    'subjects-scope-hits-v1',
+  ])
     await native.request('DELETE', `/_scripts/${prefix}${template}`);
 });
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
@@ -97,7 +109,11 @@ function heldNative() {
       }
       const gate = deferred<void>();
       const call: Call = {
-        path: args[1], sent, request: args[2], options: args[3], reply: response.body as Body,
+        path: args[1],
+        sent,
+        request: args[2],
+        options: args[3],
+        reply: response.body as Body,
         release: () => gate.resolve(),
       };
       calls.push(call);
@@ -108,7 +124,8 @@ function heldNative() {
     },
   };
   return {
-    client, calls,
+    client,
+    calls,
     async next() {
       if (ready.length === 0) await waiting.promise;
       const call = ready.shift()!;
@@ -134,7 +151,9 @@ function poison(value: unknown): void {
 function definition(empty = false) {
   return {
     query: { bool: { must: [{ match: { search_text: { query: 'kokoro', _name: 'custody-query' } } }] } },
-    filter: { bool: { filter: [{ terms: { type: [empty ? 'schema:Recipe' : 'schema:Book'], _name: 'custody-filter' } }] } },
+    filter: {
+      bool: { filter: [{ terms: { type: [empty ? 'schema:Recipe' : 'schema:Book'], _name: 'custody-filter' } }] },
+    },
     boost: 'Kokoro 1',
     overflowProperties: [property],
   };
@@ -156,8 +175,21 @@ for (const counted of [true, false]) {
   for (const empty of [false, true]) {
     test(`query invocation custody: ordinary counted=${counted} empty=${empty} concurrent requests and owned results`, async () => {
       const settlements: number[] = [];
-      const work = { bytes: 4 * 1024 * 1024, deadline: Date.now() + 120_000, settle: (bytes: number) => { settlements.push(bytes); } };
-      const input = { ...definition(empty), sort: 'name' as SearchPlan['sort'], size: 4, generation: 1, after: ['', id(0)] as (string | number | null)[], work };
+      const work = {
+        bytes: 4 * 1024 * 1024,
+        deadline: Date.now() + 120_000,
+        settle: (bytes: number) => {
+          settlements.push(bytes);
+        },
+      };
+      const input = {
+        ...definition(empty),
+        sort: 'name' as SearchPlan['sort'],
+        size: 4,
+        generation: 1,
+        after: ['', id(0)] as (string | number | null)[],
+        work,
+      };
       const admitted = structuredClone({ ...input, work: undefined });
       const invoke = counted ? searchSubjects : searchSubjectHits;
       const healthy = await invoke(native, prefix, admitted);
@@ -234,9 +266,14 @@ for (const definite of [false, true]) {
   for (const empty of [false, true]) {
     test(`query invocation custody: facets definite=${definite} empty=${empty} retain properties sizes sample and overflow`, async () => {
       const input = {
-        ...definition(empty), generation: 1,
+        ...definition(empty),
+        generation: 1,
         overflowProperties: definite ? [property] : [],
-        facets: [{ property: 'type', size: 1 }, { property, size: 1 }], sample: 10,
+        facets: [
+          { property: 'type', size: 1 },
+          { property, size: 1 },
+        ],
+        sample: 10,
       };
       const admitted = structuredClone(input);
       const healthy = await countFacets(native, prefix, admitted);
@@ -256,7 +293,10 @@ for (const definite of [false, true]) {
       const result = await pending;
       expect(result).toEqual(healthy);
       expect(result.facets.map((facet) => facet.property)).toEqual(['type', property]);
-      expect(result.total).toEqual({ value: empty ? 0 : definite ? 2 : 4, relation: !empty && definite ? 'lower_bound' : 'exact' });
+      expect(result.total).toEqual({
+        value: empty ? 0 : definite ? 2 : 4,
+        relation: !empty && definite ? 'lower_bound' : 'exact',
+      });
       poison(call.reply);
       expect(result).toEqual(healthy);
       expect(observer.calls).toHaveLength(1);
@@ -266,19 +306,44 @@ for (const definite of [false, true]) {
 }
 
 const ratingSurfaces = [
-  { name: 'direct counted', counted: true, invoke: (client: OpenSearch, input: RatingQueryPlan) => searchRatingSubjects(client, prefix, input, SEARCH_TEMPLATE) },
-  { name: 'direct hits', counted: false, invoke: (client: OpenSearch, input: RatingQueryPlan) => searchRatingSubjectHits(client, prefix, input) },
-  { name: 'ordinary counted rating', counted: true, invoke: (client: OpenSearch, input: RatingQueryPlan) => searchSubjects(client, prefix, { ...input, sort: 'rating' }) },
-  { name: 'ordinary rating hits', counted: false, invoke: (client: OpenSearch, input: RatingQueryPlan) => searchSubjectHits(client, prefix, { ...input, sort: 'rating' }) },
+  {
+    name: 'direct counted',
+    counted: true,
+    invoke: (client: OpenSearch, input: RatingQueryPlan) =>
+      searchRatingSubjects(client, prefix, input, SEARCH_TEMPLATE),
+  },
+  {
+    name: 'direct hits',
+    counted: false,
+    invoke: (client: OpenSearch, input: RatingQueryPlan) => searchRatingSubjectHits(client, prefix, input),
+  },
+  {
+    name: 'ordinary counted rating',
+    counted: true,
+    invoke: (client: OpenSearch, input: RatingQueryPlan) =>
+      searchSubjects(client, prefix, { ...input, sort: 'rating' }),
+  },
+  {
+    name: 'ordinary rating hits',
+    counted: false,
+    invoke: (client: OpenSearch, input: RatingQueryPlan) =>
+      searchSubjectHits(client, prefix, { ...input, sort: 'rating' }),
+  },
 ];
 
 for (const surface of ratingSurfaces) {
   for (const scenario of ['mixed', 'full', 'empty', 'null epoch', 'unscored after'] as const) {
     test(`query invocation custody: ${surface.name} ${scenario} pins alias epoch and both phase definitions`, async () => {
       const input = {
-        ...definition(scenario === 'empty'), size: scenario === 'full' ? 1 : 4,
-        rating: { questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: scenario === 'null epoch' ? null : 7 },
-        ratingPhase: scenario === 'null epoch' || scenario === 'unscored after' ? 'unscored' as const : 'scored' as const,
+        ...definition(scenario === 'empty'),
+        size: scenario === 'full' ? 1 : 4,
+        rating: {
+          questionId: STANDARD_QUESTION_ID,
+          populationId: GLOBAL_CONTEXT.id,
+          priorEpoch: scenario === 'null epoch' ? null : 7,
+        },
+        ratingPhase:
+          scenario === 'null epoch' || scenario === 'unscored after' ? ('unscored' as const) : ('scored' as const),
         after: scenario === 'null epoch' || scenario === 'unscored after' ? ['', id(0)] : [9, '', id(0)],
         generation: undefined as number | undefined,
       };
@@ -306,14 +371,16 @@ for (const surface of ratingSurfaces) {
       const phaseA = await observer.next();
       const otherA = concurrent ? await concurrent.next() : undefined;
       const aParams = params(phaseA);
-      const firstCountOnly = surface.counted && admitted.ratingPhase === 'unscored' && admitted.rating.priorEpoch !== null;
+      const firstCountOnly =
+        surface.counted && admitted.ratingPhase === 'unscored' && admitted.rating.priorEpoch !== null;
       expect(aParams.query).toEqual(admitted.query);
       expect(aParams.after).toEqual(firstCountOnly ? undefined : admitted.after);
       expect(aParams.boost).toBe(JSON.stringify(admitted.boost));
       expect(aParams.overflow_properties).toEqual([property]);
       expect(aParams.size).toBe(firstCountOnly ? 0 : admitted.size);
       expect(JSON.stringify(aParams.filter)).toContain(admitted.filter.bool.filter[0]!.terms.type[0]!);
-      if (admitted.rating.priorEpoch !== null) expect(JSON.stringify(aParams.filter)).toContain('"rating_prior_epoch":7');
+      if (admitted.rating.priorEpoch !== null)
+        expect(JSON.stringify(aParams.filter)).toContain('"rating_prior_epoch":7');
       if (otherA) expect(otherA.sent).toEqual(phaseA.sent);
       poison(phaseA.request);
       if (otherA) poison(otherA.request);
@@ -322,7 +389,9 @@ for (const surface of ratingSurfaces) {
       input.overflowProperties.length = 0;
       phaseA.release();
       otherA?.release();
-      const hasSecond = admitted.rating.priorEpoch !== null && (surface.counted || (admitted.ratingPhase === 'scored' && scenario !== 'full'));
+      const hasSecond =
+        admitted.rating.priorEpoch !== null &&
+        (surface.counted || (admitted.ratingPhase === 'scored' && scenario !== 'full'));
       if (hasSecond) {
         const phaseB = await observer.next();
         const otherB = concurrent ? await concurrent.next() : undefined;
@@ -333,7 +402,13 @@ for (const surface of ratingSurfaces) {
         const filters = (bParams.filter as { bool: { filter: unknown[] } }).bool.filter;
         expect(filters[0]).toEqual(admitted.filter);
         if (admitted.ratingPhase === 'scored') {
-          expect(filters[1]).toEqual({ bool: { must_not: [{ bool: { filter: [{ term: { rating_prior_epoch: 7 } }, { exists: { field: 'rating_score' } }] } }] } });
+          expect(filters[1]).toEqual({
+            bool: {
+              must_not: [
+                { bool: { filter: [{ term: { rating_prior_epoch: 7 } }, { exists: { field: 'rating_score' } }] } },
+              ],
+            },
+          });
           expect(bParams.has_after).toBe(false);
           expect(bParams.size).toBe(scenario === 'full' ? 0 : scenario === 'empty' ? 4 : 2);
         } else {
@@ -353,8 +428,11 @@ for (const surface of ratingSurfaces) {
       expect(result).toEqual(healthy);
       if (otherResult) expect(otherResult).toEqual(healthy);
       expect(result.generation).toBe(1);
-      expect(result.hits).toHaveLength(scenario === 'empty' ? 0 : scenario === 'full' ? 1 : scenario === 'unscored after' ? 2 : 4);
-      if (surface.counted) expect(result).toHaveProperty('total', { value: scenario === 'empty' ? 0 : 4, relation: 'exact' });
+      expect(result.hits).toHaveLength(
+        scenario === 'empty' ? 0 : scenario === 'full' ? 1 : scenario === 'unscored after' ? 2 : 4,
+      );
+      if (surface.counted)
+        expect(result).toHaveProperty('total', { value: scenario === 'empty' ? 0 : 4, relation: 'exact' });
       else expect(result).not.toHaveProperty('total');
       for (const recording of [observer, ...(concurrent ? [concurrent] : [])]) {
         expect(recording.calls).toHaveLength(hasSecond ? 3 : 2);
@@ -377,7 +455,9 @@ for (const surface of ratingSurfaces) {
 for (const surface of ratingSurfaces) {
   test(`query invocation custody: ${surface.name} still rejects a malformed real native tuple without another request`, async () => {
     const input: RatingQueryPlan = {
-      ...definition(), generation: 1, size: 1,
+      ...definition(),
+      generation: 1,
+      size: 1,
       rating: { questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: 7 },
     };
     const observer = heldNative();
@@ -390,5 +470,29 @@ for (const surface of ratingSurfaces) {
     call.release();
     await rejected;
     expect(observer.calls).toHaveLength(1);
+  });
+}
+
+for (const operation of ['counted', 'hits', 'suggest'] as const) {
+  test(`query invocation custody: ${operation} caller mutation cannot authorize a foreign generation reply`, async () => {
+    const input = { ...definition(), sort: 'id' as const, text: 'Koko', generation: 1, size: 4 };
+    const observer = heldNative();
+    const pending =
+      operation === 'counted'
+        ? searchSubjects(observer.client, prefix, input)
+        : operation === 'hits'
+          ? searchSubjectHits(observer.client, prefix, input)
+          : suggestSubjects(observer.client, prefix, input);
+    const rejected = expect(pending).rejects.toBeInstanceOf(SearchUnavailableError);
+    const call = await observer.next();
+    input.generation = 2;
+    const hits = (call.reply.hits as { hits: { _index: string }[] }).hits;
+    expect(hits).toHaveLength(4);
+    // Change only payload identity in a genuine complete reply, as in query-payload.test.ts.
+    for (const hit of hits) hit._index = subjectIndexName(prefix, 2);
+    call.release();
+    await rejected;
+    expect(observer.calls).toHaveLength(1);
+    expect(call.path).toBe(`/${index}/_search/template`);
   });
 }

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import type { Facet } from './facets.ts';
 import { assertCompleteSearch } from './complete-search.ts';
+import { ownQueryInput } from './query-input.ts';
 import {
   admitFacetPayload,
   admitHitPayload,
@@ -16,7 +17,7 @@ import {
 import { subjectAlias, subjectIndexName } from './indices.ts';
 import { type OpenSearch, type SearchRequestWork, SearchUnavailableError } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
-import { searchRatingSubjects } from './rating-query.ts';
+import { searchRatingSubjectHits, searchRatingSubjects } from './rating-query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 
 // Released templates keep their source and id; changes require a new version of both.
@@ -164,8 +165,11 @@ function executeSubjects(
 ): Promise<HitResult | SearchResult> {
   validateSize(plan.size, 200);
   if (plan.sort === 'rating')
-    return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
+    return counted
+      ? searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE)
+      : searchRatingSubjectHits(search, prefix, { ...plan, rating: plan.rating! });
   validateSearchAfter(plan);
+  plan = ownQueryInput(plan);
   const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort =
@@ -181,7 +185,7 @@ function executeSubjects(
     .request<SearchResponse>(
       'POST',
       `/${target}/_search/template`,
-      {
+      structuredClone({
         id: `${prefix}${counted ? SEARCH_TEMPLATE : HIT_TEMPLATE}`,
         params: {
           query: plan.query,
@@ -199,7 +203,7 @@ function executeSubjects(
           has_overflow: hasOverflow,
           overflow_properties: plan.overflowProperties,
         },
-      },
+      }),
       { query: { allow_partial_search_results: false }, ...(plan.work ? { work: plan.work } : {}) },
     )
     .then(({ body }) => {
@@ -211,8 +215,8 @@ function executeSubjects(
         ...(plan.generation === undefined ? {} : { generation: plan.generation }),
         hits: body.hits.hits.map((hit) => ({
           ...subjectHit(hit),
-          matched: hit.matched_queries ?? [],
-          sort: hit.sort,
+          matched: [...(hit.matched_queries ?? [])],
+          sort: [...hit.sort],
         })),
         ...(counted
           ? {
@@ -233,6 +237,7 @@ export function suggestSubjects(
   plan: { text: string; size: number; generation?: number },
 ): Promise<SubjectHit[]> {
   validateSize(plan.size, 50);
+  plan = { ...plan };
   const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   return search
     .request<SearchResponse>(
@@ -279,6 +284,7 @@ export async function countFacets(
     sample: number;
   },
 ) {
+  plan = { ...ownQueryInput(plan), facets: plan.facets.map((facet) => ({ ...facet })) };
   const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const facetAggregations = Object.fromEntries(
     plan.facets.map(({ property, size }, index) => [
@@ -337,13 +343,13 @@ export async function countFacets(
   const { body } = await search.request<FacetResponse>(
     'POST',
     `/${target}/_search/template`,
-    {
+    structuredClone({
       id: `${prefix}${FACET_TEMPLATE}`,
       params: {
         query: { bool: { must: plan.query ?? { match_all: {} }, ...(plan.filter ? { filter: plan.filter } : {}) } },
         aggregations,
       },
-    },
+    }),
     { query: { allow_partial_search_results: false } },
   );
   assertCompleteSearch(body);
