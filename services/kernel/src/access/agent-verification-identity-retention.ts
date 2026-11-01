@@ -586,12 +586,7 @@ async function prepareNativeRetention(
             prepared.stage ?? undefined,
             prepared.client,
           );
-          const recoveryInventory = await verifyAgentIdentityRecoveryCopyInventory(
-            tx,
-            input.barrier,
-            key,
-            copy,
-          );
+          const recoveryInventory = await verifyAgentIdentityRecoveryCopyInventory(tx, input.barrier, key, copy);
           copies = agentIdentityCopyRetention(copy, inventory, recoveryInventory);
           gap = consumed ? 'native-source-copies-pending' : agentIdentityConsumerCustody.dependency;
           if (consumed && receiving === 'verified' && inventory.state === 'verified') {

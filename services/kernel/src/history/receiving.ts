@@ -424,8 +424,7 @@ export async function readHistoryReceivingReceipt(
   // Do not expose a capability retaining caller-owned mutable arrays or buffers.
   const fixedArtifact = structuredClone(artifact);
   const fixedBarrier = Object.freeze({ ...barrier });
-  const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
-    await import('./agent-identity-inventory-work.ts');
+  const { reserveIdentityHistoryWork, nativeWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
   const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
     await import('./agent-identity-sdk-fence.ts');
   await reserveIdentityHistoryWork(
@@ -602,11 +601,9 @@ async function recordIdentityReceivingProof(
   const held = await lockRecordedAgentIdentityHistory(tx, unit.client, unit.stage, unit.context);
   if (held.state === 'pending') return held.gap;
   if (!sameBarrier(barrier, held.receipt.binding.barrier)) return 'identity-sdk-retirement-barrier-changed';
-  await reserveIdentityHistoryWork(
-    pool,
-    addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_ABSENCE_COST),
-    { deadline },
-  );
+  await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_ABSENCE_COST), {
+    deadline,
+  });
   await tx.query(`SELECT core.check_agent_identity_history_absence($1)`, [locator.workId]);
   const encoded = Buffer.from(encodeLocator(locator));
   await reserveIdentityHistoryWork(pool, nativeWork(65, 65, 1, 8192), { deadline });

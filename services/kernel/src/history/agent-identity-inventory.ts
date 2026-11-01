@@ -225,12 +225,7 @@ async function declareAgentIdentityRecoveryInventory(
     throw new TypeError('Invalid recovery identity native writer');
   const [namespace, version, mac] = receipt.storageKey.split('.');
   const token = Buffer.from(mac ?? '', 'base64url');
-  if (
-    namespace !== 'rk1' ||
-    !/^(0|[1-9]\d*)$/.test(version ?? '') ||
-    Number(version) > 255 ||
-    token.length !== 32
-  )
+  if (namespace !== 'rk1' || !/^(0|[1-9]\d*)$/.test(version ?? '') || Number(version) > 255 || token.length !== 32)
     throw new TypeError('Recovery identity receipt codec unavailable');
   const expectedAccounts = JSON.stringify(
     [...accounts]
@@ -278,59 +273,52 @@ export function captureAgentIdentityInventory(
   events: readonly { type: string }[],
 ): void {
   const declaration = commandAgentIdentitySource(tx);
-  if (
-    !declaration ||
-    (declaration.original.writerKind === 'original' && declaration.original.handoff === null)
-  )
-    return;
+  if (!declaration || (declaration.original.writerKind === 'original' && declaration.original.handoff === null)) return;
   if (expected.has(tx) || declaration.kind !== kind) throw new TypeError('Repeated identity serializer obligations');
   const types =
-    declaration.original.writerKind === 'recovery'
-      ? ['com.rezics.access.account-updated.v1']
-      : eventsFor(kind!);
+    declaration.original.writerKind === 'recovery' ? ['com.rezics.access.account-updated.v1'] : eventsFor(kind!);
   if (types.length !== events.length || events.some((event, index) => event.type !== types[index]))
     throw new TypeError('Unconverted identity serializer obligations');
   const receipt = currentCommandReceipt(tx);
   const [namespace, version, mac] = receipt.storageKey.split('.');
   const commandKindId = COMMAND_HISTORY_KINDS[kind as keyof typeof COMMAND_HISTORY_KINDS];
   if (namespace !== 'rk1' || !commandKindId) throw new TypeError('Original native identity receipt unavailable');
-  expected.set(tx, Object.freeze({
-    locators: Object.freeze([
-      Buffer.from(
-        encodeLocator({
-          artifactType: 'command-receipt/v1',
-          partitionNo: declaration.original.partition,
-          principalKind: receipt.principal.kind,
-          principalId: receipt.principal.id,
-          commandKindId,
-          keyVersion: Number(version),
-          keyToken: Buffer.from(mac!, 'base64url').toString('hex'),
-        }),
-      ),
-      ...types.map((_, eventSeq) =>
+  expected.set(
+    tx,
+    Object.freeze({
+      locators: Object.freeze([
         Buffer.from(
           encodeLocator({
-            artifactType: 'outbox-event/v1',
+            artifactType: 'command-receipt/v1',
             partitionNo: declaration.original.partition,
-            position: declaration.original.position,
-            eventSeq,
+            principalKind: receipt.principal.kind,
+            principalId: receipt.principal.id,
+            commandKindId,
+            keyVersion: Number(version),
+            keyToken: Buffer.from(mac!, 'base64url').toString('hex'),
           }),
         ),
-      ),
-    ]),
-    eventTypes: Object.freeze([...types]),
-  }));
+        ...types.map((_, eventSeq) =>
+          Buffer.from(
+            encodeLocator({
+              artifactType: 'outbox-event/v1',
+              partitionNo: declaration.original.partition,
+              position: declaration.original.position,
+              eventSeq,
+            }),
+          ),
+        ),
+      ]),
+      eventTypes: Object.freeze([...types]),
+    }),
+  );
 }
 
 /** After EVERY actual serializer hook and final physical fence, still in the original transaction.
  * Durable validation matches each expected slot to its genuine association and physical row. */
 export async function finalizeAgentIdentityInventory(tx: CommandTransaction, position: bigint): Promise<void> {
   const declaration = commandAgentIdentitySource(tx);
-  if (
-    !declaration ||
-    (declaration.original.writerKind === 'original' && declaration.original.handoff === null)
-  )
-    return;
+  if (!declaration || (declaration.original.writerKind === 'original' && declaration.original.handoff === null)) return;
   const cut = expected.get(tx);
   if (!cut || position !== declaration.original.position)
     throw new TypeError('Identity serializer obligations incomplete');
@@ -492,9 +480,7 @@ function recoveryAccountManifest(accounts: readonly import('./locator.ts').Accou
   );
 }
 
-function recoveryCutDigest(
-  proof: Omit<AgentIdentityRecoveryInventoryProof, typeof recoveryInventoryProof>,
-): string {
+function recoveryCutDigest(proof: Omit<AgentIdentityRecoveryInventoryProof, typeof recoveryInventoryProof>): string {
   return createHash('sha256')
     .update(
       JSON.stringify([
@@ -522,10 +508,13 @@ export async function readAgentIdentityRecoveryInventoryInTransaction(
   tx: CommandTransaction,
   key: AgentIdentitySourceKey,
 ): Promise<AgentIdentityRecoveryInventory> {
-  const pending = (
-    gap: string,
-    native: 'pending' | 'sealed' = 'pending',
-  ): AgentIdentityRecoveryInventory => ({ state: 'pending', gap, native, proof: null, receipts: [] });
+  const pending = (gap: string, native: 'pending' | 'sealed' = 'pending'): AgentIdentityRecoveryInventory => ({
+    state: 'pending',
+    gap,
+    native,
+    proof: null,
+    receipts: [],
+  });
   const row = (
     await tx.query<{
       partition_no: number;
@@ -626,12 +615,7 @@ export async function readAgentIdentityRecoveryInventoryInTransaction(
        WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3 AND source_direction=$4
          AND source_receipt_id=$5 AND source_epoch=$6 AND source_position=$7 AND source_transaction_id=$8
        ORDER BY artifact_type,locator LIMIT 3 FOR SHARE`,
-      [
-        ...params(key),
-        row.recovery_epoch,
-        row.recovery_position,
-        row.recovery_transaction_id,
-      ],
+      [...params(key), row.recovery_epoch, row.recovery_position, row.recovery_transaction_id],
     )
   ).rows;
   if (
@@ -775,10 +759,7 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
 ): Promise<AgentIdentityRecoveryArtifactInspection> {
   const absent: AgentIdentityRecoveryArtifactInspection = { state: 'absent', gap: null, proof: null };
   const pending = (gap: string): AgentIdentityRecoveryArtifactInspection => ({ state: 'pending', gap, proof: null });
-  if (
-    artifact.locator.artifactType === 'durable-work/v1' ||
-    artifact.partition !== artifact.locator.partitionNo
-  )
+  if (artifact.locator.artifactType === 'durable-work/v1' || artifact.partition !== artifact.locator.partitionNo)
     return absent;
   const resources = currentCommandResources(tx);
   if (pool && pool !== resources.pool) throw new TypeError('Recovery artifact pool differs from its command');
@@ -831,7 +812,9 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
       Buffer.from(encodeLocator(candidate.locator)).equals(Buffer.from(encodeLocator(artifact.locator))),
   );
   if (!exact) return pending('agent-identity-recovery-artifact-scope-changed');
-  const recoveryEvent = current.proof.artifacts.find((candidate) => candidate.locator.artifactType === 'outbox-event/v1');
+  const recoveryEvent = current.proof.artifacts.find(
+    (candidate) => candidate.locator.artifactType === 'outbox-event/v1',
+  );
   if (!recoveryEvent) return pending('agent-identity-recovery-copy-cut-incomplete');
   return {
     state: 'sealed',

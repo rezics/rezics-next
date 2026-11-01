@@ -26,14 +26,14 @@ held through COMMIT. A retained old recovery without a sealed discriminator is p
 
 The fixed recovery read costs are literal reservations at their dispatch points:
 
-| Operation | Native work (rows / points / statements / bytes / engine requests) |
-| --- | ---: |
-| Native inventory snapshot, once per exact source key | 135 / 135 / 6 / 32768 / 0 |
-| Artifact association probe, before returning absent or continuing | 2 / 2 / 1 / 512 / 0 |
-| Unique association's exact cut reread | 135 / 135 / 6 / 32768 / 0 |
-| Final same-home proof/owner/restore/receipt verification | 275 / 275 / 18 / 49152 / 0 |
-| Recovery owner readiness after cut resolution | 100 / 100 / 36 / 24576 / 0 |
-| One non-durable serializer receiving receipt read | 76 / 75 / 12 / 24576 / 0 |
+| Operation                                                         | Native work (rows / points / statements / bytes / engine requests) |
+| ----------------------------------------------------------------- | -----------------------------------------------------------------: |
+| Native inventory snapshot, once per exact source key              |                                          135 / 135 / 6 / 32768 / 0 |
+| Artifact association probe, before returning absent or continuing |                                                2 / 2 / 1 / 512 / 0 |
+| Unique association's exact cut reread                             |                                          135 / 135 / 6 / 32768 / 0 |
+| Final same-home proof/owner/restore/receipt verification          |                                         275 / 275 / 18 / 49152 / 0 |
+| Recovery owner readiness after cut resolution                     |                                         100 / 100 / 36 / 24576 / 0 |
+| One non-durable serializer receiving receipt read                 |                                           76 / 75 / 12 / 24576 / 0 |
 
 The recovery readiness reservation includes the exact effects/`account_discovery_redrive` consumer probes; its
 event consumer ceiling is 32 plus the refusal sentinel. It then refuses for missing Search current-enrollment
@@ -57,4 +57,3 @@ The recovery writer is suppressed inside an active Semantic Source maintenance f
 Source/History aggregate is funded. Five existing current verifier entries alone require 696320 bytes against the
 unchanged 630784-byte allowance. The previous 11588/9856/2731/6843136/0 selected consumer body is not the final
 aggregate. The current implementation does not alter prices, configured limits, or any unrelated owner budget.
-

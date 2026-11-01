@@ -312,8 +312,7 @@ export async function readAgentIdentityRetirementStage(
 ): Promise<AgentIdentityRetirementStage | null> {
   const fixed = structuredClone(reference);
   historyDeadline(context, fixed.source.partition);
-  if (maintenanceCallbacks.has(context))
-    await reserveIdentityHistoryWork(pool, nativeWork(73, 71, 26, 82176), context);
+  if (maintenanceCallbacks.has(context)) await reserveIdentityHistoryWork(pool, nativeWork(73, 71, 26, 82176), context);
   const handoff = (
     await runCommand(pool, { partition: fixed.source.partition, deadline: context.deadline }, async (tx) =>
       noEffect(await sourceHandoff(tx, fixed)),

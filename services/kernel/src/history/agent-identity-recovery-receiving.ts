@@ -72,12 +72,7 @@ export async function verifyAgentIdentityRecoveryArtifactReadiness(
     eventRow?.payload_state === 'minimized' &&
     eventRow.subject === null &&
     JSON.stringify(eventRow.data) === JSON.stringify({});
-  if (
-    !eventRow ||
-    eventRow.epoch !== cut.proof.epoch ||
-    eventRow.event_count !== 1 ||
-    (!present && !minimized)
-  )
+  if (!eventRow || eventRow.epoch !== cut.proof.epoch || eventRow.event_count !== 1 || (!present && !minimized))
     return { state: 'pending', gap: 'agent-identity-recovery-event-unavailable' };
   const effects = (
     await tx.query(

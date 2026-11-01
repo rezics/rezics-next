@@ -8,9 +8,7 @@ import { loadAccountIdentitySource } from '../../src/access/agent-verification-i
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
 import { readAgentIdentityNativeInventory } from '../../src/history/agent-identity-inventory.ts';
-import {
-  readAgentIdentityRecoveryInventoryInTransaction,
-} from '../../src/history/agent-identity-inventory.ts';
+import { readAgentIdentityRecoveryInventoryInTransaction } from '../../src/history/agent-identity-inventory.ts';
 import { verifyAgentIdentityRecoveryArtifactReadiness } from '../../src/history/agent-identity-recovery-receiving.ts';
 import { readAgentIdentitySDKRetirementGap } from '../../src/history/agent-identity-retirement.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
@@ -193,12 +191,16 @@ test('missing-source recovery seals its exact receipt and account-updated cut wi
 
   const receivingContext = { deadline: Date.now() + 5000 };
   await expect(
-    readAgentIdentityNativeInventory(fixture.pool, {
-      route: routeOf(accounts.owner)!,
-      accountId: accounts.owner,
-      direction: identityReceipt.kind,
-      receiptId: receipt,
-    }, receivingContext),
+    readAgentIdentityNativeInventory(
+      fixture.pool,
+      {
+        route: routeOf(accounts.owner)!,
+        accountId: accounts.owner,
+        direction: identityReceipt.kind,
+        receiptId: receipt,
+      },
+      receivingContext,
+    ),
   ).resolves.toMatchObject({ state: 'pending', gap: 'agent-identity-original-inventory-unsealed' });
   await expect(
     readAgentIdentitySDKRetirementGap(
@@ -217,7 +219,10 @@ test('missing-source recovery seals its exact receipt and account-updated cut wi
         receiptId: receipt,
       });
       if (current.state !== 'sealed')
-        return noEffect({ state: 'pending' as const, gap: current.gap ?? 'agent-identity-recovery-inventory-unsealed' });
+        return noEffect({
+          state: 'pending' as const,
+          gap: current.gap ?? 'agent-identity-recovery-inventory-unsealed',
+        });
       const event = current.proof.artifacts.find(({ locator }) => locator.artifactType === 'outbox-event/v1');
       if (!event) return noEffect({ state: 'pending' as const, gap: 'agent-identity-recovery-event-cut-unavailable' });
       const readiness = await verifyAgentIdentityRecoveryArtifactReadiness(tx, event, undefined, fixture.pool);

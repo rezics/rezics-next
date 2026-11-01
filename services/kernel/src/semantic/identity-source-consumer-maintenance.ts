@@ -110,9 +110,7 @@ export function currentIdentitySourceConsumerMaintenance(
 
 /** The live invocation's own allocation and deadline for internal nested History work.
  * This does not mint a frame: it returns only the current async invocation's existing token. */
-export function activeIdentitySourceConsumerMaintenance(
-  pool: Pool,
-): IdentitySourceConsumerMaintenanceContext | null {
+export function activeIdentitySourceConsumerMaintenance(pool: Pool): IdentitySourceConsumerMaintenanceContext | null {
   const frame = current.getStore();
   if (!frame || !frame.active || frame.pool !== pool) return null;
   return Object.freeze({ deadline: frame.deadline, identityConsumerWork: frame.token });

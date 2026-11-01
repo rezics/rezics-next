@@ -568,11 +568,9 @@ export async function lockRecordedAgentIdentityHistory(
   if (held.state === 'pending') return held;
   if (!same(held.handoff.sourceAuthority, row.history_authority) || !same(held.handoff.writer, row.sdk_closure))
     return pending('identity-history-current-authority-changed');
-  await reserveIdentityHistoryWork(
-    pool,
-    addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_GUARD_COST),
-    { deadline },
-  );
+  await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_GUARD_COST), {
+    deadline,
+  });
   await tx.query(`SELECT core.check_agent_identity_history($1,$2,$3,$4,'closure')`, [
     stage.handoff.custodyId,
     row.sdk_readiness.binding,

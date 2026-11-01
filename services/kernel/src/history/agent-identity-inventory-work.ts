@@ -19,7 +19,9 @@ export const nativeWork = (rows: number, points: number, statements: number, byt
 export async function reserveIdentityHistoryWork(
   pool: Pool,
   amount: NativeStepWork,
-  invocation?: Pick<HistoryReceivingContext, 'deadline' | 'identityConsumerWork'> | IdentitySourceConsumerMaintenanceContext,
+  invocation?:
+    | Pick<HistoryReceivingContext, 'deadline' | 'identityConsumerWork'>
+    | IdentitySourceConsumerMaintenanceContext,
 ): Promise<void> {
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
   const active = invocation?.identityConsumerWork ? invocation : owner.activeIdentitySourceConsumerMaintenance(pool);
