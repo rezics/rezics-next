@@ -82,6 +82,16 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
       clearTimeout(timer.current);
     };
   }, []);
+  useLayoutEffect(
+    () =>
+      origin?.watch(() => {
+        if (scope.current()) return;
+        scope.active = false;
+        requestId.current++;
+        clearTimeout(timer.current);
+      }),
+    [origin, scope],
+  );
   const accept = (result: LabelPage, request: { query: string; cursor?: string }) => {
     if (!isCurrent()) return false;
     const provenance = result.provenance;
@@ -199,7 +209,16 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
                 next={page.next ?? null}
                 isCurrent={retainedCurrent}
                 acceptPage={(result, request) => {
-                  if (!retainedCurrent() || !accept(result, request)) return false;
+                  if (!retainedCurrent()) return false;
+                  if (!accept(result, request)) {
+                    const unavailable: LabelPage = { state: 'unavailable', labels: [] };
+                    requestId.current++;
+                    liveChoice.current = '';
+                    livePage.current = unavailable;
+                    setChoiceId('');
+                    setPage(unavailable);
+                    return false;
+                  }
                   acceptedMore.current = result;
                   return true;
                 }}

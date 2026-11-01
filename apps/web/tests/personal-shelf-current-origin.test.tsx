@@ -309,6 +309,19 @@ test('Whole personal Shelf reads, sequential commands and Undo retire on actual 
     expect(ui.host.textContent).toContain('Private B');
     expect(ui.host.textContent).not.toContain('Private A');
     await ui.settle(ui.writes[3]!.work, saved(1));
+    const readKey = ui.client
+      .getQueryCache()
+      .findAll({ queryKey: ['personal-library-current'], type: 'active' })[0]!.queryKey;
+    const cached = ui.client.getQueryData<{ value: PersonalLibraryCurrentRead }>(readKey)!;
+    const retiredRead = ui.controls;
+    await ui.run(() => {
+      ui.client.setQueryData(readKey, { ...cached, value: response('A') });
+      expect(retiredRead.isCurrent()).toBe(false);
+      ui.client.setQueryData(readKey, cached);
+      expect(retiredRead.isCurrent()).toBe(false);
+    });
+    await ui.refresh();
+    const staleRefresh = ui.reads.at(-1)!;
     await ui.run(() => {
       ui.router.emit({
         type: 'onBeforeNavigate',
@@ -327,6 +340,8 @@ test('Whole personal Shelf reads, sequential commands and Undo retire on actual 
       });
       expect(current.isCurrent()).toBe(false);
     });
+    await ui.settle(staleRefresh, response('B'));
+    expect(ui.host.textContent).not.toContain('Private B');
     await ui.settle(ui.reads.at(-1)!, { ...response('B'), sessionSubject: 'A' });
     expect(ui.host.textContent).not.toContain('Private A');
     expect(ui.host.textContent).not.toContain('Private B');
@@ -350,6 +365,11 @@ test('Per-operation retirement keeps healthy reads, exact uncertain keys and par
     await ui.run(() => ui.session('A', 'rotated'));
     await ui.refresh();
     const fresh = response('A');
+    fresh.continueEntries = {
+      state: 'loaded',
+      entries: [{ subjectId: id(5), label: 'Healthy Continue', summary: null, progress: null }],
+      next: null,
+    };
     if (fresh.page.signedIn) fresh.page.entries[1]!.revision = 99;
     await ui.settle(ui.reads.at(-1)!, fresh);
     expect(ui.controls.rows.find((row) => row.entry.subjectId === id(2))!.unknownIntent).toEqual(exact);
@@ -368,6 +388,7 @@ test('Per-operation retirement keeps healthy reads, exact uncertain keys and par
     expect(label()).toBe(false);
     expect(ui.reads).toHaveLength(before);
     expect(ui.host.textContent).toContain('Private A');
+    expect(ui.host.textContent).toContain('Healthy Continue');
     expect(ui.controls.pending).toBe(true); // Label retirement does not release an independent state command.
     await ui.settle(ui.writes[2]!.work, saved(2));
     await ui.run(() => ui.controls.selectPage());
@@ -378,10 +399,17 @@ test('Per-operation retirement keeps healthy reads, exact uncertain keys and par
     await ui.run(() => ui.session('A', 'rotated-again'));
     await ui.refresh();
     await ui.settle(ui.reads.at(-1)!, response('A'));
+    ui.assign.mockResolvedValueOnce({ ok: true, assignment: { id: id(91), revision: 1 } });
     await ui.run(() => {
       void ui.controls.retryLabel(id(1));
     });
     expect(ui.assign.mock.calls.at(-1)![0].data).toEqual(labelInput);
+    expect(ui.controls.rows[0]!.unknownLabelIntent).toBeUndefined();
+    expect(ui.controls.labelOutcomes.map((outcome) => outcome.status)).toEqual([
+      'assigned',
+      'not-attempted',
+      'not-attempted',
+    ]);
     await ui.run(() => ui.controls.askRemove(id(2)));
     ui.remove.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
     await ui.run(() => {
@@ -425,11 +453,12 @@ test('Signed label first/debounced/next/retry pages require actual viewer and ex
       await ui.debounce();
       await ui.settle(ui.searches.at(-1)!.work, {
         state: 'loaded',
-        labels: [],
+        labels: provenance ? [{ id: id(9), name: 'Wrong private name', revision: 1 }] : [],
         next: null,
         ...(provenance ? { provenance } : {}),
       });
       expect(document.body.textContent).toContain(ui.m.library_subject_label_unavailable());
+      expect(document.body.textContent).not.toContain('Wrong private name');
       await ui.run(() => ui.button(ui.m.library_collection_cancel()).click());
     }
     await open();
@@ -441,12 +470,18 @@ test('Signed label first/debounced/next/retry pages require actual viewer and ex
     );
     const apply = handler(ui.button(ui.m.library_selected_labels_apply()), 'onClick');
     const more = ui.more;
-    expect(
-      more.acceptPage!(
-        { state: 'loaded', labels: [], provenance: signed('', 'wrong') },
-        { query: '', cursor: 'signed-next' },
-      ),
-    ).toBe(false);
+    await ui.run(() => ui.button(ui.m.library_label_more()).click());
+    await ui.settle(ui.searches.at(-1)!.work, { state: 'loaded', labels: [], provenance: signed('', 'wrong') });
+    expect(document.body.textContent).not.toContain('Native private name');
+    await ui.run(() => {
+      apply();
+      more.onPage({ state: 'loaded', labels });
+    });
+    expect(ui.assign).not.toHaveBeenCalled();
+    await ui.run(() => ui.button(ui.m.library_collection_cancel()).click());
+    await open();
+    await ui.debounce();
+    await ui.settle(ui.searches.at(-1)!.work, { state: 'loaded', labels, next: 'signed-next', provenance: signed() });
     await ui.run(() => ui.button(ui.m.library_label_more()).click());
     expect(ui.searches.at(-1)!.input.data).toEqual({ query: '', cursor: 'signed-next' });
     await ui.settle(ui.searches.at(-1)!.work, {

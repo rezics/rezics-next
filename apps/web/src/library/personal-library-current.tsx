@@ -186,7 +186,24 @@ function PersonalLibraryRead({
       const guards = envelope(initial);
       const value = await readPersonalLibraryCurrent({ data: input });
       if (!origin.current() || !matches(value, subject, address)) throw new Error('Unaccepted personal Library read');
-      return { ...guards, value };
+      return {
+        ...guards,
+        value: {
+          ...value,
+          page: guards.entries()
+            ? value.page
+            : {
+                signedIn: true,
+                entries: [],
+                next: null,
+                readState: 'denied',
+                sort: { orderBy: address.orderBy, direction: address.direction },
+                ...(address.type ? { type: address.type } : {}),
+                ...(address.state ? { state: address.state } : {}),
+              },
+          continueEntries: guards.continue() ? value.continueEntries : { state: 'denied', status: 403 },
+        } satisfies PersonalLibraryCurrentRead,
+      };
     },
     initialData,
     gcTime: 0,
@@ -207,25 +224,74 @@ function PersonalLibraryRead({
     }
   }, [initial, readVersion, query.refetch, origin]);
   const accepted = !query.isError && matches(query.data?.value, subject, address) ? query.data : undefined;
-  const current = useRef(false);
-  current.current = !!accepted;
-  const [isCurrent] = useState(() => () => {
-    const actual = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
-    return (
-      origin.current() &&
-      current.current &&
-      actual?.status === 'success' &&
-      matches(actual.data?.value, subject, address)
-    );
-  });
-  const [pageOrigin] = useState<ShelfOrigin>(() => ({
-    ...origin,
-    current: isCurrent,
-    capture: (...ops) => {
-      const current = origin.capture('library_entry.list', 'progress_session.list', ...ops);
-      return () => isCurrent() && current();
+  const readLifetime = useMemo(() => {
+    let generation = 0;
+    let invalid = false;
+    const listeners = new Set<() => void>();
+    const read = () => {
+      const actual = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
+      const next =
+        actual?.status === 'error' || (actual?.status === 'success' && !matches(actual.data?.value, subject, address));
+      if (next && !invalid) generation++;
+      invalid = next;
+      return generation;
+    };
+    return {
+      read,
+      server: () => 0,
+      watch: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      subscribe: (notify: () => void) => {
+        listeners.add(notify);
+        const unsubscribe = client.getQueryCache().subscribe(({ query }) => {
+          if (query.queryKey[0] !== 'personal-library-current' || query.queryKey.at(-1) !== lifetime) return;
+          const before = generation;
+          read();
+          if (generation !== before) listeners.forEach((listener) => listener());
+        });
+        return () => {
+          listeners.delete(notify);
+          unsubscribe();
+        };
+      },
+    };
+  }, [client, origin]);
+  const readGeneration = useSyncExternalStore(readLifetime.subscribe, readLifetime.read, readLifetime.server);
+  const isCurrent = useMemo(
+    () => () => {
+      const actual = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
+      return (
+        origin.current() &&
+        readLifetime.read() === readGeneration &&
+        actual?.status === 'success' &&
+        matches(actual.data?.value, subject, address)
+      );
     },
-  }));
+    [origin, readGeneration],
+  );
+  const pageOrigin = useMemo<ShelfOrigin>(
+    () => ({
+      ...origin,
+      current: isCurrent,
+      capture: (...ops) => {
+        const current = origin.capture('library_entry.list', 'progress_session.list', ...ops);
+        return () => isCurrent() && current();
+      },
+      watch: (listener) => {
+        const authority = origin.watch(listener);
+        const read = readLifetime.watch(listener);
+        return () => {
+          authority();
+          read();
+        };
+      },
+    }),
+    [origin, isCurrent],
+  );
   const readContinue = useMemo(
     () => async () => {
       const current = origin.capture('library_continue.list', 'progress_session.list');
@@ -252,6 +318,7 @@ function PersonalLibraryRead({
   return (
     <PersonalShelfOrigin.Provider value={pageOrigin}>
       <PersonalLibraryPage
+        key={readGeneration}
         page={
           accepted.entries()
             ? accepted.value.page
@@ -273,7 +340,7 @@ function PersonalLibraryRead({
           collections: collectionsAdmitted ? accepted.value.navigation.collections : [],
           collectionsState: collectionsAdmitted ? (accepted.value.navigation.collectionsState ?? 'loaded') : 'loaded',
         }}
-        continueState={accepted.continue() ? accepted.value.continueEntries : { state: 'denied' }}
+        continueState={accepted.continue() ? accepted.value.continueEntries : { state: 'denied', status: 403 }}
         continueRead={readContinue}
         isCurrent={isCurrent}
         originatingLease={mutationLease}
