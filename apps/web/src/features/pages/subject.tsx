@@ -271,8 +271,9 @@ export function subjectPageJsonLd(
   if (!read) return;
   const documents = documentRead(
     page.document as CompositionDocument,
-    page.subject,
+    read.subject.id,
     Object.keys(read.subject.statements),
+    page.context?.id,
   );
   const origin = (options.origin ?? 'https://rezics.com').replace(/\/+$/, '');
   const json = subjectJsonLd({
@@ -303,27 +304,70 @@ export function subjectPageJsonLd(
     ['schema:exampleOfWork', 'workExample'],
     ['schema:isPartOf', 'hasPart'],
   ]);
+  const inverseItems = new Map<string, Map<string, ReturnType<typeof publicSubjectReference>>>();
+  const components = new Map(platformRegistry.components.map((component) => [component.type, component]));
   const visit = (content: readonly unknown[]): void => {
     for (const node of content) {
       if (!isRecord(node) || !isRecord(node.props)) continue;
       const key = typeof node.props.id === 'string' ? plan.nodes[node.props.id] : undefined;
       const planned = key ? plan.reads[key] : undefined;
       const result = key ? page.reads[key] : undefined;
-      if (node.type === 'SubjectList' && planned?.kind === 'links' && planned.id === page.subject) {
+      if (node.type === 'SubjectList' && planned?.kind === 'links' && planned.id === read.subject.id) {
         const property = inverse.get(planned.property);
         if (property && result?.status === 200 && isRecord(result.body)) {
-          const limit = node.props.paged === true ? planned.limit : Math.min(planned.limit, 12);
-          const found = holderItems(result.body, limit);
-          const items = found?.items.map((item) =>
-            publicSubjectReference(item.id, item.label.text || undefined, item.type, locale, origin),
-          );
-          if (items?.length) json[property] = items;
+          const limit =
+            node.props.paged === true
+              ? Number.POSITIVE_INFINITY
+              : typeof node.props.limit === 'number' && node.props.limit >= 1
+                ? Math.min(node.props.limit, 12)
+                : 12;
+          const found = holderItems(result.body, limit, locale, 0);
+          let items = found?.items ?? [];
+          if (node.props.paged === true) {
+            const pageItems = new Map<string, (typeof items)[number]>();
+            for (const item of items) pageItems.set(item.statement ?? item.id, item);
+            items = [...pageItems.values()];
+          }
+          const propertyItems = inverseItems.get(property) ?? new Map();
+          for (const item of items) {
+            if (item.gated || propertyItems.has(item.id)) continue;
+            propertyItems.set(
+              item.id,
+              publicSubjectReference(item.id, item.label.text || undefined, item.type, locale, origin),
+            );
+          }
+          if (propertyItems.size) inverseItems.set(property, propertyItems);
         }
       }
-      for (const value of Object.values(node.props)) if (Array.isArray(value)) visit(value);
+      for (const slot of components.get(String(node.type))?.slots ?? []) {
+        const children = node.props[slot];
+        if (Array.isArray(children)) visit(children);
+      }
     }
   };
   visit(page.document.content);
+  for (const [property, references] of inverseItems) {
+    const existing = Object.hasOwn(json, property)
+      ? Array.isArray(json[property])
+        ? json[property]
+        : [json[property]!]
+      : [];
+    const seen = new Set(
+      existing.flatMap((entry) =>
+        isRecord(entry) && typeof entry['@id'] === 'string' ? [entry['@id']] : [],
+      ),
+    );
+    const values = [...existing];
+    let added = false;
+    for (const reference of references.values()) {
+      const identity = reference['@id'];
+      if (typeof identity === 'string' && seen.has(identity)) continue;
+      if (typeof identity === 'string') seen.add(identity);
+      values.push(reference);
+      added = true;
+    }
+    if (added) json[property] = values;
+  }
   return serializeJsonLd(json);
 }
 

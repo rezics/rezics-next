@@ -1,5 +1,5 @@
 import type { PublicFigure } from './subject-ratings';
-import { pickLanguage } from '@rezics/composition';
+import { documentRead, type CompositionDocument } from '@rezics/composition';
 import { coverImagePreload } from '@rezics/ui/cover';
 import { coverSrc } from '../../media/cover-src';
 import { publicCardImage, publicCover } from '../../media/public-card';
@@ -10,7 +10,7 @@ import { shareCardImage } from '../../shell/share-card';
 import type { ShareCardProjection } from '../../media/share-card';
 import { subjectBody, subjectDisplayLabel, subjectPageJsonLd, type SubjectPageData } from './subject';
 import { bestRank, isRecord, pageText, spoilerLevel, type Stmt } from './shared';
-import { readableDocument } from './values';
+import { chosenSummary } from './overview';
 import { publicDocumentText } from './jsonld';
 
 type SubjectHeadContext = {
@@ -74,34 +74,32 @@ function releaseYear(
   }
 }
 
-function summaryText(subject: NonNullable<ReturnType<typeof subjectBody>>['subject'], locale: string): string {
-  const held = Object.hasOwn(subject.statements, 'schema:abstract')
-    ? (subject.statements as unknown as Record<string, Stmt[]>)['schema:abstract']
-    : undefined;
-  const documents = bestRank(held ?? []).flatMap((statement) => {
-    if (spoilerLevel(statement) > 0 || statement.value.type !== 'value' || !isRecord(statement.value.content))
-      return [];
-    const content = statement.value.content;
-    const document = readableDocument(content.document);
-    return document && typeof content.language === 'string' ? [{ document, language: content.language }] : [];
-  });
-  if (!documents.length) return '';
-  const original = originalLanguage(subject);
-  const language = pickLanguage(
-    documents.map((document) => document.language),
-    locale,
-    original,
+function summaryText(
+  page: SubjectPageData,
+  subject: NonNullable<ReturnType<typeof subjectBody>>['subject'],
+  documents: unknown,
+  locale: string,
+): string {
+  const planned = documentRead(
+    page.document as CompositionDocument,
+    subject.id,
+    Object.keys(subject.statements),
+    page.context?.id,
   );
-  const selected = documents.find((document) => document.language === language) ?? documents[0]!;
+  if (!planned?.properties.includes('schema:abstract')) return '';
+  const selected = chosenSummary(subject, locale, documents);
+  if (!selected || spoilerLevel(selected.statement) > 0) return '';
   return publicDocumentText(selected.document);
 }
 
 function descriptionFor(
+  page: SubjectPageData,
   subject: NonNullable<ReturnType<typeof subjectBody>>['subject'],
+  documents: unknown,
   locale: string,
 ): string | undefined {
   const description = pageText(subject.descriptions, locale, originalLanguage(subject)).text;
-  return description || summaryText(subject, locale) || undefined;
+  return description || summaryText(page, subject, documents, locale) || undefined;
 }
 
 function visibleStatement(subject: NonNullable<ReturnType<typeof subjectBody>>['subject']): boolean {
@@ -127,7 +125,7 @@ export function subjectHead(page: SubjectPageData, context: SubjectHeadContext) 
   const parts = [context.typeLabel, releaseYear(read.subject, locale)].filter((part): part is string => !!part);
   const title = `${titleLabel}${parts.length ? ` (${parts.join(', ')})` : ''}`;
   const titleWithView = context.viewLabel || context.view ? `${title} – ${context.viewLabel ?? context.view}` : title;
-  const description = descriptionFor(read.subject, locale);
+  const description = descriptionFor(page, read.subject, read.documents, locale);
   const cover = publicCover(read.summary?.cover);
   const image =
     context.shareCard === undefined

@@ -10,6 +10,12 @@ export function statementDocument(
   const content = statement.value.content;
   if (!content || typeof content !== 'object' || !('document' in content) || !('language' in content)) return;
   if (checkDocument(content.document)) return content.document;
+  if (
+    typeof content.document !== 'string' ||
+    typeof content.digest !== 'string' ||
+    typeof content.language !== 'string'
+  )
+    return;
   if (!documents || typeof documents !== 'object' || !statement.id || !Object.hasOwn(documents, statement.id)) return;
   const document: unknown = Reflect.get(documents, statement.id);
   if (
