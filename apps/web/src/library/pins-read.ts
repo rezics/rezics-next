@@ -97,7 +97,7 @@ export async function readPreparedLibraryPins(
   if (!origin.credentialAgrees || !authorization) return { state: 'closed', origin };
   const current = () => sessionSubject(request) === origin.sessionSubject && viewerCredential(request) === authorization;
   const pins = await readLibraryPins(client, authorization, limit, current);
-  return { ...pins, origin: { ...origin, credentialAgrees: current() } };
+  return current() ? { ...pins, origin } : { state: 'closed', origin: { ...origin, credentialAgrees: false } };
 }
 
 /** Reads one bounded pins page only when this viewer's OpenAPI view exposes the list operation. */
