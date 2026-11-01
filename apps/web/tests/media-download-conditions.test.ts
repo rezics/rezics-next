@@ -36,7 +36,7 @@ function fixture(options: FixtureOptions = {}) {
   const authorizationCalls: Array<{ method: string; path: string; variant: string | null; authorization: string | null }> = [];
   const headCalls: string[] = [];
   const getCalls: GetCall[] = [];
-  let decision: DownloadDecision = allowedDecision();
+  const decisions = new Map<string, DownloadDecision>([['original', allowedDecision()]]);
   let headMissing = options.headMissing ?? false;
   let getMissing = options.getMissing ?? false;
   const originalFetch = globalThis.fetch;
@@ -50,6 +50,7 @@ function fixture(options: FixtureOptions = {}) {
       variant: url.searchParams.get('variant'),
       authorization: outgoing.headers.get('authorization'),
     });
+    const decision = decisions.get(url.searchParams.get('variant') ?? '') ?? { allowed: false as const };
     if (decision.allowed) return Response.json(decision);
     return Response.json(
       { type: 'https://rezics.com/problems/not_found', title: 'Not Found', status: 404, code: 'not_found' },
@@ -89,8 +90,8 @@ function fixture(options: FixtureOptions = {}) {
     authorizationCalls,
     headCalls,
     getCalls,
-    send(request: { method?: string; headers?: HeadersInit } = {}) {
-      const path = `/media/${id}/original`;
+    send(request: { method?: string; headers?: HeadersInit; variant?: string } = {}) {
+      const path = `/media/${id}/${request.variant ?? 'original'}`;
       return mediaRequest(
         new Request(`https://site.test${path}`, {
           method: request.method ?? 'GET',
@@ -99,8 +100,8 @@ function fixture(options: FixtureOptions = {}) {
         env,
       );
     },
-    setDecision(value: DownloadDecision) {
-      decision = value;
+    setDecision(value: DownloadDecision, variant = 'original') {
+      decisions.set(variant, value);
     },
     setHeadMissing(value: boolean) {
       headMissing = value;
@@ -123,12 +124,17 @@ async function withFixture(run: (value: ReturnType<typeof fixture>) => Promise<v
   }
 }
 
-function expectOneFreshAuthorization(value: ReturnType<typeof fixture>, count: number, credential: string | null = null) {
+function expectOneFreshAuthorization(
+  value: ReturnType<typeof fixture>,
+  count: number,
+  credential: string | null = null,
+  variant = 'original',
+) {
   expect(value.authorizationCalls).toHaveLength(count);
   expect(value.authorizationCalls.at(-1)).toEqual({
     method: 'GET',
     path: `/v1/media/${id}:authorizeDownload`,
-    variant: 'original',
+    variant,
     authorization: credential,
   });
 }
@@ -192,16 +198,20 @@ test('every response decision is freshly authorized and success headers match fu
     expect(value.getCalls).toHaveLength(2);
     expectOneFreshAuthorization(value, 5);
 
-    value.setDecision({ allowed: false });
-    const denied = await value.send({ headers: { 'if-none-match': '*', range: `bytes=${bytes.length}-` } });
+    value.setDecision({ allowed: false }, 'webp-320');
+    const denied = await value.send({
+      variant: 'webp-320',
+      headers: { 'if-none-match': '*', range: `bytes=${bytes.length}-` },
+    });
     expect(denied.status).toBe(404);
     const deniedSurface = `${await denied.clone().text()}\n${[...denied.headers].map(([name, entry]) => `${name}: ${entry}`).join('\n')}`;
     expect(deniedSurface).not.toContain(key);
     expect(deniedSurface).not.toContain(digest);
     expect(value.headCalls).toHaveLength(4);
     expect(value.getCalls).toHaveLength(2);
-    expectOneFreshAuthorization(value, 6);
+    expectOneFreshAuthorization(value, 6, null, 'webp-320');
 
+    value.setDecision({ allowed: false });
     const deniedHead = await value.send({ method: 'HEAD', headers: { 'if-none-match': '*', range: 'bytes=0-0' } });
     expect(deniedHead.status).toBe(404);
     expect((await deniedHead.arrayBuffer()).byteLength).toBe(0);
