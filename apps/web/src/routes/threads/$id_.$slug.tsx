@@ -367,8 +367,12 @@ export function ThreadPage() {
       continuation.runOwnedCacheBoundary('remove', () => queryClient.removeQueries({ queryKey: ['thread-page', id] }));
       if (!current()) throw new Error('Thread reader changed');
       continuation.handoffQueryAuthority(!recovery);
-      const updated = await runThreadPageQuery(queryClient, nextCaller, query, (guarded) =>
-        queryClient.fetchQuery({ ...guarded, staleTime: 0, retry: false }),
+      const updated = await runThreadPageQuery(
+        queryClient,
+        nextCaller,
+        query,
+        (guarded) => queryClient.fetchQuery({ ...guarded, staleTime: 0, retry: false }),
+        continuation,
       );
       if (!current() || 'redirect' in updated) throw new Error('Current thread page unavailable');
       if (session === 'signed-in' && updated.viewerId !== undefined && (!subject || updated.viewerId !== subject))
@@ -386,10 +390,20 @@ export function ThreadPage() {
       if (!publicationCurrent()) throw new Error('Thread reader changed');
       rememberThreadSlug(updated.thread.id, updated.thread.title);
       if (!publicationCurrent()) throw new Error('Thread reader changed');
-      if (new URL(destination, window.location.origin).pathname !== location.pathname) {
-        operation.navigationPath = new URL(destination, window.location.origin).pathname;
+      const destinationLocation = new URL(destination, window.location.origin);
+      if (destinationLocation.pathname !== location.pathname) {
+        operation.navigationPath = destinationLocation.pathname;
         await router.navigate({ to: destination });
-        if (router.state.location.pathname !== new URL(destination, window.location.origin).pathname)
+        if (
+          !operation.navigationAuthorized ||
+          routeRevision.current !== routeTicket ||
+          currentProvider.current !== queryClient ||
+          mountedGeneration.current !== mountedTicket ||
+          getLocale() !== locale ||
+          (operation.active && !continuation.isCurrent()) ||
+          router.state.location.pathname !== destinationLocation.pathname ||
+          JSON.stringify(router.state.location.search) !== routeSearch
+        )
           throw new Error('Thread navigation changed');
       }
       return updated;

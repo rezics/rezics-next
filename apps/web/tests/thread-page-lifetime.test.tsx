@@ -365,6 +365,44 @@ function threadRefreshButton(host: HTMLElement) {
   );
 }
 
+async function pauseUnavailableRefresh(
+  page: Awaited<ReturnType<typeof mountRoute>>,
+  threadId: string,
+  seed: ThreadReadingPage,
+  withBackgroundRead = false,
+) {
+  const queryKey = threadPageQuery(threadId, undefined, 'session').queryKey;
+  await act(async () => page.client.removeQueries({ queryKey: ['thread-page', threadId] }));
+  await act(async () => {
+    page.client.setQueryData(queryKey, seed);
+  });
+  let backgroundRead: Promise<unknown> | undefined;
+  if (withBackgroundRead) {
+    await act(async () => {
+      backgroundRead = page.client
+        .fetchQuery({ ...threadPageQuery(threadId, undefined, 'session'), staleTime: 0, retry: false })
+        .catch(() => undefined);
+      await Promise.resolve();
+    });
+  }
+
+  const entered = deferred<void>();
+  const resume = deferred<void>();
+  const originalCancel = page.client.cancelQueries.bind(page.client);
+  const cancel = spyOn(page.client, 'cancelQueries').mockImplementation(async (...args) => {
+    await originalCancel(...args);
+    entered.resolve(undefined);
+    await resume.promise;
+  });
+  await act(async () => {
+    const refresh = threadRefreshButton(page.host);
+    expect(refresh).toBeDefined();
+    refresh!.click();
+    await entered.promise;
+  });
+  return { queryKey, entered, resume, cancel, backgroundRead };
+}
+
 afterAll(async () => {
   pageReader.mockRestore();
   slugReader.mockRestore();
@@ -1031,6 +1069,220 @@ test('a healthy restore refresh survives its own cancellation and removal of the
     );
   } finally {
     restore.mockRestore();
+    await page.dispose();
+  }
+});
+
+test('external distinct and structurally shared successes retire cancellation-await recovery and retain the successor', async () => {
+  for (const [index, replacementKind] of ['distinct', 'equal-shared'].entries()) {
+    const threadId = id(190 + index);
+    const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+    const seed = pageFor(threadId, { privateRead: true, body: 'Seeded successor page' });
+    let resume: ReturnType<typeof deferred<void>> | undefined;
+    let restoreCancel: (() => void) | undefined;
+    let restoreRemove: (() => void) | undefined;
+    let cancelledBackgroundRead: Promise<unknown> | undefined;
+    const removalsAfterExternalSuccess: string[] = [];
+    let externalSuccessStarted = false;
+    try {
+      await page.settlePage(0, pageFor(threadId, { privateRead: true }));
+      await page.settlePersonal(0, personalFor(threadId, id(41)));
+      const cancellation = await pauseUnavailableRefresh(page, threadId, seed, true);
+      resume = cancellation.resume;
+      cancelledBackgroundRead = cancellation.backgroundRead;
+      restoreCancel = () => cancellation.cancel.mockRestore();
+      const originalRemove = page.client.removeQueries.bind(page.client);
+      const remove = spyOn(page.client, 'removeQueries').mockImplementation((filters) => {
+        if (externalSuccessStarted && filters?.queryKey?.[0] === 'thread-page')
+          removalsAfterExternalSuccess.push(JSON.stringify(filters.queryKey));
+        return originalRemove(filters);
+      });
+      restoreRemove = () => remove.mockRestore();
+
+      const rememberedBefore = rememberedThreadSlug(threadId);
+      const pathBefore = page.router.state.location.pathname;
+      const key = cancellation.queryKey;
+      const seedValue = page.client.getQueryData(key);
+      expect(seedValue).toBe(seed);
+      const external =
+        replacementKind === 'equal-shared'
+          ? structuredClone(seed)
+          : pageFor(threadId, { privateRead: true, title: 'External successor title', body: 'External successor body' });
+      externalSuccessStarted = true;
+      await act(async () => {
+        page.client.setQueryData(key, external);
+      });
+      const successor = page.client.getQueryData(key);
+      if (replacementKind === 'equal-shared') expect(successor).toBe(seed);
+      else expect(successor).toBe(external);
+
+      await act(async () => {
+        cancellation.resume.resolve(undefined);
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(pageReads).toHaveLength(2);
+      expect(page.client.getQueryData(key)).toBe(successor);
+      expect(removalsAfterExternalSuccess).toEqual([]);
+      expect(rememberedThreadSlug(threadId)).toBe(rememberedBefore);
+      expect(page.router.state.location.pathname).toBe(pathBefore);
+      expectPrivatePageHidden(page.host);
+    } finally {
+      resume?.resolve(undefined);
+      if (pageReads[1]) pageReads[1].work.resolve(pageFor(threadId, { privateRead: true }));
+      await cancelledBackgroundRead?.catch(() => undefined);
+      restoreCancel?.();
+      restoreRemove?.();
+      await page.dispose();
+    }
+  }
+});
+
+test('external page and session cache transitions retire a queued recovery before its next read', async () => {
+  const transitions = [
+    'query-remove',
+    'query-recreate',
+    'query-error',
+    'query-setState',
+    'session-success',
+    'session-error',
+    'session-remove',
+    'session-aba',
+  ] as const;
+  for (const [index, transition] of transitions.entries()) {
+    const threadId = id(200 + index);
+    const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+    let resume: ReturnType<typeof deferred<void>> | undefined;
+    let restoreCancel: (() => void) | undefined;
+    try {
+      await page.settlePage(0, pageFor(threadId, { privateRead: true }));
+      await page.settlePersonal(0, personalFor(threadId, id(41)));
+      const cancellation = await pauseUnavailableRefresh(
+        page,
+        threadId,
+        pageFor(threadId, { privateRead: true, body: 'Cancellation transition seed' }),
+      );
+      resume = cancellation.resume;
+      restoreCancel = () => cancellation.cancel.mockRestore();
+      const pathBefore = page.router.state.location.pathname;
+      const rememberedBefore = rememberedThreadSlug(threadId);
+
+      if (transition === 'query-remove') {
+        await act(async () => page.client.removeQueries({ queryKey: cancellation.queryKey, exact: true }));
+      } else if (transition === 'query-recreate') {
+        await act(async () => {
+          page.client.removeQueries({ queryKey: cancellation.queryKey, exact: true });
+          page.client.setQueryData(
+            cancellation.queryKey,
+            pageFor(threadId, { privateRead: true, body: 'Recreated external page' }),
+          );
+        });
+      } else if (transition === 'query-error') {
+        await act(async () => {
+          await page.client
+            .fetchQuery({
+              queryKey: cancellation.queryKey,
+              queryFn: async () => {
+                throw new Error('external page query error');
+              },
+              retry: false,
+              staleTime: 0,
+            })
+            .catch(() => undefined);
+        });
+      } else if (transition === 'query-setState') {
+        const query = page.client.getQueryCache().find({ queryKey: cancellation.queryKey, exact: true });
+        expect(query).toBeDefined();
+        await act(async () => query!.setState({ isInvalidated: true }));
+      } else if (transition === 'session-success') {
+        await act(async () => page.client.setQueryData(sessionQuery.queryKey, signedIn('replacement-csrf')));
+      } else if (transition === 'session-error') {
+        await act(async () => {
+          await page.client
+            .fetchQuery({
+              ...sessionQuery,
+              queryFn: async () => {
+                throw new Error('external session query error');
+              },
+              retry: false,
+              staleTime: 0,
+            })
+            .catch(() => undefined);
+        });
+      } else if (transition === 'session-remove') {
+        await act(async () => page.client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true }));
+      } else {
+        await act(async () => {
+          page.client.setQueryData(sessionQuery.queryKey, signedOut);
+          page.client.setQueryData(sessionQuery.queryKey, signedIn());
+        });
+      }
+
+      await act(async () => {
+        cancellation.resume.resolve(undefined);
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(pageReads).toHaveLength(1);
+      expect(page.router.state.location.pathname).toBe(pathBefore);
+      expect(rememberedThreadSlug(threadId)).toBe(rememberedBefore);
+      expectPrivatePageHidden(page.host);
+    } finally {
+      resume?.resolve(undefined);
+      restoreCancel?.();
+      await page.dispose();
+    }
+  }
+});
+
+test('an external page success during the refresh response await prevents stale cache and page publication', async () => {
+  const threadId = id(220);
+  const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
+  let resume: ReturnType<typeof deferred<void>> | undefined;
+  let restoreCancel: (() => void) | undefined;
+  try {
+    await page.settlePage(0, pageFor(threadId, { privateRead: true }));
+    await page.settlePersonal(0, personalFor(threadId, id(41)));
+    const cancellation = await pauseUnavailableRefresh(
+      page,
+      threadId,
+      pageFor(threadId, { privateRead: true, body: 'Response successor seed' }),
+    );
+    resume = cancellation.resume;
+    restoreCancel = () => cancellation.cancel.mockRestore();
+    const pathBefore = page.router.state.location.pathname;
+    const rememberedBefore = rememberedThreadSlug(threadId);
+
+    await act(async () => {
+      cancellation.resume.resolve(undefined);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(pageReads).toHaveLength(2);
+
+    const external = pageFor(threadId, {
+      privateRead: true,
+      title: 'Response successor title',
+      body: 'Response successor body',
+    });
+    await act(async () => {
+      page.client.setQueryData(cancellation.queryKey, external);
+    });
+    expect(page.client.getQueryData(cancellation.queryKey)).toBe(external);
+    await act(async () => {
+      pageReads[1]!.work.resolve(
+        pageFor(threadId, { privateRead: true, title: 'Stale response title', body: 'Stale response body' }),
+      );
+      await pageReads[1]!.work.promise.catch(() => undefined);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    expect(pageReads).toHaveLength(2);
+    expect(page.client.getQueryData(cancellation.queryKey)).toBe(external);
+    expect(page.host.textContent).not.toContain('Stale response body');
+    expect(rememberedThreadSlug(threadId)).toBe(rememberedBefore);
+    expect(page.router.state.location.pathname).toBe(pathBefore);
+  } finally {
+    resume?.resolve(undefined);
+    restoreCancel?.();
     await page.dispose();
   }
 });

@@ -13,13 +13,21 @@ be selected again after values happen to return to their earlier shape. The old 
 is still the exact entry owned by the caller. A current explicit refresh captures a new admission and uses the
 existing page query; it does not grant the old result new authority.
 
-An admitted refresh keeps the exact QueryClient, cache source, route scope, session stamp and mounted connection that
-started it. Its own synchronous cancellation and removal of bounded `thread-page` entries are recorded as owned cache
-boundaries, so they do not retire the refresh that requested them. A cancellation, removal, session transition,
-provider replacement, route or locale transition, connection change, superseding refresh or final unmount from outside
-that operation retires it. The original native read is guarded before and after its response, and the result must still
-belong to the same source before it can update route state, remember a slug or navigate. Refreshed route state is
-scoped to its original provider and route identity, including away-and-back provider transitions.
+An admitted refresh keeps the exact QueryClient and cache source, source query/result generation, route identity,
+session stamp, locale and mounted connection that started it. Cancellation owns only a full revert `setState` event on
+the exact query objects present during that synchronous `cancelQueries` call. Removal owns only the `removed` events
+for the exact query objects present during that synchronous `removeQueries` call. A successful commit, error, partial
+`setState`, unrelated removal or query recreation remains external, including a successful commit whose data is equal
+and structurally shared with the previous value. The refresh does not suspend query-currentness across an await; after
+the old caller hands off its direct query comparison, its continuation still observes cache events while the successor
+read is in flight. Only the exact success event following that guarded read's result is owned.
+
+A cancellation, removal, session success/error/removal, provider replacement, route or locale transition, connection
+change, superseding refresh or final unmount from outside that operation retires it. Each queued and awaited boundary
+rechecks the captured route, source, session, locale and connection before the next removal, native read, result/cache
+publication, slug remember or navigation. A committed external result is retained as the successor; stale cleanup
+cannot remove it or touch a newer operation. Refreshed route state remains scoped to its original provider and route
+identity, including away-and-back provider transitions.
 
 Ordinary query fetch-status and observer changes do not by themselves retire a page result. A query cancellation,
 removal, error or replacement does. Once the refresh hands cache authority to its newly admitted caller, that caller
