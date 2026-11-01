@@ -273,12 +273,12 @@ test('separate aggregate reads keep six point statements and at most sixteen com
       await db.admin.query(
         `INSERT INTO rating.aggregate_component
            (route, question_id, population_id, target_id, shard, count, sum, histogram, applied_at)
-         SELECT $1, $2, ('00000000-0000-7000-8000-4211' || lpad(to_hex(n), 8, '0'))::uuid, $3, shard,
-                1, 6, ARRAY[0,0,1,0,0]::bigint[], $4
+         SELECT $1::integer, $2::uuid, ('00000000-0000-7000-8000-4211' || lpad(to_hex(n), 8, '0'))::uuid,
+                $3::uuid, shard, 1, 6, ARRAY[0,0,1,0,0]::bigint[], $4::timestamptz
          FROM generate_series($5::int + 1, $6::int) n CROSS JOIN generate_series(0,15) shard
          UNION ALL
-         SELECT $1, $2, $7, ('00000000-0000-7000-8000-5312' || lpad(to_hex(n), 8, '0'))::uuid, shard,
-                1, 6, ARRAY[0,0,1,0,0]::bigint[], $4
+         SELECT $1::integer, $2::uuid, $7::uuid, ('00000000-0000-7000-8000-5312' || lpad(to_hex(n), 8, '0'))::uuid,
+                shard, 1, 6, ARRAY[0,0,1,0,0]::bigint[], $4::timestamptz
          FROM generate_series($5::int + 1, $6::int) n CROSS JOIN generate_series(0,15) shard`,
         [targetRoute, questionId, target, earlier, previous, scale, populationId],
       );
