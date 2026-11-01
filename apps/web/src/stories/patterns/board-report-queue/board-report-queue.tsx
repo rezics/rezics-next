@@ -37,7 +37,6 @@ export function BoardReportQueue(props: ReportQueueProps) {
   const generation = useRef<{
     props: ReportQueueProps;
     controller: ReportsBulkAction;
-    number: number;
     receipt: readonly BulkItem[] | undefined;
   } | null>(null);
   const previous = generation.current;
@@ -61,7 +60,6 @@ export function BoardReportQueue(props: ReportQueueProps) {
       receipt,
       props,
       controller: createReportsBulkAction(props.bulkEnabled === false ? [] : props.reports),
-      number: (previous?.number ?? 0) + 1,
     };
   }
   const current = generation.current!;
@@ -72,7 +70,7 @@ export function BoardReportQueue(props: ReportQueueProps) {
   return (
     <>
       {props.state === 'error' && current.receipt ? <ReportsBulkRefreshFailure items={current.receipt} /> : null}
-      <QueueGeneration key={current.number} {...props} controller={current.controller} />
+      <QueueGeneration key={props.queueIdentity} {...props} controller={current.controller} />
     </>
   );
 }

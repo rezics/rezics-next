@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader } from '@rezics/ui/shadcn/card';
@@ -59,6 +59,12 @@ export function ReportReviewCard({
   const id = useId();
   const [reason, setReason] = useState('');
   const [reviewAction] = useState(createReportReviewAction);
+  const currentOwner = useRef(intentOwner);
+  currentOwner.current = intentOwner;
+  useLayoutEffect(() => {
+    // A page-data refresh retires bulk state without discarding an individual draft or uncertain intent.
+    if (reviewAction.input) intentOwner?.claimIndividual(report.id);
+  }, [intentOwner, report.id, reviewAction]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [failure, setFailure] = useState<Extract<ReportReviewResult, { ok: false }>['state'] | null>(null);
@@ -140,7 +146,7 @@ export function ReportReviewCard({
     try {
       await reviewAction.refresh(onRefresh);
       setFailure(null);
-      intentOwner?.releaseIndividual(report.id);
+      currentOwner.current?.releaseIndividual(report.id);
       setMessage(m.moderation_queue_refreshed());
     } catch {
       setMessage(m.moderation_queue_error());

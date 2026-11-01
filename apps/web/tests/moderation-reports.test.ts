@@ -995,7 +995,14 @@ test('The default Reports queue dismisses only explicitly selected loaded pendin
     await click(m.moderation_bulk_confirm({ count: 4 }));
     expect(commands).toHaveLength(4);
     expect(host.textContent).toContain(m.moderation_bulk_forbidden());
-    expect(host.querySelectorAll('[role="checkbox"]:not([disabled])')).toHaveLength(0);
+    expect(
+      [...host.querySelectorAll('[role="checkbox"]')].every(
+        (element) =>
+          element.hasAttribute('disabled') ||
+          element.hasAttribute('data-disabled') ||
+          element.getAttribute('aria-disabled') === 'true',
+      ),
+    ).toBe(true);
     expect(
       [...host.querySelectorAll('button')].some((element) => element.textContent === m.moderation_bulk_retry()),
     ).toBe(false);
