@@ -122,3 +122,8 @@ complete command response while keeping this report concise. Machine identifiers
 private allowance/account configuration is excluded. Local extraction scripts and backup remain under `.temp/`.
 Existing `tools/goal/src/flow.test.ts` supplies the named acceptance tests and is unchanged. Original acceptance,
 native and browser verification are deferred by launch policy; only local Goal workspace typing is permitted.
+
+Local foreground `bun run --cwd tools/goal typecheck` passed with exit status 0 after the report was committed.
+This establishes workspace typing only. Deferred acceptance is `bun tools/goal/src/cli.ts report --flow --json`;
+no acceptance suite, native/browser check, root check, worker-check or remote check was started.
+Companion evidence SHA-256: `6ca57e787b7cce11226220684158580b80173b631608f75485499dda9f9f27df`.
