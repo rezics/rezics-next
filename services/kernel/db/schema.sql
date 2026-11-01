@@ -429,7 +429,12 @@ BEGIN
     (NEW.owner,NEW.work_id,NEW.partition_no,NEW.request_digest,NEW.source_partition,NEW.source_transaction) IS DISTINCT FROM
     (OLD.owner,OLD.work_id,OLD.partition_no,OLD.request_digest,OLD.source_partition,OLD.source_transaction) THEN
    RAISE EXCEPTION 'native identity SDK retirement binding is immutable' USING ERRCODE='23514'; END IF;
- IF NEW.owner='access.agent-identity' AND (NEW.owner_ready OR NEW.absence_verified OR NEW.state<>'pending' OR NEW.retired_at IS NOT NULL) THEN
+ IF TG_OP='UPDATE' AND OLD.owner='access.agent-identity' AND
+    ((NEW.request IS DISTINCT FROM OLD.request AND NEW.request IS NOT NULL) OR
+     (NEW.scope IS DISTINCT FROM OLD.scope AND NEW.scope IS NOT NULL)) THEN
+   RAISE EXCEPTION 'native identity History payload is immutable until guarded clearing' USING ERRCODE='23514'; END IF;
+ IF NEW.owner='access.agent-identity' AND (NEW.owner_ready OR NEW.absence_verified OR NEW.state<>'pending' OR NEW.retired_at IS NOT NULL OR
+    (TG_OP='UPDATE' AND (NEW.request IS DISTINCT FROM OLD.request OR NEW.scope IS DISTINCT FROM OLD.scope))) THEN
    SELECT * INTO STRICT m FROM core.agent_identity_work WHERE custody_id=NEW.work_id::uuid FOR SHARE;
    IF m.sdk_readiness IS NULL OR NOT NEW.owner_ready THEN
      RAISE EXCEPTION 'identity SDK retirement requires durable source transfer' USING ERRCODE='23514'; END IF;

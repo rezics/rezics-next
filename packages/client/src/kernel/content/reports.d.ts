@@ -13,6 +13,11 @@ export type ReportTarget = Readonly<{
     kind: 'post';
     id: PostId;
 }>;
+export type ReportSelection = Readonly<{
+    status?: 'all' | 'pending' | 'resolved';
+    targetKind?: 'all' | ReportTarget['kind'];
+    order?: 'newest' | 'oldest';
+}>;
 export type ReportInput = Readonly<{
     target: ReportTarget;
     revisionId?: RevisionId;
@@ -68,4 +73,6 @@ export declare function readReport(dependencies: ReportDependencies, reportId: R
 /** Closed reporter projection, independent of the required moderator/list fields. */
 export declare function reportReadView(report: ReportView): ReportReadView;
 export declare function listTargetReports(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext, cursor?: string, limit?: number): Promise<Page<ReportView>>;
+/** Additive selection adapter; the original native list contract retains its defaults. */
+export declare function listSelectedTargetReports(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext, cursor?: string, limit?: number, selection?: ReportSelection): Promise<Page<ReportView>>;
 export {};

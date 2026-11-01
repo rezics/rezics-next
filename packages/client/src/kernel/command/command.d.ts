@@ -8,6 +8,7 @@ export type CommandEvent = {
     data: unknown;
 };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
+export declare function withSingleCommandAttempt<T>(body: () => Promise<T>): Promise<T>;
 export type CommandCallback = (transactionId: string) => void | Promise<void>;
 export type CommandResult<T> = Readonly<{
     value: T;

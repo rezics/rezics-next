@@ -6309,6 +6309,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         query: {
                             cursor?: string;
                             limit?: string | number;
+                            status?: "all" | "pending" | "resolved";
+                            targetKind?: "all" | "board" | "post" | "thread";
+                            order?: "newest" | "oldest";
                         };
                         headers: unknown;
                         response: {
@@ -6429,6 +6432,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         query: {
                             cursor?: string;
                             limit?: string | number;
+                            status?: "all" | "pending" | "resolved";
+                            targetKind?: "all" | "board" | "post" | "thread";
+                            order?: "newest" | "oldest";
                         };
                         headers: unknown;
                         response: {
@@ -6549,6 +6555,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         query: {
                             cursor?: string;
                             limit?: string | number;
+                            status?: "all" | "pending" | "resolved";
+                            targetKind?: "all" | "board" | "post" | "thread";
+                            order?: "newest" | "oldest";
                         };
                         headers: unknown;
                         response: {
