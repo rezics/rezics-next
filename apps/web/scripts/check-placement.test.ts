@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import type { Browser } from 'playwright';
 import {
   hasWebCheckCustody,
+  localStorybookPublicationRevisionEnvironment,
   placeWebCheck,
   routeWebCheck,
   trustedDriver,
@@ -39,6 +40,7 @@ function fixture() {
     driver: () => '/trusted/producer',
     hosts: () => '/private/hosts.json',
     revision: () => revision,
+    isTreeClean: () => true,
     environment(values) {
       overlays.push(values);
       return {
@@ -346,6 +348,75 @@ test('every finite heavy route crosses the exact driver with ordered argv, cwd, 
     ]);
     expect(f.closed()).toBe(1);
   }
+});
+
+test('an explicit local publication admits only the exact finite deployment validation commands', async () => {
+  const local = { [localStorybookPublicationRevisionEnvironment]: revision };
+  const routes = [
+    {
+      command: ['bun', 'scripts/storybook-deploy.ts', '--validate-only'],
+      returns: ['apps/web/storybook-static'],
+    },
+    { command: ['bun', 'scripts/storybook-build.ts'], returns: ['apps/web/storybook-static'] },
+    { command: ['bun', 'scripts/storybook-smoke.ts'], returns: [] },
+  ];
+
+  for (const route of routes) {
+    const f = fixture();
+    f.adapter.custody = () => false;
+    expect(await routeWebCheck({ root, cwd: app, ...route }, local, f.adapter)).toBeNull();
+    expect(f.calls).toHaveLength(0);
+    expect(f.overlays).toHaveLength(0);
+    expect(f.closed()).toBe(0);
+  }
+});
+
+test('local publication authorization never admits interactive, altered or unrelated heavy commands', async () => {
+  const local = { [localStorybookPublicationRevisionEnvironment]: revision };
+  const commands = [
+    ['bun', 'scripts/storybook-build.ts', '--force'],
+    ['bun', 'scripts/storybook-smoke.ts', '--origin', 'https://example.invalid/'],
+    ['bun', 'scripts/storybook-dev.ts', '--port', '6006'],
+    ['bun', 'test', 'tests/page-stories.test.ts'],
+  ];
+
+  for (const command of commands) {
+    const f = fixture();
+    f.adapter.custody = () => false;
+    expect(await routeWebCheck({ root, cwd: app, command }, local, f.adapter)).toBe(0);
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0]!.command.slice(-command.length)).toEqual(command);
+    expect(f.calls[0]!.env).not.toHaveProperty(localStorybookPublicationRevisionEnvironment);
+    expect(f.overlays[0]).not.toHaveProperty(localStorybookPublicationRevisionEnvironment);
+  }
+});
+
+test('local publication requires the exact committed revision and a clean source tree', async () => {
+  const local = { [localStorybookPublicationRevisionEnvironment]: revision };
+  const run = {
+    root,
+    cwd: app,
+    command: ['bun', 'scripts/storybook-build.ts'],
+    returns: ['apps/web/storybook-static'],
+  };
+  const changed = fixture();
+  changed.adapter.custody = () => false;
+  changed.adapter.revision = () => 'b'.repeat(40);
+  await expect(routeWebCheck(run, local, changed.adapter)).rejects.toThrow('revision changed');
+  expect(changed.calls).toHaveLength(0);
+
+  const dirty = fixture();
+  dirty.adapter.custody = () => false;
+  dirty.adapter.isTreeClean = () => false;
+  await expect(routeWebCheck(run, local, dirty.adapter)).rejects.toThrow('clean working tree');
+  expect(dirty.calls).toHaveLength(0);
+
+  const malformed = fixture();
+  malformed.adapter.custody = () => false;
+  await expect(
+    routeWebCheck(run, { [localStorybookPublicationRevisionEnvironment]: 'head' }, malformed.adapter),
+  ).rejects.toThrow('full committed revision');
+  expect(malformed.calls).toHaveLength(0);
 });
 
 test('absent/invalid hosts or producer source never admit the native callback', async () => {

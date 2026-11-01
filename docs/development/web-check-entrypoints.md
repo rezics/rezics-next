@@ -8,11 +8,13 @@ The verifier retains its existing admission and publication authority. Web does 
 ## Finite execution
 
 `scripts/check-placement.ts` is the Web receiving adapter. Every finite route below enters it before native heavy
-work. The only native continuation is an actual, realpath-resolved workspace and cwd confined beneath the existing
-remote-check run root. Caller remote markers, local/off switches, memory/stack leases and historical weights cannot
-admit native work on a worker. Missing producer source, missing hosts and failed transport fail closed; there is no
-local replay. Unknown focused commands also go remote. Workspace typecheck scripts remain direct compiler routes;
-this slice adds no competing small-unit classifier.
+work. The default native continuation requires an actual, realpath-resolved workspace and cwd confined beneath the
+existing remote-check run root. Caller remote markers, local/off switches, memory/stack leases and historical weights
+cannot admit native work on a worker. Missing producer source, missing hosts and failed transport fail closed; there
+is no local replay. The sole opt-in exception is ordinary Storybook publication validation with `--local`, bounded
+to its exact clean committed snapshot and the finite deployment validation commands below. Unknown focused commands
+also go remote. Workspace typecheck scripts remain direct compiler routes; this slice adds no competing small-unit
+classifier.
 
 The adapter invokes the agreed Performance CLI with individual argv tokens:
 
@@ -59,7 +61,7 @@ environment cleanup retain the command/transport failure as well.
 | Web `test`                                                            | Original isolated wrapper and its Bun test argv                                                                                                        | Declared named state/profile/event paths; otherwise no persistent result tree                        |
 | `focused.ts`                                                          | Original command after remote message/route preparation; optional private network, output relay and independent process-group/fixture cleanup retained | Declared named state/profile/event paths                                                             |
 | `storybook-build.ts`                                                  | Both original Web and UI Storybook builds in the same physical run                                                                                     | Entire selected output tree, including `ui/`, compatibility indexes and exact candidate `build.json` |
-| `storybook-deploy.ts`                                                 | Finite remote build then unchanged six smoke scenarios; local native publication follows only on success                                               | Entire validated Storybook output tree                                                               |
+| `storybook-deploy.ts`                                                 | Remote validation by default; explicit `--local` uses the same finite build and unchanged six smoke scenarios before local publication                     | Entire validated Storybook output tree                                                               |
 | `storybook-smoke.ts`                                                  | Same six selectors and render/image/language/cover assertions, on existing artifacts in that physical snapshot                                         | No new artifact tree                                                                                 |
 | `screenshots.ts`                                                      | Original capture selectors, locales, themes and widths, then build/browser capture remotely                                                            | Exact contained `--out` tree; default `.temp/screenshots`                                            |
 | `cards.ts`                                                            | Original browser card rendering                                                                                                                        | `apps/web/public/cards`                                                                              |
@@ -82,11 +84,25 @@ only under actual remote custody; a local programmatic caller receives unavailab
 ## Validation and native publication
 
 `storybook-deploy.ts --validate-only` is a finite build-and-smoke command with no upload or publication branch.
-Keeping both operations in one remote invocation avoids treating ignored local build output as source input.
-`runDeployment` still performs its clean-tree check and unchanged same-commit/force cadence before validation,
-then removes local leftover Cloudflare output, performs dry-run or upload/deploy/triggers through the native local
-Wrangler runner, and requires live `build.json` equality. The existing build/smoke callback contract remains usable;
-the CLI uses the finite combined validation callback. No workflow or publication authorization is changed.
+The ordinary deployment command accepts this explicit local validation option:
+
+```sh
+bun run --cwd apps/web storybook:deploy --local
+```
+
+Without `--local`, validation keeps its default remote placement. With it, the deploy entrypoint labels validation as
+local, requires a full commit SHA and a clean tree, and passes that exact revision to check-placement. Check-placement
+admits only `storybook-deploy.ts --validate-only`, `storybook-build.ts` with no extra arguments, and
+`storybook-smoke.ts` with no extra arguments from `apps/web`; each local continuation rechecks the revision and
+clean tree. The build and the same six smoke scenarios run unchanged. This narrow grant does not admit interactive
+servers or other heavy commands, create remote custody or receipts, or alter the separate remote receiver and
+prepare/register work. `--local` cannot be combined with `--validate-only` or `--status`.
+
+`runDeployment` retains its clean-tree check and unchanged same-commit/force cadence before validation. For the local
+option it checks the same committed snapshot again after validation, then removes local leftover Cloudflare output,
+performs dry-run or upload/deploy/triggers through the native local Wrangler runner, and requires live `build.json`
+equality. The existing build/smoke callback contract remains usable; the CLI uses the finite combined validation
+callback. No other workflow or publication authorization changes.
 
 Standalone smoke does not implicitly transfer a previous ignored local build. The finite CLI has no agreed input-
 artifact option. When its physical snapshot has no built Web/UI indexes, it reports unavailable before launching a

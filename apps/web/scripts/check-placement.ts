@@ -6,6 +6,7 @@ import { hostsLocation, mainCheckout, onCheckHost, type StackRun } from '../../.
 
 const root = resolve(import.meta.dir, '../../..');
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+export const localStorybookPublicationRevisionEnvironment = 'WEB_STORYBOOK_LOCAL_PUBLICATION_REVISION';
 
 export class WebCheckFailure extends Error {
   constructor(
@@ -82,6 +83,7 @@ const hostEnvironment = new Set([
   'KERNEL_CHECK_REMOTE',
   'KERNEL_CHECK_ON_REMOTE',
   'WEB_CHECK_DRIVER_ROOT',
+  localStorybookPublicationRevisionEnvironment,
   'NPM_TOKEN',
   'NODE_AUTH_TOKEN',
   'BUN_AUTH_TOKEN',
@@ -274,6 +276,7 @@ export type WebPlacementRuntime = {
   driver: (workspace: string, env: NodeJS.ProcessEnv) => string;
   hosts: (workspace: string, env: NodeJS.ProcessEnv) => string;
   revision: (workspace: string) => string;
+  isTreeClean: (workspace: string) => boolean;
   environment: (values: Record<string, string>) => { path: string; close: () => void };
   execute: (input: DriverExecution) => Promise<number>;
 };
@@ -287,6 +290,7 @@ const runtime: WebPlacementRuntime = {
     return resolve(located.file);
   },
   revision: (workspace) => git(workspace, ['rev-parse', 'HEAD']),
+  isTreeClean: (workspace) => git(workspace, ['status', '--porcelain', '--untracked-files=normal']) === '',
   environment(values) {
     // Private caller data outside the candidate source; never included in its source transfer.
     const directory = mkdtempSync(join(tmpdir(), 'rezics-web-check-'));
@@ -302,7 +306,27 @@ const runtime: WebPlacementRuntime = {
   execute: executeDriver,
 };
 
-/** null means already physically remote. No other condition admits native work on this machine. */
+function isLocalStorybookPublicationValidation(
+  command: readonly string[],
+  cwd: string,
+  returnCount: number,
+): boolean {
+  if (cwd !== 'apps/web') return false;
+  if (command.length === 3 && command[0] === 'bun' && command[1] === 'scripts/storybook-deploy.ts')
+    return command[2] === '--validate-only' && returnCount === 1;
+  if (command.length !== 2 || command[0] !== 'bun') return false;
+  if (command[1] === 'scripts/storybook-build.ts') return returnCount === 1;
+  return command[1] === 'scripts/storybook-smoke.ts' && returnCount === 0;
+}
+
+function withoutLocalPublicationControl(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (env[localStorybookPublicationRevisionEnvironment] === undefined) return env;
+  const sanitized = { ...env };
+  delete sanitized[localStorybookPublicationRevisionEnvironment];
+  return sanitized;
+}
+
+/** null means this process may continue under actual check-host custody or an exact local publication grant. */
 export async function routeWebCheck(
   run: Pick<StackRun, 'root' | 'cwd' | 'command' | 'returns'>,
   env: NodeJS.ProcessEnv = process.env,
@@ -318,6 +342,19 @@ export async function routeWebCheck(
   for (const argument of run.command) {
     if (isAbsolute(argument) || /^--[^=]+=\//.test(argument))
       throw new Error(`Web check unavailable: unsupported host-absolute argument ${argument}`);
+  }
+  const localRevision = env[localStorybookPublicationRevisionEnvironment];
+  if (
+    localRevision !== undefined &&
+    isLocalStorybookPublicationValidation(run.command, cwd, returns.length)
+  ) {
+    if (!/^[0-9a-f]{40}$/.test(localRevision))
+      throw new Error('Web check unavailable: local Storybook publication requires a full committed revision');
+    if (adapter.revision(workspace) !== localRevision)
+      throw new Error('Web check unavailable: local Storybook publication revision changed');
+    if (!adapter.isTreeClean(workspace))
+      throw new Error('Web check unavailable: local Storybook publication requires a clean working tree');
+    return null;
   }
   if (env.GROWTH_PROFILE) returns.push(workspacePath(workspace, resolve(run.cwd, env.GROWTH_PROFILE)));
   if (env.WEB_TEST_STATE_DIR) returns.push(workspacePath(workspace, resolve(run.cwd, env.WEB_TEST_STATE_DIR)));
@@ -343,7 +380,12 @@ export async function routeWebCheck(
         command: run.command,
         returns,
       });
-      code = await adapter.execute({ command, cwd: workspace, env, ...(signal ? { signal } : {}) });
+      code = await adapter.execute({
+        command,
+        cwd: workspace,
+        env: withoutLocalPublicationControl(env),
+        ...(signal ? { signal } : {}),
+      });
     }
   } catch (error) {
     failed = true;

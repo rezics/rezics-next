@@ -1,16 +1,22 @@
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { routeWebCheck, workspacePath, WebCheckFailure } from './check-placement.ts';
+import {
+  localStorybookPublicationRevisionEnvironment,
+  routeWebCheck,
+  workspacePath,
+  WebCheckFailure,
+} from './check-placement.ts';
 
 type DeploymentOptions = {
   dryRun: boolean;
   force?: boolean;
   commit?: string;
   cloudflareOutputDir?: string;
+  localPublication?: boolean;
   build: () => Promise<void>;
   smoke: () => Promise<void>;
   /** Finite build and the same six smoke scenarios in one physical snapshot, before local publication. */
-  validate?: () => Promise<void>;
+  validate?: (localPublicationCommit?: string) => Promise<void>;
   wrangler: (args: string[]) => Promise<string>;
   fetchBuild?: () => Promise<{ commit?: string }>;
   isTreeClean?: () => Promise<string[]>;
@@ -21,7 +27,11 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
   const expectedCommit = options.commit;
   if (!options.dryRun && !expectedCommit)
     throw new Error('The built commit SHA is required to verify the live Storybook.');
-  if (!options.dryRun) {
+  if (options.localPublication && (!expectedCommit || !/^[0-9a-f]{40}$/.test(expectedCommit)))
+    throw new Error('Local Storybook publication requires a full committed revision.');
+  if (options.localPublication && !options.validate)
+    throw new Error('Local Storybook publication requires the finite validation callback.');
+  if (!options.dryRun || options.localPublication) {
     const changedPaths = await (options.isTreeClean ?? getChangedPaths)();
     if (changedPaths.length > 0) {
       options.print(`Cannot publish from a dirty working tree:\n${changedPaths.join('\n')}`);
@@ -39,10 +49,22 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
       }
     }
   }
-  if (options.validate) await options.validate();
+  if (options.localPublication)
+    options.print(`Storybook validation placement: local (${expectedCommit}).`);
+  if (options.validate) await options.validate(options.localPublication ? expectedCommit : undefined);
   else {
     await options.build();
     await options.smoke();
+  }
+  if (options.localPublication) {
+    const currentCommit = getCurrentCommit();
+    if (currentCommit !== expectedCommit)
+      throw new Error(`Local Storybook validation changed from committed snapshot ${expectedCommit}.`);
+    const changedPaths = await (options.isTreeClean ?? getChangedPaths)();
+    if (changedPaths.length > 0) {
+      options.print(`Cannot publish from a dirty working tree after validation:\n${changedPaths.join('\n')}`);
+      throw new Error(`Cannot publish from a dirty working tree after validation: ${changedPaths.join(', ')}`);
+    }
   }
   const cloudflareOutputDir = options.cloudflareOutputDir ?? resolve(import.meta.dir, '../.cloudflare/output');
   rmSync(cloudflareOutputDir, { recursive: true, force: true });
@@ -101,6 +123,15 @@ async function getChangedPaths(): Promise<string[]> {
     .map((line) => line.slice(3));
 }
 
+function getCurrentCommit(): string {
+  const repositoryRoot = resolve(import.meta.dir, '../../..');
+  const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: repositoryRoot });
+  if (result.exitCode !== 0) throw new Error('Could not read the current Git commit SHA.');
+  const commit = result.stdout.toString().trim();
+  if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('Git did not return a full commit SHA.');
+  return commit;
+}
+
 async function fetchLiveBuild(): Promise<{ commit?: string }> {
   const response = await fetch('https://storybook.rezics.com/build.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`Could not verify the live Storybook build (${response.status}).`);
@@ -126,16 +157,20 @@ async function wrangler(args: string[]): Promise<string> {
 }
 
 /** No credentials or publication command crosses this finite remote validation boundary. */
-export async function validateStorybook(): Promise<void> {
+export async function validateStorybook(localPublicationCommit?: string): Promise<void> {
   const app = resolve(import.meta.dir, '..');
   const root = resolve(app, '../..');
   const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? resolve(app, 'storybook-static'));
+  const validationEnvironment = { ...process.env };
+  delete validationEnvironment[localStorybookPublicationRevisionEnvironment];
+  if (localPublicationCommit)
+    validationEnvironment[localStorybookPublicationRevisionEnvironment] = localPublicationCommit;
   const code = await routeWebCheck({
     root,
     cwd: app,
     command: ['bun', 'scripts/storybook-deploy.ts', '--validate-only'],
     returns: [workspacePath(root, output)],
-  });
+  }, validationEnvironment);
   if (code !== null) {
     if (code !== 0) throw new WebCheckFailure(code, 'Storybook validation');
     return;
@@ -143,7 +178,7 @@ export async function validateStorybook(): Promise<void> {
   for (const script of ['scripts/storybook-build.ts', 'scripts/storybook-smoke.ts']) {
     const child = Bun.spawn(['bun', script], {
       cwd: app,
-      env: process.env,
+      env: validationEnvironment,
       stdin: 'inherit',
       stdout: 'inherit',
       stderr: 'inherit',
@@ -155,16 +190,16 @@ export async function validateStorybook(): Promise<void> {
 
 if (import.meta.main) {
   try {
-    if (process.argv.slice(2).includes('--validate-only')) {
-      if (process.argv.length !== 3) throw new Error('--validate-only cannot be combined with publication options');
+    const args = process.argv.slice(2);
+    if (args.includes('--validate-only')) {
+      if (args.length !== 1) throw new Error('--validate-only cannot be combined with publication options');
       await validateStorybook();
     } else {
       const app = resolve(import.meta.dir, '..');
-      const gitCommit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: resolve(app, '../..') });
-      if (gitCommit.exitCode !== 0) throw new Error('Could not read the current Git commit SHA.');
-      const commit = gitCommit.stdout.toString().trim();
-      if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('Git did not return a full commit SHA.');
-      if (process.argv.includes('--status')) {
+      const commit = getCurrentCommit();
+      const localPublication = args.includes('--local');
+      if (args.includes('--status')) {
+        if (localPublication) throw new Error('--local is only supported for Storybook publication, not --status.');
         process.exitCode = await runStatus({
           localCommit: commit,
           fetchBuild: fetchLiveBuild,
@@ -183,8 +218,9 @@ if (import.meta.main) {
           if (code !== 0) throw new WebCheckFailure(code, script);
         };
         await runDeployment({
-          dryRun: process.argv.includes('--dry-run'),
-          force: process.argv.includes('--force'),
+          dryRun: args.includes('--dry-run'),
+          force: args.includes('--force'),
+          localPublication,
           validate: validateStorybook,
           build: () => run('scripts/storybook-build.ts'),
           smoke: () => run('scripts/storybook-smoke.ts'),
