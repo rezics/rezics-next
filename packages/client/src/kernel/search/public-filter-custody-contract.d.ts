@@ -1,7 +1,8 @@
 import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import type { PrivacyReductionStart, PublicFilterConsumer, PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
-import type { PublicFilterSourceBinding, PublicFilterBindingFailure, PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
+import type { PublicFilterSourceBinding, NativeSourceRepairLocator, PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> = Readonly<{
     source: Readonly<{
@@ -87,45 +88,9 @@ export type PublicFilterRepairSettlementResult = CustodyFailure | Readonly<{
     settlement: NativePublicFilterRepairSettlement;
     cost: CustodyCost;
 }>;
-/** Temporary structural consumer declarations until the selected Source-owner ABI is integrated.
- * Item ABI: 6ef6b75cf35e66a2fa14b6ad9d32559d1c832a97; step ABI: the adopted owner continuation.
- * These locate owner records only. They never construct or deserialize Source authority.
- */
-export type NativeSourceRepairLocator = Readonly<{
-    bootstrap: string;
-    execution: string;
-    step: string;
-    locatorDigest: string;
-}>;
-export type NativeSourceRepairRead = Readonly<{
-    receipt: NativeSourceRepairLocator;
-    queried: PublicFilterQueriedObservation;
-    execution: string;
-}>;
-export type NativeSourceRepairVerification = Readonly<{
-    status: 'verified';
-    repair: PublicSourceRepair;
-    cost: PublicFilterCost;
-}> | PublicFilterBindingFailure;
-export type NativeSourceRepairStepRead = Readonly<{
-    bootstrap: string;
-    queried: PublicFilterQueriedObservation;
-    execution: string;
-    predecessor: string | null;
-}>;
-export type NativeSourceRepairStepVerification = Readonly<{
-    status: 'verified';
-    step: string;
-    predecessor: string | null;
-    frontier: string | null;
-    complete: boolean;
-    receipts: readonly NativeSourceRepairLocator[];
-    cost: PublicFilterCost;
-}> | PublicFilterBindingFailure;
-export type PublicFilterRepairSourceBinding = PublicFilterSourceBinding & Readonly<{
-    readRepairStep?(request: NativeSourceRepairStepRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairStepVerification>;
-    readRepairReceipt?(request: NativeSourceRepairRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairVerification>;
-}>;
+/** The original Source module owns repair verification and its durable locators. */
+export type { NativeSourceRepairLocator, NativeSourceRepairRead, NativeSourceRepairVerification, NativeSourceRepairStepRead, NativeSourceRepairStepVerification, } from '../semantic/public-filter-source-binding.ts';
+export type PublicFilterRepairSourceBinding = PublicFilterSourceBinding;
 export type RetainedSourceRepair = Omit<PublicSourceRepair, 'receipt'> & Readonly<{
     receipt: NativeSourceRepairLocator;
 }>;
@@ -137,6 +102,8 @@ export type RetainedRepairPage = Readonly<{
     frontier: string | null;
     complete: boolean;
     repairs: readonly RetainedSourceRepair[];
+    /** Independent native Account input, never a Subject projection or privacy cause. */
+    account?: AccountDiscoveryRepairObservation;
 }>;
 export type RetainedRepairSettlement = Readonly<{
     id: string;
@@ -216,4 +183,3 @@ export interface PublicFilterCustody {
     /** Drains local method calls; committed observations survive factory recovery. Supplied resources stay open. */
     close(): Promise<void>;
 }
-export {};

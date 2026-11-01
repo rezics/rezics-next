@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
@@ -23,6 +24,9 @@ export type SearchRepairWriterReceipt = Readonly<{
 /** The mixed writer retains its actual tagged actions and both allocation identities. */
 export type DiscoveryRepairWriterReceipt = Readonly<{
     writer: 'discovery';
+    /** Absent on retained Subject receipts written before owner separation. */
+    owner?: 'semantic' | 'accounts';
+    account?: AccountDiscoveryRepairObservation;
     locator: string;
     subject: string;
     partition: number;
@@ -63,7 +67,42 @@ export declare function createDiscoveryRepairWriter(options: {
     consumer: string;
     projection: DiscoveryProjection;
 }): {
-    repair(subject: string, obligation: bigint, locator: string, context: PublicFilterConsumerContext): Promise<DiscoveryRepairWriterReceipt>;
+    repair(subject: string, obligation: bigint, locator: string, context: PublicFilterConsumerContext): Promise<Readonly<{
+        writer: 'discovery';
+        /** Absent on retained Subject receipts written before owner separation. */
+        owner?: 'semantic' | 'accounts';
+        account?: AccountDiscoveryRepairObservation;
+        locator: string;
+        subject: string;
+        partition: number;
+        epoch: number;
+        incarnation: string;
+        allocation: string;
+        writeAlias: string;
+        consumer: string;
+        sourcePosition: bigint;
+        effects: readonly DiscoveryRepairEffect[];
+        enrollment: IdentityNativeReceipt;
+        completion: IdentityNativeReceipt;
+    }>>;
+    repairAccount(account: string, locator: string, context: PublicFilterConsumerContext): Promise<Readonly<{
+        writer: 'discovery';
+        /** Absent on retained Subject receipts written before owner separation. */
+        owner?: 'semantic' | 'accounts';
+        account?: AccountDiscoveryRepairObservation;
+        locator: string;
+        subject: string;
+        partition: number;
+        epoch: number;
+        incarnation: string;
+        allocation: string;
+        writeAlias: string;
+        consumer: string;
+        sourcePosition: bigint;
+        effects: readonly DiscoveryRepairEffect[];
+        enrollment: IdentityNativeReceipt;
+        completion: IdentityNativeReceipt;
+    }>>;
 };
 export declare const SEARCH_IDENTITY_WRITER_CHUNK = 100;
 /** A locator only. All adoption reads retained native rows under the current home owner. */

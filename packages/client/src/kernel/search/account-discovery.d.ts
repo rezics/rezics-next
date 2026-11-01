@@ -73,7 +73,7 @@ export declare function createDiscoveryProjection(options: {
     target: DiscoveryTarget;
 }): {
     project: (partition: number, input: readonly DiscoveryKey[], atLeast?: bigint, repair?: boolean) => Promise<void>;
-    prepareRepair: (id: string, obligation: bigint) => Promise<DiscoveryIndexAction[]>;
+    prepareRepair: (id: string, obligation: bigint, owner?: DiscoveryKey['owner']) => Promise<DiscoveryIndexAction[]>;
     applyRepair: (actions: readonly DiscoveryIndexAction[]) => Promise<Readonly<{
         key: DiscoveryKey;
         action: DiscoveryIndexAction;

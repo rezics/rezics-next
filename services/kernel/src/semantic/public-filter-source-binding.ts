@@ -116,20 +116,24 @@ async function acknowledgePublicFilterRepairBaseline(
          FOR SHARE OF p,e`,
         [baseline.registrationPartition,baseline.bootstrap],
       )).rows[0];
-      const registration = (await client.query<{ state: string; consumer: string; physical_target: string }>(
-        `SELECT state,consumer,physical_target FROM search.public_filter_registration
-         WHERE (partition_no,id)=($1,$2) FOR UPDATE`,
-        [baseline.registrationPartition,baseline.registration],
-      )).rows[0];
-      if (!owner || owner.write_state !== 'active' || registration?.state !== 'active' ||
-        registration.consumer !== baseline.consumer || registration.physical_target !== baseline.physicalTarget)
+      if (!owner || owner.write_state !== 'active')
         throw new CommandUnavailableError('fenced',baseline.registrationPartition);
+      // Registration installs the physical target before its registration row.
+      // Keep that native lock order while fencing the incarnation through ACK.
       const target = (await client.query<{ incarnation: string }>(
         `SELECT incarnation FROM search.public_filter_target
          WHERE (partition_no,physical_target)=($1,$2) FOR SHARE`,
         [baseline.registrationPartition,baseline.physicalTarget],
       )).rows[0];
       if (target?.incarnation !== baseline.incarnation)
+        throw new CommandUnavailableError('fenced',baseline.registrationPartition);
+      const registration = (await client.query<{ state: string; consumer: string; physical_target: string }>(
+        `SELECT state,consumer,physical_target FROM search.public_filter_registration
+         WHERE (partition_no,id)=($1,$2) FOR UPDATE`,
+        [baseline.registrationPartition,baseline.registration],
+      )).rows[0];
+      if (registration?.state !== 'active' || registration.consumer !== baseline.consumer ||
+        registration.physical_target !== baseline.physicalTarget)
         throw new CommandUnavailableError('fenced',baseline.registrationPartition);
       const summary = (await client.query<{
         source_epoch: number; baseline_bootstrap: string; acknowledged_position: string;

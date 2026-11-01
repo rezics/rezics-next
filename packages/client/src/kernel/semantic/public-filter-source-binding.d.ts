@@ -1,3 +1,4 @@
+import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
 import type { CustodyDefinition } from '../search/public-filter-custody-contract.ts';
@@ -50,6 +51,9 @@ export type PublicFilterBindingFailure = Readonly<{
     cost: PublicFilterCost;
 }>;
 export type PublicFilterSourceBinding = Readonly<{
+    /** Older basic bindings have no repair producer. Native bootstrap bindings always provide this method. */
+    readRepairStep?(request: NativeSourceRepairStepRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairStepVerification>;
+    readRepairReceipt?(request: NativeSourceRepairRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairVerification>;
     resolve(request: Readonly<{
         source: PublicFilterSource;
         meaning: PublicFilterProjectionMeaning;
@@ -106,9 +110,42 @@ export type PublicSourceBootstrapRecovery = Readonly<{
     cost: PublicFilterCost;
 }> | PublicFilterBindingFailure;
 declare const nativeSourceRepairReceipt: unique symbol;
-export type NativeSourceRepairReceipt = Readonly<{
+/** Durable original-module locator. Its fields locate evidence; none certifies completion. */
+export type NativeSourceRepairLocator = Readonly<{
+    bootstrap: string;
+    execution: string;
+    step: string;
+    locatorDigest: string;
+}>;
+export type NativeSourceRepairReceipt = NativeSourceRepairLocator & Readonly<{
     [nativeSourceRepairReceipt]: true;
 }>;
+export type NativeSourceRepairRead = Readonly<{
+    receipt: NativeSourceRepairLocator;
+    queried: PublicFilterQueriedObservation;
+    execution: string;
+}>;
+/** Exact retained native successor request. Locators identify Source evidence; they confer no authority. */
+export type NativeSourceRepairStepRead = Readonly<{
+    bootstrap: string;
+    queried: PublicFilterQueriedObservation;
+    execution: string;
+    predecessor: string | null;
+}>;
+export type NativeSourceRepairStepVerification = Readonly<{
+    status: 'verified';
+    step: string;
+    predecessor: string | null;
+    frontier: string | null;
+    complete: boolean;
+    receipts: readonly NativeSourceRepairLocator[];
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
+export type NativeSourceRepairVerification = Readonly<{
+    status: 'verified';
+    repair: PublicSourceRepair;
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
 export type PublicSourceRepair = Readonly<{
     kind: 'local' | 'foreign';
     locator: PublicFilterRepairLocator;
@@ -128,6 +165,9 @@ export type PublicSourceRepairPage = Readonly<{
     cost: PublicFilterCost;
 }> | PublicFilterBindingFailure;
 export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Readonly<{
+    readRepairStep(request: NativeSourceRepairStepRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairStepVerification>;
+    /** Acyclic Source verification. Reads basic Search custody, never Search settlement. */
+    readRepairReceipt(request: NativeSourceRepairRead, context: PublicFilterConsumerContext): Promise<NativeSourceRepairVerification>;
     begin(request: Readonly<{
         source: PublicFilterSource;
         meaning: PublicFilterProjectionMeaning;
@@ -166,5 +206,46 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         execution: string;
     }>, context: PublicFilterConsumerContext): ReturnType<PublicFilterSourceBinding['join']>;
 }>;
+/** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
+type NativePreparationInput = Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] | Readonly<{
+    bootstrap: string;
+}>;
+export type NativePublicFilterPreparation = PublicSourceBootstrapResult | Readonly<{
+    status: 'preparing';
+    bootstrap: PublicSourceBootstrap;
+    cost: PublicFilterCost;
+}>;
+export declare function joinNativePublicFilterRepair(binding: PublicFilterSourceBinding, request: Parameters<PublicFilterSourceBinding['join']>[0], context: PublicFilterConsumerContext): Promise<Readonly<{
+    status: 'unready' | 'unavailable';
+    reason: 'source_missing' | 'configuration_changed' | 'definition_missing' | 'observation_lost' | 'execution_missing' | 'binding_mismatch' | 'owner_unavailable' | 'identity_pending' | 'deadline';
+    cost: PublicFilterCost;
+}> | Readonly<{
+    status: 'joined';
+    definition: PublicFilterSourceDefinition;
+    queried: PublicFilterQueriedObservation;
+    covered: PrivacyReductionStart;
+    execution: Readonly<{
+        id: string;
+        start: PrivacyReductionStart;
+        ownRows: readonly Readonly<{
+            original: string;
+            terminal: string;
+        }>[];
+    }> | null;
+    cost: PublicFilterCost;
+}> | null>;
+export declare function readNativePublicFilterAccountRepair(binding: PublicFilterSourceBinding, request: NativeSourceRepairStepRead, context: PublicFilterConsumerContext): Promise<Readonly<{
+    account: AccountDiscoveryRepairObservation | null;
+    cost: PublicFilterCost;
+}> | null>;
+export declare function readNativePublicFilterRepairStart(binding: PublicFilterSourceBinding, request: Readonly<{
+    bootstrap: string;
+    queried: PublicFilterQueriedObservation;
+}>, context: PublicFilterConsumerContext): Promise<Readonly<{
+    start: PrivacyReductionStart;
+    cost: PublicFilterCost;
+}> | null>;
+/** A private factory association locates the native body; it cannot grant coverage or open a PIT. */
+export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: NativePreparationInput, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation | null>;
 /** Native Source-owned registration; the origin association only locates the constructor configuration. */
 export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;

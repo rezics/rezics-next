@@ -12,7 +12,7 @@ import type { IndexedStatement } from '../search/source.ts';
 import type { Statement } from './item.ts';
 import type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
 export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
-/** Specification only. No runtime export, default composition or authorization certificate. */
+/** Shared native source contract. Its implementation remains local to Semantic and grants no permission. */
 export type PublicFilterCost = Readonly<{
     inputKeys: number;
     candidates: number;
@@ -54,6 +54,14 @@ export type PublicFilterDependency = Readonly<{
     kind: 'collection';
     route: number;
     collection: string;
+}> | Readonly<{
+    kind: 'realm';
+    route: number;
+    realm: string;
+}> | Readonly<{
+    kind: 'board';
+    route: number;
+    board: string;
 }>;
 /** Local selection evidence; dependency heads separately invalidate foreign changes. */
 export type PublicFilterProjectionObservation = Readonly<{
@@ -152,6 +160,9 @@ export type PublicFilterDependencyKey = Readonly<{
 }> | Readonly<{
     kind: 'function';
     input: 'public_collection_count' | 'public_rating';
+}> | Readonly<{
+    kind: 'realm';
+    realm: string;
 }>;
 /** Shared caller deadline; fresh native T is minted inside each read, never accepted from JSON. */
 export type PublicFilterReadContext = Pick<AccessContext, 'deadline'>;
@@ -183,7 +194,7 @@ export type PrivacyReduction = Readonly<{
     partition: PublicFilterHome;
     transactionId: string;
     time: AuthoritativeTime;
-    cause: 'subject' | 'candidate' | 'selection' | 'sourceTuple' | 'consent' | 'collection';
+    cause: 'subject' | 'candidate' | 'selection' | 'sourceTuple' | 'consent' | 'collection' | 'realm' | 'board';
     /** 1..1000 bounded affected identities, no fact bodies or copied permissions. */
     affected: readonly PublicFilterDependency[];
     impacts: readonly PrivacyReductionImpact[];
@@ -272,7 +283,7 @@ export type PrivacyReductionObservation = Readonly<{
     }>[];
     cost: PublicFilterCost;
 }> | Unready | Unavailable;
-/** Future semantic/public-filter-source.ts export publicFilterSource, additive to subjectSource. */
+/** Native Semantic source, composed additively with the existing subjectSource. */
 export type PublicFilterSource = Readonly<{
     readPublicFilterProjectionPage(request: PublicFilterProjectionRequest): Promise<PublicFilterProjectionPage>;
     readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
@@ -285,7 +296,7 @@ export type PublicFilterSourceFactory = (config: Readonly<{
     /** Same validated clock installed in createKernel/Access; not an independent test clock. */
     clock: KernelClock;
 }>) => PublicFilterSource;
-/** Future named export recordPrivacyReduction in the same module. Must not open another transaction. */
+/** Named Semantic writer hook. It must not open another transaction. */
 export type RecordPrivacyReduction = (tx: CommandTransaction, reduction: PrivacyReduction) => Promise<PrivacyReductionLogEntry>;
 /** Evidence description only; not caller booleans authorizing ACK. Search owns the writer.
  * Each locator is checked against native retained state for this exact queried observation.
