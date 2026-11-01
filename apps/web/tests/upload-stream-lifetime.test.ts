@@ -386,7 +386,12 @@ test('an already-aborted request never starts a put or cleanup delete', async ()
   });
   const completedBefore = completions.length;
 
-  const response = await uploadResponse(id, bytesStream([new Uint8Array([1, 2, 3, 4])]), storage.value, controller.signal);
+  const response = await uploadResponse(
+    id,
+    bytesStream([new Uint8Array([1, 2, 3, 4])]),
+    storage.value,
+    controller.signal,
+  );
 
   expect(response.status).toBe(502);
   expect(storage.calls).toEqual({ puts: 0, deletes: 0 });
@@ -425,9 +430,8 @@ test('an abort under storage backpressure cancels the source and joins storage b
   );
   const responsePromise = uploadResponse(
     id,
-    bytesStream(
-      [new Uint8Array([1, 2, 3, 4]), new Uint8Array([5, 6, 7, 8]), new Uint8Array([9, 10, 11, 12])],
-      () => cancelled.resolve(),
+    bytesStream([new Uint8Array([1, 2, 3, 4]), new Uint8Array([5, 6, 7, 8]), new Uint8Array([9, 10, 11, 12])], () =>
+      cancelled.resolve(),
     ),
     storage.value,
     controller.signal,
