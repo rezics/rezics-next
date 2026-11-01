@@ -95,15 +95,36 @@ export function CurationPublicationRecovery({
       className="space-y-4 rounded-xl border border-border bg-card p-4"
       aria-busy={busy}
     >
-      {result?.ok ? <p role="status">{m.curation_published({ head: result.head })}</p> : null}
+      {result?.ok ? (
+        <>
+          <p role="status">{m.presentation_editor_published()}</p>
+          <details className="text-sm">
+            <summary className="cursor-pointer">{m.presentation_editor_publication_details()}</summary>
+            <p className="mt-2 break-all font-mono">
+              {m.presentation_editor_version_reference({ head: result.head, digest: result.digest })}
+            </p>
+          </details>
+        </>
+      ) : null}
       {result?.ok === false ? <CurationFailureNotice failure={result} correction={correction} /> : null}
       {intent ? (
         <>
           <p>
             {invalid
-              ? m.curation_invalid_intent({ head: intent.expectedHead })
-              : m.curation_retained({ head: intent.expectedHead })}
+              ? m.curation_invalid_retained()
+              : stale
+                ? m.presentation_editor_publication_stale()
+                : m.presentation_editor_publication_pending()}
           </p>
+          <details className="text-sm">
+            <summary className="cursor-pointer">{m.presentation_editor_publication_details()}</summary>
+            <p className="mt-2 break-all font-mono">
+              {m.presentation_editor_version_reference({
+                head: intent.expectedHead,
+                digest: profileDigest(intent.profile),
+              })}
+            </p>
+          </details>
           <div className="flex flex-wrap gap-3">
             {!invalid && (
               <Button
@@ -146,7 +167,12 @@ export function CurationPublicationRecovery({
       {readFailure ? <CurationFailureNotice failure={readFailure} /> : null}
       {active ? (
         <div className="space-y-3">
-          <p className="break-all">{m.curation_actual_head({ head: active.head, digest: active.digest })}</p>
+          <details className="text-sm">
+            <summary className="cursor-pointer">{m.presentation_editor_active_version_details()}</summary>
+            <p className="mt-2 break-all font-mono">
+              {m.curation_actual_head({ head: active.head, digest: active.digest })}
+            </p>
+          </details>
           <details className="space-y-3">
             <summary className="cursor-pointer">{m.curation_compare()}</summary>
             <div className="grid min-w-0 gap-4 lg:grid-cols-2">

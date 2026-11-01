@@ -141,7 +141,12 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
           {m.presentation_preview_title({}, o)}
         </h2>
         <p className="text-sm text-muted-foreground">{m.presentation_preview_help({}, o)}</p>
-        <p className="text-sm text-muted-foreground">{m.presentation_preview_precedence({}, o)}</p>
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground">
+            {m.presentation_editor_resolver_details({}, o)}
+          </summary>
+          <p className="mt-2 text-muted-foreground">{m.presentation_preview_precedence({}, o)}</p>
+        </details>
       </header>
       <form onSubmit={inspect} className="space-y-3" aria-busy={busy}>
         <div className="flex flex-wrap items-end gap-3">
@@ -214,50 +219,53 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
       {result?.ok && (
         <div className="min-w-0 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-semibold">{m.presentation_preview_active({}, o)}</h3>
+            <h3 className="font-semibold">{m.presentation_editor_preview_current({}, o)}</h3>
             <Button type="button" variant="outline" onClick={clear}>
               {m.presentation_preview_close({}, o)}
             </Button>
           </div>
-          <dl className="grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
-            <dt className="text-muted-foreground">{m.presentation_preview_head({}, o)}</dt>
-            <dd>{result.head}</dd>
-            <dt className="text-muted-foreground">{m.presentation_preview_profile({}, o)}</dt>
-            <dd className="break-all font-mono">{result.page.profile}</dd>
-            <dt className="text-muted-foreground">{m.presentation_preview_template({}, o)}</dt>
-            <dd className="break-all">
-              {scopes[result.page.template.scope]({}, o)}
-              {result.page.template.key ? `: ${result.page.template.key}` : ''}
-            </dd>
-            {result.page.subject && (
-              <>
-                <dt className="text-muted-foreground">{m.presentation_preview_terminal({}, o)}</dt>
-                <dd className="break-all font-mono">{result.page.subject}</dd>
-              </>
-            )}
-            {result.page.context && (
-              <>
-                <dt className="text-muted-foreground">{m.presentation_preview_context({}, o)}</dt>
-                <dd className="break-all">
-                  {result.page.context.population.kind === 'realm' ? `${result.page.context.population.title} · ` : ''}
-                  {result.page.context.id}
-                </dd>
-              </>
-            )}
-          </dl>
-          <p className="text-sm text-muted-foreground">{m.presentation_preview_head_help({}, o)}</p>
-          <details className="min-w-0 rounded-lg border border-border p-3">
-            <summary className="cursor-pointer font-medium">{m.presentation_preview_document({}, o)}</summary>
-            <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">
-              {JSON.stringify(result.page.document, null, 2)}
-            </pre>
-          </details>
           <div data-slot="published-presentation-preview" className="min-w-0 border-t border-border pt-6">
             <PublishedPresentationPage
               key={`${result.page.profile}:${result.page.subject}:${request.current}`}
               result={result}
             />
           </div>
+          <details className="min-w-0 rounded-lg border border-border p-3">
+            <summary className="cursor-pointer font-medium">{m.presentation_editor_preview_details({}, o)}</summary>
+            <dl className="mt-3 grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+              <dt className="text-muted-foreground">{m.presentation_preview_head({}, o)}</dt>
+              <dd>{result.head}</dd>
+              <dt className="text-muted-foreground">{m.presentation_preview_profile({}, o)}</dt>
+              <dd className="break-all font-mono">{result.page.profile}</dd>
+              <dt className="text-muted-foreground">{m.presentation_preview_template({}, o)}</dt>
+              <dd className="break-all">
+                {scopes[result.page.template.scope]({}, o)}
+                {result.page.template.key ? `: ${result.page.template.key}` : ''}
+              </dd>
+              {result.page.subject && (
+                <>
+                  <dt className="text-muted-foreground">{m.presentation_preview_terminal({}, o)}</dt>
+                  <dd className="break-all font-mono">{result.page.subject}</dd>
+                </>
+              )}
+              {result.page.context && (
+                <>
+                  <dt className="text-muted-foreground">{m.presentation_preview_context({}, o)}</dt>
+                  <dd className="break-all">
+                    {result.page.context.population.kind === 'realm' ? `${result.page.context.population.title} · ` : ''}
+                    {result.page.context.id}
+                  </dd>
+                </>
+              )}
+            </dl>
+            <p className="mt-3 text-sm text-muted-foreground">{m.presentation_preview_head_help({}, o)}</p>
+          </details>
+          <details className="min-w-0 rounded-lg border border-border p-3">
+            <summary className="cursor-pointer font-medium">{m.presentation_preview_document({}, o)}</summary>
+            <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">
+              {JSON.stringify(result.page.document, null, 2)}
+            </pre>
+          </details>
         </div>
       )}
     </section>

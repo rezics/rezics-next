@@ -20,8 +20,12 @@ import {
   type PresentationPreview,
 } from '../src/features/pages/presentation-preview';
 import { PresentationPreviewPanel, PublishedPresentationPage } from '../src/features/pages/presentation-preview-view';
+import { PresentationViewEditor } from '../src/features/pages/curate-view-editor';
+import { CurationPublicationRecovery } from '../src/features/pages/curation-publish-view';
+import { CurationPublication } from '../src/features/pages/curation-publish';
 import { withTemplate } from '../src/features/pages/curate';
 import type { SubjectPageData } from '../src/features/pages/subject';
+import { m } from '../src/paraglide/messages.js';
 
 const document: CompositionDocument = {
   root: { props: {} },
@@ -44,6 +48,14 @@ const profile: PresentationProfile = {
 const digest = profileDigest(profile);
 const subject = recorded.subject.id;
 const input = { target: { subject }, locale: 'en' };
+function closedDisclosureContaining(html: string, content: string): string | undefined {
+  return [...html.matchAll(/<details\b([^>]*)>([\s\S]*?)<\/details>/g)].find(
+    ([, attributes, body]) => !/\bopen(?:\s|=|$)/.test(attributes ?? '') && (body ?? '').includes(content),
+  )?.[0];
+}
+function textOutsideDisclosures(html: string): string {
+  return html.replace(/<details\b[^>]*>[\s\S]*?<\/details>/g, '').replace(/<[^>]+>/g, ' ');
+}
 function page(template: SubjectPageData['template'] = { scope: 'type', key: 'schema:Book' }): SubjectPageData {
   const plan = planReads(platformRegistry, document, { subject });
   return {
@@ -282,7 +294,7 @@ test('preview cannot accept unpublished draft descriptors, credentials or fake s
   expect(seen).toHaveLength(0);
 });
 
-test('active published inspection preserves an unpublished editor profile and labels the distinction', async () => {
+test('presentation editing and published preview put draft meaning first and keep exact evidence in closed details', async () => {
   const draft = withTemplate(profile, { scope: 'type', key: 'schema:Book' }, routeDocument);
   const before = structuredClone(draft);
   const { client } = kernel();
@@ -296,8 +308,67 @@ test('active published inspection preserves an unpublished editor profile and la
       read: async (): Promise<PresentationPreview> => result,
     }),
   );
-  expect(html).toContain('ACTIVE published preview');
+  expect(html).toContain(m.presentation_editor_preview_current());
   expect(html).toContain('Unpublished editor changes are not rendered.');
   expect(html).toContain('The Little Prince');
   expect(html).not.toContain('Published home');
+  const previewText = textOutsideDisclosures(html);
+  expect(previewText).not.toContain(m.presentation_preview_precedence());
+  expect(previewText).not.toContain(m.presentation_preview_head());
+  const resolverDetails = closedDisclosureContaining(html, m.presentation_preview_precedence());
+  expect(resolverDetails).toBeDefined();
+  const previewDetails = closedDisclosureContaining(html, m.presentation_preview_head_help());
+  expect(previewDetails).toBeDefined();
+  expect(previewDetails).toContain('17');
+  expect(previewDetails).toContain(digest);
+  expect(previewDetails).toContain(subject);
+
+  const editorHtml = renderToString(
+    createElement(PresentationViewEditor, {
+      initial: { ok: true, profile, digest, head: 17 },
+      locale: 'en',
+      transport: {
+        publish: async () => ({ ok: true, digest, head: 18 }),
+        read: async () => ({ ok: true, profile, digest, head: 17 }),
+      },
+    }),
+  );
+  const editorText = textOutsideDisclosures(editorHtml);
+  expect(editorText).toContain(m.presentation_editor_draft_summary());
+  expect(editorText).toContain(m.curation_saved());
+  expect(editorText).toContain(m.curation_publish());
+  expect(editorText).toContain(m.curation_view_discard());
+  expect(editorText).toContain(m.curation_reload());
+  expect(editorText).not.toContain(m.presentation_editor_version_reference({ head: 17, digest }));
+  expect(editorText).not.toContain(m.curation_fallback());
+  expect(closedDisclosureContaining(editorHtml, m.presentation_editor_version_reference({ head: 17, digest }))).toBeDefined();
+  expect(closedDisclosureContaining(editorHtml, m.curation_fallback())).toBeDefined();
+
+  const publication = new CurationPublication(
+    {
+      publish: async () => ({ ok: false, reason: 'stale' }),
+      read: async () => ({ ok: true, profile, digest, head: 18 }),
+    },
+    () => 'test-publication-key',
+  );
+  await publication.start(profile, 17);
+  const recoveryHtml = renderToString(
+    createElement(CurationPublicationRecovery, {
+      publication,
+      profile,
+      head: 17,
+      onPublished: () => undefined,
+      onReviewed: () => undefined,
+    }),
+  );
+  const recoveryText = textOutsideDisclosures(recoveryHtml);
+  expect(recoveryText).toContain(m.presentation_editor_publication_stale());
+  expect(recoveryText).toContain(m.curation_retry_original());
+  expect(recoveryText).toContain(m.curation_reload_head());
+  expect(recoveryText).toContain(m.curation_discard());
+  expect(recoveryText).toContain(m.curation_reconcile());
+  expect(recoveryText).not.toContain(m.presentation_editor_version_reference({ head: 17, digest }));
+  expect(recoveryText).not.toContain(m.curation_actual_head({ head: 18, digest }));
+  expect(closedDisclosureContaining(recoveryHtml, m.presentation_editor_version_reference({ head: 17, digest }))).toBeDefined();
+  expect(closedDisclosureContaining(recoveryHtml, m.curation_actual_head({ head: 18, digest }))).toBeDefined();
 });

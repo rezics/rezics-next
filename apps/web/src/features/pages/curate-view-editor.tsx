@@ -325,7 +325,7 @@ export function PresentationViewEditor({
       {navigationGuard}
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">{m.curation_heading()}</h1>
-        <p className="text-muted-foreground">{m.curation_head({ head: saved.head })}</p>
+        <p className="text-muted-foreground">{m.presentation_editor_draft_summary()}</p>
         <p className="text-sm text-muted-foreground">{m.curation_instructions()}</p>
         <p role="status" className="text-sm">
           {invalidPublication && pendingPublication
@@ -336,6 +336,14 @@ export function PresentationViewEditor({
               ? m.curation_unsaved()
               : m.curation_saved()}
         </p>
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground">
+            {m.presentation_editor_saved_version_details()}
+          </summary>
+          <p className="mt-2 break-all font-mono">
+            {m.presentation_editor_version_reference({ head: saved.head, digest: saved.digest })}
+          </p>
+        </details>
       </header>
       {message && (
         <p role="status" className="rounded-lg border border-border bg-card p-4">
@@ -429,7 +437,12 @@ export function PresentationViewEditor({
               </NativeSelect>
             </Field>
           </div>
-          <p className="text-sm text-muted-foreground">{m.curation_fallback()}</p>
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground">
+              {m.presentation_editor_resolver_details()}
+            </summary>
+            <p className="mt-2 text-muted-foreground">{m.curation_fallback()}</p>
+          </details>
         </section>
         {editorOpen ? (
           <section ref={editorRegion} tabIndex={-1} className="min-w-0 space-y-3" aria-label={m.curation_editor()}>

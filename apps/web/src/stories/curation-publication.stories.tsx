@@ -100,6 +100,16 @@ async function retry(canvasElement: HTMLElement) {
   await userEvent.click(await canvas.findByRole('button', { name: m.curation_retry_original() }));
   return canvas;
 }
+async function expectPublished(canvasElement: HTMLElement, head: number) {
+  const canvas = within(canvasElement);
+  await expect(await canvas.findByText(m.presentation_editor_published())).toBeVisible();
+  await userEvent.click(await canvas.findByText(m.presentation_editor_publication_details()));
+  await expect(
+    await canvas.findByText(
+      m.presentation_editor_version_reference({ head, digest: profileDigest(initialProfile) }),
+    ),
+  ).toBeVisible();
+}
 
 export const UnknownPublish: Story = {
   args: { scenario: 'unknown-publish' },
@@ -107,7 +117,7 @@ export const UnknownPublish: Story = {
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.curation_unknown());
     await retry(canvasElement);
-    await expect(await canvas.findByText(m.curation_published({ head: 8 }))).toBeVisible();
+    await expectPublished(canvasElement, 8);
   },
 };
 export const PartialActivation: Story = {
@@ -116,7 +126,7 @@ export const PartialActivation: Story = {
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.curation_partial());
     await retry(canvasElement);
-    await expect(await canvas.findByText(m.curation_published({ head: 8 }))).toBeVisible();
+    await expectPublished(canvasElement, 8);
   },
 };
 export const CurrentHeadConflict: Story = {
@@ -128,12 +138,13 @@ export const CurrentHeadConflict: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
     await userEvent.click(canvas.getByRole('button', { name: m.curation_close() }));
     await submit(canvasElement);
+    await userEvent.click(await canvas.findByText(m.presentation_editor_active_version_details()));
     await canvas.findByText(m.curation_actual_head({ head: 9, digest: profileDigest(initialProfile) }));
     await expect(canvas.getByRole('button', { name: 'route: /books' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.curation_reconcile() }));
     await canvas.findByText(m.curation_reconciled());
     await submit(canvasElement);
-    await expect(await canvas.findByText(m.curation_published({ head: 10 }))).toBeVisible();
+    await expect(await canvas.findByText(m.presentation_editor_published())).toBeVisible();
   },
 };
 export const RevokedReplay: Story = {
@@ -144,6 +155,6 @@ export const RevokedReplay: Story = {
     await retry(canvasElement);
     await expect(await canvas.findByText(m.curation_forbidden())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.curation_retry_original() })).toBeEnabled();
-    await expect(canvas.queryByText(m.curation_published({ head: 8 }))).toBeNull();
+    await expect(canvas.queryByText(m.presentation_editor_published())).toBeNull();
   },
 };
