@@ -237,23 +237,81 @@ Collection gates: reads require `library_entry:list`, status uses `library_entry
 Additions also require current `subject:read`. Route action catalogue data creates no grant or effect authority.
 Current original AND terminal eligibility, foreign resources, mounts and owner lifecycle remain independently checked.
 
-Each target is one stable native command. Dispatch freezes exact operation/generation/ordinal, target/action/request
-bytes, target-home receipt locator, command kind, original key/digest and creation-initiator binding. `restoreInitiator`
-in `CommandAuthorization.prepare` uses actual native time/current consent at every attempt/replay, within the existing
-1,000 ms evidence lifetime and 5-second command deadline. Prepare precedes target checkout; release the source first.
+### Authentic native creation and current restoration
+
+During `CommandAuthorization.prepare`, after actual native command admission and before target checkout, call
+[`captureDurableInitiator`](../access/durable-initiator-capture.ts)(`commandAccessContext(context, attempt)`, actor).
+The actor must be the exact admitted account object. Capture the original account floor/operator and, for
+`requestedBy`, the exact live native assignment transaction and `issued_valid` snapshot at that attempt's T.
+Do not reconstruct these observations later.
+
+Commerce owes the immutable native [`DurableInitiatorReader`](../access/durable-initiator.ts):
+`(client, operation, time) => Promise<DurableInitiatorRecord | null>`. Its exported `DurableOperationAnchor` is
+`{route,id,kind,sourceId}`. Read the actual exact operation and independently verify its immutable native source,
+source payload/creation target and `sourceDigest`, including operation/source/transaction equality. Return the
+complete exported record: `operation`, `initiatorAccountId`, `actor`, `recordedTransactionId`, `sourceDigest`,
+`originalDelegation`, `originalAccount` and `creation` (original command kind, idempotency key, request digest and
+target route/id). `BulkStore.readOperation(route, operationId)` has a different signature and evidence contract;
+it and the throwing `createBulkStore`/`admitBulkOperation` factories do not supply this trusted producer.
+
+Native creation authenticates and authorizes normally, committing the immutable operation and actual source/target
+binding with its exact account-principal creation receipt. Independently verify that receipt at
+`partitionOf(operation.route)` for `initiatorAccountId`, original command kind/key/digest and recorded transaction.
+Its `response.durableInitiator` must equal `durableInitiatorCommitment(record)`: lowercase SHA-256 over RFC 8785
+canonical JSON of the complete allowlisted record, including creation evidence. The reader verifies the source and
+receipt independently; restoration repeats the exact receipt check. Absent, collected/minimized or substitute
+operation/source/transaction/receipt evidence fails closed; no history scan or replacement can supply it.
+
+Preserve every exported nested key and wire constraint in `DurableInitiatorRecord`, without extra policy/private
+fields: lowercase routable UUIDv7/v8 IDs and matching explicit routes; 1–255 non-space printable ASCII operation
+kind/command kind/key; exact account actor and initiator equality; 1–1,024 non-space printable ASCII client ID;
+positive safe-integer authentication epoch; at most 512 scope tokens of 1–128 ASCII characters excluding space,
+quote and backslash; null or the exact native requestedBy URN of at most 128 characters; 64-character lowercase
+hexadecimal digests; original positive canonical decimal floor of at most 19 digits and null/routable operator;
+null delegation iff requestedBy is null, otherwise its original routable transaction and canonical PostgreSQL
+`issued_valid::text` of at most 256 characters. Every nested object has exactly its exported keys, and the complete
+record must be cloneable and RFC 8785 canonicalizable. These are installed evidence constraints, not a new field ABI.
+
+Use `createInitiatorRestorer({pool, access, readOperation, readConsent})` with the real native pool/Access, that
+operation reader and the actual Auth-owned `CurrentConsentReader`. Each target is one stable native command;
+dispatch freezes exact operation/generation/ordinal, target/action/request bytes, target-home receipt locator,
+command kind, original key/digest and creation-initiator binding. At every step, retry and receipt replay, call
+`restoreInitiator({operation, action, anchor, context}, time)` in `CommandAuthorization.prepare` at the exact current
+same-attempt T, before target checkout; release the source first. Independently verify operation/source/creation
+commitment, current consent/client chain, active account/fence, original floor/operator/delegation, current resource
+anchor and native formula. Recorded scopes intersect current consent; they do not grant authority. Evidence ends
+at the earlier caller deadline or existing 1,000 ms lifetime, within the existing 5-second bulk command deadline.
+The returned actor is not reusable authority. Missing reader, consent or supported work funding remains unavailable.
 A stored Actor, `trustedAccount`, rate receipt or successful enqueue grants no continuing authority.
+
+### Exact authorized receipts and evidence gaps
 
 Authorize before receipt access. An authorized exact replay returns its original status/body before fresh profile/
 capability validation or a new membership check; changed input under the same key conflicts. Only a genuinely new
 value uses current profile acceptance. Later release activation cannot reinterpret an earlier exact receipt.
 Clearing an own historic fact needs its accepted identity/CAS, not a newly supporting profile.
 
+[`runCommand`](../command/command.ts) accepts `receipt-only` only from a real native authorization implementation.
+After current authorization it returns an exact authorized stored hit; a miss denies without executing the body.
+Digest mismatch conflicts, and minimized response payload raises `CommandResultErasedError`. This is no public
+receipt permission. `hasOwnCommandCompletion(tx, receipt)` is narrower: the exact live executor-owned transaction
+must have execute authorization, current principal/partition/deadline/keyring and exact key/digest evidence. It
+returns a completion boolean, not a response or a replacement for the captured intent's resource policy.
+
 A real target mutation, ordinary domain events, Core receipt and compatible immutable `bulk_effect` evidence share
 the target transaction. Core `noEffect` permits no domain writes, events or callbacks, so its body cannot insert
-`bulk_effect`, even though that table's outcome union includes no-effect. Existing `runCommand` authorized
-`receipt-only` mode supplies a native receipt path; bulk's protected source-bound composition is missing. Denial
-cannot fabricate an authorized receipt. Evidence-only accounting after revocation needs actual agreed protected
-authority; it cannot restore effect permission, bypass Access or disclose denied private payload.
+`bulk_effect`, even though that table's outcome union includes no-effect. Separately recording an authorized
+no-effect operation outcome requires actual native authorization and exact receipt verification. An unconditional
+requirement to insert `bulk_effect` in every target transaction remains unsatisfied for `noEffect`; neither
+receipt-only permission nor an invented adapter resolves it. Denial cannot fabricate an authorized receipt.
+
+Neither receipt-only nor completion metadata supplies private evidence-only reconciliation after revocation.
+That remains an unavailable original-owner producer requiring the exact captured intention, immutable operation/
+source and stable command/principal/key/digest/transaction, permitted terminal classification/receipt fields,
+owning-partition lifecycle/erasure fences, expiry, unknown-result custody and complete original-work costs.
+Its evidence may settle only that intention: no new effect, restored person authority, denied-viewer receipt
+disclosure, success inferred from current state or replacement key follows. Every outcome read independently
+authorizes currently.
 
 ACK verifies exact original source/operation/target/request/key/digest/receipt/transaction/outcome equality and
 ownership, including resulting member where applicable. One pending/reconciling-to-terminal CAS updates fixed
@@ -284,11 +342,29 @@ an adopted checked root/row relationship, not caller JSON. Decimal ordinals are 
 not mutable Collection order. Reuse `bulk_effect` only for compatible evidence with exact native receipt meaning.
 Lock operation transitions and native slot/parent/member targets consistently; retry deadlocks with the same keys.
 
-Page/checkpoint/intent commits require real atomic enqueue composition. `CommandTransaction` exposes queries;
-`enqueueIntent` requires a registered live `OperationalTransaction`, and `enqueueWorkIntent` uses the executor's
-actual `PoolClient`. No cast or second transaction supplies that guarantee. Core must choose either an approved
-same-client domain-command adapter or its existing outbox/effect delivery path to drain the native operation intent
-through `libraryWorkModule` with deterministic workflow identity. Both retain the same operation and worker.
+Use the existing atomic command outbox and registered deterministic effect-delivery route.
+[`command/fence.sql`](../command/fence.sql) commits domain mutation, receipt, partition fence and outbox event in
+the same command transaction. The registered native page event must bind its actual continuation locator to the
+exact immutable operation/page/checkpoint transition, under ordinary authorization and History classification.
+Later delivery consumes that committed intent; it neither expands the manifest nor authorizes targets.
+
+[`registerEffects`](../events/effects.ts) uses `effectWorkflowId(envelope, eventSeq, name)`, binding epoch, partition,
+position, event sequence and effect name, with `history_event_consumer` admission and `return-existing` durable
+effect delivery. `relayEffects` commits admission separately before enqueue; redelivery resolves the same
+deterministic identity. DBOS enqueue is not inside the original command transaction. A `NativeEffect` can transfer
+custody only through actual durable native storage established by its `admit` body; the `transferred` marker alone
+is not continuation storage.
+
+Commerce owns the real registered native event/schema, source-bound consumer and continuation bodies in the
+existing `libraryWorkModule` and single kernel worker. Require exact operation/source/page/checkpoint equality,
+closed/expired/cancelled dispatch fences, actual affected accounts, erasure locators and idempotent current-authority
+target commands. Retain the installed 32-consumer effect fanout ceiling and Source/History custody. These bulk
+bodies and their registration remain missing; selecting the existing route installs no bulk callable.
+
+[`enqueueIntent`](../command/operational.ts) accepts only its actual live WeakMap-bound `OperationalTransaction`
+and exactly the account set already fenced there. [`enqueueWorkIntent`](../work/client.ts) is the executor-internal
+actual-`PoolClient` SDK bridge. A query wrapper or registered command callback acquires neither client nor fences
+nor authority. Do not cast `CommandTransaction` to either type; no direct command-to-SDK adapter is selected.
 Actual `WorkIntent.input` includes exact fenced `accounts`, alongside operation/route/generation locators; old
 `SegmentInput` omits them. Never put target arrays in DBOS input. Retain the `workflows` queue, bounded checkpoints
 and at most 100 pages per segment; enqueue success advances no effect counter. Unacknowledged intents recover.
@@ -384,6 +460,23 @@ Access, locks, rollback, Core receipts/outbox and WorkClient SQL/bytes. No hidde
 - Growth check: deferred native first/replay/stale/confirm-cancel-expiry races, complete negative/order/identity
   dependencies and independently growing relevant/unrelated populations. No current test proves the missing cut.
 
+### Creation, restoration and delivery
+
+- Touches: actual admitted account observation, optional native assignment, complete immutable commitment,
+  operation/source/creation receipt, current consent/client chain, account/fence/delegation, Access/formula/anchor,
+  command outbox, effect admission and continuation/SDK custody.
+- Bound: capture reuses admission's account observation with zero extra account reads; delegated capture adds one
+  unique assignment seek at T. Hashing is linear in the complete bounded record. These are local facts, not a whole
+  callable quote. Full restoration repeats all operation/source/creation verification (including the independent
+  receipt check), consent/client chain, account/fence/original floor/operator/delegation and Access/formula/anchor
+  costs on each step/retry/replay. Commerce/native/Access/Auth/History/Source/delivery owners owe body-derived
+  operation/manifest/outcome/continuation/target and delivery SQL/bytes/children, failure, rollback, finalization and
+  minimization aggregates inside the original admitted frame/deadline. No guessed quote, budget, renewal or allowance
+  increase follows from a helper's local bound or the chosen route.
+- Growth check: deferred exact creation/source substitution and collection, current consent/account/delegation loss,
+  receipt hit/miss and no-effect/unknown reconciliation, outbox redelivery, native custody and erasure/minimization;
+  include repeated authorization and all nested delivery branches in native growth evidence.
+
 ### Selection, capture and manifest pages
 
 - Touches: all raw admitted Source/filter candidates and dependencies, one target-Collection scan with indexed
@@ -473,9 +566,15 @@ Shared Source/filter/Search/Library preparation and Semantic owners must supply 
 validation-to-confirm binding, with inclusive costs and proof custody/expiry. Library supplies the same operation's
 header/indexes, absent-slot producer, stable occurrence capture/lifecycle CAS, atomic active-add, dispatch/ACK and
 late-disposition/erasure locators. Core/Accounts/WorkClient supply authentic initiator/current consent, protected
-receipt/evidence-only authority, agreed atomic intent delivery, rate/resource admission and shared minimizers.
+receipt/evidence-only authority, rate/resource admission and shared minimizers through their actual owner bodies.
+Installed capture/restoration and command outbox/effect helpers do not supply Commerce's immutable reader, native
+event/schema, source-bound consumer/continuation or current-authority target bodies, Auth consent composition,
+post-revocation reconciliation or whole-call funding. The delivery route is selected; these producers remain required.
 Default routes, worker registration and actual client/Web consumers must complete this one journey after that ABI.
 Existing receiving, stopped producer and native erasure obligations remain in force.
+
+Search owns the sole independent complete capture/currentness/cut/cost research pair. The common cross-home cut
+remains unavailable; no new ABI, epoch, protocol, proof or source release is selected here.
 
 Specification adoption and source presence do not establish native acceptance or full feature/Goal completion.
 The remaining producer agreements, implementation and native/regression evidence are required before delivery;
