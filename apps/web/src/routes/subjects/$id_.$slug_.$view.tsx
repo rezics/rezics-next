@@ -264,7 +264,7 @@ function SubjectViewRoute() {
           realm={realm}
           locale={locale}
           link={SubjectLink}
-      reader={reader}
+          reader={reader}
           coverLabels={{
             withheld: m.subject_cover_withheld(),
             reveal: m.subject_cover_reveal(),

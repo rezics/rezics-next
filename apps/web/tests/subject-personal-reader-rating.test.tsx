@@ -2,14 +2,8 @@ import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, createElement, useState } from 'react';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
-import type {
-  SubjectOwnRating,
-  RatingQuestion,
-} from '../src/features/pages/subject-ratings';
-import type {
-  SubjectPersonalReadTransport,
-  SubjectReaderObservation,
-} from '../src/features/pages/subject-queries';
+import type { SubjectOwnRating, RatingQuestion } from '../src/features/pages/subject-ratings';
+import type { SubjectPersonalReadTransport, SubjectReaderObservation } from '../src/features/pages/subject-queries';
 import type { RatingWrite } from '../src/features/pages/rating-control';
 
 // UNRUN: one mounted journey over the real QueryClient, session observer, personal query factories,
@@ -36,7 +30,9 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -178,7 +174,11 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
         'data-reader-query': JSON.stringify(readerKey),
         'data-rating-query': JSON.stringify(ownKey),
       },
-      createElement('output', { 'data-slot': 'preferences' }, `${personal.reader.spoilerLevel}:${personal.reader.suitability}`),
+      createElement(
+        'output',
+        { 'data-slot': 'preferences' },
+        `${personal.reader.spoilerLevel}:${personal.reader.suitability}`,
+      ),
       createElement(
         'output',
         { 'data-slot': 'own-rating' },
@@ -218,11 +218,7 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
     if (!root) root = createRoot(host);
     await act(async () => {
       root!.render(
-        createElement(
-          StrictMode,
-          null,
-          createElement(QueryClientProvider, { client }, createElement(Journey)),
-        ),
+        createElement(StrictMode, null, createElement(QueryClientProvider, { client }, createElement(Journey))),
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -280,9 +276,11 @@ function resolveReader(call: ReaderCall, spoilerLevel: 1 | 2 = 2) {
 }
 
 function resolveRating(call: RatingCall, units: number | null = 8) {
-  call.resolve(call.actualReader === call.expectedReader
-    ? { reader: call.actualReader, kind: 'ready', units }
-    : { reader: call.actualReader, kind: 'unavailable' });
+  call.resolve(
+    call.actualReader === call.expectedReader
+      ? { reader: call.actualReader, kind: 'ready', units }
+      : { reader: call.actualReader, kind: 'unavailable' },
+  );
 }
 
 function panel(harness: Harness, label = 'panel-1') {
@@ -308,7 +306,9 @@ async function clickIntent(harness: Harness, intent: 'set' | 'change' | 'clear',
 }
 
 async function clickControlSave(harness: Harness, label = 'panel-1') {
-  const button = panel(harness, label).querySelector('[data-slot="rating-control-reserved"] button')! as unknown as HTMLButtonElement;
+  const button = panel(harness, label).querySelector(
+    '[data-slot="rating-control-reserved"] button',
+  )! as unknown as HTMLButtonElement;
   await act(async () => {
     button.click();
     await Promise.resolve();
@@ -326,7 +326,9 @@ async function resolvePair(harness: Harness, readerIndex: number, ratingIndex: n
 async function startCurrentRefetch(harness: Harness) {
   await act(async () => {
     void harness.client.refetchQueries({ queryKey: ['subject-reader', harness.page.subjectId, harness.page.locale] });
-    void harness.client.refetchQueries({ queryKey: ['subject-own-rating', harness.page.subjectId, harness.page.locale] });
+    void harness.client.refetchQueries({
+      queryKey: ['subject-own-rating', harness.page.subjectId, harness.page.locale],
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -626,15 +628,21 @@ test('subject preferences and own rating retire across the complete mounted read
     } as never;
     const actualReader = await preparedRatingReader(request, 'Bearer prepared-reader');
     expect(actualReader).not.toBeNull();
-    await expect(readOwnRating(native, new Request(request.url, { headers: request.headers }), {}, subjectA, 'other-reader'))
-      .resolves.toMatchObject({ reader: actualReader, kind: 'unavailable' });
+    await expect(
+      readOwnRating(native, new Request(request.url, { headers: request.headers }), {}, subjectA, 'other-reader'),
+    ).resolves.toMatchObject({ reader: actualReader, kind: 'unavailable' });
     expect(
-      await writeSubjectRatingForCurrentReader(native, request, {}, {
-        subjectId: subjectA,
-        units: 8,
-        idempotencyKey: crypto.randomUUID(),
-        expectedReader: 'other-reader',
-      }),
+      await writeSubjectRatingForCurrentReader(
+        native,
+        request,
+        {},
+        {
+          subjectId: subjectA,
+          units: 8,
+          idempotencyKey: crypto.randomUUID(),
+          expectedReader: 'other-reader',
+        },
+      ),
     ).toBe(false);
     expect(nativeCalls).toBe(0);
   } finally {

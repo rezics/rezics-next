@@ -551,15 +551,7 @@ export const subjectReaderQuery = (
 ) =>
   queryOptions({
     ...personalRead,
-    queryKey: [
-      'subject-reader',
-      id,
-      locale,
-      scope.reader,
-      scope.admission,
-      scope.view,
-      scope.cacheEpoch,
-    ] as const,
+    queryKey: ['subject-reader', id, locale, scope.reader, scope.admission, scope.view, scope.cacheEpoch] as const,
     meta: subjectPersonalMeta(id, locale, scope, 'reader'),
     queryFn: async () => {
       const result = await transport.readReader({ id, locale });

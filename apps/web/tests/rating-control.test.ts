@@ -2,7 +2,13 @@ import { expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { QUESTION, preparedRatingReader, readOwnRating, type RatingQuestion, type SubjectOwnRating } from '../src/features/pages/subject-ratings';
+import {
+  QUESTION,
+  preparedRatingReader,
+  readOwnRating,
+  type RatingQuestion,
+  type SubjectOwnRating,
+} from '../src/features/pages/subject-ratings';
 import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
 import {
   applyOptimisticRatingChange,
@@ -258,7 +264,9 @@ test('a forbidden own-vote read leaves its reserved space without a control', ()
 });
 
 test('a missing own vote is unrated while denied own-vote reads hide the control', async () => {
-  const request = new Request('https://site.example/en/subjects/example', { headers: { authorization: 'Bearer reader' } });
+  const request = new Request('https://site.example/en/subjects/example', {
+    headers: { authorization: 'Bearer reader' },
+  });
   const reader = await preparedRatingReader(request, 'Bearer reader');
   const read = async (status: number, units?: number) => {
     const client = {
@@ -268,12 +276,7 @@ test('a missing own vote is unrated while denied own-vote reads hide the control
         }),
       }),
     } as never;
-    return readOwnRating(
-      client,
-      request,
-      {},
-      subjectId,
-    );
+    return readOwnRating(client, request, {}, subjectId);
   };
 
   await expect(read(200, 15)).resolves.toEqual({ reader, kind: 'ready', units: 15 });

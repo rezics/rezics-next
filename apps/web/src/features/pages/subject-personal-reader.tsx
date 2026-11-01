@@ -97,11 +97,11 @@ class SubjectPersonalReaderRegistry {
     for (const listener of this.listeners) listener();
   }
 
-  private onCacheEvent(event: Parameters<ReturnType<QueryClient['getQueryCache']>['subscribe']>[0] extends (
-    event: infer T,
-  ) => void
-    ? T
-    : never) {
+  private onCacheEvent(
+    event: Parameters<ReturnType<QueryClient['getQueryCache']>['subscribe']>[0] extends (event: infer T) => void
+      ? T
+      : never,
+  ) {
     const queryKey = event.query.queryKey;
     if (queryKey[0] === 'session') {
       if (event.type === 'removed') {
@@ -161,9 +161,10 @@ class SubjectPersonalReaderRegistry {
       cached.state === session.state &&
       (cached.subject ?? null) === (session.subject ?? null) &&
       cached.csrfToken === session.csrfToken;
-    const reader = ready && cached?.state === 'signed-in' && typeof cached.subject === 'string' && cached.subject
-      ? cached.subject
-      : null;
+    const reader =
+      ready && cached?.state === 'signed-in' && typeof cached.subject === 'string' && cached.subject
+        ? cached.subject
+        : null;
     return { ready, reader, admission: this.sessionVersion };
   }
 
@@ -382,7 +383,19 @@ export function useSubjectPersonalReader(input: {
     const lease = registry.register(personalScope, () => desiredRef.current === bindingToken);
     setLeaseState({ token: bindingToken, lease });
     return () => lease.retire();
-  }, [registry, scopeKey, admission, reader, subjectId, locale, view, cacheEpoch, errorEpoch, sessionReady, bindingToken]);
+  }, [
+    registry,
+    scopeKey,
+    admission,
+    reader,
+    subjectId,
+    locale,
+    view,
+    cacheEpoch,
+    errorEpoch,
+    sessionReady,
+    bindingToken,
+  ]);
 
   const queryScope: SubjectPersonalQueryScope = {
     reader,
@@ -393,22 +406,26 @@ export function useSubjectPersonalReader(input: {
     scopeKey,
     getWriteRevision: () => registry.getWriteRevision(scopeKey, cacheEpoch),
     hasLiveObserver: () => registry.hasLiveObserver(scopeKey, cacheEpoch),
-    isCurrent: () => registry.isQueryCurrent({
-      scopeKey,
-      admission,
-      reader: reader ?? '',
-      subjectId,
-      locale,
-      view,
-      cacheEpoch,
-      errorEpoch,
-    }),
+    isCurrent: () =>
+      registry.isQueryCurrent({
+        scopeKey,
+        admission,
+        reader: reader ?? '',
+        subjectId,
+        locale,
+        view,
+        cacheEpoch,
+        errorEpoch,
+      }),
     recordRatingRead: (rating) => registry.recordRatingRead(scopeKey, cacheEpoch, rating),
   };
   const enabled = personalRead.enabled && routeEnabled && sessionReady && reader !== null;
   const preferencesOptions = subjectReaderQuery(subjectId, locale, queryScope, transport);
   const ownRatingOptions = subjectOwnRatingQuery(subjectId, locale, queryScope, transport);
-  const preferencesQuery = useQuery({ ...preferencesOptions, enabled: enabled && preferencesOptions.enabled !== false });
+  const preferencesQuery = useQuery({
+    ...preferencesOptions,
+    enabled: enabled && preferencesOptions.enabled !== false,
+  });
   const ownRatingQuery = useQuery({
     ...ownRatingOptions,
     enabled: includeOwnRating && enabled && ownRatingOptions.enabled !== false,
@@ -416,10 +433,7 @@ export function useSubjectPersonalReader(input: {
   const currentLease =
     leaseState?.token === bindingToken && leaseState.lease.isCurrent() ? leaseState.lease : undefined;
   const preferences =
-    enabled &&
-    !preferencesQuery.isError &&
-    preferencesQuery.data?.reader === reader &&
-    currentLease?.isCurrent()
+    enabled && !preferencesQuery.isError && preferencesQuery.data?.reader === reader && currentLease?.isCurrent()
       ? preferencesQuery.data.preferences
       : defaultReader;
   const ownRating =
