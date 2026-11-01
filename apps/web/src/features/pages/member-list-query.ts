@@ -67,14 +67,27 @@ export async function readMemberList(
   const contextId = page.context?.id ?? PAGE_GLOBAL_CONTEXT;
   const population = page.context?.population;
   const populationKind = population?.kind ?? 'global';
-  const populationId = populationKind === 'realm' ? population.id : undefined;
+  const populationId = population?.kind === 'realm' ? population.id : undefined;
   if (
     input.representation.context !== contextId ||
     input.representation.population !== populationKind ||
     input.representation.populationId !== populationId
   )
     return { ok: false, status: 409 };
-  const plan = memberContinuationPlan(page, page.document as CompositionDocument, input);
+  // The page API returns the resolved account ID; retain the validated account handle only for its planner shape.
+  const resolvedAccount =
+    typeof page.account === 'string' && 'account' in input.target
+      ? { id: page.account, handle: input.target.account }
+      : null;
+  const plan = memberContinuationPlan(
+    {
+      subject: page.subject ?? null,
+      account: resolvedAccount,
+      ...(page.context ? { context: page.context } : {}),
+    },
+    page.document as CompositionDocument,
+    input,
+  );
   const key = plan.nodes[input.node];
   const read = key ? plan.reads[key] : undefined;
   const result = key ? page.reads[key] : undefined;

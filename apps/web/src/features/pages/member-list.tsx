@@ -203,7 +203,11 @@ function MemberReader({
   });
   if (needsViewer && target && current.isPending)
     return <p role="status">{m.subject_relation_loading({}, { locale: value.locale as never })}</p>;
-  const section = needsViewer ? (current.isError ? { ok: false as const } : (current.data ?? initial)) : initial;
+  const section: Section = needsViewer
+    ? current.isError
+      ? { ok: false }
+      : (current.data ?? initial)
+    : initial;
   const continuationEnabled =
     value.cacheReader == null || (viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
   // An anonymous public page has no viewer provenance by design. A known private page cannot outlive its reader.
@@ -366,7 +370,7 @@ export function MemberList({
         );
       }
     } catch {
-      setError((previous) => (lifetime.current(generation) ? { ok: false } : previous));
+      setError((previous) => (lifetime.current(generation) ? { ok: false as const } : previous));
     } finally {
       if (lifetime.current(generation)) {
         if (activeQueryKey.current === queryKey) activeQueryKey.current = undefined;
