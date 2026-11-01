@@ -1,4 +1,7 @@
-import { isNotFound } from '@tanstack/react-router';
+import type { QueryClient } from '@tanstack/react-query';
+import { preparePrivateReaderRead } from './private-reader-lifetime';
+import { privateReaderFingerprint, samePrivateReader } from './private-reader-origin';
+import { isNotFound, notFound } from '@tanstack/react-router';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { DecisionPage, ModerationDecision } from './decision-read';
 
@@ -18,15 +21,25 @@ export function decisionSessionKey(session: { state: string; subject?: string | 
 }
 
 /** A browser's unknown identity never admits a prepared private page. Target visibility is irrelevant. */
-export function decisionSessionMatches(
+export async function decisionSessionMatches(
   page: DecisionPage,
   session: { state: string; subject?: string | null; csrfToken: string | null },
-): boolean {
-  return Boolean(
-    session.state === 'signed-in' &&
-    session.subject &&
-    session.csrfToken &&
-    page.viewerId === session.subject &&
-    page.sessionEpoch === session.csrfToken,
-  );
+): Promise<boolean> {
+  return session.state === 'signed-in' && !!session.subject && samePrivateReader(page.readerOrigin, {
+    subject: session.subject,
+    csrfFingerprint: await privateReaderFingerprint(session.csrfToken),
+  });
 }
+
+export async function prepareDecisionRead(
+  client: QueryClient,
+  id: string,
+  read: (id: string) => Promise<DecisionPage>,
+  signal?: AbortSignal,
+) {
+  const page = await preparePrivateReaderRead(client, decisionReadKey(id), () => read(id), signal);
+  if (page.readerBinding.retired) throw notFound();
+  if (!page.readerOrigin) throw new Error('Decision read unavailable');
+  return page;
+}
+export const decisionReadKey = (id: string) => JSON.stringify(['decision', id]);

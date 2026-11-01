@@ -5,7 +5,8 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { prepareSession, viewerCredential } from '../session/request';
+import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from './private-reader-origin';
 import type { ResolvedReportTarget as ModerationTarget } from './reports-read';
 import { enrichModerationTargets } from './target-context';
 import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './appeals-read-model';
@@ -42,7 +43,7 @@ export type AppealTargetReads = {
 function parseAppealPage(value: unknown): AppealPage {
   if (!value || typeof value !== 'object') throw new Error('Invalid appeals page');
   const page = value as Record<string, unknown>;
-  if (!Array.isArray(page.appeals) || (page.next !== null && typeof page.next !== 'string'))
+  if (!Array.isArray(page.appeals) || page.appeals.length > MODERATION_APPEALS_PAGE_SIZE || (page.next !== null && typeof page.next !== 'string'))
     throw new Error('Invalid appeals page');
   const appeals = page.appeals.map((item): Appeal => {
     if (!item || typeof item !== 'object') throw new Error('Invalid appeals page');
@@ -136,19 +137,26 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<PrivateAppealPage> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    const identity = { readKey: appealReadKey(data), viewerId: null, generation: crypto.randomUUID() };
-    try {
-      await prepareSession(request, env as Partial<SessionEnv>);
-    } catch {
-      return { ...identity, appeals: [], targets: [], next: null, state: 'unavailable' };
-    }
-    const authorization = viewerCredential(request);
-    const viewerId = sessionSubject(request);
-    // Only the prepared session supplies the private page's viewer identity.
-    if (!authorization || !viewerId) return { ...identity, appeals: [], targets: [], next: null, state: 'closed' };
-    return readModerationAppealPage(kernelClient(), data, authorization, viewerId);
+    return loadModerationAppealsRequest(getRequest(), env as Partial<SessionEnv>, data);
   });
+
+export async function loadModerationAppealsRequest(
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  data: AppealReadInput,
+  client: () => KernelClient = kernelClient,
+): Promise<PrivateAppealPage> {
+  const identity = { readKey: appealReadKey(data), viewerId: null, readerOrigin: null, generation: crypto.randomUUID() };
+  try {
+    await prepareSession(request, sessionEnv);
+  } catch {
+    return { ...identity, appeals: [], targets: [], next: null, state: 'unavailable' };
+  }
+  const authorization = viewerCredential(request);
+  const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
+  if (!authorization || !readerOrigin) return { ...identity, appeals: [], targets: [], next: null, state: 'closed' };
+  return readModerationAppealPage(client(), data, authorization, readerOrigin.subject, readerOrigin);
+}
 
 class AppealReadFailure extends Error {
   constructor(readonly state: 'closed' | 'unavailable' | 'stale') {
@@ -176,8 +184,9 @@ export async function readModerationAppealPage(
   input: AppealReadInput,
   authorization: string,
   viewerId: string,
+  readerOrigin?: PrivateReaderOrigin | null,
 ): Promise<PrivateAppealPage> {
-  const identity = { readKey: appealReadKey(input), viewerId, generation: crypto.randomUUID() };
+  const identity = { readKey: appealReadKey(input), viewerId, readerOrigin: readerOrigin ?? null, generation: crypto.randomUUID() };
   try {
     const headers = auth(authorization);
     const page = await readModerationAppeals(

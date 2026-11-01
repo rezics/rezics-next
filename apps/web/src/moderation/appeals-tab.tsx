@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useContext, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { createPrivateReaderLifetime, type PrivateReaderNavigation } from './private-reader-lifetime';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { useSession } from '../session/query';
@@ -10,7 +12,7 @@ import { AppealResolution } from './appeal-resolution';
 import { appealTarget, loadModerationAppeals, type Appeal } from './appeals-read';
 import {
   appealPageIsCurrent,
-  createAppealReadLifetime,
+  appealReadKey,
   type AppealReadInput,
   type AppealReadState,
   type PrivateAppealPage,
@@ -20,83 +22,92 @@ import { moderationTargetContent, type ModerationTarget } from './target-content
 const date = (value: string) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-/** Default route composition; retries replace only this private read, never replay a command. */
-export function ModerationAppealsPage({
-  page,
-  input,
-  active = true,
-  onNext,
-  onRestart,
-  reportsSearch,
-  read = (input) => loadModerationAppeals({ data: input }),
-}: {
+const readAppeals = (input: AppealReadInput) => loadModerationAppeals({ data: input });
+type AppealsPageProps = {
   page: PrivateAppealPage;
   input: AppealReadInput;
   active?: boolean;
+  navigation?: PrivateReaderNavigation;
   onNext?: (cursor: string) => void;
   onRestart?: () => void;
   reportsSearch?: string;
   read?: (input: AppealReadInput) => Promise<PrivateAppealPage>;
-}) {
-  const session = useSession();
-  const [data, setData] = useState(page);
-  const [lifetime] = useState(createAppealReadLifetime);
-  const preparedViewer = data.viewerId ?? page.viewerId;
-  const expectedViewer = preparedViewer ?? (session.state === 'signed-in' ? (session.subject ?? null) : null);
-  lifetime.observeViewer(preparedViewer, session);
-  if (!active || !appealPageIsCurrent(page, input)) lifetime.retire();
-  const retrying = useRef(false);
-  // Invalidate outstanding callbacks on unmount, including Strict Mode effect replay.
-  useEffect(
-    () => () => {
-      lifetime.begin();
-    },
-    [lifetime],
-  );
+};
 
+/** New native generations get new local state; old callbacks retain their original owner. */
+export function ModerationAppealsPage(props: AppealsPageProps) {
+  return <AppealsVisit key={props.page.generation} {...props} />;
+}
+
+function AppealsVisit(props: AppealsPageProps) {
+  const client = useContext(QueryClientContext);
+  const [original] = useState(() => ({ ...props, input: Object.freeze({ ...props.input }) }));
+  const [owner] = useState(() => client && typeof window !== 'undefined'
+    ? createPrivateReaderLifetime(client, original.page, appealReadKey(original.input), original.navigation)
+    : null);
+  const [data, setData] = useState(original.page);
+  const retrying = useRef(false);
+  const originalClient = useRef(client).current;
+  if (props.active === false || client !== originalClient ||
+    props.navigation !== original.navigation || props.read !== original.read ||
+    !appealPageIsCurrent(props.page, props.input) || appealReadKey(props.input) !== appealReadKey(original.input)) owner?.retire();
+  useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
+  const current = () => !owner || owner.isCurrent();
   async function retry() {
-    if (lifetime.retired || retrying.current || data.state !== 'unavailable') return;
+    if (!current() || retrying.current || data.state !== 'unavailable') return;
     retrying.current = true;
-    const token = lifetime.begin();
+    const ticket = owner?.ticket();
     setData({ ...data, appeals: [], targets: [], next: null, state: 'loading' });
     try {
-      const result = await read(input);
-      if (!lifetime.isCurrent(token)) return;
-      if (lifetime.accepts(token, result, input, expectedViewer)) setData(result);
-      else if (appealPageIsCurrent(result, input) && result.viewerId === null && result.state !== 'ready')
-        setData({ ...result, viewerId: expectedViewer });
-      else {
-        lifetime.retire();
-        setData({ ...data, appeals: [], targets: [], next: null, state: 'closed' });
+      const result = await (original.read ?? readAppeals)(original.input);
+      if (!current() || (owner && !owner.owns(ticket!))) return;
+      if (!appealPageIsCurrent(result, original.input)) return owner?.retire();
+      if (result.state === 'unavailable' && !result.readerOrigin) {
+        setData({ ...result, appeals: [], targets: [], next: null });
+      } else if (!owner || await owner.accepts(result)) {
+        if (current() && (!owner || owner.owns(ticket!))) setData(result);
+      } else {
+        owner.retire();
       }
     } catch {
-      if (lifetime.isCurrent(token)) setData({ ...data, appeals: [], targets: [], next: null, state: 'unavailable' });
+      if (current() && (!owner || owner.owns(ticket!)))
+        setData({ ...data, appeals: [], targets: [], next: null, state: 'unavailable' });
     } finally {
-      retrying.current = false;
+      if (current() && (!owner || owner.owns(ticket!))) retrying.current = false;
     }
   }
   const leave = (action: (() => void) | undefined) => {
-    lifetime.retire();
-    setData({ ...data, appeals: [], targets: [], next: null, state: 'loading' });
+    if (!current()) return;
+    owner?.retire();
     action?.();
   };
+  const commandCurrent = owner?.canCommand;
+  const state = owner && !owner.healthy() ? 'closed' : owner && !owner.available() && data.state === 'ready'
+    ? 'unavailable' : data.state;
   return (
-    <ModerationAppealsView
-      key={data.generation}
-      appeals={data.appeals}
-      targets={data.targets}
-      next={data.next}
-      {...(data.viewerId !== null ? { viewerId: data.viewerId } : {})}
-      state={lifetime.retired ? (lifetime.viewerRetired || data.state === 'closed' ? 'closed' : 'loading') : data.state}
-      {...(input.threadId ? { threadId: input.threadId } : {})}
-      {...(input.postId ? { postId: input.postId } : {})}
-      {...(reportsSearch !== undefined ? { reportsSearch } : {})}
-      {...(expectedViewer !== null ? { onRetry: () => void retry() } : {})}
-      onNext={(cursor) => leave(() => onNext?.(cursor))}
-      onRestart={() => leave(onRestart)}
-    />
+    <div onClickCapture={(event) => {
+      if ((event.target as Element).closest('a') && !current()) event.preventDefault();
+    }}>
+      <ModerationAppealsView
+        key={data.generation}
+        appeals={data.appeals}
+        targets={data.targets}
+        next={data.next}
+        {...(data.viewerId !== null ? { viewerId: data.viewerId } : {})}
+        state={state}
+        {...(original.input.threadId ? { threadId: original.input.threadId } : {})}
+        {...(original.input.postId ? { postId: original.input.postId } : {})}
+        {...(original.reportsSearch !== undefined ? { reportsSearch: original.reportsSearch } : {})}
+        {...(commandCurrent ? { isCurrent: commandCurrent } : {})}
+        onRetry={() => void retry()}
+        onNext={(cursor) => leave(() => original.onNext?.(cursor))}
+        onRestart={() => leave(original.onRestart)}
+      />
+    </div>
   );
 }
+const emptySubscribe = () => () => {};
+const zeroSnapshot = () => 0;
 
 export function ModerationAppealsView({
   appeals,
@@ -111,7 +122,9 @@ export function ModerationAppealsView({
   onRetry,
   onRestart,
   reportsSearch,
+  isCurrent,
 }: {
+  isCurrent?: () => boolean;
   state?: AppealReadState;
   onRetry?: () => void;
   onRestart?: () => void;
@@ -221,10 +234,12 @@ function AppealCard({
   appeal,
   target,
   mayResolve,
+  isCurrent,
 }: {
   appeal: Appeal;
   target: ModerationTarget | undefined;
   mayResolve: boolean;
+  isCurrent?: () => boolean;
 }) {
   const id = useId();
   const identity = appealTarget(appeal);
@@ -277,7 +292,7 @@ function AppealCard({
               <time dateTime={appeal.decision.appeal.resolvedAt}>{date(appeal.decision.appeal.resolvedAt)}</time>
             </p>
           ) : null}
-          <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal ?? null} />
+          <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal ?? null} {...(isCurrent ? { isCurrent } : {})} />
         </div>
       </ContentItemFrame>
     </li>

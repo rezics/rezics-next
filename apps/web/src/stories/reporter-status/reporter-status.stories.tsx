@@ -1,10 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReporterStatusRead, ReporterStatusResult } from '../../moderation/reporter-status-read-model';
+import type { ReporterStatusResult } from '../../moderation/reporter-status-read-model';
 import {
-  ReporterStatusCurrent,
   ReporterStatusFailure,
   ReporterStatusReadState,
   ReporterStatusResultPage,
@@ -199,34 +198,32 @@ export const Recovery: Story = {
   },
 };
 
-/** Explicit presenter fixture; session replacement itself uses the production cache subscription. */
+/** Separate presenter fixture. Production preparation/admission is exercised by connected tests, not this story. */
 function SessionRetirementExample() {
   const [cache] = useState(() => {
     const client = new QueryClient();
     client.setQueryData(['session'], { state: 'signed-in', subject: 'reporter', csrfToken: 'fixture-session' });
     return client;
   });
-  const [initial] = useState<ReporterStatusRead>(() => ({
-    id: submittedReport.id,
-    generation: 'fixture-read',
-    viewer: { subject: 'reporter', csrfToken: 'fixture-session' },
-    result: { state: 'loaded', report: { ...submittedReport, targetAvailability: 'unavailable' } },
-  }));
+  const [original] = useState(() => cache.getQueryData(['session']));
+  const session = useSyncExternalStore(
+    (listener) => cache.getQueryCache().subscribe(listener),
+    () => cache.getQueryData(['session']),
+    () => original,
+  );
+  const [retired, setRetired] = useState(false);
+  if (!retired && session !== original) setRetired(true);
   return (
     <QueryClientProvider client={cache}>
-      <button
-        type="button"
-        onClick={() =>
-          cache.setQueryData(['session'], {
-            state: 'signed-in',
-            subject: 'reporter',
-            csrfToken: 'replacement-fixture-session',
-          })
-        }
-      >
-        Replace browser session
-      </button>
-      <ReporterStatusCurrent initial={initial} />
+      <button type="button" onClick={() => cache.setQueryData(['session'], {
+        state: 'signed-in', subject: 'reporter', csrfToken: 'replacement-fixture-session',
+      })}>Replace browser session</button>
+      <ReporterStatusResultPage
+        result={retired ? { state: 'concealed' } : {
+          state: 'loaded', report: { ...submittedReport, targetAvailability: 'unavailable' },
+        }}
+        onRetry={() => {}}
+      />
     </QueryClientProvider>
   );
 }

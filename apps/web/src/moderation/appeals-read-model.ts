@@ -1,9 +1,11 @@
+import type { QueryClient } from '@tanstack/react-query';
+import { preparePrivateReaderRead, type PrivateReaderRead } from './private-reader-lifetime';
 import type { AppealPage } from './appeals-read';
 import type { ModerationTarget } from './target-content';
 
 export type AppealReadInput = { boardId: string; threadId?: string; postId?: string; cursor?: string };
 export type AppealReadState = 'ready' | 'loading' | 'unavailable' | 'stale' | 'closed';
-export type PrivateAppealPage = AppealPage & {
+export type PrivateAppealPage = AppealPage & PrivateReaderRead & {
   targets: ModerationTarget[];
   viewerId: string | null;
   readKey: string;
@@ -80,4 +82,18 @@ export function createAppealReadLifetime() {
       return !retired && token === serial && page.viewerId === viewerId && appealPageIsCurrent(page, input);
     },
   };
+}
+
+/** The route and bounded explicit recovery share the same immutable scope. */
+export async function prepareModerationAppealRead(
+  client: QueryClient,
+  input: AppealReadInput,
+  read: (input: AppealReadInput) => Promise<PrivateAppealPage>,
+  signal?: AbortSignal,
+) {
+  const original = Object.freeze({ ...input });
+  const page = await preparePrivateReaderRead(client, appealReadKey(original), () => read(original), signal);
+  return page.readerBinding.retired || (!page.readerOrigin && page.state === 'ready')
+    ? { ...page, appeals: [], targets: [], next: null, state: page.readerBinding.retired ? 'closed' as const : 'unavailable' as const }
+    : page;
 }

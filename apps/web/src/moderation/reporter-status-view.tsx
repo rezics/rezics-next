@@ -48,7 +48,11 @@ const readCurrent: ReporterStatusReader = async (data) =>
   (await import('./reporter-status-read')).readReporterStatus({ data });
 
 /** Default route composition, with synchronous observation of the real browser session cache. */
-export function ReporterStatusCurrent({
+export function ReporterStatusCurrent(props: { initial: ReporterStatusRead; navigation?: ReporterStatusNavigation }) {
+  return <ReporterStatusVisit key={props.initial.generation} {...props} />;
+}
+
+function ReporterStatusVisit({
   initial,
   navigation,
 }: {
@@ -56,12 +60,17 @@ export function ReporterStatusCurrent({
   navigation?: ReporterStatusNavigation;
 }) {
   const cache = useQueryClient();
+  const [original] = useState({ cache, initial, navigation });
   const journey = useMemo(
-    () => createReporterStatusJourney(cache, initial, readCurrent, navigation),
-    [cache, initial, navigation],
+    () => createReporterStatusJourney(original.cache, original.initial, readCurrent, original.navigation),
+    [original],
   );
+  if (cache !== original.cache || navigation !== original.navigation || initial.generation !== original.initial.generation)
+    journey.retire();
   const result = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.serverSnapshot);
-  return <ReporterStatusResultPage result={result} onRetry={() => journey.retry()} isCurrent={journey.isCurrent} />;
+  return <div onClickCapture={(event) => {
+    if ((event.target as Element).closest('a') && !journey.isConnected()) event.preventDefault();
+  }}><ReporterStatusResultPage result={result} onRetry={() => journey.retry()} isCurrent={journey.isCurrent} /></div>;
 }
 
 export function ReporterStatusResultPage({

@@ -1,20 +1,21 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, ArrowUpRight, Check, FileText, ShieldCheck } from 'lucide-react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Withheld } from '@rezics/ui/withheld';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClientContext } from '@tanstack/react-query';
+import { createPrivateReaderLifetime, type PrivateReaderNavigation } from './private-reader-lifetime';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { appealDecision, type AppealSubmission } from './appeal';
 import { createModerationIntent } from './command-intent';
-import { sessionQuery, useSession } from '../session/query';
+import { useSession } from '../session/query';
 import {
   decisionReadFailure,
-  decisionSessionKey,
-  decisionSessionMatches,
+  decisionReadKey,
+  prepareDecisionRead,
   sameDecision,
   type DecisionReadState,
 } from './decision-read-model';
@@ -64,6 +65,10 @@ export type DecisionPageProps = {
   now?: number;
   onAppeal?: DecisionAppealAction;
   onRefresh?: (id: string) => Promise<DecisionPage>;
+  navigation?: PrivateReaderNavigation;
+  isCurrent?: () => boolean;
+  canCommand?: () => boolean;
+  accepts?: (page: DecisionPage) => Promise<boolean>;
 };
 const sendAppeal: DecisionAppealAction = (data) => appealDecision({ data, headers: csrfHeaders() });
 const refreshDecision = (id: string) => readDecisionPage({ data: { id } });
@@ -116,118 +121,79 @@ function DecisionFixture(props: DecisionPageProps) {
   return <DecisionVisit key={source.revision} {...props} />;
 }
 
-const subscribeHydration = () => () => {};
-const browserSnapshot = () => true;
-const serverSnapshot = () => false;
+const emptySubscribe = () => () => {};
+const zeroSnapshot = () => 0;
 
-/** A source/read generation and browser session each retire the entire mounted private visit. */
 function DecisionSessionPage(props: DecisionPageProps) {
-  const session = useSession();
-  const hydrated = useSyncExternalStore(subscribeHydration, browserSnapshot, serverSnapshot);
-  const sessionKey = decisionSessionKey(session);
-  const sourceKey = props.page.readGeneration
-    ? JSON.stringify([props.page.readGeneration, props.page.decision.id, props.page.viewerId, props.page.sessionEpoch])
-    : props.page;
-  const [admission, setAdmission] = useState({
-    sourceKey,
-    page: props.page as DecisionPage | null,
-    observedSession: null as string | null,
-    revision: 0,
-  });
-  if (admission.sourceKey !== sourceKey) {
-    setAdmission({ sourceKey, page: props.page, observedSession: null, revision: admission.revision + 1 });
-    return null;
-  }
-  // Unknown before the first browser session is loading, never browser authority. Once observed,
-  // any loss/change is irreversible for this read, even if the old subject and token return.
-  if (
-    hydrated &&
-    (session.state !== 'unknown' || admission.observedSession !== null) &&
-    admission.observedSession !== sessionKey
-  ) {
-    const changed = admission.observedSession !== null;
-    setAdmission({
-      ...admission,
-      observedSession: sessionKey,
-      page: changed || !decisionSessionMatches(props.page, session) ? null : admission.page,
-      revision: admission.revision + 1,
-    });
-    return null;
-  }
-  if (hydrated && (session.state === 'unknown' || session.state === 'unavailable')) return <DecisionSessionRecovery />;
-  const page = admission.page;
-  if (page && (!hydrated || decisionSessionMatches(page, session)))
-    return <DecisionVisit key={admission.revision} {...props} page={page} />;
-  return (
-    <DecisionRecovery
-      key={admission.revision}
-      state={session.state === 'unavailable' ? 'unavailable' : 'closed'}
-      read={props.onRefresh ?? refreshDecision}
-      original={props.page}
-      accepts={(next) => decisionSessionMatches(next, session)}
-      onAdmit={(next) => setAdmission({ ...admission, page: next, revision: admission.revision + 1 })}
-    />
-  );
+  return <DecisionBoundPage key={props.page.readGeneration ?? props.page.decision.id} {...props} />;
 }
 
-/** Session transport failure has explicit recovery too; it cannot leave an endless loading claim. */
-function DecisionSessionRecovery() {
-  const client = useQueryClient();
-  const query = useQuery({ ...sessionQuery, enabled: false });
-  const pending = useRef(false);
-  const [busy, setBusy] = useState(false);
-  async function retry() {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    try {
-      await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
-    } catch {
-      /* Current session state owns recovery. */
-    } finally {
-      pending.current = false;
-      setBusy(false);
-    }
+function DecisionBoundPage(props: DecisionPageProps) {
+  // Initialize the existing imperative token from the real session hook; admission uses the exact cache source.
+  useSession();
+  const client = useContext(QueryClientContext);
+  const [original] = useState(props);
+  const [page, setPage] = useState(props.page);
+  const [owner, setOwner] = useState(() => client && typeof window !== 'undefined'
+    ? createPrivateReaderLifetime(client, page, decisionReadKey(page.decision.id), props.navigation) : null);
+  const originalClient = useRef(client).current;
+  if (client !== originalClient || props.navigation !== original.navigation || props.onRefresh !== original.onRefresh ||
+    props.onAppeal !== original.onAppeal || !sameDecision(props.page.decision, original.page.decision)) owner?.retire();
+  useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
+  if (owner && (!owner.healthy() || !owner.available())) {
+    return <DecisionFreshRecovery
+      key={page.readGeneration ?? page.decision.id}
+      state={owner.healthy() ? 'unavailable' : 'closed'}
+      original={page}
+      read={original.onRefresh ?? refreshDecision}
+      allowed={() => client === originalClient && original.navigation?.isCurrent() !== false}
+      prepare={(id, read) => prepareDecisionRead(client!, id, read)}
+      onAdmit={(next) => {
+        owner.retire();
+        setOwner(createPrivateReaderLifetime(client!, next, decisionReadKey(next.decision.id), original.navigation));
+        setPage(next);
+      }}
+    />;
   }
-  const loading = query.fetchStatus === 'fetching' || (query.status === 'pending' && !query.data);
-  return <DecisionReadStatus state={loading ? 'loading' : 'unavailable'} busy={busy} onRetry={() => void retry()} />;
+  return <div onClickCapture={(event) => {
+    if ((event.target as Element).closest('a') && owner && (!owner.isCurrent() || !owner.available())) event.preventDefault();
+  }}>
+    <DecisionVisit key={page.readGeneration ?? 'presenter'} {...original} page={page}
+      {...(owner ? { isCurrent: owner.isCurrent, canCommand: owner.canCommand, accepts: owner.accepts } : {})} />
+  </div>;
 }
 
-function DecisionRecovery({
-  state: initial,
-  read,
-  original,
-  accepts,
-  onAdmit,
-}: {
+/** Explicit fresh read creates a new observation; the retired owner never borrows it. */
+function DecisionFreshRecovery({ state: initial, original, read, prepare, allowed, onAdmit }: {
   state: DecisionReadState;
-  read: (id: string) => Promise<DecisionPage>;
   original: DecisionPage;
-  accepts: (page: DecisionPage) => boolean;
+  read: (id: string) => Promise<DecisionPage>;
+  prepare: (id: string, read: (id: string) => Promise<DecisionPage>) => Promise<DecisionPage>;
+  allowed: () => boolean;
   onAdmit: (page: DecisionPage) => void;
 }) {
   const [state, setState] = useState(initial);
-  const alive = useRef(true);
+  const connection = useRef({ active: true, serial: 0 });
   const pending = useRef(false);
   useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
+    connection.current.active = true;
+    return () => { connection.current.active = false; connection.current.serial++; };
   }, []);
   async function retry() {
-    if (pending.current) return;
+    if (pending.current || !connection.current.active || !allowed()) return;
     pending.current = true;
+    const ticket = connection.current.serial;
+    const current = () => connection.current.active && ticket === connection.current.serial && allowed();
     setState('loading');
     try {
-      const next = await read(original.decision.id);
-      if (!alive.current) return;
-      if (!sameDecision(next.decision, original.decision) || !accepts(next)) setState('closed');
+      const next = await prepare(original.decision.id, read);
+      if (!current()) return;
+      if (!sameDecision(next.decision, original.decision)) setState('closed');
       else onAdmit(next);
     } catch (error) {
-      if (alive.current) setState(decisionReadFailure(error));
+      if (current()) setState(decisionReadFailure(error));
     } finally {
-      pending.current = false;
+      if (current()) pending.current = false;
     }
   }
   return <DecisionReadStatus state={state} onRetry={() => void retry()} />;
@@ -239,6 +205,9 @@ function DecisionVisit({
   now = Date.now(),
   onAppeal = sendAppeal,
   onRefresh = refreshDecision,
+  isCurrent = () => true,
+  canCommand = () => true,
+  accepts,
 }: DecisionPageProps) {
   const [current, setCurrent] = useState<DecisionPage | null>(page);
   const [readState, setReadState] = useState<DecisionReadState>('unavailable');
@@ -289,7 +258,7 @@ function DecisionVisit({
             : m.decision_appeal_refused();
 
   async function submit(retry = false) {
-    if (pending.current || (!retry && (locked || !allowed || count < 1 || count > 2000))) return;
+    if (!isCurrent() || !canCommand() || pending.current || (!retry && (locked || !allowed || count < 1 || count > 2000))) return;
     if (retry && (feedback !== 'uncertain' || !lastCommand.current)) return;
     const token = ++lifetime.current.serial;
     const intent = { id: decision.id, statement: text };
@@ -301,8 +270,9 @@ function DecisionVisit({
     // A previous target snapshot is no longer a current link after a write attempt.
     setCurrent((value) => (value ? { ...value, target: null } : null));
     try {
+      if (!isCurrent() || !canCommand()) return;
       const result = await onAppeal(command);
-      if (!lifetime.current.active || lifetime.current.serial !== token) return;
+      if (!isCurrent() || !lifetime.current.active || lifetime.current.serial !== token) return;
       if (result.state === 'pending' || result.state === 'updated') {
         if (!sameDecision(result.decision, decision) || (result.state === 'pending' && !result.decision.appeal)) {
           setFeedback('uncertain');
@@ -313,9 +283,9 @@ function DecisionVisit({
       } else if (result.state === 'invalid') setFeedback('invalid');
       else setFeedback(result.state === 'failed' ? 'uncertain' : result.state);
     } catch {
-      if (lifetime.current.active && lifetime.current.serial === token) setFeedback('uncertain');
+      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) setFeedback('uncertain');
     } finally {
-      if (lifetime.current.active && lifetime.current.serial === token) {
+      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) {
         pending.current = false;
         setBusy(false);
       }
@@ -323,7 +293,7 @@ function DecisionVisit({
   }
 
   async function refresh() {
-    if (pending.current) return;
+    if (!isCurrent() || pending.current) return;
     const token = ++lifetime.current.serial;
     pending.current = true;
     setBusy(true);
@@ -331,11 +301,11 @@ function DecisionVisit({
     setCurrent((value) => (value ? { ...value, target: null } : null));
     try {
       const next = await onRefresh(decision.id);
-      if (!lifetime.current.active || lifetime.current.serial !== token) return;
+      if (!isCurrent() || !lifetime.current.active || lifetime.current.serial !== token) return;
       if (
         !sameDecision(next.decision, page.decision) ||
         next.viewerId !== page.viewerId ||
-        next.sessionEpoch !== page.sessionEpoch
+        (accepts ? !(await accepts(next)) : next.sessionEpoch !== page.sessionEpoch)
       ) {
         setCurrent(null);
         setReadState('closed');
@@ -344,6 +314,7 @@ function DecisionVisit({
         commandIntent.changed();
         return;
       }
+      if (!isCurrent() || !lifetime.current.active || lifetime.current.serial !== token) return;
       setCurrent(next);
       // A successful read without an appeal cannot settle a lost command response.
       if (feedback !== 'uncertain' || next.decision.appeal) {
@@ -352,7 +323,7 @@ function DecisionVisit({
         commandIntent.changed();
       }
     } catch (error) {
-      if (lifetime.current.active && lifetime.current.serial === token) {
+      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) {
         const state = decisionReadFailure(error);
         setCurrent(null);
         setReadState(state);
@@ -364,7 +335,7 @@ function DecisionVisit({
         }
       }
     } finally {
-      if (lifetime.current.active && lifetime.current.serial === token) {
+      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) {
         pending.current = false;
         setBusy(false);
       }

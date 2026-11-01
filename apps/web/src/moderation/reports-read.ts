@@ -7,7 +7,9 @@ import { notFound } from '@tanstack/react-router';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { prepareSession, viewerCredential } from '../session/request';
+import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from './private-reader-origin';
+import { preparePrivateReaderRead, privateReaderSessionSource, type PrivateReaderRead } from './private-reader-lifetime';
 
 import { enrichModerationTargets, type ModerationEvidence } from './target-context';
 
@@ -203,12 +205,22 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
-    const authorization = viewerCredential(request);
-    if (!authorization) throw notFound();
-    return readModerationReportPage(kernelClient(), data, authorization, sessionSubject(request) ?? '');
+    return loadModerationReportsRequest(getRequest(), env as Partial<SessionEnv>, data);
   });
+
+/** Once-prepared production boundary; tests defer only the native/session transport. */
+export async function loadModerationReportsRequest(
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  data: ReportReadInput,
+  client: () => KernelClient = kernelClient,
+) {
+  await prepareSession(request, sessionEnv);
+  const authorization = viewerCredential(request);
+  const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
+  if (!authorization || !readerOrigin) throw notFound();
+  return readModerationReportPage(client(), data, authorization, readerOrigin.subject, readerOrigin);
+}
 
 /** Default native composition, also used by the focused transport-to-render regression. */
 export async function readModerationReportPage(
@@ -216,9 +228,11 @@ export async function readModerationReportPage(
   data: ReportReadInput,
   authorization: string,
   viewerId: string,
+  readerOrigin?: PrivateReaderOrigin | null,
 ) {
   const client = nativeClient;
   const identity = {
+    readerOrigin: readerOrigin ?? null,
     readKey: reportReadKey(data),
     viewerId,
     generation: crypto.randomUUID(),
@@ -252,6 +266,7 @@ export async function readModerationReportPage(
       },
       data,
     );
+    if (page.reports.length > MODERATION_REPORTS_PAGE_SIZE) throw new ReportReadFailure('error');
     const targets = await resolveReportTargets(page.reports, {
       post: async (id) => {
         const result = await client.posts({ id }).get(headers);
@@ -291,66 +306,26 @@ export async function readModerationReportPage(
   }
 }
 
-export type PrivateReportPage = Awaited<ReturnType<typeof readModerationReportPage>> & {
+export type PrivateReportPage = Awaited<ReturnType<typeof readModerationReportPage>> & PrivateReaderRead & {
   browserRevision?: number;
 };
 type ReportSession = { state: string; subject?: string | null; csrfToken?: string | null };
 
-/** One cache observation shared by loader and mounted caller, including their handoff gap. */
-const reportSessionSources = new WeakMap<QueryClient, ReturnType<typeof observeReportSession>>();
-function observeReportSession(client: QueryClient) {
-  const read = () => client.getQueryData<ReportSession>(['session']);
-  const key = () => {
-    const session = read();
-    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
-  };
-  let previous = key();
-  let revision = 0;
-  const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe(({ query }) => {
-    if (query.queryKey.length !== 1 || query.queryKey[0] !== 'session') return;
-    const next = key();
-    if (next === previous) return;
-    previous = next;
-    revision++;
-    for (const listener of listeners) listener();
-  });
-  return {
-    read,
-    snapshot: () => revision,
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-}
-export function reportSessionSource(client: QueryClient) {
-  let source = reportSessionSources.get(client);
-  if (!source) {
-    source = observeReportSession(client);
-    reportSessionSources.set(client, source);
-  }
-  return source;
-}
+/** Compatibility facade for callers observing the original Reports cache. */
+export const reportSessionSource = privateReaderSessionSource;
 export function reportViewerIsReady(session: ReportSession | undefined, viewerId: string): boolean {
-  return !!viewerId && session?.state === 'signed-in' && session.subject === viewerId && !!session.csrfToken;
+  return !!viewerId && session?.state === 'signed-in' && session.subject === viewerId;
 }
 
-/** Browser preparation preserves the original session across the native read and route admission. */
 export async function prepareModerationReportRead(
   client: QueryClient,
   input: ReportReadInput,
   read: (input: ReportReadInput) => Promise<PrivateReportPage>,
   signal: AbortSignal,
 ): Promise<PrivateReportPage> {
-  const source = reportSessionSource(client);
-  const revision = source.snapshot();
-  const page = await read(input);
-  signal.throwIfAborted();
-  if (typeof window === 'undefined') return page;
-  if (source.snapshot() !== revision || !reportViewerIsReady(source.read(), page.viewerId))
-    return { ...page, reports: [], targets: [], revisions: [], next: null, state: 'denied', browserRevision: revision };
-  return { ...page, browserRevision: revision };
+  const original = Object.freeze({ ...input, ...reportSelection(input) });
+  const page = await preparePrivateReaderRead(client, reportReadKey(original), () => read(original), signal);
+  return page.readerBinding.retired || !page.readerOrigin
+    ? { ...page, reports: [], targets: [], revisions: [], next: null, state: page.readerBinding.retired ? 'denied' : 'error' }
+    : page;
 }

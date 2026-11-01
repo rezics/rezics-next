@@ -7,7 +7,8 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import type { ReporterStatusRead, ReporterStatusViewer } from './reporter-status-read-model';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
+import { prepareSession, viewerCredential } from '../session/request';
+import { preparedPrivateReaderOrigin, privateReaderFingerprint } from './private-reader-origin';
 import { reporterStatusResponse, type ReporterStatus } from './reporter-status-model';
 
 /** One exact private read. A failed dependency remains retryable; only 404 is absent. */
@@ -16,7 +17,7 @@ export async function loadReporterStatus(
   id: string,
   authorization: string,
 ): Promise<ReporterStatus | null> {
-  const result = await client.reports({ id }).get({ headers: { authorization } });
+  const result = await client.reports({ id }).get({ headers: { authorization }, fetch: { cache: 'no-store' } });
   if (result.error) {
     if (result.status === 404) return null;
     throw new Error('Report status unavailable');
@@ -30,11 +31,12 @@ export async function loadPrivateReporterStatus(
   id: string,
   generation: string,
   authorization: string,
-  viewer: ReporterStatusViewer,
+  viewer: ReporterStatusViewer | { subject: string; csrfToken: string | null },
 ): Promise<ReporterStatusRead> {
-  const base = { id, generation, viewer };
+  const readerOrigin = 'csrfFingerprint' in viewer ? viewer : { subject: viewer.subject, csrfFingerprint: await privateReaderFingerprint(viewer.csrfToken) };
+  const base = { id, generation, viewer: readerOrigin, readerOrigin };
   try {
-    const result = await client.reports({ id }).get({ headers: { authorization } });
+    const result = await client.reports({ id }).get({ headers: { authorization }, fetch: { cache: 'no-store' } });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { ...base, result: { state: 'closed' } };
     if (result.error) {
       if (result.status === 401 || result.status === 403 || result.status === 404)
@@ -42,7 +44,7 @@ export async function loadPrivateReporterStatus(
       return { ...base, result: { state: 'unavailable' } };
     }
     const report = reporterStatusResponse(result.data);
-    return { ...base, result: report.id === id ? { state: 'loaded', report } : { state: 'concealed' } };
+    return { ...base, result: report.id === id && report.reporterId === readerOrigin.subject ? { state: 'loaded', report } : { state: 'concealed' } };
   } catch (error) {
     return { ...base, result: { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' } };
   }
@@ -75,14 +77,13 @@ export async function loadReporterStatusRequest(
   data: { id: string; generation: string },
   client: () => Pick<KernelClient, 'reports'> = kernelClient,
 ): Promise<ReporterStatusRead> {
-  const base = { ...data, viewer: null };
+  const base = { ...data, viewer: null, readerOrigin: null };
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
-    const subject = sessionSubject(request);
-    const csrfToken = requestCsrfToken(request);
-    if (!authorization || !subject || !csrfToken) return { ...base, result: { state: 'concealed' } };
-    return await loadPrivateReporterStatus(client(), data.id, data.generation, authorization, { subject, csrfToken });
+    const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
+    if (!authorization || !readerOrigin) return { ...base, result: { state: 'concealed' } };
+    return await loadPrivateReporterStatus(client(), data.id, data.generation, authorization, readerOrigin);
   } catch {
     return { ...base, result: { state: 'unavailable' } };
   }

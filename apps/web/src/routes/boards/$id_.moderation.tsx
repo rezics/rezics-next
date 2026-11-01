@@ -22,7 +22,7 @@ import {
 import { ModerationReportsPage, ModerationReportsView } from '../../moderation/reports-page';
 import { loadModerationAppeals } from '../../moderation/appeals-read';
 import { ModerationAppealsPage, ModerationAppealsView } from '../../moderation/appeals-tab';
-import { appealReadKey, moderationAppealInput } from '../../moderation/appeals-read-model';
+import { appealReadKey, moderationAppealInput, prepareModerationAppealRead } from '../../moderation/appeals-read-model';
 
 export const Route = createFileRoute('/boards/$id_/moderation')({
   beforeLoad: requireSignedIn,
@@ -40,8 +40,10 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
   loaderDeps: ({ search }) => search,
   loader: async ({ params, deps, location, abortController, context }) => {
     if (deps.tab === 'appeals') {
-      const page = await loadModerationAppeals({ data: moderationAppealInput(params.id, deps) });
-      abortController.signal.throwIfAborted();
+      const page = await prepareModerationAppealRead(
+        context.queryClient, moderationAppealInput(params.id, deps),
+        (data) => loadModerationAppeals({ data }), abortController.signal,
+      );
       return { ...page, navigationKey: location.state.__TSR_key ?? location.href };
     }
     const page = await prepareModerationReportRead(
@@ -114,6 +116,7 @@ function ModerationReportsRoute() {
       key={`${appealPage.generation}:${appealPage.navigationKey}`}
       page={appealPage}
       input={appealInput}
+      navigation={reportNavigation}
       active={latestSearch.tab === 'appeals' && appealPage.navigationKey === appealNavigationKey}
       reportsSearch={`?${new URLSearchParams({ ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) })}`}
       onNext={onNext}

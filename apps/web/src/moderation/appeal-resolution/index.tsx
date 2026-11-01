@@ -25,11 +25,13 @@ export function AppealResolution({
   mayResolve,
   resolution,
   onResolve = resolveAppeal,
+  isCurrent,
 }: {
   appealId: string;
   mayResolve: boolean;
   resolution?: Resolution | null;
   onResolve?: ResolveAppeal;
+  isCurrent?: () => boolean;
 }) {
   const [statement, setStatement] = useState('');
   const [intent] = useState(() => createAppealResolutionIntent(appealId));
@@ -47,7 +49,7 @@ export function AppealResolution({
   }, []);
   const admitted =
     mayResolve &&
-    ((session.state === 'signed-in' && Boolean(session.subject)) ||
+    ((session.state === 'signed-in' && Boolean(session.subject) && Boolean(session.csrfToken)) ||
       (session.state === 'unknown' && onResolve !== resolveAppeal));
   const pending = intent.phase === 'pending';
   const uncertain = intent.phase === 'uncertain';
@@ -67,17 +69,18 @@ export function AppealResolution({
         : '';
 
   async function resolve(outcome?: ResolutionCommand['outcome']) {
-    if (!mounted.current || !admitted || result) return;
+    if (!mounted.current || !admitted || result || isCurrent?.() === false) return;
     const command = outcome === undefined ? intent.retry() : intent.begin(outcome, statement);
     if (!command) return;
     redraw();
     try {
+      if (isCurrent?.() === false) return;
       const response = await onResolve(command);
-      if (mounted.current) intent.settle(response);
+      if (mounted.current && isCurrent?.() !== false) intent.settle(response);
     } catch {
-      if (mounted.current) intent.uncertain();
+      if (mounted.current && isCurrent?.() !== false) intent.uncertain();
     } finally {
-      if (mounted.current) redraw();
+      if (mounted.current && isCurrent?.() !== false) redraw();
     }
   }
 

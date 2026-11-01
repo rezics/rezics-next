@@ -48,7 +48,7 @@ function ReporterStatusRoute() {
         };
       },
     }),
-    [router, initial.navigationKey],
+    [router, initial.navigationKey, initial.generation],
   );
   return <ReporterStatusCurrent key={initial.generation} initial={initial} navigation={navigation} />;
 }

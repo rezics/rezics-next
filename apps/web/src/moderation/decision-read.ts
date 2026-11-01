@@ -6,7 +6,9 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
+import { prepareSession, viewerCredential } from '../session/request';
+import { preparedPrivateReaderOrigin } from './private-reader-origin';
+import type { PrivateReaderRead } from './private-reader-lifetime';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 
 export type ModerationDecision = {
@@ -32,11 +34,11 @@ export type DecisionTarget = {
   text: string;
   href: string;
 };
-export type DecisionPage = {
+export type DecisionPage = PrivateReaderRead & {
   decision: ModerationDecision;
   target: DecisionTarget | null;
   viewerId: string | null;
-  /** Prepared browser session and read lifetime; optional for existing injected presentation fixtures. */
+  /** Legacy injected presenters may carry a local epoch; production never serializes a token. */
   sessionEpoch?: string;
   readGeneration?: string;
 };
@@ -144,27 +146,33 @@ export const readDecisionPage = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<DecisionPage> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    try {
-      await prepareSession(request, env as Partial<SessionEnv>);
-    } catch {
-      throw new Error('Decision read unavailable');
-    }
-    const authorization = viewerCredential(request);
-    const viewerId = sessionSubject(request);
-    const sessionEpoch = requestCsrfToken(request);
-    if (!authorization || !viewerId || !sessionEpoch) throw notFound();
-    let page: DecisionPage | null;
-    try {
-      page = await loadCurrentDecisionPage(data.id, decisionReadAdapters(kernelClient(), authorization));
-    } catch (error) {
-      // Preserve the native outcome without transporting its raw problem body or dependency details.
-      if (isPlatformClosedError(error)) throw new PlatformClosedError(403, null);
-      throw new Error('Decision read unavailable');
-    }
-    if (!page) throw notFound();
-    return { ...page, viewerId, sessionEpoch, readGeneration: crypto.randomUUID() };
+    return loadDecisionPageRequest(getRequest(), env as Partial<SessionEnv>, data.id);
   });
+
+export async function loadDecisionPageRequest(
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  id: string,
+  client: () => KernelClient = kernelClient,
+): Promise<DecisionPage> {
+  try {
+    await prepareSession(request, sessionEnv);
+  } catch {
+    throw new Error('Decision read unavailable');
+  }
+  const authorization = viewerCredential(request);
+  const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
+  if (!authorization || !readerOrigin) throw notFound();
+  let page: DecisionPage | null;
+  try {
+    page = await loadCurrentDecisionPage(id, decisionReadAdapters(client(), authorization));
+  } catch (error) {
+    if (isPlatformClosedError(error)) throw new PlatformClosedError(403, null);
+    throw new Error('Decision read unavailable');
+  }
+  if (!page) throw notFound();
+  return { ...page, viewerId: readerOrigin.subject, readerOrigin, readGeneration: crypto.randomUUID() };
+}
 
 export function decisionReadAdapters(client: KernelClient, authorization: string): DecisionReads {
   return {

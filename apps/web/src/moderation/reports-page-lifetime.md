@@ -2,8 +2,8 @@
 
 The Reports branch of the board moderation route now binds
 `prepareModerationReportRead` → `readModerationReportPage` → `ModerationReportsPage` →
-`ModerationReportsView` → `BoardReportQueue` → `ReportReviewCard`. The Appeals branch keeps its
-existing loader, admission and callbacks. The server read still prepares the native viewer, uses
+`ModerationReportsView` → `BoardReportQueue` → `ReportReviewCard`. The Appeals branch now shares the moderation-local original-reader observation described in
+[private reader lifetime](private-reader-lifetime.md). The server read still prepares the native viewer, uses
 private no-store responses and generated native reads with limit 20, and independently resolves
 and deduplicates targets, exact reported revisions, authors and declared media.
 
@@ -14,9 +14,13 @@ selection/restart, and never treats an empty page with continuation as an exhaus
 
 Browser preparation records a local session-cache revision before reading. The default mounted page
 compares that same revision, native viewer, original input and navigation generation. One read-only
-QueryClient cache observation remembers state/account/CSRF transitions synchronously, including an
+QueryClient cache observation remembers exact Query identity, external success (including equal data), error, setState, removal/recreation
+and state/account/CSRF transitions synchronously, including an
 away/back change hidden in a React batch and changes between loader completion and mount. Unknown,
-preparing, denied, signed-out, unavailable and missing-CSRF sessions cannot admit private report bytes.
+preparing, denied, signed-out and unavailable sessions cannot admit private report bytes. An initially healthy
+authenticated null-CSRF reader may display only when its actual prepared subject and distinguished null fingerprint
+match the original known browser observation. This explicitly replaces the earlier initial missing-CSRF denial oracle;
+a subsequently observed token-to-null transition still retires the original owner. Commands require a current token.
 They never become anonymous authority. There is no session fetch or shared-session mutation here.
 
 Navigation events, reloads, readiness loss, source replacement and account/session changes permanently
@@ -59,14 +63,14 @@ belong to integration. Typing is not whole-feature or Goal completion.
 
 Affected existing story families are `patterns-moderation-queue--` (all queue states) and
 `pages-community-moderation-reports--` (Reports states). Story IDs and fixtures are unchanged; Appeals
-remains the existing separate consumer.
+shares this connected lifetime.
 
 Implementation references read were the existing reports loader/page, queue/card/action/bulk composition,
 current session query, delivered Appeals, Decision and Reporter consumers and route, recovered reply-context
 lifetime/reading-region pattern, target enrichment/presentation and the content owner's report contract.
 No external reference project was named for this surface, and no external source was ported.
 
-The implementation typing receipt is `bun run --cwd apps/web typecheck`, completed locally in the
+The historical Reports-only implementation typing receipt (before this connected change) is `bun run --cwd apps/web typecheck`, completed locally in the
 foreground with exit 0: `No type errors in 1,476 files` (729.81 ms compiler phase). Generation and route
 generation also completed. No acceptance assertions or other verification suites were executed.
 

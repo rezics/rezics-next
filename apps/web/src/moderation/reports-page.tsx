@@ -6,8 +6,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import {
   DEFAULT_REPORT_SELECTION,
   reportPageIsCurrent,
-  reportSessionSource,
-  reportViewerIsReady,
+  reportReadKey,
   reportSelection,
   type PrivateReportPage,
   type ReportReadInput,
@@ -15,6 +14,7 @@ import {
   type ReportReadState,
 } from './reports-read';
 import { useSession } from '../session/query';
+import { createPrivateReaderLifetime } from './private-reader-lifetime';
 import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
@@ -51,12 +51,12 @@ export function ModerationReportsPage(props: {
   onRefresh?: () => Promise<void>;
 }) {
   const client = useContext(QueryClientContext);
-  const source = client && typeof window !== 'undefined' ? reportSessionSource(client) : undefined;
+  const browserClient = typeof window !== 'undefined' ? client : undefined;
   const visit = useRef<ReturnType<typeof createVisit> | null>(null);
   function createVisit() {
     const original = props;
     const page = original.page;
-    const revision = page.browserRevision ?? source?.snapshot();
+    const owner = browserClient ? createPrivateReaderLifetime(browserClient, page, reportReadKey(page.input), original.navigation) : undefined;
     let retired = retiredReads.has(page.input);
     let connected = true;
     let serial = 0;
@@ -66,14 +66,15 @@ export function ModerationReportsPage(props: {
       retired = true;
       serial++;
       retiredReads.add(page.input);
+      owner?.retire();
       for (const listener of listeners) listener();
     };
     const observe = () => {
-      if (source && (source.snapshot() !== revision || !reportViewerIsReady(source.read(), page.viewerId))) retire();
+      if (owner && !owner.healthy()) retire();
       if (original.navigation?.isCurrent() === false) retire();
       return retired;
     };
-    const isCurrent = () => connected && !observe();
+    const isCurrent = () => connected && !observe() && (!owner || owner.isCurrent());
     const leave = (callback: (() => void) | undefined) => {
       if (!isCurrent()) return;
       retire();
@@ -81,7 +82,9 @@ export function ModerationReportsPage(props: {
     };
     return {
       page,
-      source,
+      canCommand: () => isCurrent() && (!owner || owner.canCommand()),
+      client: browserClient,
+      owner,
       action: original.onAction,
       navigation: original.navigation,
       retire,
@@ -90,8 +93,9 @@ export function ModerationReportsPage(props: {
       subscribe(listener: () => void) {
         connected = true;
         listeners.add(listener);
-        const disconnectSession = source?.subscribe(() => {
+        const disconnectSession = owner?.subscribe(() => {
           observe();
+          for (const listener of listeners) listener();
         });
         const disconnectNavigation = original.navigation?.subscribe(retire);
         observe();
@@ -125,7 +129,7 @@ export function ModerationReportsPage(props: {
       },
       async submit(input: Parameters<ReportQueueAction>[0]) {
         // Keep the original transport and exact intent. A retired caller never starts it.
-        if (!isCurrent()) return;
+        if (!isCurrent() || (owner && !owner.canCommand())) return;
         return (original.onAction ?? submitReportAction)(input);
       },
     };
@@ -137,18 +141,20 @@ export function ModerationReportsPage(props: {
   }
   const current = visit.current!;
   if (
-    current.page !== props.page ||
-    current.source !== source ||
+    current.page.state !== props.page.state ||
+    current.page.readKey !== props.page.readKey ||
+    current.client !== browserClient ||
     current.action !== props.onAction ||
     current.navigation !== props.navigation ||
     props.active === false ||
     !reportPageIsCurrent(props.page, props.input)
   )
     current.retire();
-  const retired = useSyncExternalStore(current.subscribe, current.observe, serverReady);
+  useSyncExternalStore(current.subscribe, () => current.owner?.snapshot() ?? Number(current.observe()), () => 0);
+  const retired = current.observe();
   // The browser cache is authoritative even before a session hook has hydrated. Standalone SSR
   // fixtures have no browser source; they retain only their explicit prepared native admission.
-  if (retired || current.observe())
+  if (retired || current.observe() || (current.owner && !current.owner.available()))
     return (
       <ContentItemFrame as="div" role="status" className="p-4 sm:p-6">
         <ContentItemHeading level={2} className="text-base font-semibold">
@@ -159,7 +165,9 @@ export function ModerationReportsPage(props: {
   const { page } = current;
   const input = page.input;
   return (
-    <ModerationReportsView
+    <div onClickCapture={(event) => {
+      if ((event.target as Element).closest('a') && !current.isCurrent()) event.preventDefault();
+    }}><ModerationReportsView
       key={page.generation}
       boardId={input.boardId}
       {...(input.threadId ? { threadId: input.threadId } : {})}
@@ -179,7 +187,7 @@ export function ModerationReportsPage(props: {
       {...(props.onRestart ? { onRestart: current.restart } : {})}
       {...(props.onRetry ? { onRetry: current.retry } : {})}
       {...(props.onRefresh ? { onRefresh: current.refresh } : {})}
-    />
+    /></div>
   );
 }
 
