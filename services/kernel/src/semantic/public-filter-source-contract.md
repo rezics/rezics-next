@@ -723,7 +723,9 @@ caller receipt nor a successful engine callback certifies completion. Account pr
 Its closed declarations are `NativePublicSource`, `PublicFilterSourceDefinition`,
 `PublicFilterBindingFailure`, `PublicFilterSourceBinding`, `PublicSourceCaptureInput`,
 `PublicSourceBootstrap`, `PublicSourceBootstrapResult`, `PublicSourceBootstrapRecovery`,
-`NativeSourceRepairReceipt`, `PublicSourceRepair`, `PublicSourceRepairPage` and
+`NativeSourceRepairLocator`, `NativeSourceRepairReceipt`, `NativeSourceRepairRead`,
+`NativeSourceRepairStepRead`, `NativeSourceRepairStepVerification`,
+`NativeSourceRepairVerification`, `PublicSourceRepair`, `PublicSourceRepairPage` and
 `PublicFilterSourceBootstrapBinding`. `PublicFilterSourceCaptureInput` remains a compatibility alias;
 `PublicFilterNativeSource` and `JoinedPopulationRequest` remain exported. The capture is the canonical
 Search Subject/mixed/prefix union; queried observations are imported from Search.
@@ -787,6 +789,36 @@ not current population eligibility. The same original pages now retain an indexe
 when independent replay closes that exact captured window. The complete terminal retains an `ack_after`
 frontier; it advances one home only after the real registration-home ACK has committed and Source has
 adopted that native receipt. Crash recovery repeats that same home, never a newer baseline.
+
+The internal step API is `readRepairStep(request: NativeSourceRepairStepRead,
+context: PublicFilterConsumerContext): Promise<NativeSourceRepairStepVerification>`. Its request is exactly
+`{bootstrap, queried, execution, predecessor}`. It resolves the stored successor for that exact predecessor
+and returns its native step ID, original predecessor, ordered bounded locator list, and stored incomplete
+frontier. An incomplete step's frontier is its stored step ID; `null` is returned only for a durably verified
+complete step. The locator list comes from the original retained page, including an empty list for a proven
+empty page. A caller array, newly built projection, current equivalent page or absent item cannot fill it.
+The bootstrap keeps its `0:<UUID>` locator; the native lookup validates that original format before extracting
+the UUID used by SQL. `readRepairReceipt(request: NativeSourceRepairRead, context)` independently resolves each
+listed locator against its own original retained page. Both readers use basic immutable Search custody and
+never call Search's settlement reader.
+
+The verifier consumes the existing original-page readers in `public-filter-projection.ts`:
+`readOriginalPublicFilterProjectionPage` retains the actual page on production, and
+`readRetainedPublicFilterProjectionPage` re-reads that same page for replay and verification. The existing
+`public-filter-creation-window.ts` exports `readPublicFilterCreationWindow` and
+`readPublicFilterCreationEvent`; they resolve the enrolled bootstrap's original creation checkpoint and
+bounded outbox interval, then verify each actual event position and event-group continuation. These are
+Source-owned native readers, not a replacement ledger. Missing enrollment, pruned or partial event groups,
+owner movement, stale original rows and uncertain results remain unavailable. A complete result requires the
+verified original window chain and its terminal successor; reaching home 4096 or observing an empty page alone
+does not complete it.
+
+Migration `20261030231307_public_source_repair_custody.sql` stores each step's original input limit and receipt
+protocol and each Source advancement's same-command transaction ID/native transaction provenance. It freezes
+the step and advancement rows and enforces the original advancement event at commit. Migration
+`20261031060000_public_source_repair_custody.sql` stores the ordered SHA-256 locator digests in a bounded
+packed field. Existing rows without that original provenance or digest list remain unverifiable; no current
+transaction or equivalent page upgrades them.
 
 The ACK transaction locks the same registration and home summary as change apply, checks the exact native
 consumer and holds the original physical target/incarnation point through commit. Its complete original
