@@ -203,11 +203,116 @@ export const Conflict: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'lost-response' },
-  play: async ({ canvasElement }) => {
-    const canvas = await submit(canvasElement);
-    await canvas.findByText(m.correction_unavailable());
-    await userEvent.click(canvas.getByRole('button', { name: m.correction_retry() }));
-    await canvas.findByText(m.authored_submitted());
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: the existing default composition at 390px checks native control targets, wrapped labels, retained uncertain submission, exact-proposal retry, independent comparison and public readback after selection. Browser, native and visual verification remain deferred.',
+      },
+    },
+  },
+  play: async ({ canvasElement, step }) => {
+    await step(
+      'Existing default correction composition preserves submission and recovery with usable wrapped phone controls',
+      async () => {
+        const canvas = within(canvasElement);
+        const selected = await canvas.findByRole('region', { name: m.authored_selected() });
+        const article = canvas.getByRole('article');
+        const bounds = article.getBoundingClientRect();
+        await expect(bounds.width).toBeLessThanOrEqual(390);
+        const contained = async (element: HTMLElement) => {
+          const rect = element.getBoundingClientRect();
+          await expect(element).toBeVisible();
+          await expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+          await expect(rect.right).toBeLessThanOrEqual(bounds.right);
+          await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+          await expect(element.scrollHeight).toBeLessThanOrEqual(element.clientHeight + 1);
+        };
+        const target = async (element: HTMLElement) => {
+          await contained(element);
+          await expect(element.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+          await expect(element.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+        };
+        const property = canvas.getByRole('combobox', { name: m.candidate_field() });
+        const reload = within(selected).getByRole('button', { name: m.authored_reload_current_text() });
+        for (const control of [
+          property,
+          reload,
+          canvas.getByRole('textbox', { name: m.authored_language() }),
+          canvas.getByRole('textbox', { name: m.authored_licence() }),
+          canvas.getByRole('textbox', { name: m.authored_citation() }),
+          canvas.getByRole('button', { name: m.correction_submit() }),
+        ])
+          await target(control);
+        for (const label of article.querySelectorAll<HTMLElement>('label[for^="authored-"]'))
+          await contained(label);
+        const originalLabel = article.querySelector<HTMLElement>('label[for="authored-original"]')!;
+        await target(originalLabel);
+        if (getLocale() === 'en') {
+          const text = canvasElement.ownerDocument.createRange();
+          text.selectNodeContents(originalLabel);
+          await expect(text.getClientRects().length).toBeGreaterThan(1);
+        }
+        await userEvent.selectOptions(property, (property as HTMLSelectElement).value);
+        await waitFor(() => expect(reload).toBeEnabled());
+        await userEvent.click(reload);
+        await waitFor(() => expect(reload).toBeEnabled());
+        await within(selected).findByText('An aviator meets a young traveller in the desert.');
+
+        await submit(canvasElement);
+        await canvas.findByText(m.correction_unavailable());
+        const retry = canvas.getByRole('button', { name: m.correction_retry() });
+        await target(retry);
+        await expect(property).toBeDisabled();
+        await expect(reload).toBeDisabled();
+        await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
+          'A quiet story about friendship.',
+        );
+        for (const [name, value] of [
+          [m.authored_language(), 'en'],
+          [m.authored_licence(), 'CC-BY-4.0'],
+          [m.authored_citation(), 'https://example.org/original-notes'],
+        ] as const) {
+          const field = canvas.getByRole('textbox', { name });
+          await expect(field).toBeDisabled();
+          await expect(field).toHaveValue(value);
+        }
+        await expect(canvas.getByRole('checkbox', { name: m.authored_original() })).toBeChecked();
+        await userEvent.click(canvas.getByRole('button', { name: m.correction_retry() }));
+        await canvas.findByText(m.authored_submitted());
+        const comparisonAction = canvas.getByRole('button', { name: m.correction_review() });
+        await target(comparisonAction);
+        comparisonAction.focus();
+        await userEvent.keyboard('{Enter}');
+        const candidate = await canvas.findByRole('region', { name: m.authored_candidate() });
+        await within(candidate).findByText('A quiet story about friendship.');
+        await userEvent.click(reload);
+        await waitFor(() => expect(reload).toBeEnabled());
+        await within(selected).findByText('An aviator meets a young traveller in the desert.');
+        await expect(within(selected).queryByText('A quiet story about friendship.')).toBeNull();
+        await expect(within(candidate).getByText('A quiet story about friendship.')).toBeVisible();
+
+        // Acceptance still requires a separate, explicit public selection and fresh public readback.
+        await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
+        const confirmations = await canvas.findAllByRole('button', { name: m.candidate_accept() });
+        await userEvent.click(confirmations.at(-1)!);
+        await canvas.findByText(m.candidate_accepted());
+        await within(selected).findByText('An aviator meets a young traveller in the desert.');
+        await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
+        const choices = await canvas.findAllByRole('checkbox', { name: new RegExp(m.candidate_include()) });
+        for (const choice of choices) await userEvent.click(choice);
+        await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
+        const adoption = await canvas.findAllByRole('button', { name: m.candidate_adopt() });
+        await userEvent.click(adoption.at(-1)!);
+        await within(selected).findByText('A quiet story about friendship.');
+        await target(reload);
+        await userEvent.click(reload);
+        await within(selected).findByText('A quiet story about friendship.');
+        await expect(within(selected).queryByText('An aviator meets a young traveller in the desert.')).toBeNull();
+        await contained(article);
+      },
+    );
   },
 };
 export const Proposed: Story = {

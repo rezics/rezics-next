@@ -25,6 +25,14 @@ import {
   type AuthoredTransport,
 } from './authored-field';
 
+// Match the caller-level phone targets while retaining dense fine-pointer desktop controls.
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+// NativeSelect puts className on the wrapper, so size its actual native control as well.
+const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+const labelClassName = 'min-w-0 max-w-full whitespace-normal break-words';
+
 function Body({ body, locale }: { body: AuthoredBody | null | undefined; locale: string }) {
   const o = { locale: locale as never };
   if (!body?.ok || body.document.availability !== 'available' || !body.document.body)
@@ -277,7 +285,7 @@ export function AuthoredField({
   );
 
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
+    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 sm:p-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{m.authored_title({}, o)}</h1>
         {current && (
@@ -308,6 +316,7 @@ export function AuthoredField({
           )}
           <Button
             variant="outline"
+            className={actionClassName}
             disabled={busy}
             onClick={() =>
               void (command && failure === 'unavailable'
@@ -331,9 +340,12 @@ export function AuthoredField({
       {current && property && (
         <>
           <Field>
-            <FieldLabel htmlFor="authored-property">{m.candidate_field({}, o)}</FieldLabel>
+            <FieldLabel htmlFor="authored-property" className={labelClassName}>
+              {m.candidate_field({}, o)}
+            </FieldLabel>
             <NativeSelect
               id="authored-property"
+              className={selectClassName}
               value={property}
               disabled={locked}
               onChange={(event) => void refresh(event.target.value)}
@@ -356,7 +368,12 @@ export function AuthoredField({
             ) : (
               <p>{m.authored_no_selected({}, o)}</p>
             )}
-            <Button variant="outline" disabled={busy || !!command} onClick={() => void refresh(property, false, true)}>
+            <Button
+              variant="outline"
+              className={actionClassName}
+              disabled={busy || !!command}
+              onClick={() => void refresh(property, false, true)}
+            >
               {m.authored_reload_current_text({}, o)}
             </Button>
           </section>
@@ -400,9 +417,12 @@ export function AuthoredField({
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="authored-language">{labels.language}</FieldLabel>
+                  <FieldLabel htmlFor="authored-language" className={labelClassName}>
+                    {labels.language}
+                  </FieldLabel>
                   <Input
                     id="authored-language"
+                    className={inputClassName}
                     value={draft.language}
                     maxLength={128}
                     disabled={locked}
@@ -413,9 +433,12 @@ export function AuthoredField({
                   <p className="text-sm text-muted-foreground">{m.authored_language_hint({}, o)}</p>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="authored-licence">{labels.licence}</FieldLabel>
+                  <FieldLabel htmlFor="authored-licence" className={labelClassName}>
+                    {labels.licence}
+                  </FieldLabel>
                   <Input
                     id="authored-licence"
+                    className={inputClassName}
                     value={draft.licence}
                     maxLength={128}
                     disabled={locked}
@@ -427,9 +450,12 @@ export function AuthoredField({
                 </Field>
               </div>
               <Field>
-                <FieldLabel htmlFor="authored-citation">{labels.citation}</FieldLabel>
+                <FieldLabel htmlFor="authored-citation" className={labelClassName}>
+                  {labels.citation}
+                </FieldLabel>
                 <Input
                   id="authored-citation"
+                  className={inputClassName}
                   type="url"
                   value={draft.citation}
                   disabled={locked}
@@ -445,7 +471,12 @@ export function AuthoredField({
                   disabled={locked}
                   onCheckedChange={(checked) => update({ original: checked === true })}
                 />
-                <FieldLabel htmlFor="authored-original">{labels.original}</FieldLabel>
+                <FieldLabel
+                  htmlFor="authored-original"
+                  className="min-h-11 min-w-0 max-w-full whitespace-normal break-words md:pointer-fine:min-h-0"
+                >
+                  {labels.original}
+                </FieldLabel>
               </Field>
               <p role="status" className="text-sm text-muted-foreground">
                 {proposed
@@ -455,7 +486,11 @@ export function AuthoredField({
                   : m.authored_draft({}, o)}
               </p>
               {!proposed && (
-                <Button type="submit" className="min-h-11" disabled={locked}>
+                <Button
+                  type="submit"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                  disabled={locked}
+                >
                   {m.correction_submit({}, o)}
                 </Button>
               )}
@@ -464,7 +499,7 @@ export function AuthoredField({
           {proposed && id && current && (
             <section className="space-y-4">
               {!reviewing ? (
-                <Button variant="outline" onClick={() => setReviewing(true)}>
+                <Button variant="outline" className={actionClassName} onClick={() => setReviewing(true)}>
                   {m.correction_review({}, o)}
                 </Button>
               ) : (
