@@ -1,10 +1,11 @@
 # Complete public filter source and privacy reduction log
 
-This is the future native producer specification, owned by Semantic and submitted to Search for review before
-runtime implementation. The adjacent TypeScript file exports types only. It does not implement or compose a source,
-compiler, preparation runner, acknowledgement writer, database schema or permission service. Native acceptance is
-intentionally red until actual producers exist. Search review and runtime/default/API/three-scale evidence remain
-necessary; a typed fixture is not main/runtime proof.
+This contract owns the native Semantic Source, retained projection and privacy log, captured-window
+repair verification and registration-home ACK binding. The adjacent TypeScript file defines the shared
+protocol; `public-filter-source.ts`, `public-filter-source-binding.ts` and their native storage implement it.
+Complete maintained population observations, a single response-page root and default serving readiness
+remain unavailable until their sequential implementation. Source delivery and typing do not establish
+native acceptance, physical growth bounds or whole-journey readiness.
 
 The shared authority is [Filtered lists](../../../../docs/filtered-lists.md). This boundary follows complete
 indexed observations, immutable accepted meaning, public disclosure now, same-statement qualifiers and the existing
@@ -13,7 +14,7 @@ leaf verdicts, final replay, home certificates or an identity-basis sweep. Origi
 256 IDs **per native Source call**, the separate 64-envelope relay limit and Search's source-chunk repair stay intact.
 No private Library predicate or fact enters this projection.
 
-## Current native evidence and missing functions
+## Native evidence and authority boundaries
 
 The following are actual code, not proposed ports:
 
@@ -36,10 +37,11 @@ The following are actual code, not proposed ports:
 | `command/command.ts:runCommand/currentCommand/commandTime/mintReadTime/authoritativeTimeValue`                                     | Actual authorization-before-receipt, live transaction T, serializable attempts, event validation and partition fencing; command callbacks run before receipt/outbox, never on replay.                                                       |
 | `command/fence.sql`, `partition/partition.ts:readPartition`, `route/route.ts:partitionOf/routeOf`                                  | Native home is one of 4096 partitions containing 16 routes; partition position advances at successful command fence. Ownership epoch is independent of catalogue identity epoch.                                                            |
 
-The installed `services/kernel/src/semantic/public-filter-source.ts:publicFilterSource(config)` is a
-visibly provisional unavailable adapter. The native implementation and `recordPrivacyReduction(tx, reduction)`
-remain required. The selected projection/privacy readers are `readPublicFilterProjectionPage`,
-`readPrivacyReductionHeads`, `readPrivacyReductionPage`, as declared beside this document.
+`semantic/public-filter-source.ts:publicFilterSource(config)` installs the native
+`readPublicFilterProjectionPage`, home `readPrivacyReductionHeads` and `readPrivacyReductionPage` readers.
+`recordPrivacyReduction(tx, reduction)` appends the original privacy log and keyed pending barriers in the
+actual authorized writer transaction. Complete population `readPrivacyReductionHeads` still returns
+unready; native repair/ACK cannot substitute for that missing maintained serving observation.
 All methods return actual counted work even on changed/unready/unavailable outcomes. Invalid shape or impossible
 route/digest/limit rejects before enumeration. Missing metadata is an explicit unready/unavailable result.
 
@@ -47,9 +49,10 @@ Search owns the canonical `PublicFilterQueriedObservation` in
 `search/public-filter-consumer-contract.ts`; Source imports and re-exports that EXACT type. Its only snapshots
 are actual PIT or immutable prepared build/generation. The closed `PublicFilterConsumerOperations` and test-only
 `test/search/support/public-filter-consumer.ts:createPublicFilterConsumerFixture` / `PublicFilterConsumerFixture`
-are committed dependencies, not successful adapters. The production
-`search/public-filter-consumer.ts:createPublicFilterConsumerOperations` remains MISSING. Source never exports
-that test helper from production or clones its engine, registration, Source or ACK implementation.
+are committed shared contracts. The production
+`search/public-filter-consumer.ts:createPublicFilterConsumerOperations` installs the actual capture and
+repair job against native custody. Source never exports the test helper from production or clones its
+engine, registration, Source or ACK implementation. Missing population authority still prevents serving.
 
 The selected native public Source binding declarations now live in
 `public-filter-source-binding.ts`: `NativePublicSource`, `PublicFilterSourceDefinition`,
@@ -107,14 +110,14 @@ immutable definition/meaning/consumer linkage and final validation; opaque obser
 caller coverage. Limits remain 1..1000 under every lower native cap. Its retained native traversal is implemented;
 missing binding/key-page producers still return typed unavailability, never empty completion.
 
-Actual consumer call sites inspected are `search/service.ts:createSearchService` (its local `admitQuery` calls
-`admitFilter`/`compileFilter` and current hit disclosure) and `search/indexer.ts:createSubjectIndexer`. They do not
-export the complete-plan start/revalidation or consumer-specific privacy ACK ports described here. Actual
+Search's `service.ts:createSearchService`, `public-runtime.ts` and `public-filter-consumer.ts` retain
+ordinary query, custody and repair composition; `indexer.ts:createSubjectIndexer` remains its physical writer.
+Current whole-page population/finalization authority remains the sequential default-serving obligation. Actual
 `semantic/list-outbound-links-by-property.sql` pages `(order_key, target_subject_id, statement_id)` and
 `list-inbound-links-by-property.sql` pages `(order_key, source_subject_id, statement_id)`, with Context-over-Global
 suppression. Those projected relation keysets are useful native evidence but neither a complete current descriptive
 selection stream nor immediate authoritative reduction observation. Their relay positions cannot substitute for
-the missing log/cut. No Search or publication-hook implementation is changed here.
+the original native privacy log or its immutable cut.
 
 ## Complete native facet population extension
 
@@ -128,9 +131,9 @@ the three existing Source readers or establish callable availability.
 `capture: Extract<PrivacyReductionObservationRequest, {kind: 'population'}>`. The canonical capture retains its
 exact queried/start/execution/context union. Resolve the registered complete native catalogue definition and
 its actual Source/incarnation/meaning and immutable PIT/prepared consumer linkage internally. Neither caller
-strings nor diagnostic consumer status establish that linkage. The existing reader-only Source boundary does
-not declare the required registered-definition lookup or native key-page reader; their owning declarations
-must be supplied before implementing that join. Do not invent their proof fields or a duplicate registry.
+strings nor diagnostic consumer status establish that linkage. Registered-definition lookup and native
+key-page inventory use the original Source binding and retained traversal described above. Missing original
+coverage remains unavailable; no caller proof fields or duplicate registry can replace it.
 
 A successful page enumerates anchored subject identities, including excluded and order/privacy-relevant inputs,
 with a retained observation and frontier. It supplies no public values or permission verdicts. Preparation visits
@@ -158,8 +161,8 @@ outbox event and preserves its event-count/sequence boundary. Missing positions,
 changed ownership, missing pins and partial event groups remain unavailable.
 The repair producer routes actual Subject and Account change events through their
 separate native repair phases before returning to that retained successor. These
-bodies do not themselves establish the final all-home Source seal, receiver
-settlement, contiguous ACK or eligibility of an old served observation.
+window readers feed the independently verified terminal chain and native settlement/ACK described below.
+They do not independently establish receiver settlement or eligibility of an old served observation.
 
 ## Complete bounded selected facets
 
