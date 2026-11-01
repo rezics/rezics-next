@@ -1,7 +1,8 @@
 import * as exposure from '../kernel/exposure';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { useReadingAuthority } from './reading-detail-current-origin';
+import type { GatedOperation } from '../kernel/exposure';
 import type { ProgressDetail, ProgressDetailAddress } from './progress-detail-server';
 import { ProgressLogs } from './logs-progress';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -11,7 +12,7 @@ import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { isNotFound, Link } from '@tanstack/react-router';
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Menu } from '@rezics/ui/menu';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -59,8 +60,6 @@ const detailOperations = [
   'progress_session.abandon',
   'published_log.create',
 ] as const;
-const subscribe = () => () => {};
-
 function sameAddress(a: ProgressDetailAddress, b: ProgressDetailAddress) {
   return a.id === b.id && a.changes === b.changes && a.units === b.units && a.logs === b.logs;
 }
@@ -80,39 +79,28 @@ function matchingDetail(
   );
 }
 
-/** An originating operand is stable across token rotation and ordinary authoritative refreshes. */
+export type ProgressCommandGuard = {
+  isCurrent: () => boolean;
+  headers: () => HeadersInit | null;
+};
+
+/** Compatible standalone callers may omit the mounted command capture. */
 export type ProgressDetailOrigin = {
   viewer: string;
   address: ProgressDetailAddress;
   isCurrent: (write?: boolean) => boolean;
   refresh: () => Promise<ProgressSessionPage>;
+  capture?: (operation?: GatedOperation) => ProgressCommandGuard;
+  observation?: object | undefined;
 };
+const detailReads = detailOperations.slice(0, 4);
 
-/** The route's mounted composition observes the actual session, independently of loader retention. */
+/** The actual viewer observation owns the read; loader identity only rejects mismatches. */
 export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDetail; address: ProgressDetailAddress }) {
-  const observed = useSession();
-  const client = useQueryClient();
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
-  const read = exposure.useOperation('progress_session.read');
-  const changes = exposure.useOperation('progress_session.changes');
-  const units = exposure.useOperation('progress_session.units');
-  const logs = exposure.useOperation('published_log.list');
-  const record = exposure.useOperation('progress_session.record');
-  const complete = exposure.useOperation('progress_session.complete');
-  const abandon = exposure.useOperation('progress_session.abandon');
-  const publish = exposure.useOperation('published_log.create');
-  const admission = [read, changes, units, logs, record, complete, abandon, publish];
-  const viewer = hydrated
-    ? observed.state === 'signed-in' && observed.subject
-      ? observed.subject
-      : null
-    : loaded.viewer;
-  const allowed = !hydrated || admission.slice(0, 4).every(Boolean);
+  const { client, browser, store, snapshot } = useReadingAuthority(detailOperations);
+  const viewer = browser ? snapshot.viewer : loaded.viewer;
   const locale = getLocale();
+  const readEpisode = detailReads.map((operation) => snapshot.admissions.get(operation)?.id);
   const signature = JSON.stringify([
     viewer,
     address.id,
@@ -120,87 +108,124 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
     address.units,
     address.logs,
     locale,
-    hydrated ? admission : null,
-    hydrated && Boolean(observed.csrfToken),
+    readEpisode,
   ]);
   const [instance] = useState(() => crypto.randomUUID());
-  type Boundary = {
-    signature: string;
-    active: boolean;
-    hydrated: boolean;
-    epoch: number;
-    seed: ProgressDetail | undefined;
-  };
-  const boundaryRef = useRef<Boundary | null>(null);
-  const [, renderRetired] = useState(0);
-  const seeded = useRef<ProgressDetail | null>(null);
-  if (boundaryRef.current?.signature !== signature || !boundaryRef.current.active) {
-    const previous = boundaryRef.current;
+  type Boundary = { signature: string; identity: object; active: boolean; epoch: number; seed?: ProgressDetail };
+  const ref = useRef<Boundary | null>(null);
+  const enrolled = useRef(false);
+  if (
+    !ref.current ||
+    !ref.current.active ||
+    ref.current.signature !== signature ||
+    ref.current.identity !== snapshot.identity
+  ) {
+    const previous = ref.current;
     if (previous) previous.active = false;
-    const handover = previous && !previous.hydrated && hydrated;
     const seed =
-      allowed && matchingDetail(loaded, viewer, address) && (loaded !== seeded.current || handover)
+      (!browser || (!enrolled.current && snapshot.viewer && snapshot.ready)) && matchingDetail(loaded, viewer, address)
         ? loaded
         : undefined;
-    if (seed) seeded.current = seed;
-    boundaryRef.current = { signature, active: true, hydrated, epoch: (previous?.epoch ?? 0) + 1, seed };
+    if (browser && snapshot.viewer && snapshot.ready) enrolled.current = true;
+    ref.current = {
+      signature,
+      identity: snapshot.identity,
+      active: true,
+      epoch: (previous?.epoch ?? 0) + 1,
+      ...(seed ? { seed } : {}),
+    };
   }
-  const boundary = boundaryRef.current!;
+  const boundary = ref.current;
+  const mounted = useRef(0);
   useLayoutEffect(() => {
-    boundary.active = true;
-    const observe = () => {
-      // Retire even an away/back identity change batched before React's next render.
-      if (hydrated && viewer && allowed && boundary.active && !isCurrent()) {
-        boundary.active = false;
-        renderRetired((value) => value + 1);
-      }
-    };
-    const unsubscribe = client.getQueryCache().subscribe(observe);
-    observe();
+    mounted.current++;
     return () => {
-      unsubscribe();
-      boundary.active = false;
+      mounted.current--;
     };
-  }, [boundary, client]);
+  }, []);
+  const sameBoundary = () => ref.current === boundary && boundary.active && getLocale() === locale;
+  const isCurrent = () => sameBoundary() && (!browser || store.current(snapshot, detailReads));
+  const allowed = !browser || store.current(snapshot, detailReads);
   const queryKey = ['progress-detail', instance, signature, boundary.epoch] as const;
   const query = useQuery({
     ...personalRead,
     queryKey,
     queryFn: () => readDetail(address, isCurrent),
-    enabled: personalRead.enabled && hydrated && Boolean(viewer) && allowed,
+    enabled: personalRead.enabled && browser && !!viewer && allowed,
     initialData: boundary.seed,
     staleTime: Infinity,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  function isCurrent(write = false) {
-    if (boundaryRef.current !== boundary || !boundary.active || !viewer || !allowed || getLocale() !== locale)
-      return false;
-    if (!hydrated) return !write;
-    const now = client.getQueryData(sessionQuery.queryKey);
-    const groups = client.getQueryData(exposureQuery.queryKey);
-    return (
-      now?.state === 'signed-in' &&
-      now.subject === viewer &&
-      Boolean(now.csrfToken) === Boolean(observed.csrfToken) &&
-      (!write || Boolean(now.csrfToken)) &&
-      detailOperations.every((operation, index) => exposure.operationIsAdmitted(operation, groups) === admission[index])
-    );
+  const [, renderRetired] = useState(0);
+  const evidence = useRef<{ boundary: Boundary; query: object } | null>(null);
+  const checkEvidence = () => {
+    const enrolled = evidence.current;
+    if (enrolled?.boundary !== boundary) return true;
+    const query = client.getQueryCache().find({ queryKey, exact: true });
+    const state = client.getQueryState(queryKey);
+    if (query === enrolled.query && state?.status === 'success' && matchingDetail(state.data, viewer, address))
+      return true;
+    boundary.active = false;
+    return false;
+  };
+  if (
+    query.status === 'success' &&
+    matchingDetail(query.data, viewer, address) &&
+    evidence.current?.boundary !== boundary
+  ) {
+    const actual = client.getQueryCache().find({ queryKey, exact: true });
+    if (actual) evidence.current = { boundary, query: actual };
   }
-  // The operand belongs to this admission episode, never to a response object or CSRF string.
+  useLayoutEffect(() => {
+    const observe = () => {
+      if (boundary.active && !checkEvidence()) renderRetired((value) => value + 1);
+    };
+    const release = client.getQueryCache().subscribe(observe);
+    observe();
+    return release;
+  }, [boundary, client, queryKey]);
   const originRef = useRef<{ boundary: Boundary; value: ProgressDetailOrigin } | null>(null);
   if (originRef.current?.boundary !== boundary && viewer) {
+    // These methods retain the owning viewer/address, while captures enroll a particular
+    // successful observation and operation. Churn cannot replace the editor's exact intent.
+    const owns = () => mounted.current > 0 && sameBoundary();
+    const currentReads = () =>
+      owns() &&
+      checkEvidence() &&
+      store.current(store.read(), detailReads) &&
+      store.read().identity === boundary.identity;
     originRef.current = {
       boundary,
       value: {
         viewer,
         address,
-        isCurrent,
+        isCurrent: (write = false) =>
+          currentReads() && (!write || store.current(store.read(), ['published_log.create'])),
+        capture: (operation) => {
+          const enrolled = store.read();
+          const operations = operation ? [...detailReads, operation] : detailReads;
+          const current = () =>
+            owns() &&
+            checkEvidence() &&
+            enrolled.identity === boundary.identity &&
+            store.current(enrolled, operations, true);
+          return { isCurrent: current, headers: () => (current() ? store.headers(enrolled, operations) : null) };
+        },
+        get observation() {
+          return store.read().observation;
+        },
         refresh: async () => {
-          if (!isCurrent()) return { signedIn: false, idempotencyKey: '' };
-          const fresh = await readDetail(address, isCurrent);
-          if (!isCurrent() || !matchingDetail(fresh, viewer, address)) return { signedIn: false, idempotencyKey: '' };
+          const enrolled = store.read();
+          const current = () =>
+            owns() &&
+            checkEvidence() &&
+            enrolled.identity === boundary.identity &&
+            store.current(enrolled, detailReads, true);
+          if (!current()) return { signedIn: false, idempotencyKey: '' };
+          const fresh = await readDetail(address, current);
+          if (!current() || !matchingDetail(fresh, viewer, address)) return { signedIn: false, idempotencyKey: '' };
           return fresh.progress;
         },
       },
@@ -214,7 +239,10 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
     loaded.progress.session.revision > detail.progress.session.revision
   )
     detail = loaded;
-  if (!viewer || !allowed || !detail)
+  // A healthy same-viewer rotation pauses dispatch while its new scoped read is pending.
+  // Keeping this already accepted read mounted preserves the existing publication editor.
+  const healthyPause = browser && snapshot.healthyPause;
+  if (!viewer || (!allowed && !healthyPause) || !detail)
     return (
       <article className="max-w-4xl space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
@@ -255,12 +283,15 @@ type EditorLifetime = {
   pending: boolean;
   history: symbol | null;
   retry?: CapturedIntent;
+  observation?: object | undefined;
+  attempt?: ProgressCommandGuard;
 };
 const editorLifetime = (page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime => ({
   page,
   originating,
   pending: false,
   history: null,
+  observation: originating?.observation,
 });
 
 function stateLabel(state: ProgressState): string {
@@ -312,6 +343,8 @@ function SessionEditor({
   const [editing, setEditing] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [readDenied, setReadDenied] = useState(false);
+  const completeAllowed = exposure.useOperation('progress_session.complete');
+  const abandonAllowed = exposure.useOperation('progress_session.abandon');
   const offered = !unsupported && session.meaning === 'known' && session.recordingState === 'supported';
   const [phone, setPhone] = useState(false);
   const lifetime = useRef<EditorLifetime | null>(editorLifetime(page, originating));
@@ -339,7 +372,29 @@ function SessionEditor({
     return () => query.removeEventListener('change', update);
   }, []);
 
+  const viewGuard = originating?.capture?.();
+  const canEdit = () => !originating || (viewGuard ? viewGuard.isCurrent() : originating.isCurrent());
+  const commandGuards = {
+    record: originating?.capture?.('progress_session.record'),
+    complete: originating?.capture?.('progress_session.complete'),
+    abandon: originating?.capture?.('progress_session.abandon'),
+  };
+  if (
+    lifetime.current &&
+    (lifetime.current.observation !== originating?.observation ||
+      (lifetime.current.attempt && !lifetime.current.attempt.isCurrent()))
+  ) {
+    lifetime.current.observation = originating?.observation;
+    lifetime.current.pending = false;
+    lifetime.current.attempt = undefined;
+    lifetime.current.history = null;
+  }
+  function edit(change: () => void) {
+    if (canEdit()) change();
+  }
+
   function openUpdate() {
+    if (!canEdit() || (commandGuards.record && !commandGuards.record.isCurrent())) return;
     setAmount(session.amount ?? '');
     setLocator(session.locator ?? '');
     setPosition(session.position ?? '');
@@ -376,6 +431,7 @@ function SessionEditor({
     return (
       origin !== null &&
       lifetime.current === origin &&
+      canEdit() &&
       origin.originating === originating &&
       (originating ? originating.isCurrent() : origin.page === page)
     );
@@ -431,7 +487,16 @@ function SessionEditor({
   }
 
   async function dispatch(intent: CapturedIntent, origin: EditorLifetime) {
-    if (!isCurrent(origin) || (originating && !originating.isCurrent(true)) || origin.pending) return;
+    const guard = commandGuards[intent.kind === 'finish' ? intent.data.action : 'record'];
+    if (
+      !isCurrent(origin) ||
+      (guard && !guard.isCurrent()) ||
+      (originating && !guard && !originating.isCurrent(true)) ||
+      origin.pending
+    )
+      return;
+    const headers = guard ? guard.headers() : csrfHeaders();
+    if (!headers) return;
     origin.retry ??= intent;
     const captured = origin.retry;
     if (
@@ -441,14 +506,16 @@ function SessionEditor({
       return;
     setAlert(null);
     origin.pending = true;
+    origin.attempt = guard;
+    const currentAttempt = () => isCurrent(origin) && origin.attempt === guard && (!guard || guard.isCurrent());
     origin.history = null;
     try {
       const result =
         captured.kind === 'finish'
-          ? await finishProgressSession({ data: captured.data, headers: csrfHeaders() })
-          : await recordProgressSession({ data: captured.data, headers: csrfHeaders() });
+          ? await finishProgressSession({ data: captured.data, headers })
+          : await recordProgressSession({ data: captured.data, headers });
       // Native work may commit after retirement; its completion has no replacement UI authority.
-      if (!isCurrent(origin) || (originating && !originating.isCurrent(true))) return;
+      if (!currentAttempt()) return;
       if (!result.ok) {
         explain(result.reason, captured.kind !== 'finish');
         return;
@@ -471,13 +538,13 @@ function SessionEditor({
         !originating || result.session.revision >= current.revision ? { ...current, ...result.session } : current,
       );
       await refreshHistory(origin);
-      if (!isCurrent(origin)) return;
+      if (!currentAttempt()) return;
       setEditing(false);
     } catch {
-      if (!isCurrent(origin)) return;
+      if (!currentAttempt()) return;
       setAlert(m.library_progress_unavailable());
     } finally {
-      if (isCurrent(origin)) origin.pending = false;
+      if (currentAttempt()) origin.pending = false;
     }
   }
 
@@ -596,7 +663,7 @@ function SessionEditor({
                     {...inputBounds}
                     aria-describedby={amountHint}
                     value={amount}
-                    onChange={(event) => setAmount(event.target.value)}
+                    onChange={(event) => edit(() => setAmount(event.target.value))}
                   />
                 </label>
                 <p id={amountHint} className="text-sm text-muted-foreground">
@@ -617,7 +684,7 @@ function SessionEditor({
               <>
                 <label className="block space-y-1">
                   <span className="text-sm font-medium">{m.library_progress_locator()}</span>
-                  <Input value={locator} onChange={(event) => setLocator(event.target.value)} />
+                  <Input value={locator} onChange={(event) => edit(() => setLocator(event.target.value))} />
                 </label>
                 <label className="block space-y-1">
                   <span className="text-sm font-medium">{m.library_progress_position()}</span>
@@ -625,7 +692,7 @@ function SessionEditor({
                     type="number"
                     {...inputBounds}
                     value={position}
-                    onChange={(event) => setPosition(event.target.value)}
+                    onChange={(event) => edit(() => setPosition(event.target.value))}
                   />
                 </label>
               </>
@@ -643,7 +710,7 @@ function SessionEditor({
                 id={addId}
                 aria-describedby={addHint}
                 value={addText}
-                onChange={(event) => setAddText(event.target.value)}
+                onChange={(event) => edit(() => setAddText(event.target.value))}
               />
               <p id={addHint} className="text-sm text-muted-foreground">
                 {m.library_progress_batch_limit()}
@@ -660,7 +727,7 @@ function SessionEditor({
                 id={removeId}
                 aria-describedby={removeHint}
                 value={removeText}
-                onChange={(event) => setRemoveText(event.target.value)}
+                onChange={(event) => edit(() => setRemoveText(event.target.value))}
               />
               <p id={removeHint} className="text-sm text-muted-foreground">
                 {m.library_progress_batch_limit()}
@@ -683,7 +750,7 @@ function SessionEditor({
                 {m.library_progress_confirm_abandon()}
               </Button>
             ) : null}
-            <Button variant="outline" onClick={() => setConfirming(null)}>
+            <Button variant="outline" onClick={() => edit(() => setConfirming(null))}>
               {m.library_progress_cancel()}
             </Button>
           </div>
@@ -790,7 +857,7 @@ function SessionEditor({
       {session.state === 'active' ? (
         <div className="flex items-center gap-2">
           {offered ? <Button onClick={openUpdate}>{m.library_progress_update()}</Button> : null}
-          <Exposure operation="progress_session.complete">
+          {completeAllowed || abandonAllowed ? (
             <Menu
               title={m.library_collection_actions()}
               trigger={
@@ -799,11 +866,31 @@ function SessionEditor({
                 </Button>
               }
               entries={[
-                { type: 'item', label: m.library_progress_complete(), onSelect: () => setConfirming('complete') },
-                { type: 'item', label: m.library_progress_abandon(), onSelect: () => setConfirming('abandon') },
+                ...(completeAllowed
+                  ? [
+                      {
+                        type: 'item' as const,
+                        label: m.library_progress_complete(),
+                        onSelect: () => {
+                          if (commandGuards.complete?.isCurrent() ?? canEdit()) setConfirming('complete');
+                        },
+                      },
+                    ]
+                  : []),
+                ...(abandonAllowed
+                  ? [
+                      {
+                        type: 'item' as const,
+                        label: m.library_progress_abandon(),
+                        onSelect: () => {
+                          if (commandGuards.abandon?.isCurrent() ?? canEdit()) setConfirming('abandon');
+                        },
+                      },
+                    ]
+                  : []),
               ]}
             />
-          </Exposure>
+          ) : null}
         </div>
       ) : null}
       {session.state === 'active' && confirming && !editing ? (
@@ -811,7 +898,7 @@ function SessionEditor({
           <Button variant="outline" onClick={() => void onFinish(confirming)}>
             {confirming === 'complete' ? m.library_progress_confirm_complete() : m.library_progress_confirm_abandon()}
           </Button>
-          <Button variant="outline" onClick={() => setConfirming(null)}>
+          <Button variant="outline" onClick={() => edit(() => setConfirming(null))}>
             {m.library_progress_cancel()}
           </Button>
         </div>
@@ -826,7 +913,11 @@ function SessionEditor({
       </Exposure>
       {editing ? (
         phone ? (
-          <BottomSheet open={editing} onOpenChange={setEditing} title={m.library_progress_update()}>
+          <BottomSheet
+            open={editing}
+            onOpenChange={(value) => edit(() => setEditing(value))}
+            title={m.library_progress_update()}
+          >
             <input type="hidden" name="idempotencyKey" value={key} />
             {alert ? (
               <p role="alert" className="rounded-lg border border-border bg-card p-3">
@@ -836,7 +927,7 @@ function SessionEditor({
             {offered ? recordForm : null}
           </BottomSheet>
         ) : (
-          <Dialog open={editing} onOpenChange={setEditing}>
+          <Dialog open={editing} onOpenChange={(value) => edit(() => setEditing(value))}>
             <DialogContent className="max-h-[85dvh] overflow-y-auto">
               <DialogTitle>{m.library_progress_update()}</DialogTitle>
               <input type="hidden" name="idempotencyKey" value={key} />

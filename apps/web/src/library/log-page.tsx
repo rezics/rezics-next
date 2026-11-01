@@ -32,8 +32,18 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
 /** Additive operands keep standalone presentation compatible; the route supplies actual authority. */
 export type PublishedLogOrigin = {
   lifetime: object;
-  remove: { lifetime: object; isCurrent: () => boolean; headers: () => HeadersInit | null };
-  restore: { lifetime: object; isCurrent: () => boolean; headers: () => HeadersInit | null };
+  remove: {
+    lifetime: object;
+    observation?: object | undefined;
+    isCurrent: () => boolean;
+    headers: () => HeadersInit | null;
+  };
+  restore: {
+    lifetime: object;
+    observation?: object | undefined;
+    isCurrent: () => boolean;
+    headers: () => HeadersInit | null;
+  };
 };
 
 type PublicationPage = {
@@ -51,6 +61,7 @@ type PublicationPage = {
   idempotencyKey: string;
   origin: PublishedLogOrigin | undefined;
   restoreGeneration: number;
+  undoKey: string | undefined;
 };
 
 function publicationPage(
@@ -74,6 +85,7 @@ function publicationPage(
     idempotencyKey: crypto.randomUUID(),
     origin,
     restoreGeneration: 0,
+    undoKey: undefined,
   };
 }
 
@@ -113,35 +125,40 @@ export function PublishedLogPageView({
   if (
     page.id !== log.id ||
     page.isOwner !== isOwner ||
-    page.loadedRevision !== loadedRevision ||
+    (!originating && page.loadedRevision !== loadedRevision) ||
     page.origin?.lifetime !== originating?.lifetime
   ) {
     committed.current = null;
     setPage(publicationPage(log.id, isOwner, loadedRevision, originating));
   } else if (
     page.origin?.remove.lifetime !== originating?.remove.lifetime ||
-    page.origin?.restore.lifetime !== originating?.restore.lifetime
+    page.origin?.restore.lifetime !== originating?.restore.lifetime ||
+    page.origin?.remove.observation !== originating?.remove.observation ||
+    page.origin?.restore.observation !== originating?.restore.observation ||
+    page.loadedRevision !== loadedRevision
   ) {
     const removeChanged = page.origin?.remove.lifetime !== originating?.remove.lifetime;
     const restoreChanged = page.origin?.restore.lifetime !== originating?.restore.lifetime;
+    const removeObservationChanged = page.origin?.remove.observation !== originating?.remove.observation;
+    const restoreObservationChanged = page.origin?.restore.observation !== originating?.restore.observation;
     if (
-      (removeChanged && busy.current?.operation === 'remove') ||
-      (restoreChanged && busy.current?.operation === 'restore')
+      ((removeChanged || removeObservationChanged) && busy.current?.operation === 'remove') ||
+      ((restoreChanged || restoreObservationChanged) && busy.current?.operation === 'restore')
     )
       busy.current = null;
     setPage({
       ...page,
       origin: originating,
-      ...(removeChanged
+      loadedRevision,
+      ...(!page.deleteStarted && !page.deleted ? { revision: loadedRevision } : {}),
+      ...(removeChanged || removeObservationChanged
         ? {
-            confirming: false,
+            ...(removeChanged ? { confirming: false } : {}),
             pending: false,
             error: null,
-            idempotencyKey: crypto.randomUUID(),
-            deleteStarted: page.deleted ? page.deleteStarted : null,
           }
         : {}),
-      ...(restoreChanged ? { undo: undefined, restoreGeneration: page.restoreGeneration + 1 } : {}),
+      ...(restoreChanged || restoreObservationChanged ? { restoreGeneration: page.restoreGeneration + 1 } : {}),
     });
   }
 
@@ -174,11 +191,13 @@ export function PublishedLogPageView({
         update({ error: result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed() });
         return;
       }
+      if (result.id !== page.id) return;
       update({
         idempotencyKey: crypto.randomUUID(),
         confirming: false,
         undo: !originating || originating.restore.isCurrent() ? result.undo : undefined,
         deleted: true,
+        undoKey: crypto.randomUUID(),
       });
     } catch {
       if (isCurrent('remove')) update({ error: m.library_logs_write_failed() });
@@ -206,10 +225,10 @@ export function PublishedLogPageView({
     busy.current = { lifetime, operation: 'restore' };
     try {
       const result = await restorePublishedLog({
-        data: { id: page.id, ...undo, idempotencyKey },
+        data: { id: page.id, ...undo, idempotencyKey: page.undoKey ?? idempotencyKey },
         headers,
       });
-      if (!isCurrent('restore') || !result.ok) return false;
+      if (!isCurrent('restore') || !result.ok || result.id !== page.id) return false;
       update({ revision: result.revision, deleted: false, undo: undefined, deleteStarted: null });
       return true;
     } finally {

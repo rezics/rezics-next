@@ -1,22 +1,21 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { operationIsAdmitted, useOperation } from '../kernel/exposure';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { getLocale } from '../paraglide/runtime.js';
 import { PublishedLogPageView, type PublishedLogOrigin } from './log-page';
 import { readPublishedLogCurrent } from './logs-server';
 import type { PublishedLogCurrentRead, PublishedLogOwner } from './logs-read';
+import { useReadingAuthority, type ReadingAdmission } from './reading-detail-current-origin';
 
-const subscribe = () => () => {};
-type Admission = { id: string; active: boolean; allowed: boolean; owner: PublishedLogOwner | null };
-const admission = (allowed: boolean): Admission => ({ id: crypto.randomUUID(), active: true, allowed, owner: null });
+const operations = ['published_log.delete', 'published_log.create'] as const;
+type Evidence = { lease: ReadingAdmission; owner: PublishedLogOwner };
 type OwnerRead = { value: PublishedLogCurrentRead; removeId: string | null; restoreId: string | null };
 type Boundary = {
   signature: string;
+  identity: object;
   active: boolean;
-  remove: Admission;
-  restore: Admission;
-  readId: string;
+  remove?: Evidence;
+  restore?: Evidence;
   seed?: OwnerRead;
 };
 
@@ -34,169 +33,166 @@ function matches(value: PublishedLogCurrentRead | undefined, viewer: string | nu
   );
 }
 
-/** Public snapshots survive private retirement. Each write admission has its own non-revivable episode. */
+/** Explicitly public snapshots are independent of the two owner operation episodes. */
 export function CurrentPublishedLog({ loaded, id }: { loaded: PublishedLogCurrentRead; id: string }) {
-  const observed = useSession();
-  const client = useQueryClient();
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
-  const removeAllowed = useOperation('published_log.delete');
-  const restoreAllowed = useOperation('published_log.create');
-  const viewer = hydrated
-    ? observed.state === 'signed-in'
-      ? (observed.subject ?? null)
-      : null
-    : (loaded.owner?.sessionSubject ?? null);
-  const signature = JSON.stringify([
-    viewer,
-    hydrated ? observed.state : viewer ? 'signed-in' : 'unknown',
-    id,
-    loaded.log.id === id ? loaded.revision : null,
-  ]);
-  const boundaryRef = useRef<Boundary | null>(null);
-  const [, renderRetired] = useState(0);
-  const first = boundaryRef.current === null;
-  if (boundaryRef.current?.signature !== signature || !boundaryRef.current.active) {
-    if (boundaryRef.current) boundaryRef.current.active = false;
-    const remove = admission(!hydrated || removeAllowed);
-    const restore = admission(!hydrated || restoreAllowed);
-    boundaryRef.current = {
+  const { client, browser, store, snapshot } = useReadingAuthority(operations);
+  const viewer = browser ? snapshot.viewer : (loaded.owner?.sessionSubject ?? null);
+  const locale = getLocale();
+  const signature = JSON.stringify([viewer, id, locale]);
+  const ref = useRef<Boundary | null>(null);
+  const seeded = useRef(false);
+  const mounted = useRef(0);
+  if (
+    !ref.current ||
+    !ref.current.active ||
+    ref.current.signature !== signature ||
+    ref.current.identity !== snapshot.identity
+  ) {
+    if (ref.current) ref.current.active = false;
+    const seed = (!browser || (!seeded.current && snapshot.ready)) && matches(loaded, viewer, id);
+    if (browser && snapshot.viewer && snapshot.ready) seeded.current = true;
+    ref.current = {
       signature,
+      identity: snapshot.identity,
       active: true,
-      remove,
-      restore,
-      readId: crypto.randomUUID(),
-      ...(first && matches(loaded, viewer, id)
-        ? { seed: { value: loaded, removeId: remove.id, restoreId: restore.id } }
+      ...(seed
+        ? {
+            seed: {
+              value: loaded,
+              removeId: snapshot.admissions.get(operations[0])?.id ?? null,
+              restoreId: snapshot.admissions.get(operations[1])?.id ?? null,
+            },
+          }
         : {}),
     };
   }
-  const boundary = boundaryRef.current!;
-  for (const [name, allowed] of [
-    ['remove', !hydrated || removeAllowed],
-    ['restore', !hydrated || restoreAllowed],
-  ] as const) {
-    const previous = boundary[name];
-    if (!previous.active || previous.allowed !== allowed) {
-      previous.active = false;
-      boundary[name] = admission(allowed);
-      // Losing an admission must not refresh/retire the other operation's exact intent.
-      // A newly admitted episode needs fresh evidence, rather than the old query's payload.
-      if (allowed) boundary.readId = crypto.randomUUID();
-      // A previously observed admission cannot be reseeded from the loader, including ABA.
-      delete boundary.seed;
-    }
-  }
-  const remove = boundary.remove;
-  const restore = boundary.restore;
-  function currentViewer() {
-    if (boundaryRef.current !== boundary || !boundary.active || !viewer) return false;
-    if (!hydrated) return true;
-    const now = client.getQueryData(sessionQuery.queryKey);
-    return now?.state === 'signed-in' && now.subject === viewer;
-  }
-  function currentAdmission(value: Admission, operation: 'published_log.delete' | 'published_log.create') {
-    return (
-      currentViewer() &&
-      value.active &&
-      value.allowed &&
-      (!hydrated || operationIsAdmitted(operation, client.getQueryData(exposureQuery.queryKey)))
-    );
+  const boundary = ref.current;
+  if (browser && snapshot.viewer && snapshot.ready && !seeded.current) {
+    seeded.current = true;
+    if (matches(loaded, viewer, id))
+      boundary.seed = {
+        value: loaded,
+        removeId: snapshot.admissions.get(operations[0])?.id ?? null,
+        restoreId: snapshot.admissions.get(operations[1])?.id ?? null,
+      };
   }
   useLayoutEffect(() => {
-    boundary.active = true;
+    mounted.current++;
     return () => {
-      boundary.active = false;
+      mounted.current--;
     };
-  }, [boundary]);
-  useLayoutEffect(() => {
-    const observe = () => {
-      if (!hydrated || !boundary.active || !viewer) return;
-      let retired = false;
-      if (!currentViewer()) {
-        boundary.active = false;
-        retired = true;
-      } else {
-        const groups = client.getQueryData(exposureQuery.queryKey);
-        for (const [value, operation] of [
-          [remove, 'published_log.delete'],
-          [restore, 'published_log.create'],
-        ] as const) {
-          if (value.active && value.allowed !== operationIsAdmitted(operation, groups)) {
-            value.active = false;
-            retired = true;
-          }
-        }
-      }
-      if (retired) renderRetired((n) => n + 1);
-    };
-    const unsubscribe = client.getQueryCache().subscribe(observe);
-    observe();
-    return () => {
-      unsubscribe();
-    };
-  }, [boundary, remove, restore, client, hydrated]);
+  }, []);
+  const owns = () =>
+    ref.current === boundary &&
+    boundary.active &&
+    getLocale() === locale &&
+    store.read().identity === boundary.identity;
+  const remove = snapshot.admissions.get(operations[0]);
+  const restore = snapshot.admissions.get(operations[1]);
+  const currentAdmission = (lease: ReadingAdmission | undefined, index: 0 | 1) =>
+    !!lease &&
+    owns() &&
+    store.current(snapshot, [operations[index]]) &&
+    store.read().admissions.get(operations[index]) === lease;
+  const queryKey = ['published-log-owner', signature, remove?.id, restore?.id] as const;
+  const needsRemove = currentAdmission(remove, 0) && boundary.remove?.lease !== remove;
+  const needsRestore = currentAdmission(restore, 1) && boundary.restore?.lease !== restore;
   const query = useQuery({
     ...personalRead,
-    queryKey: ['published-log-owner', signature, boundary.readId],
-    enabled: personalRead.enabled && hydrated && !!viewer && (remove.allowed || restore.allowed),
-    initialData: boundary.seed,
+    queryKey,
+    enabled: personalRead.enabled && browser && !!viewer && (needsRemove || needsRestore),
+    initialData:
+      boundary.seed?.removeId === remove?.id && boundary.seed?.restoreId === restore?.id ? boundary.seed : undefined,
     staleTime: Infinity,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    queryFn: async () => {
-      if (!currentViewer()) throw new Error('Published log read retired');
-      const needsRemove = !remove.owner && currentAdmission(remove, 'published_log.delete');
-      const needsRestore = !restore.owner && currentAdmission(restore, 'published_log.create');
+    queryFn: async (): Promise<OwnerRead> => {
+      if (!owns() || !snapshot.ready || (!needsRemove && !needsRestore)) throw new Error('Published log read retired');
       const value = await readPublishedLogCurrent({ data: { id } });
-      if (!currentViewer() || value.requestedId !== id || value.log.id !== id)
+      if (!owns() || !store.current(snapshot, []) || value.requestedId !== id || value.log.id !== id)
         throw new Error('Published log read retired');
       return {
         value,
-        removeId: needsRemove && currentAdmission(remove, 'published_log.delete') ? remove.id : null,
-        restoreId: needsRestore && currentAdmission(restore, 'published_log.create') ? restore.id : null,
+        removeId: needsRemove && currentAdmission(remove, 0) ? remove!.id : null,
+        restoreId: needsRestore && currentAdmission(restore, 1) ? restore!.id : null,
       };
     },
   });
-  if (query.data && !query.isError) {
-    const owner = matches(query.data.value, viewer, id) ? query.data.value.owner : null;
-    if (query.data.removeId === remove.id && currentAdmission(remove, 'published_log.delete')) remove.owner = owner;
-    if (query.data.restoreId === restore.id && currentAdmission(restore, 'published_log.create')) restore.owner = owner;
+  // Each operand retains the actual owner's complete point-read evidence. A read needed
+  // by the other admission cannot overwrite it, including with a different revision.
+  if (query.data && !query.isError && matches(query.data.value, viewer, id)) {
+    const owner = query.data.value.owner!;
+    if (remove && query.data.removeId === remove.id && currentAdmission(remove, 0) && boundary.remove?.lease !== remove)
+      boundary.remove = { lease: remove, owner };
+    if (
+      restore &&
+      query.data.restoreId === restore.id &&
+      currentAdmission(restore, 1) &&
+      boundary.restore?.lease !== restore
+    )
+      boundary.restore = { lease: restore, owner };
   }
-  function operand(value: Admission, operation: 'published_log.delete' | 'published_log.create') {
-    const owner = value.owner;
+  const [, renderRetired] = useState(0);
+  const evidence = useRef<{ key: typeof queryKey; query: object } | null>(null);
+  if (query.status === 'success' && matches(query.data?.value, viewer, id)) {
+    const actual = client.getQueryCache().find({ queryKey, exact: true });
+    if (actual && evidence.current?.query !== actual) evidence.current = { key: queryKey, query: actual };
+  }
+  useLayoutEffect(() => {
+    const observe = () => {
+      const accepted = evidence.current;
+      if (!boundary.active || !accepted) return;
+      const admissions = store.read().admissions;
+      if (
+        accepted.key[2] !== admissions.get(operations[0])?.id ||
+        accepted.key[3] !== admissions.get(operations[1])?.id
+      )
+        return;
+      const actual = client.getQueryCache().find({ queryKey: accepted.key, exact: true });
+      const state = client.getQueryState<OwnerRead>(accepted.key);
+      // A key retired for an independent admission is not a revocation of the other's read.
+      if (actual === accepted.query && state?.status === 'success' && matches(state.data?.value, viewer, id)) return;
+      boundary.active = false;
+      renderRetired((value) => value + 1);
+    };
+    const release = client.getQueryCache().subscribe(observe);
+    observe();
+    return release;
+  }, [boundary, client, remove, restore, viewer, id]);
+  function operand(value: ReadingAdmission | undefined, index: 0 | 1) {
+    const evidence = index === 0 ? boundary.remove : boundary.restore;
+    const owner = evidence?.owner;
     const isCurrent = () =>
+      mounted.current > 0 &&
       !!owner &&
-      value.owner?.sessionSubject === owner.sessionSubject &&
-      value.owner.accountId === owner.accountId &&
-      value.owner.id === owner.id &&
-      value.owner.revision === owner.revision &&
-      currentAdmission(value, operation);
+      evidence?.lease === value &&
+      (index === 0 ? boundary.remove : boundary.restore) === evidence &&
+      currentAdmission(value, index) &&
+      store.current(snapshot, [operations[index]], true);
     return {
-      lifetime: value,
+      lifetime: value ?? boundary,
+      observation: snapshot.observation,
       isCurrent,
-      headers: () => {
-        if (!hydrated || !isCurrent()) return null;
-        const token = client.getQueryData(sessionQuery.queryKey)?.csrfToken;
-        return token ? { 'x-csrf-token': token } : null;
-      },
+      headers: () => (isCurrent() ? store.headers(snapshot, [operations[index]]) : null),
     };
   }
   const originating: PublishedLogOrigin = {
     lifetime: boundary,
-    remove: operand(remove, 'published_log.delete'),
-    restore: operand(restore, 'published_log.create'),
+    remove: operand(remove, 0),
+    restore: operand(restore, 1),
   };
-  const owner =
-    (currentAdmission(remove, 'published_log.delete') && remove.owner) ||
-    (currentAdmission(restore, 'published_log.create') && restore.owner) ||
-    null;
-  const log = query.data?.value.log.id === id ? query.data.value.log : loaded.log;
+  // Retain the owner editor's custody during an authority pause. The operands alone
+  // admit actions; this flag never grants either operation.
+  const owner = boundary.remove?.owner ?? boundary.restore?.owner;
+  const publicSnapshot = useRef<{ id: string; log: PublishedLogCurrentRead['log'] }>({ id, log: loaded.log });
+  if (publicSnapshot.current.id !== id) publicSnapshot.current = { id, log: loaded.log };
+  if (query.data?.value.requestedId === id && query.data.value.log.id === id)
+    publicSnapshot.current = { id, log: query.data.value.log };
+  const log =
+    publicSnapshot.current.log.id === id ? publicSnapshot.current.log : loaded.log.id === id ? loaded.log : null;
+  if (!log) return null;
   return (
     <PublishedLogPageView
       log={log}
