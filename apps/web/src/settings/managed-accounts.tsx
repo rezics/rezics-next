@@ -5,7 +5,7 @@ import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { initials } from '../threads/initials';
@@ -34,21 +34,22 @@ function IdentityRow({
 }) {
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
-    <ListRow className="flex min-h-16 min-w-0 flex-wrap items-center gap-3 py-3">
-      <ListRowLink href={managedAccountHref(settingsHref, account.id)}>{name}</ListRowLink>
-      <Avatar aria-hidden="true">
-        <AvatarFallback>{initials(account.displayName || account.handle || '')}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1 basis-32">
-        <p aria-hidden="true" className="break-words font-medium text-primary">
-          {name}
-        </p>
-        {account.handle && account.displayName ? (
+    <ContentItem
+      title={name}
+      headingLevel={4}
+      href={managedAccountHref(settingsHref, account.id)}
+      visual={
+        <Avatar aria-hidden="true">
+          <AvatarFallback>{initials(account.displayName || account.handle || '')}</AvatarFallback>
+        </Avatar>
+      }
+      metadata={
+        account.handle && account.displayName ? (
           <p className="break-words text-sm text-muted-foreground">@{account.handle}</p>
-        ) : null}
-      </div>
-      {children}
-    </ListRow>
+        ) : null
+      }
+      state={children}
+    />
   );
 }
 
@@ -223,12 +224,16 @@ export function ManagedAccountsView({
                         </Badge>
                       </IdentityRow>
                     ) : (
-                      <ListRow key={item.reservationId} className="space-y-2 py-3">
-                        <p className="text-sm text-muted-foreground">{m.settings_managed_identity_unavailable()}</p>
-                        <Badge variant="secondary">
-                          {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
-                        </Badge>
-                      </ListRow>
+                      <ContentItem
+                        key={item.reservationId}
+                        title={m.settings_managed_identity_unavailable()}
+                        headingLevel={4}
+                        state={
+                          <Badge variant="secondary">
+                            {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
+                          </Badge>
+                        }
+                      />
                     ),
                   )}
                 </ul>

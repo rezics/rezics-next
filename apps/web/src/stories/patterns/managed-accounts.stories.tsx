@@ -129,6 +129,29 @@ export const IndependentCursors: Story = {
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
     const responsibilities = within(canvas.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
+    await expect(canvas.getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual([
+      'Avery Reader',
+      'Atlas Editors',
+      'Independent Reading Group',
+      'Atlas Indexer',
+      m.settings_managed_identity_unavailable(),
+    ]);
+    for (const [name, id] of [
+      ['Avery Reader', managedViewer],
+      ['Atlas Editors', '019a0000-0000-7000-8000-000000000002'],
+      ['Independent Reading Group', '019a0000-0000-7000-8000-000000000003'],
+      ['Atlas Indexer', '019a0000-0000-7000-8000-000000000005'],
+    ] as const) {
+      const heading = canvas.getByRole('heading', { name, level: 4 });
+      await expect(heading).toBeVisible();
+      const row = within(heading.closest('li')!);
+      await expect(row.getAllByRole('heading')).toHaveLength(1);
+      await expect(row.getAllByRole('link')).toHaveLength(1);
+      await expect(row.getByRole('link', { name, exact: true })).toHaveAttribute(
+        'href',
+        `/${getLocale()}/settings?panel=compact&managedAccount=${id}#account`,
+      );
+    }
     await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
     await organizations.findByRole('alert');
     await expect(organizations.getByRole('link', { name: 'Atlas Editors' })).toBeVisible();
@@ -156,6 +179,17 @@ export const ReconcilingAndUnavailableIdentity: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.settings_managed_identity_unavailable());
+    const unavailableHeading = canvas.getByRole('heading', {
+      name: m.settings_managed_identity_unavailable(),
+      level: 4,
+    });
+    await expect(unavailableHeading).toBeVisible();
+    const unavailableElement = unavailableHeading.closest('li')!;
+    const unavailable = within(unavailableElement);
+    await expect(unavailable.getAllByRole('heading')).toHaveLength(1);
+    await expect(unavailable.queryByRole('link')).toBeNull();
+    await expect(unavailableElement.querySelector('[data-slot="avatar"]')).toBeNull();
+    await expect(unavailable.getByText(m.managed_reconciling())).toBeVisible();
     await expect(canvas.queryByText(m.managed_current())).toBeNull();
     await expect(canvas.getAllByText(m.managed_reconciling())).toHaveLength(2);
     const href = canvas.getByRole('link', { name: 'Atlas Indexer' }).getAttribute('href')!;
