@@ -67,12 +67,14 @@ index expressions/predicates and notes the rejection of subqueries. Git source b
 `access/nbtree/nbtsearch.c:_bt_readfirstpage` were also inspected. BitmapAnd constructs child
 bitmaps and intersects their entries; a top-level limit does not make that work constant.
 
-Repository chains additionally inspected: `work/{README,client,queues,retention,registry,
-sdk-retirement-fence}.ts` (README is Markdown), worker pool composition, Commerce's work and
-Session key contract, `history/{durable,agent-identity-retirement,agent-identity-inventory-work}.ts`,
-and Semantic's `identity-{epoch-contract,source-consumer-maintenance,source-maintenance-config}.ts`
-plus `library/collection-source.ts` for the original aggregate axes. Source links below are
-relative to the repository boundary, not claims that referenced dependency work is installed.
+Repository chains additionally inspected under `services/kernel/src/`:
+`work/README.md`, `work/{client,queues,retention,registry,sdk-retirement-fence}.ts`, `worker.ts`,
+`commerce/{work,work-contract}.ts`,
+`history/{durable,agent-identity-retirement,agent-identity-inventory-work}.ts`,
+`semantic/identity-{epoch-contract,source-consumer-maintenance,source-maintenance-config}.ts`
+and `library/collection-source.ts`. These establish pool composition, Session keys and the
+original aggregate axes. Short module paths below use this prefix; they do not establish
+that any referenced dependency delivery is installed.
 
 ## Exact native problem
 
@@ -156,7 +158,10 @@ are constant only if each component already solves this problem.
 
 All pseudocode here describes evaluated data structures, not a second implementation.
 `Q` counts examined records/cells, `P` keyed/range probes, `S` SQL statements including
-nested maintenance, `B` bytes processed/returned, and `I` visible index work. Ordinary
+nested maintenance, and `I` visible index work. Distinguish `B_out`, content returned to the
+calling owner, from `B_int`, scalar content processed inside native execution. A server-side
+loop can have zero B_out and growing B_int; SDK dispatch `bytes` must not be inflated by
+pretending the latter crossed the client boundary. Ordinary
 B-tree descent for a fixed number of entries is `O(log H)` engine work; explicit SQL tree
 nodes also count as examined rows. A function containing a loop pays for its whole loop.
 
@@ -177,9 +182,9 @@ on status mutation, in the source transaction:
 ```
 
 With correct coverage, read costs are `Q=O(1+w), P=O(1+w), S=O(1)` at fixed w,
-returned `B=O(wL)`, `I=O((1+w)log H)`. A gate toggle costs
+returned `B_out=O(wL)`, `I=O((1+w)log H)`. A gate toggle costs
 `Q=Theta(1+D(K)), P=Theta(1+D(K))`, `S=Theta(1+D(K))` for this loop,
-`B=Theta(D(K))` internal fixed-width membership content and
+`B_int=Theta(D(K))` internal fixed-width membership content and
 `I=Theta((1+D(K))log H)` index updates. A set-based INSERT/DELETE reduces S, not Q/B/I.
 On one K with V versions, one original completion or claim incurs V derived writes.
 Application factorization removes hypothetical worker replication but does not remove V.
@@ -280,8 +285,8 @@ at most T keys and Ready indexes for larger domains. Keep reverse lists of heavy
 domains. A light query checks at most T gates; a heavy query reads its Ready index.
 On a gate toggle, update each incident heavy Ready index. With M memberships there are at
 most M/T heavy domains, so worst-case toggle work is
-`Q,P,B=O(1+min(D(K),M/T))`, `I=O((1+min(D(K),M/T))log H)`;
-a light miss is `Q,P,B=Theta(T)` with corresponding indexed work. Statements can be batched,
+`Q,P,B_int=O(1+min(D(K),M/T))`, `I=O((1+min(D(K),M/T))log H)`;
+a light miss is `Q,P,B_int=Theta(T)` with corresponding indexed work. Statements can be batched,
 but the scalar work cannot. T near sqrt(M) offers an honest tradeoff, not the frozen bounds.
 T constant makes arbitrary V domains heavy. T growing violates constant empty-query rows.
 Dynamic promotion/demotion also requires rebuilding a posting/Ready set; amortized rebuilds
@@ -373,23 +378,26 @@ and `Ready PK(bucket_id,ticket,key)`, plus reverse M `(key,bucket_id)` and G's k
 On an existing K, the added trigger executes exactly this body on a veto boundary:
 
 ```text
-UPDATE G SET pending_count=pending_count+delta WHERE key=K RETURNING pending_count; // 1 row/probe
-SELECT bucket_id,ticket FROM M WHERE key=K ORDER BY bucket_id;                     // V rows, 1 range
-for each result: INSERT Ready VALUES(...) or DELETE Ready WHERE full_primary_key; // V rows/probes
+UPDATE G SET pending_count=pending_count+delta WHERE key=K RETURNING pending_count INTO local_count;
+FOR local_row IN SELECT bucket_id,ticket FROM M WHERE key=K ORDER BY bucket_id:
+    INSERT Ready VALUES(...) or DELETE Ready WHERE full_primary_key;
 ```
 
-Even before optional safety checks/head repairs, its additional vector is at least
-`(rows=1+2V, points=2+V, statements=2+V, bytes=8+16V, engineRequests=0)` when counting
-the fixed-width internal returned scalar content. Caller-returned bytes can remain zero;
-server-side processed/returned membership bytes still grow. Text serialization, tuple
-overhead and extra guards only increase a safe reservation. This is a literal **lower
-bound**, sufficient to refute every finite replacement dispatch constant; it is deliberately
-not passed off as a complete safe upper bound for an unbuilt trigger. Visible index work
-includes V Ready modifications and one reverse range scan, with O((1+V)log H) B-tree work.
-Packing that body into one SQL statement only lowers its statement component.
+The G update examines one row/probe; M examines V rows in one range probe; Ready modifies
+V rows through V probes. Even before safety checks/head repairs, the added dispatch vector
+is at least `(rows=1+2V, points=2+V, statements=2+V, bytes=0, engineRequests=0)`.
+This body is wholly server-side: its B_out is zero. It additionally processes at least
+`8+16V` bytes of logical bigint content internally, plus key, tuple and index content.
+Moving the loop into owner JavaScript would instead return V memberships and require a
+growing wire-byte reservation derived from the actual serialization/column-width bounds.
+This is a literal **lower bound**, sufficient to refute every finite replacement row/probe
+dispatch constant; it is not a complete safe upper bound for an unbuilt trigger. Visible
+index work includes V Ready modifications and one reverse range scan, with
+O((1+V)log H) B-tree work. Set-based SQL can lower S, not the growing rows/internal bytes.
 
 Thus for this evaluated loop the delete-attempt lower bound becomes
-`(145+2V,12+V,18+V,8328+16V,0)` and cannot fit a constant dispatch replacement. For shared
+`(145+2V,12+V,18+V,8320,0)` plus the growing internal/index work, and cannot fit a constant
+dispatch replacement. For shared
 postings, the corresponding unbounded variable is the number X of inspected nonmatching
 keys; for chunk bitsets it is N/W; for explicit joint trees it is D(K)log N. All must be
 charged, including failed/rolled-back dispatches. O(log H) ordinary index maintenance on
