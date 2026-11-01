@@ -92,12 +92,7 @@ export function RealmClaimReviewPanel({ realmId, initial }: { realmId: string; i
         return lifetime.owns(ticket) ? result : { kind: 'signed-out' };
       },
       approve: async (data) => {
-        if (
-          !lifetime.current() ||
-          !originalCsrfToken ||
-          data.realmId !== realmId
-        )
-          return { kind: 'signed-out' };
+        if (!lifetime.current() || !originalCsrfToken || data.realmId !== realmId) return { kind: 'signed-out' };
         const ticket = lifetime.ticket();
         const result = await submitRealmClaimApproval({
           data,

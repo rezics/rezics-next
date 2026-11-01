@@ -345,12 +345,17 @@ test('caller retirement withholds the original status and suppresses its late po
   let current = true;
   let reads = 0;
   const lifetime = createRealmClaimCallerLifetime(() => current);
-  const control = createRealmClaimStatus({ realmId, requestId }, own, {
-    read: () => {
-      reads++;
-      return late.promise;
+  const control = createRealmClaimStatus(
+    { realmId, requestId },
+    own,
+    {
+      read: () => {
+        reads++;
+        return late.promise;
+      },
     },
-  }, lifetime);
+    lifetime,
+  );
   const refreshing = control.refresh();
   expect(control.getSnapshot().read.kind).toBe('unavailable');
   expect(reads).toBe(1);

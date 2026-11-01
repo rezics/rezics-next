@@ -99,10 +99,7 @@ export function createRealmClaimStatus(
       if (state.busy || !callerCurrent()) return;
       const version = ++generation;
       const callerTicket = lifetime?.ticket() ?? 0;
-      const owns = () =>
-        !disconnected &&
-        generation === version &&
-        (!lifetime || lifetime.owns(callerTicket));
+      const owns = () => !disconnected && generation === version && (!lifetime || lifetime.owns(callerTicket));
       // Never leave an old positive receipt visible while current disclosure is being checked.
       update({ kind: 'unavailable' }, true);
       let read: RealmClaimStatusRead;

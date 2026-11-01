@@ -3,7 +3,12 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
-import { RealmClaimReviewExample, reviewExample, reviewRequest, type ReviewScenario } from './patterns/realm-claim-review/example';
+import {
+  RealmClaimReviewExample,
+  reviewExample,
+  reviewRequest,
+  type ReviewScenario,
+} from './patterns/realm-claim-review/example';
 import { confirmReview } from './patterns/realm-claim-review/realm-claim-review.stories';
 import { m } from '../paraglide/messages.js';
 import { RealmClaimReviewView } from '../community/realm-claim-review-page';

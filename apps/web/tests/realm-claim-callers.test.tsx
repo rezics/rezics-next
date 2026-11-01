@@ -238,7 +238,9 @@ async function mountStatus(session: ReturnType<typeof viewer> = viewer(), target
   await paint();
 }
 function button(label: string) {
-  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === label);
+  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (node) => node.textContent?.trim() === label,
+  );
   expect(found).toBeDefined();
   return found!;
 }
@@ -507,4 +509,3 @@ test('sparse review continuation advances by one exact opaque cursor', async () 
   expect(reviewReads).toHaveLength(1);
   expect(host.textContent).toContain(claimantId);
 });
-

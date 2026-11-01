@@ -236,4 +236,3 @@ export function useRealmClaimCaller(realmId: string, requestId?: string, visitKe
   const connectionRevision = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   return { source, session: callerSession, ready: ready && lifetime.current(), lifetime, connectionRevision, hydrated };
 }
-

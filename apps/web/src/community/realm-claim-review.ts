@@ -174,11 +174,7 @@ export function createRealmClaimReview(
     return { operation: ++operationGeneration, caller: lifetime?.ticket() ?? 0 };
   }
   function owns(ticket: Ticket): boolean {
-    return (
-      !disconnected &&
-      operationGeneration === ticket.operation &&
-      (!lifetime || lifetime.owns(ticket.caller))
-    );
+    return !disconnected && operationGeneration === ticket.operation && (!lifetime || lifetime.owns(ticket.caller));
   }
   async function load(cursor: string | undefined, ticket: Ticket): Promise<RealmClaimReviewRead | null> {
     if (!owns(ticket)) return null;
