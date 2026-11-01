@@ -41,24 +41,75 @@ export type LabelShelfPageData =
       labelResult?: string;
     };
 
+export type LabelShelfInput = {
+  labelId: string;
+  cursor?: string;
+  limit: number;
+  undo?: SubjectLabelUndo & { subjectId: string };
+  labelResult?: string;
+  undoKey?: string;
+};
+
+export type LabelShelfSource = {
+  labelId: string;
+  cursor: string | null;
+  undo: (SubjectLabelUndo & { subjectId: string }) | null;
+  labelResult: string | null;
+  undoKey: string | null;
+};
+
+export function labelShelfSource(input: Omit<LabelShelfInput, 'limit'>): LabelShelfSource {
+  return {
+    labelId: input.labelId,
+    cursor: input.cursor || null,
+    undo: input.undo ?? null,
+    labelResult: input.labelResult ?? null,
+    undoKey: input.undoKey ?? null,
+  };
+}
+
+/** Additive route envelope; the public page reader below retains its original result shape. */
+export type CurrentLabelShelfData = LabelShelfPageData & {
+  provenance: { subject: string | null; locale: string; source: LabelShelfSource };
+};
+
+export async function loadCurrentLabelShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: LabelShelfInput,
+): Promise<CurrentLabelShelfData> {
+  const { result, provenance } = await readLabelShelfPage(client, request, sessionEnv, input);
+  return { ...result, provenance };
+}
+
 /** One FULL assignment page supplies every tile, its page heading and next cursor. */
 export async function loadLabelShelfPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: {
-    labelId: string;
-    cursor?: string;
-    limit: number;
-    undo?: SubjectLabelUndo & { subjectId: string };
-    labelResult?: string;
-    undoKey?: string;
-  },
+  input: LabelShelfInput,
 ): Promise<LabelShelfPageData> {
+  return (await readLabelShelfPage(client, request, sessionEnv, input)).result;
+}
+
+async function readLabelShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: LabelShelfInput,
+): Promise<{ result: LabelShelfPageData; provenance: CurrentLabelShelfData['provenance'] }> {
+  const provenance: CurrentLabelShelfData['provenance'] = {
+    subject: null,
+    locale: requestLocale(request) ?? 'en',
+    source: labelShelfSource(input),
+  };
+  const finish = (result: LabelShelfPageData) => ({ result, provenance });
   try {
     const identity = await readSubjectSlotSession(request, sessionEnv);
-    if (identity.state === 'signed-out') return { state: 'signed-out' };
-    if (identity.state !== 'signed-in') return { state: 'unavailable' };
+    if (identity.state === 'signed-out') return finish({ state: 'signed-out' });
+    if (identity.state !== 'signed-in' || !identity.subject.trim()) return finish({ state: 'unavailable' });
+    provenance.subject = identity.subject;
     const authorization = identity.authorization;
     const exposure = await client.platform.exposure.get({ headers: { authorization } });
     const admitted = readLibraryResult(exposure).admitted;
@@ -67,7 +118,7 @@ export async function loadLabelShelfPage(
       !admitted.includes('reading_progress') ||
       !admitted.includes('library_label.assignment_list')
     )
-      return { state: 'closed' };
+      return finish({ state: 'closed' });
     const result = await client.libraryLabelAssignments.get({
       query: {
         labelId: input.labelId,
@@ -77,17 +128,17 @@ export async function loadLabelShelfPage(
       },
       headers: { authorization },
     });
-    if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
-    if (result.status === 401 || result.status === 403) return { state: 'denied' };
+    if (isPlatformClosedProblem(result.status, result.error?.value)) return finish({ state: 'closed' });
+    if (result.status === 401 || result.status === 403) return finish({ state: 'denied' });
     const problem: unknown = result.error?.value;
     const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : undefined;
-    if (code === 'index_not_ready' || code === 'semantic_not_ready') return { state: 'preparing' };
+    if (code === 'index_not_ready' || code === 'semantic_not_ready') return finish({ state: 'preparing' });
     const page = readLibraryResult(result);
     if (!('label' in page) || page.label.id !== input.labelId)
       throw new Error('FULL label shelf omitted its label summary');
-    const locale = requestLocale() ?? 'en';
+    const locale = provenance.locale;
     const release = await readRelease().catch(() => undefined);
-    return {
+    return finish({
       state: 'loaded',
       label: page.label,
       entries: page.assignments.map((row) => {
@@ -120,12 +171,12 @@ export async function loadLabelShelfPage(
       undoKey: input.undoKey ?? crypto.randomUUID(),
       ...(input.undo ? { undo: input.undo } : {}),
       ...(input.labelResult ? { labelResult: input.labelResult } : {}),
-    };
+    });
   } catch (error) {
-    if (isPlatformClosedError(error)) return { state: 'closed' };
+    if (isPlatformClosedError(error)) return finish({ state: 'closed' });
     if (error && typeof error === 'object' && 'isNotFound' in error) throw error;
     if (error instanceof Error && error.name === 'StaleCursorError') throw error;
-    return { state: 'unavailable' };
+    return finish({ state: 'unavailable' });
   }
 }
 

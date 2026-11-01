@@ -7,10 +7,10 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
-import { LabelShelfPage } from '../../library/entries-page';
 import { readPersonalLibraryCurrent } from '../../library/personal-library-server';
 import { PersonalLibraryCurrent } from '../../library/personal-library-current';
-import { loadLabelShelfPage, type LabelShelfPageData } from '../../library/label-shelf-read';
+import { CurrentLabelShelf } from '../../library/label-shelf-current';
+import { loadCurrentLabelShelfPage, type CurrentLabelShelfData } from '../../library/label-shelf-read';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import type { SessionEnv } from '../../session/client';
 import { shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
@@ -51,9 +51,9 @@ const readLabelShelf = createServerFn({ method: 'GET' })
       undoKey: typeof value.undoKey === 'string' && routeId.test(value.undoKey) ? value.undoKey : undefined,
     };
   })
-  .handler(async ({ data }): Promise<LabelShelfPageData> => {
+  .handler(async ({ data }): Promise<CurrentLabelShelfData> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadLabelShelfPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, {
+    return loadCurrentLabelShelfPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, {
       labelId: data.labelId,
       limit: 100,
       ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
@@ -183,6 +183,7 @@ export const Route = createFileRoute('/library/')({
 function LibraryRoute() {
   const search = validateShelfSearch(Route.useSearch());
   const data = Route.useLoaderData();
-  if (!('page' in data)) return <LabelShelfPage page={data} locale={getLocale()} display={shelfDisplay(search)} />;
+  if (!('page' in data))
+    return <CurrentLabelShelf initial={data} locale={getLocale()} display={shelfDisplay(search)} read={readLabelShelf} />;
   return <PersonalLibraryCurrent initial={data} search={search} locale={getLocale()} display={shelfDisplay(search)} />;
 }
