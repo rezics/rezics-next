@@ -568,9 +568,14 @@ for (const replacement of [
   'equal-source-success',
   'sign-out',
   'non-success-ABA',
+  'non-success-source-ABA',
+  'non-success-question-ABA',
+  'equal-question-success',
 ] as const) {
   test(`${replacement} retires queued choices and retries before React commit, rejects late responses/finally and permits fresh matching recovery`, async () => {
     cache.setQueryData(sessionQuery.queryKey, session(preparedReader, null));
+    const questionKey = subjectRatingQuery(subjectId, 'en', 'question').queryKey;
+    cache.setQueryData(questionKey, await readRatings(native, subjectId, 'question'));
     await paint();
     await until(() => boxes().length === 20);
     aggregateFailed = true;
@@ -595,6 +600,18 @@ for (const replacement of [
       if (replacement === 'remove-session') cache.removeQueries({ queryKey: sessionQuery.queryKey });
       if (replacement === 'remove-source') cache.removeQueries({ queryKey: oldKey });
       if (replacement === 'equal-source-success') cache.setQueryData(oldKey, source.state.data);
+      if (replacement === 'non-success-source-ABA') {
+        const original = source.state.data;
+        source.setState({ data: {} });
+        source.setState({ data: original });
+      }
+      if (replacement === 'equal-question-success') cache.setQueryData(questionKey, cache.getQueryData(questionKey));
+      if (replacement === 'non-success-question-ABA') {
+        const query = cache.getQueryCache().find({ queryKey: questionKey })!;
+        const original = query.state.data;
+        query.setState({ data: { question: { kind: 'failed' } } });
+        query.setState({ data: original });
+      }
       if (replacement === 'non-success-ABA') {
         const query = cache.getQueryCache().find({ queryKey: sessionQuery.queryKey })!;
         query.setState({ data: { state: 'signed-out', subject: null, csrfToken: null } });
@@ -638,6 +655,7 @@ test('ordinary invalidation/fetch/error/observer notifications preserve useful c
   await act(async () => {
     await cache.invalidateQueries({ queryKey: query.queryKey, refetchType: 'none' });
     cache.getQueryCache().notify({ type: 'observerResultsUpdated', query });
+    query.setState({ error: new Error('ordinary directory refresh failed'), fetchStatus: 'idle' });
     cache
       .getQueryCache()
       .find({ queryKey: sessionQuery.queryKey })!

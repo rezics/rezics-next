@@ -30,6 +30,7 @@ class PopulationRegistry {
   private listeners = new Set<() => void>();
   private leases = new Map<string, PopulationLease>();
   private versions = new Map<string, number>();
+  private sourceData = new WeakMap<QueryCacheNotifyEvent['query'], unknown>();
   private sessionQuery: QueryCacheNotifyEvent['query'] | undefined;
   private sessionData: unknown;
   constructor(readonly client: QueryClient) {
@@ -48,6 +49,17 @@ class PopulationRegistry {
   private notify() {
     this.revision++;
     for (const listener of this.listeners) listener();
+  }
+  rememberQuestion(subject: string, locale: string) {
+    const query = this.client
+      .getQueryCache()
+      .find({ queryKey: ['subject-rating', subject, locale, 'question'], exact: true });
+    if (query && !this.sourceData.has(query)) this.sourceData.set(query, query.state.data);
+  }
+  private dataReplaced(query: QueryCacheNotifyEvent['query']) {
+    const replaced = this.sourceData.has(query) && this.sourceData.get(query) !== query.state.data;
+    this.sourceData.set(query, query.state.data);
+    return replaced;
   }
   private observe(event: QueryCacheNotifyEvent) {
     const { query } = event;
@@ -68,22 +80,28 @@ class PopulationRegistry {
       }
       return;
     }
-    if (
-      query.queryKey[0] === 'subject-rating' &&
-      query.queryKey[3] === 'question' &&
-      (event.type === 'removed' || (event.type === 'updated' && event.action.type === 'success'))
-    ) {
-      this.epoch++;
-      this.notify();
+    if (query.queryKey[0] === 'subject-rating' && query.queryKey[3] === 'question') {
+      const replaced = this.dataReplaced(query);
+      if (
+        replaced ||
+        event.type === 'added' ||
+        event.type === 'removed' ||
+        (event.type === 'updated' && event.action.type === 'success')
+      ) {
+        this.epoch++;
+        this.notify();
+      }
       return;
     }
     if (event.type === 'removed') this.versions.delete(query.queryHash);
     const key = query.meta?.ratingPopulationLease;
     if (typeof key !== 'string') return;
+    const replaced = this.dataReplaced(query);
     const lease = this.leases.get(key);
     if (!lease?.isCurrent() || !lease.ownsQuery?.(query.queryHash)) return;
     if (
       event.type === 'removed' ||
+      (replaced && !(event.type === 'updated' && event.action.type === 'success')) ||
       (event.type === 'updated' && event.action.type === 'success' && event.action.manual)
     ) {
       lease.retire();
@@ -128,6 +146,7 @@ export function useRatingPopulations(
 ) {
   const client = useQueryClient();
   const registry = useMemo(() => registryFor(client), [client]);
+  registry.rememberQuestion(input.subjectId, input.locale);
   useSyncExternalStore(registry.subscribe, registry.snapshot, registry.serverSnapshot);
   const cached = client.getQueryData<Session>(['session']);
   const reader =
