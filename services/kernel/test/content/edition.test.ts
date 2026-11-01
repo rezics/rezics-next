@@ -619,12 +619,19 @@ for (const change of ['subject denial', 'source denial', 'subject redirect'] as 
   }, 60000);
 }
 
-test('default exact and edition identity never disclose unavailable revision metadata or conditional stale bodies', async () => {
+test('default edition opt-ins refuse erased sources while ordinary exact reads retain authorized tombstones', async () => {
   const f = await fixture();
   const path = `${exactPath(f)}?editionIdentity=true`;
   expect((await wire(f.token, path)).status).toBe(200);
+  await seedGovernanceAuthority(f.native.database.pool, f.route, f.post.id, f.author.actor.accountId, ['post:read']);
   await value(wire(f.token, `/v1/posts/${f.post.id}`, 'DELETE'), 200);
-  for (const target of [exactPath(f), path, `/v1/contentEditions/${f.draft.editionId}`]) {
+  const ordinary = await value<{ post: { availability: string; body: null; sha256: null } }>(
+    wire(f.token, exactPath(f)),
+    200,
+  );
+  expect(Object.keys(ordinary)).toEqual(['post']);
+  expect(ordinary.post).toMatchObject({ availability: 'erased', body: null, sha256: null });
+  for (const target of [path, `/v1/contentEditions/${f.draft.editionId}`]) {
     const response = await wire(f.token, target, 'GET', undefined, undefined, randomUUID(), {
       ...identityOptIn,
       'if-none-match': JSON.stringify(f.post.sha256),
