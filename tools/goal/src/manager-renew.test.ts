@@ -224,9 +224,9 @@ test('renewing a paused Codex manager starts a fresh thread under the same id an
     expect(threadStarts.map((request) => request.params.config.model_reasoning_effort)).toEqual(['high', 'high']);
     const turnStarts = s.requests().filter((request) => request.method === 'turn/start');
     expect(turnStarts.map((request) => request.params.threadId)).toEqual(['thread-1', 'thread-1', 'thread-2']);
-    expect(turnStarts.every((request) => request.params.model === 'gpt-6.1-sol' && request.params.effort === 'high')).toBe(
-      true,
-    );
+    expect(
+      turnStarts.every((request) => request.params.model === 'gpt-6.1-sol' && request.params.effort === 'high'),
+    ).toBe(true);
     expect(
       s
         .requests()
@@ -272,9 +272,9 @@ test('goal continuation renews with pinned model and effort and notifies the sup
     expect(threadStarts.every((request) => request.params.config.model_reasoning_effort === 'high')).toBe(true);
     const turnStarts = s.requests().filter((request) => request.method === 'turn/start');
     expect(turnStarts).toHaveLength(2);
-    expect(turnStarts.every((request) => request.params.model === 'gpt-6.1-sol' && request.params.effort === 'high')).toBe(
-      true,
-    );
+    expect(
+      turnStarts.every((request) => request.params.model === 'gpt-6.1-sol' && request.params.effort === 'high'),
+    ).toBe(true);
     expect(turnStarts[1]!.params.input[0].text).toContain(continuationPath);
     expect(s.inbox.pending(s.spec.supermanager).filter((entry) => entry.event.kind === 'environment')).toHaveLength(1);
 

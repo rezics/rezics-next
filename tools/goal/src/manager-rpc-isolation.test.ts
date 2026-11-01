@@ -158,7 +158,8 @@ test('the manager host sends the pinned model and effort in supported provider r
     const turnStart = f.rpc().find((request) => request.method === 'turn/start');
     expect(turnStart!.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
   } finally {
-    if (started) await hostRequest(short(join(f.path, 'manager.sock')), { command: 'stop', manager: spec.id }, 5_000, 10);
+    if (started)
+      await hostRequest(short(join(f.path, 'manager.sock')), { command: 'stop', manager: spec.id }, 5_000, 10);
     await stopHost(host);
     f.close();
   }
