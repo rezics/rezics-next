@@ -172,7 +172,7 @@ test('duplicate instances keep query and scoped names attached to their own visi
   const helpIds = [...markup.matchAll(/<span id="([^"]+-keyboard-help)"/gu)].map(([, id]) => id!);
   expect(helpIds).toHaveLength(2);
   expect(new Set(helpIds).size).toBe(2);
-  const inputs = [...markup.matchAll(/<input\b(?=[^>]*role="combobox")[^>]*>/gu)].map(([, input]) => input!);
+  const inputs = [...markup.matchAll(/<input\b(?=[^>]*role="combobox")[^>]*>/gu)].map(([input]) => input!);
   expect(inputs).toHaveLength(2);
   for (const [index, input] of inputs.entries()) {
     expect(input).toContain(`aria-label="${m.search_label()}"`);
