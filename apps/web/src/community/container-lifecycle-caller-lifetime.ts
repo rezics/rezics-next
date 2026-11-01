@@ -175,6 +175,7 @@ type RenderBinding = {
   targetKey: string;
   locale: string;
   adapter: unknown;
+  inputRevision: number;
   client: QueryClient | null;
   ready: boolean;
   sessionState: string;
@@ -208,13 +209,27 @@ function useConnectionLifetime(
     targetKey: key,
     locale,
     adapter,
+    inputRevision: 0,
     client,
     ready,
     sessionState,
     subject,
     csrfToken,
   });
-  bindingRef.current = { targetKey: key, locale, adapter, client, ready, sessionState, subject, csrfToken };
+  const prior = bindingRef.current;
+  const inputRevision =
+    prior.targetKey === key && prior.locale === locale && prior.adapter === adapter ? prior.inputRevision : prior.inputRevision + 1;
+  bindingRef.current = {
+    targetKey: key,
+    locale,
+    adapter,
+    inputRevision,
+    client,
+    ready,
+    sessionState,
+    subject,
+    csrfToken,
+  };
 
   const capturedSession = JSON.stringify([sessionState, subject, csrfToken]);
   const capturedCache = client ? sessionCacheIdentity(client) : '';
@@ -226,6 +241,7 @@ function useConnectionLifetime(
         binding.locale !== locale ||
         getLocale() !== locale ||
         binding.adapter !== adapter ||
+        binding.inputRevision !== inputRevision ||
         binding.client !== client ||
         !binding.ready ||
         sessionViewIdentity(binding) !== capturedSession
@@ -254,6 +270,7 @@ function useConnectionLifetime(
     key,
     locale,
     adapter,
+    inputRevision,
     client,
     ready,
     sessionState,
