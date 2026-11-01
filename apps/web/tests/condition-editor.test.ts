@@ -43,9 +43,7 @@ test('Distinct released condition choices with identical localized labels are di
   const errorId = invalid.match(/aria-describedby="([^"]+)"/)?.[1];
   expect(errorId).toBeDefined();
   const expectedError = m.search_reader_condition_unsupported({ field: m.condition_value({ number: 1 }) });
-  expect(html).toContain(
-    `id="${errorId}" class="text-sm text-destructive">${expectedError}</p>`,
-  );
+  expect(html).toContain(`id="${errorId}" class="text-sm text-destructive">${expectedError}</p>`);
   expect(html).toContain('value="bf:Instance" selected="">版本 (bf:Instance)</option>');
   expect(html).toContain('value="retired:Type" selected="">retired:Type</option>');
   expect(html).toContain(`data-error-pointer="${pointer}"`);
