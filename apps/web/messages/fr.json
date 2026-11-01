@@ -4074,5 +4074,10 @@
   "moderation_appeal_intent_retry": "Réessayer cette même décision",
   "moderation_appeal_intent_forbidden_recovery": "Vos autorisations actuelles ne permettent pas cette décision. Rechargez la page de modération pour vérifier votre accès ; un autre modérateur habilité devra peut-être examiner l’appel.",
   "moderation_appeal_intent_conflict_recovery": "L’appel a changé ou a déjà été tranché. Rechargez la page de modération pour consulter le résultat actuel avant toute autre action.",
-  "moderation_appeal_intent_retired": "Cette vue privée de décision est terminée. Rechargez la page de modération avec votre compte actuel pour vérifier votre accès et le résultat de l’appel."
+  "moderation_appeal_intent_retired": "Cette vue privée de décision est terminée. Rechargez la page de modération avec votre compte actuel pour vérifier votre accès et le résultat de l’appel.",
+  "moderation_decision_read_loading": "Lecture de la décision privée actuelle…",
+  "moderation_decision_read_unavailable": "La décision actuelle n’a pas pu être lue. Réessayez pour consulter son dernier état.",
+  "moderation_decision_read_closed": "Cette décision n’est pas disponible pour votre session actuelle.",
+  "moderation_decision_read_platform_closed": "La modération est actuellement fermée sur cette plateforme.",
+  "moderation_decision_read_retry": "Réessayer de lire la décision"
 }

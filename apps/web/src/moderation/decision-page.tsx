@@ -1,13 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, ArrowUpRight, Check, FileText, ShieldCheck } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Withheld } from '@rezics/ui/withheld';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { appealDecision, type AppealSubmission } from './appeal';
 import { createModerationIntent } from './command-intent';
+import { sessionQuery, useSession } from '../session/query';
+import {
+  decisionReadFailure,
+  decisionSessionKey,
+  decisionSessionMatches,
+  sameDecision,
+  type DecisionReadState,
+} from './decision-read-model';
 import { canAppealDecision, canAttemptAppealWithoutTarget, type DecisionPage, readDecisionPage } from './decision-read';
 
 function relativeTime(instant: string, now: number, locale: string) {
@@ -57,40 +66,198 @@ export type DecisionPageProps = {
 };
 const sendAppeal: DecisionAppealAction = (data) => appealDecision({ data, headers: csrfHeaders() });
 const refreshDecision = (id: string) => readDecisionPage({ data: { id } });
-type Feedback = 'denied' | 'conflict' | 'uncertain' | 'invalid' | 'refused' | 'refresh-failed';
+type Feedback = 'denied' | 'conflict' | 'uncertain' | 'invalid' | 'refused';
 
-/** The route and Pattern share this view. Native reads and commands remain the only outcome authority. */
-export function DecisionPageView({
+/** No private content or native problem details appear in a loading/failed current read. */
+export function DecisionReadStatus({
+  state,
+  onRetry,
+  busy = false,
+}: {
+  state: DecisionReadState;
+  onRetry?: () => void;
+  busy?: boolean;
+}) {
+  return (
+    <article className="mx-auto w-full max-w-4xl space-y-5 py-4" aria-labelledby="decision-read-heading">
+      <h1 id="decision-read-heading" className="font-display text-3xl font-semibold">
+        {m.decision_heading()}
+      </h1>
+      <p role={state === 'loading' ? 'status' : 'alert'} aria-busy={state === 'loading' || busy}>
+        {state === 'loading'
+          ? m.moderation_decision_read_loading()
+          : state === 'closed'
+            ? m.moderation_decision_read_closed()
+            : state === 'platform-closed'
+              ? m.moderation_decision_read_platform_closed()
+              : m.moderation_decision_read_unavailable()}
+      </p>
+      {state !== 'loading' && state !== 'platform-closed' && onRetry ? (
+        <Button variant="outline" className="min-h-11" disabled={busy} onClick={onRetry}>
+          {m.moderation_decision_read_retry()}
+        </Button>
+      ) : null}
+    </article>
+  );
+}
+
+/** Existing explicitly injected fixture pairs do not acquire browser production authority. */
+export function DecisionPageView(props: DecisionPageProps) {
+  return props.onAppeal && props.onRefresh ? <DecisionFixture {...props} /> : <DecisionSessionPage {...props} />;
+}
+
+function DecisionFixture(props: DecisionPageProps) {
+  const [source, setSource] = useState({ page: props.page, revision: 0 });
+  if (source.page !== props.page) {
+    setSource({ page: props.page, revision: source.revision + 1 });
+    return null;
+  }
+  return <DecisionVisit key={source.revision} {...props} />;
+}
+
+const subscribeHydration = () => () => {};
+const browserSnapshot = () => true;
+const serverSnapshot = () => false;
+
+/** A source/read generation and browser session each retire the entire mounted private visit. */
+function DecisionSessionPage(props: DecisionPageProps) {
+  const session = useSession();
+  const hydrated = useSyncExternalStore(subscribeHydration, browserSnapshot, serverSnapshot);
+  const sessionKey = decisionSessionKey(session);
+  const sourceKey = props.page.readGeneration
+    ? JSON.stringify([props.page.readGeneration, props.page.decision.id, props.page.viewerId, props.page.sessionEpoch])
+    : props.page;
+  const [admission, setAdmission] = useState({
+    sourceKey,
+    page: props.page as DecisionPage | null,
+    observedSession: null as string | null,
+    revision: 0,
+  });
+  if (admission.sourceKey !== sourceKey) {
+    setAdmission({ sourceKey, page: props.page, observedSession: null, revision: admission.revision + 1 });
+    return null;
+  }
+  // Unknown before the first browser session is loading, never browser authority. Once observed,
+  // any loss/change is irreversible for this read, even if the old subject and token return.
+  if (
+    hydrated &&
+    (session.state !== 'unknown' || admission.observedSession !== null) &&
+    admission.observedSession !== sessionKey
+  ) {
+    const changed = admission.observedSession !== null;
+    setAdmission({
+      ...admission,
+      observedSession: sessionKey,
+      page: changed || !decisionSessionMatches(props.page, session) ? null : admission.page,
+      revision: admission.revision + 1,
+    });
+    return null;
+  }
+  if (hydrated && (session.state === 'unknown' || session.state === 'unavailable')) return <DecisionSessionRecovery />;
+  const page = admission.page;
+  if (page && (!hydrated || decisionSessionMatches(page, session)))
+    return <DecisionVisit key={admission.revision} {...props} page={page} />;
+  return (
+    <DecisionRecovery
+      key={admission.revision}
+      state={session.state === 'unavailable' ? 'unavailable' : 'closed'}
+      read={props.onRefresh ?? refreshDecision}
+      original={props.page}
+      accepts={(next) => decisionSessionMatches(next, session)}
+      onAdmit={(next) => setAdmission({ ...admission, page: next, revision: admission.revision + 1 })}
+    />
+  );
+}
+
+/** Session transport failure has explicit recovery too; it cannot leave an endless loading claim. */
+function DecisionSessionRecovery() {
+  const client = useQueryClient();
+  const query = useQuery({ ...sessionQuery, enabled: false });
+  const pending = useRef(false);
+  const [busy, setBusy] = useState(false);
+  async function retry() {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    try {
+      await client.fetchQuery(sessionQuery);
+    } catch {
+      /* Current session state owns recovery. */
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  }
+  const loading = query.fetchStatus === 'fetching' || (query.status === 'pending' && !query.data);
+  return <DecisionReadStatus state={loading ? 'loading' : 'unavailable'} busy={busy} onRetry={() => void retry()} />;
+}
+
+function DecisionRecovery({
+  state: initial,
+  read,
+  original,
+  accepts,
+  onAdmit,
+}: {
+  state: DecisionReadState;
+  read: (id: string) => Promise<DecisionPage>;
+  original: DecisionPage;
+  accepts: (page: DecisionPage) => boolean;
+  onAdmit: (page: DecisionPage) => void;
+}) {
+  const [state, setState] = useState(initial);
+  const alive = useRef(true);
+  const pending = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  async function retry() {
+    if (pending.current) return;
+    pending.current = true;
+    setState('loading');
+    try {
+      const next = await read(original.decision.id);
+      if (!alive.current) return;
+      if (!sameDecision(next.decision, original.decision) || !accepts(next)) setState('closed');
+      else onAdmit(next);
+    } catch (error) {
+      if (alive.current) setState(decisionReadFailure(error));
+    } finally {
+      pending.current = false;
+    }
+  }
+  return <DecisionReadStatus state={state} onRetry={() => void retry()} />;
+}
+
+/** Native reads and commands remain the only outcome authority; this state lives for one admitted visit. */
+function DecisionVisit({
   page,
   now = Date.now(),
   onAppeal = sendAppeal,
   onRefresh = refreshDecision,
 }: DecisionPageProps) {
-  const [current, setCurrent] = useState(page);
-  const currentSource = useRef(page);
+  const [current, setCurrent] = useState<DecisionPage | null>(page);
+  const [readState, setReadState] = useState<DecisionReadState>('unavailable');
   const [text, setText] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
   const [commandIntent] = useState(createModerationIntent);
   const pending = useRef(false);
   const lastCommand = useRef<Parameters<DecisionAppealAction>[0] | null>(null);
-  const source = useRef<DecisionPage | null>(page);
-  source.current = page;
+  const lifetime = useRef({ active: true, serial: 0 });
   useEffect(() => {
-    source.current = page;
-    currentSource.current = page;
-    setCurrent(page);
-    setText('');
-    setFeedback(null);
-    setBusy(false);
-    pending.current = false;
-    lastCommand.current = null;
-    commandIntent.changed();
+    lifetime.current.active = true;
     return () => {
-      source.current = null;
+      lifetime.current.active = false;
+      lifetime.current.serial++;
+      lastCommand.current = null;
+      commandIntent.changed();
     };
-  }, [page, commandIntent]);
-  const displayed = currentSource.current === page ? current : page;
+  }, [commandIntent]);
+  const displayed = current ?? page;
   const { decision } = displayed;
   const target = displayed.target?.id === decision.targetId ? displayed.target : null;
   const locale = getLocale();
@@ -118,14 +285,12 @@ export function DecisionPageView({
           ? m.decision_appeal_uncertain()
           : feedback === 'invalid'
             ? m.decision_appeal_too_long()
-            : feedback === 'refresh-failed'
-              ? m.decision_refresh_failed()
-              : m.decision_appeal_refused();
+            : m.decision_appeal_refused();
 
   async function submit(retry = false) {
     if (pending.current || (!retry && (locked || !allowed || count < 1 || count > 2000))) return;
     if (retry && (feedback !== 'uncertain' || !lastCommand.current)) return;
-    const origin = source.current;
+    const token = ++lifetime.current.serial;
     const intent = { id: decision.id, statement: text };
     const command = retry ? lastCommand.current! : { ...intent, idempotencyKey: commandIntent.keyFor(intent) };
     lastCommand.current = command;
@@ -133,28 +298,23 @@ export function DecisionPageView({
     setBusy(true);
     setFeedback(null);
     // A previous target snapshot is no longer a current link after a write attempt.
-    setCurrent((value) => ({ ...value, target: null }));
+    setCurrent((value) => (value ? { ...value, target: null } : null));
     try {
       const result = await onAppeal(command);
-      if (source.current !== origin) return;
+      if (!lifetime.current.active || lifetime.current.serial !== token) return;
       if (result.state === 'pending' || result.state === 'updated') {
-        if (
-          result.decision.id !== decision.id ||
-          result.decision.targetId !== decision.targetId ||
-          result.decision.targetKind !== decision.targetKind ||
-          (result.state === 'pending' && !result.decision.appeal)
-        ) {
+        if (!sameDecision(result.decision, decision) || (result.state === 'pending' && !result.decision.appeal)) {
           setFeedback('uncertain');
           return;
         }
-        setCurrent((value) => ({ ...value, decision: result.decision, target: null }));
+        setCurrent((value) => (value ? { ...value, decision: result.decision, target: null } : null));
         setFeedback(result.state === 'updated' ? 'conflict' : null);
       } else if (result.state === 'invalid') setFeedback('invalid');
       else setFeedback(result.state === 'failed' ? 'uncertain' : result.state);
     } catch {
-      if (source.current === origin) setFeedback('uncertain');
+      if (lifetime.current.active && lifetime.current.serial === token) setFeedback('uncertain');
     } finally {
-      if (source.current === origin) {
+      if (lifetime.current.active && lifetime.current.serial === token) {
         pending.current = false;
         setBusy(false);
       }
@@ -163,32 +323,54 @@ export function DecisionPageView({
 
   async function refresh() {
     if (pending.current) return;
-    const origin = source.current;
+    const token = ++lifetime.current.serial;
     pending.current = true;
     setBusy(true);
-    setCurrent((value) => ({ ...value, target: null }));
+    if (!current) setReadState('loading');
+    setCurrent((value) => (value ? { ...value, target: null } : null));
     try {
       const next = await onRefresh(decision.id);
-      if (source.current !== origin) return;
+      if (!lifetime.current.active || lifetime.current.serial !== token) return;
       if (
-        next.decision.id !== decision.id ||
-        next.decision.targetId !== decision.targetId ||
-        next.decision.targetKind !== decision.targetKind
-      )
-        throw new Error('Decision changed');
+        !sameDecision(next.decision, page.decision) ||
+        next.viewerId !== page.viewerId ||
+        next.sessionEpoch !== page.sessionEpoch
+      ) {
+        setCurrent(null);
+        setReadState('closed');
+        setText('');
+        lastCommand.current = null;
+        commandIntent.changed();
+        return;
+      }
       setCurrent(next);
-      setFeedback(null);
-      lastCommand.current = null;
-      commandIntent.changed();
-    } catch {
-      if (source.current === origin) setFeedback('refresh-failed');
+      // A successful read without an appeal cannot settle a lost command response.
+      if (feedback !== 'uncertain' || next.decision.appeal) {
+        setFeedback(null);
+        lastCommand.current = null;
+        commandIntent.changed();
+      }
+    } catch (error) {
+      if (lifetime.current.active && lifetime.current.serial === token) {
+        const state = decisionReadFailure(error);
+        setCurrent(null);
+        setReadState(state);
+        if (state !== 'unavailable') {
+          setText('');
+          setFeedback(null);
+          lastCommand.current = null;
+          commandIntent.changed();
+        }
+      }
     } finally {
-      if (source.current === origin) {
+      if (lifetime.current.active && lifetime.current.serial === token) {
         pending.current = false;
         setBusy(false);
       }
     }
   }
+
+  if (!current) return <DecisionReadStatus state={readState} busy={busy} onRetry={() => void refresh()} />;
 
   return (
     <article

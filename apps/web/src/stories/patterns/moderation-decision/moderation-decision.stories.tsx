@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, mocked, userEvent, within } from 'storybook/test';
-import { DecisionPageView, type DecisionAppealAction } from '../../../moderation/decision-page';
+import { DecisionPageView, DecisionReadStatus, type DecisionAppealAction } from '../../../moderation/decision-page';
 import { m } from '../../../paraglide/messages.js';
 import {
   appealDraft,
@@ -102,5 +102,29 @@ export const UncertainRetry: Story = {
     const calls = mocked(args.onAppeal!).mock.calls;
     await expect(calls).toHaveLength(2);
     await expect(calls[1]![0]).toEqual(calls[0]![0]);
+  },
+};
+
+export const Loading: Story = { render: () => <DecisionReadStatus state="loading" /> };
+export const ReadUnavailable: Story = {
+  render: () => <DecisionReadStatus state="unavailable" onRetry={fn()} />,
+};
+export const ReadClosed: Story = { render: () => <DecisionReadStatus state="closed" /> };
+export const PlatformClosed: Story = { render: () => <DecisionReadStatus state="platform-closed" /> };
+export const RefreshRecovery: Story = {
+  args: {
+    onRefresh: fn().mockRejectedValueOnce(new Error('Read unavailable')).mockResolvedValue(openDecision),
+  },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await userEvent.type(view.getByRole('textbox'), appealDraft);
+    await userEvent.click(view.getByRole('button', { name: m.decision_refresh() }));
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_decision_read_unavailable());
+    await expect(view.queryByText(openDecision.decision.statement)).toBeNull();
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.moderation_decision_read_retry() }));
+    await expect(await view.findByRole('textbox')).toHaveValue(appealDraft);
+    await expect(args.onRefresh).toHaveBeenCalledTimes(2);
+    await expect(args.onAppeal).not.toHaveBeenCalled();
   },
 };

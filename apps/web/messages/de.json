@@ -4074,5 +4074,10 @@
   "moderation_appeal_intent_retry": "Genau diese Entscheidung erneut senden",
   "moderation_appeal_intent_forbidden_recovery": "Deine aktuellen Berechtigungen erlauben diese Entscheidung nicht. Lade die Moderationsseite neu, um den Zugriff zu prüfen. Möglicherweise muss ein anderer berechtigter Moderator die Prüfung übernehmen.",
   "moderation_appeal_intent_conflict_recovery": "Der Einspruch wurde geändert oder bereits entschieden. Lade die Moderationsseite neu und lies das aktuelle Ergebnis, bevor du weitere Schritte unternimmst.",
-  "moderation_appeal_intent_retired": "Diese private Entscheidungsansicht wurde beendet. Lade die Moderationsseite mit deinem aktuellen Konto neu, um Zugriff und Einspruchsergebnis zu prüfen."
+  "moderation_appeal_intent_retired": "Diese private Entscheidungsansicht wurde beendet. Lade die Moderationsseite mit deinem aktuellen Konto neu, um Zugriff und Einspruchsergebnis zu prüfen.",
+  "moderation_decision_read_loading": "Die aktuelle private Entscheidung wird geladen…",
+  "moderation_decision_read_unavailable": "Die aktuelle Entscheidung konnte nicht gelesen werden. Versuche es erneut, um den neuesten Stand zu prüfen.",
+  "moderation_decision_read_closed": "Diese Entscheidung ist für deine aktuelle Sitzung nicht verfügbar.",
+  "moderation_decision_read_platform_closed": "Die Moderation ist auf dieser Plattform derzeit geschlossen.",
+  "moderation_decision_read_retry": "Aktuelle Entscheidung erneut laden"
 }

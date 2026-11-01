@@ -1,11 +1,13 @@
 import { documentText, parseDocument } from '@rezics/document';
+import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
+import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 
 export type ModerationDecision = {
   id: string;
@@ -30,7 +32,14 @@ export type DecisionTarget = {
   text: string;
   href: string;
 };
-export type DecisionPage = { decision: ModerationDecision; target: DecisionTarget | null; viewerId: string | null };
+export type DecisionPage = {
+  decision: ModerationDecision;
+  target: DecisionTarget | null;
+  viewerId: string | null;
+  /** Prepared browser session and read lifetime; optional for existing injected presentation fixtures. */
+  sessionEpoch?: string;
+  readGeneration?: string;
+};
 
 type ReadResult = { data?: unknown; error?: unknown; status?: number };
 type DecisionReads = {
@@ -97,19 +106,24 @@ export function canAttemptAppealWithoutTarget(
   return Boolean(viewerId && !decision.appeal && now <= Date.parse(decision.appealDeadline));
 }
 
-type DecisionKernel = {
-  'moderation-decisions': (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
-  posts: (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
-  threads: (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
-};
-function headers(authorization: string) {
-  return { authorization };
-}
+const readOptions = (authorization: string) => ({
+  headers: { authorization },
+  fetch: { cache: 'no-store' as const },
+});
 
 function readStatus(result: ReadResult): number | undefined {
   if (typeof result.status === 'number') return result.status;
   if (result.error && typeof result.error === 'object' && 'status' in result.error) return Number(result.error.status);
   return undefined;
+}
+
+function refused(result: ReadResult): boolean {
+  const status = readStatus(result);
+  const problem =
+    result.error && typeof result.error === 'object' && 'value' in result.error ? result.error.value : null;
+  if (isPlatformClosedProblem(status, problem)) throw new PlatformClosedError(403, problem);
+  if (status !== undefined && [401, 403, 404].includes(status)) return true;
+  throw new Error('Decision read unavailable');
 }
 
 function targetHref(kind: 'post' | 'thread', id: string, threadId?: string) {
@@ -131,29 +145,40 @@ export const readDecisionPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<DecisionPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
+    try {
+      await prepareSession(request, env as Partial<SessionEnv>);
+    } catch {
+      throw new Error('Decision read unavailable');
+    }
     const authorization = viewerCredential(request);
-    if (!authorization) throw notFound();
-    const reads = decisionReadAdapters(kernelClient() as unknown as DecisionKernel, authorization);
-    const page = await loadCurrentDecisionPage(data.id, reads);
+    const viewerId = sessionSubject(request);
+    const sessionEpoch = requestCsrfToken(request);
+    if (!authorization || !viewerId || !sessionEpoch) throw notFound();
+    const page = await loadCurrentDecisionPage(data.id, decisionReadAdapters(kernelClient(), authorization));
     if (!page) throw notFound();
-    return { ...page, viewerId: sessionSubject(request) ?? null };
+    return { ...page, viewerId, sessionEpoch, readGeneration: crypto.randomUUID() };
   });
 
-export function decisionReadAdapters(client: DecisionKernel, authorization: string): DecisionReads {
+export function decisionReadAdapters(client: KernelClient, authorization: string): DecisionReads {
   return {
     decision: async (id) => {
-      const result = await client['moderation-decisions']({ id }).get({ headers: headers(authorization) });
-      return result.error ? null : ((result.data as ModerationDecision | undefined) ?? null);
+      const result = await client['moderation-decisions']({ id }).get(readOptions(authorization));
+      if (result.error && refused(result)) return null;
+      if (!result.data) throw new Error('Decision read unavailable');
+      return result.data;
     },
     post: async (id) => {
-      const result = await client.posts({ id }).get({ headers: headers(authorization) });
-      if (result.error) {
-        if (readStatus(result) === 404) return null;
-        throw notFound();
-      }
-      const record = (result.data as { post?: Record<string, unknown> } | undefined)?.post;
-      if (!record) throw notFound();
+      // Target failure cannot revoke the independently readable private decision.
+      const result = await client
+        .posts({ id })
+        .get(readOptions(authorization))
+        .catch((error: unknown) => {
+          if (isPlatformClosedError(error)) throw error;
+          return null;
+        });
+      if (!result || result.error) return null;
+      const record = result.data?.post;
+      if (!record) return null;
       if (record.id !== id || record.availability !== 'available' || record.removed === true) return null;
       if (typeof record.threadId !== 'string') return null;
       return {
@@ -166,13 +191,16 @@ export function decisionReadAdapters(client: DecisionKernel, authorization: stri
       };
     },
     thread: async (id) => {
-      const result = await client.threads({ id }).get({ headers: headers(authorization) });
-      if (result.error) {
-        if (readStatus(result) === 404) return null;
-        throw notFound();
-      }
-      const record = (result.data as { thread?: Record<string, unknown> } | undefined)?.thread;
-      if (!record) throw notFound();
+      const result = await client
+        .threads({ id })
+        .get(readOptions(authorization))
+        .catch((error: unknown) => {
+          if (isPlatformClosedError(error)) throw error;
+          return null;
+        });
+      if (!result || result.error) return null;
+      const record = result.data?.thread;
+      if (!record) return null;
       if (record.id !== id || record.availability !== 'available' || record.removed === true) return null;
       return {
         id,

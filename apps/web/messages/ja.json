@@ -4074,5 +4074,10 @@
   "moderation_appeal_intent_retry": "同じ内容の判断を再送",
   "moderation_appeal_intent_forbidden_recovery": "現在の権限ではこの判断を行えません。モデレーションページを再読み込みしてアクセス権を確認してください。別の適格なモデレーターによる審査が必要な場合があります。",
   "moderation_appeal_intent_conflict_recovery": "異議申し立てが変更されたか、すでに判断されています。別の操作を行う前に、モデレーションページを再読み込みして現在の結果を確認してください。",
-  "moderation_appeal_intent_retired": "この非公開の判断画面は終了しました。現在のアカウントでモデレーションページを再読み込みし、アクセス権と異議申し立ての結果を確認してください。"
+  "moderation_appeal_intent_retired": "この非公開の判断画面は終了しました。現在のアカウントでモデレーションページを再読み込みし、アクセス権と異議申し立ての結果を確認してください。",
+  "moderation_decision_read_loading": "現在の非公開の判断を読み込んでいます…",
+  "moderation_decision_read_unavailable": "現在の判断を読み込めませんでした。再試行して最新の状態を確認してください。",
+  "moderation_decision_read_closed": "現在のセッションでは、この判断を閲覧できません。",
+  "moderation_decision_read_platform_closed": "このプラットフォームでは現在、モデレーションを利用できません。",
+  "moderation_decision_read_retry": "現在の判断を再読み込み"
 }
