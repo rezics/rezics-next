@@ -187,7 +187,10 @@ test('Subject offer pending preparing and denied regions keep their existing rec
     ]);
 
     document.body.innerHTML = renderToStaticMarkup(
-      <SubjectOffersView page={{ kind: 'ready', offers: [], projectionState: 'preparing', next: null }} locale={locale} />,
+      <SubjectOffersView
+        page={{ kind: 'ready', offers: [], projectionState: 'preparing', next: null }}
+        locale={locale}
+      />,
     );
     expect(document.querySelector('[role="status"]')?.textContent).toBe(m.subject_purchase_preparing({}, { locale }));
     expect(document.body.textContent).not.toContain(m.subject_purchase_empty({}, { locale }));
