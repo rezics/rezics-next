@@ -9,7 +9,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { readingFixture } from '../kernel/fake/settings-preferences-reading';
 import { m } from '../paraglide/messages.js';
@@ -23,6 +23,8 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+type StoryRouter = ReturnType<typeof createRouter>;
+type StoryRouterHost = HTMLDivElement & { storyRouter?: StoryRouter };
 
 function ChangeStoryViewer() {
   const client = useQueryClient();
@@ -114,10 +116,21 @@ function SettingsNavigationPhoneExample() {
       history: createMemoryHistory({ initialEntries: ['/settings'] }),
     });
   }, []);
+  const routerHost = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const host = routerHost.current as StoryRouterHost | null;
+    if (!host) return;
+    host.storyRouter = router;
+    return () => {
+      if (host.storyRouter === router) delete host.storyRouter;
+    };
+  }, [router]);
   return (
-    <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <div ref={routerHost} data-settings-navigation-router>
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </div>
   );
 }
 
@@ -129,6 +142,11 @@ export const DraftDecisionPhoneRecovery: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
+    const router = await waitFor(() => {
+      const current = canvasElement.querySelector<StoryRouterHost>('[data-settings-navigation-router]')?.storyRouter;
+      if (!current) throw new Error('Settings navigation story router is not mounted.');
+      return current;
+    });
     const spoiler = await canvas.findByRole('radio', { name: m.settings_spoiler_1_title() });
     await waitFor(() => expect(spoiler).not.toBeDisabled());
     await userEvent.click(spoiler);
@@ -165,13 +183,18 @@ export const DraftDecisionPhoneRecovery: Story = {
     await expect(spoiler).toBeChecked();
     await expect(suitability).toBeChecked();
 
-    const alternate = canvas.getByRole('link', { name: m.settings_account_heading() });
     await userEvent.click(home);
     const reopenedDialog = within(await page.findByRole('alertdialog'));
     await waitFor(() => expect(reopenedDialog.getByRole('button', { name: m.settings_profile_stay() })).toHaveFocus());
-    await userEvent.click(alternate);
+    // The Accounts link is inert behind the modal; this is a competing programmatic request, not user input.
+    const competingNavigation = router.navigate({ to: '/accounts' }).then(
+      () => ({ status: 'resolved' as const }),
+      (error: unknown) => ({ status: 'rejected' as const, error }),
+    );
     await expect(await page.findAllByRole('alertdialog')).toHaveLength(1);
     await userEvent.click(reopenedDialog.getByRole('button', { name: m.settings_profile_leave() }));
+    const competingResult = await competingNavigation;
+    await expect(competingResult.status).toBe('resolved');
     await canvas.findByRole('heading', { name: m.nav_home() });
     await expect(canvas.queryByRole('heading', { name: m.settings_account_heading() })).toBeNull();
     await expect(page.queryByRole('alertdialog')).toBeNull();
