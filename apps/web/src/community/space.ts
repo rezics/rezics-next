@@ -112,6 +112,15 @@ export type Located = { kind: 'page'; page: SpacePageData } | { kind: 'redirect'
 type Result<T> = { data?: T | null; error?: unknown; status?: number };
 type Auth = { headers: { authorization: string } } | Record<string, never>;
 
+/** The subject produced by the same preparation that supplies the native read credential. */
+export type ReaderOrigin =
+  | { kind: 'anonymous' }
+  | { kind: 'signed-in'; subject: string }
+  | { kind: 'unidentified'; reason: 'credential-subject-unavailable' | 'session-preparation-failed' };
+
+/** Additive capture result used by route reads; default loader helpers still return their original values. */
+export type PreparedRead<T> = { value: T; readerOrigin: ReaderOrigin };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -143,11 +152,18 @@ async function readOptional<T>(read: Promise<Result<T>>): Promise<T | null> {
 }
 
 async function session(request: Request, sessionEnv: Partial<SessionEnv>, credentialMode: ReadCredentialMode) {
-  if (credentialMode === 'anonymous') return { signedIn: false, auth: {} as Auth };
+  if (credentialMode === 'anonymous')
+    return { signedIn: false, auth: {} as Auth, readerOrigin: { kind: 'anonymous' } as const };
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
+  const subject = sessionSubject(request);
   const auth: Auth = authorization ? { headers: { authorization } } : {};
-  return { signedIn: authorization !== null, auth };
+  const readerOrigin: ReaderOrigin = !authorization
+    ? { kind: 'anonymous' }
+    : subject
+      ? { kind: 'signed-in', subject }
+      : { kind: 'unidentified', reason: 'credential-subject-unavailable' };
+  return { signedIn: authorization !== null, auth, readerOrigin };
 }
 
 type SubjectRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['get']>>['data']>;
@@ -274,36 +290,60 @@ export function loadRealmShelfPage(
   input: ShelfReadInput & { list: 'publications' },
 ): Promise<ShelfPage<PublishedSubject>>;
 /** Continue exactly one native list, retaining its own reader-bound cursor and fixed page size. */
-export async function loadRealmShelfPage(
+export function loadRealmShelfPageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' },
+): Promise<PreparedRead<ShelfPage<RealmBoard>>>;
+export function loadRealmShelfPageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'publications' },
+): Promise<PreparedRead<ShelfPage<PublishedSubject>>>;
+export function loadRealmShelfPageWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: ShelfReadInput & { list: 'boards' | 'publications' },
-): Promise<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>> {
+): Promise<PreparedRead<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>>>;
+export async function loadRealmShelfPageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' | 'publications' },
+): Promise<PreparedRead<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>>> {
+  let readerOrigin: ReaderOrigin = { kind: 'unidentified', reason: 'session-preparation-failed' };
   try {
-    const { auth } = await session(request, sessionEnv, input.credentialMode);
+    const prepared = await session(request, sessionEnv, input.credentialMode);
+    const { auth } = prepared;
+    readerOrigin = prepared.readerOrigin;
     const realm = client.realms({ realmId: input.realmId });
     const cursor = input.cursor ? { cursor: input.cursor } : {};
     if (input.list === 'boards') {
       const result = await realm.boards.get({ query: { limit: BOARD_ROW_LIMIT, ...cursor }, ...auth });
       const failure = shelfFailure(result);
-      if (failure) return failure;
+      if (failure) return { value: failure, readerOrigin };
       const page = readCommunity(result);
       const items = page.items
         .filter((board) => board.availability === 'available' && board.visibility !== 'taken_down')
         .map((board) => ({ id: board.id, title: board.title, purpose: board.purpose, visibility: board.visibility }));
       return {
-        kind: 'page',
-        items,
-        next: page.next,
-        unavailable: page.items.filter(
-          (board) => board.availability !== 'available' && board.visibility !== 'taken_down',
-        ).length,
+        value: {
+          kind: 'page',
+          items,
+          next: page.next,
+          unavailable: page.items.filter(
+            (board) => board.availability !== 'available' && board.visibility !== 'taken_down',
+          ).length,
+        },
+        readerOrigin,
       };
     }
     const result = await realm.publications.get({ query: { limit: COVER_ROW_LIMIT, ...cursor }, ...auth });
     const failure = shelfFailure(result);
-    if (failure) return failure;
+    if (failure) return { value: failure, readerOrigin };
     const page = readCommunity(result);
     const subjects = await readPublished(
       client,
@@ -311,14 +351,27 @@ export async function loadRealmShelfPage(
       auth,
     );
     return {
-      kind: 'page',
-      items: attachPublicationHeads(subjects, page.items),
-      next: page.next,
-      unavailable: page.items.length - subjects.length,
+      value: {
+        kind: 'page',
+        items: attachPublicationHeads(subjects, page.items),
+        next: page.next,
+        unavailable: page.items.length - subjects.length,
+      },
+      readerOrigin,
     };
   } catch {
-    return { kind: 'unavailable' };
+    return { value: { kind: 'unavailable' }, readerOrigin };
   }
+}
+
+/** Compatibility helper for consumers that only need the original shelf value. */
+export async function loadRealmShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' | 'publications' },
+): Promise<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>> {
+  return (await loadRealmShelfPageWithOrigin(client, request, sessionEnv, input)).value;
 }
 
 /** The signed-in reader's membership state, loaded only by a browser personal query. */
@@ -330,14 +383,15 @@ export async function loadRealmMembership(client: KernelClient, realmId: string,
  * Reads the page of one Space address: the address, then the Space, then — only when the Space names a Realm this
  * viewer may read — the Realm, its boards, its publications and the viewer's standing together.
  */
-export async function loadSpacePage(
+export async function loadSpacePageWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { address: string },
   credentialMode: ReadCredentialMode = 'session',
-): Promise<SpacePageData> {
-  const { auth } = await session(request, sessionEnv, credentialMode);
+): Promise<PreparedRead<SpacePageData>> {
+  const prepared = await session(request, sessionEnv, credentialMode);
+  const { auth } = prepared;
   const { spaceId } = readCommunity(await client.spaceAddresses({ address: input.address }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId }).get(auth));
   const extendedSpace = space as typeof space & { banner?: CoverSummary | null };
@@ -347,21 +401,68 @@ export async function loadSpacePage(
     summary: space.summary,
     ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}),
   };
-  if (!space.realmId) return { space: base, realm: null };
+  if (!space.realmId) return { value: { space: base, realm: null }, readerOrigin: prepared.readerOrigin };
   const realmId = space.realmId;
   const realm = await readOptional(client.realms({ realmId }).get(auth));
-  if (!realm) return { space: base, realm: null };
+  if (!realm) return { value: { space: base, realm: null }, readerOrigin: prepared.readerOrigin };
   const home = await readHome(client, realm.realm, auth, credentialMode, space);
   return {
-    space: base,
-    realm: { ...home, title: realm.realm.title, summary: realm.realm.summary, visibility: realm.realm.visibility },
+    value: {
+      space: base,
+      realm: { ...home, title: realm.realm.title, summary: realm.realm.summary, visibility: realm.realm.visibility },
+    },
+    readerOrigin: prepared.readerOrigin,
   };
+}
+
+/** Original return contract retained for callers that do not need reader admission. */
+export async function loadSpacePage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { address: string },
+  credentialMode: ReadCredentialMode = 'session',
+): Promise<SpacePageData> {
+  return (await loadSpacePageWithOrigin(client, request, sessionEnv, input, credentialMode)).value;
 }
 
 /**
  * Reads one Realm by id for the page of the Space that carries it: a Space with an address sends the viewer there,
  * and one without is shown from the reads already made.
  */
+export async function locateRealmWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { realmId: string },
+  credentialMode: ReadCredentialMode = 'session',
+): Promise<PreparedRead<Located>> {
+  const prepared = await session(request, sessionEnv, credentialMode);
+  const { auth } = prepared;
+  const { realm } = readCommunity(await client.realms({ realmId: input.realmId }).get(auth));
+  const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
+  if (space.address) return { value: { kind: 'redirect', address: space.address }, readerOrigin: prepared.readerOrigin };
+  const home = await readHome(client, realm, auth, credentialMode, space);
+  return {
+    value: {
+      kind: 'page',
+      page: {
+        space: {
+          id: space.spaceId,
+          title: space.title,
+          summary: space.summary,
+          ...((space as typeof space & { banner?: CoverSummary | null }).banner
+            ? { banner: (space as typeof space & { banner?: CoverSummary | null }).banner }
+            : {}),
+        },
+        realm: home,
+      },
+    },
+    readerOrigin: prepared.readerOrigin,
+  };
+}
+
+/** Original return contract retained for callers that do not need reader admission. */
 export async function locateRealm(
   client: KernelClient,
   request: Request,
@@ -369,25 +470,7 @@ export async function locateRealm(
   input: { realmId: string },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<Located> {
-  const { auth } = await session(request, sessionEnv, credentialMode);
-  const { realm } = readCommunity(await client.realms({ realmId: input.realmId }).get(auth));
-  const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
-  if (space.address) return { kind: 'redirect', address: space.address };
-  const home = await readHome(client, realm, auth, credentialMode, space);
-  return {
-    kind: 'page',
-    page: {
-      space: {
-        id: space.spaceId,
-        title: space.title,
-        summary: space.summary,
-        ...((space as typeof space & { banner?: CoverSummary | null }).banner
-          ? { banner: (space as typeof space & { banner?: CoverSummary | null }).banner }
-          : {}),
-      },
-      realm: home,
-    },
-  };
+  return (await locateRealmWithOrigin(client, request, sessionEnv, input, credentialMode)).value;
 }
 
 /** One page of the signed-in person's Realms. A cursor the kernel rejects restarts at the first page. */

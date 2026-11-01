@@ -133,19 +133,43 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/community/space-actions', () => ({
   readSpacePage: ({ data }: { data: PageInput }) => {
     calls.pages.push(structuredClone(data));
-    return pageReader(data);
+    return pageReader(data).then((page) => ({
+      ...page,
+      readerOrigin:
+        data.credentialMode === 'anonymous'
+          ? { kind: 'anonymous' as const }
+          : { kind: 'signed-in' as const, subject: reader },
+    }));
   },
   locateRealmPage: ({ data }: { data: RealmInput }) => {
     calls.realms.push(structuredClone(data));
-    return realmReader(data);
+    return realmReader(data).then((located) => ({
+      ...located,
+      readerOrigin:
+        data.credentialMode === 'anonymous'
+          ? { kind: 'anonymous' as const }
+          : { kind: 'signed-in' as const, subject: reader },
+    }));
   },
   readRealmBoards: ({ data }: { data: ShelfInput }) => {
     calls.boards.push(structuredClone(data));
-    return boardReader(data);
+    return boardReader(data).then((page) => ({
+      ...page,
+      readerOrigin:
+        data.credentialMode === 'anonymous'
+          ? { kind: 'anonymous' as const }
+          : { kind: 'signed-in' as const, subject: reader },
+    }));
   },
   readRealmPublications: ({ data }: { data: ShelfInput }) => {
     calls.publications.push(structuredClone(data));
-    return publicationReader(data);
+    return publicationReader(data).then((page) => ({
+      ...page,
+      readerOrigin:
+        data.credentialMode === 'anonymous'
+          ? { kind: 'anonymous' as const }
+          : { kind: 'signed-in' as const, subject: reader },
+    }));
   },
   changeRealmPublication: async () => ({ kind: 'unavailable' }),
   readSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
@@ -166,7 +190,7 @@ const { createMemoryHistory, createRootRoute, createRootRouteWithContext, create
   await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { spaceQuery, useShelfList } = await import('../src/community/space-queries');
-const { captureSpacePageAdmission, getSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime } =
+const { captureSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime } =
   await import('../src/community/space-page-lifetime');
 const { SpacePage } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
@@ -281,10 +305,8 @@ async function loadSessionSpace(queryClient: QueryClient, routeAddress = address
     locale,
     credentialMode: 'session',
   });
-  const page = await queryClient.fetchQuery(spaceQuery(routeAddress, locale, 'session', admission));
-  const bound = getSpacePageAdmission(page);
-  if (!bound) throw new Error('Session Space query returned no original admission');
-  return { page, admission: bound };
+  const result = await queryClient.fetchQuery(spaceQuery(routeAddress, locale, 'session', admission));
+  return { page: result.page, admission: result.admission };
 }
 
 function makeRouter(queryClient: QueryClient) {
@@ -705,7 +727,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     });
     const routePage = pageFor(address, false);
     const bound = await nextClient.fetchQuery(spaceQuery(address, 'en', 'anonymous', admission));
-    const pageAdmission = getSpacePageAdmission(bound)!;
+    const pageAdmission = bound.admission;
     const initial = { items: [board()], next: 'old-cursor', unavailable: 0, credentialMode: 'anonymous' as const };
     const read = async (input: { cursor?: string; credentialMode: 'anonymous' | 'session' }) => {
       calls.boards.push({ realmId, ...input });
@@ -777,8 +799,9 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
       locale: 'en',
       credentialMode: 'anonymous',
     });
-    const localePage = await localeClient.fetchQuery(spaceQuery(address, 'en', 'anonymous', localeAdmission));
-    const boundLocaleAdmission = getSpacePageAdmission(localePage)!;
+    const localeRead = await localeClient.fetchQuery(spaceQuery(address, 'en', 'anonymous', localeAdmission));
+    const localePage = localeRead.page;
+    const boundLocaleAdmission = localeRead.admission;
     await mount(
       <SpacePageLifetimeHost
         page={localePage}

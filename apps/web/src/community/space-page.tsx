@@ -209,6 +209,7 @@ export function RealmShelf({
     },
     transport?.boards ?? ((input) => readRealmBoards({ data: { realmId: realm.id, ...input } })),
     lifetime,
+    !transport?.boards,
   );
   const publications = useShelfList(
     {
@@ -219,6 +220,7 @@ export function RealmShelf({
     },
     transport?.publications ?? ((input) => readRealmPublications({ data: { realmId: realm.id, ...input } })),
     lifetime,
+    !transport?.publications,
   );
   const sendPublication = useCallback<PublicationSend>(
     (input) =>

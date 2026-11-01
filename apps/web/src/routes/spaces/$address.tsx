@@ -11,7 +11,6 @@ import { SpacePage } from '../../community/space-page';
 import {
   bindHydratedSpacePage,
   captureSpacePageAdmission,
-  getSpacePageAdmission,
   isObsoleteSpacePageRead,
   ObsoleteSpacePageReadError,
   spacePageAdmissionFor,
@@ -38,13 +37,11 @@ export const Route = createFileRoute('/spaces/$address')({
     for (let attempt = 0; attempt < 2; attempt++) {
       const query = spaceQuery(params.address, locale, 'anonymous', original);
       try {
-        let page = await context.queryClient.ensureQueryData(query);
-        let admission = getSpacePageAdmission(page);
-        if (admission?.readId !== original.readId) {
-          page = await context.queryClient.fetchQuery({ ...query, staleTime: 0 });
-          admission = getSpacePageAdmission(page);
-        }
-        if (admission?.readId === original.readId) return { page, admission };
+        let result = await context.queryClient.ensureQueryData(query);
+        if (result.admission.readId !== original.readId)
+          result = await context.queryClient.fetchQuery({ ...query, staleTime: 0 });
+        if (result.admission.readId === original.readId)
+          return { page: result.page, admission: result.admission } satisfies SpaceLoaderData;
         throw new ObsoleteSpacePageReadError();
       } catch (error) {
         if (!isObsoleteSpacePageRead(error) || attempt > 0) throw error;
@@ -84,11 +81,11 @@ function SpaceRoute() {
   const personal = session === 'signed-in' && publicPage.realm === null;
   const sessionRequest = { target: { kind: 'space' as const, address }, locale, credentialMode: 'session' as const };
   const currentSessionAdmission = sessionPage.data
-    ? spacePageAdmissionFor(sessionPage.data, client, sessionRequest)
+    ? spacePageAdmissionFor(sessionPage.data.page, client, sessionRequest, sessionPage.data.admission)
     : null;
   if (personal && sessionPage.isError && !isObsoleteSpacePageRead(sessionPage.error)) throw sessionPage.error;
   const usePersonal = personal && sessionPage.isSuccess && !sessionPage.isFetching && !!currentSessionAdmission;
-  const page = usePersonal ? sessionPage.data! : publicPage;
+  const page = usePersonal ? sessionPage.data!.page : publicPage;
   const admission = usePersonal ? currentSessionAdmission! : publicAdmission;
   const request = usePersonal ? sessionRequest : publicRequest;
 

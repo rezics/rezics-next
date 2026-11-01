@@ -7,12 +7,10 @@ import { SpacePage } from '../../community/space-page';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ClosedErrorPage } from '../../shell/closed';
 import { spacePageHead } from '../../community/space-head';
-import type { Located, SpacePageData } from '../../community/space';
+import type { SpacePageData } from '../../community/space';
 import {
   bindHydratedSpacePage,
   captureSpacePageAdmission,
-  getRealmPageAdmission,
-  getSpacePageAdmission,
   isObsoleteSpacePageRead,
   ObsoleteSpacePageReadError,
   spacePageSessionSource,
@@ -34,17 +32,15 @@ export const Route = createFileRoute('/realms/$id')({
     });
     for (let attempt = 0; attempt < 2; attempt++) {
       const query = realmPageQuery(params.id, locale, context.credentialMode, original);
-      let located: Located;
       try {
-        located = await context.queryClient.ensureQueryData(query);
-        if (getRealmPageAdmission(located)?.readId !== original.readId)
-          located = await context.queryClient.fetchQuery({ ...query, staleTime: 0 });
-        if (getRealmPageAdmission(located)?.readId !== original.readId) throw new ObsoleteSpacePageReadError();
+        let result = await context.queryClient.ensureQueryData(query);
+        if (result.admission.readId !== original.readId)
+          result = await context.queryClient.fetchQuery({ ...query, staleTime: 0 });
+        if (result.admission.readId !== original.readId) throw new ObsoleteSpacePageReadError();
+        const { located, admission } = result;
         if (located.kind === 'redirect')
           throw redirect({ href: `/${locale}/spaces/${encodeURIComponent(located.address)}`, statusCode: 307 });
-        const admission = getSpacePageAdmission(located.page);
-        if (admission?.readId === original.readId) return { page: located.page, admission } satisfies RealmLoaderData;
-        throw new ObsoleteSpacePageReadError();
+        return { page: located.page, admission } satisfies RealmLoaderData;
       } catch (error) {
         if (!isObsoleteSpacePageRead(error) || attempt > 0) throw error;
         original = captureSpacePageAdmission(context.queryClient, {

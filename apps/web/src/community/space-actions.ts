@@ -27,13 +27,17 @@ import {
 import {
   requestRealmMembership,
   loadMyRealms,
-  loadSpacePage,
-  locateRealm,
+  loadSpacePageWithOrigin,
+  locateRealmWithOrigin,
   namePublishedTypes,
-  loadRealmShelfPage,
+  loadRealmShelfPageWithOrigin,
   type Located,
   type MembershipResult,
   type MyRealmsPage,
+  type ReaderOrigin,
+  type ShelfPage,
+  type RealmBoard,
+  type PublishedSubject,
   type SpacePageData,
 } from './space';
 import { changePublication, type PublicationChange, type PublicationOutcome } from './publication-controls';
@@ -127,22 +131,42 @@ function validateChange(input: unknown): { realmId: string; action: 'join' | 'le
 
 export const readSpacePage = createServerFn({ method: 'GET' })
   .validator(validateAddress)
-  .handler(async ({ data }): Promise<SpacePageData> => {
+  .handler(async ({ data }): Promise<SpacePageData & { readerOrigin: ReaderOrigin }> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await loadSpacePage(kernelClient(), request, env as Partial<SessionEnv>, data, data.credentialMode);
-    return namePublishedTypes(page, requestLocale(request) ?? 'en');
+    const result = await loadSpacePageWithOrigin(
+      kernelClient(),
+      request,
+      env as Partial<SessionEnv>,
+      data,
+      data.credentialMode,
+    );
+    return {
+      ...(await namePublishedTypes(result.value, requestLocale(request) ?? 'en')),
+      readerOrigin: result.readerOrigin,
+    };
   });
 
 export const locateRealmPage = createServerFn({ method: 'GET' })
   .validator(validateRealm)
-  .handler(async ({ data }): Promise<Located> => {
+  .handler(async ({ data }): Promise<Located & { readerOrigin: ReaderOrigin }> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const located = await locateRealm(kernelClient(), request, env as Partial<SessionEnv>, data, data.credentialMode);
+    const result = await locateRealmWithOrigin(
+      kernelClient(),
+      request,
+      env as Partial<SessionEnv>,
+      data,
+      data.credentialMode,
+    );
+    const located = result.value;
     return located.kind === 'page'
-      ? { ...located, page: await namePublishedTypes(located.page, requestLocale(request) ?? 'en') }
-      : located;
+      ? {
+          ...located,
+          page: await namePublishedTypes(located.page, requestLocale(request) ?? 'en'),
+          readerOrigin: result.readerOrigin,
+        }
+      : { ...located, readerOrigin: result.readerOrigin };
   });
 
 export const readMyRealmsPage = createServerFn({ method: 'GET' })
@@ -268,29 +292,34 @@ function validateShelf(input: unknown) {
 
 export const readRealmBoards = createServerFn({ method: 'GET' })
   .validator(validateShelf)
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<ShelfPage<RealmBoard> & { readerOrigin: ReaderOrigin }> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadRealmShelfPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, { ...data, list: 'boards' });
+    const result = await loadRealmShelfPageWithOrigin(kernelClient(), getRequest(), env as Partial<SessionEnv>, {
+      ...data,
+      list: 'boards',
+    });
+    return { ...result.value, readerOrigin: result.readerOrigin };
   });
 
 export const readRealmPublications = createServerFn({ method: 'GET' })
   .validator(validateShelf)
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<ShelfPage<PublishedSubject> & { readerOrigin: ReaderOrigin }> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const result = await loadRealmShelfPage(kernelClient(), request, env as Partial<SessionEnv>, {
+    const result = await loadRealmShelfPageWithOrigin(kernelClient(), request, env as Partial<SessionEnv>, {
       ...data,
       list: 'publications',
     });
-    if (result.kind !== 'page') return result;
+    if (result.value.kind !== 'page') return { ...result.value, readerOrigin: result.readerOrigin };
     const { typeNames } = await import('../subject/definitions');
     const names = await typeNames(
-      [...new Set(result.items.flatMap((subject) => subject.types.slice(0, 1)))],
+      [...new Set(result.value.items.flatMap((subject) => subject.types.slice(0, 1)))],
       requestLocale(request) ?? 'en',
     );
     return {
-      ...result,
-      items: result.items.map((subject) => {
+      ...result.value,
+      readerOrigin: result.readerOrigin,
+      items: result.value.items.map((subject) => {
         const typeName = names.get(subject.types[0] ?? '');
         return { ...subject, ...(typeName ? { typeName } : {}) };
       }),
