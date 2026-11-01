@@ -4,8 +4,7 @@ INSERT INTO semantic.public_filter_bootstrap
    owner_epoch, source_position, state, account_after)
 SELECT s.partition_no, :bootstrap::uuid, d.read_definition, :request_key::text, :consumer::text,
   :snapshot_kind::text, pg_current_snapshot(), p.epoch, p.position,
-  CASE WHEN input.mixed THEN 'capturing' ELSE 'begun' END,
-  CASE WHEN input.mixed THEN 0 ELSE 4096 END
+  'capturing', 0
 FROM semantic.public_filter_read_definition d
 JOIN semantic.public_filter_source s ON (s.partition_no,s.source_id,s.configuration) =
   (d.partition_no,d.source_id,d.configuration)

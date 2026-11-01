@@ -1641,6 +1641,7 @@ export async function readGenerationPublicationCustody(
 ): Promise<
   | Readonly<{
       definition: CustodyRetainedDefinition;
+      registration: CustodyRegistration;
       queried: PublicFilterQueriedObservation | null;
       cost: CustodyCost;
     }>
@@ -1680,11 +1681,12 @@ export async function readGenerationPublicationCustody(
          AND observation=$3 AND state='open'`,
             [sourceHome, row.id, observation],
           );
-    if (!found.rows[0]) return { definition: definition.data, queried: null, cost: meter };
+    const registration = { partition: row.partition_no as number, id: row.id as string };
+    if (!found.rows[0]) return { definition: definition.data, registration, queried: null, cost: meter };
     const q = decode<PublicFilterQueriedObservation>(found.rows[0].queried);
     requireValue(encode(q.consumer) === encode(consumer));
     const native = await read(pool, { queried: q }, context, meter);
-    return { definition: native.definition, queried: native.queried, cost: meter };
+    return { definition: native.definition, registration, queried: native.queried, cost: meter };
   } catch (error) {
     return failure(error, meter);
   }

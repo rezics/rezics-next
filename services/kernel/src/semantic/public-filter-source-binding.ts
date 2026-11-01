@@ -18,6 +18,9 @@ import readBootstrap from './public-filter-source-binding-bootstrap.sql';
 import adoptBootstrap from './public-filter-source-binding-adopt.sql';
 import abortBootstrap from './public-filter-source-binding-abort.sql';
 import accountPage from './public-filter-source-binding-account-page.sql';
+import { enrollAccountDiscoveryHome } from '../access/account-discovery-reduction.ts';
+import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
+import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import readAccounts from './public-filter-source-binding-accounts.sql';
 import repairState from './public-filter-source-binding-repair-state.sql';
 import repairRead from './public-filter-source-binding-repair-read.sql';
@@ -959,29 +962,29 @@ export function createPublicFilterSourceBinding(
         if (!inserted) throw new BindingError('configuration_changed');
         const cut = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
         if (cut.row.state === 'capturing') {
-          // One bounded owner page per retry. Excluded, empty, order and hashed-claim homes are all retained.
-          const homes = Array.from(
-            { length: Math.min(100, 4096 - cut.row.account_after) },
-            (_, i) => cut.row.account_after + i,
-          );
-          const native = await readAccountDiscoveryReductionBinding(db, homes, { deadline });
-          if (native.heads.length !== homes.length || native.heads.some((head, i) => head.partition !== homes[i]))
-            throw new BindingError('owner_unavailable');
-          const advanced = (
-            await accountPage.run(db, {
-              bootstrap: inserted.bootstrap,
-              after_partition: cut.row.account_after,
-              next_partition: cut.row.account_after + homes.length,
-              head_count: homes.length,
-              heads: native.heads.map((head) => ({
-                partition: head.partition,
-                epoch: head.epoch,
-                revision: String(head.revision),
-                claim_revision: String(head.claimRevision),
-              })),
-            })
-          )[0];
-          if (!advanced || cut.row.account_after + homes.length !== 4096)
+          // One original native home per retained preparation step. Account and
+          // Source writers share the locks used by this enrollment. Its original
+          // tuple survives replay and is not replaced by a current read snapshot.
+          const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys);
+          const receipt = await enrollAccountDiscoveryHome(db, {
+            partition: cut.row.account_after,
+            bootstrap: inserted.bootstrap,
+            registration: registration.registration,
+            readDefinition: resolved.definition.readDefinition,
+            keys: 'representation' in capture ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys,
+            accounts: 'representation' in capture,
+          }, { deadline });
+          if (!receipt.complete)
+            return { status: 'unready' as const, reason: 'owner_unavailable' as const, cost };
+          const advanced = (await accountPage.run(db, {
+            bootstrap: inserted.bootstrap,
+            after_partition: cut.row.account_after,
+            next_partition: cut.row.account_after + 1,
+            head_count: 1,
+            heads: [{ partition: receipt.partition, epoch: receipt.epoch,
+              revision: String(receipt.revision), claim_revision: String(receipt.claimRevision) }],
+          }))[0];
+          if (!advanced || cut.row.account_after + 1 !== 4096)
             return { status: 'unready' as const, reason: 'owner_unavailable' as const, cost };
         }
         const begun = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
