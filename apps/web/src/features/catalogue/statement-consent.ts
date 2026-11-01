@@ -54,7 +54,8 @@ export function consentAssertion(read: Extract<ConsentRead, { ok: true }>, addre
   const target = name(
     bound &&
       candidate.statement.value.type === 'value' &&
-      identity?.target?.id === candidate.statement.value.content &&
+      identity?.target &&
+      identity.target.id === candidate.statement.value.content &&
       (!address.slot?.target || address.slot.target === identity.target.id)
       ? identity.target.labels
       : {},
