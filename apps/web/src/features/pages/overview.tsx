@@ -41,6 +41,7 @@ import {
 } from './shared';
 import { statementDocument } from './documents';
 import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
+import { DescriptionPassage, SubjectPassage } from './subject-passage';
 import { SubjectReadingState } from '../../subject/reading-state';
 import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
 export type { Count } from '../count';
@@ -945,25 +946,10 @@ function SummaryPassage({
   const body = (
     <DocumentValue document={document} lang={language === value.locale ? undefined : language} labels={value.labels} />
   );
-  if (excerpt.complete) return body;
-  const options = { locale: value.locale as never };
   return (
-    <details data-slot="summary-disclosure" className="group space-y-3">
-      <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
-        {excerpt.text && (
-          <span lang={language} className="mb-2 block max-w-prose text-pretty leading-7 group-open:hidden">
-            {excerpt.text}…
-          </span>
-        )}
-        <span className="text-sm font-medium text-primary underline underline-offset-4 group-open:hidden">
-          {m.subject_summary_expand({}, options)}
-        </span>
-        <span className="hidden text-sm font-medium text-primary underline underline-offset-4 group-open:inline">
-          {m.subject_summary_collapse({}, options)}
-        </span>
-      </summary>
+    <SubjectPassage excerpt={excerpt} language={language} locale={value.locale}>
       {body}
-    </details>
+    </SubjectPassage>
   );
 }
 
@@ -1027,9 +1013,12 @@ export function Summary(props: Record<string, unknown>) {
         ))}
       {description?.text && (
         <div className="space-y-1">
-          <p lang={description.lang} className="max-w-prose text-pretty leading-7">
-            {description.text}
-          </p>
+          <DescriptionPassage
+            key={`${read.subject.id}/${value.locale}/${read.subject.context}/${description.lang}`}
+            text={description.text}
+            language={description.lang}
+            locale={value.locale}
+          />
           <LanguageTag lang={description.lang} locale={value.locale} />
         </div>
       )}

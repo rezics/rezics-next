@@ -4,7 +4,8 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import { SubjectPage, type SubjectPageData } from '../features/pages/subject';
+import { SubjectPage, subjectBody, type SubjectPageData } from '../features/pages/subject';
+import { fromMarkdown } from '@rezics/document';
 import { RatingsView } from '../features/pages/subject-ratings-view';
 import { subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import subjectPageRecording from '../kernel/recorded/subject-page.json';
@@ -89,6 +90,70 @@ export const SignedOut: Story = {
   name: 'Signed out',
   play: subjectReady,
   render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
+};
+
+/** Illustrative passage fixtures on the recorded composition, not new native evidence. */
+function ReadingPassageStory({ rich = false }: { rich?: boolean }) {
+  const [page] = useState(() => {
+    const page = structuredClone(subjectPageRecording) as unknown as SubjectPageData;
+    const read = subjectBody(page);
+    if (!read) throw new Error('The recorded subject read is missing.');
+    const passage = [
+      'A traveller follows a trail of handwritten maps through a city whose libraries stay open all night. ' +
+        'Each chapter pauses with a different reader, keeping the small details of their daily lives in view. '.repeat(
+          4,
+        ),
+      'The journey continues beside the river, where neighbours exchange stories in many languages. ' +
+        '星空の下で、旅は続く。 👩🏽‍🚀 é '.repeat(18),
+      'The final paragraph remains available only after the reader chooses to expand the complete passage.',
+    ].join('\n\n');
+    if (rich) {
+      const statement = read.subject.statements['schema:abstract']?.[0];
+      if (!statement || statement.value.type !== 'value') throw new Error('The recorded summary is missing.');
+      statement.value.content = {
+        language: 'en',
+        document: fromMarkdown(
+          `${passage}\n\n[Reading notes](https://example.test/notes) and >!the hidden ending!<.`,
+          'text',
+        ),
+      };
+      statement.qualifiers = [
+        {
+          property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+          value: { type: 'value', content: { amount: '+1', unit: '1' } },
+        },
+      ];
+      read.subject.statements['schema:abstract'] = [statement];
+    } else {
+      delete read.subject.statements['schema:abstract'];
+      read.subject.descriptions = { en: passage };
+    }
+    return page;
+  });
+  return (
+    <PatternStory visitor="Signed Out" path={pagePaths.subject}>
+      <AppShell>
+        <SubjectPage
+          page={page}
+          locale={getLocale()}
+          messages={subjectPageMessages()}
+          tabs={subjectTabs(page)}
+          tabLabels={viewTabLabels()}
+          reader={{ spoilerLevel: 0, suitability: 'blur' }}
+        />
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+export const LongFallbackDescription: Story = {
+  name: 'Long fallback description',
+  render: () => <ReadingPassageStory />,
+};
+
+export const SpoilerLongSummary: Story = {
+  name: 'Spoiler with long summary',
+  render: () => <ReadingPassageStory rich />,
 };
 
 export const LibrarySlotMenuPhone: Story = {

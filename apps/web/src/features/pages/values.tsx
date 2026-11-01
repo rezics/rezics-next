@@ -44,7 +44,15 @@ export function SpoilerGate({
   const [open, setOpen] = useState(false);
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="space-y-2">
-      <CollapsibleTrigger render={<Button variant="outline" size="sm" />}>
+      <CollapsibleTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11 min-w-11 whitespace-normal text-left focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
+          />
+        }
+      >
         <Eye aria-hidden="true" className="size-4" />
         {open ? (hideLabel ?? m.subject_spoiler_hide()) : label}
       </CollapsibleTrigger>
