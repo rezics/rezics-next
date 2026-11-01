@@ -16,7 +16,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { csrfHeaders } from './composer';
 import { changeReaction } from './reactions';
 import { subjectReactionKinds, type ReactionFailure } from './reaction-request';
-import { sessionQuery } from '../session/query';
+import type { useSession } from '../session/query';
 
 function reactionLabels(failed: string | null) {
   return {
@@ -87,7 +87,8 @@ type ThreadReactionsProps = {
 
 /** Observe the existing cache only. Remember transitions even when React batches away/back into one render. */
 function observeReactionSession(client: QueryClient | undefined) {
-  const read = () => client?.getQueryData(sessionQuery.queryKey);
+  // Observe sessionQuery's existing key without importing its server actions into isolated prepared renderers.
+  const read = () => client?.getQueryData<ReturnType<typeof useSession>>(['session']);
   const identity = () => {
     const session = read();
     return JSON.stringify([session?.state, session?.subject ?? null, session?.csrfToken ?? null]);
@@ -108,7 +109,7 @@ function observeReactionSession(client: QueryClient | undefined) {
     serverSnapshot: () => 0,
     subscribe: (notify: () => void) =>
       client?.getQueryCache().subscribe(({ query }) => {
-        if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        if (query.queryKey.length !== 1 || query.queryKey[0] !== 'session') return;
         const before = revision;
         if (snapshot() !== before) notify();
       }) ?? (() => {}),

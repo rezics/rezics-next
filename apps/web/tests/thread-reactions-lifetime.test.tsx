@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, type ComponentProps, type ReactNode } from 'react';
+import { act, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ChangeReactionInput, ReactionFailure } from '../src/threads/reaction-request';
 
@@ -350,6 +350,7 @@ for (const reject of [false, true])
     expect(calls).toHaveLength(1);
     freshView();
     expect(chips().some((node) => node.textContent?.startsWith(m.reaction_upvote()))).toBe(false);
+    expect(chips().some((node) => node.textContent?.startsWith(m.reaction_downvote()))).toBe(false);
   });
 
 test('SSR, unknown sessions and readiness remain disabled, while anonymous URLs and standalone prepared views survive', async () => {

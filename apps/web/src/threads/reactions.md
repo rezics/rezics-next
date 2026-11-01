@@ -2,7 +2,8 @@
 
 `ThreadReactions` owns one mounted reader/target visit. Changing target kind or ID, withdrawing signed-in admission
 or personal readiness, unmounting, or observing loss/replacement of the browser session retires that visit. Account
-and CSRF token are both identity fields. Even an observed away/back transition creates a new visit. The shared
+and CSRF token are both identity fields. Replacing the QueryClient also creates a new visit, even with identical
+session fields. Even an observed away/back transition creates a new visit. The shared
 `Reactions` child remounts with the current controlled counts and selection; old optimistic state and refusal copy
 cannot follow it. Ordinary rerenders, callback changes and count echoes retain the current serialized queue.
 
