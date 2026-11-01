@@ -36,8 +36,9 @@ export function ModerationAppealsPage({
   const session = useSession();
   const [data, setData] = useState(page);
   const [lifetime] = useState(createAppealReadLifetime);
-  const expectedViewer = page.viewerId ?? (session.state === 'signed-in' ? (session.subject ?? null) : null);
-  lifetime.observeViewer(page.viewerId, session);
+  const preparedViewer = data.viewerId ?? page.viewerId;
+  const expectedViewer = preparedViewer ?? (session.state === 'signed-in' ? (session.subject ?? null) : null);
+  lifetime.observeViewer(preparedViewer, session);
   if (!active || !appealPageIsCurrent(page, input)) lifetime.retire();
   const retrying = useRef(false);
   // Invalidate outstanding callbacks on unmount, including Strict Mode effect replay.
@@ -64,8 +65,7 @@ export function ModerationAppealsPage({
         setData({ ...data, appeals: [], targets: [], next: null, state: 'closed' });
       }
     } catch {
-      if (lifetime.accepts(token, data, input, expectedViewer))
-        setData({ ...data, appeals: [], targets: [], next: null, state: 'unavailable' });
+      if (lifetime.isCurrent(token)) setData({ ...data, appeals: [], targets: [], next: null, state: 'unavailable' });
     } finally {
       retrying.current = false;
     }
@@ -81,12 +81,12 @@ export function ModerationAppealsPage({
       appeals={data.appeals}
       targets={data.targets}
       next={data.next}
-      viewerId={data.viewerId ?? undefined}
+      {...(data.viewerId !== null ? { viewerId: data.viewerId } : {})}
       state={lifetime.retired ? (lifetime.viewerRetired || data.state === 'closed' ? 'closed' : 'loading') : data.state}
-      threadId={input.threadId}
-      postId={input.postId}
-      reportsSearch={reportsSearch}
-      onRetry={expectedViewer !== null ? () => void retry() : undefined}
+      {...(input.threadId ? { threadId: input.threadId } : {})}
+      {...(input.postId ? { postId: input.postId } : {})}
+      {...(reportsSearch !== undefined ? { reportsSearch } : {})}
+      {...(expectedViewer !== null ? { onRetry: () => void retry() } : {})}
       onNext={(cursor) => leave(() => onNext?.(cursor))}
       onRestart={() => leave(onRestart)}
     />

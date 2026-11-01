@@ -144,7 +144,14 @@ function ModerationReportsPending() {
   const selection = reportSelection(search);
   if (tab === 'appeals')
     return (
-      <ModerationAppealsView appeals={[]} targets={[]} next={null} state="loading" threadId={thread} postId={post} />
+      <ModerationAppealsView
+        appeals={[]}
+        targets={[]}
+        next={null}
+        state="loading"
+        {...(thread ? { threadId: thread } : {})}
+        {...(post ? { postId: post } : {})}
+      />
     );
   return (
     <ModerationReportsView
