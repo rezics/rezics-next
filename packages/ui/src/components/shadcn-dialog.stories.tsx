@@ -120,7 +120,11 @@ const editFields = [
   ['profile-work', 'Current work', 'The Three-Body Problem'],
   ['profile-note', 'Reading note', 'A long-form note for this profile'],
   ['profile-handle', 'Public handle', 'lin-mo'],
-  ['profile-bio', 'Biography and interests — 作品名稱作品名稱作品名稱作品名稱作品名稱作品名稱作品名稱作品名稱', 'Writer and reader'],
+  [
+    'profile-bio',
+    'Biography and interests — 作品名稱作品名稱作品名稱作品名稱作品名稱作品名稱作品名稱作品名稱',
+    'Writer and reader',
+  ],
 ] as const;
 
 function LongProfileEdit() {
