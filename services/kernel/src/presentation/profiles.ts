@@ -51,6 +51,7 @@ type WriteOptions = {
 };
 
 function commandOptions(options: WriteOptions, kind: string, action: string) {
+  const authorize = options.authorize;
   return {
     partition: 0,
     ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
@@ -72,7 +73,7 @@ function commandOptions(options: WriteOptions, kind: string, action: string) {
         resource,
         denied: () => new ProfileAccessDeniedError(),
         async authorize(tx, attempt) {
-          if (!(await options.authorize(tx, attempt.time))) throw new ProfileAccessDeniedError();
+          if (!(await authorize(tx, attempt.time))) throw new ProfileAccessDeniedError();
           return 'execute';
         },
       } satisfies CommandAuthorization),
@@ -80,32 +81,29 @@ function commandOptions(options: WriteOptions, kind: string, action: string) {
 }
 
 export async function publishProfile(pool: Pool, options: WriteOptions & { profile: unknown }) {
+  const invocation = commandOptions(options, 'presentation.publish', 'presentation:publish');
   // Validate before runCommand can check out a connection, including for a replay.
   const profile = profileSnapshot(options.profile);
   const digest = profileDigest(profile);
-  const command = await runCommand(
-    pool,
-    commandOptions(options, 'presentation.publish', 'presentation:publish'),
-    async (tx, { transactionId }) => {
-      const release = await activeRelease(tx);
-      const violations = validateProfileFilters(
-        platformRegistry,
-        profile,
-        release?.release ?? { types: {}, properties: {} },
-      );
-      if (violations.length) throw new ProfileInputError(violations);
-      const rows = await publish.run(tx, {
-        route: resource.route,
-        digest,
-        body: profile,
-        transaction_id: transactionId,
-      });
-      return {
-        value: { digest, created: rows !== null },
-        events: [{ type: 'com.rezics.presentation.profile.published.v1', subject: GLOBAL_CONTEXT, data: { digest } }],
-      };
-    },
-  );
+  const command = await runCommand(pool, invocation, async (tx, { transactionId }) => {
+    const release = await activeRelease(tx);
+    const violations = validateProfileFilters(
+      platformRegistry,
+      profile,
+      release?.release ?? { types: {}, properties: {} },
+    );
+    if (violations.length) throw new ProfileInputError(violations);
+    const rows = await publish.run(tx, {
+      route: resource.route,
+      digest,
+      body: profile,
+      transaction_id: transactionId,
+    });
+    return {
+      value: { digest, created: rows !== null },
+      events: [{ type: 'com.rezics.presentation.profile.published.v1', subject: GLOBAL_CONTEXT, data: { digest } }],
+    };
+  });
   return {
     ...command.value,
     component: { partition: command.partition, epoch: command.epoch, position: command.position },
@@ -117,18 +115,19 @@ export async function activateProfile(
   pool: Pool,
   options: WriteOptions & { profileDigest: string; expectedHead: number | null },
 ) {
+  const digest = options.profileDigest;
+  const expectedHead = options.expectedHead;
   const command = await runCommand(
     pool,
     commandOptions(options, 'presentation.activate', 'presentation:activate'),
     async (tx, { transactionId }) => {
-      const digest = options.profileDigest;
       // This runs after command authorization and receipt lookup, even for a malformed digest.
       if (DIGEST.exec(digest)?.[0] !== digest || !(await read.run(tx, { route: resource.route, digest })))
         throw new ProfileNotFoundError();
       const rows = await activate.run(tx, {
         route: resource.route,
         digest,
-        expected_head: options.expectedHead ?? 0,
+        expected_head: expectedHead ?? 0,
         transaction_id: transactionId,
       });
       if (!rows.length) throw new StaleProfileHeadError();
@@ -156,9 +155,19 @@ class AlreadyActive extends Error {
 
 /** Trusted setup only: the first activation and its profile commit together, without an actor. */
 export async function bootstrapProfile(pool: Pool, profile: PresentationProfile): Promise<string> {
+  // Setup ignores an unused malformed body when already active, but an empty
+  // bootstrap must never adopt a caller replacement during the pointer read.
+  const captured = (() => {
+    try {
+      return { body: profileSnapshot(profile) };
+    } catch (error) {
+      return { error };
+    }
+  })();
   const existing = await pointer.run(pool, { route: resource.route });
   if (existing) return existing.digest;
-  const body = profileSnapshot(profile);
+  if ('error' in captured) throw captured.error;
+  const body = captured.body;
   const digest = profileDigest(body);
   try {
     const command = await runCommand(pool, { partition: 0 }, async (tx, { transactionId }) => {

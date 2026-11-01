@@ -37,6 +37,16 @@ browser or native matrix for every type; the generic page needs no per-vertical 
 immutable, and publish and activate use their explicit grants. The original Zone starters remain inert documents;
 they do not implement the later common Zone page runtime.
 
+Profile commands retain their invocation's digest/head, detached deeply frozen plain-data body and original
+callback or live authorization capability before asynchronous work. Validation, hashing and storage use the same
+owned body without evaluating accessors or serialization hooks; caller objects remain mutable. Authority is checked
+fresh on each attempt and before receipt replay; the executor retains receipt-byte and basis ownership. Trusted
+bootstrap captures its potential body before the initial pointer read and defers an invalid-body error until needed,
+so an already-active setup still returns after one pointer read without writing. This adds bounded in-memory work
+only, with no additional SQL, cache entries, authority decisions or command frames. The connected invocation cases
+in `test/presentation/profile-invocation-custody.test.ts` are authored but unrun; native, growth and browser proof
+remain deferred for this change. Compiler evidence alone does not establish those outcomes.
+
 The six frozen [page outcomes](../../../../specs/pages-outcomes.test.ts) have a real persona/API receipt, and the
 [Workers host cases](../../../../apps/web/tests/pages-workers.host.test.ts) have actual workerd HTTP rendering and
 aggregate-derived JSON-LD receipts in development history. The [completion audit](../../../../docs/research/search-pages-completion-audit.md#execution-evidence-actually-inspected)
