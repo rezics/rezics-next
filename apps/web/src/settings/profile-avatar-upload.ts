@@ -2,6 +2,17 @@ import { UploadRefusal } from '../threads/upload';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
+import {
+  avatarCropSourceSupported,
+  avatarUploadFailure,
+  canCropAvatar,
+  constrainAvatarCrop,
+  createCroppedAvatarFile,
+  decodeAvatarCrop,
+  initialAvatarCrop,
+  type AvatarCropIssue,
+  type AvatarCropPosition,
+} from './profile-avatar-crop.ts';
 
 export type AvatarUpload = (accountId: string, file: File, signal: AbortSignal) => Promise<{ src: string }>;
 export type AvatarResume = (mediaId: string, file: File, signal: AbortSignal) => Promise<{ src: string }>;
@@ -12,12 +23,17 @@ type Selection = {
   file: File;
   url: string;
   before: Avatar;
+  bitmap?: ImageBitmap;
+  source?: { width: number; height: number };
+  crop?: AvatarCropPosition;
   reservation?: string;
   media?: string;
 };
 type UploadState = {
-  phase: 'idle' | 'uploading' | 'ready' | 'error' | 'cancelled';
+  phase: 'idle' | 'preparing' | 'crop' | 'original-only' | 'exporting' | 'uploading' | 'ready' | 'error' | 'cancelled';
   url: string | null;
+  crop?: { width: number; height: number; position: AvatarCropPosition };
+  cropIssue?: AvatarCropIssue;
   failure?: Failure;
   retryAt?: number;
 };
@@ -33,6 +49,7 @@ export class ProfileAvatarUpload {
   private connected = false;
   private retryAt = 0;
   private rateFailure: Failure | undefined;
+  private preparation = 0;
   constructor(
     private editor: ProfileEditor,
     private upload: AvatarUpload,
@@ -65,12 +82,16 @@ export class ProfileAvatarUpload {
   }
   private clear() {
     // Invalidate ownership before abort listeners or a late promise can run.
+    this.preparation++;
     const selection = this.selection;
     this.selection = null;
     const request = this.request;
     this.request = null;
     request?.abort();
-    if (selection) this.urls.revokeObjectURL(selection.url);
+    if (selection) {
+      selection.bitmap?.close();
+      this.urls.revokeObjectURL(selection.url);
+    }
     this.update(idle);
   }
   private reconcile() {
@@ -114,9 +135,47 @@ export class ProfileAvatarUpload {
       this.update({ phase: 'error', url: null });
       return;
     }
-    this.selection = { accountId: draft.accountId, file, url, before: draft.avatar };
+    const selection: Selection = { accountId: draft.accountId, file, url, before: draft.avatar };
+    this.selection = selection;
     this.editor.edit({});
-    void this.send(this.selection);
+    const failure = avatarUploadFailure(file);
+    if (failure) {
+      this.update({ phase: 'error', url, failure: { reason: failure } });
+      return;
+    }
+    const preparation = ++this.preparation;
+    this.update({ phase: 'preparing', url });
+    void this.prepare(selection, preparation);
+  };
+  setCrop = (patch: Partial<AvatarCropPosition>) => {
+    const selection = this.selection;
+    if (!selection?.source || !selection.crop || this.state.phase !== 'crop') return;
+    selection.crop = constrainAvatarCrop(selection.source, { ...selection.crop, ...patch });
+    this.update({
+      phase: 'crop',
+      url: selection.url,
+      crop: { ...selection.source, position: selection.crop },
+    });
+  };
+  applyCrop = () => {
+    const selection = this.selection;
+    if (!selection?.bitmap || !selection.crop || !selection.source || this.state.phase !== 'crop') return;
+    const preparation = ++this.preparation;
+    const bitmap = selection.bitmap;
+    const sourceFile = selection.file;
+    const position = selection.crop;
+    this.update({ phase: 'exporting', url: selection.url, crop: { ...selection.source, position } });
+    void this.exportCrop(selection, preparation, bitmap, sourceFile, position);
+  };
+  useOriginal = () => {
+    const selection = this.selection;
+    if (!selection || !this.editable() || !['crop', 'original-only'].includes(this.state.phase)) return;
+    this.preparation++;
+    selection.bitmap?.close();
+    selection.bitmap = undefined;
+    selection.source = undefined;
+    selection.crop = undefined;
+    void this.send(selection);
   };
   retry = () => {
     if (this.editable() && this.selection && this.canRetry() && !this.waiting()) void this.send(this.selection);
@@ -163,6 +222,81 @@ export class ProfileAvatarUpload {
     } finally {
       if (this.request === request) this.request = null;
     }
+  }
+  private async prepare(selection: Selection, preparation: number) {
+    try {
+      const cropable = await canCropAvatar(selection.file);
+      if (!this.ownsPreparation(selection, preparation)) return;
+      if (!cropable) {
+        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
+        return;
+      }
+      const bitmap = await decodeAvatarCrop(selection.file);
+      if (!this.ownsPreparation(selection, preparation)) {
+        bitmap?.close();
+        return;
+      }
+      if (!bitmap) {
+        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
+        return;
+      }
+      if (!avatarCropSourceSupported(bitmap)) {
+        bitmap.close();
+        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
+        return;
+      }
+      selection.bitmap = bitmap;
+      selection.source = { width: bitmap.width, height: bitmap.height };
+      selection.crop = initialAvatarCrop;
+      this.update({
+        phase: 'crop',
+        url: selection.url,
+        crop: { ...selection.source, position: selection.crop },
+      });
+    } catch {
+      if (!this.ownsPreparation(selection, preparation)) return;
+      this.update({ phase: 'original-only', url: selection.url, cropIssue: 'decode' });
+    }
+  }
+  private async exportCrop(
+    selection: Selection,
+    preparation: number,
+    bitmap: ImageBitmap,
+    sourceFile: File,
+    position: AvatarCropPosition,
+  ) {
+    try {
+      const file = await createCroppedAvatarFile(bitmap, sourceFile, position);
+      if (!this.ownsPreparation(selection, preparation)) return;
+      const url = this.urls.createObjectURL(file);
+      const previousUrl = selection.url;
+      selection.file = file;
+      selection.url = url;
+      selection.bitmap?.close();
+      selection.bitmap = undefined;
+      selection.source = undefined;
+      selection.crop = undefined;
+      this.urls.revokeObjectURL(previousUrl);
+      await this.send(selection);
+    } catch {
+      if (!this.ownsPreparation(selection, preparation)) return;
+      this.update({
+        phase: 'crop',
+        url: selection.url,
+        crop: selection.source && selection.crop ? { ...selection.source, position: selection.crop } : undefined,
+        cropIssue: 'encode',
+      });
+    }
+  }
+  private ownsPreparation(selection: Selection, preparation: number) {
+    const { draft, phase } = this.editor.snapshot();
+    return (
+      this.connected &&
+      this.selection === selection &&
+      this.preparation === preparation &&
+      draft?.accountId === selection.accountId &&
+      phase !== 'unavailable'
+    );
   }
   private owns(selection: Selection, request: AbortController) {
     return (
