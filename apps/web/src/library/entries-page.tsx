@@ -235,6 +235,10 @@ export function PersonalLibraryPage({
   acceptedNavigation,
   originatingLease,
   continueRead,
+  continueCurrent,
+  continueScope,
+  entriesAdmitted = true,
+  continueAdmitted = true,
   isCurrent,
 }: {
   page: PersonalLibraryView;
@@ -249,6 +253,10 @@ export function PersonalLibraryPage({
   acceptedNavigation?: LibraryNavigationRead;
   originatingLease?: ShelfMutationLease;
   continueRead?: () => Promise<Exclude<ContinueView, { state: 'unknown' }>>;
+  continueCurrent?: () => boolean;
+  continueScope?: string;
+  entriesAdmitted?: boolean;
+  continueAdmitted?: boolean;
   isCurrent?: () => boolean;
 }) {
   // Keep the write lease while a predicate replaces rows or temporarily shows no matches.
@@ -262,7 +270,7 @@ export function PersonalLibraryPage({
   );
   const currentNavigation = acceptedNavigation ?? navigation.data;
   const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);
-  const resume = useContinueRefresh(continueState, continueRead ?? readContinue, locale);
+  const resume = useContinueRefresh(continueState, continueRead ?? readContinue, continueScope ?? locale);
   const currentContinue = continueState ? resume.result : undefined;
   // Only a successful exhausted source establishes absence; readiness and failed reads remain visible.
   const continueAbsent =
@@ -316,15 +324,19 @@ export function PersonalLibraryPage({
       ) : null}
       {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
       {continueAbsent ? null : (
-        <ContinueSection
-          {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
-          onRetry={() => void resume.refresh()}
-          busy={resume.busy}
-          locale={locale}
-          density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
-        />
+        <div hidden={!continueAdmitted}>
+          <ContinueSection
+            {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
+            onRetry={() => {
+              if (continueCurrent?.() ?? true) void resume.refresh();
+            }}
+            busy={resume.busy}
+            locale={locale}
+            density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
+          />
+        </div>
       )}
-      <section aria-labelledby="tracked-entries-heading" className="space-y-5">
+      <section hidden={!entriesAdmitted} aria-labelledby="tracked-entries-heading" className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 id="tracked-entries-heading" className="text-2xl font-semibold">
             {heading}

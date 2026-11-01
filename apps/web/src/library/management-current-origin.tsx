@@ -74,7 +74,7 @@ class ManagementCurrentOrigin {
       return;
     }
     for (const [operation, lease] of this.operations) {
-      if (!lease.retired && lease.version !== this.admission.version(operation)) {
+      if (!lease.retired && lease.version !== this.admission.dispatchVersion(operation)) {
         lease.retired = true;
         this.changed();
       }
@@ -140,7 +140,7 @@ class ManagementCurrentOrigin {
     if (this.accepted.retired) this.accepted = { retired: false };
     for (const operation of operations) {
       if (!this.operations.has(operation) || this.operations.get(operation)!.retired) {
-        this.operations.set(operation, { retired: false, version: this.admission.version(operation) });
+        this.operations.set(operation, { retired: false, version: this.admission.dispatchVersion(operation) });
         this.captured = undefined;
       }
     }
@@ -149,6 +149,7 @@ class ManagementCurrentOrigin {
       const leases = new Map(this.operations);
       const isCurrent = (operation = this.operation) =>
         this.isCurrent() &&
+        !leases.get(this.operation)?.retired &&
         this.admitted(operation) &&
         !accepted.retired &&
         !!leases.get(operation) &&

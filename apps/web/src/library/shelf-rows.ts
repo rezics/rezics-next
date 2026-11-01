@@ -643,6 +643,12 @@ export function useShelfRows(
     labelWriteAdmitted: labelCurrent(),
     captureLabel: () => guard(labelWriteAdmitted && labelListAdmitted, 'library_label.assign', 'library_label.list'),
     labelVersion: shelfOrigin?.version('library_label.assign', 'library_label.list'),
+    labelEpoch: shelfOrigin?.epoch?.(
+      'library_entry.list',
+      'progress_session.list',
+      'library_label.assign',
+      'library_label.list',
+    ),
     assignSelectedLabel,
     retryLabel,
     labelSelectionBlocked:

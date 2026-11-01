@@ -38,11 +38,12 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
   const mounted = useRef(true);
   const blocked = controls.pending || controls.labelSelectionBlocked;
   const selected = controls.selected.join(':');
-  const scope = useMemo(
-    () => ({ active: true, current: controls.captureLabel() }),
+  const searchScope = useMemo(
+    () => ({}),
     [open, query, session.state, session.subject, controls.labelVersion, selected, origin],
   );
-  const previous = useRef(scope);
+  const scope = useMemo(() => ({ active: true, current: controls.captureLabel() }), [searchScope, controls.labelEpoch]);
+  const previous = useRef({ scope, searchScope });
   const cancelTimer = () => {
     clearTimeout(timer.current);
     timer.current = undefined;
@@ -56,15 +57,19 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
     setPage(null);
     setChoiceId('');
   };
-  if (previous.current !== scope) {
-    previous.current.active = false;
-    previous.current = scope;
+  if (previous.current.scope !== scope) {
+    previous.current.scope.active = false;
+    const changedSearch = previous.current.searchScope !== searchScope;
+    previous.current = { scope, searchScope };
     requestId.current++;
     cancelTimer();
-    livePage.current = null;
     liveChoice.current = '';
-    setPage(null);
     setChoiceId('');
+    // Observation churn retires callbacks, but does not replay an accepted search.
+    // An interrupted first read can be retried by reopening the chooser.
+    const next = changedSearch ? null : (livePage.current ?? { state: 'unavailable' as const, labels: [] });
+    livePage.current = next;
+    setPage(next);
   }
   const isCurrent = () => mounted.current && scope.active && scope.current();
   const retainedCurrent = () => isCurrent() && page === livePage.current;
@@ -132,7 +137,7 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
       clearTimeout(timer.current);
       requestId.current++;
     };
-  }, [scope]);
+  }, [searchScope]);
   const ready = isCurrent() && listAdmitted && page?.state === 'loaded' && !labelReadMessage(page.reason);
   const choice = ready ? page.labels.find((label) => label.id === choiceId) : undefined;
   const acceptedMore = useRef<LabelPage | null>(null);

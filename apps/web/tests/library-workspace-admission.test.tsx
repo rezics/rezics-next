@@ -167,7 +167,7 @@ const copyResponse = (subject: string): CopiesCurrentRead => ({
   page: { signedIn: true, subjectId: null, copies: [], next: null, addKey: id(84), csrfToken: `loader-${subject}` },
 });
 
-test('Healthy actual scoped admission enables management without a global key; foreign cache and pre-commit ABA cannot authorize retained guards', async () => {
+test('Healthy actual scoped admission enables Library workspace journeys while foreign legacy cache never authorizes reads or retained commands', async () => {
   const labels = await import('../src/library/labels-page');
   const copies = await import('../src/library/copies-page');
   const read = await import('../src/library/labels-read-route');
@@ -216,6 +216,17 @@ test('Healthy actual scoped admission enables management without a global key; f
     expect(client.getQueryData(['exposure', 'viewer'])).toBeUndefined();
     expect(label.originating!.isCurrent('library_label.rename')).toBe(true);
     expect(new Headers(copy.originating!.headers('copy.create')!).get('x-csrf-token')).toBe('csrf-A');
+    const beforeRotation = label.originating!;
+    await act(async () => {
+      session(client, 'A', 'rotated-A');
+      expect(beforeRotation.isCurrent('library_label.rename')).toBe(false);
+      settle(client, 'A');
+      expect(beforeRotation.isCurrent('library_label.rename')).toBe(false);
+    });
+    await tick();
+    expect(label.originating!.isCurrent('library_label.rename')).toBe(true);
+    expect(new Headers(copy.originating!.headers('copy.create')!).get('x-csrf-token')).toBe('rotated-A');
+    expect(lists).toHaveLength(0);
     const original = label.originating!;
     await act(async () => {
       client.setQueryData(['exposure', 'viewer'], groups);
@@ -407,6 +418,7 @@ function shelfResponse(subject: string): PersonalLibraryCurrentRead {
 test('The actual personal Shelf keeps uncertain entry intent while its scoped chooser and independent history operands retire before commit', async () => {
   const rows = await import('../src/library/shelf-rows');
   const actions = await import('../src/library/entries-actions');
+  const labels = await import('../src/library/labels-actions');
   const { PersonalLibraryCurrent } = await import('../src/library/personal-library-current');
   const { useShelfTypesLifetime } = await import('../src/library/shelf-types-current');
   const { useHistoryCurrentOrigin } = await import('../src/library/history-current-origin');
@@ -426,26 +438,39 @@ test('The actual personal Shelf keeps uncertain entry intent while its scoped ch
       native.push({ input, work });
       return work.promise;
     }),
+    spyOn(labels, 'readSubjectLabelPage').mockResolvedValue({
+      state: 'loaded',
+      labels: [{ id: id(95), name: 'Accepted scoped label' }],
+      next: null,
+      provenance: { viewer: 'A', csrfToken: 'csrf-A', query: '' },
+    }),
   ];
   const { client, release } = fixture();
   const view = mounted(client);
+  const initial = shelfResponse('A');
   function Siblings() {
     types = useShelfTypesLifetime('en', {});
     history = useHistoryCurrentOrigin('opaque+/==:en', historyOperations, 'A');
-    return (
-      <PersonalLibraryCurrent
-        initial={shelfResponse('A')}
-        search={{}}
-        display={{ layout: 'list', size: 'm' }}
-        locale="en"
-      />
-    );
+    return <PersonalLibraryCurrent initial={initial} search={{}} display={{ layout: 'list', size: 'm' }} locale="en" />;
   }
   try {
     await view.show(<Siblings />);
     expect(controls.writeAdmitted).toBe(true);
     expect(types.isCurrent()).toBe(true);
     expect(history.current(0)).toBe(true);
+    await act(async () => controls.select(id(1), true));
+    const chooser = [...view.host.querySelectorAll('button')].find(
+      (node) => node.textContent === m.library_selected_labels_open(),
+    )!;
+    await act(async () => chooser.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 270));
+    });
+    expect(document.body.textContent).toContain('Accepted scoped label');
+    const oldCancel = handler<() => void>(
+      [...document.querySelectorAll('button')].find((node) => node.textContent === m.library_collection_cancel())!,
+      'onClick',
+    );
     await act(async () => {
       void controls.changeState(id(1), 'completed');
     });
@@ -455,6 +480,7 @@ test('The actual personal Shelf keeps uncertain entry intent while its scoped ch
     const exact = structuredClone(native[0]!.input.data);
     const oldType = types.isCurrent;
     const oldHistory = history.current;
+    const oldRetry = controls.retryState;
     await act(async () => {
       session(client, 'A', 'new-A');
       settle(client, 'A');
@@ -463,6 +489,13 @@ test('The actual personal Shelf keeps uncertain entry intent while its scoped ch
     expect(oldType()).toBe(false);
     expect(oldHistory(0)).toBe(false);
     expect(types.isCurrent()).toBe(true);
+    await act(async () => {
+      void oldRetry(id(1));
+    });
+    expect(native).toHaveLength(1);
+    await act(async () => oldCancel());
+    expect(document.body.textContent).toContain('Accepted scoped label');
+    expect(labels.readSubjectLabelPage).toHaveBeenCalledTimes(1);
     await act(async () => {
       void controls.retryState(id(1));
     });
@@ -482,6 +515,8 @@ test('The actual personal Shelf keeps uncertain entry intent while its scoped ch
       settle(client, 'A');
       expect(retained(0)).toBe(false);
     });
+    await tick();
+    expect(controls.rows[0]!.unknownIntent).toEqual(exact);
     const before = native.length;
     const stale = controls.retryState;
     await act(async () => {

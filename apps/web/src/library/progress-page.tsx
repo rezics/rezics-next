@@ -14,7 +14,7 @@ import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
 import { useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import {
   progressIndexAdmission,
@@ -144,15 +144,20 @@ export function CurrentViewerProgressIndexPage({
       const admissionVersion = store.dispatchVersion('progress_session.list');
       const currentRead = () =>
         origin.isCurrent() && store.dispatchVersion('progress_session.list') === admissionVersion;
-      if (!currentRead()) throw new Error('Progress index read retired');
-      const result = await readCurrentViewerProgressIndex({
-        data: {
-          ...(subjectId ? { subjectId } : {}),
-          ...(cursor ? { cursor } : {}),
-        },
-      });
-      if (!currentRead()) throw new Error('Progress index read retired');
-      return result;
+      if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
+      try {
+        const result = await readCurrentViewerProgressIndex({
+          data: {
+            ...(subjectId ? { subjectId } : {}),
+            ...(cursor ? { cursor } : {}),
+          },
+        });
+        if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
+        return result;
+      } catch (error) {
+        if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
+        throw error;
+      }
     },
     enabled: personalRead.enabled && hydrated && !!viewer && allowed,
     // Do not duplicate the bounded loader read on hydration. Invalidations still refetch.

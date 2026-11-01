@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
@@ -124,15 +124,16 @@ function LabelsRead({
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
       const current = origin.capture();
-      if (!current()) throw new Error('Obsolete Labels read');
+      if (!current()) throw new CancelledError({ silent: true, revert: true });
       try {
         const value = await readLabelsCurrent({
           data: { cursor: address.cursor ?? undefined, query: address.query ?? undefined },
         });
-        if (!current() || !matches(value, subject, address)) throw new Error('Unaccepted Labels read');
+        if (!current()) throw new CancelledError({ silent: true, revert: true });
+        if (!matches(value, subject, address)) throw new Error('Unaccepted Labels read');
         return value;
       } catch (error) {
-        if (!current()) throw new Error('Obsolete Labels read');
+        if (!current()) throw new CancelledError({ silent: true, revert: true });
         throw error;
       }
     },

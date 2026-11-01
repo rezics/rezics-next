@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { CancelledError, useQuery } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
@@ -119,13 +119,14 @@ function CurrentCopiesRead({
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
       const current = origin.capture();
-      if (!current()) throw new Error('Obsolete Copies read');
+      if (!current()) throw new CancelledError({ silent: true, revert: true });
       try {
         const value = await readCopiesCurrent({ data: input });
-        if (!current() || !matches(value, subject, address)) throw new Error('Unaccepted Copies read');
+        if (!current()) throw new CancelledError({ silent: true, revert: true });
+        if (!matches(value, subject, address)) throw new Error('Unaccepted Copies read');
         return value;
       } catch (error) {
-        if (!current()) throw new Error('Obsolete Copies read');
+        if (!current()) throw new CancelledError({ silent: true, revert: true });
         throw error;
       }
     },

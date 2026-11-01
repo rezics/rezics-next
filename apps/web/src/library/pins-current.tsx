@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientContext, useQuery } from '@tanstack/react-query';
+import { CancelledError, QueryClient, QueryClientContext, useQuery } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { useSession } from '../session/query';
@@ -131,6 +131,14 @@ export function useCurrentLibraryNavigation(locale: string, limit: 8 | 100 = 8, 
   const query = useQuery(
     {
       ...options,
+      queryFn: async (context) => {
+        try {
+          return await options.queryFn!(context);
+        } catch (error) {
+          if (!origin.isCurrent()) throw new CancelledError({ silent: true, revert: true });
+          throw error;
+        }
+      },
       enabled: enabled && origin.hydrated && !!origin.subject && options.enabled === true,
       staleTime: Infinity,
       refetchOnMount: false,
