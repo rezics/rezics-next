@@ -158,7 +158,7 @@ These are declared native plan-node bounds, not returned-row counts or engine vi
 | transition insert and both deferred validators                                    |        144 |           29 |                          16384 |                           3 |
 | predecessor consume / receiving fence, each including its own deferred validation |         96 |           22 |                           4096 |                      2 each |
 | raw output page of limit L                                                        |       4L+4 |            1 |                           256L |                           1 |
-| BEGIN / reserved terminal COMMIT-or-ROLLBACK                                      |          0 |            0 |                              0 |                      1 each |
+| BEGIN / separately reserved COMMIT / ROLLBACK                                     |          0 |            0 |                              0 |                      1 each |
 
 The migration's binding deferred SELECT has thirteen exact-key relations and twelve joins. Each transition deferred
 SELECT has eight exact-key relations and seven joins; it runs separately for transition insertion, predecessor consumption and receiving closure. The
@@ -184,7 +184,9 @@ and provenance row work is included in `nativeRows`/`nativePoints`. `emptySeeks`
 its nested validators. A single top-level seek can refund its unused empty seek; nested or failed seeks keep
 their complete admitted bound. Candidate settlement cannot refund dispatched native row work. All eight dimensions are supplied before dispatch. Repeated locks, provenance checks, failed SQL,
 and each separate deferred validation are charged separately. The existing instrumentation reserves one checkout
-point and terminal cleanup before beginning a read snapshot, including failed BEGIN/rollback paths. Caller-owned
+point and separate COMMIT and ROLLBACK controls before beginning a read snapshot. A successful COMMIT cancels
+the unused rollback reservation; a failed COMMIT keeps it for the actual ROLLBACK, charging both dispatched
+controls. A failed BEGIN cancels both unused controls and discards its connection. Caller-owned
 commands retain their existing checkout/Core fence/commit/rollback accounting: these helpers open none of those.
 
 Nested Semantic validation transfers the remaining original reservation through `NativeCollectionWork.compose`

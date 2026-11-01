@@ -40,6 +40,7 @@ import type {
   PublicIdentityOutputWork,
 } from '../../src/semantic/identity-public-output-types.ts';
 import type { NativePublicOutputBinding } from '../../src/library/native-public-output-contract.ts';
+import type { WorkReceipt } from '../../src/library/collection-source.ts';
 import type { PoolClient } from 'pg';
 
 let f: SourceRuntimeFixture;
@@ -376,6 +377,89 @@ test('a failed atomic staged successor transition rolls native and Semantic rows
     expect(replay.disposition).toEqual(applied.disposition);
   expect(await count('transition', s.capture)).toBe(1);
 });
+
+test('a genuine deferred COMMIT failure retains independent rollback funding and rolls the whole staged disposition back', async () => {
+  const s = await setup([]);
+  await exhaust(s);
+  expect((await s.producer.seal(s.capture, work())).status).toBe('sealed');
+  const options = work();
+  const controls: string[] = [];
+  let staged = false;
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  const inject = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const original = client.query;
+    originals.set(client, original);
+    client.query = function (this: PoolClient, ...args: unknown[]) {
+      const config = args[0] as string | { text: string; values?: unknown[] };
+      const sql = typeof config === 'string' ? config : config.text;
+      if (sql === transitionInsertSQL.sql) {
+        staged = true;
+        const values = [...(typeof config === 'string' ? (args[1] as unknown[]) : config.values!)];
+        // Execute the genuine INSERT, but mismatch its component. Immediate writes succeed;
+        // the real deferred native/atomic validators must reject the actual COMMIT.
+        values[5] = (BigInt(values[5] as string) + 1n).toString();
+        if (typeof config === 'string') args[1] = values;
+        else args[0] = { ...config, values };
+      }
+      if (staged && (sql === 'COMMIT' || sql === 'ROLLBACK')) controls.push(sql);
+      return (original as (...args: unknown[]) => unknown).apply(this, args);
+    } as PoolClient['query'];
+  };
+  const attempt = async (funding: PublicIdentityOutputWork) => {
+    f.pool.on('acquire', inject);
+    try {
+      await s.producer.apply(s.capture, funding);
+      throw new Error('Expected staged disposition failure');
+    } catch (error) {
+      return error as Error & { work: WorkReceipt };
+    } finally {
+      f.pool.off('acquire', inject);
+      for (const [client, original] of originals) client.query = original;
+      originals.clear();
+    }
+  };
+  const failed = await attempt(options);
+  expect(failed.message).toMatch(/public_output/);
+  expect(controls).toEqual(['COMMIT', 'ROLLBACK']);
+  expect(failed.work.reservationId).toBe(options.allowance.reservationId);
+  for (const axis of Object.keys(options.allowance.remaining) as (keyof WorkReceipt['used'])[])
+    expect(failed.work.used[axis]).toBeLessThanOrEqual(options.allowance.remaining[axis]);
+  expect(failed.work.used.statements).toBeGreaterThan(2);
+
+  // With one fewer statement than the real failed prefix, refuse before COMMIT rather
+  // than spending the rollback reservation on COMMIT and masking the failure at cleanup.
+  controls.length = 0;
+  staged = false;
+  const tight = work();
+  const refused = await attempt({
+    ...tight,
+    allowance: {
+      ...tight.allowance,
+      remaining: { ...tight.allowance.remaining, statements: failed.work.used.statements - 1 },
+    },
+  });
+  expect(refused.work.used.statements).toBeLessThanOrEqual(failed.work.used.statements - 1);
+  expect(controls).not.toContain('COMMIT');
+  for (const table of ['fence', 'disposition', 'transition'] as const) expect(await count(table, s.capture)).toBe(0);
+  expect(
+    (
+      await f.pool.query(
+        'SELECT count(*)::integer AS n FROM semantic.identity_public_output_stage WHERE partition_no=$1 AND capture_id=$2',
+        [s.capture.partition, s.capture.captureId],
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  expect(
+    (
+      await f.pool.query(
+        'SELECT role,consumed_by FROM library.native_public_output_hold WHERE partition_no=$1 AND capture_id=$2',
+        [s.capture.partition, s.capture.captureId],
+      )
+    ).rows,
+  ).toEqual([{ role: 'predecessor', consumed_by: null }]);
+  expect((await s.producer.apply(s.capture, work())).status).toBe('applied');
+}, 120000);
 
 test('a cancelled admitted Subject cut stays fenced and retained without genuine foreign removal custody', async () => {
   const s = await setup([await f.createSubject('game')]);

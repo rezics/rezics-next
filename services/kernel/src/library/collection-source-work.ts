@@ -199,13 +199,19 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
   if (clients.has(client)) return;
   clients.add(client);
   const original = client.query;
+  type Control = { reservation: ReturnType<NativeCollectionWork['reserve']>; bound: WorkDimensions };
   let terminal:
     | {
         work: NativeCollectionWork;
-        reservation: ReturnType<NativeCollectionWork['reserve']>;
-        bound: WorkDimensions;
+        commit?: Control;
+        rollback?: Control;
       }
     | undefined;
+  const cancelTerminal = () => {
+    terminal?.commit?.reservation.cancel();
+    terminal?.rollback?.reservation.cancel();
+    terminal = undefined;
+  };
   client.query = function (this: PoolClient, ...args: unknown[]) {
     const active = observing.getStore();
     const invoke = original as unknown as (...args: unknown[]) => unknown;
@@ -217,30 +223,52 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
     const config = args[0] as string | QueryConfig;
     const sql = typeof config === 'string' ? config : config.text;
     const values = (typeof config === 'string' ? args[1] : config.values) as unknown[] | undefined;
-    const finishing = /^(?:COMMIT|ROLLBACK)\b/i.test(sql) && terminal?.work === active.work;
+    const beginning = /^BEGIN\b/i.test(sql);
+    const control = /^COMMIT\b/i.test(sql) ? 'commit' : /^ROLLBACK\b/i.test(sql) ? 'rollback' : undefined;
+    const finishing = control !== undefined && terminal?.work === active.work;
+    let beganReservation = false;
     let reservation: ReturnType<NativeCollectionWork['reserve']>;
     let bound: WorkDimensions | undefined;
     try {
       if (finishing && terminal) {
-        ({ reservation, bound } = terminal);
-        terminal = undefined;
+        const slot = terminal[control!];
+        if (!slot) throw new TypeError('Native transaction control already dispatched');
+        ({ reservation, bound } = slot);
+        terminal[control!] = undefined;
       } else {
         active.work.assertReady();
-        if (/^BEGIN\b/i.test(sql)) {
-          const cleanupBound = active.footprint('ROLLBACK', []);
-          const cleanup = active.work.reserve(cleanupBound, true);
-          terminal = { work: active.work, reservation: cleanup, bound: cleanupBound! };
+        if (beginning) {
+          if (terminal) throw new TypeError('Native transaction cleanup is still reserved');
+          const commitBound = active.footprint('COMMIT', []);
+          const commit = active.work.reserve(commitBound, true);
+          try {
+            const rollbackBound = active.footprint('ROLLBACK', []);
+            const rollback = active.work.reserve(rollbackBound, true);
+            terminal = {
+              work: active.work,
+              commit: { reservation: commit, bound: commitBound! },
+              rollback: { reservation: rollback, bound: rollbackBound! },
+            };
+            beganReservation = true;
+          } catch (error) {
+            commit.cancel();
+            throw error;
+          }
         }
         bound = active.footprint(sql, Array.isArray(values) ? values : []);
         reservation = active.work.reserve(bound);
       }
       reservation.dispatch();
     } catch (error) {
+      if (beganReservation) cancelTerminal();
       active.work.failure = error instanceof Error ? error : new Error('Native work admission failed');
       throw error;
     }
+    let settled = false;
     const settle = (result?: QueryResult, error?: unknown) => {
-      if ((finishing || /^BEGIN\b/i.test(sql)) && error)
+      if (settled) return;
+      settled = true;
+      if ((finishing || beginning) && error)
         discardConnection(client, error instanceof Error ? error : new Error('Native transaction cleanup failed'));
       reservation.settle({
         emptySeeks:
@@ -248,6 +276,9 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
         candidateKeys: result ? Math.min(bound!.candidateKeys, result.rows.length) : bound!.candidateKeys,
         witnessKeys: result ? Math.min(bound!.witnessKeys, result.rows.length) : bound!.witnessKeys,
       });
+      // A deferred COMMIT failure still needs its separately admitted ROLLBACK. Successful
+      // commit, rollback, or a failed BEGIN cancels only controls that were never dispatched.
+      if ((finishing && (control === 'rollback' || !error)) || (beginning && error)) cancelTerminal();
     };
     const callbackIndex = args.findIndex((arg) => typeof arg === 'function');
     if (callbackIndex >= 0) {

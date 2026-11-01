@@ -1843,8 +1843,11 @@ Each native or reentrant Semantic child receives only the parent's remaining fin
 The parent holds that remainder while the child runs; an already-reserved native query suppresses duplicate
 parent observation, without changing the real client or authoritative T. A thrown child with a valid settled
 receipt charges precisely that prefix; missing/invalid evidence charges the full transferred remainder and
-poisons the frame. BEGIN reserves terminal cleanup first; failed dispatch and late deferred constraint failure
-retain their admitted row/point/byte/nested-empty charges, and ROLLBACK uses that already-reserved slot.
+poisons the frame. BEGIN first reserves separate COMMIT and ROLLBACK controls from the same finite frame.
+A successful COMMIT cancels unused rollback funding; a failed COMMIT retains that reservation for the actual
+ROLLBACK, so both dispatched controls are charged. A failed BEGIN cancels both unused controls and discards
+its connection. Failed dispatch and late deferred constraints retain their admitted row/point/byte/nested-empty
+charges. No failed callback can settle a query twice.
 A single successful seek can refund only its unused empty/candidate/witness bound. Nested seek bounds stay
 charged because top-level returned rows cannot show which nested relation was empty. No allowance is minted
 by a callback, refusal, replay, control statement or rollback.

@@ -1,6 +1,7 @@
+WITH parameters AS (SELECT $6::uuid AS current_transaction)
 SELECT d.kind,d.manifest_digest,d.seal_transaction_id::text,d.native_epoch,d.native_position::text,
  d.transaction_id::text,s.successor_hold_id::text,s.cancellation_epoch::text,s.purpose,
- (d.transaction_id=$6 AND s.native_xid=pg_current_xact_id_if_assigned() AND d.xmin=s.xmin
+ (d.transaction_id=(SELECT current_transaction FROM parameters) AND s.native_xid=pg_current_xact_id_if_assigned() AND d.xmin=s.xmin
   AND d.native_position=p.position+1) AS staged
 FROM semantic.identity_public_output_disposition d
 JOIN semantic.identity_public_output_stage s USING(partition_no,capture_id,hold_id,binding_digest,kind,
@@ -20,7 +21,7 @@ WHERE d.partition_no=$1 AND d.capture_id=$2 AND d.hold_id=$3 AND d.binding_diges
  AND s.original_receiving_epoch=(a.binding->'tuple'->'identity'->>'receivingEpoch')::bigint
  AND s.manifest_digest IS NOT DISTINCT FROM d.manifest_digest
  AND s.seal_transaction_id IS NOT DISTINCT FROM d.seal_transaction_id
- AND ((d.transaction_id=$6 AND s.native_xid=pg_current_xact_id_if_assigned()
+ AND ((d.transaction_id=(SELECT current_transaction FROM parameters) AND s.native_xid=pg_current_xact_id_if_assigned()
        AND d.xmin=s.xmin AND d.native_position=p.position+1)
  OR (n.transaction_id IS NOT NULL AND p.position>=n.position AND o.position IS NOT NULL
   AND s.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
