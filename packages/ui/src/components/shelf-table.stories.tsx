@@ -153,10 +153,7 @@ function ConnectedShelfJourney() {
     <fieldset className="grid min-w-0 gap-2 rounded-md border p-2">
       <legend>Configuration visit controls</legend>
       <div className="flex min-w-0 flex-wrap gap-2">
-        <Button
-          size="sm"
-          onClick={() => setColumns((current) => [...current].reverse())}
-        >
+        <Button size="sm" onClick={() => setColumns((current) => [...current].reverse())}>
           Replace schema B
         </Button>
         <Button size="sm" onClick={() => setColumns(createWorkflowColumns())}>
@@ -298,7 +295,9 @@ function ConnectedShelfJourney() {
         count={4}
       />
       <div className="flex min-w-0 flex-wrap gap-3" aria-label="Controlled shelf state">
-        <output data-testid="toolbar-sort">{sort}:{direction}</output>
+        <output data-testid="toolbar-sort">
+          {sort}:{direction}
+        </output>
         <output data-testid="toolbar-layout">{layout}</output>
         <output data-testid="toolbar-density">{density}</output>
         <output data-testid="main-column-order">{columns.map((column) => column.id).join(',')}</output>
@@ -330,10 +329,7 @@ function ConnectedShelfJourney() {
               Mount independent picker
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={() => setPeerColumns((current) => current.map((column) => ({ ...column })))}
-          >
+          <Button size="sm" onClick={() => setPeerColumns((current) => current.map((column) => ({ ...column })))}>
             Refresh independent picker
           </Button>
         </div>
@@ -465,7 +461,16 @@ export const ConnectedShelfConfigurationJourney: Story = {
     const mainCoverHandle = mainCover?.querySelector<HTMLElement>('span');
     const peerCover = peerPicker.querySelector<HTMLElement>('[data-column-id="cover"]');
     const peerCoverHandle = peerCover?.querySelector<HTMLElement>('span');
-    if (!mainTitle || !mainTitleHandle || !peerTitle || !peerTitleHandle || !mainCover || !mainCoverHandle || !peerCover || !peerCoverHandle)
+    if (
+      !mainTitle ||
+      !mainTitleHandle ||
+      !peerTitle ||
+      !peerTitleHandle ||
+      !mainCover ||
+      !mainCoverHandle ||
+      !peerCover ||
+      !peerCoverHandle
+    )
       throw new Error('The same default column IDs must appear in both mounted pickers');
 
     const HTMLElementConstructor = browser.HTMLElement;
@@ -496,11 +501,7 @@ export const ConnectedShelfConfigurationJourney: Story = {
       pointerCancel: 'pointercancel',
       lostPointerCapture: 'lostpointercapture',
     } as const;
-    const dispatchPointer = async (
-      type: keyof typeof pointerEventNames,
-      target: HTMLElement,
-      pointerId: number,
-    ) => {
+    const dispatchPointer = async (type: keyof typeof pointerEventNames, target: HTMLElement, pointerId: number) => {
       target.dispatchEvent(
         new browser.PointerEvent(pointerEventNames[type], {
           bubbles: true,
@@ -564,7 +565,8 @@ export const ConnectedShelfConfigurationJourney: Story = {
       const dragSource = mainPicker.querySelector<HTMLElement>('[data-column-id="type"]');
       const dragTarget = mainPicker.querySelector<HTMLElement>('[data-column-id="status"]');
       const hiddenDragTarget = mainPicker.querySelector<HTMLElement>('[data-column-id="creator"]');
-      if (!dragSource || !dragTarget || !hiddenDragTarget) throw new Error('Drag source and grouped targets must exist');
+      if (!dragSource || !dragTarget || !hiddenDragTarget)
+        throw new Error('Drag source and grouped targets must exist');
       const boundaryTransfer = new DataTransfer();
       const beforeDragWrites = Number(canvas.getByTestId('main-column-writes').textContent);
       await fireEvent.dragStart(dragSource, { dataTransfer: boundaryTransfer });
@@ -582,7 +584,12 @@ export const ConnectedShelfConfigurationJourney: Story = {
       await fireEvent.drop(dragTarget, { dataTransfer: newerTransfer });
       await fireEvent.dragEnd(dragSource, { dataTransfer: newerTransfer });
       await expect(Number(canvas.getByTestId('main-column-writes').textContent)).toBe(beforeDragWrites + 1);
-      await expect(within(table).getAllByRole('columnheader').filter((head) => head.textContent).map((head) => head.textContent?.trim())).toContain('Status');
+      await expect(
+        within(table)
+          .getAllByRole('columnheader')
+          .filter((head) => head.textContent)
+          .map((head) => head.textContent?.trim()),
+      ).toContain('Status');
 
       const afterDragOrder = canvas.getByTestId('main-column-order').textContent;
       const beforeWrongPointer = Number(canvas.getByTestId('main-column-writes').textContent);

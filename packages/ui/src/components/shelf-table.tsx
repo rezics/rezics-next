@@ -230,13 +230,7 @@ function columnSchema(columns: ShelfColumn[]) {
 function reorderColumns(columns: ShelfColumn[], fromId: string, toId: string) {
   const from = columns.findIndex((column) => column.id === fromId);
   const to = columns.findIndex((column) => column.id === toId);
-  if (
-    from < 0 ||
-    to < 0 ||
-    from === to ||
-    columns[from]?.visible !== columns[to]?.visible
-  )
-    return null;
+  if (from < 0 || to < 0 || from === to || columns[from]?.visible !== columns[to]?.visible) return null;
   const next = [...columns];
   const [item] = next.splice(from, 1);
   if (!item) return null;
