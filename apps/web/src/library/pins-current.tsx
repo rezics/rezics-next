@@ -113,7 +113,6 @@ export function useCurrentLibraryNavigation(
   limit: 8 | 100 = 8,
   address = locale,
   enabled = true,
-  supplied?: LibraryNavigationRead,
 ) {
   const origin = useLibraryReadOrigin(JSON.stringify([locale, limit, address, enabled]));
   const options = libraryNavigationQuery(locale, limit, {
@@ -121,14 +120,6 @@ export function useCurrentLibraryNavigation(
     pins: origin.pins.allowed, collections: origin.collections.allowed,
     isCurrent: () => origin.mounted() && origin.isCurrent(),
   });
-  const seed = useRef(false);
-  if (!seed.current && origin.hydrated) {
-    seed.current = true;
-    if (supplied && origin.subject && matchesPinsOrigin(supplied.origin, origin.subject, limit)) {
-      if (origin.pinsCurrent() && matchesPinsOrigin(supplied.pins.origin, origin.subject, limit)) origin.pins.data = supplied;
-      if (origin.collectionsCurrent()) origin.collections.data = supplied;
-    }
-  }
   const query = useQuery({
     ...options,
     enabled: enabled && origin.hydrated && !!origin.subject && options.enabled === true,

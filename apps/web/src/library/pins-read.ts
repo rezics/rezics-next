@@ -97,7 +97,7 @@ export async function readPreparedLibraryPins(
   if (!origin.credentialAgrees || !authorization) return { state: 'closed', origin };
   const current = () => sessionSubject(request) === origin.sessionSubject && viewerCredential(request) === authorization;
   const pins = await readLibraryPins(client, authorization, limit, current);
-  return current() ? { ...pins, origin } : { state: 'closed', origin: preparedPinsOrigin(request, limit) };
+  return { ...pins, origin: { ...origin, credentialAgrees: current() } };
 }
 
 /** Reads one bounded pins page only when this viewer's OpenAPI view exposes the list operation. */
@@ -161,7 +161,10 @@ export async function loadLibraryNavigation(
     reads.pins ? readPreparedLibraryPins(client, request, limit) : { state: 'closed' as const, origin },
     reads.collections ? loadMineCollectionsForOwner(client, accountId, authorization).catch(() => undefined) : undefined,
   ]);
-  if (sessionSubject(request) !== accountId || viewerCredential(request) !== authorization) return closed;
+  if (sessionSubject(request) !== accountId || viewerCredential(request) !== authorization) {
+    const refusedOrigin = { ...origin, credentialAgrees: false };
+    return { ...closed, origin: refusedOrigin, pins: { state: 'closed', origin: refusedOrigin } };
+  }
   return {
     origin,
     pins,

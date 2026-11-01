@@ -124,9 +124,9 @@ function MineCollectionsViewerRead({
     queryKey,
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.isCurrent()) throw new Error('Retired My Collections read');
+      if (!origin.mounted() || !origin.isCurrent()) throw new Error('Retired My Collections read');
       const result = await readMineCollectionsViewerPage({ data: { cursor: address.cursor ?? undefined, layout: address.layout } });
-      if (!origin.isCurrent() || !matchesViewer(result, subject, address)) throw new Error('Unaccepted My Collections read');
+      if (!origin.mounted() || !origin.isCurrent() || !matchesViewer(result, subject, address)) throw new Error('Unaccepted My Collections read');
       return result;
     },
     initialData,

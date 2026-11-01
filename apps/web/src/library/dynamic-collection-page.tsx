@@ -23,10 +23,9 @@ type DynamicCollectionPageProps = {
 
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
   const [source, setSource] = useState({ page: props.page, lifetime: 0 });
-  const navigation = useCurrentLibraryNavigation(getLocale(), 100, JSON.stringify([props.page.id, props.page.cursor, props.search]), true, props.page.pins ? {
-    ...(props.page.pins.origin ? { origin: props.page.pins.origin } : {}),
-    pins: props.page.pins, collections: props.page.navigationCollections ?? [],
-  } : undefined);
+  const navigation = useCurrentLibraryNavigation(
+    getLocale(), 100, JSON.stringify([props.page.id, props.page.cursor, props.search]),
+  );
   const pinActions = usePinControlActions({
     collectionId: props.page.id, pins: navigation.data.pins, mode: 'collection', origin: navigation.pinsOrigin,
   });
