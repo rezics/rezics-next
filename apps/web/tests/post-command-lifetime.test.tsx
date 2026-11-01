@@ -35,7 +35,11 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: `https://site.test/en/threads/${threadId}/a-close-reading`, width: 1280, height: 900 });
+  const window = new Window({
+    url: `https://site.test/en/threads/${threadId}/a-close-reading`,
+    width: 1280,
+    height: 900,
+  });
   const globals = {
     window,
     document: window.document,
@@ -104,7 +108,7 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
     body: fromMarkdown(`Original post body. ![chart](/media/${mediaId})`, 'blocks'),
   } as unknown as ThreadPost;
   const availablePost = (nextRevision = revisionId, body = sourcePost.body) =>
-    ({ ...sourcePost, availability: 'available', revisionId: nextRevision, body } as ThreadPost);
+    ({ ...sourcePost, availability: 'available', revisionId: nextRevision, body }) as ThreadPost;
   const erasedPost = (restorableUntil?: string) =>
     ({
       ...sourcePost,
@@ -113,7 +117,8 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
       body: null,
       sha256: null,
     }) as unknown as ThreadPost;
-  const withheldPost = () => ({ ...sourcePost, availability: 'withheld', body: null, sha256: null }) as unknown as ThreadPost;
+  const withheldPost = () =>
+    ({ ...sourcePost, availability: 'withheld', body: null, sha256: null }) as unknown as ThreadPost;
 
   type PropsState = {
     post: ThreadPost;
@@ -169,7 +174,11 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
   });
   const restoreSpy = spyOn(actions, 'restorePost').mockImplementation((input) => {
     const gate = deferred<Awaited<ReturnType<typeof actions.restorePost>>>();
-    restorations.push({ data: structuredClone(input.data), csrf: new Headers(input.headers).get('X-CSRF-Token'), gate });
+    restorations.push({
+      data: structuredClone(input.data),
+      csrf: new Headers(input.headers).get('X-CSRF-Token'),
+      gate,
+    });
     return gate.promise;
   });
 
@@ -481,9 +490,7 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
       })),
     );
     await settle(() => buttons(m.thread_post_restore()).length === 1);
-    await act(async () =>
-      updateState((previous) => ({ ...previous, post: erasedPost(restoreExpired) })),
-    );
+    await act(async () => updateState((previous) => ({ ...previous, post: erasedPost(restoreExpired) })));
     await settle(() => buttons(m.thread_post_restore()).length === 0);
     await act(async () => updateState((previous) => ({ ...previous, post: withheldPost() })));
     await settle(() => host.querySelector('[data-slot="tombstone"]') !== null);

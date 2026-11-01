@@ -34,11 +34,7 @@ export function postCommandSessionSource(client: QueryClient | undefined): PostC
   const read = () => client.getQueryData<PostCommandSession>(sessionQuery.queryKey);
   const identity = () => {
     const session = read();
-    return JSON.stringify([
-      session?.state ?? 'unknown',
-      session?.subject ?? null,
-      session?.csrfToken ?? null,
-    ]);
+    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
   };
   let previous = identity();
   let revision = 0;
@@ -71,11 +67,7 @@ export function postCommandSessionSource(client: QueryClient | undefined): PostC
 }
 
 export function postCommandSessionIdentity(session: PostCommandSession | undefined) {
-  return JSON.stringify([
-    session?.state ?? 'unknown',
-    session?.subject ?? null,
-    session?.csrfToken ?? null,
-  ]);
+  return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
 }
 
 export type PostCommandBinding = {
@@ -119,10 +111,7 @@ function normalizedSession(session: PostCommandSession | undefined) {
   };
 }
 
-function sameTarget(
-  left: PostCommandBinding['target'],
-  right: PostCommandBinding['target'],
-) {
+function sameTarget(left: PostCommandBinding['target'], right: PostCommandBinding['target']) {
   return left.kind === right.kind && left.id === right.id;
 }
 

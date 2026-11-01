@@ -310,7 +310,7 @@ export function ThreadReadingPost({
   const sessionRecord = sessionSource.read();
   const previousLifetime = useRef<PostCommandLifetime | undefined>(undefined);
   const originalDeleteContinuation = previousLifetime.current?.continuesAfterOwnWrite(post) ?? false;
-  const authorId = 'authorId' in post ? post.authorId ?? undefined : undefined;
+  const authorId = 'authorId' in post ? (post.authorId ?? undefined) : undefined;
   const postRevisionId = 'revisionId' in post ? post.revisionId : undefined;
   const binding: PostCommandBinding = {
     client: queryClient,
@@ -322,12 +322,12 @@ export function ThreadReadingPost({
     threadId: post.threadId,
     revisionId: originalDeleteContinuation ? previousLifetime.current!.revisionId : postRevisionId,
     authorId: authorId ?? (originalDeleteContinuation ? previousLifetime.current!.binding.authorId : undefined),
-    availability: originalDeleteContinuation
-      ? previousLifetime.current!.binding.availability
-      : post.availability,
+    availability: originalDeleteContinuation ? previousLifetime.current!.binding.availability : post.availability,
     restorableUntil: originalDeleteContinuation
       ? previousLifetime.current!.binding.restorableUntil
-      : ('restorableUntil' in post ? post.restorableUntil : undefined),
+      : 'restorableUntil' in post
+        ? post.restorableUntil
+        : undefined,
     target,
     signedIn,
     personalReady,
@@ -451,11 +451,7 @@ export function ThreadReadingPost({
     return Number.isFinite(deadline) && Date.now() < deadline;
   }
 
-  async function restoreRemovedPost(
-    owner = lifetime,
-    ownerTicket = ticket,
-    expectedEpisode = owner.intent.episode,
-  ) {
+  async function restoreRemovedPost(owner = lifetime, ownerTicket = ticket, expectedEpisode = owner.intent.episode) {
     const command = owner.intent;
     if (
       !commandReady(owner, ownerTicket) ||
@@ -498,9 +494,7 @@ export function ThreadReadingPost({
           setExistingReviewId(result.existingReviewId);
           setRestoreError(m.thread_post_restore_conflict());
         } else {
-          setRestoreError(
-            command.restoreUncertain ? m.thread_post_restore_unknown() : m.thread_post_restore_failure(),
-          );
+          setRestoreError(command.restoreUncertain ? m.thread_post_restore_unknown() : m.thread_post_restore_failure());
         }
         return;
       }
@@ -518,8 +512,7 @@ export function ThreadReadingPost({
       }
     } finally {
       command.restorePending = false;
-      if (current(owner, ownerTicket) && command.episode === expectedEpisode)
-        updateIntent((value) => value + 1);
+      if (current(owner, ownerTicket) && command.episode === expectedEpisode) updateIntent((value) => value + 1);
     }
   }
 
@@ -553,9 +546,7 @@ export function ThreadReadingPost({
         data: {
           postId: lifetime.binding.postId,
           idempotencyKey,
-          ...(lifetime.binding.target.kind === 'thread'
-            ? { openingThreadId: lifetime.binding.target.id }
-            : {}),
+          ...(lifetime.binding.target.kind === 'thread' ? { openingThreadId: lifetime.binding.target.id } : {}),
         },
         headers: { 'X-CSRF-Token': lifetime.csrfToken },
       });
@@ -598,11 +589,9 @@ export function ThreadReadingPost({
     if (!current()) return;
     if (lifetime.binding.target.kind === 'thread') onOpeningPostChange(false);
     if (!current()) return;
-    undoToast(
-      m.thread_post_deleted_toast(),
-      () => void restoreRemovedPost(lifetime, ticket, episode),
-      { undo: m.thread_post_undo() },
-    );
+    undoToast(m.thread_post_deleted_toast(), () => void restoreRemovedPost(lifetime, ticket, episode), {
+      undo: m.thread_post_undo(),
+    });
     if (!current()) return;
     await refreshCurrentPost(lifetime, ticket);
   }
@@ -631,9 +620,7 @@ export function ThreadReadingPost({
           ? { onRefresh: () => void refreshCurrentPost(lifetime, ticket) }
           : {})}
         onCopyLink={copyLink}
-        {...(canRestore
-          ? { onRestore: () => void restoreRemovedPost(lifetime, ticket, intent.episode) }
-          : {})}
+        {...(canRestore ? { onRestore: () => void restoreRemovedPost(lifetime, ticket, intent.episode) } : {})}
       >
         <ReplyContext parentId={post.parentId} parents={replyParents} authors={authors} reader={replyParentReader} />
       </RemovedPost>
