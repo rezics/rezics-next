@@ -50,6 +50,7 @@ import select from './identity-source-consumer-custody-select.sql';
 import progressSQL from './identity-source-consumer-custody-progress.sql';
 import appendSQL from './identity-source-consumer-custody-append.sql';
 import type { IdentitySourceConsumerMaintenanceWork } from './identity-source-consumer-maintenance.ts';
+import { identitySourceConsumerDirectoryPlan } from './identity-source-maintenance-config.ts';
 import {
   currentIdentitySourceConsumerMaintenance,
   identitySourceConsumerLibraryWork,
@@ -563,16 +564,14 @@ async function latest(tx: CommandTransaction, retained: Retained): Promise<Progr
 class DirectoryWork {
   private readonly remaining: { -readonly [K in keyof NativeStepWork]: number };
   constructor(allowance: NativeStepWork) {
-    this.remaining = { ...allowance, rows: Math.min(100, allowance.rows) };
+    this.remaining = { ...identitySourceConsumerDirectoryPlan(allowance).envelope };
     if (Object.values(this.remaining).some((v) => !Number.isSafeInteger(v) || v < 0))
       throw new TypeError('Invalid admitted consumer work');
   }
   reserve(): NativeStepWork | null {
     // The read's opaque cut saves this allowance for its independent verify. Reserve BOTH
     // calls before either dispatch; failed/unavailable work is never refunded for reuse.
-    const allowance = Object.fromEntries(
-      Object.entries(this.remaining).map(([k, v]) => [k, Math.floor(v / 2)]),
-    ) as NativeStepWork;
+    const allowance = identitySourceConsumerDirectoryPlan(this.remaining).child;
     if (allowance.rows < 1 || allowance.points < 1 || allowance.statements < 1) return null;
     for (const k of Object.keys(this.remaining) as (keyof NativeStepWork)[]) this.remaining[k] -= allowance[k] * 2;
     return allowance;

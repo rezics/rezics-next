@@ -10,19 +10,39 @@ export type IdentitySourceMaintenanceConfig = Readonly<{
 
 const prefix = 'KERNEL_IDENTITY_SOURCE_MAINTENANCE_';
 
-// One invocation may read and then verify the native directory. Each child still keeps
-// the pre-existing 100-row ceiling. The extra native row/point allowance is the fixed
-// Source control cut: original source, accepted claim/job, participant receipts, progress,
-// and final source-home rechecks. The binding owner's two released snapshots add thirteen
-// native points, ten statements and 16 KiB. Equal directory child ceilings need eighteen
-// statements each, including read/verify cleanup. No PostgreSQL engine request is dispatched.
+// One invocation also funds the original Account settlement and two complete History
+// Source checks around SDK retirement and fence observation. Directory planning remains
+// independently capped below so this larger parent cannot expand its two existing children.
+// No PostgreSQL engine request is dispatched.
 const nativeDefaults = {
-  ROWS: 249,
-  POINTS: 249,
-  STATEMENTS: 81,
-  BYTES: 286720,
+  ROWS: 577,
+  POINTS: 577,
+  STATEMENTS: 173,
+  BYTES: 630784,
   ENGINE_REQUESTS: 0,
 } as const;
+
+/** Keep the original two-child Source planning envelope bounded by remaining frame balance. */
+export function identitySourceConsumerDirectoryPlan(allowance: NativeStepWork): Readonly<{
+  envelope: NativeStepWork;
+  child: NativeStepWork;
+}> {
+  const envelope = Object.freeze({
+    rows: Math.min(100, allowance.rows),
+    points: Math.min(200, allowance.points),
+    statements: Math.min(36, allowance.statements),
+    bytes: Math.min(229376, allowance.bytes),
+    engineRequests: Math.min(0, allowance.engineRequests),
+  });
+  const child = Object.freeze({
+    rows: Math.floor(envelope.rows / 2),
+    points: Math.floor(envelope.points / 2),
+    statements: Math.floor(envelope.statements / 2),
+    bytes: Math.floor(envelope.bytes / 2),
+    engineRequests: Math.floor(envelope.engineRequests / 2),
+  });
+  return Object.freeze({ envelope, child });
+}
 
 // One private Library effect selection uses the existing one-page bounds. Identity metadata
 // is not read by this consumer path; the Source page is limited to one raw effect and keeps

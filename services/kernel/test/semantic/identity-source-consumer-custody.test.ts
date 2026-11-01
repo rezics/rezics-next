@@ -19,7 +19,10 @@ import {
   reserveIdentitySourceConsumerNativeWork,
   withIdentitySourceConsumerMaintenance,
 } from '../../src/semantic/identity-source-consumer-maintenance.ts';
-import { readIdentitySourceMaintenanceConfig } from '../../src/semantic/identity-source-maintenance-config.ts';
+import {
+  identitySourceConsumerDirectoryPlan,
+  readIdentitySourceMaintenanceConfig,
+} from '../../src/semantic/identity-source-maintenance-config.ts';
 import { approvedVerification, cutoverFixture } from './support/identity-epoch-cutover.ts';
 import * as bindingConsumer from '../../src/semantic/identity-epoch-binding.ts';
 import {
@@ -192,6 +195,50 @@ test('Source maintenance issues one genuinely configured live accounting frame w
     },
   } as unknown as Pool;
   expect(await readIdentitySourceConsumerCustody(pool, reference, { deadline: Date.now() + 5000 })).toBeNull();
+  expect(checkouts).toBe(0);
+});
+
+test('History-sized Source funding preserves the directory child bounds and refuses an underfunded real Source read before checkout', async () => {
+  const configured = readIdentitySourceMaintenanceConfig({});
+  expect(configured.native).toEqual({
+    rows: 577,
+    points: 577,
+    statements: 173,
+    bytes: 630784,
+    engineRequests: 0,
+  });
+  expect(identitySourceConsumerDirectoryPlan(configured.native)).toEqual({
+    envelope: { rows: 100, points: 200, statements: 36, bytes: 229376, engineRequests: 0 },
+    child: { rows: 50, points: 100, statements: 18, bytes: 114688, engineRequests: 0 },
+  });
+  expect(
+    identitySourceConsumerDirectoryPlan({
+      rows: 60,
+      points: 140,
+      statements: 20,
+      bytes: 170000,
+      engineRequests: 0,
+    }),
+  ).toEqual({
+    envelope: { rows: 60, points: 140, statements: 20, bytes: 170000, engineRequests: 0 },
+    child: { rows: 30, points: 70, statements: 10, bytes: 85000, engineRequests: 0 },
+  });
+
+  let checkouts = 0;
+  const pool = {
+    connect: () => {
+      checkouts++;
+      throw new Error('underfunded Source work must refuse before checkout');
+    },
+  } as unknown as Pool;
+  const deadline = Date.now() + 5000;
+  await withIdentitySourceConsumerMaintenance(
+    { pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS: '31' } },
+    { deadline },
+    async (funded) => {
+      expect(await readIdentitySourceConsumerCustody(pool, reference, funded)).toBeNull();
+    },
+  );
   expect(checkouts).toBe(0);
 });
 

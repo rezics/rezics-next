@@ -140,17 +140,17 @@ verification. This Account proof closes only Account-native reversal dependencie
 it does not close Library scopes, Semantic's own cut, History copies, SDK custody,
 or Account root/copy erasure.
 
-The existing default native frame is 249 rows, 249 points, 81 statements and 286720
-bytes. The same terminal invocation must also fund the fixed Source work (32 rows,
-29 statements, 32768 bytes), binding snapshot (13 rows, 10 statements, 16384 bytes),
-two bounded directory children (200 rows, 36 statements, 229376 bytes), Account
-settlement read (64 rows, 20 statements, 65536 bytes), its same-home verification
-before commit and after commit (128 rows, 30 statements, 131072 bytes), and Source's
-same-home receipt verification (4 rows, 6 statements, 8192 bytes). The sum is 441
-rows/points, 131 statements and 483328 bytes. With the original configured bounds,
-the Account read or verification refuses before dispatch, so subject discharge stays
-pending. Increasing those existing bounds is a product/spec decision; Source does not
-mint another work frame or bypass the Account reservations.
+The one default History invocation uses an existing native frame of 577 rows, 577
+points, 173 statements, 630784 bytes and zero engine requests. This is a fixed
+per-invocation ceiling, independent of input size. It funds the existing Source,
+binding, directory and local Source verification allowance (249 rows/points, 81
+statements, 286720 bytes), the actual Account reversal-settlement read (64/64/20/65536),
+both Account same-home verification calls (128/128/30/131072), and both History Source
+checks around SDK retirement and fence observation (136/136/42/147456). Each History
+check includes Source custody verification and the actual same-home Account verifier.
+Their sum is exactly 577/577/173/630784 with zero engine requests. The frame is created
+once for the real History callback, remains live across released-home work, and is not
+replaced, refunded or extended by a second allocator.
 
 The Semantic retained-directory reader, scoped fence, and Accounts technical receiver
 are present and consumed through these original ports. Their native receipts remain
@@ -231,24 +231,43 @@ never converted. No caller scope list, expected-set mirror, zero from EOF, timin
 shortcut or participant ACK is terminal authority. Account current root and all
 History copy associations/receipts remain independently required.
 
-Source funds this work once through `withIdentitySourceConsumerMaintenance` at the
-actual History default-maintenance invocation. The opaque frame is bound to that
+The actual default path is `advanceAgentIdentityConsumerMaintenance`, which creates
+one frame through `withIdentitySourceConsumerMaintenance` and passes it into
+`retireAgentIdentitySDKWork`. That function runs the complete Source check before SDK
+retirement, observes the SDK fence, then runs the complete Source check again before
+committing the receipt. Each check includes the History stage verifier, Source custody
+verifier and same-home Account verifier, all on the same original frame. Source funding
+is not a separate allocation for either check. The opaque frame is bound to that
 Pool, deadline and async invocation, and ends in `finally`. Deadline-only, copied,
 wrong-Pool and expired frames return pending before Source consumer I/O. Same-command
 verification resolves the current frame from the live command resources and checks
 the same Pool and invocation before reading.
 
-The independent native defaults are rows 249, points 249, statements 81, bytes
-286720 and engine requests 0. The row/point allowance is two existing 100-row child
-ceilings (one directory read and one current-cut verification), plus 32 fixed Source
-control touches, thirteen binding-owner read points and four same-command verification touches. Each directory child still
-refuses above 100. The statement allowance reserves 18 for each directory child (the existing equal
-read/verify planning split), 29 fixed Source control statements including the bounded
-command-executor failure/cleanup path, ten for the binding owner's two released
-read snapshots, and six same-command verification statements.
-The byte allowance is 32 KiB for fixed Source controls, 8 KiB for same-command
-verification, 16 KiB for the binding owner's fixed projections, and two 112 KiB native child reservations. No engine request is dispatched
-by this PostgreSQL path, so only that proved-unused axis defaults to zero.
+The default native aggregate is fixed at rows 577, points 577, statements 173, bytes
+630784 and engine requests 0. Its complete derivation is:
+
+| Existing work in the one invocation | Rows | Points | Statements | Bytes |
+| ------------------------------------ | ---: | -----: | ---------: | ----: |
+| Source, binding, directory and local Source verifier | 249 | 249 | 81 | 286720 |
+| Account reversal-settlement read | 64 | 64 | 20 | 65536 |
+| Account same-home verification before and after Source commit | 128 | 128 | 30 | 131072 |
+| History Source verification before SDK retirement and after fence observation | 136 | 136 | 42 | 147456 |
+| **Total** | **577** | **577** | **173** | **630784** |
+
+The larger aggregate does not enlarge the Source directory children. Before splitting,
+`identitySourceConsumerDirectoryPlan` clamps the current remaining allowance to the
+original effective envelope: 100 rows, 200 points, 36 statements, 229376 bytes and
+zero engine requests. It splits that envelope into two planned children of 50 rows,
+100 points, 18 statements, 114688 bytes and zero engine requests each. A smaller
+current balance is preserved before the split; the native reader independently
+refuses more than 100 RAW rows. These child bounds do not reserve or convert Library
+work, and lower configured aggregate limits continue to refuse unfunded work before
+dispatch. Values above the configured hard maxima remain invalid.
+
+The Account verifications and Source verification remain real, separate same-home
+checks. No engine request is dispatched by this PostgreSQL path, so that proved-unused
+axis remains zero. No second frame, refund, cached verdict or skipped verification is
+introduced.
 
 Library dimensions stay in their existing units and are never converted into
 NativeStepWork. Defaults are candidateKeys 1 for the existing one-effect page,
@@ -264,10 +283,10 @@ The exact optional overrides and defaults are:
 
 | Environment key                                                     | Default | Derivation                                                                                                                                                                         |
 | ------------------------------------------------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS`                    |     249 | Two 100-row native directory child ceilings, 32 fixed Source control touches, thirteen binding-owner points and four same-command verification touches.                            |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS`                  |     249 | The same bounded point footprint as the native row allowance.                                                                                                                      |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS`              |      81 | Two eighteen-statement directory children, 29 fixed Source control/failure/cleanup statements, ten binding-owner snapshot statements and six same-command verification statements. |
-| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES`                   |  286720 | 32 KiB Source controls, 8 KiB same-command verification, 16 KiB binding-owner reads and two 112 KiB native directory children.                                                     |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ROWS`                    |     577 | Fixed sum of Source/binding/directory (249), Account settlement read (64), Account verification (128), and both History Source checks (136).                                      |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_POINTS`                  |     577 | Same fixed bounded operation count as the native row aggregate.                                                                                                                    |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS`              |     173 | Fixed sum of Source/binding/directory (81), Account settlement read (20), Account verification (30), and both History Source checks (42).                                         |
+| `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES`                   |  630784 | Fixed sum of Source/binding/directory (286720), Account settlement read (65536), Account verification (131072), and both History Source checks (147456).                          |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_ENGINE_REQUESTS`         |       0 | This PostgreSQL path dispatches no engine request.                                                                                                                                 |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_CANDIDATE_KEYS`         |       1 | One effect selection in the existing one-page bound.                                                                                                                               |
 | `KERNEL_IDENTITY_SOURCE_MAINTENANCE_LIBRARY_IDENTITY_METADATA_ROWS` |       0 | This path does not dispatch an identity metadata sweep.                                                                                                                            |
