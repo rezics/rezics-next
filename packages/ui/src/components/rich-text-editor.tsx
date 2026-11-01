@@ -422,19 +422,16 @@ export function RichTextEditor({
     [value.profile, placeholder, maxLength],
   );
 
-  const resetUploadState = useCallback(
-    (notify: boolean) => {
-      const hadState =
-        uploadEntriesRef.current.length > 0 || uploadStatus.current.state !== 'ready' || uploadStatus.current.count !== 0;
-      uploadEntriesRef.current = [];
-      setUploadEntries((entries) => (entries.length ? [] : entries));
-      setUploadMessage('');
-      if (!hadState) return;
-      uploadStatus.current = { state: 'ready', count: 0 };
-      if (notify) latest.current.onUploadState?.('ready', 0);
-    },
-    [],
-  );
+  const resetUploadState = useCallback((notify: boolean) => {
+    const hadState =
+      uploadEntriesRef.current.length > 0 || uploadStatus.current.state !== 'ready' || uploadStatus.current.count !== 0;
+    uploadEntriesRef.current = [];
+    setUploadEntries((entries) => (entries.length ? [] : entries));
+    setUploadMessage('');
+    if (!hadState) return;
+    uploadStatus.current = { state: 'ready', count: 0 };
+    if (notify) latest.current.onUploadState?.('ready', 0);
+  }, []);
 
   const retireUploads = useCallback(
     (notify: boolean, restart = false) => {
@@ -467,8 +464,7 @@ export function RichTextEditor({
   }, [editor]);
 
   useLayoutEffect(() => {
-    const schemaMatchesProfile =
-      editor !== null && Boolean(editor.schema.nodes.image) === (value.profile === 'blocks');
+    const schemaMatchesProfile = editor !== null && Boolean(editor.schema.nodes.image) === (value.profile === 'blocks');
     const previous = controlled.current;
     const profileChanged = previous.profile !== value.profile;
     const incomingChanged = previous.key !== controlledKey || profileChanged;

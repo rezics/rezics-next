@@ -13,17 +13,7 @@ test('mounted rich-text image uploads stay owned by their editable document', as
   const report = join(output, 'stories.json');
   try {
     const run = Bun.spawn(
-      [
-        'bun',
-        'x',
-        'vitest',
-        'run',
-        story,
-        '-t',
-        'Upload Image',
-        '--reporter=json',
-        `--outputFile=${report}`,
-      ],
+      ['bun', 'x', 'vitest', 'run', story, '-t', 'Upload Image', '--reporter=json', `--outputFile=${report}`],
       {
         cwd: root,
         stdout: 'pipe',
@@ -45,9 +35,7 @@ test('mounted rich-text image uploads stay owned by their editable document', as
       .map((assertion) =>
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       );
-    expect(outcomes, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toEqual([
-      'Upload Image: passed',
-    ]);
+    expect(outcomes, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toEqual(['Upload Image: passed']);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

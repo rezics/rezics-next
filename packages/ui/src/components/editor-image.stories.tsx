@@ -583,7 +583,9 @@ export const UploadImage: Story = {
     const profileRetired = uploadLifetime.calls[45]!;
     const profileChanges = uploadLifetime.changes.length;
     await userEvent.click(canvas.getByRole('button', { name: 'Use text profile' }));
-    await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Lifetime post' })).toHaveTextContent('Text profile'));
+    await waitFor(() =>
+      expect(canvas.getByRole('textbox', { name: 'Lifetime post' })).toHaveTextContent('Text profile'),
+    );
     expect(profileRetired.signal.aborted).toBe(true);
     const profileValue = uploadLifetime.value.current;
     const profileStates = [...uploadLifetime.states];
