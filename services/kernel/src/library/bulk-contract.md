@@ -14,10 +14,14 @@ and the closed five-state request are superseded. Shared meaning, admission and 
 [Collection Source](../../../../docs/collection-source.md), [filtered lists](../../../../docs/filtered-lists.md),
 [profile consumers](../../../../docs/library-profile-consumers.md) and the [Library module](README.md).
 
+The complete [capture comparison](../../../../docs/research/search-bulk-confirmation-capture.md) and
+[independent comparison](../../../../docs/research/search-bulk-confirmation-capture-independent.md) supply evidence
+for the conditional finite-preparation direction and its unresolved capture, cut and inclusive cost boundaries.
+
 ## Installed source and unavailable runtime
 
 Native common confirmation is unavailable. Complete-population validation bound to the confirmation transition
-is missing, and shared Source/filter/Search and identity producers must agree on and supply it. The temporal rule
+is missing, and shared Source/filter/Search and identity owners must supply its actual bodies and costs. The temporal rule
 below is an adopted requirement, not an installed ABI or proof of feasibility. Preview storage alone cannot enable
 confirmation. Existing stopped producers, Source/Kind/identity receiving, creator-sales accounting and physical
 custody keep their own contracts; this adoption neither restarts them nor releases an old handle.
@@ -53,12 +57,24 @@ custody keep their own contracts; this adoption neither restarts them nor releas
   and native locator. Reserve/touch/admitStep throw; readWorkDefinition requires genuine same-client admission
   and cannot supply the absent producer. The registered [`members worker`](members-preparation-work.ts) is
   provisional and explicitly fails. No completed-result reader, durable bulk attachment or confirmation binding
-  exists. [`ScopeWorkContext`](../search/scope-work-context.ts) has exactly three other roles: members-preparation,
+  exists. [`ScopeWorkContext`](../search/scope-work-context.ts) keeps exactly three installed roles: members-preparation,
   collection-kind-preparation and collection-publication, each with a live operational transaction and locator.
 - [`libraryWorkModule`](work-module.ts) is in [`KERNEL_WORK_MODULES`](../work/modules.ts) and registers maintenance,
   source and provisional members work, but no bulk work. No Library operation routes are mounted by
   [`http/kernel.ts`](../http/kernel.ts); its `bulkRoutes` is Semantic bulk. Default API/worker/client/Web delivery
   remains missing. Extend this existing composition; add no scheduler, worker process, second manifest or export ABI.
+
+The concrete native delivery boundaries distinguish local operands from complete producers. None of these
+missing bodies or their whole prices is supplied by selecting the finite-preparation direction.
+
+| Delivery boundary | Existing operand and missing body | Inclusive cost still due |
+| --- | --- | --- |
+| Admission and native operation reader | `admitBulkOperation` and `createBulkStore` throw. Supply the one operation header, owner/phase/due/expiry/erasure indexes, immutable source/meaning/action provenance, authentic native `DurableInitiatorReader` and exact creation commitment. | Source and creation-receipt verification, capture, consent/restoration/Access, rate admission, fences/controls/outbox, retained bytes and failures. Capture's zero extra account reads and one delegated assignment seek are local operands, not an admission price. |
+| Canonical result and manifest page | `discoverBulkPage` and `commitBulkPage` throw; `BulkStore.commitDiscovery` is a declared port without an implemented store. Genuine finite result/reader adoption must verify exact page/source/owner/equality/provenance and atomically commit immutable targets, checkpoint and registered continuation, with real source adoption/ACK. | One candidate multirow insert plus one CAS omits Source/Semantic/Access children, receipt/event/control and equality costs. Include raw, negative, empty and replay work. Page size `k` derives from every remaining coordinate and the original deadline; 100 is a ceiling. |
+| Slot and action expectations | [`readEntry`, `readEntryFact`, `updateEntryState`, `deleteEntry`](entry-store.ts) supply present incarnation/revision operands. A complete indexed non-ABA absent-slot witness and all lifecycle-writer closure remain missing. Relevant expectation writers must stale pre-cut capture even when the desired final value and query membership are unchanged. | All writer, present/absent probe, constraint, control, failure/retry/rollback and retained-witness costs. Existing entry CAS is not a complete slot producer. |
+| Actual occurrences | `captureCollectionPage` and `acknowledgeOccurrencePage` throw. Native [`collection-store.ts`](collection-store.ts) changes `member_revision` on delete/restore and preserves it on move/note. Complete stable all-occurrence capture, selected-subject probes, negative/behind-frontier/lifecycle coverage and exact page/transfer/adoption/ACK custody remain missing. | Raw excluded, moved, tombstone, duplicate and replay work, probes, witnesses, verification, transfers and all retained/control copies. Canonical pages are not occurrence pages and cannot supply their price. |
+| Confirmation root and actions | No complete cut/confirmation body exists. It must bind the operation transition to all complete captured dependencies/expectations on their actual homes. `executeStatusTarget`, `executeLibraryRemovalTarget`, `executeCollectionAddTarget` and `executeCollectionRemoveTarget` throw. Active-add lookup/atomic append, occurrence CAS and all required native writers remain due. | All actual-home/root/fence/receipt/restoration/authority work and writer participation. Existing parent locks and entry CAS do not establish the common cut; its whole price remains unavailable even for zero targets. |
+| Delivery, outcomes and disposal | `registerLibraryBulkWork`, `runBulkSegment`, `reconcileBulkTarget`, `acknowledgeBulkOutcome`, `cancelBulkPage` and `expireBulkPage` throw. The selected outbox/effect route still needs the source-bound Library event/consumer/continuation, exact original receipt/ACK, currently authorized reads and indexed late-disposition/erasure retirement. Protected post-revocation evidence and terminal abort/no-inflight authority remain unavailable original-owner producers. | `pageBulkOutcomes` is one seek, at most 21 fetched/20 emitted, before authorization/source/cursor/bytes; it is not the whole price. Delivery, unknown/noEffect, retention/minimization and peak overlapping copies remain charged. |
 
 ## Four independent bindings
 
@@ -111,11 +127,14 @@ arbitrary mounted/foreign preparation. Unsupported public/frozen/mounted/native-
 or rejected before enumeration. Do not use injected services, a reconstructed Actor, fabricated authoritative time,
 a cast into another work role or a restored WeakMap handle as a native producer.
 
-Shared Source/filter and Library preparation owners must provide either a genuine finite members-preparation result
-with an admitted bounded durable reader attachable to this operation, or an explicitly adopted bulk work role with
-same-client episode admission. Neither option exists as the required complete bulk protocol. Semantic supplies the
-actual scoped original/terminal observation through its normal owner boundary; a committedRevision alone is not the
-full observation, and identity revalidation alone is not arbitrary filtered-population confirmation.
+The selected direction is conditional genuine finite members preparation plus an explicitly admitted bounded
+durable reader through the existing Source/filter/Search and Library preparation owners. Actual supported-placement
+reservation, immutable result, reader, restoration, custody, retention and inclusive price bodies are prerequisites.
+This selection supplies no result, reader, role, durable ABI or confirmation-cut capability by declaration. No
+distinct same-client bulk work role is selected; `ScopeWorkContext` retains its three installed roles. A cast,
+forged locator, borrowed kind/publication episode or WeakMap restoration grants no authority. Semantic supplies
+the actual scoped original/terminal observation through its normal owner boundary; a committedRevision alone is
+not the full observation, and identity revalidation alone is not arbitrary filtered-population confirmation.
 Privacy reduction invalidates admission/disclosure immediately; repairing or acknowledging a reduction during a read
 cannot rescue its old observation. Missing foreign or original support remains unavailable, never negative evidence.
 Native Source captures/holds require their existing same-home live transaction and retain all receiving/retirement
@@ -127,12 +146,29 @@ continuation intent commit atomically on the operation home. Uniqueness collisio
 not silent omission on conflict. A read interrupted before commit repeats only the unfinished step. A committed
 page survives a DBOS checkpoint gap; resume its native frontier instead of restarting from zero.
 
-Complete coverage needs a stable finite generation and indexed repair or a producer-defined writer fence/cut.
-Changes behind the frontier, alias/dedup groups, negative dependencies and edited ordinal populations must be
-repaired completely or invalidate the capture. A high-water or suffix exhaustion alone cannot seal a changing
-population. No admission-sequence/slot-generation field is presumed installed. Continuous relevant mutation may
-end stale or expired; it cannot yield truncated completeness or perpetual fake preparation. Missing, failed,
-unknown and empty-but-unexhausted work never supplies a completed zero.
+Native dependency enrollment must precede the first raw range escaping writer serialization. The complete cover
+includes empty/new population ranges and behind-frontier arrivals; positives, negatives, NOT, exclusions and order;
+foreign/privacy and meaning/release dependencies; and original/terminal identity and canonical support, including
+originals outside selected positives. Late enrollment must account for every relevant change since the original
+baseline. Selected IDs, a high-water, largest allocated sequence, suffix exhaustion or final-value equality cannot
+prove this cover. No admission-sequence/slot-generation field is presumed installed.
+
+Supply an admitted immutable baseline/history or complete dependency-local sticky drift detection with
+stale/unavailable disposition, together with lossless committed OLD/NEW native routing. Mutable scans plus changed
+anchors cannot reconstruct lost old values. Complete native writer coverage includes already-started writers at
+their final commit boundary, identity claim/group/publication/cancellation, source enrollment/late receiving,
+support withdrawal/addition, owner/partition movement, repair/ACK and output custody transitions. Coarse global
+or account invalidation is not a substitute for complete dependency-local coverage.
+
+The handoff must retain exact result/source/owner/provenance/support/frontier/completion evidence, bounded reading
+and real occurrence-facing custody/ACK, with indexed owner/due/phase/unfinished/erasure locators. Repair may finish
+the admitted build within its original bounds; after an expectation is captured or preview exposed, relevant drift
+remains stale even if values are restored or repair is acknowledged. Never replace that baseline or renew membership.
+Eviction preserves separately admitted exact proof custody or makes unfinished work unavailable. Canonical support
+neither fabricates nor proves all real occurrences or their lifecycle witnesses. No producer is installed merely
+by selecting this direction. Continuous relevant mutation may end stale or expired; it cannot yield truncated
+completeness or perpetual fake preparation. Missing, failed, unknown and empty-but-unexhausted work never supplies
+a completed zero.
 
 For subject-based removal from a target Collection, bind selected membership to the immutable request/shared
 result and transfer bounded exact pages into an indexed target-home selected-subject lookup. Scan the target
@@ -187,6 +223,12 @@ check cannot undo an earlier independent effect. Hashes, returned positives, hea
 per-page/target serializable transactions do not close that race. Same-home custody holds are not cross-home locks.
 No exported long-lived PostgreSQL snapshot or global gate is selected. A bounded single-home transaction can be a
 placement optimization, not a restriction that removes required common cross-home support.
+
+Complete pre-scan dependency cover and durable reading still do not bind validation to that root transition.
+Durable writer interlocks, writer tickets, prepared transactions and distributed validation/commit are unselected
+proposals, not accepted mechanisms or protocol proofs. Urgent authority writes must remain effective; root unknown
+commit/abort/no-inflight disposition, indexed finite dependency overlap/fanout, retention and full original-frame
+costs remain unresolved. No new ABI, epoch, global gate, population/version cap or enlarged budget is selected.
 
 Strictly later drift does not expand or re-query the manifest. Exact target conflicts and target-specific denials
 are inspectable partial outcomes. Loss of source/account/consent/delegation/gate/resource authority stops remaining
@@ -452,6 +494,17 @@ candidates, `M` target-Collection raw members examined, `D` changed dependency/r
 tombstones, lookahead, empty seeks, failed/repeated work and every child, including identity metadata/witnesses,
 Access, locks, rollback, Core receipts/outbox and WorkClient SQL/bytes. No hidden allowance renewal or literal price.
 
+Define `V=(candidateKeys,identityMetadataRows,nativeRows,nativePoints,witnessKeys,statements,bytes,emptySeeks)`.
+For each actual original invocation `f`, its remaining allowance is `R_f=A_f-sum_j V_fj` componentwise, where `A_f`
+is its original admitted vector and `V_fj` is each dispatched body/child's complete debit. Keep every coordinate
+nonnegative under that invocation's original absolute deadline. Reserve complete nested work before dispatch;
+charge failure, empty seeks, repeats, rollback, unknown commits and controls. Retain unknown child remainder,
+never refund dispatched work or introduce a replacement frame. Summing lifecycle work across admitted invocations
+does not refill any invocation. Engine iterator/examined/buffer work, connection/lock tenure and peak retained
+copies need separate complete inclusive accounting beyond this vector. Returned-row legacy counters do not quote
+inclusive indexed/control/SQL/argument work. Unknown bodies and costs remain unavailable even for zero targets,
+never zero or permission to suppress a guard.
+
 ### Admission, seal and whole confirmation
 
 - Touches: bounded request (100 explicit IDs/16 KiB), exact authorization/creation/receipt/root/intent and all admitted
@@ -484,9 +537,10 @@ Access, locks, rollback, Core receipts/outbox and WorkClient SQL/bytes. No hidde
 
 - Touches: all raw admitted Source/filter candidates and dependencies, one target-Collection scan with indexed
   selected-subject probes, exact transfer/ACK pages, immutable target inserts, one frontier and continuation.
-- Bound: the stronger applicable 100 raw native keys per worker step wins. Shrink page size for remaining rows,
-  probes, statements and bytes. Proposed manifest SQL is one multirow insert plus one root CAS, alongside actual
-  receipt/intent SQL, all in the existing allowance. Native external anchor probes remain at most 100 per chunk,
+- Bound: the stronger applicable 100 raw native keys per worker step wins. Derive page size `k` from every remaining
+  vector coordinate and the original deadline; 100 is only a ceiling. Proposed manifest SQL is one multirow insert
+  plus one root CAS, before Source/Semantic/Access, equality, receipt/event/control and adoption/ACK work, all in
+  the existing allowance. Native external anchor probes remain at most 100 per chunk,
   further limited by the shared ledger; this is not a second 100-key allowance. Stable total candidate/capture/repair
   work targets `O(N + M + D)` and target/evidence work `O(T + E)`, with at most one unfinished-step reread per recovery
   and indexed affected-result repair, never full rebuilds after each change. Total SQL sums actual shared calls,
@@ -507,6 +561,17 @@ Access, locks, rollback, Core receipts/outbox and WorkClient SQL/bytes. No hidde
   shared throughout each admitted operation class; the applicable native raw-100 step limit is still stronger.
   Existing native Source/owner read and work allowances also remain binding. Manifest writes, nested controls,
   identity/foreign work and empty/failure/rollback work spend this same ledger.
+
+  The Semantic direct-output guard local subtotal is `(0,14,112,14,0,4,2124544+Q,4)`, where `Q` is dispatched SQL
+  plus serialized argument bytes. Two such sequences reserve `4249088+sumQ` bytes, exceeding 4 MiB (`4194304`) by
+  `54784` before nested work. This excludes native holds/output, command/Access/component/event/constraint/control
+  and variable non-SQL work; it is a conditional composition refusal, not a complete callable price.
+
+  The old repair mapper reserves 8 statements per original; three originals require 24 against preparation's 16
+  before raw/current/mutation work. Sweeping 4096 privacy homes twice costs 8192 logical rows before other work,
+  versus the required indexed two-statement `64+2(behind+changed)` subset at zero changed/behind homes. These exact
+  refusals require actual better bounded bodies/access paths and complete owner prices. They permit no suppressed
+  guard, guessed allowance, population/version cap, additional funding or replacement frame.
 - Growth check: deferred shared three-scale native captures, inclusive role attribution and engine iterator work;
   no free witness work, budget reset, private/public fallback or growth waiver follows from this adoption.
 
@@ -565,14 +630,13 @@ retaining prior effects; concurrent confirm/cancel/expiry; disclosure-safe count
 discipline; default native/API/worker/client/Web composition; and complete byte admission/erasure/shared custody.
 No exact new seal/confirm schema, test title or measurement is invented pending producer agreement.
 
-Shared Source/filter/Search/Library preparation and Semantic owners must supply complete durable coverage and the
-validation-to-confirm binding, with inclusive costs and proof custody/expiry. Library supplies the same operation's
-header/indexes, absent-slot producer, stable occurrence capture/lifecycle CAS, atomic active-add, dispatch/ACK and
-late-disposition/erasure locators. Core/Accounts/WorkClient supply authentic initiator/current consent, protected
-receipt/evidence-only authority, rate/resource admission and shared minimizers through their actual owner bodies.
-Installed capture/restoration and command outbox/effect helpers do not supply Commerce's immutable reader, native
-event/schema, source-bound consumer/continuation or current-authority target bodies, Auth consent composition,
-post-revocation reconciliation or whole-call funding. The delivery route is selected; these producers remain required.
+The concrete delivery boundaries above remain required. Search/Source and Library preparation owe the complete
+finite result/reader and dependency cover; Semantic owes original/terminal/support witnesses, committed OLD/NEW
+routing and restoration/retirement. Library owes real slot/occurrence/writer bodies, while Commerce owns their
+binding to its actual root cut and immutable action expectations. Core/Accounts/Access/Auth/History/WorkClient
+retain current consent/authority, protected evidence/unknown/abort disposition, rate/resource admission and shared
+minimizers through their actual owner bodies. Installed capture/restoration and outbox/effect helpers supply
+neither these missing producers nor whole-call funding, including for zero targets. The delivery route is selected.
 Default routes, worker registration and actual client/Web consumers must complete this one journey after that ABI.
 Existing receiving, stopped producer and native erasure obligations remain in force.
 
