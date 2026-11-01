@@ -1,4 +1,4 @@
-import { Exposure } from '../kernel/exposure';
+import { Exposure, useOperation } from '../kernel/exposure';
 import { getLocale } from '../paraglide/runtime.js';
 import { fullDateTime } from '../threads/byline';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -11,7 +11,7 @@ import type { PublishedLogPage } from './logs-read';
 import type { ProgressSessionPage } from './progress-reads';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -157,6 +157,7 @@ function PublishedLogs({
   search: { changes?: string; units?: string };
 }) {
   const headingId = 'published-logs-heading';
+  const canRead = useOperation('published_log.read');
 
   return (
     <section role="region" aria-labelledby={headingId} className="space-y-3">
@@ -166,42 +167,18 @@ function PublishedLogs({
       {page.logs.length ? (
         <ol className="space-y-3">
           {page.logs.map((log) => (
-            <ListRow key={log.id} className="space-y-2 py-3">
-              <Exposure operation="published_log.read">
-                <ListRowLink href={`/${getLocale()}/logs/${encodeURIComponent(log.id)}`}>
-                  {m.library_logs_open()}
-                </ListRowLink>
-              </Exposure>
-              <p className="flex min-w-0 items-baseline gap-2 overflow-hidden text-sm whitespace-nowrap">
-                {log.account ? (
-                  <>
-                    {log.account.displayName ? (
-                      <span className="truncate font-medium">{log.account.displayName}</span>
-                    ) : null}
-                    {log.account.handle ? (
-                      <span className="shrink-0 text-muted-foreground">@{log.account.handle}</span>
-                    ) : null}
-                  </>
-                ) : (
-                  <span className="truncate font-medium">{m.library_account_deleted()}</span>
-                )}
-                <span className="shrink-0 text-muted-foreground">
-                  <RelativeTime value={log.publishedAt} />
-                </span>
-              </p>
-              {log.note ? <p className="whitespace-pre-wrap">{log.note}</p> : null}
-              <ListRowControl>
-                <Exposure operation="published_log.read">
-                  <Link
-                    to="/logs/$id"
-                    params={{ id: log.id }}
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    {m.library_logs_open()}
-                  </Link>
-                </Exposure>
-              </ListRowControl>
-            </ListRow>
+            <ContentItem
+              key={log.id}
+              title={
+                [log.account?.displayName, log.account?.handle ? `@${log.account.handle}` : null]
+                  .filter(Boolean)
+                  .join(' ') || m.library_account_deleted()
+              }
+              headingLevel={3}
+              {...(canRead ? { href: `/${getLocale()}/logs/${encodeURIComponent(log.id)}` } : {})}
+              metadata={<RelativeTime value={log.publishedAt} />}
+              preview={log.note ? <p className="whitespace-pre-wrap">{log.note}</p> : null}
+            />
           ))}
         </ol>
       ) : (
