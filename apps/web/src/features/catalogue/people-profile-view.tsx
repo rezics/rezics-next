@@ -25,6 +25,57 @@ import {
 type Current = Extract<PeopleRead, { ok: true }>;
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 
+const peopleActionTarget =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+const peopleLinkTarget =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+const peopleInputTarget = 'h-11 md:pointer-fine:h-8';
+const peopleProfileSurface = [
+  'min-w-0 w-full [overflow-wrap:anywhere]',
+  '[&>article>header>p:first-of-type_a]:inline-flex',
+  '[&>article>header>p:first-of-type_a]:min-h-11',
+  '[&>article>header>p:first-of-type_a]:min-w-11',
+  '[&>article>header>p:first-of-type_a]:max-w-full',
+  '[&>article>header>p:first-of-type_a]:min-w-0',
+  '[&>article>header>p:first-of-type_a]:items-center',
+  '[&>article>header>p:first-of-type_a]:py-2',
+  '[&>article>header>p:first-of-type_a]:[overflow-wrap:anywhere]',
+  '[&>article>header>p:first-of-type_a]:focus-visible:outline-2',
+  '[&>article>header>p:first-of-type_a]:focus-visible:outline-offset-2',
+  '[&>article>header>p:first-of-type_a]:focus-visible:outline-ring',
+  'md:pointer-fine:[&>article>header>p:first-of-type_a]:min-h-8',
+  'md:pointer-fine:[&>article>header>p:first-of-type_a]:min-w-0',
+  'md:pointer-fine:[&>article>header>p:first-of-type_a]:py-1',
+  '[&>article>nav>a]:h-auto',
+  '[&>article>nav>a]:min-h-11',
+  '[&>article>nav>a]:min-w-11',
+  '[&>article>nav>a]:max-w-full',
+  '[&>article>nav>a]:whitespace-normal',
+  '[&>article>nav>a]:py-2',
+  '[&>article>nav>a]:[overflow-wrap:anywhere]',
+  'md:pointer-fine:[&>article>nav>a]:min-h-8',
+  'md:pointer-fine:[&>article>nav>a]:min-w-0',
+  'md:pointer-fine:[&>article>nav>a]:py-1',
+].join(' ');
+const peopleRelationsSurface = [
+  'min-w-0 max-w-full [overflow-wrap:anywhere]',
+  '[&_details]:min-w-0',
+  '[&_details]:max-w-full',
+  '[&_details>summary]:min-h-11',
+  '[&_details>summary]:min-w-11',
+  '[&_details>summary]:max-w-full',
+  '[&_details>summary]:cursor-pointer',
+  '[&_details>summary]:whitespace-normal',
+  '[&_details>summary]:py-2',
+  '[&_details>summary]:[overflow-wrap:anywhere]',
+  '[&_details>summary]:focus-visible:outline-2',
+  '[&_details>summary]:focus-visible:outline-offset-2',
+  '[&_details>summary]:focus-visible:outline-ring',
+  'md:pointer-fine:[&_details>summary]:min-h-8',
+  'md:pointer-fine:[&_details>summary]:min-w-0',
+  'md:pointer-fine:[&_details>summary]:py-1',
+].join(' ');
+
 function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
   const o = { locale: locale as never };
   const subject = read.public?.subject;
@@ -32,11 +83,11 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
   const work = read.work?.subject;
   const workTitle = definitionText(work?.labels, locale);
   return (
-    <div className="space-y-3 text-sm">
+    <div className="min-w-0 space-y-3 text-sm [overflow-wrap:anywhere]">
       <p>{m.people_profile_intro({}, o)}</p>
       {profile && <p lang={profile.descriptionLang ?? undefined}>{profile.description}</p>}
       {subject && (
-        <dl className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
+        <dl className="grid min-w-0 gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
           {[
             ...new Set([
               ...Object.keys(subject.labels),
@@ -44,15 +95,23 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
               ...Object.keys(subject.aliases),
             ]),
           ].map((language) => (
-            <div key={language}>
+            <div key={language} className="min-w-0">
               <dt className="text-muted-foreground">{language}</dt>
               {subject.labels[language] && (
-                <dd lang={language} className="break-words font-medium">
+                <dd lang={language} className="min-w-0 font-medium [overflow-wrap:anywhere]">
                   {subject.labels[language]}
                 </dd>
               )}
-              {subject.descriptions[language] && <dd lang={language}>{subject.descriptions[language]}</dd>}
-              {!!subject.aliases[language]?.length && <dd lang={language}>{subject.aliases[language]!.join(' · ')}</dd>}
+              {subject.descriptions[language] && (
+                <dd lang={language} className="min-w-0 [overflow-wrap:anywhere]">
+                  {subject.descriptions[language]}
+                </dd>
+              )}
+              {!!subject.aliases[language]?.length && (
+                <dd lang={language} className="min-w-0 [overflow-wrap:anywhere]">
+                  {subject.aliases[language]!.join(' · ')}
+                </dd>
+              )}
             </div>
           ))}
         </dl>
@@ -60,11 +119,11 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
       <p className="text-muted-foreground">{m.people_profile_terms({}, o)}</p>
       <p className="text-muted-foreground">{m.people_profile_disclosure({}, o)}</p>
       {work && (
-        <section className="space-y-2 rounded-xl border border-border bg-card p-4">
+        <section className="min-w-0 space-y-2 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere]">
           <h2 className="font-semibold">{m.people_profile_credit({}, o)}</h2>
           <a
             lang={workTitle.lang ?? undefined}
-            className="underline"
+            className={peopleLinkTarget + ' underline'}
             href={subjectHref({ id: work.id, label: workTitle.text }, locale).href}
           >
             {workTitle.text || m.subject_value_unlabelled({}, o)}
@@ -72,7 +131,7 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
           <p>{m.people_profile_credit_help({}, o)}</p>
           {read.credits.length ? (
             <a
-              className={buttonVariants({ variant: 'outline' })}
+              className={buttonVariants({ variant: 'outline', className: peopleActionTarget })}
               href={`${subjectHref({ id: work.id, label: workTitle.text }, locale).href}/relation-edit`}
             >
               {m.relation_title({}, o)}
@@ -114,7 +173,7 @@ function PeopleCreate({
     setFailure(undefined);
   }
   return (
-    <section className="mx-auto w-full max-w-3xl space-y-6">
+    <section className="mx-auto min-w-0 w-full max-w-3xl space-y-6 [overflow-wrap:anywhere]">
       <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
       <ProfileIntro read={read} locale={locale} />
       {created && (
@@ -165,7 +224,7 @@ function PeopleCreate({
             const fields = drafts[type] ?? {};
             return (
               profile && (
-                <section className="space-y-4">
+                <section className="min-w-0 space-y-4">
                   <h2 className="text-xl font-semibold">{m.people_profile_initial({}, o)}</h2>
                   <p className="text-sm text-muted-foreground">{m.people_profile_initial_help({}, o)}</p>
                   <p lang={profile.descriptionLang ?? undefined}>{profile.description}</p>
@@ -179,6 +238,7 @@ function PeopleCreate({
                             key={id}
                             type="button"
                             variant="outline"
+                            className={peopleActionTarget}
                             disabled={disabled}
                             onClick={() =>
                               update(type, id, {
@@ -190,7 +250,7 @@ function PeopleCreate({
                               })
                             }
                           >
-                            <span lang={name.lang ?? undefined}>
+                            <span lang={name.lang ?? undefined} className="min-w-0 [overflow-wrap:anywhere]">
                               {m.people_profile_add_fact({ field: name.text }, o)}
                             </span>
                           </Button>
@@ -210,7 +270,7 @@ function PeopleCreate({
                         key={property}
                         id={`people-fact-${property}`}
                         disabled={disabled}
-                        className="space-y-3 rounded-xl border border-border bg-card p-4"
+                        className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4"
                       >
                         <legend className="px-1 font-medium" lang={name.lang ?? undefined}>
                           {name.text || m.candidate_value_unavailable({}, o)}
@@ -230,6 +290,7 @@ function PeopleCreate({
                           <FieldLabel htmlFor={`people-citation-${property}`}>{m.relation_citation({}, o)}</FieldLabel>
                           <Input
                             id={`people-citation-${property}`}
+                            className={peopleInputTarget}
                             type="url"
                             value={citation?.type === 'value' ? String(citation.content) : ''}
                             onChange={(event) =>
@@ -252,7 +313,12 @@ function PeopleCreate({
                           />
                         </Field>
                         {invalid && <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>}
-                        <Button type="button" variant="ghost" onClick={() => update(type, property)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className={peopleActionTarget}
+                          onClick={() => update(type, property)}
+                        >
                           {m.people_profile_remove_fact({}, o)}
                         </Button>
                       </fieldset>
@@ -316,14 +382,19 @@ export function PeopleProfileEditor({
   const read = query.data;
   if (!read?.ok)
     return (
-      <article className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+      <article className="mx-auto w-full min-w-0 max-w-4xl space-y-4 p-4 sm:p-6 [overflow-wrap:anywhere]">
         <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
         {query.isPending ? (
           <p role="status">{m.catalogue_create_loading({}, o)}</p>
         ) : (
           <>
             <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
-            <Button type="button" variant="outline" onClick={() => void query.refetch()}>
+            <Button
+              type="button"
+              variant="outline"
+              className={peopleActionTarget}
+              onClick={() => void query.refetch()}
+            >
               {m.catalogue_create_retry({}, o)}
             </Button>
           </>
@@ -336,7 +407,7 @@ export function PeopleProfileEditor({
     );
   if (session !== 'signed-in')
     return (
-      <article className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+      <article className="mx-auto w-full min-w-0 max-w-4xl space-y-4 p-4 sm:p-6 [overflow-wrap:anywhere]">
         <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
         <ProfileIntro read={read} locale={locale} />
         <p role="status">
@@ -350,6 +421,7 @@ export function PeopleProfileEditor({
           <Button
             type="button"
             variant="outline"
+            className={peopleActionTarget}
             onClick={() => void client.invalidateQueries({ queryKey: ['session'] })}
           >
             {m.catalogue_create_retry({}, o)}
@@ -357,7 +429,7 @@ export function PeopleProfileEditor({
         )}
         {session === 'signed-out' && (
           <a
-            className="underline"
+            className={peopleLinkTarget + ' underline'}
             href={`/auth/sign-in?return_to=${encodeURIComponent(
               id && read.public
                 ? `${subjectHref({ id, label: definitionText(read.public.subject.labels, locale).text }, locale).href}/people`
@@ -371,32 +443,34 @@ export function PeopleProfileEditor({
     );
   if (!read.public) return <EditorFailure reason="unavailable" locale={locale} />;
   return (
-    <SubjectFacts
-      locale={locale}
-      initial={{ ok: true, public: read.public, release: read.release, source: null }}
-      profile={{
-        title: m.people_profile_title({}, o),
-        intro: m.facts_intro({}, o),
-        empty: m.facts_empty({}, o),
-        path: 'people',
-        properties: (current) =>
-          peopleProfiles(current.release, locale).find((profile) => profile.id === current.public.subject.type)
-            ?.fields ?? [],
-      }}
-      profileIntro={<ProfileIntro read={read} locale={locale} />}
-      profileRelations={relations}
-      transport={{
-        propose,
-        read: async () => {
-          const next = await transport.load();
-          return next.ok && next.public
-            ? { ok: true, public: next.public, release: next.release, source: null }
-            : next.ok
-              ? { ok: false, reason: 'unavailable' }
-              : next;
-        },
-      }}
-      review={review}
-    />
+    <div className={peopleProfileSurface}>
+      <SubjectFacts
+        locale={locale}
+        initial={{ ok: true, public: read.public, release: read.release, source: null }}
+        profile={{
+          title: m.people_profile_title({}, o),
+          intro: m.facts_intro({}, o),
+          empty: m.facts_empty({}, o),
+          path: 'people',
+          properties: (current) =>
+            peopleProfiles(current.release, locale).find((profile) => profile.id === current.public.subject.type)
+              ?.fields ?? [],
+        }}
+        profileIntro={<ProfileIntro read={read} locale={locale} />}
+        profileRelations={relations ? <div className={peopleRelationsSurface}>{relations}</div> : undefined}
+        transport={{
+          propose,
+          read: async () => {
+            const next = await transport.load();
+            return next.ok && next.public
+              ? { ok: true, public: next.public, release: next.release, source: null }
+              : next.ok
+                ? { ok: false, reason: 'unavailable' }
+                : next;
+          },
+        }}
+        review={review}
+      />
+    </div>
   );
 }

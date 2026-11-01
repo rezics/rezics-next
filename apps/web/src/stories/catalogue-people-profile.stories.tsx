@@ -117,14 +117,88 @@ async function fill(canvasElement: HTMLElement) {
   await userEvent.type(fact.getByRole('textbox', { name: m.relation_citation() }), 'https://example.org/credits');
   return canvas;
 }
+async function assertPeopleTarget(target: HTMLElement, region: HTMLElement, canvasElement: HTMLElement) {
+  const document = canvasElement.ownerDocument;
+  const view = document.defaultView;
+  if (!view) throw new Error('People profile story requires a browser window.');
+  const touchLayout = document.documentElement.clientWidth < 768 || view.matchMedia('(pointer: coarse)').matches;
+  const rect = target.getBoundingClientRect();
+  const bounds = region.getBoundingClientRect();
+  await expect(target).toBeVisible();
+  await expect(rect.height).toBeGreaterThanOrEqual(touchLayout ? 44 : 32);
+  if (touchLayout) await expect(rect.width).toBeGreaterThanOrEqual(44);
+  else await expect(rect.height).toBeLessThan(44);
+  await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+  await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+  await expect(target.scrollWidth).toBeLessThanOrEqual(target.clientWidth + 1);
+  await expect(target.scrollHeight).toBeLessThanOrEqual(target.clientHeight + 1);
+}
+async function fillAndAssertOwnedControls(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const main = canvas.getByRole('main');
+  const credit = within(canvas.getByRole('heading', { name: m.people_profile_credit() }).closest('section')!);
+  const work = credit.getByRole('link', { name: 'Lantern Songs' });
+  const relations = credit.getByRole('link', { name: m.relation_title() });
+  await expect(work.tagName).toBe('A');
+  await expect(work).toHaveAttribute('href', expect.stringContaining(peopleWorkId));
+  await expect(relations.tagName).toBe('A');
+  await expect(relations).toHaveAttribute('href', expect.stringContaining('/relation-edit'));
+  const creditSection = credit.getByRole('heading', { name: m.people_profile_credit() }).closest('section')!;
+  await assertPeopleTarget(work, creditSection, canvasElement);
+  await assertPeopleTarget(relations, creditSection, canvasElement);
+
+  work.focus();
+  await userEvent.tab();
+  await expect(relations).toHaveFocus();
+  const view = canvasElement.ownerDocument.defaultView!;
+  const focusStyle = view.getComputedStyle(relations);
+  await expect(focusStyle.outlineWidth !== '0px' || focusStyle.boxShadow !== 'none').toBe(true);
+
+  await userEvent.selectOptions(
+    await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
+    'schema:Organization',
+  );
+  const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
+  await userEvent.clear(language);
+  await userEvent.type(language, 'en');
+  await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'Paper Lantern Studio');
+  const add = canvas.getByRole('button', { name: m.people_profile_add_fact({ field: urlLabel() }) });
+  await expect(add).toHaveAttribute('type', 'button');
+  const initial = canvas.getByRole('heading', { name: m.people_profile_initial() }).closest('section')!;
+  await assertPeopleTarget(add, initial, canvasElement);
+  add.focus();
+  await expect(add).toHaveFocus();
+  const addFocusStyle = view.getComputedStyle(add);
+  await expect(addFocusStyle.outlineWidth !== '0px' || addFocusStyle.boxShadow !== 'none').toBe(true);
+  await userEvent.keyboard('{Enter}');
+
+  const group = canvas.getByRole('group', { name: urlLabel() });
+  const fact = within(group);
+  const remove = fact.getByRole('button', { name: m.people_profile_remove_fact() });
+  const citation = fact.getByRole('textbox', { name: m.relation_citation() });
+  await expect(remove).toHaveAttribute('type', 'button');
+  await expect(citation).toHaveAttribute('type', 'url');
+  await assertPeopleTarget(remove, group, canvasElement);
+  await assertPeopleTarget(citation, group, canvasElement);
+  const value = fact.getByRole('textbox', { name: m.correction_value() });
+  const longUrl = `https://example.org/${'studio-credit/'.repeat(8)}source`;
+  await userEvent.type(value, longUrl);
+  await userEvent.type(citation, longUrl);
+  await expect(value).toHaveValue(longUrl);
+  await expect(citation).toHaveValue(longUrl);
+  await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth + 1);
+  return canvas;
+}
 async function submit(canvasElement: HTMLElement) {
   const canvas = await fill(canvasElement);
   await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
   return canvas;
 }
 export const Create: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
-    const canvas = await submit(canvasElement);
+    const canvas = await fillAndAssertOwnedControls(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
       'href',
       `/${getLocale()}/subjects/${peopleCreatedId}/paper-lantern-studio`,
