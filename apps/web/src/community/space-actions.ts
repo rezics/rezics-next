@@ -165,7 +165,7 @@ export const readMyRealmsPageForReview = createServerFn({ method: 'GET' })
     const request = getRequest();
     const page = await loadMyRealms(kernelClient(), request, env as Partial<SessionEnv>, {});
     const provenance = await preparedReviewReader(sessionSubject(request), requestCsrfToken(request));
-    if (!page.signedIn || !sameReviewReader(data.expected, provenance)) return { kind: 'mismatch' };
+    if (!page.signedIn || !provenance || !sameReviewReader(data.expected, provenance)) return { kind: 'mismatch' };
     return { kind: 'ready', page, provenance };
   });
 
