@@ -273,7 +273,7 @@ export function SpaceSetupForm({ initial, transport, boardChoices = unavailableB
 function SpaceSetupFormVisit({
   initial,
   transport,
-  boardChoices,
+  boardChoices = unavailableBoardChoiceSource,
   caller,
 }: SpaceSetupFormProps & { caller: SpaceSetupCallerLifetime }) {
   const callerRevision = useSyncExternalStore(caller.subscribe, caller.snapshot, caller.snapshot);
@@ -319,7 +319,7 @@ function SpaceSetupFormVisit({
     source: BoardChoiceSource;
     choice: SetupChoice;
   } | null>(null);
-  const scheme = schemeSelection?.source === boardChoices ? schemeSelection.choice : null;
+  const scheme = schemeSelection && schemeSelection.source === boardChoices ? schemeSelection.choice : null;
   const [conceptSelection, setConceptSelection] = useState<
     (BoardConceptSelection & { source: BoardChoiceSource }) | null
   >(null);

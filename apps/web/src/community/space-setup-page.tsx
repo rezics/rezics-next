@@ -43,7 +43,7 @@ function useHydrated() {
 
 function sessionMatches(
   cached: ReturnType<ReturnType<typeof spaceSetupSessionSource>['read']>,
-  expected: { state: string; subject?: string | null; csrfToken: string | null },
+  expected: { state: string; subject?: string | null | undefined; csrfToken: string | null },
 ) {
   return (
     !!cached &&
