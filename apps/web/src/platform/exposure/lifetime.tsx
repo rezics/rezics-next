@@ -219,6 +219,10 @@ export class ExposureVisit {
     return this.retiredRead;
   }
 
+  retire(notify = true) {
+    this.retireRead(notify);
+  }
+
   get intent(): Intent | null {
     return this.operation.intent;
   }
@@ -412,7 +416,7 @@ export function useExposureVisit(envelope: ExposureReaderEnvelope, io: ExposureB
   const newInput = !previous || previous.client !== client || previous.source !== source || previous.envelope !== envelope;
   if (newInput || previous!.visit.retired) {
     const history = previous?.visit.successorHistory() ?? null;
-    previous?.visit.retireRead(false);
+    previous?.visit.retire(false);
     const seed =
       !previous || (previous.client === client && previous.source === source && previous.envelope !== envelope);
     const visit = new ExposureVisit(source, envelope, io, seed, history);
