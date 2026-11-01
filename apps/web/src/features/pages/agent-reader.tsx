@@ -9,6 +9,8 @@ export type AgentReaderPath = { kind: 'overview' } | { kind: 'view'; view: strin
 type SessionCache = {
   getSnapshot: () => number;
   subscribe: (listener: () => void) => () => void;
+  getSession: () => SessionSnapshot | undefined;
+  register: (observation: AgentReaderObservation) => () => void;
 };
 
 type SessionSnapshot = { state?: unknown; subject?: unknown; csrfToken?: unknown } | undefined;
@@ -20,26 +22,41 @@ function sessionCache(client: QueryClient): SessionCache {
   let cache = sessionCaches.get(client);
   if (cache) return cache;
 
-  const snapshot = () => {
-    const value = client.getQueryData<SessionSnapshot>(['session']);
-    return JSON.stringify([value?.state, value?.subject ?? null, value?.csrfToken ?? null]);
+  const getSession = () => {
+    const state = client.getQueryState<SessionSnapshot>(['session']);
+    if (
+      !state ||
+      state.status !== 'success' ||
+      state.fetchStatus !== 'idle' ||
+      state.isInvalidated ||
+      !state.data
+    )
+      return undefined;
+    return state.data;
   };
-  let last = snapshot();
   let revision = 0;
   const listeners = new Set<() => void>();
+  const observations = new Set<AgentReaderObservation>();
   client.getQueryCache().subscribe((event) => {
     if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
-    const next = snapshot();
-    if (next === last) return;
-    last = next;
+    if (event.type !== 'added' && event.type !== 'removed' && event.type !== 'updated') return;
     revision += 1;
+    for (const observation of [...observations]) {
+      if (observation.revision !== revision) observation.retire();
+    }
     for (const listener of listeners) listener();
   });
   cache = {
     getSnapshot: () => revision,
+    getSession,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    register: (observation) => {
+      if (observation.revision !== revision) observation.retire();
+      else if (!observation.invalidated()) observations.add(observation);
+      return () => observations.delete(observation);
     },
   };
   sessionCaches.set(client, cache);
@@ -72,7 +89,6 @@ export function useAgentReaderScope({
   locale,
   path,
   enabled,
-  session,
 }: {
   handle: string;
   locale: string;
@@ -84,10 +100,17 @@ export function useAgentReaderScope({
   const sessions = sessionCache(client);
   const revision = useSyncExternalStore(sessions.subscribe, sessions.getSnapshot, () => 0);
   const [mount] = useState(() => ++nextMount);
-  const reader = session.state === 'signed-in' && session.subject ? session.subject : null;
+  const cachedSession = sessions.getSession();
+  const reader =
+    typeof window !== 'undefined' &&
+    cachedSession?.state === 'signed-in' &&
+    typeof cachedSession.subject === 'string' &&
+    cachedSession.subject.length > 0
+      ? cachedSession.subject
+      : null;
   const route = JSON.stringify([path.kind, path.kind === 'view' ? path.view : null]);
   const admitted = enabled && (path.kind !== 'view' || path.view !== 'realms');
-  const identity = JSON.stringify([handle, locale, route, session.state, reader, revision, admitted]);
+  const identity = JSON.stringify([handle, locale, route, reader, revision, admitted]);
   const current = useRef<CurrentObservation | null>(null);
 
   if (!current.current || current.current.identity !== identity) {
@@ -113,13 +136,20 @@ export function useAgentReaderScope({
       generation,
       enabled: admitted && reader !== null,
       queryKey,
-      current: () =>
-        !retired &&
-        active &&
-        current.current?.observation === observation &&
-        sessions.getSnapshot() === revision &&
-        admitted &&
-        reader !== null,
+      current: () => {
+        const liveSession = sessions.getSession();
+        return (
+          !retired &&
+          active &&
+          current.current?.observation === observation &&
+          sessions.getSnapshot() === revision &&
+          typeof window !== 'undefined' &&
+          liveSession?.state === 'signed-in' &&
+          liveSession.subject === reader &&
+          admitted &&
+          reader !== null
+        );
+      },
       retire: () => invalidate(true),
       subscribe: (listener) => {
         listeners.add(listener);
@@ -144,6 +174,7 @@ export function useAgentReaderScope({
 
   useEffect(() => {
     observation.activate();
+    const unregister = sessions.register(observation);
     const unsubscribe = client.getQueryCache().subscribe((event) => {
       if (!sameQueryKey(event.query.queryKey, observation.queryKey)) return;
       if (event.type === 'removed' || (event.type === 'updated' && event.query.state.status === 'error'))
@@ -151,6 +182,7 @@ export function useAgentReaderScope({
     });
     return () => {
       unsubscribe();
+      unregister();
       observation.deactivate();
       queueMicrotask(() => {
         if (observation.active()) return;
@@ -158,7 +190,7 @@ export function useAgentReaderScope({
         removePrivateObservation(client, observation.queryKey);
       });
     };
-  }, [client, observation]);
+  }, [client, observation, sessions]);
 
   useEffect(() => {
     if (observationVersion > 0 || observation.invalidated()) removePrivateObservation(client, observation.queryKey);

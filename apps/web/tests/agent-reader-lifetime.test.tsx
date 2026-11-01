@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, StrictMode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 
@@ -32,6 +32,8 @@ let bffReader: string | null = null;
 let currentRequest = new Request('https://rezics.test/en/@alice');
 let nextSessionGate: { entered: Deferred<void>; release: Deferred<void> } | undefined;
 let failNextAgentAction = false;
+let failNextSessionAction = false;
+let nextAgentActionGate: { entered: Deferred<void>; release: Deferred<unknown> } | undefined;
 
 type PreferenceResult = {
   status: number;
@@ -94,6 +96,9 @@ function createServerFn() {
             failNextAgentAction = false;
             return Promise.reject(new Error('Reader BFF unavailable'));
           }
+        } else if (failNextSessionAction) {
+          failNextSessionAction = false;
+          return Promise.reject(new Error('Session unavailable'));
         }
         const gate = !isAgentReader ? nextSessionGate : undefined;
         if (gate) {
@@ -102,7 +107,14 @@ function createServerFn() {
           await gate.release.promise;
         }
         currentRequest = requestFor(isAgentReader ? bffReader : sessionReader);
-        return handler({ data });
+        const response = await handler({ data });
+        if (isAgentReader && nextAgentActionGate) {
+          const actionGate = nextAgentActionGate;
+          nextAgentActionGate = undefined;
+          actionGate.entered.resolve(undefined);
+          return actionGate.release.promise;
+        }
+        return response;
       };
     },
   };
@@ -252,37 +264,44 @@ test('public account readers retire old admissions across sign-out, replacement,
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const render = (props: {
+  const secondHost = window.document.createElement('div');
+  window.document.body.append(secondHost);
+  const secondRoot = createRoot(secondHost as unknown as HTMLElement);
+  let secondRootMounted = true;
+  type RenderProps = {
     handle?: string;
     locale?: string;
     path?: import('../src/features/pages/agent-reader').AgentReaderPath;
-  }) =>
-    root.render(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(PublicReaderConsumer, {
-          page,
-          handle: props.handle ?? 'alice',
-          locale: props.locale ?? 'en',
-          path: props.path ?? { kind: 'overview' },
-          useSession: sessionModule.useSession,
-          useAgentReaderScope: readerModule.useAgentReaderScope,
-          useAgentReaderResult: readerModule.useAgentReaderResult,
-          agentReaderQuery: queryModule.agentReaderQuery,
-          SubjectPage: subjectModule.SubjectPage,
-          messages: subjectModule.subjectPageMessages,
-        }),
-      ),
-    );
-  const isWithheld = () => host.querySelector('[data-slot="cover"][data-state="withheld"]') !== null;
-  const expectSafeReader = () => {
-    expect(host.querySelector('[data-slot="cover"]')).not.toBeNull();
-    expect(isWithheld()).toBe(true);
   };
-  const expectAdmittedReader = () => {
-    expect(host.querySelector('[data-slot="cover"]')).not.toBeNull();
-    expect(isWithheld()).toBe(false);
+  const renderInto = (targetRoot: typeof root, props: RenderProps, strict = false) => {
+    const tree = createElement(
+      QueryClientProvider,
+      { client },
+      createElement(PublicReaderConsumer, {
+        page,
+        handle: props.handle ?? 'alice',
+        locale: props.locale ?? 'en',
+        path: props.path ?? { kind: 'overview' },
+        useSession: sessionModule.useSession,
+        useAgentReaderScope: readerModule.useAgentReaderScope,
+        useAgentReaderResult: readerModule.useAgentReaderResult,
+        agentReaderQuery: queryModule.agentReaderQuery,
+        SubjectPage: subjectModule.SubjectPage,
+        messages: subjectModule.subjectPageMessages,
+      }),
+    );
+    targetRoot.render(strict ? createElement(StrictMode, null, tree) : tree);
+  };
+  const render = (props: RenderProps) => renderInto(root, props);
+  const isWithheld = (target: HTMLElement = host) =>
+    target.querySelector('[data-slot="cover"][data-state="withheld"]') !== null;
+  const expectSafeReader = (target: HTMLElement = host) => {
+    expect(target.querySelector('[data-slot="cover"]')).not.toBeNull();
+    expect(isWithheld(target)).toBe(true);
+  };
+  const expectAdmittedReader = (target: HTMLElement = host) => {
+    expect(target.querySelector('[data-slot="cover"]')).not.toBeNull();
+    expect(isWithheld(target)).toBe(false);
   };
   const setSession = async (subject: string | null) => {
     await act(async () => {
@@ -298,6 +317,10 @@ test('public account readers retire old admissions across sign-out, replacement,
     expect(nativeReads).toHaveLength(count);
     return nativeReads[count - 1]!;
   };
+  const privateQueries = () => client.getQueryCache().findAll({ queryKey: ['agent-reader'] });
+  const routeKey = (path: import('../src/features/pages/agent-reader').AgentReaderPath) =>
+    JSON.stringify([path.kind, path.kind === 'view' ? path.view : null]);
+  const privateKeyForRoute = (route: string) => privateQueries().find((query) => query.queryKey[3] === route)?.queryKey;
 
   const initialSession = { entered: deferred<void>(), release: deferred<void>() };
   nextSessionGate = initialSession;
@@ -413,8 +436,163 @@ test('public account readers retire old admissions across sign-out, replacement,
     expectSafeReader();
     await settle();
     expect(nativeReads).toHaveLength(11);
+
+    bffReader = alice;
+    await act(async () => render({ path: { kind: 'overview' } }));
+    const admittedOverview = await nextRead(12);
+    admittedOverview.work.resolve(result('show'));
+    await settle();
+    expectAdmittedReader();
+    const retiredOverviewKey = privateKeyForRoute(routeKey({ kind: 'overview' }));
+    expect(retiredOverviewKey).toBeDefined();
+
+    const postsPath = { kind: 'view' as const, view: 'posts' };
+    await act(async () => renderInto(secondRoot, { path: postsPath }, true));
+    const delayedView = await nextRead(13);
+    const retiredViewKey = privateKeyForRoute(routeKey(postsPath));
+    expect(retiredViewKey).toBeDefined();
+    expectAdmittedReader();
+    expectSafeReader(secondHost);
+
+    const retainedSession = client.getQueryData(sessionModule.sessionQuery.queryKey);
+    failNextSessionAction = true;
+    await act(async () => {
+      await client.refetchQueries({ queryKey: sessionModule.sessionQuery.queryKey, exact: true });
+    });
+    expect(client.getQueryState(sessionModule.sessionQuery.queryKey)?.status).toBe('error');
+    expect(client.getQueryData(sessionModule.sessionQuery.queryKey)).toEqual(retainedSession);
+    expectSafeReader();
+    expectSafeReader(secondHost);
+    await act(async () => {
+      delayedView.work.resolve(result('show'));
+      await Promise.resolve();
+    });
+    await settle();
+    expectSafeReader();
+    expectSafeReader(secondHost);
+    expect(client.getQueryCache().find({ queryKey: retiredViewKey!, exact: true })).toBeUndefined();
+    expect(client.getQueryCache().find({ queryKey: retiredOverviewKey!, exact: true })).toBeUndefined();
+    expect(nativeReads).toHaveLength(13);
+
+    await setSession(alice);
+    const recoveredOverview = await nextRead(14);
+    const recoveredView = await nextRead(15);
+    expect(recoveredOverview.accountId).toBe(alice);
+    expect(recoveredView.accountId).toBe(alice);
+    recoveredOverview.work.resolve(result('show'));
+    recoveredView.work.resolve(result('show'));
+    await settle();
+    expectAdmittedReader();
+    expectAdmittedReader(secondHost);
+
+    const reviewsPath = { kind: 'view' as const, view: 'reviews' };
+    const delayedRemovalAction = { entered: deferred<void>(), release: deferred<unknown>() };
+    nextAgentActionGate = delayedRemovalAction;
+    await act(async () => renderInto(secondRoot, { path: reviewsPath }, true));
+    const delayedRemoval = await nextRead(16);
+    delayedRemoval.work.resolve(result('show'));
+    await delayedRemovalAction.entered.promise;
+    const removedViewKey = privateKeyForRoute(routeKey(reviewsPath));
+    expect(removedViewKey).toBeDefined();
+    expectAdmittedReader();
+    expectSafeReader(secondHost);
+    let observedSessionRemoval = false;
+    const stopWatchingSession = client.getQueryCache().subscribe((event) => {
+      if (event.type === 'removed' && event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session')
+        observedSessionRemoval = true;
+    });
+    await act(async () => {
+      client.removeQueries({ queryKey: sessionModule.sessionQuery.queryKey, exact: true });
+      client.setQueryData(sessionModule.sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: alice,
+        csrfToken: null,
+      });
+    });
+    stopWatchingSession();
+    expect(observedSessionRemoval).toBe(true);
+    expectSafeReader();
+    expectSafeReader(secondHost);
+    const recreatedOverview = await nextRead(17);
+    const recreatedView = await nextRead(18);
+    expect(recreatedOverview.accountId).toBe(alice);
+    expect(recreatedView.accountId).toBe(alice);
+    await act(async () => {
+      delayedRemovalAction.release.reject(new Error('Retired preference action failed'));
+      await Promise.resolve();
+    });
+    await settle();
+    expectSafeReader();
+    expectSafeReader(secondHost);
+    expect(client.getQueryCache().find({ queryKey: removedViewKey!, exact: true })).toBeUndefined();
+    expect(nativeReads).toHaveLength(18);
+    recreatedOverview.work.resolve(result('show'));
+    recreatedView.work.resolve(result('show'));
+    await settle();
+    expectAdmittedReader();
+    expectAdmittedReader(secondHost);
+
+    await act(async () => renderInto(secondRoot, { path: postsPath }, true));
+    const delayedAba = await nextRead(19);
+    const abaRoute = routeKey(postsPath);
+    const abaOldKey = privateKeyForRoute(abaRoute);
+    expect(abaOldKey).toBeDefined();
+    await act(async () => {
+      client.setQueryData(sessionModule.sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: alice,
+        csrfToken: null,
+      });
+      client.setQueryData(sessionModule.sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: bob,
+        csrfToken: null,
+      });
+      client.setQueryData(sessionModule.sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: alice,
+        csrfToken: null,
+      });
+      delayedAba.work.resolve(result('show'));
+      await Promise.resolve();
+    });
+    expectSafeReader();
+    expectSafeReader(secondHost);
+    await settle();
+    expect(client.getQueryCache().find({ queryKey: abaOldKey!, exact: true })).toBeUndefined();
+    const currentAbaOverview = await nextRead(20);
+    const currentAbaView = await nextRead(21);
+    expect(currentAbaOverview.accountId).toBe(alice);
+    expect(currentAbaView.accountId).toBe(alice);
+    expectSafeReader();
+    expectSafeReader(secondHost);
+    currentAbaOverview.work.resolve(result('show'));
+    currentAbaView.work.resolve(result('show'));
+    await settle();
+    expectAdmittedReader();
+    expectAdmittedReader(secondHost);
+
+    const overviewRoute = routeKey({ kind: 'overview' });
+    const currentOverviewKey = privateKeyForRoute(overviewRoute);
+    const currentViewKey = privateKeyForRoute(abaRoute);
+    expect(currentOverviewKey).toBeDefined();
+    expect(currentViewKey).toBeDefined();
+    await act(async () => {
+      secondRoot.unmount();
+      secondRootMounted = false;
+    });
+    await settle();
+    expect(client.getQueryCache().find({ queryKey: currentViewKey!, exact: true })).toBeUndefined();
+    expect(client.getQueryCache().find({ queryKey: currentOverviewKey!, exact: true })).toBeDefined();
+    expectAdmittedReader();
   } finally {
-    await act(async () => root.unmount());
+    await act(async () => {
+      root.unmount();
+      if (secondRootMounted) secondRoot.unmount();
+      failNextAgentAction = false;
+      failNextSessionAction = false;
+      nextAgentActionGate = undefined;
+    });
     await settle();
     client.clear();
     serverClient.clear();
