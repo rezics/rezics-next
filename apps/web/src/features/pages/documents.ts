@@ -12,6 +12,7 @@ export function statementDocument(
   if (checkDocument(content.document)) return content.document;
   if (
     typeof content.document !== 'string' ||
+    !('digest' in content) ||
     typeof content.digest !== 'string' ||
     typeof content.language !== 'string'
   )
