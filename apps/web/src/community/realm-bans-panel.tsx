@@ -62,5 +62,6 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
     previous.current = binding;
   }
   useLayoutEffect(() => binding.lifetime.connect(), [binding]);
-  return <RealmBansControl realmId={realmId} {...binding} ready={state === 'signed-in' && !!subject && !!csrfToken} />;
+  if (state !== 'signed-in' || !subject) return null;
+  return <RealmBansControl key={`${realmId}:${subject}`} realmId={realmId} {...binding} ready={!!csrfToken} />;
 }

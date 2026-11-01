@@ -214,7 +214,8 @@ function RealmBansVisit({
       } catch {
         next = { state: 'unavailable' };
       }
-      if (!owns()) return;
+      if (generation.current !== current) return;
+      if (!gate.owns(ticket)) return;
       pageReady.current = next.state === 'ready';
       setView(next);
       if (next.state === 'forbidden' || next.state === 'closed' || next.state === 'signed-out') {
