@@ -20,15 +20,17 @@ required linear byte-work derivation. It also supplies neither unique text inter
 per-group candidate-head interface. These are specific gaps, not a claim that long-string indexes are impossible.
 
 String B-trees and pointer-based radix dictionaries show viable algorithms in other storage models.
-Moving their nodes into SQL rows changes their access cost; moving them into native PostgreSQL pages creates
-a new index/dictionary producer with persistence, concurrency, cleanup and deployment obligations.
-No such producer is present in the inspected stack. Exhaustive compatibility hooks are also prospective,
-not facilities established by the installed SDK source files.
+Moving their nodes into logically indexed SQL rows changes their access cost. PostgreSQL's direct heap-TID
+access offers another route: immutable, copied paths can avoid that additional logarithm, but depend on a
+physical-storage maintenance/restore contract that is not established here. A native index is another route.
+Neither complete producer is present in the inspected stack. Exhaustive compatibility hooks are also
+prospective, not facilities established by the installed SDK source files.
 
 There are two explicit owner choices; neither is silently selected by this report:
 
 1. Preserve the uniform bound and exact semantics. Require a separately reviewable native exact-string
-   producer, including the ordered actual-ID tie keys, with literal inclusive costs and deployment authority.
+   producer, including the ordered actual-ID tie keys, with literal inclusive costs and deployment authority
+   or an explicitly owned immutable heap-TID placement as described below.
    The original complete implementation must consume that producer; a SQL wrapper around an unpriced
    dictionary is insufficient. This is the recommended choice if the uniform bound is mandatory.
 2. Select a finite physical-domain interpretation for an ordinary SQL trie. This introduces no new text cap,
@@ -36,9 +38,10 @@ There are two explicit owner choices; neither is silently selected by this repor
    maxima. It must not be described as a uniform linear-byte algorithm or admitted with the old allowances.
    Ordered actual-ID representation and full-call costs still need completion before implementation.
 
-The unresolved contradiction is **model-scoped**: ordinary indexed-row traversal charges `Q log N`, while the
-uniform contract permits only `d log N + B`; `Q` is not bounded by `d` independently of text length.
-The inspected native alternatives do not close that gap. This finding holds with short ordinary workflow IDs,
+The unresolved contradiction is **model-scoped**: logical-ID indexed-row traversal charges `Q log N`, while
+the uniform contract permits only `d log N + B`; `Q` is not bounded by `d` independently of text length.
+Direct physical addresses escape that argument but require the additional placement contract below.
+The available complete producers do not close the gap. This finding holds with short ordinary workflow IDs,
 one changed native input, no hash collision, and no accumulated history. It does not establish a lower bound
 for every possible PostgreSQL extension or every deterministic string dictionary.
 
@@ -66,7 +69,7 @@ Repository files below are pinned to the repository revision at the top of this 
 
 | Source | Revision and licence | Inspected material |
 | --- | --- | --- |
-| [PostgreSQL source](https://github.com/postgres/postgres/tree/700b422af7e26cf310caf3fb76d78f4c8ca39c1f) | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; PostgreSQL License, `COPYRIGHT` | `src/include/access/nbtree.h`; `src/backend/access/nbtree/{nbtutils,nbtsearch}.c`; `src/backend/access/spgist/{spgtextproc,spgdoinsert,spgscan}.c`; `src/backend/utils/adt/{varlena,jsonb_util}.c`; `src/include/utils/memutils.h` |
+| [PostgreSQL source](https://github.com/postgres/postgres/tree/700b422af7e26cf310caf3fb76d78f4c8ca39c1f) | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`; PostgreSQL License, `COPYRIGHT` | `src/include/access/nbtree.h`; `src/backend/access/nbtree/{nbtutils,nbtsearch}.c`; `src/backend/access/spgist/{spgtextproc,spgdoinsert,spgscan}.c`; `src/backend/utils/adt/{varlena,jsonb_util}.c`; `src/include/utils/memutils.h`; `src/backend/executor/nodeTidscan.c`; `src/backend/access/heap/heapam.c`; `src/include/storage/itemptr.h` |
 | [DBOS Transact TypeScript](https://github.com/dbos-inc/dbos-transact-ts/tree/980dc55095f445b189aecb59e7f3334345179f65) | `980dc55095f445b189aecb59e7f3334345179f65`; MIT, `LICENSE` | `src/client.ts`, caller-owned transactional enqueue |
 | [Rax](https://github.com/antirez/rax/tree/1927550cb218ec3c3dda8b39d82d1d019bf0476d) | `1927550cb218ec3c3dda8b39d82d1d019bf0476d`; BSD-2-Clause, `COPYING` | `README.md`; `rax.c`, especially `raxLowWalk`, `raxGenericInsert`, `raxRemove`; node layout in `rax.h` |
 | [The Adaptive Radix Tree](https://db.in.tum.de/~leis/papers/ART.pdf) | Leis, Kemper and Neumann, ICDE 2013, DOI `10.1109/ICDE.2013.6544812` | Primary research paper; scholarly publication, not a software licence |
@@ -464,6 +467,76 @@ does not upload missing code; superuser is normally required unless a qualifying
 A managed service's permitted-extension list and deployment/recovery support must be established, not assumed.
 No permission, packaged extension or successful producer receipt for this design was supplied or inferred.
 
+## Serious candidate D: immutable heap-TID paths
+
+Do not infer that every SQL row access requires a B-tree lookup. Pinned `nodeTidscan.c:TidNext` fetches a
+specified tuple version through the table access method. `heapam.c:heap_fetch` reads the block named in its
+item pointer and addresses the item offset directly; `itemptr.h` specifies the six-byte block/offset pointer.
+This is a relevant native PostgreSQL mechanism, not a cryptographic or alias identity.
+
+A conditional design uses a private unindexed heap of **immutable** trie nodes, an indexed singleton root,
+and `SELECT ... WHERE ctid=$1::tid` for each transition. A fixed 256-element non-null `tid[]` child array uses
+1,536 element bytes plus the 24-byte one-dimensional array header on the inspected layout. An invalid TID
+marks no child. Terminal intern/refcount and optional subtree-minimum payload are three eight-byte scalars:
+1,584 logical node bytes before heap overhead. Use PLAIN storage and the supported default page size so a
+node stays inline. Empty text is represented by a terminal at the root; there is no byte terminator node.
+The terminal's logical intern ID remains distinct from its changing physical node address.
+
+```text
+take the original transaction's version-changing root lock
+read the changed key path through single-TID fetches
+push (old_node_tid, predecessor_frame_tid, byte_position) onto an unindexed scratch heap
+unwind scratch frames; fetch each old node and copy its fixed child array
+insert replacement immutable nodes bottom-up, using RETURNING ctid for parent downlinks
+delete superseded path nodes and scratch frames by their exact TIDs
+publish the new root pointer in the same original transaction
+```
+
+The scratch heap avoids an allocation proportional to `1,584 * key_length` in one backend memory object.
+No child node is updated in place: UPDATE would change its TID and invalidate parents. For one current tree,
+the superseded path nodes are not shared by the new root; untouched subtrees are shared and remain live.
+Their deletion/reclamation therefore does not require recursively visiting unrelated surviving subtrees.
+A terminal reference change copies its path; last-reference removal drops empty nodes while unwinding.
+Reuse of a terminal intern needs the bounded logical allocator once per changed terminal, not per byte.
+
+For `q=L+1` visited root/byte positions, one simple path operation has at most seven row/point/statement
+slots per position: old-node read, scratch insert, scratch read, old-node reread, replacement insert,
+old-node delete and scratch delete. The root and terminal allocator add a constant number of indexed points.
+Typed node arguments/results are bounded by `2*1584+12=3180` bytes per charged node slot; scratch records are
+smaller. This yields `O(q)` direct heap accesses and fixed-size copies plus `O(log N)` root/terminal index
+work, under this physical model. Old/new changes charge both actual paths. It does **not** establish the
+complete representation cost: ordered candidate/eligible trees, JSON conversion, source hooks and full native
+writer paths still require their own literal bodies. Command-ID and backend-allocation limits also need
+derivation for the entire original transaction, not a per-function proof on a small fixture.
+
+The mechanism is promising because it identifies where a SQL-only uniform bound might be obtained. It is
+not safe under ordinary unrestricted table maintenance. PostgreSQL's
+[system-column documentation](https://www.postgresql.org/docs/18/ddl-system-columns.html) explicitly warns
+that UPDATE and VACUUM FULL change `ctid`; a logical primary key cannot be replaced by it. Here only private
+storage links would use it, while native authority and terminal identities remain logical. That distinction
+does not make the physical links stable through a rewrite or a logical restore.
+
+Required placement decisions are precise:
+
+- Never UPDATE node content, partition-move it, CLUSTER it, VACUUM FULL it, apply a rewriting ALTER, or logically
+  restore its heap independently while its root claims coverage. Invalidate first and rebuild from native data.
+  Restrict node DML to the owner protocol; autovacuum/plain VACUUM can reclaim dead versions without this rewrite.
+- Read every multi-statement path in one protected snapshot or while holding the writer root lock. A released
+  READ COMMITTED root followed by later snapshots can see old path nodes disappear. Old-snapshot readers need
+  MVCC-visible old nodes; reclamation/reuse relies on PostgreSQL's normal snapshot horizon, not an application timer.
+- Establish a TID-scan access path for exact TID reads/deletes, fixed inline tuple shape and same-table pointer
+  interpretation. A logical-ID fallback through a B-tree reintroduces the extra logarithm. No plan was executed.
+- An offline physical restore must preserve the related heaps/root together or invalidate/rebuild. A logical
+  dump/restore cannot preserve physical addresses by copying numeric TID values. No existing SDK restore hook
+  supplies this guarantee for a new compatibility heap.
+
+Those are ownership/placement obligations, not a new reservation length cap. They require no C extension
+merely to express the storage operations, but they are a new storage producer and operational contract.
+The current contract supplies neither this private-heap maintenance agreement nor a complete ordered-key
+producer using it. It would be incorrect to assert either impossibility of SQL-only storage or readiness of
+this candidate. If the owner authorizes that placement, complete this candidate before selecting a C extension;
+if ordinary rewrite/restore behavior must remain unrestricted, reject raw persistent TID links.
+
 ## Exhaustive native integration, backfill and restore
 
 The source proves why an application-only callback misses writes. Native `insertWorkflowStatus` inserts status
@@ -691,9 +764,10 @@ Keep the exact relation, accepted ties, two-group update shape, source-half atom
 authority. Reject full-text composite B-trees, digest identity and residual buckets. Do not dispatch a claim
 of completed bounded implementation based solely on a trie name, SP-GiST availability or finite field sizes.
 
-Resolve the model choice stated at the start. Under the recommended uniform model, require the native
-exact-string/ordered-key producer with the traversal, storage, locking, crash, GC and deployment obligations
-listed above, then derive all dispatches and complete original path maxima from its actual body. Under the
+Resolve the model choice stated at the start. Under the recommended uniform model, first decide whether the
+private immutable heap-TID placement is supported; otherwise require a packaged native exact-string index.
+Require the exact-string/ordered-key producer with the traversal, storage, locking, crash, GC and deployment
+obligations listed above, then derive all dispatches and complete original path maxima from its actual body. Under the
 finite-domain SQL choice, explicitly adopt and fund the literal length-proportional seeks; do not rename them
 linear byte work. Neither choice authorizes an execution/retry, a new input cap or a lifecycle exception.
 
