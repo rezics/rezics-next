@@ -14,9 +14,14 @@ import type { ManagerWindows } from './windows.ts';
 
 // Managers run with full access, like workers; the maintainer is not there to answer approval requests.
 const FULL_ACCESS = { approvalPolicy: 'never', sandbox: 'danger-full-access' } as const;
+const CODEX_MANAGER_MODEL = 'gpt-6.1-sol';
 
 function codexThreadConfig(spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>) {
   return { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 };
+}
+
+function codexTurnSettings(spec: Pick<ManagerSpec, 'effort'>) {
+  return { model: CODEX_MANAGER_MODEL, effort: spec.effort };
 }
 
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
@@ -531,7 +536,7 @@ export class ManagerSessions {
         const started = await client.request('thread/start', {
           ...FULL_ACCESS,
           cwd: spec.cwd,
-          model: 'gpt-6.1-sol',
+          model: CODEX_MANAGER_MODEL,
           config: codexThreadConfig(spec),
         });
         state.threadId = started.thread.id;
@@ -552,7 +557,7 @@ export class ManagerSessions {
           continuationFile && existsSync(continuationFile) ? this.opening(spec, continuationFile) : this.opening(spec);
         const turn = await client.request('turn/start', {
           threadId: state.threadId,
-          effort: spec.effort,
+          ...codexTurnSettings(spec),
           input: textInput(opening),
         });
         this.turnStarted(state, turn.turn.id);
@@ -873,6 +878,7 @@ export class ManagerSessions {
           const resumed = await client.request('thread/resume', {
             ...FULL_ACCESS,
             threadId: state.threadId,
+            model: CODEX_MANAGER_MODEL,
             config: codexThreadConfig(state),
           });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
@@ -907,6 +913,7 @@ export class ManagerSessions {
       state = this.get(id);
       assertManagedManager(state);
       if (state.activeTurnId) {
+        // turn/steer has no model or effort fields, so active turns inherit the settings pinned at turn/start.
         try {
           await client.request('turn/steer', {
             threadId: state.threadId,
@@ -918,6 +925,7 @@ export class ManagerSessions {
           const resumed = await client.request('thread/resume', {
             ...FULL_ACCESS,
             threadId: state.threadId,
+            model: CODEX_MANAGER_MODEL,
             config: codexThreadConfig(state),
           });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
@@ -936,7 +944,11 @@ export class ManagerSessions {
     }
   }
   private async startWakeTurn(client: AppServer, state: ManagedManagerState, summary: string): Promise<void> {
-    const turn = await client.request('turn/start', { threadId: state.threadId, input: textInput(summary) });
+    const turn = await client.request('turn/start', {
+      threadId: state.threadId,
+      ...codexTurnSettings(state),
+      input: textInput(summary),
+    });
     this.turnStarted(state, turn.turn.id);
     this.save(state);
   }
@@ -1050,6 +1062,7 @@ export class ManagerSessions {
             const resume = client.request('thread/resume', {
               ...FULL_ACCESS,
               threadId: current.threadId,
+              model: CODEX_MANAGER_MODEL,
               config: codexThreadConfig(current),
             });
             reportProgress();

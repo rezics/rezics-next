@@ -667,6 +667,7 @@ test('manager recovery, wake races and interruption races forward the configured
         threadId: started.threadId,
         approvalPolicy: 'never',
         sandbox: 'danger-full-access',
+        model: 'gpt-6.1-sol',
         config,
       });
     const starts = requests.filter((record) => record.method === 'thread/start');
