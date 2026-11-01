@@ -1,10 +1,24 @@
-import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export const PERFORMANCE_HOST_NAMES = ['a', 'b'] as const;
+export const CHECK_HOST_RUNS_ROOT = '/srv/rezics-check/runs';
+export const CHECK_HOST_SUPERVISOR_MARKER = '.remote-check-supervisor';
 const MAX_SMALL_UNIT_FILES = 12;
 const MAX_SMALL_UNIT_SOURCE_BYTES = 256 * 1024;
 const MAX_SMALL_UNIT_IMPORTS = 64;
+const MAX_CHECK_HOST_MARKER_BYTES = 4096;
+const MAX_CHECK_HOST_PROC_BYTES = 4096;
 // Local tests understand only these harness/assertion modules plus recursively checked relative files. Other bare,
 // workspace, builtin, dynamic, or configuration routes are opaque and stay remote. The closure is bounded to 12 test
 // entries, 64 source files, 64 static imports per file, and 256 KiB per source; it does not execute sources to inspect
@@ -14,6 +28,107 @@ const SAFE_SMALL_UNIT_IMPORTS = new Set(['bun:test', 'node:test', 'node:assert',
 export type CheckPlacement = {
   placement: 'local' | 'remote';
   reason: string;
+};
+
+export function checkHostScopeUnitName(runId: string): string {
+  return `rezics-check-${runId}.scope`;
+}
+
+export function checkHostSliceUnitName(runId: string): string {
+  return `rezics-check-${runId.replaceAll('-', '_')}.slice`;
+}
+
+export type CheckHostRecognitionReason =
+  | 'cwd-not-absolute'
+  | 'cwd-outside-runs'
+  | 'run-id-invalid'
+  | 'runs-root-unavailable'
+  | 'runs-root-not-directory'
+  | 'run-directory-unavailable'
+  | 'run-directory-not-physical'
+  | 'cwd-unavailable'
+  | 'cwd-not-confined'
+  | 'cgroup-unavailable'
+  | 'cgroup-invalid'
+  | 'scope-mismatch'
+  | 'supervisor-marker-missing'
+  | 'supervisor-marker-unavailable'
+  | 'supervisor-marker-not-regular'
+  | 'supervisor-marker-oversized'
+  | 'supervisor-marker-invalid'
+  | 'supervisor-stat-unavailable'
+  | 'supervisor-stat-invalid'
+  | 'supervisor-state-unknown'
+  | 'supervisor-not-live'
+  | 'supervisor-start-mismatch'
+  | 'supervisor-group-mismatch'
+  | 'evidence-unavailable';
+
+export type CheckHostRecognitionDisposition =
+  | {
+      outcome: 'admitted';
+      runId: string;
+      scope: string;
+      supervisor: { pid: number; started: string; group: number };
+    }
+  | { outcome: 'refused'; reason: CheckHostRecognitionReason };
+
+export type CheckHostPathEvidence =
+  | { status: 'ok'; kind: 'directory' | 'file' | 'symlink' | 'other'; realPath: string }
+  | { status: 'missing' | 'unavailable' };
+
+export type CheckHostReadEvidence =
+  | { status: 'ok'; kind: 'regular'; text: string; size: number }
+  | { status: 'missing' | 'unavailable' | 'too-large' | 'not-regular' | 'symlink' };
+
+/** Read-only seam for a bounded, inert filesystem/proc fixture. Production callers use the host reader below. */
+export type CheckHostRecognitionReader = {
+  inspect(path: string): CheckHostPathEvidence;
+  read(path: string, maxBytes: number): CheckHostReadEvidence;
+};
+
+function hostPathEvidence(path: string): CheckHostPathEvidence {
+  try {
+    const stats = lstatSync(path);
+    const kind = stats.isSymbolicLink()
+      ? 'symlink'
+      : stats.isDirectory()
+        ? 'directory'
+        : stats.isFile()
+          ? 'file'
+          : 'other';
+    return { status: 'ok', kind, realPath: realpathSync(path) };
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT'
+      ? { status: 'missing' }
+      : { status: 'unavailable' };
+  }
+}
+
+function hostReadEvidence(path: string, maxBytes: number): CheckHostReadEvidence {
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const stats = fstatSync(descriptor);
+    if (!stats.isFile()) return { status: 'not-regular' };
+    if (stats.size > maxBytes) return { status: 'too-large' };
+    const bytes = Buffer.alloc(maxBytes + 1);
+    const count = readSync(descriptor, bytes, 0, bytes.byteLength, 0);
+    if (count > maxBytes) return { status: 'too-large' };
+    return { status: 'ok', kind: 'regular', text: bytes.subarray(0, count).toString('utf8'), size: count };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { status: 'missing' };
+    if (code === 'ELOOP') return { status: 'symlink' };
+    return { status: 'unavailable' };
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+const hostRecognitionReader: CheckHostRecognitionReader = {
+  inspect: hostPathEvidence,
+  read: hostReadEvidence,
 };
 
 type EnvironmentCommand = { prefix: string[]; command: string[] };
@@ -516,48 +631,131 @@ export function performanceHosts<T extends { name: string }>(hosts: readonly T[]
   return hosts.filter((host) => (PERFORMANCE_HOST_NAMES as readonly string[]).includes(host.name));
 }
 
-/** True only when the actual process is confined to a remote-check run tree; environment markers do not count. */
-export function isCheckHostRun(cwd: string, cgroup?: string): boolean {
-  const absolute = resolve(cwd);
-  const runs = '/srv/rezics-check/runs';
-  const inside = relative(runs, absolute);
-  if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) return false;
-  const runId = inside.split(sep)[0];
-  if (!runId || !/^[a-z0-9-]+$/i.test(runId)) return false;
-  const currentCgroup =
-    cgroup ??
-    (() => {
-      try {
-        return readFileSync('/proc/self/cgroup', 'utf8');
-      } catch {
-        return '';
-      }
-    })();
-  if (!new RegExp(`(?:^|/)rezics-check-${runId}\\.scope(?:/|$)`).test(currentCgroup)) return false;
-  const marker = join(runs, runId, '.remote-check-supervisor');
+function refusal(reason: CheckHostRecognitionReason): CheckHostRecognitionDisposition {
+  return { outcome: 'refused', reason };
+}
+
+function insidePath(root: string, path: string): boolean {
+  const child = relative(root, path);
+  return child === '' || !(child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child));
+}
+
+function parseSupervisorStat(
+  contents: string,
+  expectedPid: number,
+): { state: string; group: number; started: string } | null {
+  const close = contents.lastIndexOf(')');
+  if (close < 0 || !new RegExp(`^${expectedPid} \\(`).test(contents)) return null;
+  const fields = contents.slice(close + 1).trim().split(/\s+/);
+  if (fields.length <= 19 || !/^\d+$/.test(fields[2]!) || !/^\d+$/.test(fields[19]!)) return null;
+  const group = Number(fields[2]);
+  if (!Number.isSafeInteger(group) || group < 1) return null;
+  return { state: fields[0]!, group, started: fields[19]! };
+}
+
+/**
+ * Return a bounded, predicate-specific disposition for the physical run handoff. The injectable reader is a
+ * read-only seam for inert tests; runtime callers use the fixed filesystem/proc reader and cannot supply identities.
+ */
+export function recognizeCheckHostRun(
+  cwd: string,
+  reader: CheckHostRecognitionReader = hostRecognitionReader,
+): CheckHostRecognitionDisposition {
   try {
-    const stats = lstatSync(marker);
-    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > 4096) return false;
-    const owner = JSON.parse(readFileSync(marker, 'utf8')) as { pid?: unknown; started?: unknown; group?: unknown };
+    if (!isAbsolute(cwd)) return refusal('cwd-not-absolute');
+    const absolute = resolve(cwd);
+    const inside = relative(CHECK_HOST_RUNS_ROOT, absolute);
+    if (!insidePath(CHECK_HOST_RUNS_ROOT, absolute) || inside === '') return refusal('cwd-outside-runs');
+    const runId = inside.split(sep)[0] ?? '';
+    if (!/^[a-z0-9-]{1,128}$/i.test(runId)) return refusal('run-id-invalid');
+    const runDirectory = join(CHECK_HOST_RUNS_ROOT, runId);
+    if (!insidePath(runDirectory, absolute) || resolve(runDirectory) === absolute)
+      return refusal('cwd-not-confined');
+
+    const runs = reader.inspect(CHECK_HOST_RUNS_ROOT);
+    if (runs.status !== 'ok') return refusal('runs-root-unavailable');
+    if (runs.kind !== 'directory') return refusal('runs-root-not-directory');
+    const run = reader.inspect(runDirectory);
+    if (run.status !== 'ok') return refusal('run-directory-unavailable');
+    const expectedRunPath = join(runs.realPath, runId);
+    if (run.kind !== 'directory' || !insidePath(runs.realPath, run.realPath) || run.realPath !== expectedRunPath)
+      return refusal('run-directory-not-physical');
+
+    const current = reader.inspect(absolute);
+    if (current.status !== 'ok') return refusal('cwd-unavailable');
+    if (current.kind !== 'directory') return refusal('cwd-unavailable');
+    // The caller's lexical path and run-directory identity are checked here. Physical cwd confinement is added
+    // separately so the refusal can distinguish a symlink escape from an ordinary out-of-run path.
+
+    const cgroup = reader.read('/proc/self/cgroup', MAX_CHECK_HOST_PROC_BYTES);
+    if (cgroup.status === 'missing' || cgroup.status === 'unavailable') return refusal('cgroup-unavailable');
+    if (cgroup.status !== 'ok') return refusal('cgroup-invalid');
+    const entries = cgroup.text.split(/\r?\n/).filter((line) => line.startsWith('0::/'));
+    if (entries.length !== 1) return refusal('cgroup-invalid');
+    const cgroupPath = entries[0]!.slice(3);
+    if (!cgroupPath.split('/').includes(checkHostScopeUnitName(runId))) return refusal('scope-mismatch');
+
+    const markerPath = join(runDirectory, CHECK_HOST_SUPERVISOR_MARKER);
+    const marker = reader.read(markerPath, MAX_CHECK_HOST_MARKER_BYTES);
+    if (marker.status === 'missing') return refusal('supervisor-marker-missing');
+    if (marker.status === 'unavailable') return refusal('supervisor-marker-unavailable');
+    if (marker.status === 'symlink' || marker.status === 'not-regular')
+      return refusal('supervisor-marker-not-regular');
+    if (marker.status === 'too-large' || (marker.status === 'ok' && marker.size > MAX_CHECK_HOST_MARKER_BYTES))
+      return refusal('supervisor-marker-oversized');
+    if (marker.status !== 'ok') return refusal('supervisor-marker-unavailable');
+
+    let owner: { pid?: unknown; started?: unknown; group?: unknown };
+    try {
+      owner = JSON.parse(marker.text) as { pid?: unknown; started?: unknown; group?: unknown };
+    } catch {
+      return refusal('supervisor-marker-invalid');
+    }
     if (
+      !owner ||
+      typeof owner !== 'object' ||
+      Array.isArray(owner) ||
+      Object.keys(owner).sort().join(',') !== 'group,pid,started' ||
       !Number.isSafeInteger(owner.pid) ||
+      (owner.pid as number) < 1 ||
       typeof owner.started !== 'string' ||
-      !/^\d+$/.test(owner.started) ||
-      !Number.isSafeInteger(owner.group)
+      !/^\d{1,20}$/.test(owner.started) ||
+      !Number.isSafeInteger(owner.group) ||
+      (owner.group as number) < 1
     )
-      return false;
-    const processStat = readFileSync(`/proc/${owner.pid}/stat`, 'utf8');
-    const supervisor = processStat
-      .slice(processStat.lastIndexOf(')') + 1)
-      .trim()
-      .split(/\s+/);
-    return (
-      supervisor[0] !== 'Z' &&
-      supervisor[0] !== 'X' &&
-      supervisor[2] === String(owner.group) &&
-      supervisor[19] === owner.started
-    );
+      return refusal('supervisor-marker-invalid');
+
+    const processStat = reader.read(`/proc/${owner.pid}/stat`, MAX_CHECK_HOST_PROC_BYTES);
+    if (processStat.status === 'missing' || processStat.status === 'unavailable')
+      return refusal('supervisor-stat-unavailable');
+    if (processStat.status !== 'ok') return refusal('supervisor-stat-invalid');
+    const supervisor = parseSupervisorStat(processStat.text, owner.pid as number);
+    if (!supervisor) return refusal('supervisor-stat-invalid');
+    if (supervisor.state === 'Z' || supervisor.state === 'X' || supervisor.state === 'x')
+      return refusal('supervisor-not-live');
+    if (!'RSDTtWIKP'.includes(supervisor.state)) return refusal('supervisor-state-unknown');
+    if (supervisor.started !== owner.started) return refusal('supervisor-start-mismatch');
+    if (supervisor.group !== owner.group) return refusal('supervisor-group-mismatch');
+
+    return {
+      outcome: 'admitted',
+      runId,
+      scope: checkHostScopeUnitName(runId),
+      supervisor: { pid: owner.pid as number, started: owner.started, group: owner.group as number },
+    };
   } catch {
-    return false;
+    return refusal('evidence-unavailable');
   }
+}
+
+/** True only when the actual process is confined to a remote-check run tree; environment markers do not count. */
+export function isCheckHostRun(cwd: string): boolean {
+  return recognizeCheckHostRun(cwd).outcome === 'admitted';
+}
+
+/** Candidate paths get a reason-coded refusal diagnostic; this lexical test grants no physical authority. */
+export function isCheckHostRunCandidate(cwd: string): boolean {
+  if (!isAbsolute(cwd)) return false;
+  const inside = relative(CHECK_HOST_RUNS_ROOT, resolve(cwd));
+  return insidePath(CHECK_HOST_RUNS_ROOT, resolve(cwd)) && /^[a-z0-9-]{1,128}$/i.test(inside.split(sep)[0] ?? '');
 }
