@@ -768,3 +768,16 @@ unavailable. No whole rebuild or creation/change coverage is inferred from one p
 `readPublicFilterConsumerCustody` exposes immutable executions but no visible-winner repair/dispatch settlement
 reader; `settle` therefore preserves that exact foreign absence as `owner_unavailable`, after Source validation.
 This does not prevent Source registration, cuts, adoption, recovery or bounded Source repair metadata progress.
+
+The original repair pages now retain independently verified prefix metadata in
+`semantic.public_filter_repair_step`. `readRepairStep` replays each actual native
+key, advancement, projection, Account tuple or creation-event successor before
+adopting it. Payloads, limits, locators and existing proof roots stay immutable;
+only the exact original successor can extend the prefix. A partial unique index
+locates its tip without walking prior pages. Recovery can verify one older original
+page per funded repair invocation. The empty terminal successor binds this same
+prefix and its exact definition, queried observation, covered/start and execution;
+it does not call the served-population reader. This closes captured page replay,
+not current population eligibility or genuine receiver settlement. Native contiguous
+ACK, all-domain current window closure, population observations and response-root
+integration still require their actual maintained bodies before serving is ready.

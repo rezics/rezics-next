@@ -375,6 +375,53 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(row.original).toBe(true);
         expect(row.pinned).toBe(true);
       }
+      // Completion must resolve the original independently verified prefix. A
+      // terminal boolean, a home count or a new equivalent page cannot supply it.
+      const chains = await pool.query<{
+        bootstrap: string; execution: string; pages: number; complete: number; tips: number;
+        bound: boolean; contiguous: boolean;
+      }>(
+        `WITH originals AS (
+           SELECT s.*,lead(step) OVER w AS successor,
+             row_number() OVER w AS ordinal
+           FROM semantic.public_filter_repair_step s
+           JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
+           WHERE b.state='adopted' AND b.consumer LIKE $1
+           WINDOW w AS (PARTITION BY s.bootstrap,s.execution ORDER BY s.verified_ordinal)
+         ) SELECT bootstrap::text,execution,count(*)::integer AS pages,
+           count(*) FILTER (WHERE complete)::integer AS complete,
+           count(*) FILTER (WHERE verified_next IS NULL)::integer AS tips,
+           bool_and(verified_root IS NOT NULL AND verified_binding IS NOT NULL) AS bound,
+           bool_and(verified_ordinal=ordinal AND verified_next IS NOT DISTINCT FROM successor
+             AND (NOT complete OR successor IS NULL)) AS contiguous
+         FROM originals GROUP BY bootstrap,execution`, [`%${prefix}%`],
+      );
+      expect(chains.rows.length).toBeGreaterThan(0);
+      for (const chain of chains.rows) {
+        expect(chain.pages).toBeGreaterThan(4096);
+        expect(chain.complete).toBe(1);
+        expect(chain.tips).toBe(1);
+        expect(chain.bound).toBe(true);
+        expect(chain.contiguous).toBe(true);
+      }
+      const originalChain = chains.rows[0]!;
+      const immutable = await pool.connect();
+      try {
+        await immutable.query('BEGIN');
+        await expect(immutable.query(
+          `UPDATE semantic.public_filter_repair_step SET state=state || ' '
+           WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete`,
+          [originalChain.bootstrap,originalChain.execution],
+        )).rejects.toMatchObject({ code: '23514' });
+        await immutable.query('ROLLBACK');
+        await immutable.query('BEGIN');
+        await expect(immutable.query(
+          `UPDATE semantic.public_filter_repair_step SET verified_root=repeat('0',64)
+           WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete`,
+          [originalChain.bootstrap,originalChain.execution],
+        )).rejects.toMatchObject({ code: '23514' });
+        await immutable.query('ROLLBACK');
+      } finally { immutable.release(); }
       // The default repair job must retain the native Account input alongside
       // actual writer effects. Neither a Subject projection nor an intent tick
       // can stand in for the independent Account and claim tuple.
