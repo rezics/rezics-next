@@ -111,7 +111,8 @@ function nativeHarness() {
       return Response.json({ accounts: [{ id: fixedEditionTerms.creatorAccountId, displayName: 'Captured creator' }] });
     throw new Error(`Unexpected native request: ${call.method} ${path}`);
   });
-  const privateCalls = () => calls.filter((call) => /\/v1\/(orders|entitlements)(\/|$)/.test(new URL(call.url).pathname));
+  const privateCalls = () =>
+    calls.filter((call) => /\/v1\/(orders|entitlements)(\/|$)/.test(new URL(call.url).pathname));
   return { calls, native, privateCalls, restore: () => fetcher.mockRestore() };
 }
 function restrictive(calls: Request[]) {
@@ -195,7 +196,12 @@ test('cached receipts and status renew admission before disclosure, retaining bo
     expect((await loadOrderPage(paid.order.id, 'en')).canReconcile).toBe(false);
     expect(h.privateCalls()).toHaveLength(count + 2);
     expect(session.calls).toBe(preparationsBeforeExplicit);
-    expect(h.privateCalls().slice(-2).every((call) => call.headers.get('authorization') === 'Bearer explicit')).toBe(true);
+    expect(
+      h
+        .privateCalls()
+        .slice(-2)
+        .every((call) => call.headers.get('authorization') === 'Bearer explicit'),
+    ).toBe(true);
     restrictive(h.privateCalls());
   } finally {
     h.restore();
@@ -292,7 +298,10 @@ test('Checkout refuses stale preparation before parsing and preserves real unsaf
       expect([call.method, new URL(call.url).pathname, new URL(call.url).search]).toEqual(['POST', '/v1/orders', '']);
       expect(call.headers.get('authorization')).toBe(index === 0 ? 'Bearer buyer' : 'Bearer explicit');
       expect(call.headers.get('idempotency-key')).toBe(intent.idempotencyKey);
-      expect(await call.json()).toEqual({ offerId: intent.offerId, expectedOfferRevision: intent.expectedOfferRevision });
+      expect(await call.json()).toEqual({
+        offerId: intent.offerId,
+        expectedOfferRevision: intent.expectedOfferRevision,
+      });
     }
     restrictive(h.calls);
   } finally {
