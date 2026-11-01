@@ -353,9 +353,7 @@ export function subjectPageJsonLd(
         : [json[property]!]
       : [];
     const seen = new Set(
-      existing.flatMap((entry) =>
-        isRecord(entry) && typeof entry['@id'] === 'string' ? [entry['@id']] : [],
-      ),
+      existing.flatMap((entry) => (isRecord(entry) && typeof entry['@id'] === 'string' ? [entry['@id']] : [])),
     );
     const values = [...existing];
     let added = false;

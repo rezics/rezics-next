@@ -3,12 +3,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { fromMarkdown } from '@rezics/document';
-import {
-  pageContext,
-  SubjectPage,
-  subjectPageJsonLd,
-  type SubjectPageData,
-} from '../src/features/pages/subject.tsx';
+import { pageContext, SubjectPage, subjectPageJsonLd, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { ResultList } from '../src/search/results.tsx';
 import { pageHead } from '../src/shell/head.ts';
@@ -181,10 +176,7 @@ test('head and JSON-LD match the rendered public summary and nested inverse list
     qualifiers: [],
     references: [],
   };
-  testSubject.statements['schema:abstract'] = [
-    preferred,
-    ...testSubject.statements['schema:abstract']!,
-  ];
+  testSubject.statements['schema:abstract'] = [preferred, ...testSubject.statements['schema:abstract']!];
   fillSummary(page, preferred, locale, fromMarkdown(summaryText, 'text'));
 
   const list = (id: string, limit: number, paged = false) => ({
