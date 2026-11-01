@@ -71,6 +71,7 @@ class ViewerExposureLifetime {
   private stopQueryCache: (() => void) | undefined;
   private nextId = 0;
   private lastData?: unknown;
+  private lastCsrfToken: unknown;
   private lastUpdatedAt = 0;
 
   constructor(private readonly client: QueryClient) {}
@@ -99,6 +100,7 @@ class ViewerExposureLifetime {
     const data = state?.data as SessionData | undefined;
     if (state?.status !== 'success' || !data) {
       this.lastData = undefined;
+      this.lastCsrfToken = undefined;
       this.lastUpdatedAt = 0;
       this.transition({ state: 'unknown' });
       return;
@@ -106,6 +108,7 @@ class ViewerExposureLifetime {
 
     if (data.state === 'signed-out') {
       this.lastData = data;
+      this.lastCsrfToken = data.csrfToken;
       this.lastUpdatedAt = state.dataUpdatedAt;
       this.transition({ state: 'signed-out' });
       return;
@@ -113,6 +116,7 @@ class ViewerExposureLifetime {
 
     if (data.state !== 'signed-in' || typeof data.subject !== 'string' || !data.subject) {
       this.lastData = undefined;
+      this.lastCsrfToken = undefined;
       this.lastUpdatedAt = 0;
       this.transition({ state: 'unknown' });
       return;
@@ -124,11 +128,13 @@ class ViewerExposureLifetime {
       !forceFresh &&
       currentObservation?.subject === data.subject &&
       this.lastData === data &&
+      this.lastCsrfToken === data.csrfToken &&
       this.lastUpdatedAt === state.dataUpdatedAt
     )
       return;
 
     this.lastData = data;
+    this.lastCsrfToken = data.csrfToken;
     this.lastUpdatedAt = state.dataUpdatedAt;
     this.transition({ state: 'signed-in', observation: { subject: data.subject, id: ++this.nextId } });
   }
@@ -158,6 +164,7 @@ class ViewerExposureLifetime {
     this.stopQueryCache?.();
     this.stopQueryCache = undefined;
     this.lastData = undefined;
+    this.lastCsrfToken = undefined;
     this.lastUpdatedAt = 0;
     const previous = this.snapshot;
     const previousObservation = previous.state === 'signed-in' ? previous.observation : undefined;
