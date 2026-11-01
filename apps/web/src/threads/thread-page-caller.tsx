@@ -842,7 +842,7 @@ export class ThreadPageCaller {
           !state.queryRetired
         );
       },
-      runOwnedCacheBoundary: <T>(kind: 'cancel' | 'remove', operation: () => T) => {
+      runOwnedCacheBoundary: <T,>(kind: 'cancel' | 'remove', operation: () => T) => {
         if (!state.active) throw new ThreadPageCallerRetired();
         const previousBoundary = state.boundary;
         state.boundary = kind;
