@@ -138,7 +138,9 @@ function sameInput(left: BoardPageCallerInput, right: BoardPageCallerInput): boo
   );
 }
 
-function boardPathLocation(href: string): { input: Pick<BoardPageCallerInput, 'id' | 'cursor' | 'sort' | 'locale'> } | null {
+function boardPathLocation(
+  href: string,
+): { input: Pick<BoardPageCallerInput, 'id' | 'cursor' | 'sort' | 'locale'> } | null {
   try {
     const url = new URL(href, 'https://board-page.invalid');
     const parts = url.pathname.split('/').filter(Boolean);
@@ -428,11 +430,7 @@ function transferredPublicCaller(
   receipt: BoardPageCallerReceipt | undefined,
 ): BoardPageCaller | undefined {
   if (receipt?.credentialMode !== 'anonymous' || input.credentialMode !== 'anonymous') return undefined;
-  if (
-    !receipt.publicTransfer ||
-    receipt.routeKey !== currentPageKey(input) ||
-    consumedPublicTransfers.has(result)
-  )
+  if (!receipt.publicTransfer || receipt.routeKey !== currentPageKey(input) || consumedPublicTransfers.has(result))
     return undefined;
   const caller = new BoardPageCaller(client, input, undefined, true);
   consumedPublicTransfers.add(result);
@@ -468,9 +466,11 @@ export function boardPageResultIsCurrent(
 }
 
 function callerForError(error: unknown): BoardPageCaller | undefined {
-  return ((typeof error === 'object' && error !== null) || typeof error === 'function'
-    ? errorOwners.get(error as object)
-    : undefined) as BoardPageCaller | undefined;
+  return (
+    (typeof error === 'object' && error !== null) || typeof error === 'function'
+      ? errorOwners.get(error as object)
+      : undefined
+  ) as BoardPageCaller | undefined;
 }
 
 const noSubscribe = () => () => {};
@@ -484,13 +484,20 @@ export type BoardPageCallerLifecycle = {
   retry: (callback: () => void) => boolean;
 };
 
-function useCallerLifecycle(caller: BoardPageCaller | undefined, input: BoardPageCallerInput): BoardPageCallerLifecycle {
+function useCallerLifecycle(
+  caller: BoardPageCaller | undefined,
+  input: BoardPageCallerInput,
+): BoardPageCallerLifecycle {
   const client = useContext(QueryClientContext);
   const router = useRouter();
   const binding = useRef<LiveBinding>({ client: client ?? ({} as QueryClient), input });
   binding.current = { client: client ?? ({} as QueryClient), input };
   caller?.bindCurrent(() => binding.current);
-  useSyncExternalStore(caller?.subscribe ?? noSubscribe, caller?.snapshot ?? noSnapshot, caller?.serverSnapshot ?? noSnapshot);
+  useSyncExternalStore(
+    caller?.subscribe ?? noSubscribe,
+    caller?.snapshot ?? noSnapshot,
+    caller?.serverSnapshot ?? noSnapshot,
+  );
   useCallerLayoutEffect(() => (caller && client ? caller.connect(router) : undefined), [caller, client, router]);
   const ticket = caller?.connectionTicket ?? -1;
   const current = caller?.isCurrent() ?? false;

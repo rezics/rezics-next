@@ -119,9 +119,7 @@ function BoardPageError({ error }: { error: unknown }) {
   return (
     <BoardCommunityStatus
       state={lifecycle.caller && !lifecycle.current ? 'loading' : isPlatformClosedError(error) ? 'closed' : 'error'}
-      {...(canRetry
-        ? { onRetry: () => void lifecycle.retry(() => void router.invalidate()) }
-        : {})}
+      {...(canRetry ? { onRetry: () => void lifecycle.retry(() => void router.invalidate()) } : {})}
     />
   );
 }

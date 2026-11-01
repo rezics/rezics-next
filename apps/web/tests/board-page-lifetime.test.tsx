@@ -35,7 +35,10 @@ type ReadCall = { input: BoardReadInput; result: Deferred<CommunityBoardPage> };
 const calls: ReadCall[] = [];
 
 mock.module('@tanstack/react-start', () => startApi);
-mock.module('@tanstack/react-start/server', () => ({ ...startApi, getRequest: () => new Request('https://site.test/en/boards') }));
+mock.module('@tanstack/react-start/server', () => ({
+  ...startApi,
+  getRequest: () => new Request('https://site.test/en/boards'),
+}));
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 
 const existingReads = await import('../src/threads/reads');
@@ -195,7 +198,11 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
   });
   const loaded = await loadBoardPageWithAuthors(
     client,
-    { id: input.id, ...(input.cursor === undefined ? {} : { cursor: input.cursor }), ...(input.sort ? { sort: input.sort } : {}) },
+    {
+      id: input.id,
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(input.sort ? { sort: input.sort } : {}),
+    },
     input.credentialMode === 'session' ? 'Bearer original-session' : undefined,
   );
   return {
@@ -263,7 +270,11 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
 
   // The server-produced anonymous page crosses one real render/hydration boundary and remains public.
   const anonymousClient = makeQueryClient({ state: 'signed-in', subject: accountId, csrfToken: 'original-csrf' });
-  const anonymousRouter = makeRouter(anonymousClient, { id: boardA, mode: 'anonymous', session: { state: 'signed-in', subject: accountId, csrfToken: 'original-csrf' } });
+  const anonymousRouter = makeRouter(anonymousClient, {
+    id: boardA,
+    mode: 'anonymous',
+    session: { state: 'signed-in', subject: accountId, csrfToken: 'original-csrf' },
+  });
   const { pending: anonymousLoad } = await noWindowAsync(() => start(() => anonymousRouter.load()));
   expect(calls).toHaveLength(1);
   expect(calls[0]!.input).toEqual({ id: boardA, credentialMode: 'anonymous' });
@@ -405,7 +416,11 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
 
   const boardChangeDone = resolved(anonymousRouter);
   const { pending: boardChange } = await start(() =>
-    anonymousRouter.navigate({ to: '/boards/$id', params: { id: boardB }, search: { cursor: 'native-cursor-2', sort: 'hot' } }),
+    anonymousRouter.navigate({
+      to: '/boards/$id',
+      params: { id: boardB },
+      search: { cursor: 'native-cursor-2', sort: 'hot' },
+    }),
   );
   absent(anonymousHost, 'Cursor and hot');
   expect(calls).toHaveLength(7);
@@ -436,7 +451,11 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
 
   // A deferred private response that completes after its captured session changes cannot be cached or published.
   const queuedClient = makeQueryClient({ state: 'signed-in', subject: accountId, csrfToken: 'queued-original' });
-  const queuedRouter = makeRouter(queuedClient, { id: boardA, mode: 'session', session: { state: 'signed-in', subject: accountId, csrfToken: 'queued-original' } });
+  const queuedRouter = makeRouter(queuedClient, {
+    id: boardA,
+    mode: 'session',
+    session: { state: 'signed-in', subject: accountId, csrfToken: 'queued-original' },
+  });
   const { pending: queuedLoad } = await start(() => queuedRouter.load());
   expect(calls).toHaveLength(9);
   await act(async () => {
@@ -453,7 +472,11 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
 
   // Error retry is tied to the error visit's mounted connection; a current visit can still retry successfully.
   const errorClient = makeQueryClient({ state: 'signed-in', subject: accountId, csrfToken: 'error-original' });
-  const errorRouter = makeRouter(errorClient, { id: boardA, mode: 'session', session: { state: 'signed-in', subject: accountId, csrfToken: 'error-original' } });
+  const errorRouter = makeRouter(errorClient, {
+    id: boardA,
+    mode: 'session',
+    session: { state: 'signed-in', subject: accountId, csrfToken: 'error-original' },
+  });
   const errorHost = window.document.createElement('main') as unknown as HTMLElement;
   window.document.body.append(errorHost);
   const { pending: errorFirst } = await start(() => errorRouter.load());
@@ -512,7 +535,11 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
 
   // A ready signed-in route also survives a server render and its matching hydration visit.
   const signedClient = makeQueryClient({ state: 'signed-in', subject: accountId, csrfToken: null });
-  const signedRouter = makeRouter(signedClient, { id: boardA, mode: 'session', session: { state: 'signed-in', subject: accountId, csrfToken: null } });
+  const signedRouter = makeRouter(signedClient, {
+    id: boardA,
+    mode: 'session',
+    session: { state: 'signed-in', subject: accountId, csrfToken: null },
+  });
   const { pending: signedLoad } = await noWindowAsync(() => start(() => signedRouter.load()));
   expect(calls).toHaveLength(14);
   expect(calls[13]!.input).toEqual({ id: boardA, credentialMode: 'session' });
