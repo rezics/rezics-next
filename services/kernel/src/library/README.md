@@ -1370,20 +1370,39 @@ without its real driver; this specification does not change the implementation; 
 
 ## Bulk library operations
 
-The common Collection bulk contract requires preview and execution to bind the same admitted filtered or selected
-population, including curated and built-in/state sources and permitted mounted use. Reject stale selection; replay
-cannot duplicate effects; inspectable private outcomes retain changed, unchanged and partial failures. No terminal
-summary is valid while selection is incomplete or any target is unresolved. Public candidate totals are not a preview.
+One private durable operation prepares the admitted explicit or filtered selection, enumerates it, captures exact
+native intentions, seals a complete preview, awaits explicit confirmation and executes independently receipted
+targets from the same immutable `bulk_target` manifest. This covers curated and built-in/state sources and permitted
+mounted use through shared Source/filter admission. Browser layout and page contents/cursors cannot redefine all
+matches; admitted source/filter/order and accepted profile meanings remain bound. See the owning
+[native bulk contract](bulk-contract.md) and its [research evidence](../../../../docs/research/library-bulk-bound-selection.md).
 
-The existing [bulk contract](bulk-contract.md) specifies explicit targets and entry-query discovery, a frozen private
-manifest and per-target receipts; its typed/storage surfaces do not establish the shared filtered-selection runtime.
-Its discovery-time population alone cannot stand in for a bound common preview. Adapt that same durable operation
-and the shared admitted source rather than adding another workflow, manifest or export ABI here. Browser layout,
-sort and page cursor do not silently redefine the confirmed selection.
+All relevant population, meaning, original/terminal identity AND captured target expectation drift before the defined
+confirmation cut stales confirmation with no dispatch. Strictly later drift yields exact target conflicts or
+appropriate source-wide authority stops, retaining earlier effects. Confirmation never re-queries the selection or
+promises rollback across independent effects. The cut includes exclusion/NOT/order/foreign/privacy dependencies and
+behind-frontier changes, not just returned positives. Discovery-time matching alone is superseded.
 
-Bulk add skips a subject already present in the target Collection and appends at most one occurrence for each missing subject in that operation. Ordinary Collection membership still permits duplicates. Subject-based removal captures every matching occurrence before effects and removes only those member IDs; later additions survive. Removing an item from the library deletes only its entry. Progress sessions and history, copies, follows and Collection members remain. The confirmation says that only the library entry is removed; full erasure is a separate explicit action.
+Native confirmation is unavailable pending shared producer agreement and a complete validation-to-confirm binding
+across the participating homes. Sequential checks plus root CAS, hashes, RR snapshots or positive-ID sets do not
+supply it. Bulk factories still throw; target/effect DDL and the native outcome pager exist, but operation-header
+DDL, finite preparation attachment, seal/confirm ABI, default bulk registration/routes and the complete journey do
+not. The temporal choice is an owning contract, not installed support or proven feasibility. Existing stopped
+Source/Kind/identity producers and custody obligations retain their authority.
 
-The operation is private. Its routes use the existing `personal_library` gate; operation reads also require `library_entry:list`. Status changes use `library_entry:update`, library removal uses `library_entry:delete`, and Collection membership changes use the target's `collections` gate, `collection:update` and the installed Collection permission. Collection additions also run the existing `subject:read` checks. Every target attempt and replay restores the captured durable initiator and rechecks current source and target authority. Enqueueing is not a completed outcome.
+Bulk add atomically skips active subject presence and appends at most one occurrence per missing subject; ordinary
+intentional duplicates and existing capacity/respacing remain. Subject-based removal captures every matching real
+occurrence before seal and removes only those lifecycle-bound IDs; later additions survive. Entry removal uses
+exact incarnation/revision and deletes only the entry. Progress sessions/history, copies, follows and Collection
+members remain; confirmation names that scope. Full erasure is a separate explicit action.
+
+Preview and outcomes are private and currently disclosure-safe; public candidate totals are not preview counts.
+Incomplete/unknown is never zero, and no terminal summary is valid while selection or outcomes remain unresolved.
+Current source/mount, original AND terminal disclosure, foreign authority and account lifecycle remain independent
+of retained freshness evidence. Reads/attempts/replays use current gates/scopes/permissions and the authentic durable
+initiator; authorization precedes receipt access and exact replay precedes fresh profile validation. Cancellation
+and expiry stop new dispatch, reconcile exact receipts and retain prior effects. Missing native producers, absolute
+24-hour execution/48-hour results, byte admission and bounded shared/native cleanup are detailed in the contract.
 
 ### Type filter identity
 
@@ -1836,13 +1855,33 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Bound: `R` `O(s+1)`, `B` `O(L(N)+s)`, `S` 1 for the page, plus the admit and the partition read.
 - Growth check: `test/library/entries.test.ts`: `put, delete and list statement counts stay equal at three scales of unrelated account entries` lists with limit 20 and compares statements at 1, 8 and 64. `test/library/entry-store.test.ts`: `entry write, entry page and copy page touch the same rows and statements at three scales` pages entries with limit 1 at scales 1, 4 and 16 with 500 x scale seeded rows per relation (500, 2,000 and 8,000), with no planner setting: one statement, constant rows, logarithmic blocks and no sequential scan.
 
-### Bulk operation summary and outcome page
+### Bulk preparation, confirmation, summary and outcomes
 
-- Touches: The summary reads one source-owned operation row with fixed counters; it does not count manifest rows. An outcome page reads at most 21 immutable operation ordinals from the operation/ordinal keyset for a page size of 20. Target receipt reconciliation uses the exact receipt key. Counters change with one unique terminal target transition.
-- Bound: Summary work is `R O(1)`, `S O(1)`, with logarithmic index blocks. The outcome page is `R O(21)`, `S 1` for target rows, with logarithmic seek cost. The manifest and target evidence grow with the number of selected items; these per-operation bounds do not claim constant total operation cost. Discovery cost and its indexes are specified separately in [`bulk-contract.md`](bulk-contract.md).
-- Native outcome paging: `pageBulkOutcomes` uses the caller's source repeatable-read client after independent authorization and exact operation-owner proof. One statement seeks `bulk_target_pkey`, or `bulk_target_state` for an exact state, with route/operation/account predicates. It fetches at most 21 rows, emits at most 20, and continues after the last emitted decimal ordinal only when lookahead exists. State is current at the page snapshot. The outer reader owns encrypted cursors and private not-found behavior.
-- Native growth check: `test/library/growth-bulk-outcome-page.test.ts`: `outcome pages have bounded rows and statements as operation targets grow` measures first and deep pages in both branches as the same operation's targets, mostly nonmatching states, other operations and other owners grow. It checks constant examined rows and statements, logarithmic blocks and no sequential scan without planner settings.
-- Growth check: `specs/library-bulk-outcomes.test.ts`: `progress is bounded truthful and outcome pagination does not repeat or expose the manifest on summary` checks bounded operation resources and pages; `specs/library-bulk-outcomes.test.ts`: `growth axes retain indexed admission replay summary and fixed outcome pages without manifest recounts` checks admission replay, summary and fixed outcome-page reads as unrelated histories grow. These checks are acceptance requirements, not measured product results in this repository yet. Discovery cost and index expectations are specified separately in [`bulk-contract.md`](bulk-contract.md).
+- Touches: admitted Source/filter/identity/foreign dependencies, complete selection/occurrence capture, exact target
+  commands/receipts/ACKs and native/shared retention. Summary reads one fixed header, never counts the manifest;
+  outcomes use immutable operation ordinals. All child, duplicate, rejected, lookahead, empty, failed, repeated and
+  rollback work is charged. See [the detailed bulk Cost contract](bulk-contract.md#cost).
+- Bound: existing shared read/preparation allowances and the stronger applicable 100 raw native keys/step remain;
+  manifest writes spend the same remaining ledger, with one connection/backend. Whole confirmation includes the
+  complete missing validation-to-confirm primitive, with no O(1) claim. Stable total work targets
+  `O(N + M + D + T + E)` over raw source/target-member/repair keys, targets and attempts; bytes include dependencies,
+  targets/receipts and replay. These are obligations, not measurements or a new population cap/budget. Proposed
+  summary work is `R O(1)`, `S O(1)` plus logarithmic blocks/current authority; its runtime is absent.
+  Real `pageBulkOutcomes` uses the independently authorized caller's source RR client and exact operation-owner
+  proof: one `bulk_target_pkey` or exact-state `bulk_target_state` seek, route/operation/account predicates, at most
+  21 fetched/20 emitted rows and last-emitted continuation only with lookahead. State is current at that snapshot;
+  the outer reader owns encrypted bound cursors/private not-found. Receipt reconciliation uses exact keys and
+  counters change once per unique transition. Respacing retains its ordinary admitted cost. Cleanup is indexed,
+  at most 100 charged child keys/page; outstanding-operation/byte admission and unknown receipt disposition remain
+  prerequisites. A TTL/preparation quota is no aggregate manifest-byte bound.
+- Growth check: existing `test/library/growth-bulk-outcome-page.test.ts`,
+  `outcome pages have bounded rows and statements as operation targets grow`, covers first/deep pages in both pager
+  branches as targets/nonmatching states/other operations/owners grow, with bounded rows/statements, logarithmic
+  blocks and no sequential scan/planner settings. The original `specs/library-bulk-outcomes.test.ts` titles
+  `progress is bounded truthful and outcome pagination does not repeat or expose the manifest on summary` and
+  `growth axes retain indexed admission replay summary and fixed outcome pages without manifest recounts` remain
+  deferred acceptance obligations. Whole preview/confirmation, shared/native costs and custody acceptance are
+  deferred/unimplemented; all execution is UNRUN here. Existing test source is not measured full-product evidence.
 
 ### Session start
 
