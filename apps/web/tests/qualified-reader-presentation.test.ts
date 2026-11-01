@@ -91,6 +91,13 @@ test('qualified reader journey keeps complete statement fields and presentation-
     expect(section.querySelector('h2')!.textContent).toBe('Cast');
     const firstRow = section.querySelector('[data-statement="complete-credit"]')!;
     const secondRow = section.querySelector('[data-statement="another-credit"]')!;
+    const labelledList = section.querySelector('ul[aria-label]')!;
+    const firstItem = firstRow.closest('li')!;
+    expect(firstItem.tagName).toBe('LI');
+    expect(firstItem.parentElement).toBe(labelledList);
+    expect(firstItem.querySelectorAll('article[data-slot="cover-card"]')).toHaveLength(1);
+    expect(firstItem.getAttribute('data-slot')).not.toBe('list-row');
+    expect(firstItem.querySelector('[data-slot="list-row"]')).toBeNull();
     expect(firstRow.textContent).toContain('Ada Player');
     expect(Array.from(firstRow.querySelectorAll('li')).map((li) => li.textContent)).toEqual([
       'Order: 2',

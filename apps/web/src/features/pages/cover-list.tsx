@@ -7,7 +7,6 @@ import {
 } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
-import { ListRow } from '@rezics/ui/list-row';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { listKeyFacts } from '../../media/type-presentation';
@@ -82,9 +81,10 @@ function ItemCard({
 }
 
 /**
- * Qualified credits wrap in rows at every width; ordinary subjects remain cards with their Type's list frame.
- * The shared ratio is the fallback for unknown Types; a Zone's appearance fixes that composition. Ordinary card
- * previews snap on phones and use a grid from `sm` up. `label` names the list for assistive technology.
+ * Qualified credits stay semantic rows at every width and use their shared card as the visual frame. Ordinary
+ * subjects remain cards with their Type's list frame. The shared ratio is the fallback for unknown Types; a Zone's
+ * appearance fixes that composition. Ordinary card previews snap on phones and use a grid from `sm` up. `label`
+ * names the list for assistive technology.
  */
 export function CoverList({
   items,
@@ -119,9 +119,9 @@ export function CoverList({
       />
     );
     return credits ? (
-      <ListRow key={`${item.id}-${index}`}>
+      <li key={`${item.id}-${index}`}>
         <div data-statement={item.statement}>{card}</div>
-      </ListRow>
+      </li>
     ) : (
       card
     );
