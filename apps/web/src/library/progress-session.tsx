@@ -164,7 +164,7 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
     const enrolled = evidence.current;
     if (enrolled?.boundary !== boundary) return true;
     const query = client.getQueryCache().find({ queryKey, exact: true });
-    const state = client.getQueryState(queryKey);
+    const state = client.getQueryState<ProgressDetail>(queryKey);
     if (query === enrolled.query && state?.status === 'success' && matchingDetail(state.data, viewer, address))
       return true;
     boundary.active = false;
@@ -284,7 +284,7 @@ type EditorLifetime = {
   history: symbol | null;
   retry?: CapturedIntent;
   observation?: object | undefined;
-  attempt?: ProgressCommandGuard;
+  attempt?: ProgressCommandGuard | undefined;
 };
 const editorLifetime = (page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime => ({
   page,
