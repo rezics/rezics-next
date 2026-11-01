@@ -61,7 +61,13 @@ function OrderReceipt(props: OrderPageProps) {
   const polls = useRef(0);
   return (
     <OrderLifetime
-      key={JSON.stringify([props.order.offerId, session, subject ?? null, canReadOrder, props.order.canReconcile === true])}
+      key={JSON.stringify([
+        props.order.offerId,
+        session,
+        subject ?? null,
+        canReadOrder,
+        props.order.canReconcile === true,
+      ])}
       {...props}
       order={order}
       setOrder={setOrder}

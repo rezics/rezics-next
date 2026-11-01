@@ -219,9 +219,7 @@ test('Observed session/admission loss and unmount abort private reads and reject
       const decoding = deferred<unknown>();
       const fetching = deferred<Response>();
       h.responses.push(
-        boundary === 'signed-out'
-          ? fetching.promise
-          : Object.assign(new Response(), { json: () => decoding.promise }),
+        boundary === 'signed-out' ? fetching.promise : Object.assign(new Response(), { json: () => decoding.promise }),
       );
       await h.advance();
       const read = h.reads.at(-1)!;
