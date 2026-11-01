@@ -213,6 +213,14 @@ Checkboxes and radio buttons use the shadcn `Checkbox` and `RadioGroup` inside a
 
 Import `ListRow`, `ListRowLink` and `ListRowControl` from `@rezics/ui/list-row` for item lists. Rows have no fixed height, dividers, borders or card background at rest. The rounded overlay is the only hover, keyboard-focus and press state. Stretch the title link over the row, and put controls or secondary links above it in `ListRowControl`. Prefer a larger vertical cover over denser rows: covers are at least 72 px wide on a phone and 96 px from `sm` up, at the subject's own ratio. Grids of cover cards are not lists.
 
+### Content items
+
+Import `ContentItem` and `ContentItemProps` from `@rezics/ui/content-item` for a shared content row. Place each item in an ordinary `ul` or `ol`; it renders exactly one `li`. The required `title` renders as a named `h2`, `h3` or `h4` (default `h2`). With `href`, one native `ListRowLink` is stretched across the row and labelled by that visible heading; without a destination, the heading remains plain text. No slot is nested inside the primary anchor, and there is no duplicate title link or tab stop.
+
+The optional slots render in this order: `visual`, `context`, `metadata`, `preview`, `state`, `actions`, `trailing`, with the title between context and metadata. A visual supplies its own cover or avatar width; omitting it leaves the content column flush with the row rather than an empty visual column. Use `metadata` for supplied facts and secondary links, `preview` for short content summaries, `state` for progress or status, and `actions`/`trailing` for actual independent controls. Metadata, state and controls sit above the stretched link. Buttons and links in state/action slots have at least 44 px targets, including on touch. Titles are 17–18 px on phones and 18–20 px on desktop; metadata is 13–14 px. Rows use 12–16 px vertical breathing room and 12–16 px phone / 16–20 px desktop gaps. The component forwards ordinary `li` attributes, including `data-*`, and uses the `ListRow` overlay for hover, focus and press, with a visible focus outline and reduced-motion transition handling. Native forced-colors behavior is retained by using ordinary headings, links, controls and list semantics.
+
+`ShelfListRow` from `@rezics/ui/shelf-list` remains the compatibility adapter for library callers. It composes the shared item while preserving selection callbacks, status and overflow menus, progress labels (including unknown values), cover presentation, date and progress controls. Use `ShelfTable` for tabular data rather than changing table semantics. The shared row keeps the established `ListRow` hover, focus and press overlay as its sole surface feedback.
+
 ### List presentation
 
 The joint authority is [Collection presentation](../../docs/collection-presentation.md). Import `MemberListRow`

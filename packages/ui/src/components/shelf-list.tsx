@@ -3,7 +3,8 @@ import { EllipsisIcon } from 'lucide-react';
 import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRatio, type CoverProps } from './cover.tsx';
-import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
+import { ContentItem } from './content-item.tsx';
+import { ListRowControl } from './list-row.tsx';
 import { ProgressRow } from './progress-row.tsx';
 import { Checkbox } from '../shadcn/checkbox.tsx';
 import { Field } from '../shadcn/field.tsx';
@@ -79,121 +80,107 @@ export function ShelfListRow({
       status
     ));
   return (
-    <ListRow
+    <ContentItem
       forceOverlay={forceOverlay}
-      className="flex items-center gap-3 py-3"
-      onClick={
-        selectable
-          ? (event) => {
-              if (
-                !(event.target as Element).closest(
-                  '[data-slot="list-row-control"], a, button, input, [role="checkbox"], [role="menuitem"]',
-                )
-              )
-                select(event);
-            }
-          : undefined
-      }
-    >
-      {selectable && (
-        <ListRowControl>
-          <Field orientation="horizontal" className="w-auto">
-            <Checkbox
-              aria-label={labels.select}
-              checked={selected}
-              onCheckedChange={(checked) => onSelectedChange?.(checked === true)}
-              onClick={(event) => onSelect?.(event)}
-            />
-          </Field>
-        </ListRowControl>
-      )}
-      <div
-        className="pointer-events-none w-[72px] shrink-0 overflow-hidden rounded sm:w-24"
-        style={{ aspectRatio: ratio.replace(':', ' / ') }}
-      >
-        <Cover {...cover} size="fill" ratio={ratio} decorative />
-      </div>
-      <div className="min-w-0 flex-1">
-        <ListRowLink
-          href={href}
-          lang={titleLang}
-          onClick={
-            selectable
-              ? (event) => {
-                  event.preventDefault();
-                  select(event);
-                }
-              : undefined
-          }
-        >
-          {title}
-        </ListRowLink>
-        <span aria-hidden="true" lang={titleLang} className="line-clamp-2 text-sm font-semibold sm:line-clamp-1">
-          {title}
-        </span>
-        {meta != null && <div className="hidden truncate text-xs text-muted-foreground sm:block">{meta}</div>}
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:hidden">
-          {chip != null && <ListRowControl>{chip}</ListRowControl>}
-          <span className="whitespace-nowrap">{progress?.label}</span>
-          <span>{date}</span>
-        </div>
-        {progress?.value != null && (
-          <div className="mt-1 h-1 overflow-hidden rounded bg-muted sm:hidden">
-            <div
-              className="h-full bg-primary"
-              style={{ width: `${Math.max(0, Math.min(1, progress.value)) * 100}%` }}
-            />
-          </div>
-        )}
-        <div className="flex justify-end sm:hidden">
-          {stepper && (
-            <ListRowControl className="flex">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={stepper.decreaseLabel}
-                onClick={() => stepper.onStep(-1)}
-              >
-                −
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={stepper.increaseLabel}
-                onClick={() => stepper.onStep(1)}
-              >
-                +
-              </Button>
+      className="items-center"
+      href={href}
+      title={title}
+      titleLang={titleLang}
+      visual={
+        <div className="flex shrink-0 items-center gap-3">
+          {selectable && (
+            <ListRowControl>
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  aria-label={labels.select}
+                  checked={selected}
+                  onCheckedChange={(checked) => onSelectedChange?.(checked === true)}
+                  onClick={(event) => onSelect?.(event)}
+                />
+              </Field>
             </ListRowControl>
           )}
+          <div
+            className="pointer-events-none w-[72px] shrink-0 overflow-hidden rounded sm:w-24"
+            style={{ aspectRatio: ratio.replace(':', ' / ') }}
+          >
+            <Cover {...cover} size="fill" ratio={ratio} decorative />
+          </div>
         </div>
-      </div>
-      <ListRowControl className="hidden items-center gap-3 sm:flex">
-        {chip}
-        {progress && (
-          <div className="w-24 text-xs">
-            <ProgressRow {...progress} />
+      }
+      metadata={
+        meta != null && <div className="hidden truncate text-[13px] text-muted-foreground sm:block">{meta}</div>
+      }
+      state={
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground sm:hidden">
+            {chip}
+            <span className="whitespace-nowrap">{progress?.label}</span>
+            <span>{date}</span>
           </div>
-        )}
-        {stepper && (
-          <div className="flex">
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={stepper.decreaseLabel}
-              onClick={() => stepper.onStep(-1)}
-            >
-              −
-            </Button>
-            <Button variant="ghost" size="icon-xs" aria-label={stepper.increaseLabel} onClick={() => stepper.onStep(1)}>
-              +
-            </Button>
+          {progress?.value != null && (
+            <div className="mt-1 h-1 overflow-hidden rounded bg-muted sm:hidden">
+              <div
+                className="h-full bg-primary"
+                style={{ width: `${Math.max(0, Math.min(1, progress.value)) * 100}%` }}
+              />
+            </div>
+          )}
+          <div className="hidden items-center gap-3 sm:flex">
+            {chip}
+            {progress && (
+              <div className="w-24 text-xs">
+                <ProgressRow {...progress} />
+              </div>
+            )}
+            {stepper && (
+              <div className="flex">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={stepper.decreaseLabel}
+                  onClick={() => stepper.onStep(-1)}
+                >
+                  −
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={stepper.increaseLabel}
+                  onClick={() => stepper.onStep(1)}
+                >
+                  +
+                </Button>
+              </div>
+            )}
+            <span className="text-xs text-muted-foreground">{date}</span>
           </div>
-        )}
-        <span className="text-xs text-muted-foreground">{date}</span>
-      </ListRowControl>
-      {(menu != null || menuEntries != null) && (
-        <ListRowControl>
+          {stepper && (
+            <div className="flex justify-end sm:hidden">
+              <ListRowControl className="flex">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={stepper.decreaseLabel}
+                  onClick={() => stepper.onStep(-1)}
+                >
+                  −
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={stepper.increaseLabel}
+                  onClick={() => stepper.onStep(1)}
+                >
+                  +
+                </Button>
+              </ListRowControl>
+            </div>
+          )}
+        </>
+      }
+      trailing={
+        (menu != null || menuEntries != null) && (
           <Menu
             title={labels.menu}
             trigger={
@@ -204,8 +191,26 @@ export function ShelfListRow({
             content={menu}
             entries={menuEntries}
           />
-        </ListRowControl>
-      )}
-    </ListRow>
+        )
+      }
+      onClick={
+        selectable
+          ? (event) => {
+              const target = event.target as Element;
+              if (target.closest('[data-slot="list-row-link"]')) {
+                event.preventDefault();
+                select(event);
+                return;
+              }
+              if (
+                !target.closest(
+                  '[data-slot="list-row-control"], a, button, input, [role="checkbox"], [role="menuitem"]',
+                )
+              )
+                select(event);
+            }
+          : undefined
+      }
+    />
   );
 }
