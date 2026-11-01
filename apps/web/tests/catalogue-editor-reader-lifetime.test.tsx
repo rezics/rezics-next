@@ -35,10 +35,12 @@ type Gate = {
   entered: ReturnType<typeof deferred<void>>;
   delivery: ReturnType<typeof deferred<Delivery>>;
 };
+const allGates: Gate[] = [];
 let gate: Gate | undefined;
 let preparing: { entered: ReturnType<typeof deferred<void>>; resume: ReturnType<typeof deferred<void>> } | undefined;
 function delay(matches: Gate['matches']) {
   gate = { matches, entered: deferred<void>(), delivery: deferred<Delivery>() };
+  allGates.push(gate);
   return gate;
 }
 mock.module('cloudflare:workers', () => ({
@@ -491,6 +493,16 @@ test('catalogue editors retain only their original live reader, exact address an
     expect(tf.calls.every((call) => call.authorization === 'Bearer prepared-original')).toBe(true);
     const beforeMismatch = tf.calls.length;
     expect((await loadCatalogueTerms({ data: { id: termsSubjectId, expectedReader: original } })).state).toBe('denied');
+    expect(tf.calls).toHaveLength(beforeMismatch);
+
+    serverReader = original;
+    const mismatchPreparation = { entered: deferred<void>(), resume: deferred<void>() };
+    preparing = mismatchPreparation;
+    const refusedPrepared = loadCatalogueTerms({ data: { id: termsSubjectId, expectedReader: replacement } });
+    await mismatchPreparation.entered.promise;
+    serverReader = replacement;
+    mismatchPreparation.resume.resolve();
+    expect((await refusedPrepared).state).toBe('denied');
     expect(tf.calls).toHaveLength(beforeMismatch);
 
     // Public terms and evidence remain anonymous even with a signed-in request cookie.
@@ -951,7 +963,8 @@ test('catalogue editors retain only their original live reader, exact address an
     expect(ui.host.textContent).not.toContain(m.contribution_restored());
     expect(cacheHeaders.every((value) => value === 'private, no-store')).toBe(true);
   } finally {
-    gate?.delivery.resolve('throw');
+    for (const pending of allGates) pending.delivery.resolve('throw');
+    allGates.length = 0;
     gate = undefined;
     preparing?.resume.resolve();
     preparing = undefined;
