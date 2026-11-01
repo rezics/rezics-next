@@ -151,7 +151,10 @@ test('shared owner items confirm deletion, retry the identical uncertain request
   }
   try {
     await settle(render);
-    const trigger = button(host.querySelector('[data-content-item-slot="actions"]')!, m.zones_owner_trash_action({}, options));
+    const trigger = button(
+      host.querySelector('[data-content-item-slot="actions"]')!,
+      m.zones_owner_trash_action({}, options),
+    );
     trigger.focus();
     expect(document.activeElement).toBe(trigger);
     await settle(() => trigger.click());
