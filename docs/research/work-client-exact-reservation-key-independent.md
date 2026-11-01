@@ -87,30 +87,30 @@ there is no changed code workspace requiring typing.
 
 Inspected local interfaces, all at the repository pin above:
 
-| Source | Relevant authority or body |
-| --- | --- |
-| `services/kernel/src/work/client.ts` | Full resolver, SDK enqueue adapter, pool ownership and close-once behavior |
-| `services/kernel/src/work/sdk-retirement-fence.ts` | Every current dispatch price and supported bounded maintenance callback |
-| `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch` | Native writer guards, original maintenance/delete body, restore domain and same-Pool checks |
-| `services/kernel/src/work/README.md` | Inclusive nested dispatch accounting and physical copy inventory |
-| `services/kernel/src/history/agent-identity-inventory-work.ts` | Pre-I/O reservation, command controls and invalidation prices |
-| `services/kernel/src/history/agent-identity-retirement.ts` | Original frame lifetime, staging and fresh verification call chain |
-| `services/kernel/src/history/agent-identity-sdk-fence.ts` | Readiness/closure, current native locks and recorded-handoff revalidation |
-| `services/kernel/src/history/durable.ts` | Physical inspection, 65,536-byte payload scope and original deletion/receiving sequence |
-| `services/kernel/src/semantic/identity-source-consumer-custody.ts` | Independent verifier, directory composition and Library receiving calls |
-| `services/kernel/src/semantic/identity-source-consumer-maintenance.ts` | Live frame, actual Pool/deadline, safe-integer admission and no refunds |
-| `services/kernel/src/semantic/identity-source-maintenance-config.ts` | Present defaults, hard maxima and smaller caller allocations |
-| `services/kernel/src/library/identity-scope-effects.ts` | Provisional unavailable Library adapter, not a completed native producer |
+| Source                                                                 | Relevant authority or body                                                                  |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `services/kernel/src/work/client.ts`                                   | Full resolver, SDK enqueue adapter, pool ownership and close-once behavior                  |
+| `services/kernel/src/work/sdk-retirement-fence.ts`                     | Every current dispatch price and supported bounded maintenance callback                     |
+| `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch`                     | Native writer guards, original maintenance/delete body, restore domain and same-Pool checks |
+| `services/kernel/src/work/README.md`                                   | Inclusive nested dispatch accounting and physical copy inventory                            |
+| `services/kernel/src/history/agent-identity-inventory-work.ts`         | Pre-I/O reservation, command controls and invalidation prices                               |
+| `services/kernel/src/history/agent-identity-retirement.ts`             | Original frame lifetime, staging and fresh verification call chain                          |
+| `services/kernel/src/history/agent-identity-sdk-fence.ts`              | Readiness/closure, current native locks and recorded-handoff revalidation                   |
+| `services/kernel/src/history/durable.ts`                               | Physical inspection, 65,536-byte payload scope and original deletion/receiving sequence     |
+| `services/kernel/src/semantic/identity-source-consumer-custody.ts`     | Independent verifier, directory composition and Library receiving calls                     |
+| `services/kernel/src/semantic/identity-source-consumer-maintenance.ts` | Live frame, actual Pool/deadline, safe-integer admission and no refunds                     |
+| `services/kernel/src/semantic/identity-source-maintenance-config.ts`   | Present defaults, hard maxima and smaller caller allocations                                |
+| `services/kernel/src/library/identity-scope-effects.ts`                | Provisional unavailable Library adapter, not a completed native producer                    |
 
 Read-only installed DBOS 5.5.3-preview artifacts were inspected by exact path
 under `services/kernel/node_modules/@dbos-inc/dbos-sdk/`. SHA-256 pins:
 
-| Artifact | SHA-256 |
-| --- | --- |
-| `dist/src/client.js` | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
-| `dist/src/system_database.js` | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
+| Artifact                                           | SHA-256                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `dist/src/client.js`                               | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
+| `dist/src/system_database.js`                      | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
 | `dist/src/sysdb_migrations/internal/migrations.js` | `d187c8a19e4c3141392c73701899ca0005155febdabdfde481bf5782fe61daff` |
-| Repository SDK patch | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
+| Repository SDK patch                               | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
 
 Source-readable installed files are not an installation receipt. The launch has
 no dependency receipts; none is inferred from these files or another session's
@@ -471,16 +471,15 @@ less work still reserve the full maximum. In an implementation, allocation's
 control read can include the already-held lock but must not be charged twice.
 These deliberately inclusive limits permit no range scan or cascading trim.
 
-| Primitive, excluding native I/O | Rows | Points | Statements | Server result retained by caller |
-| --- | ---: | ---: | ---: | ---: |
-| Dictionary equality lookup | `q+1` | `q+1` | `q+1` | 8-byte terminal ID or absence |
-| Retain existing/new reservation | `9q+2` | `9q+2` | `9q+2` | 8-byte terminal ID |
-| Release reservation | `9q+2` | `9q+2` | `9q+2` | no reservation text |
-| Dictionary outer function dispatch | 1 | 0 | 1 | at most 16 bytes of IDs/counts |
+| Primitive, excluding native I/O    |   Rows | Points | Statements | Server result retained by caller |
+| ---------------------------------- | -----: | -----: | ---------: | -------------------------------: |
+| Dictionary equality lookup         |  `q+1` |  `q+1` |      `q+1` |    8-byte terminal ID or absence |
+| Retain existing/new reservation    | `9q+2` | `9q+2` |     `9q+2` |               8-byte terminal ID |
+| Release reservation                | `9q+2` | `9q+2` |     `9q+2` |              no reservation text |
+| Dictionary outer function dispatch |      1 |      0 |          1 |   at most 16 bytes of IDs/counts |
 
 For retain: per chunk reserve one edge read, one node insert/update, and A for
-possible allocation, totaling 9. Finish with terminal read and update, totaling
-2. For release: per chunk reserve node read, node update/delete and A for slot
+possible allocation, totaling 9. Finish with terminal read and update, totaling 2. For release: per chunk reserve node read, node update/delete and A for slot
 release, again 9; terminal read/update adds 2. Parent IDs obtained in those reads
 avoid rediscovering paths. Equality reads each edge and terminal exactly once.
 Allocation probes are bounded regardless of interval population or allocation
@@ -672,18 +671,18 @@ SDK/writer/deletion interface, and does not solve old-writer lock order or fundi
 Use vectors `(rows,points,statements,returned bytes,engineRequests)`. Current
 source-literal SDK prices, before any dictionary or group producer, are:
 
-| Dispatch | Present price |
-| --- | --- |
-| rollback, prepaid before BEGIN | `(0,0,1,0,0)` |
-| begin | `(0,0,1,0,0)` |
-| settings | `(1,0,1,128,0)` |
-| lock | `(4,2,4,8192,0)` |
-| retire | `(8,5,9,32768,0)` |
-| delete-workflow_input | `(1,1,1,0,0)` |
-| delete-workflow_output | `(1,1,1,0,0)` |
-| delete-operation_outputs | `(64,1,1,0,0)` |
-| delete-workflow_status, including four FK cascades | `(73,5,5,0,0)` |
-| commit | `(0,0,1,0,0)` |
+| Dispatch                                           | Present price     |
+| -------------------------------------------------- | ----------------- |
+| rollback, prepaid before BEGIN                     | `(0,0,1,0,0)`     |
+| begin                                              | `(0,0,1,0,0)`     |
+| settings                                           | `(1,0,1,128,0)`   |
+| lock                                               | `(4,2,4,8192,0)`  |
+| retire                                             | `(8,5,9,32768,0)` |
+| delete-workflow_input                              | `(1,1,1,0,0)`     |
+| delete-workflow_output                             | `(1,1,1,0,0)`     |
+| delete-operation_outputs                           | `(64,1,1,0,0)`    |
+| delete-workflow_status, including four FK cascades | `(73,5,5,0,0)`    |
+| commit                                             | `(0,0,1,0,0)`     |
 
 Their complete present sums are retirement `(13,7,17,41088,0)` and deletion
 `(144,10,16,8320,0)`. `SDK_TRANSACTION_FENCE_COST` is `(4,2,4,8192,0)` per
@@ -740,22 +739,22 @@ maximum is adopted.
 
 Source evidence fixing several summands:
 
-| Operation or scope | Literal source price / obligation |
-| --- | --- |
-| Every independent Source verifier V | `(100,100,22,139264,0)` |
-| Directory pre-split envelope | `(100,200,36,229376,0)` |
-| Directory effective child | `(50,100,18,114688,0)`; reserve read and independent verify before either dispatch |
-| History command control | `(3,1,8,256,0)`, including failure slot |
-| `advanceInFrame` receiving read | `(72,72,6,32768,0)` plus its command control |
-| Original Account source read | `(70,68,25,73984,0)` |
-| Original accepted lookup | `(86,80,59,205920,0)` including its finite retries/snapshots |
-| Retirement-stage source handoff | `(73,71,26,82176,0)` before consumer reconstruction/staging |
-| Retirement-stage verification wrapper | `(71,71,19,82048,0)` plus command control and fresh V |
-| Receiving-binding wrapper | `(160,80,6,131072,0)` plus command control on each entry |
-| Recorded handoff outer reads | `(1,1,1,106496,0)` during readiness; `(1,1,1,122880,0)` during later recorded closure |
-| History guard | `(92,87,11,40960,0)` plus separately priced outer operation |
-| History absence guard | `(9,9,9,0,0)` |
-| Repeated receiving/fence observations, physical inspections, sealing, invalidation/wake, final writes | Required additional summands in their actual reached bodies, never zero |
+| Operation or scope                                                                                    | Literal source price / obligation                                                     |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Every independent Source verifier V                                                                   | `(100,100,22,139264,0)`                                                               |
+| Directory pre-split envelope                                                                          | `(100,200,36,229376,0)`                                                               |
+| Directory effective child                                                                             | `(50,100,18,114688,0)`; reserve read and independent verify before either dispatch    |
+| History command control                                                                               | `(3,1,8,256,0)`, including failure slot                                               |
+| `advanceInFrame` receiving read                                                                       | `(72,72,6,32768,0)` plus its command control                                          |
+| Original Account source read                                                                          | `(70,68,25,73984,0)`                                                                  |
+| Original accepted lookup                                                                              | `(86,80,59,205920,0)` including its finite retries/snapshots                          |
+| Retirement-stage source handoff                                                                       | `(73,71,26,82176,0)` before consumer reconstruction/staging                           |
+| Retirement-stage verification wrapper                                                                 | `(71,71,19,82048,0)` plus command control and fresh V                                 |
+| Receiving-binding wrapper                                                                             | `(160,80,6,131072,0)` plus command control on each entry                              |
+| Recorded handoff outer reads                                                                          | `(1,1,1,106496,0)` during readiness; `(1,1,1,122880,0)` during later recorded closure |
+| History guard                                                                                         | `(92,87,11,40960,0)` plus separately priced outer operation                           |
+| History absence guard                                                                                 | `(9,9,9,0,0)`                                                                         |
+| Repeated receiving/fence observations, physical inspections, sealing, invalidation/wake, final writes | Required additional summands in their actual reached bodies, never zero               |
 
 At least five fresh V entries precede SDK deletion on the retained-terminal
 path: initial reconstruction, retirement verification, readiness handoff,
