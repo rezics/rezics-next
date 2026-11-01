@@ -2,6 +2,7 @@ import { notFound } from '@tanstack/react-router';
 import { deletionEvidence, nativeRevision, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
+import { assertPublicCacheReadAllowed } from '../security/page-cache';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { PublishedLogListError } from './my-logs';
@@ -63,7 +64,11 @@ async function readPublishedLogSnapshot(
   sessionEnv: Partial<SessionEnv>,
   input: { id: string },
 ): Promise<PublishedLogCurrentRead> {
-  const request = new Request(sourceRequest);
+  assertPublicCacheReadAllowed(sourceRequest, 'session');
+  const headers = new Headers(sourceRequest.headers);
+  const cookie = sourceRequest.headers.get('cookie');
+  if (cookie !== null) headers.set('cookie', cookie);
+  const request = new Request(sourceRequest, { headers });
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
   // Capture the successful preparation before dispatch, never from a later preparation
