@@ -286,6 +286,14 @@ export class WorkerTasks {
       });
     });
   }
+  /** Use the same live pool policy and observed allowance as worker launches. */
+  resolverPools() {
+    const pools = this.poolPolicies.read();
+    return {
+      pools,
+      readings: pools.map((pool) => withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory)),
+    };
+  }
   private branchHead(branch: string, createFromMain: boolean): string {
     const reference = `refs/heads/${branch}`;
     try {

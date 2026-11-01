@@ -13,6 +13,8 @@ export type AgentLaunchOptions = {
   readOnly?: boolean;
   research?: boolean;
   consultation?: boolean;
+  /** A fresh train editing session; only adapters with supportsResolver may receive this mode. */
+  resolver?: boolean;
   codex?: Settings['codex'];
   resumeSession?: string;
 };
@@ -39,6 +41,8 @@ export type AgentAdapter = {
   readonly environmentKeys?: readonly string[];
   start(options: AgentLaunchOptions): [string, string[]];
   resume(options: AgentLaunchOptions & { session: string }): [string, string[]];
+  /** start supports fresh train editing with workspace sandboxing and no network tools. */
+  readonly supportsResolver?: boolean;
   hasRollout?(events: Record<string, any>[]): boolean;
   parseEvent?(event: Record<string, any>, hasRollout: boolean): AgentEvent | null;
   readSession?(configDirectory: string, session: string): string | null;

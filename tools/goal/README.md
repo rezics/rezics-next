@@ -1438,6 +1438,45 @@ implementation and permitted typing with `checks: []`; actual native/combined re
 
 ### Explicit control-plane cohort release
 
+Concrete additional files in an accepted control-plane source require separate owning-manager authority for a main
+cohort. The public receiving API is
+`receiveControlPlaneScopeApproval(input: ControlPlaneScopeApprovalRequest, runtime, env?): ControlPlaneScopeApprovalReceipt`
+in `src/control-plane-batch.ts`. Operations captures the actual current queue and original contract identities with
+`controlPlaneScopeApprovalIdentity(source, runtime)`, then submits the exact additional files from its persisted
+owning manager provider session. For an already manager-authorized queue source:
+
+```ts
+const source = { taskId, attempt, acceptedCommit }; // Actual accepted current source, never a historical generation.
+const input = {
+  version: 1 as const,
+  managerId,
+  ...source,
+  ...controlPlaneScopeApprovalIdentity(source, runtime),
+  additionalPaths: [
+    { path: 'tools/goal/src/lease.ts', reason: 'Required native publication lease custody adapter' },
+    { path: 'tools/goal/src/process.ts', reason: 'Required publication process custody adapter' },
+    { path: 'tools/goal/src/tasks.ts', reason: 'Required accepted launch custody adapter' },
+  ],
+};
+const receipt = receiveControlPlaneScopeApproval(input, runtime, managerEnv);
+```
+
+The CLI equivalent is `bun tools/goal/scripts/release-control-plane-batch.ts --approve-scope .temp/scope-approval.json`
+with that exact serialized input. The returned receipt contains the source, original contract/request hashes,
+concrete justified paths, authenticated actor/session, approval time and content digest. Exact replay is idempotent;
+a conflicting set for the same attempt refuses. Native immutable queue storage and a matching store event retain
+the receipt separately from the original brief, queue request, acceptance, result and source history. Generic events
+and worker-supplied permission fields grant no scope. Stale or processed sources, other Goals, directories, globs,
+symlinks, frozen files and protected risk areas refuse.
+
+Only the exact member's combined main preparation consumes its approved additional paths. The journal, completed
+proof and publication record bind the approval identity; the final current-source fence verifies it again. An
+approval arriving after a journal captured its inputs requires a fresh cohort. Ordinary landing permissions are
+unchanged. This API never grants native execution, critical priority, a retry, integration or a passing proof.
+The corrected main cohort still needs fresh full Goal typing, the complete suite, exact dev script compatibility,
+real provider lifecycle and atomic publication before its deferred dev handoff can be consumed. Retained negative
+proofs, supersession generation mappings and unknown legacy physical inventory keep their existing meaning.
+
 The controller receiving entrypoint is
 `bun tools/goal/scripts/release-control-plane-batch.ts <manifest.json>`. Invoke it from the authenticated owning
 manager's persisted provider session, after source completion. Worker sessions cannot invoke it. It uses the ordinary
@@ -1461,7 +1500,8 @@ control-plane migration source for the current release priority. No task, branch
 can be supplied through the manifest. `receiveControlPlaneBatch` authenticates the session and authorizes those same
 native requests before calling `MergeTrain.releaseControlPlaneBatch`.
 
-The train preserves source commits by merging them in an isolated tree, applies native mechanical conflict resolution,
+The train preserves source commits by merging them in an isolated tree with the delivered `TrainResolver`: actual
+rerere and proven additive unions precede one bounded fresh `gpt-6.1-sol` high session. It applies
 scope and frozen-file guards, formats the combined candidate, and runs the mandatory Goal installs, typing, suite,
 main/dev script compatibility and complete real-boundary provider lifecycle proof on that final head once. Compatibility
 uses the captured immutable dev tree; lifecycle evidence must identify the exact candidate and dev tree. An already
@@ -1477,7 +1517,183 @@ combined merge commit with its own changed-file and line counts. Independent dev
 split decisions. Exact gate output remains in the cohort logs. A failed proof splits the cohort in halves; passing
 subsets release together after their own required final-head proof. Whole failed cohorts are never automatically
 retried unchanged. Selected queue entries are reserved against ordinary serial drain, including excluded sources;
-the manager must repair or retry those sources explicitly. Each node allows at most three candidate/ref attempts,
+preparation exclusions can be selected for exact readmission after the old controller releases the main lane and its
+journal becomes terminal. In a new manifest, add `"readmitFrom": "<prior-batch-digest>"` to each selected excluded member;
+keep its exact task, attempt and accepted commit, and include the fresh adapter source and other remaining sources in
+the same combined cohort. The public API remains `receiveControlPlaneBatch(manifest, runtime, env)` and the CLI remains
+`bun tools/goal/scripts/release-control-plane-batch.ts <manifest.json>` from the authenticated owning manager session.
+The receiving path transfers only unprocessed preparation exclusions under the main lane and shared SQLite fence,
+preserving both journals and claim history. It verifies the original request/contract generation and unchanged current
+source; active controllers, other owners, changed generations, any candidate/outcome/delivery and any prior native
+participation refuse readmission. Legacy journals qualify only through their exact pre-native conflict exclusions,
+original native request/authorization events and persisted brief. No queue reset, worker retry or acceptance rewrite is
+involved. Native assertion failures still require an actual owning-manager product fix.
+
+Resolver evidence includes actual earlier cohort owners whose accepted sources are already in the cumulative target,
+even while their tasks remain landing. Frozen/protected inputs, refs, source identities, index and outside edits remain
+guarded; only the controller stages and commits verified edits. Actual compiler diagnostics in a resolved file may
+trigger one bounded typing repair before the single suite/compatibility/provider proof on the final combined head.
+The resolver never runs checks. Source delivery does not run this operation, advance live refs, or prove whole-Goal
+completion; operations must perform that fresh native proof and atomic publication after the old cohort is terminal.
+
+Resolver command support belongs to the agent adapter's optional `supportsResolver` capability and `start` command.
+Unsupported adapters refuse before starting a process; the neutral launcher never falls back to an ordinary worker or
+resumes a resolver.
+The Codex adapter constructs a fresh workspace-write sandbox command with network tools disabled and no worker-result
+schema. The existing controller still bounds input, output, time, allowed source paths and the single repair pass.
+
+Native batch releases acquire the ordinary main lane, then wait at most 30 seconds for the ordinary dev lane.
+Both lanes remain owned from before ref capture through the complete candidate checks, exact captured-dev installed
+scripts compatibility, real provider lifecycle, propagation and atomic ref CAS. The dev owner is never evicted;
+contention fails within that bound and releases the main lane. Workers can still complete sources, and ordinary dev
+landings stay queued until the finite release returns. The dev drain never acquires main while holding dev; promotion
+runs after dev lease release, so there is no inverse nested train order. External ref writers still invalidate captured proof and fail CAS normally.
+
+The narrow same-source receiving API is
+`receiveControlPlaneBatchRefContinuation(input: ControlPlaneBatchRefContinuation, runtime, env)`; Operations invokes
+`bun tools/goal/scripts/release-control-plane-batch.ts --continue-ref-exhausted <request.json>` **once**, from the actual
+owning manager's authenticated provider session, using the delivered controller and the existing private `mainBranch`
+configuration. It does not change that branch setting or select a default main. The JSON contains `version: 1`, the
+**unchanged** single-source `manifest`, `logHash` (SHA-256 of the retained root log), and `handoff` with the exact prior
+`journalHash`, `controller` process incarnation, `ownedCommands`, `inventory` and retained terminal `evidence` reference.
+The journal must retain exactly three positive, non-timeout full-suite results, their candidate proof refs and exact
+source/scope snapshots; every attempt's native log must document all mandatory checks passing and captured-ref movement.
+These partial positives grant no compatibility, lifecycle or publication proof. There must be no split, failure,
+prepared/release record, outcome, delivery, candidate, source/contract/request/scope change or supersession. The exact
+accepted source must still be clean and current with its original native claim. The prior controller/group and every
+positively recorded owned operation must have exited, and both ordinary lanes must become available normally.
+`legacy-inventory-unavailable` preserves unknown custody; receiving grants no physical cleanup or capacity evidence.
+
+An immutable native queue receipt retains the full original journal bytes, exact input and manager session, old/new
+controller identities and receiving time. The journal appends a separate `ref-continuation` node without rewriting the
+old controller, three attempts, proofs, logs or results. That node admits **one** fresh stabilized candidate, requiring
+all existing full checks, compatibility, real lifecycle and atomic CAS. Failure, interruption or external ref movement
+cannot open another budget. Exact terminal replay returns/reconciles that result without gates; changed input or a
+live/incomplete continuation refuses. Ordinary manifest submission cannot bypass the receiving port. Failed-source
+supersession and preparation-only readmission retain their separate existing rules.
+
+Each node allows at most three candidate/ref attempts,
 including interrupted attempts. Reinvoke the same manifest to resume durable split decisions or recover a published
 release. A published verified record survives interrupted outcome delivery and checkout/tree cleanup failure, so
 recovery never needs another suite run. Individual releases remain supported for unreserved requests.
+
+Completed cohort proofs now retain the exact candidate, captured refs, accepted sources, failed command and output in
+that node's journal before ref movement can request a rebuild. The native controller retains candidate objects under
+`refs/goal/control-plane-proof/`. A failed candidate is classified and split even when publication refs moved; restart
+uses its retained negative rather than rerunning the unchanged candidate. Passing moved-ref checks still require a
+fresh complete proof. Bisection may run one bounded probe of at most three failing Goal test files selected from the
+parent's actual full-suite output. A conclusive negative can split a group early. A passing or inconclusive probe
+cannot publish: every passing head still needs fresh Goal typing, the complete suite, dev script compatibility and
+the real provider lifecycle proof before CAS.
+
+For an interrupted, unpublished cohort with a retained completed native failure, the typed receiving operation is
+`receiveControlPlaneBatchSupersession(input: ControlPlaneBatchSupersession, runtime, env)`. The existing CLI also accepts
+that input in its JSON file. It returns `ControlPlaneBatchSupersessionResult` and only transfers claims; subsequently
+submit its `replacement` manifest through `receiveControlPlaneBatch` or the same CLI to run the fresh combined proof.
+Workers must never invoke either operation. Operations supplies the verified terminal handoff after actual controller
+death and lease handoff. `handoff` binds the exact prior journal SHA-256, controller process incarnation,
+known owned-command inventory and retained physical evidence reference. Every listed incarnation and known resolver process
+must be dead, with no surviving owned group; the native main lease must be available. Legacy journals additionally
+require `handoff.failures` naming the exact node, candidate, failed command and output already present in their native
+logs. `inventory: 'legacy-inventory-unavailable'` explicitly preserves unknown legacy validation-child custody.
+The logical unpublished draft can transfer after verified canonical publisher/group death and native lease handoff;
+it does not release a physical host lease, check custody or capacity. Positively recorded live identities still refuse.
+Omitting `inventory` retains the original complete-inventory contract. No result or physical terminal receipt can be
+invented from missing evidence.
+
+The supersession input has `version: 1`, `previousBatchId`, `replacement`, `handoff`, and `changedInputs`. Each changed
+input names an omitted or added accepted producer's `taskId`, concrete `path`, and the owning manager's relevance `reason`. The
+native fence verifies actual changed file content against every retained failed candidate; changing only manifest
+metadata or a relevance label cannot qualify. Without `memberMapping`, the original exact-generation plus added-source
+operation remains supported. With `memberMapping`, every prior member must appear exactly once as either
+`{ previous, disposition: 'replacement', current }` or `{ previous, disposition: 'deferred-to-dev', cause }`.
+Both identities have `taskId`, `attempt`, and `acceptedCommit`. A replacement can only name the same task's currently
+accepted generation. A corrected generation must have actual public retry, brief hash and source settlement lineage;
+its old accepted commit is checked as an immutable Git object, never as the current branch tip or current attempt.
+Added producer tasks must be fresh accepted requests. Partial mappings and arbitrary replacement tasks refuse.
+
+Deferrals require `deferralAuthorization: { order, expectedDeferredCount }`, binding the owning manager's retained Root
+order and exact number of preparation exclusions. For the main-first migration order, map the seven main members to
+their current accepted generations and explicitly defer all thirteen preparation exclusions; do not construct another
+all-source main cohort. A deferred source must still have its exact current request, contract, source and old queue
+claim, with no native participation, candidate, outcome or delivery. Retained native-failed members cannot be deferred.
+`result.devHandoff` retains the exact task/attempt/source, owner, request, contract identity, queue entry/claim and cause.
+Corrected generations claim their new current rows; old stale rows and all old claims stay historical.
+
+The replacement composes real producer edits relevant to the failure.
+An old preparation-excluded member can supply those producer edits because its source was absent from the failed
+candidate. Before new native checks, the controller verifies those inputs actually survive composition; omitting them
+again cannot rerun the unchanged failed head. Old request/contract
+identities and current source acceptance remain exact. An old native-failed source can therefore participate with
+actual omitted producer fixes; its old proof stays failed and the replacement receives no inherited pass.
+
+Claim transfers and the authoritative supersession closure commit atomically in the existing SQLite fence. Both
+claim histories and the entire prior journal, nodes, results and evidence remain retained; the old draft is marked
+`superseded/interrupted` with explicit failed/unknown member dispositions. Journal materialization recovers from that
+same immutable transaction after interruption. Old controllers cannot resume a superseded draft. Published releases,
+processed rows, unproved generation changes, live controllers/commands/leases, other owners and unchanged producer inputs refuse
+supersession. No tasks, attempts, outcomes, acceptance or prior failed proofs are reset. Normal terminal preparation-only
+readmission remains separate. Source delivery and local typing provide no native acceptance or runtime authorization;
+operations must supply the actual handoff and execute the combined validation/publication later.
+
+The public migration receiving declaration is:
+
+```ts
+receiveControlPlaneBatchDevHandoff(
+  input: ControlPlaneBatchDevHandoffRequest,
+  runtime: { train: MergeTrain; receiveDev(handoff: ControlPlaneBatchDevHandoff): void },
+  env?: NodeJS.ProcessEnv,
+): Promise<ControlPlaneBatchDevHandoff>
+```
+
+`ControlPlaneBatchDevHandoffRequest` is `{ previousBatchId: string; replacementBatchId: string }`. The native owning
+manager calls it immediately after the replacement root's complete fresh proof and publication. Passing split subsets
+or probes cannot unlock migration. `receiveDev` is the migration source's synchronous native store receiver, called
+inside the existing SQLite transaction. It must migrate every handed-off current task to the normal dev lane while
+preserving the accepted request/source/attempt and owner. Only then does the queue transfer those exact reserved claims
+to normal dev processing, retaining an immutable consumption receipt and both original histories. Failed or incomplete
+receivers roll back; identical consumption is idempotent. The normal dev resolver handles the deferred conflicts.
+This source exposes no CLI that guesses a migration callback or performs physical cleanup.
+
+For example, operations supplies actual accepted identities and verified retirement evidence:
+
+```ts
+const input: ControlPlaneBatchSupersession = {
+  version: 1,
+  previousBatchId,
+  replacement: sevenCurrentMainSources,
+  handoff: {
+    journalHash,
+    controller,
+    ownedCommands: knownOwnedCommands,
+    inventory: 'legacy-inventory-unavailable',
+    evidence: retirementReceipt,
+    failures: retainedLegacyFailures,
+  },
+  memberMapping: [
+    ...previousMainMembers.map((previous) => ({
+      previous,
+      disposition: 'replacement' as const,
+      current: currentAcceptedByTask.get(previous.taskId)!,
+    })),
+    ...thirteenPreparationExclusions.map((previous) => ({
+      previous,
+      disposition: 'deferred-to-dev' as const,
+      cause: 'Preparation conflict deferred to dev under the retained Root order',
+    })),
+  ],
+  deferralAuthorization: { order: retainedRootOrder, expectedDeferredCount: 13 },
+  changedInputs: relevantCorrectedProducerInputs,
+};
+const closure = await receiveControlPlaneBatchSupersession(input, runtime, managerEnv);
+await receiveControlPlaneBatch(input.replacement, runtime, managerEnv);
+await receiveControlPlaneBatchDevHandoff(
+  { previousBatchId, replacementBatchId: closure.replacementBatchId },
+  { train: runtime.train, receiveDev: migrationReceiver },
+  managerEnv,
+);
+```
+
+The existing supersession JSON CLI receives the same mapping fields. Workers must never invoke these operations.
+Old negative proofs remain failed. The corrected combined head still requires full Goal typing, the complete suite,
+dev script compatibility, real provider lifecycle evidence and CAS; source typing alone grants no native pass.
