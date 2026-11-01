@@ -83,8 +83,9 @@ atomic main/dev/stabilize compare-and-swap, including verification of the accept
 
 While that proof is running, its controller observes the native dev queue every 50 ms and checks custody before each
 proof command and publication. A newly queued dev request interrupts the controller's own proof. Per-invocation
-`GateRunner` cancellation kills only that proof's command groups and awaits their close; parallel proof commands all
-settle before the controller releases its positively owned dev lease. The same existing dev drain then takes a turn,
+`GateRunner` cancellation kills only that proof's command groups and awaits the complete runner, including terminal
+cleanup supplied by the receiving tree; parallel proof commands all settle before the controller releases its
+positively owned dev lease. The same existing dev drain then takes a turn,
 even if the initial idle dev drain returned or found another live owner. No manager signal or extra enqueue is needed.
 The main request stays pending and unpublished; it is not retried again in that drain. Another live dev owner is never
 removed or replaced. Stale code cancels its own proof and uses the existing current-code handoff.

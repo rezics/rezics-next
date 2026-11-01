@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -10,6 +10,22 @@ import {
   type CheckResult,
   type CheckResults,
 } from './check-results.ts';
+
+/** Attach cancellation to this spawned group without replacing the runner's normal terminal cleanup. */
+function cancelOwnedCommand(child: ChildProcess, signal: AbortSignal | undefined): void {
+  if (!signal) return;
+  const cancel = () => {
+    if (child.pid === undefined) return;
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch {}
+  };
+  const detach = () => signal.removeEventListener('abort', cancel);
+  child.once('error', detach);
+  child.once('close', detach);
+  signal.addEventListener('abort', cancel, { once: true });
+  if (signal.aborted) cancel();
+}
 
 export function git(cwd: string, ...args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
@@ -79,9 +95,8 @@ export function processGroupRunner(
   parent: NodeJS.ProcessEnv = process.env,
   sanitizeEnvironment = true,
 ): GateRunner {
-  return async (argv, cwd, logPath, { signal }: GateRunOptions = {}) => {
+  const run: GateRunner = async (argv, cwd, logPath, options) => {
     if (!argv.length) throw new Error('A gate command is required');
-    signal?.throwIfAborted();
     return await new Promise<GateResult>((resolve, reject) => {
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
@@ -99,9 +114,6 @@ export function processGroupRunner(
           process.kill(-child.pid, 'SIGKILL');
         } catch {}
       };
-      // Await close after killing: callers must not release custody or remove the tree while pipes are still open.
-      signal?.addEventListener('abort', killGroup, { once: true });
-      if (signal?.aborted) killGroup();
       const collect = (chunk: Buffer) => {
         const text = chunk.toString();
         output += text;
@@ -109,6 +121,7 @@ export function processGroupRunner(
       };
       child.stdout.on('data', collect);
       child.stderr.on('data', collect);
+      cancelOwnedCommand(child, options?.signal);
       const timer =
         timeoutMs === undefined
           ? undefined
@@ -118,7 +131,6 @@ export function processGroupRunner(
             }, timeoutMs);
       const cleanup = () => {
         if (timer !== undefined) clearTimeout(timer);
-        signal?.removeEventListener('abort', killGroup);
         if (child.pid !== undefined) activeCommandGroups.delete(child.pid);
         killGroup();
       };
@@ -132,13 +144,16 @@ export function processGroupRunner(
         if (settled) return;
         settled = true;
         cleanup();
-        if (signal?.aborted) {
-          reject(signal.reason);
-          return;
-        }
         resolve({ passed: code === 0 && !timedOut, output, timedOut });
       });
     });
+  };
+  return async (argv, cwd, logPath, options) => {
+    options?.signal?.throwIfAborted();
+    // Await the complete runner, including any asynchronous terminal cleanup composed by the receiving tree.
+    const result = await run(argv, cwd, logPath, options);
+    options?.signal?.throwIfAborted();
+    return result;
   };
 }
 
