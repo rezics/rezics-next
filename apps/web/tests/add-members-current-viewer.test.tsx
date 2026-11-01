@@ -373,7 +373,11 @@ test('Uncertain retries retain exact intent and key; explicit edits capture a ne
     expect(page.host.querySelector('[role="alert"]')!.textContent).toBe(page.m.library_collection_conflict());
     await page.changeNote('Deliberate edit');
     await page.submit();
-    expect(page.calls[3]!.data).toMatchObject({ ...captured, note: 'Deliberate edit', idempotencyKey: expect.any(String) });
+    expect(page.calls[3]!.data).toMatchObject({
+      ...captured,
+      note: 'Deliberate edit',
+      idempotencyKey: expect.any(String),
+    });
     expect(page.calls[3]!.data.idempotencyKey).not.toBe(captured.idempotencyKey);
     await page.settle(3, { ok: false, reason: 'full' });
     expect(page.host.querySelector('[role="alert"]')!.textContent).toBe(page.m.library_collection_full());
