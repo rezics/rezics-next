@@ -1199,6 +1199,8 @@ export function createPublicFilterSourceBinding(
           return { status: 'preparing' as const, bootstrap: cut.bootstrap, cost };
       }
       const begun = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
+      if (begun.row.state !== 'begun' || !begun.row.coverage_sealed || begun.row.coverage_after !== 4096)
+        throw new BindingError('owner_unavailable');
       return { status: 'begun' as const, bootstrap: begun.bootstrap, cost };
     });
   }
@@ -1569,8 +1571,11 @@ export function createPublicFilterSourceBinding(
       return { status: 'retained' as const, cut, cost };
     });
     if (retained.status !== 'retained') return retained;
-    if (retained.cut.row.state === 'begun')
+    if (retained.cut.row.state === 'begun') {
+      if (!retained.cut.row.coverage_sealed || retained.cut.row.coverage_after !== 4096)
+        return fail('owner_unavailable', retained.cost);
       return { status: 'begun', bootstrap: retained.cut.bootstrap, cost: retained.cost };
+    }
     const result = await beginRetained({
       source: sourceReader(retained.cut.definition), meaning: retained.cut.definition.meaning,
       capture: retained.cut.definition.capture, consumer: retained.cut.bootstrap.consumer,
