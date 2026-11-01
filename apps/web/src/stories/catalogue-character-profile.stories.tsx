@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { pickText } from '@rezics/composition';
 import { useMemo } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { CharacterProfile } from '../features/catalogue/character-profile-view';
 import {
   characterProfileFixture,
@@ -144,13 +144,132 @@ export const Created: Story = {
   },
 };
 export const UncertainRetry: Story = {
-  args: { scenario: 'uncertain' },
-  play: async ({ canvasElement }) => {
-    const canvas = await create(canvasElement);
+  args: { scenario: 'uncertain', onCreate: createObserver() },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: the default creation journey at 390px checks rendered targets and label/action wrapping, language and fact removal, disabled uncertain drafts, exact body/key retry and saved-reader recovery. Browser, native and visual verification are deferred.',
+      },
+    },
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const label = await canvas.findByRole('textbox', { name: m.catalogue_create_label() });
+    const form = label.closest('form')!;
+    const document = canvasElement.ownerDocument;
+    await expect(document.documentElement.clientWidth).toBe(390);
+    const phoneControls = async () => {
+      const bounds = form.getBoundingClientRect();
+      await expect(bounds.left).toBeGreaterThanOrEqual(0);
+      await expect(bounds.right).toBeLessThanOrEqual(390);
+      await expect(form.scrollWidth).toBeLessThanOrEqual(form.clientWidth + 1);
+      for (const target of form.querySelectorAll<HTMLElement>('input, textarea, select, button, a')) {
+        const rect = target.getBoundingClientRect();
+        const parent = target.parentElement!.getBoundingClientRect();
+        await expect(rect.height).toBeGreaterThanOrEqual(44);
+        await expect(rect.width).toBeGreaterThanOrEqual(44);
+        await expect(rect.left).toBeGreaterThanOrEqual(Math.max(bounds.left, parent.left) - 1);
+        await expect(rect.right).toBeLessThanOrEqual(Math.min(bounds.right, parent.right) + 1);
+      }
+      // Text must fit each rendered label/action, including every line of a wrapped translation.
+      for (const text of form.querySelectorAll<HTMLElement>('label, button, a')) {
+        const rect = text.getBoundingClientRect();
+        await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+        const walker = document.createTreeWalker(text, 4 /* SHOW_TEXT */);
+        while (walker.nextNode()) {
+          if (!walker.currentNode.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(walker.currentNode);
+          for (const line of range.getClientRects()) {
+            await expect(line.left).toBeGreaterThanOrEqual(rect.left - 1);
+            await expect(line.right).toBeLessThanOrEqual(rect.right + 1);
+            await expect(line.top).toBeGreaterThanOrEqual(rect.top - 1);
+            await expect(line.bottom).toBeLessThanOrEqual(rect.bottom + 1);
+          }
+        }
+      }
+    };
+    await phoneControls();
+    await userEvent.type(label, 'A new traveler');
+    const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
+    await userEvent.clear(language);
+    await userEvent.type(language, 'en');
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: m.catalogue_create_description() }),
+      'A fictional traveler',
+    );
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: m.catalogue_create_aliases() }),
+      'First alias\nSecond alias',
+    );
+    await userEvent.click(within(form).getByText(m.catalogue_create_label(), { exact: true }));
+    await expect(label).toHaveFocus();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
+    await phoneControls();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_remove_language() }));
+    await expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(1);
+
+    const initial = canvas.getByRole('combobox', { name: m.character_initial_fact() });
+    const addFact = canvas.getByRole('button', { name: m.character_add_fact() });
+    await expect(addFact).toBeDisabled();
+    await userEvent.selectOptions(initial, 'schema:url');
+    await userEvent.click(addFact);
+    await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), 'https://example.org/removed');
+    await phoneControls();
+    await userEvent.click(canvas.getByRole('button', { name: m.recipe_remove_field() }));
+    await expect(canvas.queryByRole('textbox', { name: m.correction_value() })).toBeNull();
+    await userEvent.selectOptions(initial, 'schema:url');
+    await userEvent.click(addFact);
+    await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), 'https://example.org/traveler');
+    await expect(initial).toHaveValue('');
+    await expect(addFact).toBeDisabled();
+    await phoneControls();
+    const observed = args.onCreate as ReturnType<typeof createObserver>;
+    await expect(observed).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole('button', { name: m.character_create() }));
     const retry = await canvas.findByRole('button', { name: m.correction_retry() });
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
+    for (const control of form.querySelectorAll(
+      'fieldset input, fieldset textarea, fieldset select, fieldset button',
+    )) {
+      await expect(control).toBeDisabled();
+    }
+    await waitFor(() => expect(observed).toHaveBeenCalledTimes(1));
+    await expect(retry).toBeEnabled();
+    await phoneControls();
     await userEvent.click(retry);
     await expect(canvas.findByRole('link', { name: m.character_correct() })).resolves.toBeVisible();
+    await waitFor(() => expect(observed).toHaveBeenCalledTimes(2));
+    const writes = observed.mock.calls[1]![0].filter((call) => call.method === 'POST' && call.path === '/v1/subjects');
+    await expect(writes).toHaveLength(2);
+    await expect(writes[0]!.body).toEqual({
+      type: 'wd:Q95074',
+      labels: { en: 'A new traveler' },
+      descriptions: { en: 'A fictional traveler' },
+      aliases: { en: ['First alias', 'Second alias'] },
+      statements: {
+        'schema:url': [
+          {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: 'https://example.org/traveler' },
+            qualifiers: [],
+            references: [],
+            rank: 'normal',
+          },
+        ],
+      },
+    });
+    await expect(writes[1]!.body).toEqual(writes[0]!.body);
+    await expect(writes[0]!.key).toBeTruthy();
+    await expect(writes[1]!.key).toBe(writes[0]!.key);
+    const reader = canvas.getByRole('link', { name: m.candidate_view_public() });
+    await expect(reader.getAttribute('href')).toContain(`/subjects/${characterCreatedId}/a-new-traveler`);
+    await expect(canvas.getByRole('link', { name: m.character_correct() })).toHaveAttribute(
+      'href',
+      `${reader.getAttribute('href')}/character`,
+    );
   },
 };
 export const Proposed: Story = {

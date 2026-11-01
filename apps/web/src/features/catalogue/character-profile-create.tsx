@@ -13,6 +13,10 @@ import { editableScalar, type StatementInput } from './statement-editor';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import { characterDraft, characterGroups, type CharacterCommand, type CharacterTransport } from './character-profile';
 
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
+
 /** Initial terms and explicitly added facts use the existing validators, scalar controls and subject POST. */
 export function CharacterProfileCreate({
   release,
@@ -71,27 +75,27 @@ export function CharacterProfileCreate({
   }
   return (
     <form
-      className="space-y-5"
+      className="min-w-0 space-y-5 [overflow-wrap:anywhere]"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
       <a
-        className={buttonVariants({ variant: 'outline' })}
+        className={buttonVariants({ variant: 'outline', className: actionClassName })}
         href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
       >
         {m.catalogue_create_search({}, o)}
       </a>
       <p className="text-sm text-muted-foreground">{m.character_create_help({}, o)}</p>
-      <fieldset disabled={locked} className="space-y-5">
+      <fieldset disabled={locked} className="min-w-0 space-y-5">
         <legend className="font-semibold">{m.catalogue_create_terms({}, o)}</legend>
         {terms.map((term, index) => (
           <fieldset key={term.id} id={`${termsId}-${term.id}`} className="min-w-0 space-y-3">
             <legend className="sr-only">{term.language || m.catalogue_create_language({}, o)}</legend>
             {(['language', 'label', 'description', 'aliases'] as const).map((key) => (
-              <Field key={key}>
-                <FieldLabel htmlFor={`${termsId}-${key}-${term.id}`}>
+              <Field key={key} className="min-w-0">
+                <FieldLabel className={labelClassName} htmlFor={`${termsId}-${key}-${term.id}`}>
                   {
                     {
                       language: m.catalogue_create_language({}, o),
@@ -103,6 +107,7 @@ export function CharacterProfileCreate({
                 </FieldLabel>
                 {key === 'aliases' ? (
                   <Textarea
+                    className="min-w-0 max-w-full"
                     id={`${termsId}-${key}-${term.id}`}
                     value={term[key]}
                     onChange={(event) =>
@@ -113,6 +118,7 @@ export function CharacterProfileCreate({
                   />
                 ) : (
                   <Input
+                    className="min-h-11 min-w-0 max-w-full md:pointer-fine:min-h-8"
                     id={`${termsId}-${key}-${term.id}`}
                     value={term[key]}
                     onChange={(event) =>
@@ -153,8 +159,10 @@ export function CharacterProfileCreate({
         >
           {m.catalogue_create_add_language({}, o)}
         </Button>
-        <Field>
-          <FieldLabel htmlFor="character-initial-field">{m.character_initial_fact({}, o)}</FieldLabel>
+        <Field className="min-w-0">
+          <FieldLabel className={labelClassName} htmlFor="character-initial-field">
+            {m.character_initial_fact({}, o)}
+          </FieldLabel>
           <NativeSelect
             id="character-initial-field"
             className="w-full [&>select]:min-h-11"
@@ -170,6 +178,7 @@ export function CharacterProfileCreate({
           </NativeSelect>
         </Field>
         <Button
+          className={actionClassName}
           type="button"
           variant="outline"
           disabled={!field}
@@ -190,7 +199,7 @@ export function CharacterProfileCreate({
           {m.character_add_fact({}, o)}
         </Button>
         {facts.map((fact, index) => (
-          <section key={index} className="space-y-3 rounded-xl border border-border p-4">
+          <section key={index} className="min-w-0 space-y-3 rounded-xl border border-border p-4">
             <h3 className="font-semibold">{pickText(release.properties[fact.property.id]!.labels, locale).text}</h3>
             <ScalarControl
               part={fact}
@@ -199,7 +208,12 @@ export function CharacterProfileCreate({
               read={{ release, public: { related: {} } }}
               onChange={(value) => setFacts(facts.map((row, at) => (at === index ? { ...row, value } : row)))}
             />
-            <Button type="button" variant="ghost" onClick={() => setFacts(facts.filter((_, at) => at !== index))}>
+            <Button
+              className={actionClassName}
+              type="button"
+              variant="ghost"
+              onClick={() => setFacts(facts.filter((_, at) => at !== index))}
+            >
               {m.recipe_remove_field({}, o)}
             </Button>
           </section>
@@ -220,6 +234,7 @@ export function CharacterProfileCreate({
           )}
           {failure.reason === 'conflict' && (
             <Button
+              className={actionClassName}
               type="button"
               onClick={() => {
                 pending.current = null;
@@ -231,7 +246,7 @@ export function CharacterProfileCreate({
           )}
         </div>
       )}
-      <Button type="submit" disabled={busy || failure?.reason === 'conflict'}>
+      <Button className={actionClassName} type="submit" disabled={busy || failure?.reason === 'conflict'}>
         {busy
           ? m.catalogue_create_saving({}, o)
           : pending.current
