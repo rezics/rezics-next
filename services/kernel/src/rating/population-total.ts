@@ -21,6 +21,7 @@ const MAX_SERIAL = 9223372036854775807n;
 const PAGE = 100;
 type Queryable = Pick<PoolClient, 'query'>;
 type Address = Pick<PopulationTotalEvent, 'sourcePartition' | 'populationId' | 'serial'>;
+type CountedDelta = { questionId: string; shard: number; count: bigint; sum: bigint };
 
 function address(data: Address): [number, string, number, string] {
   const route = routeOf(data.populationId);
@@ -44,12 +45,12 @@ function parse(event: CloudEvent): PopulationTotalEvent {
 
 /** Only exact counted before/after deltas, reduced by destination/shard within one bounded source command. */
 export class PopulationTotalCapture {
-  private readonly populations = new Map<string, Map<string, { questionId: string; shard: number; count: bigint; sum: bigint }>>();
+  private readonly populations = new Map<string, Map<string, CountedDelta>>();
 
   add(change: { questionId: string; populationId: string }, entries: readonly {
     countingKey: string; delta: { count: bigint; sum: bigint };
   }[]): void {
-    const shards = this.populations.get(change.populationId) ?? new Map();
+    const shards = this.populations.get(change.populationId) ?? new Map<string, CountedDelta>();
     for (const { countingKey, delta } of entries) {
       const shard = Number.parseInt(countingKey.slice(0, 2), 16) % 16;
       const key = `${change.questionId}/${shard}`;

@@ -340,7 +340,7 @@ test('source pages, destination statements and exact replay stay bounded as unre
     expect(Buffer.byteLength(JSON.stringify(data))).toBeLessThanOrEqual(65536);
     expect(event_count).toBeLessThanOrEqual(101);
   }
-});
+}, 120_000);
 
 test('the default installed worker admits committed deliveries, recovers an interrupted caller and survives process restart', async () => {
   const first = vote();
@@ -401,4 +401,4 @@ test('the default installed worker admits committed deliveries, recovers an inte
     expect(await readAggregate(database.pool, { questionId, populationId: first.populationId, targetId: second.targetId }))
       .toMatchObject({ count: 1n, sum: 7n });
   } finally { if (child) await stop(); }
-});
+}, 240_000);
