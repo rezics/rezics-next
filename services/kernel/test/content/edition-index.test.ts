@@ -332,7 +332,7 @@ test('default creator inventory opt-in preserves ordinary shapes, immutable pins
   const identity = {
     subject: { id: f.targetSubjectId, kind: 'available', label: { value: 'Edition source', language: 'en' } },
     revisionCreatedAt: date.rows[0]!.recorded_at.toISOString(),
-  };
+  } as const;
   expect(opted).toEqual({ editions: [{ ...ordinary.editions[0]!, identity }], next: null });
   expect((await identityList(f.buyer.bearer, path)).status).toBe(404);
   expect((await identityList(f.token, `/v1/accounts/${f.buyer.actor.accountId}/editions`)).status).toBe(404);

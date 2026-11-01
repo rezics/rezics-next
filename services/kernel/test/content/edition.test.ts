@@ -377,7 +377,7 @@ async function revisionDate(f: Awaited<ReturnType<typeof fixture>>) {
 test('default exact revision HTTP preserves legacy query admission and validates only the edition opt-in', async () => {
   const f = await fixture();
   const path = exactPath(f);
-  const plain = await value<{ post: unknown }>(wire(f.token, path), 200);
+  const plain = await value<{ post: ExactIdentityResponse['post'] }>(wire(f.token, path), 200);
   expect(Object.keys(plain)).toEqual(['post']);
   expect(await value(wire(f.token, `${path}?unrelated=value`), 200)).toEqual(plain);
   const response = await wire(f.token, `${path}?editionIdentity=true`);
@@ -532,7 +532,7 @@ for (const state of ['hidden', 'taken_down', 'redirected', 'denied'] as const) {
         [routeOf(f.targetSubjectId), f.targetSubjectId, state],
       );
     }
-    const plain = await value<{ post: unknown }>(wire(f.token, exactPath(f)), 200);
+    const plain = await value<{ post: ExactIdentityResponse['post'] }>(wire(f.token, exactPath(f)), 200);
     const result = await value<ExactIdentityResponse>(wire(f.token, `${exactPath(f)}?editionIdentity=true`), 200);
     expect(result.post).toEqual(plain.post);
     expect(result.editionIdentity.subjects).toEqual([{ id: f.targetSubjectId, kind: 'withheld', label: null }]);
