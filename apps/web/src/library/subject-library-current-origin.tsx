@@ -71,7 +71,8 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
         : undefined;
       const admitted =
         sessionReady &&
-        enrolled?.subject === viewer.subject &&
+        enrolled !== undefined &&
+        enrolled.subject === viewer.subject &&
         exposure?.status === 'success' &&
         exposure.data?.subject === enrolled.subject
           ? exposure.data.admitted
@@ -93,7 +94,7 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
       const next = {
         ...value,
         sessionReady,
-        viewer: sessionReady ? viewer.subject : null,
+        viewer: sessionReady ? viewer.subject! : null,
         credential: sessionReady ? viewer.csrfToken : null,
         admitted,
         entryAdmitted: operationIsAdmitted('library_entry.get', admitted),
