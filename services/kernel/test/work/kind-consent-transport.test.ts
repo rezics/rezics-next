@@ -67,10 +67,10 @@ beforeAll(async () => {
     .setProtectedHeader({ alg: 'RS256', kid: 'kind-consent-access' })
     .sign(accessPair.privateKey);
 
-  await database.query(
-    'INSERT INTO auth_client (client_id,first_party,scopes) VALUES ($1,false,$2)',
-    [clientId, scopes],
-  );
+  await database.query('INSERT INTO auth_client (client_id,first_party,scopes) VALUES ($1,false,$2)', [
+    clientId,
+    scopes,
+  ]);
   await database.query('INSERT INTO auth_client_coverage (client_id,ready) VALUES ($1,true)', [clientId]);
   await database.query('INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)', [
     accountId,
@@ -106,7 +106,10 @@ beforeAll(async () => {
     port: 0,
     fetch: (request) => {
       if (new URL(request.url).pathname === '/internal/v1/kind-consents:enroll')
-        void request.clone().json().then((body: { deadline: number }) => resolveDeadlineSeen(body.deadline));
+        void request
+          .clone()
+          .json()
+          .then((body: { deadline: number }) => resolveDeadlineSeen(body.deadline));
       return host.privateConsentHandler!(request);
     },
   });

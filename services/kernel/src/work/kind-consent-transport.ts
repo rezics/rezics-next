@@ -208,12 +208,7 @@ export function createKindConsentParticipantTransport(
           !kindConsentWorkWithin(invocation.work, nativeBound)
         )
           return undefined;
-        return kindConsentTransportActual(
-          input,
-          invocation.work,
-          invocation.requestBytes,
-          invocation.responseBytes,
-        );
+        return kindConsentTransportActual(input, invocation.work, invocation.requestBytes, invocation.responseBytes);
       },
     }),
   };

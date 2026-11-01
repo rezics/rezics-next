@@ -204,7 +204,9 @@ async function connectByDeadline(database: Pool, deadline?: number): Promise<Poo
   try {
     return await Promise.race([pending, expired]);
   } catch (error) {
-    void pending.then((connection) => connection.release(new Error('Kind consent enrollment deadline expired'))).catch(() => {});
+    void pending
+      .then((connection) => connection.release(new Error('Kind consent enrollment deadline expired')))
+      .catch(() => {});
     throw error;
   } finally {
     clearTimeout(timer);
@@ -236,10 +238,10 @@ async function withTransaction<T>(
     if (deadline !== undefined) {
       checkDeadline();
       const remaining = Math.max(1, deadline - Date.now());
-      await connection.query(
-        "SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true)",
-        [`${remaining}ms`, `${remaining}ms`],
-      );
+      await connection.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true)", [
+        `${remaining}ms`,
+        `${remaining}ms`,
+      ]);
     }
     const result = await run(connection);
     checkDeadline();
@@ -333,108 +335,112 @@ export function createKindConsentParticipant(input: {
     const effectiveRequest = [...new Set(requestedScopes)].sort();
     let result: KindConsentEnrollmentResult;
     try {
-      result = await withTransaction(database, async (connection) => {
-        await lockChange(connection, raw.clientId, raw.accountId);
-        if (!(await noOpenTransition(connection, raw.clientId, raw.accountId))) return { status: 'unavailable' };
-        const current = (
-          await connection.query<{
-            client_id: string;
-            client_scopes: string[];
-            first_party: boolean;
-            ready: boolean;
-            reducing: boolean;
-            consent_scopes: string[] | null;
-            pending_scopes: string[] | null;
-            revision: string | null;
-          }>(
-            `SELECT c.client_id,c.scopes AS client_scopes,c.first_party,v.ready,
+      result = await withTransaction(
+        database,
+        async (connection) => {
+          await lockChange(connection, raw.clientId, raw.accountId);
+          if (!(await noOpenTransition(connection, raw.clientId, raw.accountId))) return { status: 'unavailable' };
+          const current = (
+            await connection.query<{
+              client_id: string;
+              client_scopes: string[];
+              first_party: boolean;
+              ready: boolean;
+              reducing: boolean;
+              consent_scopes: string[] | null;
+              pending_scopes: string[] | null;
+              revision: string | null;
+            }>(
+              `SELECT c.client_id,c.scopes AS client_scopes,c.first_party,v.ready,
                 EXISTS(SELECT 1 FROM auth_client_reduction r WHERE r.client_id=c.client_id) AS reducing,
                 a.scopes AS consent_scopes,a.pending_scopes,a.revision::text AS revision
                FROM auth_client c
                LEFT JOIN auth_client_coverage v ON v.client_id=c.client_id
                LEFT JOIN auth_consent a ON a.account_id=$1 AND a.client_id=c.client_id
                WHERE c.client_id=$2`,
-            [raw.accountId, raw.clientId],
-          )
-        ).rows[0];
-        if (!current || !current.ready || current.reducing) return { status: 'unavailable' };
+              [raw.accountId, raw.clientId],
+            )
+          ).rows[0];
+          if (!current || !current.ready || current.reducing) return { status: 'unavailable' };
 
-        const digest = consumerHash(raw.consumer);
-        const existing = (
-          await connection.query<{
-            reference_id: string;
-            account_id: string;
-            client_id: string;
-            requested_scopes: string[];
-            effective_scopes: string[];
-            consumer_route: string;
-            owner_account_id: string;
-            collection_id: string;
-            preparation_id: string;
-            origin_id: string;
-            active: boolean;
-          }>(
-            `SELECT reference_id,account_id,client_id,requested_scopes,effective_scopes,
+          const digest = consumerHash(raw.consumer);
+          const existing = (
+            await connection.query<{
+              reference_id: string;
+              account_id: string;
+              client_id: string;
+              requested_scopes: string[];
+              effective_scopes: string[];
+              consumer_route: string;
+              owner_account_id: string;
+              collection_id: string;
+              preparation_id: string;
+              origin_id: string;
+              active: boolean;
+            }>(
+              `SELECT reference_id,account_id,client_id,requested_scopes,effective_scopes,
                 consumer_route,owner_account_id,collection_id,preparation_id,origin_id,active
                FROM auth_kind_consent_dependency
                WHERE consumer_key_hash=$1
                FOR UPDATE`,
-            [digest],
-          )
-        ).rows[0];
-        if (existing) {
-          const consumerMatches =
-            existing.account_id === raw.accountId &&
-            existing.client_id === raw.clientId &&
-            sameJson(existing.requested_scopes, requestedScopes) &&
-            existing.consumer_route === raw.consumer.route &&
-            existing.owner_account_id === raw.consumer.ownerAccountId &&
-            existing.collection_id === raw.consumer.collectionId &&
-            existing.preparation_id === raw.consumer.preparationId &&
-            existing.origin_id === raw.consumer.originId;
-          if (!consumerMatches || !existing.active) return { status: 'unavailable' };
-          return {
-            status: 'enrolled',
-            reference: referenceOf(existing.reference_id),
-            effectiveScopes: Object.freeze([...existing.effective_scopes]),
-          };
-        }
+              [digest],
+            )
+          ).rows[0];
+          if (existing) {
+            const consumerMatches =
+              existing.account_id === raw.accountId &&
+              existing.client_id === raw.clientId &&
+              sameJson(existing.requested_scopes, requestedScopes) &&
+              existing.consumer_route === raw.consumer.route &&
+              existing.owner_account_id === raw.consumer.ownerAccountId &&
+              existing.collection_id === raw.consumer.collectionId &&
+              existing.preparation_id === raw.consumer.preparationId &&
+              existing.origin_id === raw.consumer.originId;
+            if (!consumerMatches || !existing.active) return { status: 'unavailable' };
+            return {
+              status: 'enrolled',
+              reference: referenceOf(existing.reference_id),
+              effectiveScopes: Object.freeze([...existing.effective_scopes]),
+            };
+          }
 
-        // First-party status never creates consent here. It only controls
-        // materialization in the ordinary authenticated issuance path.
-        const stored = new Set(current.consent_scopes ?? []);
-        const client = new Set(current.client_scopes);
-        const pending = current.pending_scopes === null ? null : new Set(current.pending_scopes);
-        const effectiveScopes = effectiveRequest.filter(
-          (scope) => client.has(scope) && stored.has(scope) && (pending === null || pending.has(scope)),
-        );
-        const row = (
-          await connection.query<{ reference_id: string }>(
-            `INSERT INTO auth_kind_consent_dependency
+          // First-party status never creates consent here. It only controls
+          // materialization in the ordinary authenticated issuance path.
+          const stored = new Set(current.consent_scopes ?? []);
+          const client = new Set(current.client_scopes);
+          const pending = current.pending_scopes === null ? null : new Set(current.pending_scopes);
+          const effectiveScopes = effectiveRequest.filter(
+            (scope) => client.has(scope) && stored.has(scope) && (pending === null || pending.has(scope)),
+          );
+          const row = (
+            await connection.query<{ reference_id: string }>(
+              `INSERT INTO auth_kind_consent_dependency
                 (consumer_key_hash,account_id,client_id,requested_scopes,effective_scopes,consent_revision,client_scopes,client_first_party,
                  consumer_route,owner_account_id,collection_id,preparation_id,origin_id)
                VALUES ($1,$2,$3,$4,$5,COALESCE($6::bigint,0),$7,$8,$9,$10,$11,$12,$13)
                RETURNING reference_id::text`,
-            [
-              digest,
-              raw.accountId,
-              raw.clientId,
-              requestedScopes,
-              effectiveScopes,
-              current.revision,
-              current.client_scopes,
-              current.first_party,
-              raw.consumer.route,
-              raw.consumer.ownerAccountId,
-              raw.consumer.collectionId,
-              raw.consumer.preparationId,
-              raw.consumer.originId,
-            ],
-          )
-        ).rows[0];
-        if (!row) return { status: 'unavailable' };
-        return { status: 'enrolled', reference: referenceOf(row.reference_id), effectiveScopes };
-      }, enrollmentDeadline.getStore());
+              [
+                digest,
+                raw.accountId,
+                raw.clientId,
+                requestedScopes,
+                effectiveScopes,
+                current.revision,
+                current.client_scopes,
+                current.first_party,
+                raw.consumer.route,
+                raw.consumer.ownerAccountId,
+                raw.consumer.collectionId,
+                raw.consumer.preparationId,
+                raw.consumer.originId,
+              ],
+            )
+          ).rows[0];
+          if (!row) return { status: 'unavailable' };
+          return { status: 'enrolled', reference: referenceOf(row.reference_id), effectiveScopes };
+        },
+        enrollmentDeadline.getStore(),
+      );
     } catch {
       // Native coverage gaps, restore uncertainty and serialization failures
       // are unavailable; they never become empty or a negative verdict.

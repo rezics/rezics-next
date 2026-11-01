@@ -8,7 +8,11 @@ import {
   kindConsentOperationBound,
   kindConsentWorkWithin,
 } from '@rezics/auth-contract';
-import type { KindConsentEnrollmentInput, KindConsentEnrollmentResult, KindConsentParticipant } from '@rezics/auth-contract';
+import type {
+  KindConsentEnrollmentInput,
+  KindConsentEnrollmentResult,
+  KindConsentParticipant,
+} from '@rezics/auth-contract';
 import { withKindConsentEnrollmentDeadline } from './kind-consent.ts';
 import { createCurrentConsentReader, validConsentInput } from './current-consent.ts';
 
@@ -134,10 +138,12 @@ export type InternalConsentAccessConfiguration = Readonly<{
 /** Auth's private consent listener accepts only current reads and canonical
  * Kind enrollment. The enrollment callable is the actual installed participant.
  */
-export function createInternalConsentHandler(config: {
-  database: Pool;
-  kindConsentParticipant?: KindConsentParticipant;
-} & InternalConsentAccessConfiguration): (request: Request) => Promise<Response> {
+export function createInternalConsentHandler(
+  config: {
+    database: Pool;
+    kindConsentParticipant?: KindConsentParticipant;
+  } & InternalConsentAccessConfiguration,
+): (request: Request) => Promise<Response> {
   const { database, issuer, audience, kindConsentParticipant } = config;
   const issuerUrl = trustedUrl(issuer);
   const jwksUrl = trustedUrl(config.jwksUrl);
@@ -221,7 +227,11 @@ export function createInternalConsentHandler(config: {
     let input: KindConsentEnrollmentInput;
     let deadline: number;
     try {
-      const body = await bodyOf(request, KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES, Date.now() + KIND_CONSENT_ENROLLMENT_MAX_DURATION_MS);
+      const body = await bodyOf(
+        request,
+        KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES,
+        Date.now() + KIND_CONSENT_ENROLLMENT_MAX_DURATION_MS,
+      );
       if (!exactRecord(body.value, ['input', 'deadline'])) throw new Error('Denied');
       const rawDeadline = body.value.deadline;
       if (typeof rawDeadline !== 'number' || !Number.isSafeInteger(rawDeadline) || rawDeadline <= Date.now())
