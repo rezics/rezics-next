@@ -20,9 +20,9 @@ import {
 } from './check-run-settlement.ts';
 
 const directories: string[] = [];
+const temporaryRoot = join(import.meta.dir, '..', '.temp');
 
 function stateDirectory(): string {
-  const temporaryRoot = join(import.meta.dir, '..', '.temp');
   mkdirSync(temporaryRoot, { recursive: true });
   const path = mkdtempSync(join(temporaryRoot, `check-run-settlement-${randomUUID()}-`));
   chmodSync(path, 0o700);
@@ -198,7 +198,7 @@ test('durable queued and in-flight cancellation and reconciliation retain unknow
 
 test('prepared descriptor records the prior binding, claims once, and fences queued cancellation', async () => {
   const state = stateDirectory();
-  const candidateRoot = mkdtempSync(join(tmpdir(), `check-run-prepared-candidate-${randomUUID()}-`));
+  const candidateRoot = mkdtempSync(join(temporaryRoot, `check-run-prepared-candidate-${randomUUID()}-`));
   directories.push(candidateRoot);
   const selectedBinding = {
     ...binding(),

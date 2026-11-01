@@ -833,12 +833,9 @@ function assertOutsideCandidate(stateDirectory: string, workspace?: string): voi
   const root = realpathSync(workspace);
   const privateDirectory = realpathSync(stateDirectory);
   const fromWorkspace = relative(root, privateDirectory);
-  const fromState = relative(privateDirectory, root);
   if (
     fromWorkspace === '' ||
-    (!fromWorkspace.startsWith('..') && !isAbsolute(fromWorkspace)) ||
-    fromState === '' ||
-    (!fromState.startsWith('..') && !isAbsolute(fromState))
+    (fromWorkspace !== '..' && !fromWorkspace.startsWith(`..${sep}`) && !isAbsolute(fromWorkspace))
   ) {
     throw new Error('check-run-settlement: private invocation state must be outside the candidate workspace');
   }
