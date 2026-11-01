@@ -10,15 +10,16 @@ import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/moderation/reports/$id')({
   beforeLoad: requireSignedIn,
-  loader: async ({ params, context, abortController, location }) => ({
-    ...(await prepareReporterStatusRead(
+  loader: async ({ params, context, abortController, location }) => {
+    const read = await prepareReporterStatusRead(
       context.queryClient,
       params.id,
       (data) => readReporterStatus({ data }),
       abortController.signal,
-    )),
-    navigationKey: location.state.__TSR_key ?? location.href,
-  }),
+    );
+    // Preserve the envelope identity so pending-read observation hands over without a disclosure gap.
+    return Object.assign(read, { navigationKey: location.state.__TSR_key ?? location.href });
+  },
   pendingMs: 0,
   pendingMinMs: 0,
   staleTime: 0,

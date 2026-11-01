@@ -8,7 +8,7 @@ The unavailable item retains the reporter's evidence. Missing evidence is stated
 revision sit in expandable reference details, with native clipboard copying and an honest copy failure message.
 The page offers the existing localized Inbox destination; the DTO supplies no authorized target destination.
 The page performs one exact report GET with the current viewer credential, with private no-store responses.
-A missing or unrelated report is not found. Service failures use retry without submitting another report.
+A missing or unrelated report uses the same concealed unknown/not-visible state. Service failures use retry without submitting another report.
 
 Patterns/Reporter status uses the same presenter as Pages/Reporter status. Review the same IDs with phone390 and
 desktop1280 viewport globals, locale and theme globals; no viewport or locale exports. Pattern IDs:
@@ -28,7 +28,7 @@ Pure presenter fixtures may still inject `report` and `onRetry` directly; these 
 Session logout, account replacement, replacement sessions for the same account, report navigation and unmount retire
 the old journey. Returning to an old session cannot revive retired results. The route observes session changes during
 a pending read and through handover to the mounted page; mounted reads and retries drop private bytes before any
-asynchronous settlement. Navigation aborts the old admission. Clipboard success/failure from an obsolete journey is
+asynchronous settlement. Navigation aborts the old admission; navigation and reload events also retire mounted generations immediately. Clipboard success/failure from an obsolete journey is
 ignored. Route entries are immediately stale and have no retained cache lifetime.
 
 Loading, native transient failure with explicit recovery, concealed unknown/not-visible and native `platform_closed`
@@ -38,8 +38,8 @@ report GET; the public `loadReporterStatus` retains its original 404/null versus
 
 Additional pattern IDs in the same family: `--loading`, `--concealed`, `--platform-closed`, `--recovery`,
 `--session-retirement`. Additional page fixtures: `pages-reporter-status--read-unavailable` and `--session-retired`;
-these exercise the same page states inside AppShell. Recovery is an explicit presenter fixture, not native evidence. Session retirement uses the
-production composition and real session query-cache replacement with a withheld target. The default-composition
+these exercise the same page states inside AppShell. Recovery is an explicit presenter fixture, not native evidence.
+Session retirement uses the production composition and real session query-cache replacement with a withheld target. The default-composition
 regression in `reporter-status.test.ts` covers prepared session reads, transient recovery, concealed native denial,
 pending route/read and retry retirement, logout, account and same-account session replacement, and obsolete clipboard
 settlement. It is authored **UNRUN** under the implementation worker's typing-only policy; controller acceptance,
