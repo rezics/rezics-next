@@ -71,7 +71,18 @@ function ProfileNavigationRegistration({
   isCurrent: () => boolean;
   children: ReactNode;
 }) {
+  const navigation = useSettingsNavigationOwner();
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  useLayoutEffect(
+    () =>
+      editor.subscribe(() => {
+        if (editor.isActive() && isCurrent()) return;
+        // Cancel an outstanding departure before the dirty-state refresh could release its old destination.
+        if (navigation?.blocked) navigation.stay();
+        navigation?.refresh();
+      }),
+    [editor, isCurrent, navigation],
+  );
   const [upload, setUpload] = useState<ProfileAvatarUpload | null>(null);
   const uploadState = useSyncExternalStore(
     upload?.subscribe ?? noSubscription,

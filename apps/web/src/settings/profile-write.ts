@@ -180,7 +180,7 @@ export class ProfileEditor {
   edit(patch: Partial<ProfileValues>) {
     if (!this.canWrite() || !this.state.draft || this.state.readAuthority !== 'allowed') return;
     this.update({
-      draft: { ...this.state.draft, ...patch },
+      draft: { ...this.state.draft, ...patch, accountId: this.state.draft.accountId, kind: this.state.draft.kind },
       phase: this.state.phase === 'saved' ? 'idle' : this.state.phase,
     });
   }

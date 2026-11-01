@@ -148,12 +148,12 @@ export function ProfileFeedback({
 
 export function ProfileSection() {
   const location = useLocation();
-  const { editor, readable, writable, isCurrent } = useProfileEditor();
+  const { editor, readable, writable, isCurrent, observationKey } = useProfileEditor();
   const previewActive = new URL(location.publicHref, 'https://rezics.local').hash === '#profile';
   return (
     <ProfileNavigation editor={editor} writable={writable} isCurrent={isCurrent}>
       <ProfileCard
-        key={writable ? 'signed-in' : 'unavailable'}
+        key={observationKey}
         editor={editor}
         writable={writable}
         readable={readable}
@@ -192,8 +192,8 @@ export function ProfileCard({
   useEffect(() => {
     const field = pendingFocus.current;
     pendingFocus.current = undefined;
-    if (field) (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
-  }, [validationAttempt]);
+    if (field && editor.canWrite()) (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
+  }, [editor, validationAttempt]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const closed = !writable || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
   const avatar = useProfileAvatarUpload(editor, closed, avatarUpload, avatarResume);
@@ -258,6 +258,7 @@ export function ProfileCard({
             aria-busy={busy || uploading}
             onSubmit={(event) => {
               event.preventDefault();
+              if (closed || !editor.canWrite()) return;
               const invalidFields = Object.keys(profileFieldErrors(profile));
               if (invalidFields.length) {
                 submittedDraft.current = profile;
@@ -288,6 +289,7 @@ export function ProfileCard({
                           className="block min-h-11 content-center rounded-sm py-2 break-words underline focus-visible:outline-2 focus-visible:outline-offset-2"
                           onClick={(event) => {
                             event.preventDefault();
+                            if (!editor.canWrite()) return;
                             (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
                           }}
                         >

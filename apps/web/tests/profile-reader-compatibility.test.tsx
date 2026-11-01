@@ -512,7 +512,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     const freshWriteIndex = saveRequests.length;
     await click(button(m.settings_profile_save()));
     await until(() => saveRequests.length === freshWriteIndex + 1, 'the new owner write');
-    expect(saveRequests[freshWriteIndex]!.headers.get('X-CSRF-Token')).toBe('csrf-secret-three');
+    expect(saveRequests[freshWriteIndex]!.headers.get('X-CSRF-Token')).toBe('csrf-secret-four');
     const freshAfter = saveRequests[freshWriteIndex]!.attempt.after;
     const freshReadback = readRequests.length;
     await resolveWrite(freshWriteIndex, { ok: true, profile: freshAfter }, freshAfter);

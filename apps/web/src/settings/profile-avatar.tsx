@@ -18,7 +18,19 @@ export function useProfileAvatarUpload(
   upload: AvatarUpload = uploadAvatar,
   resume: AvatarResume | undefined = upload === uploadAvatar ? resumeReplyImageUpload : undefined,
 ) {
-  const controller = useMemo(() => new ProfileAvatarUpload(editor, upload, URL, resume), [editor, upload, resume]);
+  const controller = useMemo(() => {
+    const guardedUpload: AvatarUpload = (accountId, file, signal) => {
+      if (!editor.canWrite()) return Promise.reject(new Error('Profile unavailable'));
+      return upload(accountId, file, signal);
+    };
+    const guardedResume: AvatarResume | undefined =
+      resume &&
+      ((mediaId, file, signal) => {
+        if (!editor.canWrite()) return Promise.reject(new Error('Profile unavailable'));
+        return resume(mediaId, file, signal);
+      });
+    return new ProfileAvatarUpload(editor, guardedUpload, URL, guardedResume);
+  }, [editor, upload, resume]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   useLayoutEffect(() => {
     if (!closed) return controller.connect();
@@ -26,6 +38,7 @@ export function useProfileAvatarUpload(
   return {
     controller,
     state,
+    canInteract: () => !closed && editor.canWrite(),
     blocked: ['preparing', 'crop', 'original-only', 'exporting', 'uploading', 'error'].includes(state.phase),
   };
 }
@@ -133,7 +146,9 @@ export function ProfileAvatar({
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
           disabled={disabled}
-          onClick={() => input.current?.click()}
+          onClick={() => {
+            if (upload.canInteract()) input.current?.click();
+          }}
         >
           {m.settings_profile_choose_avatar()}
         </Button>
@@ -145,6 +160,7 @@ export function ProfileAvatar({
           aria-label={m.settings_profile_choose_avatar()}
           disabled={disabled}
           onChange={(event) => {
+            if (!upload.canInteract()) return;
             controller.choose(event.target.files?.[0]);
             event.target.value = '';
           }}
@@ -156,6 +172,7 @@ export function ProfileAvatar({
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled}
             onClick={() => {
+              if (!upload.canInteract()) return;
               controller.cancel();
               choose.current?.focus();
             }}
@@ -168,7 +185,9 @@ export function ProfileAvatar({
             type="button"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled}
-            onClick={controller.useOriginal}
+            onClick={() => {
+              if (upload.canInteract()) controller.useOriginal();
+            }}
           >
             {m.settings_profile_crop_use_original()}
           </Button>
@@ -180,6 +199,7 @@ export function ProfileAvatar({
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled || waiting}
             onClick={() => {
+              if (!upload.canInteract()) return;
               controller.retry();
               choose.current?.focus();
             }}
@@ -194,6 +214,7 @@ export function ProfileAvatar({
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled}
             onClick={() => {
+              if (!upload.canInteract()) return;
               controller.remove();
               choose.current?.focus();
             }}
