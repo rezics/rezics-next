@@ -4160,3 +4160,64 @@ subject custody: native discovery appends a stable phase and blocks their purge 
 The new relation therefore cannot silently disappear from root accounting. The focused default-writer regression
 covers genuine verify/reverse, lifecycle T, exact replay, changed input/reference, owner restore and receiver loss.
 Original acceptance, native and growth execution remain deferred; workspace typing does not prove native closure.
+
+### Native agent identity source retention boundary
+
+`agent-verification-identity-retention.ts` prepares at most eight exact
+`(route,account_id,direction,receipt_id)` keys in one native source home. The per-row
+`minimizeDiscoveredAgentIdentitySources` entry exported by `erasure-progress.ts` consumes the existing scalar
+inventory's key order. The mechanical platform command checks the exact committed erasure version/time,
+terminal fenced account, active home, current source owner and locked original row. Missing sources, wrong roles,
+changed epochs and unavailable roots remain pending. No Actor, current account role, discovery EOF or caller
+flag releases proof. There is no second erasure workflow, progress store or participant acknowledgement.
+
+Preparation first reads the current root in its own native home and releases that command. It then stages Source
+and copy reads with released checkouts before the final source-home command. For same-home roots, final validation
+locks the root, terminal account, active owner and source row together. For a requester/decider in a different
+physical home, `native-erasure-source-home-root-custody-unavailable` is returned before querying that foreign root
+on the source client. Access has no delivered source-home root/courier/fence capability to replace this boundary;
+`history/receiving.ts:lockHistoryBarrier` and `verifyHistoryReceivingReceipt` provide only the existing account-home
+contract. A released root read is screening, not a transferable current-root proof.
+
+The cleanup imports the original `IdentitySourceConsumerReference` and opaque `IdentitySourceConsumerCustody`
+from `semantic/identity-source-consumer-custody.ts`, and calls its actual read and same-command verify ports.
+`account_id`, `requested_by` and `decided_by` map to Source's subject, requester and decider respectively, with no
+History role change. The reference carries the original partition, epoch, bigint position, transaction and intent
+digest. Verification hints come from the actual `readAccountIdentityUndo`, including its after-T undo-only source
+read. Reversal hints come from `lookupIdentityBinding` on their own original input; their prior `undoJob` is never
+the current job. Missing accepted jobs remain pending. Cleanup never calls admission or binds a new receipt.
+
+Source's [consumer custody contract](../semantic/identity-source-consumer-custody-contract.md) delivers retained
+progress and native terminal read/verify bodies. Cleanup forwards only an already live original-owner maintenance
+frame; it cannot allocate a replacement budget or mint a positive proof. Calls without that frame remain pending.
+Library's `readLibraryScopeEffectsPage` and `verifyLibraryScopeEffectsSeal` still return unavailable/false in this
+checkout. Missing scope evidence is never an empty scope. The existing technical receiver and reversal-settlement
+exports above are preserved verbatim when source retention is composed with them.
+
+`shared-history-agent-identity.ts` consumes the real `readAgentIdentityCopyReceiving` port for historical point
+associations, independently stages `readAgentIdentityInventory`, and reads the actual SDK retirement gap. The native
+finite cut has at most three receipt/outbox copies. Its original owner probes each actual receiving artifact after
+releasing its home. The final source command calls `verifyAgentIdentityInventory` to recheck current generations,
+full roles, all native receiving/physical dispositions and the source-local SDK obligation. A verified point receipt
+never substitutes for this finite cut. Current owner gaps replace stale absence claims for converted sources;
+`agent-identity-original-inventory-unsealed` remains specific to an unsealed original inventory. No artifact or
+locator is reconstructed from source account, transaction or workflow metadata.
+
+The native receipt/outbox inventory now seals converted originals, allowing independent receiving minimization
+without a source/global-acknowledgement cycle. Historical unsealed associations retain their original boundary.
+Original SDK enqueue/association wrappers are also present; they are no longer described as missing serializers.
+The current `verifyAgentIdentityInventory` result type, `AgentIdentityInventoryVerification`, still admits only
+`state: 'pending'`: even after verifying all native copies it returns
+`agent-identity-sdk-recording-port-unavailable`. `readAgentIdentitySDKRetirementGap` separately reports the actual
+receiving branch, including `identity-source-terminal-transfer-unavailable`. These are independent of Source
+terminal custody. The minimal additional History export needed is a same-source-home positive inventory result
+bound to durable SDK writer retirement, receiving-copy closure and the original source transfer. Accounts cannot
+supply that foreign authority, reinterpret a mapped workflow as retired, or read foreign SDK tables in its command.
+
+Until that exact native authority exists, source UPDATE/DELETE remains forbidden by the database guard. A forward
+skeleton/role-minimization migration would otherwise authorize data loss without required custody, so none is
+installed. Requester/decider erasure must preserve the surviving account's intent, undo and immutable technical proof;
+subject minimization requires genuine reversal/consumer and copy closure. Cross-home erased roles additionally
+need the Access source-home root capability described above. The adapter stores no new native progress or family
+acknowledgement. Source progress joins Semantic's own native producer inventory. Positive native minimization,
+full coverage and Goal completion remain unfinished; workspace typing cannot prove those outcomes.

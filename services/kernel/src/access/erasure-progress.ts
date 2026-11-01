@@ -355,3 +355,7 @@ export async function discoverErasurePage(
     }
   });
 }
+
+// Narrow cleanup entry for the native identity family. It independently revalidates the current
+// committed root and native source; scalar discovery/result replay itself never releases custody.
+export { minimizeDiscoveredAgentIdentitySources } from './erasure-agent-identity.ts';
