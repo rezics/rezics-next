@@ -2,9 +2,10 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
-import { kernelClient } from '../kernel/client';
+import { kernelClient, requestLocale } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
+import { sessionSubject } from '../session/request';
 import { loadMineFollowingPage, type MineFollowingPage, unfollowFollow } from './mine-following';
 
 function validateInput(input: unknown): { cursor?: string } {
@@ -19,14 +20,34 @@ function validateInput(input: unknown): { cursor?: string } {
   return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
 }
 
+export type MineFollowingRead = {
+  subject: string | null;
+  /** The normalized requested address, even when the reader retries a stale cursor at the first page. */
+  cursor: string | null;
+  locale: string;
+  page: MineFollowingPage;
+};
+
+async function readFollowingRequest(data: { cursor?: string }): Promise<MineFollowingRead> {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  const loaded = await loadMineFollowingPage(kernelClient(), request, env as Partial<SessionEnv>, data);
+  // Only a successful reader preparation authorizes this Request's recorded subject. A refused
+  // preparation can leave older WeakMap entries behind, so never stamp those around a signed-out page.
+  const subject = loaded.signedIn ? (sessionSubject(request) ?? null) : null;
+  const page = subject ? loaded : { signedIn: false, follows: [], next: null };
+  await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
+  return { subject, cursor: data.cursor ?? null, locale: requestLocale(request) ?? 'en', page };
+}
+
 export const readMineFollowingPage = createServerFn({ method: 'GET' })
   .validator(validateInput)
-  .handler(async ({ data }): Promise<MineFollowingPage> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const page = await loadMineFollowingPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
-    await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
-    return page;
-  });
+  .handler(async ({ data }): Promise<MineFollowingPage> => (await readFollowingRequest(data)).page);
+
+/** Provenance comes from the same actual request and preparation that produced the private page. */
+export const readMineFollowingForViewer = createServerFn({ method: 'GET' })
+  .validator(validateInput)
+  .handler(async ({ data }): Promise<MineFollowingRead> => readFollowingRequest(data));
 
 function validateUnfollow(input: unknown): { targetId: string; idempotencyKey: string } {
   if (

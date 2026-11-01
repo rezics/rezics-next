@@ -2,7 +2,8 @@ import { Exposure, useOperation } from '../kernel/exposure';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -11,16 +12,90 @@ import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import type { MineFollowingPage } from './mine-following';
 import { FollowTargetControl } from './follow-target-control';
+import { personalRead } from '../kernel/query';
+import { useSession } from '../session/query';
+import { readMineFollowingForViewer, type MineFollowingRead } from './mine-following-actions';
+
+const retiredPage: MineFollowingPage = { signedIn: false, follows: [], next: null };
+
+export const mineFollowingQuery = (subject: string, cursor: string | null, locale: string) =>
+  queryOptions({
+    ...personalRead,
+    queryKey: ['mine-following', subject, 'follow.list', true, cursor, locale],
+    queryFn: async ({ signal }) => {
+      const result = await readMineFollowingForViewer({ data: { cursor: cursor ?? undefined } });
+      signal.throwIfAborted();
+      return result;
+    },
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+function matches(read: MineFollowingRead, subject: string, cursor: string | null, locale: string): boolean {
+  return read.page.signedIn && read.subject === subject && read.cursor === cursor && read.locale === locale;
+}
+
+/** Retained router data is a candidate, never authority for the browser's current viewer. */
+export function CurrentViewerMineFollowingPage({
+  initial,
+  cursor,
+}: {
+  initial: MineFollowingRead;
+  cursor?: string | undefined;
+}) {
+  const session = useSession();
+  const canList = useOperation('follow.list');
+  const subject = session.state === 'signed-in' && session.subject ? session.subject : null;
+  const address = cursor || null;
+  const locale = getLocale();
+  return subject && canList ? (
+    <CurrentFollowingRead
+      key={JSON.stringify([subject, address, locale])}
+      subject={subject}
+      cursor={address}
+      locale={locale}
+      initial={initial}
+    />
+  ) : (
+    <MineFollowingPageView page={retiredPage} />
+  );
+}
+
+function CurrentFollowingRead({
+  subject,
+  cursor,
+  locale,
+  initial,
+}: {
+  subject: string;
+  cursor: string | null;
+  locale: string;
+  initial: MineFollowingRead;
+}) {
+  const read = useQuery({
+    ...mineFollowingQuery(subject, cursor, locale),
+    ...(matches(initial, subject, cursor, locale) ? { initialData: initial } : {}),
+  });
+  const page = read.data && matches(read.data, subject, cursor, locale) ? read.data.page : retiredPage;
+  return <MineFollowingPageView page={page} />;
+}
 
 export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
+  // A meaningful row/page replacement retires local removal callbacks during render. Equivalent
+  // refetches (including freshly issued keys) preserve the native control's uncertain intent.
+  const lifetime = JSON.stringify({
+    ...page,
+    follows: page.follows.map(({ idempotencyKey: _key, ...follow }) => follow),
+  });
+  return <MineFollowingPageState key={lifetime} page={page} />;
+}
+
+function MineFollowingPageState({ page }: { page: MineFollowingPage }) {
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
   const [follows, setFollows] = useState(page.follows);
   const [removed, setRemoved] = useState(false);
-  useEffect(() => {
-    setFollows(page.follows);
-    setRemoved(false);
-  }, [page.follows]);
 
   const active = page.signedIn ? follows.filter((follow) => follow.state === 'following') : [];
   const groups = [
