@@ -17,6 +17,8 @@ import { readLabelsPage } from './labels-read-route';
 import type { LabelInput, LabelsPage, LabelFeedback } from './labels-read';
 import { shelfHref } from './shelf-params';
 import type { LibraryLabelSummary } from './subject-labels';
+import type { ManagementGuard } from './management-current-origin';
+import type { GatedOperation } from '../kernel/exposure';
 
 /** A catalogue label opens its complete personal shelf. */
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
@@ -42,8 +44,19 @@ export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; 
 }
 
 // The private loader's Exposure snapshot also gates the server-rendered, no-script forms.
-function LabelExposure({ page, operation, children }: { page: LabelsPage; operation: string; children: ReactNode }) {
-  return page.operations.includes(`library_label.${operation}`) ? children : null;
+function LabelExposure({
+  page,
+  operation,
+  children,
+  current,
+}: {
+  page: LabelsPage;
+  operation: 'create' | 'rename' | 'delete';
+  children: ReactNode;
+  current?: ManagementGuard['isCurrent'] | undefined;
+}) {
+  const name = `library_label.${operation}` as const;
+  return page.operations.includes(name) && (!current || current(name)) ? children : null;
 }
 const fieldClass = 'h-11';
 const actionClass =
@@ -74,12 +87,14 @@ export function LabelsPageView({
   page: initial,
   isCurrent = alwaysCurrent,
   refresh,
+  originating,
   cursor,
   locale = getLocale(),
 }: {
   page: LabelsPage;
   isCurrent?: () => boolean;
   refresh?: () => Promise<LabelsPage | null>;
+  originating?: ManagementGuard | undefined;
   cursor?: string;
   locale?: string;
 }) {
@@ -88,7 +103,7 @@ export function LabelsPageView({
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [action, setAction] = useState<LabelAction | null>(() => failedAction(initial));
-  const locked = useRef<object | null>(null);
+  const locked = useRef<{ current: () => boolean } | null>(null);
   const mounted = useRef(false);
   const attempts = useRef(new Map<string, Attempt>());
   const ownedToast = useRef<{ id: string; owner: string } | null>(null);
@@ -159,13 +174,19 @@ export function LabelsPageView({
     });
   }
   latestPage.current = page;
+  if (locked.current && !locked.current.current()) {
+    locked.current = null;
+    setBusy(false);
+  }
+  const operationOf = (input: LabelInput) =>
+    `library_label.${input.operation === 'restore' ? 'delete' : input.operation}` as GatedOperation;
   function admitted(input: LabelInput) {
     const current = latestPage.current;
     return (
       alive() &&
       current.signedIn &&
       (!current.state || current.state === 'loaded') &&
-      !!current.csrfToken &&
+      (originating ? originating.isCurrent(operationOf(input)) : !!current.csrfToken) &&
       current.operations.includes('library_label.list') &&
       current.operations.includes(`library_label.${input.operation === 'restore' ? 'delete' : input.operation}`)
     );
@@ -193,13 +214,15 @@ export function LabelsPageView({
           };
     const attempt: Attempt = { input, renderedKey: supplied.idempotencyKey, unresolved: true };
     attempts.current.set(slot, attempt);
-    const lock = {};
+    const lock = { current: () => admitted(input) };
     locked.current = lock;
     setBusy(true);
     const page = latestPage.current;
     try {
       if (!admitted(input)) return;
-      const result = await manageLabel({ data: input, headers: { 'X-CSRF-Token': page.csrfToken } });
+      const headers = originating ? originating.headers(operationOf(input)) : { 'X-CSRF-Token': page.csrfToken };
+      if (!headers || !admitted(input)) return;
+      const result = await manageLabel({ data: input, headers });
       if (!admitted(input)) return;
       attempt.unresolved = !result.ok && result.reason === 'unavailable';
       const feedback: LabelFeedback = {
@@ -242,7 +265,7 @@ export function LabelsPageView({
         (current.state && current.state !== 'loaded')
       ) {
         retireToast();
-        setPage(current);
+        setPage({ ...current, feedback: retained, undoKey: retained.undoKey ?? current.undoKey });
         setAction(null);
         return;
       }
@@ -286,7 +309,7 @@ export function LabelsPageView({
         feedback: { ...current.feedback, ...input, ok: false, reason: 'unavailable' },
       }));
     } finally {
-      if (alive() && locked.current === lock) {
+      if (alive() && (!originating || originating.isCurrent(operationOf(input))) && locked.current === lock) {
         locked.current = null;
         setBusy(false);
       }
@@ -356,7 +379,12 @@ export function LabelsPageView({
                 : {
                     value: selected.name,
                     onChange: (event) => {
-                      if (alive() && !locked.current) setAction({ ...selected, name: event.target.value });
+                      if (
+                        alive() &&
+                        (!originating || originating.isCurrent(`library_label.${selected.operation}`)) &&
+                        !locked.current
+                      )
+                        setAction({ ...selected, name: event.target.value });
                     },
                   })}
               aria-invalid={invalid || undefined}
@@ -369,7 +397,13 @@ export function LabelsPageView({
         {invalid ? error(errorId) : null}
         <div className="flex flex-wrap justify-end gap-2">
           {fallback ? (
-            <a href={mutationPath} className={buttonVariants({ variant: 'outline', className: actionClass })}>
+            <a
+              onClick={(event) => {
+                if (!alive()) event.preventDefault();
+              }}
+              href={mutationPath}
+              className={buttonVariants({ variant: 'outline', className: actionClass })}
+            >
               {m.action_cancel()}
             </a>
           ) : (
@@ -379,7 +413,12 @@ export function LabelsPageView({
               className={actionClass}
               disabled={busy}
               onClick={() => {
-                if (alive() && !locked.current) setAction(null);
+                if (
+                  alive() &&
+                  (!originating || originating.isCurrent(`library_label.${selected.operation}`)) &&
+                  !locked.current
+                )
+                  setAction(null);
               }}
             >
               {m.action_cancel()}
@@ -398,7 +437,7 @@ export function LabelsPageView({
     );
   }
   const undoForm = feedback?.undo ? (
-    <LabelExposure page={page} operation="delete">
+    <LabelExposure current={hydrated ? originating?.isCurrent : undefined} page={page} operation="delete">
       <form
         method="post"
         action={mutationPath}
@@ -432,7 +471,13 @@ export function LabelsPageView({
         </p>
         {feedback && !feedback.ok ? error('label-error') : null}
         {undoForm}
-        <a href={mutationPath} className={buttonVariants({ variant: 'outline', className: actionClass })}>
+        <a
+          onClick={(event) => {
+            if (!alive()) event.preventDefault();
+          }}
+          href={mutationPath}
+          className={buttonVariants({ variant: 'outline', className: actionClass })}
+        >
           {m.library_labels_heading()}
         </a>
       </article>
@@ -469,7 +514,14 @@ export function LabelsPageView({
       !fieldError('delete', feedback.id)
         ? error('label-error')
         : null}
-      <form method="get" action={path} className="flex flex-wrap items-end gap-2">
+      <form
+        method="get"
+        action={path}
+        onSubmit={(event) => {
+          if (!alive()) event.preventDefault();
+        }}
+        className="flex flex-wrap items-end gap-2"
+      >
         <Field className="min-w-0 flex-1 basis-48">
           <FieldLabel htmlFor="label-prefix">{m.library_labels_prefix()}</FieldLabel>
           <Input id="label-prefix" name="q" className={fieldClass} defaultValue={page.query ?? ''} />
@@ -478,12 +530,18 @@ export function LabelsPageView({
           {m.library_labels_filter()}
         </Button>
         {page.query ? (
-          <a href={path} className={buttonVariants({ variant: 'ghost', className: actionClass })}>
+          <a
+            onClick={(event) => {
+              if (!alive()) event.preventDefault();
+            }}
+            href={path}
+            className={buttonVariants({ variant: 'ghost', className: actionClass })}
+          >
             {m.library_clear_state()}
           </a>
         ) : null}
       </form>
-      <LabelExposure page={page} operation="create">
+      <LabelExposure current={hydrated ? originating?.isCurrent : undefined} page={page} operation="create">
         <form key={page.createKey} method="post" action={mutationPath} onSubmit={onSubmit} className="space-y-2">
           {hidden('create', page.createKey)}
           <Field>
@@ -512,20 +570,28 @@ export function LabelsPageView({
         <ul className="space-y-1">
           {page.labels.map((label) => {
             const entries: MenuEntry[] = [];
-            if (page.operations.includes('library_label.rename'))
+            if (
+              page.operations.includes('library_label.rename') &&
+              (!originating || originating.isCurrent('library_label.rename'))
+            )
               entries.push({
                 type: 'item',
                 label: m.library_label_rename(),
                 onSelect: () => {
-                  if (alive() && !locked.current) setAction({ operation: 'rename', label, name: label.name });
+                  if (alive() && (!originating || originating.isCurrent('library_label.rename')) && !locked.current)
+                    setAction({ operation: 'rename', label, name: label.name });
                 },
               });
-            if (page.operations.includes('library_label.delete'))
+            if (
+              page.operations.includes('library_label.delete') &&
+              (!originating || originating.isCurrent('library_label.delete'))
+            )
               entries.push({
                 type: 'destructive',
                 label: m.library_label_delete(),
                 onSelect: () => {
-                  if (alive() && !locked.current) setAction({ operation: 'delete', label, name: label.name });
+                  if (alive() && (!originating || originating.isCurrent('library_label.delete')) && !locked.current)
+                    setAction({ operation: 'delete', label, name: label.name });
                 },
               });
             return (
@@ -559,7 +625,12 @@ export function LabelsPageView({
                 {!hydrated ? (
                   <div className="flex min-w-0 flex-wrap gap-2">
                     {(['rename', 'delete'] as const).map((operation) => (
-                      <LabelExposure key={operation} page={page} operation={operation}>
+                      <LabelExposure
+                        current={hydrated ? originating?.isCurrent : undefined}
+                        key={operation}
+                        page={page}
+                        operation={operation}
+                      >
                         <ListRowControl className="min-w-0 max-w-full has-[details[open]]:basis-full">
                           <details
                             name="library-label-action"
@@ -604,11 +675,20 @@ export function LabelsPageView({
           {page.query ? m.library_subject_label_no_results() : m.library_labels_empty()}
         </p>
       ) : null}
-      {hydrated && action && page.operations.includes(`library_label.${action.operation}`) ? (
+      {hydrated &&
+      action &&
+      page.operations.includes(`library_label.${action.operation}`) &&
+      (!originating || originating.isCurrent(`library_label.${action.operation}`)) ? (
         <Dialog
           open
           onOpenChange={(open) => {
-            if (alive() && !open && !locked.current) setAction(null);
+            if (
+              alive() &&
+              (!originating || originating.isCurrent(`library_label.${action.operation}`)) &&
+              !open &&
+              !locked.current
+            )
+              setAction(null);
           }}
         >
           <DialogContent
@@ -632,6 +712,9 @@ export function LabelsPageView({
         <nav>
           <a
             className={buttonVariants({ variant: 'outline', className: actionClass })}
+            onClick={(event) => {
+              if (!alive()) event.preventDefault();
+            }}
             href={`${path}?${new URLSearchParams({ ...(page.query ? { q: page.query } : {}), cursor: page.next })}`}
           >
             {m.library_label_more()}
@@ -639,7 +722,13 @@ export function LabelsPageView({
         </nav>
       ) : null}
       {feedback?.reason === 'stale_cursor' ? (
-        <a href={path} className={buttonVariants({ variant: 'outline', className: actionClass })}>
+        <a
+          onClick={(event) => {
+            if (!alive()) event.preventDefault();
+          }}
+          href={path}
+          className={buttonVariants({ variant: 'outline', className: actionClass })}
+        >
           {m.library_labels_heading()}
         </a>
       ) : null}

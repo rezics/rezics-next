@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { CopiesPage, type CopiesOrigin } from './copies-page';
+import { useManagementCurrentOrigin } from './management-current-origin';
 import {
   copiesAddress,
   sameCopiesAddress,
@@ -16,17 +17,24 @@ import {
 } from './copies-actions';
 
 const subscribe = () => () => {};
+const closed: CopiesOrigin = {
+  isCurrent: () => false,
+  headers: () => null,
+  readDetail: async () => ({ ok: false, reason: 'unavailable' }),
+  readSubject: async () => ({ state: 'unavailable' }),
+};
+const operations = ['copy.list', 'copy.get', 'copy.create', 'copy.update', 'copy.delete'] as const;
 function matches(value: CopiesCurrentRead | undefined, subject: string, address: CopiesAddress) {
   return (
     value?.sessionSubject === subject &&
+    !!value.requested &&
     sameCopiesAddress(value.requested, address) &&
-    value.page.signedIn &&
+    value.page?.signedIn &&
     value.page.subjectId === address.subjectId &&
     (!address.subjectId || value.page.copies.every((copy) => !copy.subject || copy.subject.id === address.subjectId))
   );
 }
 
-/** The route's private render boundary. Identity/admission/address retire work during render. */
 export function CopiesCurrent({
   initial,
   search,
@@ -45,32 +53,18 @@ export function CopiesCurrent({
   );
   const session = useSession();
   const admitted = useOperation('copy.list');
-  const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
+  const subject = hydrated
+    ? session.state === 'signed-in' && session.csrfToken
+      ? (session.subject ?? null)
+      : null
+    : initial.sessionSubject;
   const allowed = !hydrated || admitted;
   const address = copiesAddress(search, locale);
-  const key = JSON.stringify([subject, allowed, address]);
-  const [scope, setScope] = useState({ key, generation: 0, seed: true, hydrated });
-  const origin = useRef({ key, active: true });
-  if (origin.current.key !== key) {
-    origin.current.active = false;
-    origin.current = { key, active: true };
-  }
-  if (scope.key !== key)
-    setScope({
-      key,
-      generation: scope.generation + 1,
-      seed: scope.seed && !scope.hydrated && !!subject && allowed,
-      hydrated,
-    });
+  const origin = useManagementCurrentOrigin(subject, JSON.stringify(address), 'copy.list', hydrated);
+  const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
+  if (scope.id !== origin.id)
+    setScope({ id: origin.id, seed: scope.seed && !scope.hydrated && !!subject && allowed, hydrated });
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
-  useLayoutEffect(() => {
-    const mounted = origin.current;
-    mounted.active = true;
-    return () => {
-      mounted.active = false;
-      origin.current.active = false;
-    };
-  }, []);
   if (!subject || !allowed)
     return (
       <p role="status">
@@ -83,14 +77,13 @@ export function CopiesCurrent({
     );
   return (
     <CurrentCopiesRead
-      key={scope.generation}
+      key={origin.id}
       subject={subject}
       address={address}
       initial={initial}
       seed={scope.seed}
       hydrated={hydrated}
-      origin={origin.current}
-      csrfToken={session.csrfToken}
+      origin={origin}
       failure={failure}
     />
   );
@@ -103,7 +96,6 @@ function CurrentCopiesRead({
   seed,
   hydrated,
   origin,
-  csrfToken,
   failure,
 }: {
   subject: string;
@@ -111,86 +103,106 @@ function CurrentCopiesRead({
   initial: CopiesCurrentRead;
   seed: boolean;
   hydrated: boolean;
-  origin: { active: boolean };
-  csrfToken: string | null;
+  origin: ReturnType<typeof useManagementCurrentOrigin>;
   failure?: string | undefined;
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? initial : undefined));
   const input = { subjectId: address.subjectId ?? undefined, cursor: address.cursor ?? undefined };
-  const mounted = useRef(true);
-  useLayoutEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const queryKey = ['copies-current', subject, address, lifetime] as const;
   const query = useQuery({
     ...personalRead,
-    queryKey: ['copies-current', subject, address, lifetime],
+    queryKey,
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.active || !mounted.current) throw new Error('Obsolete Copies read');
-      const value = await readCopiesCurrent({ data: input });
-      if (!origin.active || !mounted.current || !matches(value, subject, address))
-        throw new Error('Unaccepted Copies read');
-      return value;
+      if (!origin.isCurrent()) throw new Error('Obsolete Copies read');
+      try {
+        const value = await readCopiesCurrent({ data: input });
+        if (!origin.isCurrent() || !matches(value, subject, address)) throw new Error('Unaccepted Copies read');
+        return value;
+      } catch (error) {
+        if (!origin.isCurrent()) throw new Error('Obsolete Copies read');
+        throw error;
+      }
     },
     initialData,
+    // The loader already performed the bounded read; retry remains explicit.
+    staleTime: Infinity,
+    refetchOnMount: false,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  const [loader, setLoader] = useState(initial);
+  if (loader !== initial) {
+    setLoader(initial);
+    if (!matches(initial, subject, address)) origin.rejectRead();
+  }
   const previousLoader = useRef(initial);
   useEffect(() => {
-    if (previousLoader.current !== initial) {
-      previousLoader.current = initial;
-      void query.refetch();
-    }
-  }, [initial, query.refetch]);
+    if (previousLoader.current === initial) return;
+    previousLoader.current = initial;
+    if (origin.isCurrent()) void query.refetch();
+  }, [initial, origin, query.refetch]);
   const accepted = !query.isError && matches(query.data, subject, address) ? query.data : undefined;
-  const current = useRef(false);
-  current.current = !!accepted;
-  const token = useRef<string | null>(null);
-  // A browser token is associated only after the observed viewer agrees with the actual read.
-  token.current = accepted ? (hydrated ? csrfToken : (accepted.page.csrfToken ?? null)) : null;
-  const [operand] = useState<CopiesOrigin>(() => {
-    const isCurrent = () => origin.active && mounted.current && current.current;
-    return {
-      isCurrent,
-      headers: () => (isCurrent() && token.current ? { 'x-csrf-token': token.current } : null),
-      readDetail: async (id) => {
-        if (!isCurrent()) return { ok: false, reason: 'unavailable' };
-        const value = await readCopyDetailCurrent({ data: { ...input, id } });
-        if (
-          !isCurrent() ||
-          value.sessionSubject !== subject ||
-          !sameCopiesAddress(value.requested, address) ||
-          value.id !== id ||
-          (value.result.ok &&
-            (value.result.copy.id !== id ||
-              (address.subjectId && value.result.copy.subject && value.result.copy.subject.id !== address.subjectId)))
-        )
-          return { ok: false, reason: 'unavailable' };
-        return value.result;
-      },
-      readSubject: async (id) => {
-        if (!isCurrent()) return { state: 'unavailable' };
-        const value = await readCopySubjectCurrent({ data: { ...input, id } });
-        if (
-          !isCurrent() ||
-          value.sessionSubject !== subject ||
-          !sameCopiesAddress(value.requested, address) ||
-          value.id !== id ||
-          (value.result.state === 'ready' && value.result.subject.id !== id)
-        )
-          return { state: 'unavailable' };
-        return value.result;
-      },
-    };
-  });
-  if (!accepted)
-    return <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>;
-  return <CopiesPage page={accepted.page} failure={failure} originating={operand} />;
+  const guard = accepted
+    ? origin.accept(queryKey, (value) => matches(value as CopiesCurrentRead, subject, address), operations)
+    : null;
+  const operand: CopiesOrigin | undefined = guard
+    ? {
+        isCurrent: guard.isCurrent,
+        headers: guard.headers,
+        readDetail: async (id) => {
+          if (!guard.isCurrent('copy.get')) return { ok: false, reason: 'unavailable' };
+          const value = await readCopyDetailCurrent({ data: { ...input, id } });
+          if (!guard.isCurrent('copy.get')) return { ok: false, reason: 'unavailable' };
+          if (
+            value.sessionSubject !== subject ||
+            !sameCopiesAddress(value.requested, address) ||
+            value.id !== id ||
+            (value.result.ok &&
+              (value.result.copy.id !== id ||
+                (address.subjectId && value.result.copy.subject && value.result.copy.subject.id !== address.subjectId)))
+          ) {
+            origin.rejectRead();
+            return { ok: false, reason: 'unavailable' };
+          }
+          return value.result;
+        },
+        readSubject: async (id) => {
+          if (!guard.isCurrent('copy.create')) return { state: 'unavailable' };
+          const value = await readCopySubjectCurrent({ data: { ...input, id } });
+          if (!guard.isCurrent('copy.create')) return { state: 'unavailable' };
+          if (
+            value.sessionSubject !== subject ||
+            !sameCopiesAddress(value.requested, address) ||
+            value.id !== id ||
+            (value.result.state === 'ready' && value.result.subject.id !== id)
+          ) {
+            origin.rejectRead();
+            return { state: 'unavailable' };
+          }
+          return value.result;
+        },
+      }
+    : undefined;
+  // Server HTML keeps the existing no-JS form; browser authority comes only from the cache guard.
+  if (!accepted || (hydrated && !guard))
+    return (
+      <div>
+        <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>
+        {hydrated && !query.isFetching ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (origin.isCurrent()) void query.refetch();
+            }}
+          >
+            {m.subject_view_retry()}
+          </button>
+        ) : null}
+      </div>
+    );
+  return <CopiesPage key={origin.id} page={accepted.page} failure={failure} originating={operand ?? closed} />;
 }

@@ -1,14 +1,22 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { exposureQuery, useSession } from '../session/query';
+import { operationIsAdmitted } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { LabelsPageView } from './labels-page';
 import type { LabelsPage } from './labels-read';
 import { readLabelsCurrent, type LabelsAddress, type LabelsCurrentRead } from './labels-read-route';
+import { useManagementCurrentOrigin, type ManagementGuard } from './management-current-origin';
 
 const subscribe = () => () => {};
-const labelOperations = ['library_label.list', 'library_label.create', 'library_label.rename', 'library_label.delete'];
+const closed: ManagementGuard = { isCurrent: () => false, headers: () => null };
+const labelOperations = [
+  'library_label.list',
+  'library_label.create',
+  'library_label.rename',
+  'library_label.delete',
+] as const;
 const signedOutPage: LabelsPage = {
   signedIn: false,
   operations: [],
@@ -21,6 +29,7 @@ const signedOutPage: LabelsPage = {
 function matches(value: LabelsCurrentRead | undefined, subject: string, address: LabelsAddress) {
   return (
     value?.sessionSubject === subject &&
+    value.page?.signedIn &&
     value.requested?.cursor === address.cursor &&
     value.requested.query === address.query &&
     value.requested.locale === address.locale &&
@@ -28,7 +37,6 @@ function matches(value: LabelsCurrentRead | undefined, subject: string, address:
   );
 }
 
-/** The route's private render boundary. Every observed replacement retires the originating handlers synchronously. */
 export function LabelsCurrent({
   initial,
   search,
@@ -47,28 +55,16 @@ export function LabelsCurrent({
   const exposure = useQuery({ ...exposureQuery, enabled: hydrated && session.state === 'signed-in' });
   const subject = hydrated
     ? session.state === 'signed-in' && session.csrfToken
-      ? session.subject
+      ? (session.subject ?? null)
       : null
     : initial.sessionSubject;
-  const admitted = hydrated ? exposure.data : initial.page.operations;
-  const personal = admitted?.includes('personal_library') ?? false;
-  const operations = labelOperations.filter((operation) => admitted?.includes(operation));
+  const admitted = hydrated && !exposure.isError ? exposure.data : !hydrated ? initial.page.operations : undefined;
+  const allowed = operationIsAdmitted('library_label.list', admitted);
   const address: LabelsAddress = { cursor: search.cursor ?? null, query: search.q ?? null, locale };
-  const key = JSON.stringify([subject, personal, operations, address]);
-  const [scope, setScope] = useState({ key, generation: 0, seed: true });
-  const origin = useRef({ key, active: true });
-  if (origin.current.key !== key) {
-    origin.current.active = false;
-    origin.current = { key, active: true };
-  }
-  if (scope.key !== key) setScope({ key, generation: scope.generation + 1, seed: false });
-  const currentOrigin = origin.current;
-  useLayoutEffect(() => {
-    currentOrigin.active = true;
-    return () => {
-      currentOrigin.active = false;
-    };
-  }, [currentOrigin]);
+  const origin = useManagementCurrentOrigin(subject, JSON.stringify(address), 'library_label.list', hydrated);
+  const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
+  if (scope.id !== origin.id) setScope({ id: origin.id, seed: scope.seed && !scope.hydrated && !!subject, hydrated });
+  else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
   if (!subject) {
     if (!hydrated)
       return (
@@ -80,18 +76,17 @@ export function LabelsCurrent({
     if (session.state === 'signed-out') return <LabelsPageView page={signedOutPage} locale={locale} />;
     return <p role="status">{m.library_labels_unavailable()}</p>;
   }
-  if (!personal || !operations.includes('library_label.list'))
+  if (!allowed)
     return <p role="status">{admitted ? m.library_subject_label_closed() : m.library_labels_unavailable()}</p>;
   return (
     <LabelsRead
-      key={scope.generation}
+      key={origin.id}
       subject={subject}
       address={address}
-      operations={operations}
       initial={initial}
       seed={scope.seed}
       hydrated={hydrated}
-      origin={currentOrigin}
+      origin={origin}
     />
   );
 }
@@ -99,7 +94,6 @@ export function LabelsCurrent({
 function LabelsRead({
   subject,
   address,
-  operations,
   initial,
   seed,
   hydrated,
@@ -107,30 +101,32 @@ function LabelsRead({
 }: {
   subject: string;
   address: LabelsAddress;
-  operations: string[];
   initial: LabelsCurrentRead;
   seed: boolean;
   hydrated: boolean;
-  origin: { active: boolean };
+  origin: ReturnType<typeof useManagementCurrentOrigin>;
 }) {
   const client = useQueryClient();
   const [lifetime] = useState(() => crypto.randomUUID());
-  const [rejected, setRejected] = useState(false);
-  const queryKey = ['labels-current', subject, 'personal_library', operations, address, lifetime] as const;
+  const queryKey = ['labels-current', subject, address, lifetime] as const;
   const query = useQuery({
     ...personalRead,
     queryKey,
-    enabled: hydrated && personalRead.enabled && !rejected,
+    enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.active) throw new Error('Obsolete Labels read');
-      const value = await readLabelsCurrent({
-        data: { cursor: address.cursor ?? undefined, query: address.query ?? undefined },
-      });
-      if (!origin.active || !matches(value, subject, address)) throw new Error('Unaccepted Labels read');
-      return value;
+      if (!origin.isCurrent()) throw new Error('Obsolete Labels read');
+      try {
+        const value = await readLabelsCurrent({
+          data: { cursor: address.cursor ?? undefined, query: address.query ?? undefined },
+        });
+        if (!origin.isCurrent() || !matches(value, subject, address)) throw new Error('Unaccepted Labels read');
+        return value;
+      } catch (error) {
+        if (!origin.isCurrent()) throw new Error('Obsolete Labels read');
+        throw error;
+      }
     },
     initialData: seed && matches(initial, subject, address) ? initial : undefined,
-    // The loader already performed this bounded read. Hydration must not add another one.
     staleTime: Infinity,
     refetchOnMount: false,
     gcTime: 0,
@@ -139,48 +135,64 @@ function LabelsRead({
     refetchOnReconnect: false,
   });
   const previousLoader = useRef(initial);
-  const [loader, setLoader] = useState({ value: initial, valid: true });
-  if (loader.value !== initial) setLoader({ value: initial, valid: matches(initial, subject, address) });
+  const [loader, setLoader] = useState(initial);
+  if (loader !== initial) {
+    setLoader(initial);
+    if (!matches(initial, subject, address)) origin.rejectRead();
+  }
   useEffect(() => {
     if (previousLoader.current === initial) return;
     previousLoader.current = initial;
-    if (origin.active && matches(initial, subject, address)) client.setQueryData(queryKey, initial);
+    if (!origin.isCurrent()) return;
+    if (matches(initial, subject, address)) client.setQueryData(queryKey, initial);
+    else origin.rejectRead();
   }, [initial, subject, address, client, origin, queryKey]);
-  const accepted =
-    !rejected && loader.valid && !query.isError && matches(query.data, subject, address) ? query.data : undefined;
-  const current = useRef(false);
-  current.current = !!accepted;
-  const [isCurrent] = useState(() => () => origin.active && current.current);
-  const [refresh] = useState(() => async () => {
-    if (!isCurrent()) return null;
-    const value = await readLabelsCurrent({
-      data: { cursor: address.cursor ?? undefined, query: address.query ?? undefined },
-    });
-    if (!isCurrent()) return null;
-    if (!matches(value, subject, address)) {
-      origin.active = false;
-      setRejected(true);
-      return null;
-    }
-    return { ...value.page, operations: value.page.operations.filter((operation) => operations.includes(operation)) };
-  });
-  const admission = operations.join('|');
-  const page = useMemo(
-    () =>
-      accepted
-        ? {
-            ...accepted.page,
-            operations: accepted.page.operations.filter((operation) => operations.includes(operation)),
-          }
-        : undefined,
-    [accepted, admission],
-  );
-  if (!page) return <p role="status">{m.library_labels_unavailable()}</p>;
+  const accepted = !query.isError && matches(query.data, subject, address) ? query.data : undefined;
+  const guard = accepted
+    ? origin.accept(
+        queryKey,
+        (value) =>
+          matches(value as LabelsCurrentRead, subject, address) &&
+          (value as LabelsCurrentRead).page.operations.includes('library_label.list') &&
+          (!(value as LabelsCurrentRead).page.state || (value as LabelsCurrentRead).page.state === 'loaded'),
+        labelOperations,
+      )
+    : null;
+  const page = accepted?.page;
+  if (!page || (hydrated && !guard && (!page.state || page.state === 'loaded')))
+    return (
+      <div>
+        <p role="status">{m.library_labels_unavailable()}</p>
+        {hydrated && !query.isFetching ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (origin.isCurrent()) void query.refetch();
+            }}
+          >
+            {m.subject_view_retry()}
+          </button>
+        ) : null}
+      </div>
+    );
   return (
     <LabelsPageView
+      key={origin.id}
       page={page}
-      isCurrent={isCurrent}
-      refresh={refresh}
+      isCurrent={guard?.isCurrent ?? (hydrated ? origin.isCurrent : closed.isCurrent)}
+      originating={guard ?? closed}
+      refresh={async () => {
+        if (!guard?.isCurrent('library_label.list')) return null;
+        const value = await readLabelsCurrent({
+          data: { cursor: address.cursor ?? undefined, query: address.query ?? undefined },
+        });
+        if (!guard.isCurrent('library_label.list')) return null;
+        if (!matches(value, subject, address)) {
+          origin.rejectRead();
+          return null;
+        }
+        return value.page;
+      }}
       {...(address.cursor === null ? {} : { cursor: address.cursor })}
       locale={address.locale}
     />
