@@ -39,6 +39,18 @@ function outcome(workspace: Workspace, host = 'check-a', passed = true): Workspa
   };
 }
 
+function unknownOutcome(workspace: Workspace): WorkspaceOutcome {
+  return {
+    name: workspace.name,
+    directory: workspace.directory,
+    host: 'unknown',
+    passed: false,
+    durationSeconds: 0,
+    failingFiles: [],
+    loadSensitiveTests: [],
+  };
+}
+
 function rawReport(
   workspaces: unknown[] = [outcome(selected)],
   controlPlane?: unknown,
@@ -70,7 +82,7 @@ describe('remote gate group report accounting', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.errors).toContain('group 1: result report is missing');
-    expect(result.result.workspaces).toEqual([outcome({ ...selected }, 'unknown', false)]);
+    expect(result.result.workspaces).toEqual([unknownOutcome(selected)]);
   });
 
   test('malformed, empty, partial, and oversized reports cannot pass a zero exit', () => {
@@ -84,7 +96,7 @@ describe('remote gate group report accounting', () => {
     for (const { label, text } of cases) {
       const result = aggregateRemoteGateReports([group([selected], text)]);
       expect(result.exitCode, label).toBe(1);
-      expect(result.result.workspaces, label).toEqual([outcome({ ...selected }, 'unknown', false)]);
+      expect(result.result.workspaces, label).toEqual([unknownOutcome(selected)]);
     }
   });
 
@@ -93,7 +105,7 @@ describe('remote gate group report accounting', () => {
     const result = aggregateRemoteGateReports([group([selected], rawReport([invalid]))]);
 
     expect(result.exitCode).toBe(1);
-    expect(result.result.workspaces).toEqual([outcome({ ...selected }, 'unknown', false)]);
+    expect(result.result.workspaces).toEqual([unknownOutcome(selected)]);
   });
 
   test('duplicate and unexpected outcomes fail closed', () => {
@@ -106,7 +118,7 @@ describe('remote gate group report accounting', () => {
     for (const workspaces of cases) {
       const result = aggregateRemoteGateReports([group([selected], rawReport(workspaces))]);
       expect(result.exitCode).toBe(1);
-      expect(result.result.workspaces).toEqual([outcome({ ...selected }, 'unknown', false)]);
+      expect(result.result.workspaces).toEqual([unknownOutcome(selected)]);
     }
   });
 
@@ -123,7 +135,7 @@ describe('remote gate group report accounting', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.result.workspaces).toEqual([
-      outcome({ ...selected }, 'unknown', false),
+      unknownOutcome(selected),
       outcome(other, 'check-b'),
     ]);
   });
