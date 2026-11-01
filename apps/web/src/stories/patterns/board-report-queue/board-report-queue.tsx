@@ -1,4 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Skeleton } from '@rezics/ui/shadcn/skeleton';
 import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -103,32 +104,40 @@ function QueueGeneration({
   if (state === 'loading')
     return (
       <section aria-busy="true" className="space-y-4">
-        <p role="status">{m.moderation_queue_loading()}</p>
-        <Skeleton className="h-52 rounded-2xl" />
-        <Skeleton className="h-52 rounded-2xl" />
+        <ContentItemFrame as="div" role="status" aria-live="polite" className="space-y-4 p-4 sm:p-6">
+          <ContentItemHeading id={`${selectionId}-loading`} level={2} className="text-base font-semibold">
+            {m.moderation_queue_loading()}
+          </ContentItemHeading>
+          <Skeleton className="h-52 rounded-xl" />
+          <Skeleton className="h-52 rounded-xl" />
+        </ContentItemFrame>
       </section>
     );
   if (state === 'denied' || state === 'stale')
     return (
-      <div className="space-y-3 rounded-2xl border p-6">
-        <p role="alert">{state === 'denied' ? m.moderation_queue_read_denied() : m.moderation_queue_stale()}</p>
+      <ContentItemFrame as="div" role="alert" className="space-y-3 p-4 sm:p-6">
+        <ContentItemHeading level={2} className="text-base font-semibold">
+          {state === 'denied' ? m.moderation_queue_read_denied() : m.moderation_queue_stale()}
+        </ContentItemHeading>
         {state === 'stale' && onRestart ? (
           <Button variant="outline" onClick={onRestart}>
             {m.moderation_queue_restart()}
           </Button>
         ) : null}
-      </div>
+      </ContentItemFrame>
     );
   if (state === 'error')
     return (
-      <div className="space-y-3 rounded-2xl border p-6">
-        <p role="alert">{m.moderation_queue_error()}</p>
+      <ContentItemFrame as="div" role="alert" className="space-y-3 p-4 sm:p-6">
+        <ContentItemHeading level={2} className="text-base font-semibold">
+          {m.moderation_queue_error()}
+        </ContentItemHeading>
         {onRetry ? (
           <Button variant="outline" className="min-h-11" onClick={onRetry}>
             {m.moderation_queue_retry()}
           </Button>
         ) : null}
-      </div>
+      </ContentItemFrame>
     );
   return (
     <section className="space-y-6" aria-label={m.moderation_reports_tab()}>
@@ -175,12 +184,14 @@ function QueueGeneration({
           })}
         </ol>
       ) : (
-        <div className="space-y-2 rounded-2xl border border-dashed p-6">
-          <p className="font-medium">{m.moderation_reports_empty()}</p>
+        <ContentItemFrame as="div" className="space-y-2 p-4 sm:p-6">
+          <ContentItemHeading level={2} className="text-base font-semibold">
+            {m.moderation_reports_empty()}
+          </ContentItemHeading>
           <p className="text-sm text-muted-foreground">
             {next ? m.moderation_queue_empty_next() : m.moderation_queue_end()}
           </p>
-        </div>
+        </ContentItemFrame>
       )}
       {next && !snapshot.retired ? (
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -1,6 +1,7 @@
 import { useContext, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import {
   DEFAULT_REPORT_SELECTION,
@@ -147,7 +148,14 @@ export function ModerationReportsPage(props: {
   const retired = useSyncExternalStore(current.subscribe, current.observe, serverReady);
   // The browser cache is authoritative even before a session hook has hydrated. Standalone SSR
   // fixtures have no browser source; they retain only their explicit prepared native admission.
-  if (retired || current.observe()) return <p role="status">{m.moderation_target_unavailable()}</p>;
+  if (retired || current.observe())
+    return (
+      <ContentItemFrame as="div" role="status" className="p-4 sm:p-6">
+        <ContentItemHeading level={2} className="text-base font-semibold">
+          {m.moderation_target_unavailable()}
+        </ContentItemHeading>
+      </ContentItemFrame>
+    );
   const { page } = current;
   const input = page.input;
   return (
@@ -230,7 +238,13 @@ export function ModerationReportsView({
     ((viewerId !== undefined && (session.state !== 'signed-in' || session.subject !== viewerId)) ||
       evidence.some((item) => item && (session.state !== 'signed-in' || session.subject !== item.viewerId)))
   )
-    return <p role="status">{m.moderation_target_unavailable()}</p>;
+    return (
+      <ContentItemFrame as="div" role="status" className="p-4 sm:p-6">
+        <ContentItemHeading level={2} className="text-base font-semibold">
+          {m.moderation_target_unavailable()}
+        </ContentItemHeading>
+      </ContentItemFrame>
+    );
   const filters = [
     threadId ? `thread=${encodeURIComponent(threadId)}` : '',
     postId ? `post=${encodeURIComponent(postId)}` : '',

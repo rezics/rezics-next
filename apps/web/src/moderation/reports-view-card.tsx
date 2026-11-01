@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader } from '@rezics/ui/shadcn/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
@@ -175,27 +175,27 @@ export function ReportReviewCard({
               : m.moderation_action_failed();
 
   return (
-    <Card className="min-w-0" role="article" aria-labelledby={`${id}-title`}>
-      <CardHeader className="gap-3">
+    <ContentItemFrame as="article" className="min-w-0 space-y-5 p-4 sm:p-6" aria-labelledby={`${id}-title`}>
+      <header className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <h2 id={`${id}-title`} className="text-lg font-semibold">
+          <ContentItemHeading id={`${id}-title`} level={2} className="text-lg font-semibold">
+            {m.moderation_reports_tab()} ·{' '}
             {report.target.kind === 'post'
               ? m.moderation_queue_post()
               : report.target.kind === 'thread'
                 ? m.moderation_queue_thread()
                 : m.moderation_queue_board()}
-          </h2>
+          </ContentItemHeading>
           <Badge variant="secondary">{status}</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
           {m.moderation_queue_submitted()} <time dateTime={report.createdAt}>{date(report.createdAt)}</time>
         </p>
-      </CardHeader>
-      <CardContent className="space-y-5">
+      </header>
         <section aria-labelledby={`${id}-submission`} className="space-y-3 rounded-xl bg-muted/50 p-4">
-          <h3 id={`${id}-submission`} className="text-sm font-semibold">
+          <ContentItemHeading id={`${id}-submission`} level={3} className="text-sm font-semibold">
             {m.moderation_queue_submission()}
-          </h3>
+          </ContentItemHeading>
           <dl className="space-y-3 text-sm">
             <div>
               <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
@@ -211,18 +211,29 @@ export function ReportReviewCard({
         </section>
         <div className="grid min-w-0 gap-6">
           <section aria-labelledby={`${id}-revision`} className="min-w-0 space-y-2">
-            <h3 id={`${id}-revision`} className="text-sm font-semibold">
+            <ContentItemHeading id={`${id}-revision`} level={3} className="text-sm font-semibold">
               {m.moderation_reported_revision_label()}
-            </h3>
+            </ContentItemHeading>
             <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
               {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
             </div>
           </section>
           <section aria-labelledby={`${id}-current`} className="min-w-0 space-y-2">
-            <h3 id={`${id}-current`} className="text-sm font-semibold">
+            <ContentItemHeading id={`${id}-current`} level={3} className="text-sm font-semibold">
               {m.moderation_current_target_label()}
-            </h3>
-            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">{moderationTargetContent(target)}</div>
+            </ContentItemHeading>
+            <p className="text-xs text-muted-foreground">
+              <span>{m.moderation_appeal_target_label()}:</span>{' '}
+              {report.target.kind === 'post'
+                ? m.moderation_queue_post()
+                : report.target.kind === 'thread'
+                  ? m.moderation_queue_thread()
+                  : m.moderation_queue_board()}{' '}
+              <code className="break-all">{report.target.id}</code>
+            </p>
+            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
+              {moderationTargetContent(target)}
+            </div>
           </section>
         </div>
         <div className="border-t pt-4">
@@ -350,7 +361,6 @@ export function ReportReviewCard({
             </Collapsible>
           )}
         </div>
-      </CardContent>
-    </Card>
+    </ContentItemFrame>
   );
 }

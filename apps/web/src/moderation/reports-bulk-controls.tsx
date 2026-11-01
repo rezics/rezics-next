@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
 import type { BulkItemState, BulkSnapshot, ReportsBulkAction } from './reports-bulk-action';
 import type { ReportQueueAction } from './reports-view-action';
@@ -48,11 +48,11 @@ export function ReportsBulkControls({
     if (snapshot.phase === 'complete') results.current?.focus();
   }, [snapshot.phase]);
   return (
-    <Card aria-labelledby={`${id}-title`}>
-      <CardHeader>
-        <CardTitle id={`${id}-title`}>{m.moderation_bulk_title()}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+    <ContentItemFrame as="article" aria-labelledby={`${id}-title`} className="space-y-4 p-4 sm:p-6">
+      <ContentItemHeading id={`${id}-title`} level={2} className="text-lg font-semibold">
+        {m.moderation_bulk_title()}
+      </ContentItemHeading>
+      <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">{m.moderation_bulk_bound()}</p>
         {snapshot.phase === 'selecting' ? (
           <>
@@ -91,7 +91,9 @@ export function ReportsBulkControls({
             aria-labelledby={`${id}-review`}
             className="flex flex-col gap-3 rounded-lg focus-visible:outline focus-visible:outline-ring"
           >
-            <p id={`${id}-review`}>{m.moderation_bulk_confirmation({ count: snapshot.selected.length })}</p>
+            <ContentItemHeading id={`${id}-review`} level={3} className="text-base font-medium">
+              {m.moderation_bulk_confirmation({ count: snapshot.selected.length })}
+            </ContentItemHeading>
             <div className="flex flex-wrap gap-2">
               <Button type="button" className="min-h-11" onClick={() => void controller.confirm(onAction, onRefresh)}>
                 {m.moderation_bulk_confirm({ count: snapshot.selected.length })}
@@ -116,9 +118,9 @@ export function ReportsBulkControls({
             aria-labelledby={`${id}-results`}
             className="flex flex-col gap-3 rounded-lg focus-visible:outline focus-visible:outline-ring"
           >
-            <p id={`${id}-results`} role="status">
+            <ContentItemHeading id={`${id}-results`} level={3} role="status" className="text-base font-medium">
               {snapshot.phase === 'running' ? m.moderation_bulk_running() : m.moderation_bulk_results()}
-            </p>
+            </ContentItemHeading>
             <ol aria-live="polite" className="flex flex-col gap-2">
               {snapshot.items.map((item) => (
                 <li key={item.reportId} className="flex flex-wrap items-center gap-2 text-sm">
@@ -156,16 +158,19 @@ export function ReportsBulkControls({
             ) : null}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </ContentItemFrame>
   );
 }
 
 /** A failed replacement read may retain public command receipts, never old evidence or retry intents. */
 export function ReportsBulkRefreshFailure({ items }: { items: readonly import('./reports-bulk-action').BulkItem[] }) {
+  const id = useId();
   return (
-    <div className="flex flex-col gap-2 rounded-xl border p-4">
-      <p role="alert">{m.moderation_bulk_stale()}</p>
+    <ContentItemFrame as="article" role="alert" aria-labelledby={`${id}-title`} className="space-y-3 p-4 sm:p-6">
+      <ContentItemHeading id={`${id}-title`} level={2} className="text-base font-semibold">
+        {m.moderation_bulk_stale()}
+      </ContentItemHeading>
       <ol className="flex flex-col gap-2 text-sm">
         {items.map((item) => (
           <li key={item.reportId}>
@@ -173,6 +178,6 @@ export function ReportsBulkRefreshFailure({ items }: { items: readonly import('.
           </li>
         ))}
       </ol>
-    </div>
+    </ContentItemFrame>
   );
 }

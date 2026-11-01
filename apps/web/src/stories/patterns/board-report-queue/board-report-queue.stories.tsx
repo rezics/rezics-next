@@ -47,6 +47,14 @@ export const Open: Story = {
     await expect(view.getByText(currentText)).toBeVisible();
     await expect(view.getByText(revisionText)).toBeVisible();
     await expect(view.getByText(postReport.evidence!, { exact: false })).toBeVisible();
+    const article = view.getByRole('article', {
+      name: new RegExp(`${m.moderation_reports_tab()}.*${m.moderation_queue_post()}`),
+    });
+    await expect(article.querySelector('h2')).toHaveTextContent(m.moderation_queue_post());
+    await expect(article).toHaveTextContent(postReport.target.id);
+    await expect(article.querySelector('a')).toBeNull();
+    await expect(view.getByRole('heading', { level: 3, name: m.moderation_reported_revision_label() })).toBeVisible();
+    await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
     await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
     await expect(view.getAllByRole('textbox')).toHaveLength(1);
     await userEvent.type(view.getByRole('textbox', { name: m.moderation_reason_label() }), reason);

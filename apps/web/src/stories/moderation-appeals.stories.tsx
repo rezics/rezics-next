@@ -65,6 +65,14 @@ export const Pending: Story = {
     const reports = view.getByRole('link', { name: m.moderation_reports_tab() });
     const statement = view.getByRole('textbox', { name: m.moderation_statement_label() });
     const uphold = view.getByRole('button', { name: m.moderation_appeal_uphold_action() });
+    const article = view.getByRole('article', {
+      name: new RegExp(`${m.moderation_appeals_tab()}.*${m.moderation_queue_post()}`),
+    });
+    await expect(article.querySelector('h2')).toHaveTextContent(m.moderation_queue_post());
+    await expect(article).toHaveTextContent(pendingAppeal.decision.target.id);
+    await expect(article.querySelector('a')).toBeNull();
+    await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
+    await expect(article.querySelector('time')).toHaveAttribute('dateTime', pendingAppeal.createdAt);
 
     // The shell's skip target anchors keyboard progression inside the appeals page.
     main.focus();

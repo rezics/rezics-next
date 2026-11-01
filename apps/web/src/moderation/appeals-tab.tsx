@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { useSession } from '../session/query';
 import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { AppealResolution } from './appeal-resolution';
 import { appealTarget, loadModerationAppeals, type Appeal } from './appeals-read';
@@ -14,6 +16,9 @@ import {
   type PrivateAppealPage,
 } from './appeals-read-model';
 import { moderationTargetContent, type ModerationTarget } from './target-content';
+
+const date = (value: string) =>
+  new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
 /** Default route composition; retries replace only this private read, never replay a command. */
 export function ModerationAppealsPage({
@@ -157,8 +162,14 @@ export function ModerationAppealsView({
             : m.moderation_appeals_read_board_scope()}
       </p>
       {state !== 'ready' ? (
-        <section className="space-y-3" aria-live="polite" aria-busy={state === 'loading'}>
-          <p role="status">
+        <ContentItemFrame
+          as="div"
+          role="status"
+          aria-live="polite"
+          aria-busy={state === 'loading'}
+          className="space-y-3 p-4 sm:p-6"
+        >
+          <ContentItemHeading level={2} className="text-base font-semibold">
             {state === 'loading'
               ? m.moderation_appeals_read_loading()
               : state === 'unavailable'
@@ -166,7 +177,7 @@ export function ModerationAppealsView({
                 : state === 'stale'
                   ? m.moderation_appeals_read_stale()
                   : m.moderation_appeals_read_closed()}
-          </p>
+          </ContentItemHeading>
           {state === 'unavailable' && onRetry ? (
             <Button variant="outline" onClick={onRetry}>
               {m.moderation_appeals_read_retry()}
@@ -177,7 +188,7 @@ export function ModerationAppealsView({
               {m.moderation_appeals_read_restart()}
             </Button>
           ) : null}
-        </section>
+        </ContentItemFrame>
       ) : appeals.length ? (
         <ol className="space-y-4">
           {appeals.map((appeal) => {
@@ -191,9 +202,11 @@ export function ModerationAppealsView({
           })}
         </ol>
       ) : (
-        <p role="status" className="text-muted-foreground">
-          {next ? m.moderation_appeals_read_sparse() : m.moderation_appeals_empty()}
-        </p>
+        <ContentItemFrame as="div" role="status" className="p-4 sm:p-6">
+          <ContentItemHeading level={2} className="text-base font-semibold text-muted-foreground">
+            {next ? m.moderation_appeals_read_sparse() : m.moderation_appeals_empty()}
+          </ContentItemHeading>
+        </ContentItemFrame>
       )}
       {state === 'ready' && next ? (
         <Button variant="outline" onClick={() => onNext?.(next)}>
@@ -213,25 +226,60 @@ function AppealCard({
   target: ModerationTarget | undefined;
   mayResolve: boolean;
 }) {
+  const id = useId();
   const identity = appealTarget(appeal);
+  const targetKind =
+    identity?.kind === 'post'
+      ? m.moderation_queue_post()
+      : identity?.kind === 'thread'
+        ? m.moderation_queue_thread()
+        : m.moderation_target_unavailable();
 
   return (
-    <li className="space-y-3 rounded-lg border p-4">
-      <section className="space-y-2">
-        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-          <span className="font-medium">{m.moderation_appeal_decision_label()}:</span> {appeal.decision.statement}
-        </p>
-        <blockquote className="min-w-0 border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
-        {identity ? (
-          <p className="text-xs text-muted-foreground">
-            <span>{m.moderation_appeal_target_label()}:</span> {identity.kind} <code>{identity.id}</code>
+    <li>
+      <ContentItemFrame as="article" className="space-y-5 p-4 sm:p-6" aria-labelledby={`${id}-title`}>
+        <header className="space-y-2">
+          <ContentItemHeading id={`${id}-title`} level={2} className="text-lg font-semibold">
+            {m.moderation_appeals_tab()} · {targetKind}
+          </ContentItemHeading>
+          <p className="text-sm text-muted-foreground">
+            {m.moderation_queue_submitted()} <time dateTime={appeal.createdAt}>{date(appeal.createdAt)}</time>
           </p>
-        ) : null}
-      </section>
-      <p className="whitespace-pre-wrap">
-        <span className="font-medium">{m.moderation_appeal_reason_label()}:</span> {appeal.statement}
-      </p>
-      <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal ?? null} />
+        </header>
+        <section aria-labelledby={`${id}-decision`} className="space-y-2">
+          <ContentItemHeading id={`${id}-decision`} level={3} className="text-sm font-semibold">
+            {m.moderation_appeal_decision_label()}
+          </ContentItemHeading>
+          <p className="whitespace-pre-wrap break-words">{appeal.decision.statement}</p>
+        </section>
+        <section aria-labelledby={`${id}-target`} className="space-y-2">
+          <ContentItemHeading id={`${id}-target`} level={3} className="text-sm font-semibold">
+            {m.moderation_current_target_label()}
+          </ContentItemHeading>
+          {identity ? (
+            <p className="text-xs text-muted-foreground">
+              <span>{m.moderation_appeal_target_label()}:</span> {targetKind}{' '}
+              <code className="break-all">{identity.id}</code>
+            </p>
+          ) : null}
+          <blockquote className="min-w-0 border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
+        </section>
+        <section aria-labelledby={`${id}-statement`} className="space-y-2">
+          <ContentItemHeading id={`${id}-statement`} level={3} className="text-sm font-semibold">
+            {m.moderation_appeal_reason_label()}
+          </ContentItemHeading>
+          <p className="whitespace-pre-wrap break-words">{appeal.statement}</p>
+        </section>
+        <div className="space-y-3 border-t pt-4">
+          {appeal.decision.appeal ? (
+            <p className="text-sm text-muted-foreground">
+              {m.moderation_queue_resolved_at()}{' '}
+              <time dateTime={appeal.decision.appeal.resolvedAt}>{date(appeal.decision.appeal.resolvedAt)}</time>
+            </p>
+          ) : null}
+          <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal ?? null} />
+        </div>
+      </ContentItemFrame>
     </li>
   );
 }

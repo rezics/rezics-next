@@ -51,6 +51,12 @@ export const OpenReports: Story = {
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await expect(await view.findByRole('navigation', { name: m.moderation_tabs_label() })).toBeVisible();
+    const article = view.getByRole('article', {
+      name: new RegExp(`${m.moderation_reports_tab()}.*${m.moderation_queue_post()}`),
+    });
+    await expect(article.querySelector('h2')).toHaveTextContent(m.moderation_queue_post());
+    await expect(article).toHaveTextContent(postReport.target.id);
+    await expect(article.querySelector('a')).toBeNull();
     await userEvent.click(view.getAllByRole('button', { name: m.moderation_queue_review() })[0]!);
     await expect(view.getAllByRole('textbox', { name: m.moderation_reason_label() })).toHaveLength(1);
     await userEvent.type(view.getAllByRole('textbox')[0]!, 'Private address disclosure.');
@@ -88,7 +94,27 @@ const appeal = {
 };
 
 export const Appeals: Story = {
-  render: () => <ModerationAppealsView appeals={[appeal]} targets={moderationQueueFixture.targets} next={null} />,
+  render: () => (
+    <ModerationAppealsView
+      appeals={[
+        appeal,
+        {
+          ...appeal,
+          id: '0192f3a0-6c1e-7b2a-9d4e-000000000102',
+          decision: {
+            ...appeal.decision,
+            appeal: {
+              outcome: 'reversed' as const,
+              statement: 'The submitted context changes the original decision.',
+              resolvedAt: '2026-10-30T09:15:00.000Z',
+            },
+          },
+        },
+      ]}
+      targets={moderationQueueFixture.targets}
+      next={null}
+    />
+  ),
 };
 
 export const TargetUnavailable: Story = {

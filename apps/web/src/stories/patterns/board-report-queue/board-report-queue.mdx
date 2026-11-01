@@ -5,10 +5,12 @@ import * as Queue from './board-report-queue.stories';
 
 # Moderation report queue
 
-`BoardReportQueue` renders the real board moderation page's bounded report page. Each review card separates the
-submitted reason and evidence from the ordinarily readable reported revision and current target. Report inspection
-never unlocks either body. Missing, refused and removed content stays neutral; there are no reporter identities,
-other-report summaries, copied bodies, raw identifier headings or per-card detail requests.
+`BoardReportQueue` renders the real board moderation page's bounded report page. Each report is one native list item
+with a shared review frame, a localized target-kind heading and a separately labelled target identity. The full
+submitted reason and evidence, historical reported revision, and current target are separately labelled. A retained
+ID identifies a case; it does not grant permission to disclose its content or replace a missing title. Missing,
+refused and removed content stays neutral. There are no reporter identities, other-report summaries, copied bodies,
+stretched links over evidence or per-card detail requests.
 
 Open **Review report** to enter one takedown reason, or dismiss without a reason. The shared controls keep the draft
 when the panel closes. A request disables the form and announces submission. An unchanged retry retains its command
@@ -23,7 +25,9 @@ read rather than a blind replay.
 A confirmed command stays visible until navigation. Takedown confirmation is distinct from a projected report
 outcome: the page does not claim that asynchronous report resolution has finished. It hides the current and revision
 bodies for that target across the returned page after a confirmed takedown. Dismissal preserves current content.
-Resolved read rows show the native disposition and resolution time. Appeal statements remain in the separate tab.
+Resolved read rows show the native disposition and resolution time, without an extra review action. Appeals keep their
+full original decision, current target, appeal statement and any native resolution outcome/date in their own case
+frames; resolution forms remain independent from the evidence and source links.
 
 ## Dismiss selected loaded reports
 
