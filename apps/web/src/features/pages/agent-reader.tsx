@@ -24,13 +24,7 @@ function sessionCache(client: QueryClient): SessionCache {
 
   const getSession = () => {
     const state = client.getQueryState<SessionSnapshot>(['session']);
-    if (
-      !state ||
-      state.status !== 'success' ||
-      state.fetchStatus !== 'idle' ||
-      state.isInvalidated ||
-      !state.data
-    )
+    if (!state || state.status !== 'success' || state.fetchStatus !== 'idle' || state.isInvalidated || !state.data)
       return undefined;
     return state.data;
   };
