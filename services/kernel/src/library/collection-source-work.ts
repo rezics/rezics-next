@@ -234,7 +234,7 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
         const slot = terminal[control!];
         if (!slot) throw new TypeError('Native transaction control already dispatched');
         ({ reservation, bound } = slot);
-        terminal[control!] = undefined;
+        delete terminal[control!];
       } else {
         active.work.assertReady();
         if (beginning) {
