@@ -153,14 +153,28 @@ test('every response decision is freshly authorized and success headers match fu
     expect(full.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
     expect(full.headers.get('content-disposition')).toBe(`attachment; filename="${id}-original.png"`);
     expect(full.headers.get('last-modified')).toBeNull();
+    expect(value.headCalls).toEqual([key]);
+    expect(value.getCalls).toEqual([{ key, range: null }]);
     expectOneFreshAuthorization(value, 1, 'Bearer current-viewer');
 
     const partial = await value.send({ headers: { range: 'bytes=3-6' } });
     expect(partial.status).toBe(206);
     expect(partial.headers.get('content-range')).toBe(`bytes 3-6/${bytes.length}`);
     expect(partial.headers.get('content-length')).toBe('4');
+    for (const name of [
+      'etag',
+      'cache-control',
+      'content-type',
+      'accept-ranges',
+      'x-content-type-options',
+      'content-security-policy',
+      'content-disposition',
+    ])
+      expect(partial.headers.get(name)).toBe(full.headers.get(name));
     expect(new Uint8Array(await partial.arrayBuffer())).toEqual(bytes.slice(3, 7));
     expect(value.getCalls.at(-1)).toEqual({ key, range: { offset: 3, length: 4 } });
+    expect(value.headCalls).toHaveLength(2);
+    expect(value.getCalls).toHaveLength(2);
     expectOneFreshAuthorization(value, 2);
 
     const head = await value.send({ method: 'HEAD', headers: { range: 'bytes=3-6', 'if-range': 'W/' + etag } });
@@ -187,6 +201,8 @@ test('every response decision is freshly authorized and success headers match fu
     });
     expect(notModified.status).toBe(304);
     expect((await notModified.arrayBuffer()).byteLength).toBe(0);
+    expect(notModified.headers.get('etag')).toBe(etag);
+    expect(notModified.headers.get('cache-control')).toBe('private, no-cache');
     expect(value.headCalls).toHaveLength(3);
     expect(value.getCalls).toHaveLength(2);
     expectOneFreshAuthorization(value, 4);
@@ -194,6 +210,8 @@ test('every response decision is freshly authorized and success headers match fu
     const unsatisfiable = await value.send({ headers: { range: `bytes=${bytes.length}-` } });
     expect(unsatisfiable.status).toBe(416);
     expect(unsatisfiable.headers.get('content-range')).toBe(`bytes */${bytes.length}`);
+    expect(unsatisfiable.headers.get('etag')).toBe(etag);
+    expect(unsatisfiable.headers.get('cache-control')).toBe('private, no-cache');
     expect(value.headCalls).toHaveLength(4);
     expect(value.getCalls).toHaveLength(2);
     expectOneFreshAuthorization(value, 5);
