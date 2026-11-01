@@ -185,6 +185,8 @@ async function mounted(kind: 'page' | 'occurrence' = 'page') {
     readEditorPage: mock(async () => props.page),
     refreshPage: refresh,
   };
+  // Match the owning route: the native page is already the successful data at its exact query address.
+  client.setQueryData(props.queryKey, props.page);
   const onAdded = mock(async () => {});
   const onClose = mock(() => {});
   const tree = () => (
