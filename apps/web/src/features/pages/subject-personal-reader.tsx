@@ -264,6 +264,18 @@ class SubjectPersonalReaderRegistry {
       isCurrent,
       recordRatingRead: (rating) => this.recordRatingRead(scope.scopeKey, scope.cacheEpoch, rating),
     };
+    const retire = () => {
+      if (!live) return;
+      live = false;
+      scopeState.observers--;
+      if (scopeState.observers !== 0) return;
+      const retirement = ++scopeState.retirement;
+      queueMicrotask(() => {
+        if (scopeState.observers !== 0 || scopeState.retirement !== retirement) return;
+        this.cacheEpochs.set(scope.scopeKey, this.getCacheEpoch(scope.scopeKey) + 1);
+        this.notify();
+      });
+    };
     const lease: SubjectPersonalLease = {
       key,
       reader: scope.reader,
@@ -271,6 +283,7 @@ class SubjectPersonalReaderRegistry {
       locale: scope.locale,
       view: scope.view,
       scope: leaseScope,
+      retire,
       isCurrent,
       beginRatingWrite: (before) => {
         if (!isCurrent()) return null;
@@ -312,18 +325,6 @@ class SubjectPersonalReaderRegistry {
           },
         };
       },
-    };
-    lease.retire = () => {
-      if (!live) return;
-      live = false;
-      scopeState.observers--;
-      if (scopeState.observers !== 0) return;
-      const retirement = ++scopeState.retirement;
-      queueMicrotask(() => {
-        if (scopeState.observers !== 0 || scopeState.retirement !== retirement) return;
-        this.cacheEpochs.set(scope.scopeKey, this.getCacheEpoch(scope.scopeKey) + 1);
-        this.notify();
-      });
     };
     return lease;
   }
@@ -407,10 +408,10 @@ export function useSubjectPersonalReader(input: {
   const enabled = personalRead.enabled && routeEnabled && sessionReady && reader !== null;
   const preferencesOptions = subjectReaderQuery(subjectId, locale, queryScope, transport);
   const ownRatingOptions = subjectOwnRatingQuery(subjectId, locale, queryScope, transport);
-  const preferencesQuery = useQuery({ ...preferencesOptions, enabled: enabled && preferencesOptions.enabled });
+  const preferencesQuery = useQuery({ ...preferencesOptions, enabled: enabled && preferencesOptions.enabled !== false });
   const ownRatingQuery = useQuery({
     ...ownRatingOptions,
-    enabled: includeOwnRating && enabled && ownRatingOptions.enabled,
+    enabled: includeOwnRating && enabled && ownRatingOptions.enabled !== false,
   });
   const currentLease =
     leaseState?.token === bindingToken && leaseState.lease.isCurrent() ? leaseState.lease : undefined;

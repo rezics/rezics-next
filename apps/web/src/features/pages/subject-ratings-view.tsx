@@ -125,7 +125,7 @@ export function RatingsView({
             question={data.question}
             locale={control.locale}
             own={control.own}
-            binding={control.binding}
+            {...(control.binding ? { binding: control.binding } : {})}
             returnTo={control.returnTo}
             session={control.session}
             subjectId={control.subjectId}

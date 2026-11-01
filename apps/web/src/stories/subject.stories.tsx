@@ -414,7 +414,7 @@ export const ImportedScores: Story = {
             locale,
             returnTo: subjectHref({ id: IMPORTED_VN_SUBJECT_ID, label }, locale).href,
             session: 'signed-out',
-            own: { kind: 'ready', units: null },
+            own: { reader: null, kind: 'ready', units: null },
           }}
           data={ratingsFixtures['subject-ratings-imported'].preview}
           id="clannad-ratings"
