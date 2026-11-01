@@ -7,6 +7,7 @@ import {
   type ActiveCuration,
   type PublicationConfirmation,
   type PublicationRead,
+  type CurationPublicationVisit,
 } from './curation-publish';
 
 export type ValidationCorrection = { describe: (pointer: string) => string; correct: (pointer: string) => void };
@@ -60,6 +61,7 @@ export function CurationFailureNotice({
 /** Publication recovery consumes the editor's draft, without owning document selection or edits. */
 export function CurationPublicationRecovery({
   publication,
+  visit,
   profile,
   head,
   onPublished,
@@ -67,6 +69,7 @@ export function CurationPublicationRecovery({
   correction,
 }: {
   publication: CurationPublication;
+  visit?: CurationPublicationVisit;
   profile: PresentationProfile;
   head: number;
   onPublished: (confirmation: PublicationConfirmation) => void;
@@ -89,15 +92,19 @@ export function CurationPublicationRecovery({
   const stale = result?.ok === false && result.reason === 'stale';
   const invalid = result?.ok === false && result.reason === 'invalid';
   function reconcile(choice: 'keep' | 'discard') {
-    if (!mounted.current) return;
-    const reviewed = publication.reconcile(profile, choice);
-    if (reviewed) onReviewed(reviewed, choice);
+    if (!mounted.current || (visit && !visit.isCurrent())) return;
+    const reviewed = visit ? visit.reconcile(profile, choice) : publication.reconcile(profile, choice);
+    if (mounted.current && (!visit || visit.isCurrent()) && reviewed) onReviewed(reviewed, choice);
   }
   async function retry() {
-    if (!mounted.current) return;
-    const confirmation = await publication.retry();
-    if (mounted.current && confirmation) onPublished(confirmation);
+    if (!mounted.current || (visit && !visit.isCurrent())) return;
+    const confirmation = visit ? await visit.retry() : await publication.retry();
+    if (mounted.current && (!visit || visit.isCurrent()) && confirmation) onPublished(confirmation);
   }
+  const inspect = () => {
+    if (!mounted.current || (visit && !visit.isCurrent())) return;
+    void (visit ? visit.inspect() : publication.inspect());
+  };
   return (
     <section
       aria-label={m.curation_recovery()}
@@ -149,7 +156,7 @@ export function CurationPublicationRecovery({
               variant="outline"
               className="min-h-11 whitespace-normal"
               disabled={busy}
-              onClick={() => void publication.inspect()}
+              onClick={inspect}
             >
               {m.curation_reload_head()}
             </Button>
@@ -163,9 +170,11 @@ export function CurationPublicationRecovery({
                   profileDigest(profile) === profileDigest(intent.profile)
                 }
                 onClick={async () => {
-                  if (!mounted.current) return;
-                  const confirmation = await publication.replaceInvalid(profile, head);
-                  if (mounted.current && confirmation) onPublished(confirmation);
+                  if (!mounted.current || (visit && !visit.isCurrent())) return;
+                  const confirmation = visit
+                    ? await visit.replaceInvalid(profile, head)
+                    : await publication.replaceInvalid(profile, head);
+                  if (mounted.current && (!visit || visit.isCurrent()) && confirmation) onPublished(confirmation);
                 }}
               >
                 {m.curation_new_intent()}

@@ -1,6 +1,7 @@
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useLocation } from '@tanstack/react-router';
-import { useContext } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useContext, useLayoutEffect, useRef } from 'react';
 import { getLocale } from '../../paraglide/runtime';
 import { csrfHeaders } from '../../threads/composer';
 import { publishCuration, readCuration, type CurationRead } from './curate-actions';
@@ -11,6 +12,7 @@ import { PresentationViewEditor } from './curate-view-editor';
 import type { PublicationTransport } from './curation-publish';
 import { PresentationPreviewPanel, PresentationPreviewContext } from './presentation-preview-view';
 import { readPresentationPreview } from './curate-actions';
+import { CurationReaderAdmission } from './curation-reader-admission';
 
 const publicationTransport: PublicationTransport = {
   read: (expectedReader) => readCuration({ data: { expectedReader }, headers: csrfHeaders() }),
@@ -57,13 +59,25 @@ export function CurationView({
   transport?: PublicationTransport;
 }) {
   const preview = useContext(PresentationPreviewContext);
-  const session = useSession();
+  const queryClient = useQueryClient();
+  const admissionRef = useRef<CurationReaderAdmission | null>(null);
+  if (!admissionRef.current || admissionRef.current.queryClient !== queryClient) {
+    const replaced = admissionRef.current !== null;
+    admissionRef.current?.retireForReplacement();
+    admissionRef.current = new CurationReaderAdmission(queryClient, initial.ok ? initial.reader : null, {
+      forceFresh: replaced,
+    });
+  } else {
+    admissionRef.current.updateInitial(initial.ok ? initial.reader : null);
+  }
+  const admission = admissionRef.current;
+  useLayoutEffect(() => admission.attach(), [admission]);
   const locale = getLocale();
   return (
     <PresentationViewEditor
       initial={initial}
       locale={locale}
-      observedSession={session}
+      admission={admission}
       transport={transport}
       preview={
         <PresentationPreviewPanel

@@ -10,8 +10,10 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type Dispatch,
   type FormEvent,
   type ReactNode,
+  type SetStateAction,
 } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -55,7 +57,17 @@ import {
   type CorrectionTarget,
 } from './curate-view-editor-state';
 import type { PageEditorData } from './editor-config';
-import { CurationPublication, type PublicationConfirmation, type PublicationTransport } from './curation-publish';
+import {
+  CurationPublication,
+  retainedCurationPublication,
+  type CurationPublicationVisit,
+  type PublicationConfirmation,
+  type PublicationTransport,
+} from './curation-publish';
+import {
+  type CurationAdmissionLease,
+  CurationReaderAdmission,
+} from './curation-reader-admission';
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
 import { CurationNavigationGuard } from './curation-navigation-guard';
 
@@ -110,6 +122,7 @@ type PresentationViewEditorProps = {
   locale: string;
   transport: CurationEditorTransport;
   observedSession?: ObservedCurationSession;
+  admission?: CurationReaderAdmission;
   preview?: ReactNode;
 };
 
@@ -117,6 +130,14 @@ type EditorLifecycle = { identity: string | null; epoch: number; reader: string 
 type AdmissionResult = { epoch: number; reader: string; result: CurationRead };
 type RetainedPublication = { publication: CurationPublication; transport: CurationEditorTransport };
 type CurationReadFailure = Exclude<CurationRead, { ok: true }>;
+type FreshAdmissionResult = {
+  reader: string;
+  version: number;
+  result: CurationRead;
+  lease?: CurationAdmissionLease;
+};
+
+type AdmissionReadRequest = { reader: string; version: number; promise: Promise<CurationRead> };
 
 function failureView(failure: CurationReadFailure) {
   if (failure.reason === 'forbidden') return <ErrorPage />;
@@ -129,14 +150,182 @@ function failureView(failure: CurationReadFailure) {
 
 /** Admit the mounted private editor against both the same-read SSR identity and observed session changes. */
 export function PresentationViewEditor({
+  ...props
+}: PresentationViewEditorProps) {
+  if (props.admission) return <ActualPresentationViewEditor {...props} admission={props.admission} />;
+  return <StandalonePresentationViewEditor {...props} />;
+}
+
+function ActualPresentationViewEditor({
+  initial,
+  locale,
+  transport,
+  admission,
+  preview,
+}: PresentationViewEditorProps & { admission: CurationReaderAdmission }) {
+  const snapshot = useSyncExternalStore(admission.subscribe, admission.getSnapshot, admission.getSnapshot);
+  const lease = snapshot.lease;
+  const reader = lease?.reader ?? (snapshot.session.state === 'signed-in' ? (snapshot.session.subject ?? null) : null);
+  const initialRead = useRef<{
+    lease: CurationAdmissionLease;
+    result: Extract<CurationRead, { ok: true }>;
+  } | null>(null);
+  if (lease?.kind === 'initial' && initial.ok && initial.reader === lease.reader)
+    initialRead.current = { lease, result: initial };
+  const initialAdmission =
+    lease?.kind === 'initial' && initialRead.current?.lease === lease ? initialRead.current.result : null;
+  const [freshResult, setFreshResult] = useState<FreshAdmissionResult | null>(null);
+  const retainedPublication = useRef<RetainedPublication | null>(null);
+  const readRequest = useRef<AdmissionReadRequest | null>(null);
+
+  const readCurrent = (expectedReader: string, version: number, invocationTransport: CurationEditorTransport) => {
+    if (!admission.canRead(expectedReader, version)) return () => {};
+
+    let request = readRequest.current;
+    if (!request || request.reader !== expectedReader || request.version !== version) {
+      const promise = Promise.resolve().then(() =>
+        admission.canRead(expectedReader, version)
+          ? invocationTransport.read(expectedReader)
+          : ({ ok: false, reason: 'unavailable' } as const),
+      );
+      request = { reader: expectedReader, version, promise };
+      readRequest.current = request;
+      void promise.then(
+        () => {
+          if (readRequest.current === request) readRequest.current = null;
+        },
+        () => {
+          if (readRequest.current === request) readRequest.current = null;
+        },
+      );
+    }
+
+    let live = true;
+    request.promise.then(
+      (result) => {
+        if (!live || !admission.canRead(expectedReader, version)) return;
+        if (result.ok) {
+          if (result.reader !== expectedReader) {
+            const refusal = { ok: false as const, reason: 'forbidden' as const, admissionChanged: true };
+            setFreshResult((previous) =>
+              admission.canRead(expectedReader, version) ? { reader: expectedReader, version, result: refusal } : previous,
+            );
+            return;
+          }
+          const newLease = admission.admitFresh(expectedReader, version);
+          if (!newLease) return;
+          setFreshResult((previous) =>
+            newLease.isCurrent() ? { reader: expectedReader, version, result, lease: newLease } : previous,
+          );
+          return;
+        }
+        setFreshResult((previous) =>
+          admission.canRead(expectedReader, version) ? { reader: expectedReader, version, result } : previous,
+        );
+      },
+      () => {
+        if (!live || !admission.canRead(expectedReader, version)) return;
+        setFreshResult((previous) =>
+          admission.canRead(expectedReader, version)
+            ? { reader: expectedReader, version, result: { ok: false, reason: 'unavailable' } }
+            : previous,
+        );
+      },
+    );
+    return () => {
+      live = false;
+    };
+  };
+
+  const needsRead = !lease && reader !== null;
+  useEffect(() => {
+    if (!needsRead || !reader) return;
+    const invocationTransport = transport;
+    return readCurrent(reader, snapshot.version, invocationTransport);
+  }, [admission, needsRead, reader, snapshot.version]);
+
+  function retryAdmission() {
+    if (!needsRead || !reader) return;
+    const invocationTransport = transport;
+    readCurrent(reader, snapshot.version, invocationTransport);
+  }
+
+  const currentFreshAdmission =
+    lease?.kind === 'fresh' && freshResult?.lease === lease ? freshResult.result : null;
+  const currentAdmission = initialAdmission ?? currentFreshAdmission;
+
+  if (snapshot.session.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' });
+  if (snapshot.session.state === 'unavailable') return failureView({ ok: false, reason: 'unavailable' });
+  if (snapshot.session.state === 'signed-in' && !reader) return failureView({ ok: false, reason: 'forbidden' });
+  if (!reader && snapshot.session.state === 'unknown')
+    return initial.ok && lease?.kind === 'initial'
+      ? failureView({ ok: false, reason: 'unavailable' })
+      : !initial.ok
+        ? failureView(initial)
+        : failureView({ ok: false, reason: 'unavailable' });
+
+  if (!currentAdmission) {
+    const failedRead =
+      needsRead &&
+      freshResult?.reader === reader &&
+      freshResult.version === snapshot.version &&
+      !freshResult.lease &&
+      !freshResult.result.ok
+        ? freshResult.result
+        : null;
+    if (failedRead)
+      return failedRead.reason === 'unavailable' ? (
+        <div className="space-y-4">
+          {failureView(failedRead)}
+          <Button onClick={retryAdmission}>{m.curation_reload()}</Button>
+        </div>
+      ) : (
+        failureView(failedRead)
+      );
+    if (!needsRead) return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'unavailable' });
+    return <p role="status">{m.curation_loading()}</p>;
+  }
+  if (!currentAdmission.ok)
+    return currentAdmission.reason === 'unavailable' && needsRead ? (
+      <div className="space-y-4">
+        {failureView(currentAdmission)}
+        <Button onClick={retryAdmission}>{m.curation_reload()}</Button>
+      </div>
+    ) : (
+      failureView(currentAdmission)
+    );
+  if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' });
+  if (!lease) return failureView({ ok: false, reason: 'unavailable' });
+
+  let retained = retainedPublication.current;
+  if (!retained || retained.publication.reader !== reader) {
+    retained = { publication: retainedCurationPublication(reader!, transport), transport };
+    retainedPublication.current = retained;
+  }
+  retained.transport = transport;
+  retained.publication.setTransport(transport);
+  return (
+    <AdmittedPresentationViewEditor
+      key={`${lease.incarnation}:${reader}`}
+      initial={currentAdmission}
+      locale={locale}
+      reader={reader!}
+      epoch={lease.incarnation}
+      lease={lease}
+      transport={transport}
+      retained={retained}
+      preview={preview}
+    />
+  );
+}
+
+function StandalonePresentationViewEditor({
   initial,
   locale,
   transport,
   observedSession = { state: 'unknown' },
   preview,
 }: PresentationViewEditorProps) {
-  const transportRef = useRef(transport);
-  transportRef.current = transport;
   const publications = useRef(new Map<string, RetainedPublication>());
   const [lifecycle, setLifecycle] = useState<EditorLifecycle>(() => ({
     identity: null,
@@ -192,7 +381,8 @@ export function PresentationViewEditor({
     let retired = false;
     const epoch = lifecycle.epoch;
     const serial = ++admissionRequest.current;
-    void transportRef.current
+    const invocationTransport = transport;
+    void invocationTransport
       .read(reader)
       .then((result) => {
         if (
@@ -224,7 +414,8 @@ export function PresentationViewEditor({
     if (!needsRead || !reader) return;
     const epoch = lifecycle.epoch;
     const serial = ++admissionRequest.current;
-    void transportRef.current
+    const invocationTransport = transport;
+    void invocationTransport
       .read(reader)
       .then((result) => {
         if (
@@ -266,13 +457,11 @@ export function PresentationViewEditor({
 
   let retained = publications.current.get(reader);
   if (!retained) {
-    const publicationTransport: CurationEditorTransport = {
-      publish: (intent, expectedReader) => transportRef.current.publish(intent, expectedReader),
-      read: (expectedReader) => transportRef.current.read(expectedReader),
-    };
-    retained = { publication: new CurationPublication(reader, publicationTransport), transport: publicationTransport };
+    retained = { publication: new CurationPublication(reader, transport), transport };
     publications.current.set(reader, retained);
   }
+  retained.transport = transport;
+  retained.publication.setTransport(transport);
   return (
     <AdmittedPresentationViewEditor
       key={`${lifecycle.epoch}:${reader}`}
@@ -280,7 +469,7 @@ export function PresentationViewEditor({
       locale={locale}
       reader={reader}
       epoch={lifecycle.epoch}
-      transportRef={transportRef}
+      transport={transport}
       retained={retained}
       preview={preview}
     />
@@ -292,7 +481,8 @@ function AdmittedPresentationViewEditor({
   locale,
   reader,
   epoch,
-  transportRef,
+  lease,
+  transport,
   retained,
   preview,
 }: {
@@ -300,7 +490,8 @@ function AdmittedPresentationViewEditor({
   locale: string;
   reader: string;
   epoch: number;
-  transportRef: { current: CurationEditorTransport };
+  lease?: CurationAdmissionLease;
+  transport: CurationEditorTransport;
   retained: RetainedPublication;
   preview?: ReactNode;
 }) {
@@ -313,17 +504,30 @@ function AdmittedPresentationViewEditor({
   const publication = retained.publication;
   const lifetime = useRef({ active: false, epoch });
   lifetime.current.epoch = epoch;
-  const isCurrent = () => lifetime.current.active && lifetime.current.epoch === epoch;
+  const [visit, setVisit] = useState<CurationPublicationVisit | null>(null);
+  const isCurrent = () =>
+    lifetime.current.active &&
+    lifetime.current.epoch === epoch &&
+    (!lease || lease.isCurrent()) &&
+    !!visit?.isCurrent();
+  function setOwned<T>(setter: Dispatch<SetStateAction<T>>, update: SetStateAction<T>) {
+    setter((previous) => {
+      if (!isCurrent()) return previous;
+      return typeof update === 'function' ? (update as (value: T) => T)(previous) : update;
+    });
+  }
   const localeRef = useRef(locale);
   localeRef.current = locale;
   useLayoutEffect(() => {
+    if (lease && !lease.isCurrent()) return;
     lifetime.current.active = true;
-    publication.activate(retained.transport);
+    const currentVisit = publication.activate(transport, lease ?? null);
+    setVisit((previous) => (currentVisit.isCurrent() ? currentVisit : previous));
     return () => {
       lifetime.current.active = false;
-      publication.retire();
+      publication.retire(currentVisit);
     };
-  }, [epoch, publication, retained]);
+  }, [epoch, publication, retained, lease]);
   const publicationState = useSyncExternalStore(
     publication.subscribe,
     publication.getSnapshot,
@@ -351,13 +555,13 @@ function AdmittedPresentationViewEditor({
     if (previousInitial.current === initialVersion) return;
     previousInitial.current = initialVersion;
     if (!isCurrent() || dirty || publication.getSnapshot().intent) return;
-    setCurrent(initial);
-    setDraft(presentationDraft(initial));
-    setFailure(null);
-    setFailureProfile(initial.profile);
-    setCorrection(null);
-    setMessage('');
-    setGeneration((value) => value + 1);
+    setOwned(setCurrent, initial);
+    setOwned(setDraft, presentationDraft(initial));
+    setOwned(setFailure, null);
+    setOwned(setFailureProfile, initial.profile);
+    setOwned(setCorrection, null);
+    setOwned(setMessage, '');
+    setOwned(setGeneration, (value) => value + 1);
   }, [initialVersion]);
   const navigationGuard = (
     <CurationNavigationGuard dirty={dirty} retainedPublication={pendingPublication} fallbackFocus={pageRegion} />
@@ -412,9 +616,9 @@ function AdmittedPresentationViewEditor({
         if (!isCurrent() || !draft || busy) return;
         const original = source && resolveCorrection(source, pointer, localeRef.current);
         const target = original && currentCorrection(draft.profile, original);
-        setEditorOpen(true);
-        setCorrection(target ? { ...target } : null);
-        setMessage(
+        setOwned(setEditorOpen, true);
+        setOwned(setCorrection, target ? { ...target } : null);
+        setOwned(setMessage,
           target
             ? source && JSON.stringify(source) !== JSON.stringify(draft.profile)
               ? m.curation_correction_later()
@@ -424,8 +628,8 @@ function AdmittedPresentationViewEditor({
               : m.curation_correction_unknown(),
         );
         if (target)
-          setDraft((value) => value && { ...value, selection: { template: target.template, view: target.view } });
-        else setFocusRegion((value) => value + 1);
+          setOwned(setDraft, (value) => value && { ...value, selection: { template: target.template, view: target.view } });
+        else setOwned(setFocusRegion, (value) => value + 1);
       },
     };
   }
@@ -441,38 +645,42 @@ function AdmittedPresentationViewEditor({
   async function reload() {
     if (!isCurrent() || inFlight.current) return;
     if (publication.getSnapshot().intent) {
-      await publication.inspect();
+      const currentVisit = visit;
+      if (!currentVisit?.isCurrent()) return;
+      await currentVisit.inspect();
+      if (!isCurrent() || !currentVisit.isCurrent()) return;
       return;
     }
+    const invocationTransport = transport;
     inFlight.current = true;
-    setLoadingProfile(true);
-    setFailure(null);
-    setCorrection(null);
-    setMessage('');
+    setOwned(setLoadingProfile, true);
+    setOwned(setFailure, null);
+    setOwned(setCorrection, null);
+    setOwned(setMessage, '');
     try {
-      const next = await transportRef.current.read(reader);
+      const next = await invocationTransport.read(reader);
       if (!isCurrent()) return;
       if (next.ok) {
         if (next.reader !== reader) {
-          setCurrent({ ok: false, reason: 'forbidden' });
-          setDraft(null);
+          setOwned(setCurrent, { ok: false, reason: 'forbidden' });
+          setOwned(setDraft, null);
           return;
         }
-        setCurrent(next);
-        setDraft(presentationDraft(next));
-        setGeneration((value) => value + 1);
-        setMessage(m.curation_reloaded());
+        setOwned(setCurrent, next);
+        setOwned(setDraft, presentationDraft(next));
+        setOwned(setGeneration, (value) => value + 1);
+        setOwned(setMessage, m.curation_reloaded());
       } else if (next.reason === 'signed-out') {
-        setCurrent(next);
-        setDraft(null);
-      } else setFailure(next);
+        setOwned(setCurrent, next);
+        setOwned(setDraft, null);
+      } else setOwned(setFailure, next);
     } catch {
       if (!isCurrent()) return;
-      setFailure({ ok: false, reason: 'unavailable' });
+      setOwned(setFailure, { ok: false, reason: 'unavailable' });
     } finally {
       if (isCurrent()) {
         inFlight.current = false;
-        setLoadingProfile(false);
+        setOwned(setLoadingProfile, false);
       }
     }
   }
@@ -480,9 +688,9 @@ function AdmittedPresentationViewEditor({
   function change(data: PageEditorData) {
     if (!isCurrent() || !draft || inFlight.current) return;
     const selection = draft.selection;
-    setDraft((value) => value && editView(value, selection, data));
-    setFailure(null);
-    if (!correction) setMessage('');
+    setOwned(setDraft, (value) => value && editView(value, selection, data));
+    setOwned(setFailure, null);
+    if (!correction) setOwned(setMessage, '');
   }
 
   function addTemplate(event: FormEvent) {
@@ -490,7 +698,7 @@ function AdmittedPresentationViewEditor({
     if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy) return;
     const template = { scope, key };
     if (profileTemplates(draft.profile).some((item) => item.scope === scope && item.key === key)) {
-      setFailure({
+      setOwned(setFailure, {
         ok: false,
         reason: 'invalid',
         errors: [{ pointer: `/${scope === 'type' ? 'types' : 'routes'}`, code: 'duplicate' }],
@@ -504,24 +712,24 @@ function AdmittedPresentationViewEditor({
     );
     const errors = validateProfile(platformRegistry, profile);
     if (errors.length) {
-      setFailure({ ok: false, reason: 'invalid', errors });
-      setFailureProfile(profile);
+      setOwned(setFailure, { ok: false, reason: 'invalid', errors });
+      setOwned(setFailureProfile, profile);
       return;
     }
-    setDraft({ ...draft, profile, selection: { template, view: 'overview' } });
-    setEditorOpen(true);
-    setKey('');
-    setFailure(null);
-    setMessage(m.curation_added());
+    setOwned(setDraft, { ...draft, profile, selection: { template, view: 'overview' } });
+    setOwned(setEditorOpen, true);
+    setOwned(setKey, '');
+    setOwned(setFailure, null);
+    setOwned(setMessage, m.curation_added());
   }
 
   function published(confirmation: PublicationConfirmation) {
     if (!isCurrent() || confirmation.intent.reader !== reader) return;
     const saved = { reader, profile: confirmation.intent.profile, ...confirmation.result };
-    setCurrent(saved);
-    setDraft((value) => value && confirmPresentationDraft(value, confirmation));
-    setCorrection(null);
-    setMessage('');
+    setOwned(setCurrent, saved);
+    setOwned(setDraft, (value) => value && confirmPresentationDraft(value, confirmation));
+    setOwned(setCorrection, null);
+    setOwned(setMessage, '');
   }
 
   async function publish(edited?: CompositionDocument) {
@@ -532,17 +740,19 @@ function AdmittedPresentationViewEditor({
       : draft.profile;
     const errors = validateProfile(platformRegistry, profile);
     if (errors.length) {
-      setFailure({ ok: false, reason: 'invalid', errors });
-      setFailureProfile(profile);
+      setOwned(setFailure, { ok: false, reason: 'invalid', errors });
+      setOwned(setFailureProfile, profile);
       return;
     }
-    setDraft((value) => value && { ...value, profile });
-    setFailure(null);
-    setMessage('');
+    setOwned(setDraft, (value) => value && { ...value, profile });
+    setOwned(setFailure, null);
+    setOwned(setMessage, '');
+    const currentVisit = visit;
+    if (!currentVisit?.isCurrent()) return;
     const confirmation = invalidPublication
-      ? await publication.replaceInvalid(profile, draft.saved.head)
-      : await publication.start(profile, draft.saved.head);
-    if (isCurrent() && confirmation) published(confirmation);
+      ? await currentVisit.replaceInvalid(profile, draft.saved.head)
+      : await currentVisit.start(profile, draft.saved.head);
+    if (isCurrent() && currentVisit.isCurrent() && confirmation) published(confirmation);
   }
 
   if (!draft)
@@ -601,6 +811,7 @@ function AdmittedPresentationViewEditor({
       {preview}
       <CurationPublicationRecovery
         publication={publication}
+        visit={visit ?? undefined}
         profile={profile}
         head={saved.head}
         onPublished={published}
@@ -610,11 +821,11 @@ function AdmittedPresentationViewEditor({
           // reconcile('keep') returns the draft on the reviewed head. The dirty baseline is the actual read.
           const active = publicationState.active;
           if (!active) return;
-          setCurrent(active);
-          setDraft((value) => value && reviewPresentationDraft(value, active, choice));
-          if (choice === 'discard') setGeneration((value) => value + 1);
-          setFailure(null);
-          setMessage(choice === 'keep' ? m.curation_reconciled() : m.curation_discarded());
+          setOwned(setCurrent, active);
+          setOwned(setDraft, (value) => value && reviewPresentationDraft(value, active, choice));
+          if (choice === 'discard') setOwned(setGeneration, (value) => value + 1);
+          setOwned(setFailure, null);
+          setOwned(setMessage, choice === 'keep' ? m.curation_reconciled() : m.curation_discarded());
         }}
       />
       <fieldset disabled={busy} className="min-w-0 space-y-6">
@@ -627,12 +838,14 @@ function AdmittedPresentationViewEditor({
               {m.curation_publish()}
             </Button>
           )}
-          <Button variant="outline" disabled={!dirty} onClick={() => isCurrent() && setConfirm('discard')}>
+          <Button variant="outline" disabled={!dirty} onClick={() => isCurrent() && setOwned(setConfirm, 'discard')}>
             {m.curation_view_discard()}
           </Button>
           <Button
             variant="outline"
-            onClick={() => isCurrent() && (!pendingPublication && dirty ? setConfirm('reload') : void reload())}
+            onClick={() =>
+              isCurrent() && (!pendingPublication && dirty ? setOwned(setConfirm, 'reload') : void reload())
+            }
           >
             {m.curation_reload()}
           </Button>
@@ -651,9 +864,9 @@ function AdmittedPresentationViewEditor({
                   if (!isCurrent()) return;
                   const template = templates.find((item) => JSON.stringify(item) === event.target.value);
                   if (template) {
-                    setCorrection(null);
-                    setDraft((value) => value && selectTemplate(value, template));
-                    setEditorOpen(true);
+                    setOwned(setCorrection, null);
+                    setOwned(setDraft, (value) => value && selectTemplate(value, template));
+                    setOwned(setEditorOpen, true);
                   }
                 }}
               >
@@ -673,9 +886,9 @@ function AdmittedPresentationViewEditor({
                   if (!isCurrent()) return;
                   const view = views.find((item) => item === event.target.value);
                   if (view) {
-                    setCorrection(null);
-                    setDraft((value) => value && { ...value, selection: { ...value.selection, view } });
-                    setEditorOpen(true);
+                    setOwned(setCorrection, null);
+                    setOwned(setDraft, (value) => value && { ...value, selection: { ...value.selection, view } });
+                    setOwned(setEditorOpen, true);
                   }
                 }}
               >
@@ -700,7 +913,7 @@ function AdmittedPresentationViewEditor({
               <h2 className="break-words font-semibold">
                 {templateLabel(selection.template)} · {viewNames[selection.view]}
               </h2>
-              <Button variant="outline" onClick={() => isCurrent() && setEditorOpen(false)}>
+              <Button variant="outline" onClick={() => isCurrent() && setOwned(setEditorOpen, false)}>
                 {m.curation_close()}
               </Button>
             </div>
@@ -722,7 +935,7 @@ function AdmittedPresentationViewEditor({
                     onInvalid={(errors, document) => {
                       if (!isCurrent()) return;
                       const invalid = withView(profile, selection.template, selection.view, document);
-                      setFailure({
+                      setOwned(setFailure, {
                         ok: false,
                         reason: 'invalid',
                         errors: errors.map((error) => ({
@@ -730,7 +943,7 @@ function AdmittedPresentationViewEditor({
                           pointer: viewPointer(profile, selection.template, selection.view) + error.pointer,
                         })),
                       });
-                      setFailureProfile(invalid);
+                      setOwned(setFailureProfile, invalid);
                     }}
                     onChange={change}
                     onPublish={(edited) => void publish(edited)}
@@ -740,7 +953,7 @@ function AdmittedPresentationViewEditor({
             </div>
           </section>
         ) : (
-          <Button variant="outline" onClick={() => isCurrent() && setEditorOpen(true)}>
+          <Button variant="outline" onClick={() => isCurrent() && setOwned(setEditorOpen, true)}>
             {selection.template.scope}: {selection.template.key ?? m.curation_generic()}
           </Button>
         )}
@@ -753,7 +966,7 @@ function AdmittedPresentationViewEditor({
               <NativeSelect
                 id="curation-scope"
                 value={scope}
-                onChange={(event) => isCurrent() && setScope(event.target.value as 'type' | 'route')}
+                onChange={(event) => isCurrent() && setOwned(setScope, event.target.value as 'type' | 'route')}
               >
                 <NativeSelectOption value="type">{scopeNames.type}</NativeSelectOption>
                 <NativeSelectOption value="route">{scopeNames.route}</NativeSelectOption>
@@ -764,7 +977,7 @@ function AdmittedPresentationViewEditor({
               <Input
                 id="curation-key"
                 value={key}
-                onChange={(event) => isCurrent() && setKey(event.target.value)}
+                onChange={(event) => isCurrent() && setOwned(setKey, event.target.value)}
                 required
                 autoComplete="off"
               />
@@ -778,7 +991,7 @@ function AdmittedPresentationViewEditor({
       <AlertDialog
         open={confirm !== null}
         onOpenChange={(open) => {
-          if (!open) setConfirm(null);
+          if (!open && isCurrent()) setOwned(setConfirm, null);
         }}
       >
         <AlertDialogContent>
@@ -795,13 +1008,13 @@ function AdmittedPresentationViewEditor({
                 if (!isCurrent()) return;
                 if (confirm === 'reload') void reload();
                 else {
-                  setDraft((value) => value && discardPresentationDraft(value));
-                  setGeneration((value) => value + 1);
-                  setCorrection(null);
-                  setFailure(null);
-                  setMessage(m.curation_view_discarded());
+                  setOwned(setDraft, (value) => value && discardPresentationDraft(value));
+                  setOwned(setGeneration, (value) => value + 1);
+                  setOwned(setCorrection, null);
+                  setOwned(setFailure, null);
+                  setOwned(setMessage, m.curation_view_discarded());
                 }
-                setConfirm(null);
+                setOwned(setConfirm, null);
               }}
             >
               {confirm === 'reload' ? m.curation_discard_reload() : m.curation_view_discard()}
