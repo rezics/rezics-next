@@ -96,9 +96,7 @@ test.each([401, 403, 404, 503])('board GET %s never retries anonymously or issue
   const failure = await loadNewThreadPage(client, viewer.request(), viewer.env, {
     id: boardId,
     expectedReaderSubject: 'member',
-  }).catch(
-    (error: unknown) => error,
-  );
+  }).catch((error: unknown) => error);
 
   expectBoardRead(calls);
   expect(viewer.reads()).toBe(1);
@@ -127,9 +125,7 @@ test.each(['absent', 'unavailable', 'failed'] as const)(
     const failure = await loadNewThreadPage(client, viewer.request(), viewer.env, {
       id: boardId,
       expectedReaderSubject: 'member',
-    }).catch(
-      (error: unknown) => error,
-    );
+    }).catch((error: unknown) => error);
 
     if (state === 'absent') expect(failure).toEqual(new Error('A signed-in session is required to start a thread.'));
     else if (state === 'unavailable') expect(failure).toMatchObject({ problem: { code: 'dependency_unavailable' } });

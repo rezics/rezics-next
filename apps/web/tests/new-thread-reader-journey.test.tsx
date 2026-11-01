@@ -199,7 +199,12 @@ async function mountCompositions(queryClient: import('@tanstack/react-query').Qu
   }[] = [];
   const write = spyOn(actions, 'startThread').mockImplementation((input) => {
     const work = deferred<Awaited<ReturnType<typeof actions.startThread>>>();
-    writes.push({ input, data: structuredClone(input.data), csrf: new Headers(input.headers).get('X-CSRF-Token'), work });
+    writes.push({
+      input,
+      data: structuredClone(input.data),
+      csrf: new Headers(input.headers).get('X-CSRF-Token'),
+      work,
+    });
     return work.promise;
   });
   const voteReads: {
@@ -309,7 +314,9 @@ async function mountCompositions(queryClient: import('@tanstack/react-query').Qu
   };
 }
 
-async function queryClientWith(session: typeof ownerA | typeof ownerB | { state: 'signed-in'; subject: string; csrfToken: null }) {
+async function queryClientWith(
+  session: typeof ownerA | typeof ownerB | { state: 'signed-in'; subject: string; csrfToken: null },
+) {
   const { QueryClient } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -346,9 +353,9 @@ test('the production admission adapter binds prepared actual provenance and hydr
     await pageView.settle(() => !!pageView.title() && !!pageView.editor());
     expect(pageView.host.textContent).toContain(page.board.title);
     expect(pageView.host.querySelector('[inert]')).not.toBeNull();
-    expect([...pageView.host.querySelectorAll('button')].some((button) => button.type === 'submit' && button.disabled)).toBe(
-      true,
-    );
+    expect(
+      [...pageView.host.querySelectorAll('button')].some((button) => button.type === 'submit' && button.disabled),
+    ).toBe(true);
     expect(pageView.writes).toHaveLength(0);
   } finally {
     await pageView.dispose();
@@ -596,7 +603,9 @@ test('observer and fetch notifications keep the original visit; equal replacemen
     });
     await browser.settle(() => browser.navigation.length === 1);
     expect(browser.navigation).toEqual([`/en/threads/${id(52)}/fresh-b-discussion`]);
-    expect(browser.window.document.cookie).toContain(`rezics_draft_key=${id(52)}.${browser.writes[1]!.data.idempotencyKey}`);
+    expect(browser.window.document.cookie).toContain(
+      `rezics_draft_key=${id(52)}.${browser.writes[1]!.data.idempotencyKey}`,
+    );
     expect(browser.writes).toHaveLength(2);
   } finally {
     await browser.dispose();
@@ -667,59 +676,69 @@ test('an old unavailable command result and finally cannot alter a fresh owner v
   }
 });
 
-test.each(['query-error', 'query-removal', 'sign-out', 'unknown', 'subject-change', 'credential-change', 'readiness-loss', 'aba'] as const)(
-  'the real composition retires private board disclosure after %s',
-  async (change) => {
-    const client = await queryClientWith(ownerA);
-    const { sessionQuery } = await import('../src/session/query');
-    const loaded = await preparePage(client, {
-      boardId: id(60),
-      purpose: 'discussion',
-      readerSubject: ownerA.subject,
-      preparedSubject: ownerA.subject,
-    });
-    const browser = await mountCompositions(client, [{ key: change, page: loaded.page }]);
-    try {
-      await browser.render();
-      await browser.settle(() => !!browser.title() && browser.host.textContent?.includes(loaded.page.board.title) === true);
-      if (change === 'query-error') {
-        await client.fetchQuery({
+test.each([
+  'query-error',
+  'query-removal',
+  'sign-out',
+  'unknown',
+  'subject-change',
+  'credential-change',
+  'readiness-loss',
+  'aba',
+] as const)('the real composition retires private board disclosure after %s', async (change) => {
+  const client = await queryClientWith(ownerA);
+  const { sessionQuery } = await import('../src/session/query');
+  const loaded = await preparePage(client, {
+    boardId: id(60),
+    purpose: 'discussion',
+    readerSubject: ownerA.subject,
+    preparedSubject: ownerA.subject,
+  });
+  const browser = await mountCompositions(client, [{ key: change, page: loaded.page }]);
+  try {
+    await browser.render();
+    await browser.settle(
+      () => !!browser.title() && browser.host.textContent?.includes(loaded.page.board.title) === true,
+    );
+    if (change === 'query-error') {
+      await client
+        .fetchQuery({
           queryKey: sessionQuery.queryKey,
           queryFn: async () => {
             throw new Error('session refresh failed');
           },
           retry: false,
           staleTime: 0,
-        }).catch(() => undefined);
-      } else if (change === 'query-removal') {
-        client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
-      } else if (change === 'sign-out') {
+        })
+        .catch(() => undefined);
+    } else if (change === 'query-removal') {
+      client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+    } else if (change === 'sign-out') {
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+    } else if (change === 'unknown') {
+      client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null });
+    } else if (change === 'subject-change') {
+      client.setQueryData(sessionQuery.queryKey, ownerB);
+    } else if (change === 'credential-change') {
+      client.setQueryData(sessionQuery.queryKey, { ...ownerA, csrfToken: 'rotated-csrf' });
+    } else if (change === 'readiness-loss') {
+      client.setQueryData(sessionQuery.queryKey, { ...ownerA, csrfToken: null });
+    } else {
+      await act(async () => {
         client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
-      } else if (change === 'unknown') {
-        client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null });
-      } else if (change === 'subject-change') {
-        client.setQueryData(sessionQuery.queryKey, ownerB);
-      } else if (change === 'credential-change') {
-        client.setQueryData(sessionQuery.queryKey, { ...ownerA, csrfToken: 'rotated-csrf' });
-      } else if (change === 'readiness-loss') {
-        client.setQueryData(sessionQuery.queryKey, { ...ownerA, csrfToken: null });
-      } else {
-        await act(async () => {
-          client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
-          client.setQueryData(sessionQuery.queryKey, ownerA);
-        });
-      }
-      await browser.settle(() => !browser.host.textContent?.includes(loaded.page.board.title));
-      expect(browser.window.document.title).not.toContain(loaded.page.board.title);
-      expect(browser.window.document.head.innerHTML).not.toContain(loaded.page.board.title);
-      expect(browser.writes).toHaveLength(0);
-      expect(browser.host.querySelector('a[href*="/boards/"]')).toBeNull();
-    } finally {
-      await browser.dispose();
-      client.clear();
+        client.setQueryData(sessionQuery.queryKey, ownerA);
+      });
     }
-  },
-);
+    await browser.settle(() => !browser.host.textContent?.includes(loaded.page.board.title));
+    expect(browser.window.document.title).not.toContain(loaded.page.board.title);
+    expect(browser.window.document.head.innerHTML).not.toContain(loaded.page.board.title);
+    expect(browser.writes).toHaveLength(0);
+    expect(browser.host.querySelector('a[href*="/boards/"]')).toBeNull();
+  } finally {
+    await browser.dispose();
+    client.clear();
+  }
+});
 
 test('final unmount retires an outstanding review read without restoring private selectors', async () => {
   const client = await queryClientWith(ownerA);

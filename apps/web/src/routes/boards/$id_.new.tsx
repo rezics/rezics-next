@@ -181,9 +181,7 @@ export function NewThreadComposition({
         <article className="max-w-4xl space-y-8 text-foreground">
           <header className="space-y-3">
             {bound ? (
-              <p className="text-sm font-medium text-muted-foreground">
-                {origin.board.title ?? m.threads_untitled()}
-              </p>
+              <p className="text-sm font-medium text-muted-foreground">{origin.board.title ?? m.threads_untitled()}</p>
             ) : null}
             <PageHeading>{m.thread_new_heading()}</PageHeading>
           </header>

@@ -109,9 +109,7 @@ function writerReady(session: ThreadCreationSession | undefined): session is Thr
 }
 
 /** Capture the exact successful session-query result that precedes the private board read. */
-export function observeThreadCreationReader(
-  client: QueryClient | undefined,
-): ThreadCreationReaderObservation | null {
+export function observeThreadCreationReader(client: QueryClient | undefined): ThreadCreationReaderObservation | null {
   if (!client) return null;
   threadCreationSessionSource(client);
   const query = client.getQueryState<ThreadCreationSession>(sessionQuery.queryKey);
@@ -135,12 +133,12 @@ export function threadCreationReaderObservationMatches(
   const session = query?.data;
   return Boolean(
     query &&
-      query.status === 'success' &&
-      query.dataUpdateCount === observation.dataUpdateCount &&
-      query.errorUpdateCount === observation.errorUpdateCount &&
-      query.dataUpdatedAt === observation.dataUpdatedAt &&
-      readerReady(session) &&
-      session.subject === observation.subject,
+    query.status === 'success' &&
+    query.dataUpdateCount === observation.dataUpdateCount &&
+    query.errorUpdateCount === observation.errorUpdateCount &&
+    query.dataUpdatedAt === observation.dataUpdatedAt &&
+    readerReady(session) &&
+    session.subject === observation.subject,
   );
 }
 
@@ -264,7 +262,6 @@ export class ThreadCreationLifetime {
       });
     };
   }
-
 }
 
 export type ThreadCreationScope = {
@@ -275,10 +272,7 @@ export type ThreadCreationScope = {
   initialSubjectTitle?: string;
 };
 
-export function useThreadCreationLifetime(
-  scope: ThreadCreationScope,
-  admission: ThreadCreationReaderAdmission,
-) {
+export function useThreadCreationLifetime(scope: ThreadCreationScope, admission: ThreadCreationReaderAdmission) {
   const client = useContext(QueryClientContext);
   const source = useMemo(() => threadCreationSessionSource(client), [client]);
   const locale = getLocale();
