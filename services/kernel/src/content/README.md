@@ -138,6 +138,7 @@ continue with the same selection instead of interpreting that page as an empty q
 
 Newest traverses `(created_at, report_id)` descending; oldest traverses the same index in reverse, ascending.
 Each SQL branch uses a matching keyset inequality and its own bounded limit; only the chosen branch executes.
+The outer order sorts at most that bounded candidate page to guarantee response order across the disjoint branches.
 The v2 sealed cursor binds normalized selectors, order, limit, target, partition epoch and the current account,
 client, scopes, requested-by identity and authentication epoch. Legacy report cursors lack these bindings and
 are refused by the ordinary invalid-cursor rules; restart explicitly with the current selection. There is no
