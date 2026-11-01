@@ -114,14 +114,16 @@ const currentSession = {
   csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
 };
 
-async function withDom(run: (context: {
-  window: Awaited<ReturnType<typeof makeWindow>>['window'];
-  host: HTMLDivElement;
-  root: Root;
-  cache: QueryClient;
-  render: (node: ReactNode) => Promise<void>;
-  flush: () => Promise<void>;
-}) => Promise<void>) {
+async function withDom(
+  run: (context: {
+    window: Awaited<ReturnType<typeof makeWindow>>['window'];
+    host: HTMLDivElement;
+    root: Root;
+    cache: QueryClient;
+    render: (node: ReactNode) => Promise<void>;
+    flush: () => Promise<void>;
+  }) => Promise<void>,
+) {
   const { window, restore } = await makeWindow();
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('div');
@@ -366,7 +368,11 @@ test('report and appeal sparse, loading, denied, stale, unavailable and closed s
         createElement(BoardReportQueue, {
           reports: [privateReport],
           targets: [
-            { key: `post:${privateReport.target.id}`, kind: 'post', value: { post: { body: 'PRIVATE_REPORT_TARGET' } } },
+            {
+              key: `post:${privateReport.target.id}`,
+              kind: 'post',
+              value: { post: { body: 'PRIVATE_REPORT_TARGET' } },
+            },
           ],
           revisions: [],
           next: 'opaque/private/cursor==',
@@ -432,9 +438,7 @@ test('report and appeal sparse, loading, denied, stale, unavailable and closed s
     );
     expect(sparseAppeals).toContain(m.moderation_appeals_read_sparse());
     expect(sparseAppeals).not.toContain('opaque/private/appeal-cursor==');
-    const finalAppeals = renderStatic(
-      createElement(ModerationAppealsView, { appeals: [], targets: [], next: null }),
-    );
+    const finalAppeals = renderStatic(createElement(ModerationAppealsView, { appeals: [], targets: [], next: null }));
     expect(finalAppeals).toContain(m.moderation_appeals_empty());
     expect(finalAppeals).not.toContain(m.moderation_appeals_read_sparse());
   });
@@ -519,7 +523,12 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
 test('the default Reports visit hides its private case when the same account receives a replacement session', async () => {
   await withDom(async ({ host, render, flush, cache }) => {
     const { ModerationReportsPage } = await import('../src/moderation/reports-page');
-    const input = { boardId: reportId(600), status: 'pending' as const, targetKind: 'post' as const, order: 'newest' as const };
+    const input = {
+      boardId: reportId(600),
+      status: 'pending' as const,
+      targetKind: 'post' as const,
+      order: 'newest' as const,
+    };
     const source = reportSessionSource(cache);
     const page: PrivateReportPage = {
       state: 'ready',

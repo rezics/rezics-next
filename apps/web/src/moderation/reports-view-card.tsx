@@ -192,175 +192,173 @@ export function ReportReviewCard({
           {m.moderation_queue_submitted()} <time dateTime={report.createdAt}>{date(report.createdAt)}</time>
         </p>
       </header>
-        <section aria-labelledby={`${id}-submission`} className="space-y-3 rounded-xl bg-muted/50 p-4">
-          <ContentItemHeading id={`${id}-submission`} level={3} className="text-sm font-semibold">
-            {m.moderation_queue_submission()}
-          </ContentItemHeading>
-          <dl className="space-y-3 text-sm">
+      <section aria-labelledby={`${id}-submission`} className="space-y-3 rounded-xl bg-muted/50 p-4">
+        <ContentItemHeading id={`${id}-submission`} level={3} className="text-sm font-semibold">
+          {m.moderation_queue_submission()}
+        </ContentItemHeading>
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
+            <dd className="mt-1 font-medium">{submittedReason(report.reason)}</dd>
+          </div>
+          {report.evidence ? (
             <div>
-              <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
-              <dd className="mt-1 font-medium">{submittedReason(report.reason)}</dd>
+              <dt className="text-muted-foreground">{m.moderation_submitted_evidence_label()}</dt>
+              <dd className="mt-1 whitespace-pre-wrap break-words">{report.evidence}</dd>
             </div>
-            {report.evidence ? (
-              <div>
-                <dt className="text-muted-foreground">{m.moderation_submitted_evidence_label()}</dt>
-                <dd className="mt-1 whitespace-pre-wrap break-words">{report.evidence}</dd>
-              </div>
-            ) : null}
-          </dl>
+          ) : null}
+        </dl>
+      </section>
+      <div className="grid min-w-0 gap-6">
+        <section aria-labelledby={`${id}-revision`} className="min-w-0 space-y-2">
+          <ContentItemHeading id={`${id}-revision`} level={3} className="text-sm font-semibold">
+            {m.moderation_reported_revision_label()}
+          </ContentItemHeading>
+          <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
+            {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
+          </div>
         </section>
-        <div className="grid min-w-0 gap-6">
-          <section aria-labelledby={`${id}-revision`} className="min-w-0 space-y-2">
-            <ContentItemHeading id={`${id}-revision`} level={3} className="text-sm font-semibold">
-              {m.moderation_reported_revision_label()}
-            </ContentItemHeading>
-            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
-              {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
-            </div>
-          </section>
-          <section aria-labelledby={`${id}-current`} className="min-w-0 space-y-2">
-            <ContentItemHeading id={`${id}-current`} level={3} className="text-sm font-semibold">
-              {m.moderation_current_target_label()}
-            </ContentItemHeading>
-            <p className="text-xs text-muted-foreground">
-              <span>{m.moderation_appeal_target_label()}:</span>{' '}
-              {report.target.kind === 'post'
-                ? m.moderation_queue_post()
-                : report.target.kind === 'thread'
-                  ? m.moderation_queue_thread()
-                  : m.moderation_queue_board()}{' '}
-              <code className="break-all">{report.target.id}</code>
-            </p>
-            <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
-              {moderationTargetContent(target)}
-            </div>
-          </section>
-        </div>
-        <div className="border-t pt-4">
-          {report.outcome || confirmed ? (
-            <div
-              ref={confirmationRef}
-              role="status"
-              tabIndex={-1}
-              className="space-y-2 text-sm focus-visible:rounded-lg focus-visible:outline focus-visible:outline-ring"
+        <section aria-labelledby={`${id}-current`} className="min-w-0 space-y-2">
+          <ContentItemHeading id={`${id}-current`} level={3} className="text-sm font-semibold">
+            {m.moderation_current_target_label()}
+          </ContentItemHeading>
+          <p className="text-xs text-muted-foreground">
+            <span>{m.moderation_appeal_target_label()}:</span>{' '}
+            {report.target.kind === 'post'
+              ? m.moderation_queue_post()
+              : report.target.kind === 'thread'
+                ? m.moderation_queue_thread()
+                : m.moderation_queue_board()}{' '}
+            <code className="break-all">{report.target.id}</code>
+          </p>
+          <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">{moderationTargetContent(target)}</div>
+        </section>
+      </div>
+      <div className="border-t pt-4">
+        {report.outcome || confirmed ? (
+          <div
+            ref={confirmationRef}
+            role="status"
+            tabIndex={-1}
+            className="space-y-2 text-sm focus-visible:rounded-lg focus-visible:outline focus-visible:outline-ring"
+          >
+            {confirmed && !report.outcome ? <p className="font-medium">{status}</p> : null}
+            {report.resolvedAt ? (
+              <p className="text-muted-foreground">
+                {m.moderation_queue_resolved_at()} <time dateTime={report.resolvedAt}>{date(report.resolvedAt)}</time>
+              </p>
+            ) : null}
+            {confirmed?.action === 'take-down' ? (
+              <>
+                <p className="whitespace-pre-wrap break-words">{confirmed.reason}</p>
+                <p className="text-muted-foreground">{m.moderation_queue_projection_pending()}</p>
+              </>
+            ) : null}
+          </div>
+        ) : (
+          <Collapsible>
+            <CollapsibleTrigger
+              render={<Button variant="outline" className="min-h-11" />}
+              disabled={bulkBlocked || pending}
             >
-              {confirmed && !report.outcome ? <p className="font-medium">{status}</p> : null}
-              {report.resolvedAt ? (
-                <p className="text-muted-foreground">
-                  {m.moderation_queue_resolved_at()} <time dateTime={report.resolvedAt}>{date(report.resolvedAt)}</time>
-                </p>
-              ) : null}
-              {confirmed?.action === 'take-down' ? (
-                <>
-                  <p className="whitespace-pre-wrap break-words">{confirmed.reason}</p>
-                  <p className="text-muted-foreground">{m.moderation_queue_projection_pending()}</p>
-                </>
-              ) : null}
-            </div>
-          ) : (
-            <Collapsible>
-              <CollapsibleTrigger
-                render={<Button variant="outline" className="min-h-11" />}
-                disabled={bulkBlocked || pending}
+              {m.moderation_queue_review()}
+            </CollapsibleTrigger>
+            <CollapsibleContent keepMounted>
+              <form
+                className="space-y-4 pt-4"
+                aria-busy={pending}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void act('take-down');
+                }}
               >
-                {m.moderation_queue_review()}
-              </CollapsibleTrigger>
-              <CollapsibleContent keepMounted>
-                <form
-                  className="space-y-4 pt-4"
-                  aria-busy={pending}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void act('take-down');
-                  }}
-                >
-                  <Field>
-                    <FieldLabel htmlFor={`${id}-reason`}>{m.moderation_reason_label()}</FieldLabel>
-                    <Textarea
-                      id={`${id}-reason`}
-                      name="reason"
-                      required
-                      maxLength={1024}
-                      rows={3}
-                      value={reason}
-                      disabled={bulkBlocked || pending || failure === 'uncertain'}
-                      aria-describedby={`${id}-hint`}
-                      onChange={(event) => {
-                        setReason(event.target.value);
-                        reviewAction.changed();
-                      }}
-                    />
-                    <FieldDescription id={`${id}-hint`}>{m.moderation_queue_reason_hint()}</FieldDescription>
-                  </Field>
-                  {takenDown ? (
-                    <p className="text-sm text-muted-foreground">{m.moderation_queue_takedown_confirmed()}</p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" variant="destructive" className="min-h-11" disabled={blocked || takenDown}>
-                      {m.moderation_take_down()}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-11"
-                      disabled={blocked}
-                      onClick={() => void act('dismiss')}
-                    >
-                      {m.moderation_dismiss()}
-                    </Button>
+                <Field>
+                  <FieldLabel htmlFor={`${id}-reason`}>{m.moderation_reason_label()}</FieldLabel>
+                  <Textarea
+                    id={`${id}-reason`}
+                    name="reason"
+                    required
+                    maxLength={1024}
+                    rows={3}
+                    value={reason}
+                    disabled={bulkBlocked || pending || failure === 'uncertain'}
+                    aria-describedby={`${id}-hint`}
+                    onChange={(event) => {
+                      setReason(event.target.value);
+                      reviewAction.changed();
+                    }}
+                  />
+                  <FieldDescription id={`${id}-hint`}>{m.moderation_queue_reason_hint()}</FieldDescription>
+                </Field>
+                {takenDown ? (
+                  <p className="text-sm text-muted-foreground">{m.moderation_queue_takedown_confirmed()}</p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" variant="destructive" className="min-h-11" disabled={blocked || takenDown}>
+                    {m.moderation_take_down()}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    disabled={blocked}
+                    onClick={() => void act('dismiss')}
+                  >
+                    {m.moderation_dismiss()}
+                  </Button>
+                </div>
+                {pending ? (
+                  <p role="status" className="text-sm">
+                    {m.moderation_queue_pending()}
+                  </p>
+                ) : null}
+                {failure ? (
+                  <div role="alert" className="space-y-1 text-sm">
+                    <p>{failureMessage}</p>
+                    <p className="text-muted-foreground">
+                      {failure === 'uncertain' ? m.moderation_queue_retry_hint() : m.moderation_queue_refresh_hint()}
+                    </p>
+                    {failure === 'uncertain' ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={bulkBlocked || pending}
+                        onClick={() => void retry()}
+                      >
+                        {m.moderation_queue_retry_action()}
+                      </Button>
+                    ) : onRefresh ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={pending}
+                        onClick={() => void refresh()}
+                      >
+                        {m.moderation_queue_refresh()}
+                      </Button>
+                    ) : null}
+                    {failure === 'sign-in' ? (
+                      <a
+                        className="inline-flex min-h-11 items-center underline"
+                        href={`/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+                      >
+                        {m.moderation_queue_sign_in()}
+                      </a>
+                    ) : null}
                   </div>
-                  {pending ? (
-                    <p role="status" className="text-sm">
-                      {m.moderation_queue_pending()}
-                    </p>
-                  ) : null}
-                  {failure ? (
-                    <div role="alert" className="space-y-1 text-sm">
-                      <p>{failureMessage}</p>
-                      <p className="text-muted-foreground">
-                        {failure === 'uncertain' ? m.moderation_queue_retry_hint() : m.moderation_queue_refresh_hint()}
-                      </p>
-                      {failure === 'uncertain' ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="min-h-11"
-                          disabled={bulkBlocked || pending}
-                          onClick={() => void retry()}
-                        >
-                          {m.moderation_queue_retry_action()}
-                        </Button>
-                      ) : onRefresh ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="min-h-11"
-                          disabled={pending}
-                          onClick={() => void refresh()}
-                        >
-                          {m.moderation_queue_refresh()}
-                        </Button>
-                      ) : null}
-                      {failure === 'sign-in' ? (
-                        <a
-                          className="inline-flex min-h-11 items-center underline"
-                          href={`/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
-                        >
-                          {m.moderation_queue_sign_in()}
-                        </a>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {message ? (
-                    <p role={message === m.moderation_queue_refreshed() ? 'status' : 'alert'} className="text-sm">
-                      {message}
-                    </p>
-                  ) : null}
-                </form>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-        </div>
+                ) : null}
+                {message ? (
+                  <p role={message === m.moderation_queue_refreshed() ? 'status' : 'alert'} className="text-sm">
+                    {message}
+                  </p>
+                ) : null}
+              </form>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </div>
     </ContentItemFrame>
   );
 }
