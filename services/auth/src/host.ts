@@ -258,6 +258,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       process.off('SIGINT', interrupt);
       process.off('SIGTERM', interrupt);
       await starting?.catch(() => {});
+      privateConsentAccepting = false;
       process.off('SIGINT', interrupt);
       process.off('SIGTERM', interrupt);
       // Native recovery/scheduling shuts down before any product or injected SDK pool.
