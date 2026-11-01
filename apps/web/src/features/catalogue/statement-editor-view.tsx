@@ -720,7 +720,10 @@ export function StatementEditor({
     }
   }
   return (
-    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6" aria-busy={busy}>
+    <article
+      className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6"
+      aria-busy={busy}
+    >
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{m.correction_title({}, o)}</h1>
         {subject && (

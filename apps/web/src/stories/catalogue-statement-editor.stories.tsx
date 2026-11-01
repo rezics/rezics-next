@@ -259,15 +259,15 @@ export const Unavailable: Story = {
     await comparison.findByText(m.candidate_selection_confirmed());
     const savedLink = comparison.getByRole('link', { name: m.candidate_view_public() });
     await expect(savedLink.getAttribute('href')).toContain('/subjects/');
-    await expect(
-      comparison.getByRole('heading', { name: m.candidate_current() }).parentElement!,
-    ).toHaveTextContent('1946');
+    await expect(comparison.getByRole('heading', { name: m.candidate_current() }).parentElement!).toHaveTextContent(
+      '1946',
+    );
     await phoneControls();
     await userEvent.click(comparison.getByRole('button', { name: m.candidate_reload() }));
     await waitFor(() => expect(comparison.getByRole('button', { name: m.candidate_close() })).toBeEnabled());
-    await expect(
-      comparison.getByRole('heading', { name: m.candidate_current() }).parentElement!,
-    ).toHaveTextContent('1946');
+    await expect(comparison.getByRole('heading', { name: m.candidate_current() }).parentElement!).toHaveTextContent(
+      '1946',
+    );
     await phoneControls();
   },
 };
