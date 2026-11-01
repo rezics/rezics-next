@@ -21,9 +21,10 @@ type MainView = Awaited<ReturnType<typeof mainView>>;
 async function firstRealmLink(view: MainView) {
   const realm = myRealmsRecording.items[0];
   if (!realm) throw new Error('The recorded Realms page has no Realm.');
-  const heading = await view.findByRole('heading', { level: 2, name: realm.name, exact: true });
+  const name = new RegExp(`^${realm.name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}$`, 'u');
+  const heading = await view.findByRole('heading', { level: 2, name });
   await expect(heading).toBeVisible();
-  const links = await view.findAllByRole('link', { name: realm.name, exact: true });
+  const links = await view.findAllByRole('link', { name });
   await expect(links).toHaveLength(1);
   const link = links[0];
   if (!link) throw new Error('The recorded Realm should have one primary link.');
