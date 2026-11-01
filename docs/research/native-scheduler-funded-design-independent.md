@@ -317,7 +317,8 @@ counts are concrete; its unproved input/trigger/copy prices are identified later
 ### Exact eligibility domains
 
 Use tagged NULLs, never an ordinary string as a NULL sentinel. Match native text
-equality/collation exactly. For a named worker with application A and version v,
+equality/collation exactly. A named worker means a nonempty configured native name;
+the release treats unset/empty application filters as unrestricted. For application A and version v,
 eligible applications are A and NULL. A latest worker accepts v and NULL versions;
 an older worker accepts only v. Latest means the actual native version lookup over
 that application's own and unclaimed version records; absence of a registered
@@ -622,7 +623,8 @@ for each set bit in the cutoff, use the preceding equal bits followed by zero.
 This is exact for negative timestamps as well; it does not assume modern dates or
 that completion follows creation.
 
-Maintain a native-transaction projection with one row per terminal status, and
+Maintain a native-transaction projection with one row per terminal workflow whose
+completion is non-NULL, and
 64 expression B-tree indexes on that projection, one per prefix depth 1 through
 64, each ordered by exact application, prefix value,
 created_at and workflow_uuid. Literal partial predicates include the four terminal
@@ -669,7 +671,7 @@ The illustrative `d` is an emitted literal in each DDL/query, not a SQL column o
 runtime parameter whose planner implication is assumed. For an initial head there
 is no after predicate. Use separate NULL and named application streams so there
 is no residual owner filter over other applications' rows. Every qualifying row
-belongs to exactly one queried prefix, although its native status is maintained
+belongs to exactly one queried prefix, although its projection row is maintained
 in all 64 depth indexes.
 
 There are at most 128 named-application stream heads. Fetch one head per stream,
@@ -685,7 +687,8 @@ eligibility before ordered creation access; the creation range proves the other
 cutoff. The creation/completion inversion cannot add live residual candidates to a
 stream. A 64-deep auxiliary prefix table would instead add 64 account-bearing heap
 copies per workflow and explicit row work; it is a different, more expensive copy
-design and is not hidden inside this index-only proposal.
+design and is not hidden inside this expression-index proposal. The one projection
+heap row and all 64 index copies in this proposal remain actual owned copies.
 
 ### Literal retention steps and continuation
 
@@ -905,10 +908,12 @@ The directory sub-envelope and its child split also confer no Work budget.
 The installed adapter `work/sdk-retirement-fence.ts:SDK_MAINTENANCE_DISPATCH`
 names the exact supported one-attempt dispatches below. The native body in the
 installed patch performs these steps and calls reserve before dispatch. These
-literals are valid only with that body's documented narrow custody bounds:
+literals are existing source declarations for that body's narrow custody bounds:
 64 operation outputs, 8 event keys, 64 event-history rows, zero notifications and
 zero stream rows, payload 65,536 bytes, metadata 4,096 bytes, and its actual
-writer-state input validation. They are not a generic retention deletion tariff.
+writer-state input validation. They are not a generic retention deletion tariff
+or independently executed physical evidence. Their declared byte accounting must
+also be distinguished from the stricter inclusive internal-byte requirement below.
 
 | Dispatch | Rows | Points | Statements | Bytes | Engine requests |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -923,7 +928,8 @@ writer-state input validation. They are not a generic retention deletion tariff.
 | Delete operation outputs | 64 | 1 | 1 | 0 | 0 |
 | Delete status and native cascades | 73 | 5 | 5 | 0 | 0 |
 
-Full finite paths for that existing body, including possible cleanup, are:
+Full componentwise sums of those declared finite dispatch paths, including
+possible cleanup, are:
 
 ~~~text
 retire:
@@ -976,7 +982,7 @@ charging `(limit+1,1,1,(limit+1)*80,0)` before the query:
 | Total | 139 | 147 |
 
 The body returns scalar inventory/size/validity observations, not all payloads.
-Its actual existing reservation total is therefore:
+Its actual existing declared reservation total is therefore:
 
 ~~~text
 inspect = (1+147, 8, 4+8, 128+147*80, 0)
@@ -998,6 +1004,17 @@ For example, available `AGENT_IDENTITY_HISTORY_GUARD_COST` is
 They are charged in addition at their actual call sites. The role query explicitly
 reads up to 65 and refuses more than 64. It does not authorize general workflow
 retirement merely because an ID has few SDK child rows.
+
+The inspector itself explicitly constructs `to_jsonb(bounded_row)`, renders
+`value::text` and renders payload-stripped metadata before returning those scalars.
+The 80-byte-per-result declaration does not derive bounds for those internal
+materializations. Even under the narrow payload domain, they can exceed the scalar
+wire result size; an overflow/oversize row is inspected before rejection. Thus
+11,888 is the existing reservation sum, **not** an inclusive proof under this
+research contract's internal-byte requirement. The same distinction applies to
+the four-sub-body sum. Do not use it as an admitted new price merely because its
+arithmetic is exact. A complete new derivation needs actual bounded internal
+operands and the precise accounting interpretation, including the rejection path.
 
 The full currently available identity body cannot be called autonomously with Work
 money: `advanceAgentIdentityConsumerMaintenance`, recorded History authority and
