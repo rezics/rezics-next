@@ -121,7 +121,7 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
         changed.ownerObservation?.reader === admission.observation.reader &&
         changed.ownerObservation?.admission === admission.observation.admission);
     if (!ownerCurrent || !responseMatches) {
-      owner?.retire(admission);
+      owner?.retire(admission ?? undefined);
       return;
     }
     setResult(changed);

@@ -60,7 +60,7 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
         saved.ownerObservation?.reader === admission.observation.reader &&
         saved.ownerObservation?.admission === admission.observation.admission);
     if (!ownerCurrent || !responseMatches) {
-      owner?.retire(admission);
+      owner?.retire(admission ?? undefined);
       return;
     }
     setResult(saved);
