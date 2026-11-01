@@ -47,6 +47,10 @@ export type AgentIdentityInventoryVerification = Readonly<{
     state: 'pending';
     native: 'pending' | 'verified';
     gap: string;
+}> | Readonly<{
+    state: 'verified';
+    native: 'verified';
+    gap: null;
 }>;
 /** Only the original native writer issues this binding, before any nested serializer. */
 export declare function declareAgentIdentityInventory(tx: CommandTransaction, original: ReturnType<typeof originalAccountIdentitySource>): Promise<void>;
@@ -85,5 +89,8 @@ export declare function readAgentIdentityInventory(deps: HistoryReceivingDepende
 /** SAME source-home command. All queries address local core rows. The portable snapshot is
  * untrusted until current generation, restore/writer seal, full roles, each durable barrier
  * receipt and each physical disposition have been rechecked and locked through COMMIT. */
-export declare function verifyAgentIdentityInventory(tx: CommandTransaction, barrier: HistoryBarrier, key: AgentIdentitySourceKey, proof: AgentIdentityInventoryProof, sdkStage?: AgentIdentityRetirementStage): Promise<AgentIdentityInventoryVerification>;
+export declare function verifyAgentIdentityInventory(tx: CommandTransaction, barrier: HistoryBarrier, key: AgentIdentitySourceKey, proof: AgentIdentityInventoryProof, sdkStage?: AgentIdentityRetirementStage, receiving?: Readonly<{
+    client: WorkClient;
+    artifact: HistoryArtifact;
+}>): Promise<AgentIdentityInventoryVerification>;
 export {};

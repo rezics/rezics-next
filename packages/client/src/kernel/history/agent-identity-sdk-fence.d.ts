@@ -121,4 +121,10 @@ export declare function lockRecordedAgentIdentityHistory(tx: CommandTransaction,
     receipt: AgentIdentitySDKRetirementReceipt;
     writer: SdkWriterState;
 }>>;
+/** Resolve an original mapped receiving execution using its native physical inventory.
+ * Accounts come from the complete current locator union, never workflow/source metadata.
+ * Callers reserve the bounded mapping/role reads before entry; nativeReceipt supplies
+ * current barrier, generation-2, physical absence and later receiving verification.
+ */
+export declare function lockAgentIdentityReceivingArtifact(tx: CommandTransaction, custodyId: string): Promise<HistoryArtifact | null>;
 export {};
