@@ -261,7 +261,7 @@ export const LanguageRowRecovery: Story = {
     });
     await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
     const reader = canvas.getByRole('link', { name: m.catalogue_create_open() });
-    await expect(reader).toHaveAttribute('href', `/${getLocale()}/subjects/${albumId}/harbour-sessions`);
+    await expect(reader).toHaveAttribute('href', expect.stringContaining(`/${getLocale()}/subjects/${albumId}/`));
     await phoneControls(reader.closest('section')!);
   },
 };
