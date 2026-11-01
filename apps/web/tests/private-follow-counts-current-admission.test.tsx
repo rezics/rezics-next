@@ -273,11 +273,13 @@ test('session uncertainty and absent real credentials retire pending IO without 
   );
   await replace(() => client.setQueryData(sessionQuery.queryKey, { ...signedIn(), subject: null }));
   await replace(() => client.setQueryData(sessionQuery.queryKey, { ...signedIn(), csrfToken: null }));
+  await replace(() => client.setQueryData(sessionQuery.queryKey, { state: 'unavailable', ...alice } satisfies Session));
   await replace(() =>
-    client.setQueryData(sessionQuery.queryKey, { state: 'unavailable', ...alice } satisfies Session),
-  );
-  await replace(() =>
-    client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null } satisfies Session),
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-out',
+      subject: null,
+      csrfToken: null,
+    } satisfies Session),
   );
   expect(reads).toHaveLength(1);
   const signIn = host.querySelector<HTMLAnchorElement>('a[href^="/auth/sign-in?"]')!;
