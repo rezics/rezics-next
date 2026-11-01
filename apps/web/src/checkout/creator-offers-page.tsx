@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -201,43 +201,49 @@ export function CreatorOffersPage({
           ) : (
             <ul className="space-y-3 rounded-xl border bg-card p-3 text-card-foreground sm:p-5">
               {page.offers.map((offer) => (
-                <ListRow key={offer.id} data-offer-state={offer.state} className="min-w-0 space-y-2 p-3">
-                  {offer.state === 'active' && offerPageAvailable && (
-                    <ListRowLink href={`/${locale}/offers/${offer.id}`}>{offer.title}</ListRowLink>
-                  )}
-                  <h2 className="line-clamp-2 min-w-0 break-words font-medium [overflow-wrap:anywhere]">
-                    {offer.title}
-                  </h2>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                    <p className="shrink-0 font-serif text-lg tabular-nums">
-                      {formatMinorAmount(locale, offer.currency, offer.unitAmountMinor, recordedMoneyUnit(offer)) ??
-                        m.creator_offers_amount_unavailable()}{' '}
-                      <span className="text-sm">{offer.currency.toUpperCase()}</span>
-                    </p>
+                <ContentItem
+                  key={offer.id}
+                  data-offer-state={offer.state}
+                  title={offer.title}
+                  headingLevel={2}
+                  {...(offer.state === 'active' && offerPageAvailable ? { href: `/${locale}/offers/${offer.id}` } : {})}
+                  className="p-3 [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
+                  metadata={
+                    <div className="min-w-0 space-y-2">
+                      <p className="font-serif text-lg tabular-nums">
+                        {formatMinorAmount(locale, offer.currency, offer.unitAmountMinor, recordedMoneyUnit(offer)) ??
+                          m.creator_offers_amount_unavailable()}{' '}
+                        <span className="text-sm">{offer.currency.toUpperCase()}</span>
+                      </p>
+                      <p>
+                        {recordedTaxBehavior(offer) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
+                      </p>
+                      <p className="leading-relaxed">
+                        {offer.contentEdition === null ? m.creator_offers_unknown() : m.creator_offers_captured()}
+                      </p>
+                    </div>
+                  }
+                  state={
                     <p className="text-sm font-medium">
                       {offer.state === 'active' ? m.creator_offers_active() : m.creator_offers_delisted()}
                     </p>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {recordedTaxBehavior(offer) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
-                  </p>
-                  <ListRowControl>
-                    <details>
+                  }
+                  actions={
+                    <details className="min-w-0 max-w-sm">
                       <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                         {m.commerce_full_title()}
                       </summary>
                       <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>
                     </details>
-                  </ListRowControl>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {offer.contentEdition === null ? m.creator_offers_unknown() : m.creator_offers_captured()}
-                  </p>
-                  {data && (
-                    <ListRowControl>
-                      <OwnedOfferControls offer={offer} data={data} locale={locale} />
-                    </ListRowControl>
-                  )}
-                </ListRow>
+                  }
+                  trailing={
+                    data && (
+                      <div className="w-full min-w-0 max-w-sm">
+                        <OwnedOfferControls offer={offer} data={data} locale={locale} />
+                      </div>
+                    )
+                  }
+                />
               ))}
             </ul>
           )}
