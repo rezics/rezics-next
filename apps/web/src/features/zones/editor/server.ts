@@ -42,7 +42,7 @@ async function preparedReader(expected: OwnerRequest) {
   if (!authorization || (expected.expectedReader !== undefined && !reader)) return null;
   if (expected.expectedReader !== undefined && expected.expectedReader !== reader) return null;
   const ownerObservation: OwnerReadObservation | undefined =
-    expected.expectedReader && expected.admission
+    expected.expectedReader !== undefined && expected.admission !== undefined && reader !== undefined
       ? { reader, admission: expected.admission }
       : undefined;
   return { authorization, ownerObservation };
