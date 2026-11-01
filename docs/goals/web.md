@@ -204,6 +204,37 @@ integration, authored regression, native proof, visual review and public deliver
 document establishes neither native/browser proof nor the contents of a current deployment; the Goal's original
 acceptance and promoted-source obligations remain intact.
 
+### Home content-item presentation
+
+The actual Home consumer uses `@rezics/ui/content-item`, which exports `ContentItem` and `ContentItemProps`. The
+component accepts ordinary `li` attributes other than `title` and `children`, plus `title`, optional `href` and
+`titleLang`, `headingLevel` (2, 3 or 4; default 2), `visual`, `context`, `metadata`, `preview`, `state`, `actions`,
+`trailing` and `forceOverlay` slots/props. It renders one semantic list item. Home passes the existing `FeedItem`
+directly through this adapter and keeps `homeFeedTitle`, `homeFeedDestination` and `homeFeedResume` as its only title
+and local-destination authorities; it does not add a Home DTO or per-row hydration.
+
+The row's supplied summary determines its content: subjects keep their proportional cover, accounts use a supplied
+avatar when present, and text-only discussions have no blank visual column or fabricated image. Supplied subject
+descriptions remain short previews. Continue rows use the existing human progress label and a distinct Continue
+action. The item title is a real level-two heading and the only stretched primary link; independent actions remain
+usable above its overlay. Home adds no resting border, divider or card background and does not label ordinary rows
+with discovery/Following/Continue protocol names.
+
+Home and Following share one compact mode band. Kind, exact-address Space and rating-question Context controls sit
+inside one labelled Filters disclosure. When it is closed, each active selection's human label remains visible;
+opening it exposes the existing bounded choices and their selected-value, clear, refresh and retry controls. The
+reading column stays approximately 720–800 px wide and uses the same composition on phone. The row visual is 80 px
+wide on phone and 96 px on desktop for subjects, and 64 px for supplied account avatars.
+
+Remove the permanent feed-horizon explanation and successful Ready source ledger. When one or more sources are
+preparing or unavailable, show their applicable localized outcome once and retain Retry. Whole-request denial,
+unavailability, cursor expiry, sparse continuation, unknown progress and genuine empty results keep their existing
+distinct message and recovery; incomplete sources never become an empty/success claim. Native ordering, the 20-row
+page limit, one-page replacement, exact conjunctive filters, viewer/CSRF remount, private no-store behavior and
+late-response fencing are unchanged. The composed Home regression covers row order and identity, primary/Continue
+links, absence of technical scaffolding, accessible filter disclosure and bounded kind choice interaction. Its source
+and the updated Home stories are authored evidence only until the permitted integration checks run.
+
 ### Exact Home Space consumer
 
 Home owns a labelled exact-address lookup, one reviewed result, explicit selection, current-identity refresh, clear

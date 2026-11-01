@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Cover } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../../media/cover-src';
@@ -36,66 +37,57 @@ function FeedRow({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const progress =
     item.source === 'continue' ? progressView(continueProgress(item.continue.activeProgressSession), locale) : null;
-  const reason =
-    item.source === 'continue'
-      ? m.home_continue_heading({}, options)
-      : item.source === 'following'
-        ? m.home_feed_following({}, options)
-        : m.home_feed_discovery({}, options);
+  let visual: ReactNode | undefined;
+  if ('label' in summary) {
+    visual = (
+      <div className="w-20 shrink-0 sm:w-24">
+        <Cover
+          subject={coverSubject(summary.id, title, summary)}
+          cover={coverOf(summary)}
+          size="fill"
+          src={coverSrc}
+          decorative
+        />
+      </div>
+    );
+  } else if ('avatar' in summary && summary.avatar) {
+    visual = (
+      <div className="w-16 shrink-0">
+        <Cover
+          subject={{ id: summary.id, title, types: [] }}
+          cover={{ ...summary.avatar, variants: [...summary.avatar.variants] }}
+          ratio="1:1"
+          size="fill"
+          src={coverSrc}
+          decorative
+        />
+      </div>
+    );
+  }
+  const titleLang = 'label' in summary ? summary.label?.language : undefined;
+  const preview = 'description' in summary ? summary.description : undefined;
   return (
-    <li
+    <ContentItem
       data-feed-id={item.id}
       data-feed-source={item.source}
-      className="flex min-w-0 gap-4 border-b border-border py-5 sm:gap-6"
-    >
-      {'label' in summary ? (
-        <div className="w-20 shrink-0 sm:w-24">
-          <Cover
-            subject={coverSubject(summary.id, title, summary)}
-            cover={coverOf(summary)}
-            size="fill"
-            src={coverSrc}
-            decorative
-          />
-        </div>
-      ) : 'avatar' in summary ? (
-        <div className="w-16 shrink-0">
-          <Cover
-            subject={{ id: summary.id, title, types: [] }}
-            cover={summary.avatar ? { ...summary.avatar, variants: [...summary.avatar.variants] } : null}
-            ratio="1:1"
-            size="fill"
-            src={coverSrc}
-            decorative
-          />
-        </div>
-      ) : null}
-      <article className="min-w-0 flex-1 space-y-2">
-        <p className="text-xs text-muted-foreground">{reason}</p>
-        <h2 className="break-words text-lg leading-snug font-semibold">
-          {href ? (
-            <a
-              href={href}
-              className="hover:underline"
-              {...('label' in summary && summary.label ? { lang: summary.label.language } : {})}
-            >
-              {title}
-            </a>
-          ) : (
-            title
-          )}
-        </h2>
-        {'description' in summary && summary.description ? (
-          <p className="line-clamp-3 break-words text-sm text-muted-foreground">{summary.description}</p>
-        ) : null}
-        {progress ? <p className="text-sm">{progress.text}</p> : null}
-        {resume ? (
-          <a href={resume} className="inline-block text-sm text-primary underline underline-offset-4">
+      title={title}
+      {...(href === undefined ? {} : { href })}
+      {...(titleLang === undefined ? {} : { titleLang })}
+      headingLevel={2}
+      visual={visual}
+      preview={preview || undefined}
+      state={progress?.text}
+      actions={
+        resume ? (
+          <a
+            href={resume}
+            className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+          >
             {m.home_continue_label({ title }, options)}
           </a>
-        ) : null}
-      </article>
-    </li>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -106,6 +98,7 @@ export function HomeFeed({
   signedIn = false,
   busy = false,
   onSelect,
+  activeFilters = [],
   kindControl,
   spaceControl,
   questionControl,
@@ -119,6 +112,7 @@ export function HomeFeed({
   signedIn?: boolean;
   busy?: boolean;
   onSelect?: (stream: FeedStream) => void;
+  activeFilters?: ReactNode[];
   kindControl?: ReactNode;
   spaceControl?: ReactNode;
   questionControl?: ReactNode;
@@ -127,7 +121,11 @@ export function HomeFeed({
   onRestart?: () => void;
 }) {
   const options = { locale: locale as Locale };
+  const filterId = useId();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const page = result.state === 'ready' ? result.page : undefined;
+  const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
+  const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
   const messages = {
     loading: m.home_feed_loading,
     request: m.home_feed_request,
@@ -139,43 +137,72 @@ export function HomeFeed({
     unavailable: m.home_feed_unavailable,
   };
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-5 text-foreground" aria-busy={busy}>
+    <main
+      className="mx-auto w-full max-w-3xl space-y-4 text-foreground"
+      aria-busy={busy}
+      data-feed-source-state={
+        page
+          ? Object.entries(page.sources)
+              .filter(([, state]) => state !== 'not_requested')
+              .map(([source, state]) => `${source}:${state}`)
+              .join(' ')
+          : undefined
+      }
+    >
       <h1 className="sr-only">{m.nav_home({}, options)}</h1>
-      <nav aria-label={m.nav_home({}, options)} className="flex flex-wrap items-center gap-3">
-        <Button
-          variant={stream === 'home' ? 'secondary' : 'ghost'}
-          aria-pressed={stream === 'home'}
-          disabled={busy}
-          onClick={() => onSelect?.('home')}
-        >
-          {m.nav_home({}, options)}
-        </Button>
-        {signedIn ? (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <nav aria-label={m.nav_home({}, options)} className="flex flex-wrap items-center gap-2">
           <Button
-            variant={stream === 'following' ? 'secondary' : 'ghost'}
-            aria-pressed={stream === 'following'}
+            className="min-h-11"
+            variant={stream === 'home' ? 'secondary' : 'ghost'}
+            aria-pressed={stream === 'home'}
             disabled={busy}
-            onClick={() => onSelect?.('following')}
+            onClick={() => onSelect?.('home')}
           >
-            {m.home_feed_following({}, options)}
+            {m.nav_home({}, options)}
           </Button>
-        ) : null}
-      </nav>
-      {kindControl}
-      {spaceControl}
-      {questionControl}
-      {signedIn ? (
-        <p className="text-sm text-muted-foreground">
-          {m.home_feed_horizon({}, options)}{' '}
-          <a href={`/${locale}/library/following`} className="underline underline-offset-4">
-            {m.home_feed_sources({}, options)}
-          </a>
-          {' · '}
-          <a href={`/${locale}/library/continue`} className="underline underline-offset-4">
-            {m.home_continue_heading({}, options)}
-          </a>
-        </p>
-      ) : null}
+          {signedIn ? (
+            <Button
+              className="min-h-11"
+              variant={stream === 'following' ? 'secondary' : 'ghost'}
+              aria-pressed={stream === 'following'}
+              disabled={busy}
+              onClick={() => onSelect?.('following')}
+            >
+              {m.home_feed_following({}, options)}
+            </Button>
+          ) : null}
+        </nav>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <Button
+            className="min-h-11 whitespace-nowrap"
+            type="button"
+            variant="outline"
+            aria-expanded={filtersOpen}
+            aria-controls={filterId}
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            {filtersOpen ? m.search_close_filters({}, options) : m.search_filters({}, options)}
+          </Button>
+          {activeFilters.length ? (
+            <ul
+              aria-label={m.refinement_selected({}, options)}
+              className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground"
+            >
+              {activeFilters.map((filter, index) => (
+                <li key={index} className="break-words">
+                  {filter}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+      <div id={filterId} hidden={!filtersOpen} className={filtersOpen ? 'grid gap-3' : 'hidden'}>
+        {kindControl}
+        {spaceControl}
+        {questionControl}
+      </div>
       {busy ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.home_feed_loading({}, options)}
@@ -183,37 +210,17 @@ export function HomeFeed({
       ) : null}
       {page ? (
         <>
-          <ul
-            className="flex list-none flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
-            aria-label={m.home_feed_sources({}, options)}
-          >
-            {(['discovery', 'following', 'continue'] as const).map((source) => {
-              const state = page.sources[source];
-              if (state === 'not_requested') return null;
-              const label =
-                source === 'discovery'
-                  ? m.home_feed_discovery({}, options)
-                  : source === 'following'
-                    ? m.home_feed_following({}, options)
-                    : m.home_continue_heading({}, options);
-              const status =
-                state === 'ready'
-                  ? m.home_feed_ready({}, options)
-                  : state === 'preparing'
-                    ? m.home_feed_preparing({}, options)
-                    : m.home_feed_unavailable({}, options);
-              return (
-                <li key={source} data-feed-source-state={`${source}:${state}`}>
-                  {label}: {status}
-                </li>
-              );
-            })}
-          </ul>
           <ol className="list-none" aria-label={m.nav_home({}, options)}>
             {page.feedItems.map((item) => (
               <FeedRow key={item.id} item={item} locale={locale} />
             ))}
           </ol>
+          {hasPreparing || hasUnavailable ? (
+            <div role="status" className="flex flex-wrap gap-x-2 text-sm text-muted-foreground">
+              {hasPreparing ? <span>{m.home_feed_preparing({}, options)}</span> : null}
+              {hasUnavailable ? <span>{m.home_feed_unavailable({}, options)}</span> : null}
+            </div>
+          ) : null}
           {!page.feedItems.length &&
           Object.values(page.sources).every((state) => state === 'ready' || state === 'not_requested') ? (
             <p role="status">
@@ -229,7 +236,7 @@ export function HomeFeed({
               {m.search_heading({}, options)}
             </a>
           ) : null}
-          {Object.values(page.sources).some((state) => state === 'preparing' || state === 'unavailable') && onRetry ? (
+          {(hasPreparing || hasUnavailable) && onRetry ? (
             <Button variant="outline" disabled={busy} onClick={onRetry}>
               {m.library_follow_retry({}, options)}
             </Button>
@@ -363,6 +370,30 @@ export function HomeFeedConsumer({
     if (signedIn) void window.load({ stream: 'home' });
     return window.clear;
   }, [window, signedIn]);
+  const options = { locale: locale as Locale };
+  const activeFilters: ReactNode[] = [];
+  if (kinds.selected) {
+    activeFilters.push(
+      <span key="kind">
+        {m.home_kind_label({}, options)}:{' '}
+        <bdi lang={kinds.selected.lang}>{kinds.selected.text || m.home_kind_unnamed({}, options)}</bdi>
+      </span>,
+    );
+  }
+  if (spaceSnapshot.selected) {
+    activeFilters.push(
+      <span key="space">
+        {m.home_space_label({}, options)}: {spaceSnapshot.selected.title}
+      </span>,
+    );
+  }
+  if (questionSnapshot.selected) {
+    activeFilters.push(
+      <span key="question">
+        {m.home_question_label({}, options)}: {questionSnapshot.selected.label}
+      </span>,
+    );
+  }
   return (
     <HomeFeed
       result={snapshot.result}
@@ -370,6 +401,7 @@ export function HomeFeedConsumer({
       signedIn={signedIn}
       stream={snapshot.input.stream}
       busy={snapshot.busy}
+      activeFilters={activeFilters}
       spaceControl={
         <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
       }

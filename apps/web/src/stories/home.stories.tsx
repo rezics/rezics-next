@@ -74,6 +74,7 @@ export const KindSelection: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
     await waitFor(() =>
       expect(
@@ -82,6 +83,9 @@ export const KindSelection: Story = {
     );
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.home_kind_label() }), 'schema:Book');
     await expect(canvas.getByRole('combobox', { name: m.home_kind_label() })).toHaveValue('schema:Book');
+    await userEvent.click(canvas.getByRole('button', { name: m.search_close_filters() }));
+    await expect(canvas.getByRole('list', { name: m.refinement_selected() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.search_filters() })).toHaveAttribute('aria-expanded', 'false');
     await waitFor(() => expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull());
     await expect(canvas.queryByRole('link', { name: 'Letters from B-612' })).toBeNull();
   },
@@ -92,6 +96,7 @@ export const KindChoicesUnavailable: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
     await expect(await canvas.findByText(m.home_kinds_unavailable())).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Letters from B-612' })).toBeVisible();
@@ -103,6 +108,7 @@ export const KindChoicesNextPage: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
     await waitFor(() =>
       expect(
