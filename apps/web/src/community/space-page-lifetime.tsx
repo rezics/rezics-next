@@ -76,8 +76,10 @@ type SpacePageQueryRead = {
   readonly baselineDataUpdateCount: number;
   readonly baselineData: unknown;
   readonly signal: AbortSignal;
-  result?: unknown;
-  resultDataUpdateCount?: number;
+  /** Identifies the query-function return; it does not certify the cache commit. */
+  queryResult?: object;
+  committedResult?: { readonly data: unknown; readonly dataUpdateCount: number };
+  stopCommitObservation?: () => void;
   retryableFailure?: boolean;
 };
 
@@ -258,12 +260,67 @@ function queryReadIsCurrent(runtime: AdmissionRuntime) {
   if (read.signal.aborted) return false;
   const current = runtime.client.getQueryCache().find({ queryKey: read.queryKey, exact: true });
   if (current !== read.query) return false;
-  if (read.result === undefined) return read.query.state.dataUpdateCount === read.baselineDataUpdateCount;
+  if (read.queryResult === undefined) return read.query.state.dataUpdateCount === read.baselineDataUpdateCount;
+  const committed = read.committedResult;
   return (
-    read.resultDataUpdateCount === read.baselineDataUpdateCount + 1 &&
-    read.query.state.dataUpdateCount === read.resultDataUpdateCount &&
-    read.query.state.data === read.result
+    !!committed &&
+    committed.dataUpdateCount === read.baselineDataUpdateCount + 1 &&
+    read.query.state.dataUpdateCount === committed.dataUpdateCount &&
+    read.query.state.data === committed.data
   );
+}
+
+function stopSpacePageQueryCommitObservation(read: SpacePageQueryRead) {
+  read.stopCommitObservation?.();
+}
+
+/** Bind a recorded query-function result to its exact successful Query cache commit. */
+function observeSpacePageQueryCommit(runtime: AdmissionRuntime, read: SpacePageQueryRead) {
+  let unsubscribe: (() => void) | undefined;
+  const stop = () => {
+    if (!unsubscribe) return;
+    const release = unsubscribe;
+    unsubscribe = undefined;
+    if (read.stopCommitObservation === stop) delete read.stopCommitObservation;
+    release();
+  };
+  read.stopCommitObservation = stop;
+  unsubscribe = runtime.client.getQueryCache().subscribe((event) => {
+    if (event.query !== read.query) return;
+    if (event.type === 'removed') {
+      stop();
+      return;
+    }
+    if (event.type !== 'updated' || !('action' in event)) return;
+    const action = event.action;
+    if (action.type === 'error') {
+      if (read.query.state.fetchStatus === 'idle') stop();
+      return;
+    }
+    if (action.type !== 'success') return;
+
+    const current = runtime.client.getQueryCache().find({ queryKey: read.queryKey, exact: true });
+    const state = read.query.state;
+    const ownsCommit =
+      read.queryResult !== undefined &&
+      !read.signal.aborted &&
+      !runtime.routeAborted &&
+      current === read.query &&
+      !action.manual &&
+      state.fetchStatus === 'idle' &&
+      state.dataUpdateCount === read.baselineDataUpdateCount + 1 &&
+      state.data === action.data;
+
+    if (ownsCommit) {
+      read.committedResult = { data: state.data, dataUpdateCount: state.dataUpdateCount };
+      stop();
+      return;
+    }
+
+    // A success that is not this operation's one exact Query commit has already
+    // advanced or replaced the cache. It cannot later become this operation's commit.
+    stop();
+  });
 }
 
 function resolveRuntime(admission: SpacePageAdmission, client: QueryClient): AdmissionRuntime | null {
@@ -361,6 +418,7 @@ export function captureSpacePageAdmission(
   if (input.signal && !input.signal.aborted) {
     const onAbort = () => {
       runtime.routeAborted = true;
+      if (runtime.queryRead) stopSpacePageQueryCommitObservation(runtime.queryRead);
     };
     input.signal.addEventListener('abort', onAbort, { once: true });
     runtime.stopRouteAbort = () => input.signal?.removeEventListener('abort', onAbort);
@@ -386,7 +444,7 @@ export function beginSpacePageQueryRead(
     if (
       read.query !== query ||
       read.signal !== signal ||
-      read.result !== undefined ||
+      read.queryResult !== undefined ||
       !read.retryableFailure ||
       !queryReadIsCurrent(runtime)
     )
@@ -401,6 +459,7 @@ export function beginSpacePageQueryRead(
     baselineData: query.state.data,
     signal,
   };
+  observeSpacePageQueryCommit(runtime, runtime.queryRead);
   return runtimeIsCurrent(admission, runtime);
 }
 
@@ -408,7 +467,7 @@ export function beginSpacePageQueryRead(
 export function allowSpacePageQueryRetry(admission: SpacePageAdmission) {
   const runtime = runtimes.get(admission);
   const read = runtime?.queryRead;
-  if (runtime && read && read.result === undefined && runtimeIsCurrent(admission, runtime))
+  if (runtime && read && read.queryResult === undefined && runtimeIsCurrent(admission, runtime))
     read.retryableFailure = true;
 }
 
@@ -417,8 +476,7 @@ export function recordSpacePageQueryResult(admission: SpacePageAdmission, result
   const runtime = runtimes.get(admission);
   const read = runtime?.queryRead;
   if (!runtime || !read || !runtimeIsCurrent(admission, runtime)) return false;
-  read.result = result;
-  read.resultDataUpdateCount = read.baselineDataUpdateCount + 1;
+  read.queryResult = result;
   return true;
 }
 
@@ -435,7 +493,7 @@ export function spacePageQueryResultIsCurrent(
     runtime &&
     runtime.client === client &&
     read &&
-    read.result === result &&
+    read.queryResult === result &&
     read.queryKey.length === queryKey.length &&
     read.queryKey.every((part, index) => part === queryKey[index]) &&
     runtimeIsCurrent(admission, runtime)
@@ -450,6 +508,7 @@ export function releaseSpacePageRead(admission: SpacePageAdmission, retainRouteS
   if (runtime) {
     delete runtime.stopRouteAbort;
     delete runtime.routeSignal;
+    if (runtime.queryRead) stopSpacePageQueryCommitObservation(runtime.queryRead);
   }
 }
 
@@ -509,11 +568,16 @@ export function spacePageReadResultWasReplaced(admission: SpacePageAdmission, cl
         current.state.data !== undefined ||
         current.state.fetchStatus === 'fetching')
     );
-  if (read.result === undefined)
+  if (read.queryResult === undefined)
     return (
       read.query.state.dataUpdateCount !== read.baselineDataUpdateCount || read.query.state.data !== read.baselineData
     );
-  return read.query.state.dataUpdateCount !== read.resultDataUpdateCount || read.query.state.data !== read.result;
+  const committed = read.committedResult;
+  if (!committed)
+    return (
+      read.query.state.dataUpdateCount !== read.baselineDataUpdateCount || read.query.state.data !== read.baselineData
+    );
+  return read.query.state.dataUpdateCount !== committed.dataUpdateCount || read.query.state.data !== committed.data;
 }
 
 export function spacePageAdmissionIsCurrent(admission: SpacePageAdmission, client: QueryClient) {

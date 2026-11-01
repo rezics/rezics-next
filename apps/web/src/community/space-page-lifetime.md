@@ -15,19 +15,27 @@ inputs only; none authenticates a reader or proves that a different QueryClient 
 The digest is only used to reject a changed cached CSRF value.
 
 Each original route attempt keeps its own runtime. Before its BFF read, the query function binds the exact Query object,
-query key, baseline data-update count and TanStack cancellation signal. The returned envelope is recorded as the only
-result generation that attempt can publish. After each await, the loader checks the original session observation, route
-abort, Query object, result reference and data-update count. A synchronous cache subscriber that changes the session,
-removes and recreates the Query, or replaces its result retires the old attempt before the loader can return a page or
-throw the Realm's canonical 307.
+query key, baseline data-update count and TanStack cancellation signal. Its returned envelope identifies the query
+function result, but does not certify what the cache committed. A cache observer records the committed value from the
+exact Query's successful update notification after structural sharing, and only when that live Query, signal and one
+expected data-update count still belong to the operation. The committed Query data reference and count then remain the
+ownership witness; the raw envelope reference is never compared with `query.state.data`.
+
+After each await, the loader checks the original session observation, route abort, exact Query, query-function envelope
+and committed data generation. Equal data writes still advance the Query update count and retire the original result.
+A synchronous cache subscriber that changes the session, removes and recreates the Query, or replaces its result retires
+the old attempt before the loader can return a page or throw the Realm's canonical 307. Structural sharing may retain
+unchanged page subtrees while copying the envelope root; this preserves a healthy own commit without accepting another
+success, removal or successor Query as its result.
 
 Router abort races the route loader's wait and remains attached to a successfully published page until its mounted
 lifetime retires; it does not cancel a shared QueryClient fetch. The attempt is permanently retired on abort, and its
 late transport result cannot become that loader's page or redirect. Query-owned cancellation or exact-query removal
-can receive one fresh eligible attempt while the route remains active. Recovery is bounded to one retry and required
-read errors pass through. Mounted route effects allow one invalidate/refetch for
-each current route and session observation. They check the current admission immediately before acting so an older
-effect cannot invalidate a successor.
+can receive one fresh eligible attempt while the route remains active. The replacement check compares the committed
+data generation when the original Query still exists, and recognizes a successor Query with installed data or an
+active fetch without overwriting it. Recovery is bounded to one retry and required read errors pass through. Mounted
+route effects allow one invalidate/refetch for each current route and session observation. They check the current
+admission immediately before acting so an older effect cannot invalidate a successor.
 
 A same-QueryClient observer advances its private generation for successful session data replacements (including equal
 data), session query errors and removal. Ordinary fetch starts, observer notifications and StrictMode effect replay do
@@ -52,9 +60,11 @@ from the existing session producer, which is outside this reader-only contract.
 
 The composed acceptance is authored in `apps/web/tests/space-page-lifetime.test.tsx` and
 `apps/web/tests/space-reader-compatibility.test.tsx`; its assertions remain UNRUN under the current execution policy.
-It retains actual route loaders, QueryClient cache notifications, server preparation and the deferred native client
-seam, alongside healthy cache/native success, observer/fetch activity, rerenders, StrictMode reconnect, initial public
-session refresh, null-CSRF reads and the existing shelf limits and serialization checks. The existing native bounds
+It retains actual route loaders, default structural sharing over existing plain cache data, exact successful commit
+counts, QueryClient cache notifications, mounted and bounded loader recovery, server preparation and the deferred native
+client seam, alongside external equal replacements, observer/fetch activity, rerenders, StrictMode reconnect, initial
+public session refresh, null-CSRF reads and the existing shelf limits and serialization checks. The recreated-Query
+case captures committed data before removal and installs that same data in the successor. The existing native bounds
 remain in `realm-pages.test.ts`, `realm-publications.test.ts` and the read-only `realm-pages-cost.test.ts`.
 
 Private first-render provenance remains unresolved. Serialized comparison fields do not prove the actual cookie or

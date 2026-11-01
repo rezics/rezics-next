@@ -630,6 +630,46 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     }
   });
 
+  test('a session Query setState notification retires the actual loader read', async () => {
+    setLocale('en', { reload: false });
+    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    client = nextClient;
+    nextClient.setQueryData(sessionQuery.queryKey, viewer());
+    calls.pages.length = 0;
+    let reads = 0;
+    pageReader = async (input) => {
+      reads++;
+      return {
+        ...pageFor(input.address, false),
+        space: { id: spaceId, title: `setState read ${reads}`, summary: '' },
+      };
+    };
+    const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+    let retired = false;
+    const stop = nextClient.getQueryCache().subscribe((event) => {
+      if (
+        retired ||
+        event.type !== 'updated' ||
+        !('action' in event) ||
+        event.action.type !== 'success' ||
+        !sameQueryKey(event.query.queryKey, queryKey)
+      )
+        return;
+      retired = true;
+      const session = nextClient.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+      if (!session) throw new Error('Missing prepared session query');
+      session.setState({ ...session.state });
+    });
+    try {
+      const recovered = await loadSpaceRoute(nextClient);
+      expect(retired).toBe(true);
+      expect(recovered.page.space.title).toBe('setState read 2');
+      expect(reads).toBe(2);
+    } finally {
+      stop();
+    }
+  });
+
   test('the actual loader stops after one fresh recovery when each committed result is retired', async () => {
     setLocale('en', { reload: false });
     const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -725,9 +765,9 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
         ) {
           replaced = true;
           originalQuery = event.query;
-          if (replacement === 'query') nextClient.removeQueries({ queryKey, exact: true });
           const current = nextClient.getQueryData<SpacePageQueryResult>(queryKey);
           if (!current) throw new Error('Missing committed page result');
+          if (replacement === 'query') nextClient.removeQueries({ queryKey, exact: true });
           nextClient.setQueryData<SpacePageQueryResult>(queryKey, {
             ...current,
             page: {
@@ -749,6 +789,50 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
       } finally {
         stop();
       }
+    }
+  });
+
+  test('an equal manual page success retires the loader and keeps the committed successor data', async () => {
+    setLocale('en', { reload: false });
+    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    client = nextClient;
+    let reads = 0;
+    pageReader = async (input) => {
+      reads++;
+      return {
+        ...pageFor(input.address, false),
+        space: { id: spaceId, title: `Predecessor ${reads}`, summary: '' },
+      };
+    };
+    const queryKey = spaceQuery(address, 'en', 'anonymous').queryKey;
+    let originalQuery: unknown;
+    let replaced = false;
+    const stop = nextClient.getQueryCache().subscribe((event) => {
+      if (
+        replaced ||
+        event.type !== 'updated' ||
+        !('action' in event) ||
+        event.action.type !== 'success' ||
+        !sameQueryKey(event.query.queryKey, queryKey)
+      )
+        return;
+      replaced = true;
+      originalQuery = event.query;
+      const committed = nextClient.getQueryData<SpacePageQueryResult>(queryKey);
+      if (!committed) throw new Error('Missing committed page result');
+      nextClient.setQueryData<SpacePageQueryResult>(queryKey, committed);
+    });
+    try {
+      await expect(loadSpaceRoute(nextClient)).rejects.toThrow('obsolete visit');
+      const successor = nextClient.getQueryData<SpacePageQueryResult>(queryKey);
+      const successorQuery = nextClient.getQueryCache().find({ queryKey, exact: true });
+      expect(replaced).toBe(true);
+      expect(successor?.page.space.title).toBe('Predecessor 1');
+      expect(successorQuery).toBe(originalQuery);
+      expect(successorQuery?.state.dataUpdateCount).toBe(2);
+      expect(reads).toBe(1);
+    } finally {
+      stop();
     }
   });
 
