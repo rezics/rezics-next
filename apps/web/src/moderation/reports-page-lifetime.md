@@ -37,8 +37,8 @@ command or refresh cannot schedule the next row, restore evidence or publish int
 
 Effect disconnection immediately invalidates outstanding work. Strict Mode can reconnect a still-current
 visit/controller; explicit retirement cannot reconnect. Controller connection tokens fence work started
-before disconnection even if its original Boolean fields subsequently return. A real unmount permanently
-retires the read after the synchronous Strict Mode reconnect opportunity.
+before disconnection even if its original Boolean fields subsequently return. Disconnection immediately marks the read closed to new mounts. Strict Mode may reconnect the same
+visit, while the final disconnect permanently retires it after that synchronous reconnect opportunity.
 
 Cost is the existing bounded native page and deduplicated evidence, one constant-size session-cache
 observation per QueryClient shared across loader/mount, one local caller generation and O(page size)

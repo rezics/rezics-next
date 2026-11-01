@@ -96,6 +96,9 @@ export function ModerationReportsPage(props: {
         observe();
         return () => {
           connected = false;
+          // Mark the read synchronously for any new mount. Strict Mode reconnects this same
+          // visit, whose local retirement flag remains separate from the admission marker.
+          retiredReads.add(page.input);
           serial++;
           listeners.delete(listener);
           disconnectSession?.();

@@ -662,3 +662,28 @@ test('a loader-to-mount session replacement and disconnected queued controls nev
   await paint({ page: old });
   hidden();
 });
+
+test('a new mount cannot reuse the old native read during the synchronous Strict Mode reconnect window', async () => {
+  await paint();
+  const live = props.page;
+  await act(async () => {
+    flushSync(() => {
+      root.unmount();
+    });
+    root = createRoot(host);
+    flushSync(() =>
+      root.render(
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <ModerationReportsPage {...props} page={live} />
+          </QueryClientProvider>
+        </StrictMode>,
+      ),
+    );
+  });
+  hidden();
+  expect(sends).toHaveLength(0);
+  expect(refreshes).toBe(0);
+  await paint({ page: await fresh() });
+  expect(host.textContent).toContain('Private exact reported body');
+});
