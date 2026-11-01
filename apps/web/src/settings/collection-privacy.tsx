@@ -83,7 +83,7 @@ export function CollectionRow(props: CollectionRowProps) {
   // Explicit isolated IO has no session or exposure producer. An installed owner still takes precedence.
   if (!client)
     return (
-      <CollectionRowView {...props} owner={owner} canSave={!!props.io && !owner} canRead={!!props.io && !owner} />
+      <CollectionRowView {...props} owner={owner} canSave={!!props.io} canRead={!!props.io} />
     );
   return <AdmittedCollectionRow {...props} owner={owner} />;
 }

@@ -1134,3 +1134,34 @@ test('read-only Reading composition preserves exported writer predicates and rej
     }
   });
 });
+
+test('a standalone injected row still obeys an inherited owner without a QueryClient provider', async () => {
+  const { CollectionRow } = await import('../src/settings/collection-privacy');
+  const { SettingsSessionContext } = await import('../src/settings/settings-session-owner');
+  await mountedSettingsExample(async ({ host, render, choose }) => {
+    const h = setup();
+    let writes = 0;
+    const io = {
+      save: async (): Promise<CollectionVisibilityWrite> => {
+        writes++;
+        return { ok: false, reason: 'unavailable' };
+      },
+      read: async () => ({ ok: true as const, value: collection }),
+    };
+    try {
+      await render(createElement(SettingsSessionContext.Provider, { value: h.owner },
+        createElement('ul', null, createElement(CollectionRow, { collection, io }))));
+      const select = host.querySelector('select')!;
+      expect(select.disabled).toBe(false);
+      await choose(select, 'public');
+      expect(writes).toBe(1);
+      await act(async () => { transitions['synchronous subject away and back'](h.client); });
+      expect(select.disabled).toBe(true);
+      await choose(select, 'unlisted');
+      expect(writes).toBe(1);
+    } finally {
+      await render(null);
+      h.close();
+    }
+  });
+});
