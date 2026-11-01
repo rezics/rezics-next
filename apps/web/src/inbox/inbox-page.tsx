@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ContentItem } from '@rezics/ui/content-item';
+import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
@@ -70,6 +70,12 @@ export function InboxRows({
           const text = item.unavailable ? m.inbox_unavailable_item() : item.text;
           const readState = item.unread ? m.inbox_notice_unread() : m.inbox_notice_read();
           const date = exactDate.format(new Date(item.createdAt));
+          const destinationProps = href ? { href } : {};
+          const primaryLinkLabelProps = href
+            ? ({
+                primaryLinkLabel: [text, actor, kind, readState, date].join('. '),
+              } satisfies Pick<ContentItemProps, 'primaryLinkLabel'>)
+            : {};
           const visual = actorId ? (
             <Avatar aria-hidden="true" size="sm" className="mt-0.5 shrink-0">
               <AvatarFallback>{initials(actorId)}</AvatarFallback>
@@ -93,10 +99,8 @@ export function InboxRows({
             <ContentItem
               key={item.id}
               title={text}
-              href={href}
-              {...(href
-                ? { primaryLinkLabel: [text, actor, kind, readState, date].join('. ') }
-                : {})}
+              {...destinationProps}
+              {...primaryLinkLabelProps}
               headingLevel={2}
               visual={visual}
               metadata={
