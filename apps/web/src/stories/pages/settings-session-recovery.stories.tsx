@@ -195,17 +195,25 @@ function ActualSessionPage() {
         </button>
         <button
           type="button"
-          onClick={() => client.setQueryData(sessionQuery.queryKey, {
-            state: 'signed-in', subject: session.subject ?? null, csrfToken: null,
-          })}
+          onClick={() =>
+            client.setQueryData(sessionQuery.queryKey, {
+              state: 'signed-in',
+              subject: session.subject ?? null,
+              csrfToken: null,
+            })
+          }
         >
           Use read-only session
         </button>
         <button
           type="button"
-          onClick={() => client.setQueryData(sessionQuery.queryKey, {
-            state: 'signed-in', subject: session.subject ?? null, csrfToken: 'fresh-story-token',
-          })}
+          onClick={() =>
+            client.setQueryData(sessionQuery.queryKey, {
+              state: 'signed-in',
+              subject: session.subject ?? null,
+              csrfToken: 'fresh-story-token',
+            })
+          }
         >
           Install fresh explicit token
         </button>

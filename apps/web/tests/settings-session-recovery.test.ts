@@ -485,5 +485,7 @@ test('a successful original subject with null CSRF renders the actual read-only 
     expect(html).toContain('disabled=""');
     expect(requests).toBe(before);
     expect(client.isFetching()).toBe(0);
-  } finally { client.clear(); }
+  } finally {
+    client.clear();
+  }
 });

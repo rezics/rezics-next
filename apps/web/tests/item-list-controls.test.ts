@@ -70,13 +70,21 @@ test('a label row keeps its shelf destination and independent rename and delete 
 
 test('an explicitly injected standalone collection row retains independent enabled visibility controls', () => {
   let dispatched = 0;
-  const html = renderToStaticMarkup(createElement(CollectionRow, {
-    collection: { id: 'collection-1', title: 'Reading list', visibility: 'private', revision: 7 },
-    io: {
-      read: async () => { dispatched++; return { ok: false, reason: 'unavailable' }; },
-      save: async () => { dispatched++; return { ok: false, reason: 'unavailable' }; },
-    },
-  }));
+  const html = renderToStaticMarkup(
+    createElement(CollectionRow, {
+      collection: { id: 'collection-1', title: 'Reading list', visibility: 'private', revision: 7 },
+      io: {
+        read: async () => {
+          dispatched++;
+          return { ok: false, reason: 'unavailable' };
+        },
+        save: async () => {
+          dispatched++;
+          return { ok: false, reason: 'unavailable' };
+        },
+      },
+    }),
+  );
   const control = html.match(/<div[^>]*data-slot="list-row-control"[^>]*>[\s\S]*?<\/div>/)?.[0];
   expect(html).toContain('href="/en/collections/collection-1"');
   expect(control).toContain('<select');

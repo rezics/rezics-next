@@ -729,7 +729,15 @@ function readOnlySetup() {
   client.setQueryData(sessionQuery.queryKey, { ...identity, csrfToken: null });
   const owner = new SettingsSessionOwner(client, null, 'alice');
   const release = owner.mount();
-  return { client, owner, close() { release(); owner.retire(); client.clear(); } };
+  return {
+    client,
+    owner,
+    close() {
+      release();
+      owner.retire();
+      client.clear();
+    },
+  };
 }
 
 test('Signed-in Settings readers work without CSRF while native writes and retired or injected callers retain exact authority', async () => {
@@ -737,23 +745,59 @@ test('Signed-in Settings readers work without CSRF while native writes and retir
   const reads: string[] = [];
   const writes: string[] = [];
   let confirmed = 0;
-  const io = accountPreferenceIO('alice', h.owner.credential, (v) => { confirmed = v; }, {
-    read: async () => { reads.push('preferences'); return page; },
-    saveReading: async (_, token) => { writes.push(token); return { ok: false, reason: 'forbidden' }; },
-    saveNotifications: async (_, token) => { writes.push(token); return { ok: false, reason: 'forbidden' }; },
-  }, h.owner.readCurrent);
+  const io = accountPreferenceIO(
+    'alice',
+    h.owner.credential,
+    (v) => {
+      confirmed = v;
+    },
+    {
+      read: async () => {
+        reads.push('preferences');
+        return page;
+      },
+      saveReading: async (_, token) => {
+        writes.push(token);
+        return { ok: false, reason: 'forbidden' };
+      },
+      saveNotifications: async (_, token) => {
+        writes.push(token);
+        return { ok: false, reason: 'forbidden' };
+      },
+    },
+    h.owner.readCurrent,
+  );
   const privacy = collectionPrivacyIO(h.owner, {
-    read: async () => { reads.push('collection'); return { ok: true, value: collection }; },
-    save: async (_, token) => { writes.push(token); return { ok: false, reason: 'forbidden' }; },
+    read: async () => {
+      reads.push('collection');
+      return { ok: true, value: collection };
+    },
+    save: async (_, token) => {
+      writes.push(token);
+      return { ok: false, reason: 'forbidden' };
+    },
   });
   const verification = verificationRecoveryIO(h.owner, h.client, {
-    read: async () => { reads.push('verification'); return empty; },
-    request: async (_, __, token) => { writes.push(token); throw new Error('Unexpected request'); },
-    withdraw: async (_, __, token) => { writes.push(token); throw new Error('Unexpected withdrawal'); },
+    read: async () => {
+      reads.push('verification');
+      return empty;
+    },
+    request: async (_, __, token) => {
+      writes.push(token);
+      throw new Error('Unexpected request');
+    },
+    withdraw: async (_, __, token) => {
+      writes.push(token);
+      throw new Error('Unexpected withdrawal');
+    },
   });
   const notifications = new NotificationEditor(
-    { notifications: page.notifications, version: 4 }, io.notifications, false, () => 4,
-    h.owner.readCurrent, h.owner.isCurrent,
+    { notifications: page.notifications, version: 4 },
+    io.notifications,
+    false,
+    () => 4,
+    h.owner.readCurrent,
+    h.owner.isCurrent,
   );
   const row = new CollectionPrivacyEditor(collection, privacy, h.owner.readCurrent, h.owner.isCurrent);
   const controller = new VerificationRecovery('alice', verification, h.owner.readCurrent, h.owner.isCurrent);
@@ -786,17 +830,26 @@ test('Signed-in Settings readers work without CSRF while native writes and retir
     expect(notifications.snapshot()).toBe(beforeNotifications);
     expect(row.snapshot()).toBe(beforeRow);
     expect(controller.snapshot()).toBe(beforeVerification);
-    expect(await io.reading.save({ expectedVersion: 4, spoilerLevel: 1, idempotencyKey: 'no-token' }))
-      .toEqual({ ok: false, reason: 'forbidden' });
-    expect(await io.notifications.save({ expectedVersion: 4, notifications: null, idempotencyKey: 'no-token' }))
-      .toEqual({ ok: false, reason: 'forbidden' });
-    await expect(privacy.save({ collectionId: 'owned', revision: 7, visibility: 'public', idempotencyKey: 'no-token' }))
-      .rejects.toThrow('Settings viewer unavailable');
-    await expect(verification.request('alice', { subject: 'agent', statement: '', links: [], idempotencyKey: 'no-token' }))
-      .rejects.toThrow('Settings viewer unavailable');
-    await expect(verification.withdraw('alice', { idempotencyKey: 'no-token' })).rejects.toThrow('Settings viewer unavailable');
+    expect(await io.reading.save({ expectedVersion: 4, spoilerLevel: 1, idempotencyKey: 'no-token' })).toEqual({
+      ok: false,
+      reason: 'forbidden',
+    });
+    expect(
+      await io.notifications.save({ expectedVersion: 4, notifications: null, idempotencyKey: 'no-token' }),
+    ).toEqual({ ok: false, reason: 'forbidden' });
+    await expect(
+      privacy.save({ collectionId: 'owned', revision: 7, visibility: 'public', idempotencyKey: 'no-token' }),
+    ).rejects.toThrow('Settings viewer unavailable');
+    await expect(
+      verification.request('alice', { subject: 'agent', statement: '', links: [], idempotencyKey: 'no-token' }),
+    ).rejects.toThrow('Settings viewer unavailable');
+    await expect(verification.withdraw('alice', { idempotencyKey: 'no-token' })).rejects.toThrow(
+      'Settings viewer unavailable',
+    );
     expect(writes).toEqual([]);
-  } finally { h.close(); }
+  } finally {
+    h.close();
+  }
 });
 
 for (const [name, transition] of Object.entries(transitions)) {
@@ -808,31 +861,81 @@ for (const [name, transition] of Object.entries(transitions)) {
     const pendingList = deferred<{ ok: true; value: { collections: (typeof collection)[]; next: null } }>();
     let dispatched = 0;
     let confirmed = 0;
-    const preferences = accountPreferenceIO('alice', h.owner.credential, () => { confirmed++; }, {
-      read: () => { dispatched++; return pendingPreferences.promise; },
-      saveReading: async () => { throw new Error('Unexpected write'); },
-      saveNotifications: async () => { throw new Error('Unexpected write'); },
-    }, h.owner.readCurrent);
-    const notices = new NotificationEditor({ notifications: page.notifications, version: 4 }, preferences.notifications,
-      false, () => 4, h.owner.readCurrent, h.owner.isCurrent);
-    const row = new CollectionPrivacyEditor(collection, collectionPrivacyIO(h.owner, {
-      read: () => { dispatched++; return pendingRow.promise; },
-      save: async () => { throw new Error('Unexpected write'); },
-    }), h.owner.readCurrent, h.owner.isCurrent);
-    const pager = new CollectionPrivacyPager(() => h.owner.guardRead(() => {
-      dispatched++; return pendingList.promise;
-    }), h.owner.readCurrent);
-    const verification = new VerificationRecovery('alice', verificationRecoveryIO(h.owner, h.client, {
-      read: () => { dispatched++; return pendingVerification.promise; },
-      request: async () => { throw new Error('Unexpected request'); },
-      withdraw: async () => { throw new Error('Unexpected withdrawal'); },
-    }), h.owner.readCurrent, h.owner.isCurrent);
+    const preferences = accountPreferenceIO(
+      'alice',
+      h.owner.credential,
+      () => {
+        confirmed++;
+      },
+      {
+        read: () => {
+          dispatched++;
+          return pendingPreferences.promise;
+        },
+        saveReading: async () => {
+          throw new Error('Unexpected write');
+        },
+        saveNotifications: async () => {
+          throw new Error('Unexpected write');
+        },
+      },
+      h.owner.readCurrent,
+    );
+    const notices = new NotificationEditor(
+      { notifications: page.notifications, version: 4 },
+      preferences.notifications,
+      false,
+      () => 4,
+      h.owner.readCurrent,
+      h.owner.isCurrent,
+    );
+    const row = new CollectionPrivacyEditor(
+      collection,
+      collectionPrivacyIO(h.owner, {
+        read: () => {
+          dispatched++;
+          return pendingRow.promise;
+        },
+        save: async () => {
+          throw new Error('Unexpected write');
+        },
+      }),
+      h.owner.readCurrent,
+      h.owner.isCurrent,
+    );
+    const pager = new CollectionPrivacyPager(
+      () =>
+        h.owner.guardRead(() => {
+          dispatched++;
+          return pendingList.promise;
+        }),
+      h.owner.readCurrent,
+    );
+    const verification = new VerificationRecovery(
+      'alice',
+      verificationRecoveryIO(h.owner, h.client, {
+        read: () => {
+          dispatched++;
+          return pendingVerification.promise;
+        },
+        request: async () => {
+          throw new Error('Unexpected request');
+        },
+        withdraw: async () => {
+          throw new Error('Unexpected withdrawal');
+        },
+      }),
+      h.owner.readCurrent,
+      h.owner.isCurrent,
+    );
     const loading = [notices.reload(), row.reload(), pager.load(), verification.reload()];
     const before = [notices.snapshot(), row.snapshot(), pager.snapshot(), verification.snapshot()];
     try {
       // Do not reuse the token-bearing fixture's retained-data assertion for this null-token observation.
       if (name === 'retained data on query error') {
-        h.client.getQueryCache().find({ queryKey: sessionQuery.queryKey })!
+        h.client
+          .getQueryCache()
+          .find({ queryKey: sessionQuery.queryKey })!
           .setState({ status: 'error', error: new Error('session failed') });
         expect(h.client.getQueryData(sessionQuery.queryKey)).toEqual({ ...identity, csrfToken: null });
       } else transition(h.client);
@@ -843,7 +946,10 @@ for (const [name, transition] of Object.entries(transitions)) {
       pendingList.resolve({ ok: true, value: { collections: [collection], next: null } });
       pendingVerification.resolve(empty);
       await Promise.all(loading);
-      await notices.reload(); await row.reload(); await pager.restart(); await verification.reload();
+      await notices.reload();
+      await row.reload();
+      await pager.restart();
+      await verification.reload();
       preferences.notifications.confirmed(40);
       expect([notices.snapshot(), row.snapshot(), pager.snapshot(), verification.snapshot()]).toEqual(before);
       expect(dispatched).toBe(4);
@@ -853,7 +959,9 @@ for (const [name, transition] of Object.entries(transitions)) {
       expect(await fresh.guardRead(async () => 'fresh read')).toBe('fresh read');
       expect(fresh.isCurrent()).toBe(false);
       fresh.retire();
-    } finally { h.close(); }
+    } finally {
+      h.close();
+    }
   });
 }
 
@@ -864,30 +972,59 @@ test('a fresh token owner can write only with its own explicit credential after 
     h.client.setQueryData(sessionQuery.queryKey, { ...identity, csrfToken: 'fresh-explicit-token' });
     const fresh = new SettingsSessionOwner(h.client, 'fresh-explicit-token', 'alice');
     const release = fresh.mount();
-    const io = accountPreferenceIO('alice', fresh.credential, () => {}, {
-      read: async () => page,
-      saveReading: async (_, token) => { tokens.push(token); return { ok: true, preferences: page.preferences }; },
-      saveNotifications: async (_, token) => { tokens.push(token); return { ok: true, notifications: page.notifications, version: 4 }; },
-    }, fresh.readCurrent);
+    const io = accountPreferenceIO(
+      'alice',
+      fresh.credential,
+      () => {},
+      {
+        read: async () => page,
+        saveReading: async (_, token) => {
+          tokens.push(token);
+          return { ok: true, preferences: page.preferences };
+        },
+        saveNotifications: async (_, token) => {
+          tokens.push(token);
+          return { ok: true, notifications: page.notifications, version: 4 };
+        },
+      },
+      fresh.readCurrent,
+    );
     const row = collectionPrivacyIO(fresh, {
       read: async () => ({ ok: true, value: collection }),
-      save: async (_, token) => { tokens.push(token); return { ok: false, reason: 'conflict' }; },
+      save: async (_, token) => {
+        tokens.push(token);
+        return { ok: false, reason: 'conflict' };
+      },
     });
     const verification = verificationRecoveryIO(fresh, h.client, {
       read: async () => empty,
-      request: async (_, __, token) => { tokens.push(token); return { ok: false, outcome: 'refused', status: 403, message: 'Refused' }; },
-      withdraw: async (_, __, token) => { tokens.push(token); return { ok: false, outcome: 'refused', status: 403, message: 'Refused' }; },
+      request: async (_, __, token) => {
+        tokens.push(token);
+        return { ok: false, outcome: 'refused', status: 403, message: 'Refused' };
+      },
+      withdraw: async (_, __, token) => {
+        tokens.push(token);
+        return { ok: false, outcome: 'refused', status: 403, message: 'Refused' };
+      },
     });
     expect(h.owner.readCurrent()).toBe(false);
     await expect(h.owner.guardRead(async () => 'stale')).rejects.toThrow('Settings viewer unavailable');
     await io.reading.save({ expectedVersion: 4, spoilerLevel: 1, idempotencyKey: 'fresh-reading' });
     await io.notifications.save({ expectedVersion: 4, notifications: null, idempotencyKey: 'fresh-notices' });
     await row.save({ collectionId: 'owned', revision: 7, visibility: 'public', idempotencyKey: 'fresh-row' });
-    await verification.request('alice', { subject: 'agent', statement: '', links: [], idempotencyKey: 'fresh-request' });
+    await verification.request('alice', {
+      subject: 'agent',
+      statement: '',
+      links: [],
+      idempotencyKey: 'fresh-request',
+    });
     await verification.withdraw('alice', { idempotencyKey: 'fresh-withdraw' });
     expect(tokens).toEqual(Array(5).fill('fresh-explicit-token'));
-    release(); fresh.retire();
-  } finally { h.close(); }
+    release();
+    fresh.retire();
+  } finally {
+    h.close();
+  }
 });
 
 test('null-token read custody survives StrictMode replay and permanently closes after real teardown', async () => {
@@ -910,19 +1047,31 @@ test('null-token read custody survives StrictMode replay and permanently closes 
   await Promise.resolve();
   const staleReconnect = owner.mount();
   await expect(owner.guardRead(async () => 'late')).rejects.toThrow('Settings viewer unavailable');
-  staleReconnect(); client.clear();
+  staleReconnect();
+  client.clear();
 });
 
-async function mountedSettingsExample(run: (h: {
-  host: HTMLElement;
-  render: (node: import('react').ReactNode) => Promise<void>;
-  click: (node: Element) => Promise<void>;
-  choose: (node: HTMLSelectElement, value: string) => Promise<void>;
-}) => Promise<void>) {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+async function mountedSettingsExample(
+  run: (h: {
+    host: HTMLElement;
+    render: (node: import('react').ReactNode) => Promise<void>;
+    click: (node: Element) => Promise<void>;
+    choose: (node: HTMLSelectElement, value: string) => Promise<void>;
+  }) => Promise<void>,
+) {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/settings#notifications' });
-  const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    Node: window.Node, HTMLFormElement: window.HTMLFormElement, IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Node: window.Node,
+    HTMLFormElement: window.HTMLFormElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -933,14 +1082,27 @@ async function mountedSettingsExample(run: (h: {
   try {
     await run({
       host: host as unknown as HTMLElement,
-      render: async (node) => { await act(async () => { root.render(createElement(StrictMode, null, node)); }); },
-      click: async (node) => { await act(async () => { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); }); },
-      choose: async (node, value) => { await act(async () => {
-        node.value = value; node.dispatchEvent(new window.Event('change', { bubbles: true }));
-      }); },
+      render: async (node) => {
+        await act(async () => {
+          root.render(createElement(StrictMode, null, node));
+        });
+      },
+      click: async (node) => {
+        await act(async () => {
+          node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+        });
+      },
+      choose: async (node, value) => {
+        await act(async () => {
+          node.value = value;
+          node.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+      },
     });
   } finally {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -959,40 +1121,73 @@ test('actual null-CSRF Settings composition retains reloads, disabled writers an
     let inventoryReads = 0;
     let writes = 0;
     const preferenceIO = {
-      read: async () => { reads++; return page; },
-      saveReading: async (): Promise<PreferenceWriteResult> => { writes++; return { ok: false, reason: 'unavailable' }; },
-      saveNotifications: async (): Promise<NotificationWriteResult> => { writes++; return { ok: false, reason: 'unavailable' }; },
+      read: async () => {
+        reads++;
+        return page;
+      },
+      saveReading: async (): Promise<PreferenceWriteResult> => {
+        writes++;
+        return { ok: false, reason: 'unavailable' };
+      },
+      saveNotifications: async (): Promise<NotificationWriteResult> => {
+        writes++;
+        return { ok: false, reason: 'unavailable' };
+      },
     };
     const managedAccountsIO: import('../src/settings/managed-accounts-read').ManagedAccountsIO = async () => {
       inventoryReads++;
-      return { ok: true, page: {
-        account: { id: 'alice', kind: 'actor', displayName: 'Alice', handle: null },
-        organizations: { state: 'ready', items: [], next: null },
-        responsibilities: { items: [], next: null },
-      } };
+      return {
+        ok: true,
+        page: {
+          account: { id: 'alice', kind: 'actor', displayName: 'Alice', handle: null },
+          organizations: { state: 'ready', items: [], next: null },
+          responsibilities: { items: [], next: null },
+        },
+      };
     };
-    const route = createRootRoute({ component: () => createElement(SettingsPageView, {
-      page, csrfToken: null, preferenceIO, managedAccountsIO,
-    }) });
-    const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en/settings#reading'] }) });
+    const route = createRootRoute({
+      component: () =>
+        createElement(SettingsPageView, {
+          page,
+          csrfToken: null,
+          preferenceIO,
+          managedAccountsIO,
+        }),
+    });
+    const router = createRouter({
+      routeTree: route,
+      history: createMemoryHistory({ initialEntries: ['/en/settings#reading'] }),
+    });
     await router.load();
     try {
       await render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
       expect(host.querySelector('#settings-reading-heading')).not.toBeNull();
       expect(host.textContent).not.toContain(m.settings_session_unavailable());
       expect(host.querySelectorAll('[role="radio"]')).toHaveLength(3);
-      expect([...host.querySelectorAll<HTMLButtonElement>('[role="radio"], [role="switch"]')].every((node) => node.disabled)).toBe(true);
+      expect(
+        [...host.querySelectorAll<HTMLButtonElement>('[role="radio"], [role="switch"]')].every((node) => node.disabled),
+      ).toBe(true);
       expect(reads).toBe(0); // The installed loader supplies Reading's current snapshot.
-      await act(async () => { await router.navigate({ hash: 'notifications' }); });
+      await act(async () => {
+        await router.navigate({ hash: 'notifications' });
+      });
       const notices = host.querySelector('[data-settings-panel="notifications"]')!;
-      expect([...notices.querySelectorAll<HTMLButtonElement>('[role="switch"]')].every((node) => node.disabled)).toBe(true);
-      const noticeReload = [...notices.querySelectorAll('button')].find((node) => node.textContent === m.settings_reload())!;
+      expect([...notices.querySelectorAll<HTMLButtonElement>('[role="switch"]')].every((node) => node.disabled)).toBe(
+        true,
+      );
+      const noticeReload = [...notices.querySelectorAll('button')].find(
+        (node) => node.textContent === m.settings_reload(),
+      )!;
       await click(noticeReload);
       expect(reads).toBe(1);
-      await act(async () => { await router.navigate({ hash: 'account' }); });
+      await act(async () => {
+        await router.navigate({ hash: 'account' });
+      });
       expect(inventoryReads).toBe(1); // StrictMode and null CSRF leave Account's own read owner usable.
       expect(host.querySelector('#settings-account-heading')).not.toBeNull();
-      await act(async () => { await router.navigate({ hash: 'reading' }); });
+      await act(async () => {
+        await router.navigate({ hash: 'reading' });
+      });
       expect(host.querySelector('#settings-reading-heading')).not.toBeNull();
       expect(inventoryReads).toBe(1);
       expect(writes).toBe(0);
@@ -1005,7 +1200,10 @@ test('actual null-CSRF Settings composition retains reloads, disabled writers an
       expect(host.querySelector('[data-settings-panel]')).toBeNull();
       expect(host.querySelector('#display')).not.toBeNull();
       expect(writes).toBe(0);
-    } finally { await render(null); client.clear(); }
+    } finally {
+      await render(null);
+      client.clear();
+    }
   });
 });
 
@@ -1015,12 +1213,17 @@ test('standalone injected CollectionRow has usable controls, exact uncertain ret
     const calls: unknown[] = [];
     let reads = 0;
     const io = {
-      save: async (input: import('../src/settings/collection-privacy-recovery').VisibilityAttempt): Promise<CollectionVisibilityWrite> => {
+      save: async (
+        input: import('../src/settings/collection-privacy-recovery').VisibilityAttempt,
+      ): Promise<CollectionVisibilityWrite> => {
         calls.push(input);
         if (calls.length === 1) throw new Error('Lost response');
         return { ok: true, collection: { ...collection, visibility: 'public', revision: 8 } };
       },
-      read: async () => { reads++; return { ok: true as const, value: { ...collection, visibility: 'public' as const, revision: 8 } }; },
+      read: async () => {
+        reads++;
+        return { ok: true as const, value: { ...collection, visibility: 'public' as const, revision: 8 } };
+      },
     };
     await render(createElement('ul', null, createElement(CollectionRow, { collection, io })));
     const select = host.querySelector('select')!;
@@ -1030,7 +1233,9 @@ test('standalone injected CollectionRow has usable controls, exact uncertain ret
     const bytes = JSON.stringify(original);
     await choose(select, 'unlisted');
     expect(calls).toHaveLength(1);
-    const retry = [...host.querySelectorAll('button')].find((node) => node.textContent === m.settings_privacy_retry_original())!;
+    const retry = [...host.querySelectorAll('button')].find(
+      (node) => node.textContent === m.settings_privacy_retry_original(),
+    )!;
     expect(retry.disabled).toBe(false);
     await click(retry);
     expect(calls).toHaveLength(2);
@@ -1060,24 +1265,48 @@ for (const invalid of ['null-token', 'query-error', 'retired', 'missing-query', 
       if (invalid === 'missing-query') h.client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
       let calls = 0;
       const io = {
-        save: async (): Promise<CollectionVisibilityWrite> => { calls++; return { ok: false, reason: 'unavailable' }; },
-        read: async () => { calls++; return { ok: true as const, value: collection }; },
+        save: async (): Promise<CollectionVisibilityWrite> => {
+          calls++;
+          return { ok: false, reason: 'unavailable' };
+        },
+        read: async () => {
+          calls++;
+          return { ok: true as const, value: collection };
+        },
       };
       try {
-        const row = createElement('ul', null, createElement(CollectionRow, { collection, ...(invalid === 'native-without-owner' ? {} : { io }) }));
-        await render(invalid === 'native-without-owner' ? row : createElement(QueryClientProvider, { client: h.client },
-          invalid === 'missing-query' ? row : createElement(SettingsSessionContext.Provider, { value: h.owner }, row)));
+        const row = createElement(
+          'ul',
+          null,
+          createElement(CollectionRow, { collection, ...(invalid === 'native-without-owner' ? {} : { io }) }),
+        );
+        await render(
+          invalid === 'native-without-owner'
+            ? row
+            : createElement(
+                QueryClientProvider,
+                { client: h.client },
+                invalid === 'missing-query'
+                  ? row
+                  : createElement(SettingsSessionContext.Provider, { value: h.owner }, row),
+              ),
+        );
         const select = host.querySelector('select')!;
         expect(select.disabled).toBe(true);
         await choose(select, 'public'); // Even an injected DOM change cannot start a command.
         expect(calls).toBe(0);
         if (invalid === 'missing-query') {
-          await act(async () => { h.client.setQueryData(sessionQuery.queryKey, identity); });
+          await act(async () => {
+            h.client.setQueryData(sessionQuery.queryKey, identity);
+          });
           await choose(select, 'unlisted');
           expect(select.disabled).toBe(true); // Installing an observation cannot revive this unowned mount.
           expect(calls).toBe(0);
         }
-      } finally { await render(null); h.close(); }
+      } finally {
+        await render(null);
+        h.close();
+      }
     });
   });
 }
@@ -1088,16 +1317,36 @@ test('standalone row teardown drops a late replay receipt before it can start re
     const replay = deferred<CollectionVisibilityWrite>();
     const sent: unknown[] = [];
     let reads = 0;
-    await render(createElement('ul', null, createElement(CollectionRow, { collection, io: {
-      save: async (input) => { sent.push(input); if (sent.length === 1) throw new Error('Lost'); return replay.promise; },
-      read: async () => { reads++; return { ok: true, value: collection }; },
-    } })));
+    await render(
+      createElement(
+        'ul',
+        null,
+        createElement(CollectionRow, {
+          collection,
+          io: {
+            save: async (input) => {
+              sent.push(input);
+              if (sent.length === 1) throw new Error('Lost');
+              return replay.promise;
+            },
+            read: async () => {
+              reads++;
+              return { ok: true, value: collection };
+            },
+          },
+        }),
+      ),
+    );
     await choose(host.querySelector('select')!, 'public');
-    const retry = [...host.querySelectorAll('button')].find((node) => node.textContent === m.settings_privacy_retry_original())!;
+    const retry = [...host.querySelectorAll('button')].find(
+      (node) => node.textContent === m.settings_privacy_retry_original(),
+    )!;
     await click(retry);
     expect(sent[1]).toBe(sent[0]);
     await render(null);
-    await act(async () => { replay.resolve({ ok: true, collection: { ...collection, visibility: 'public', revision: 8 } }); });
+    await act(async () => {
+      replay.resolve({ ok: true, collection: { ...collection, visibility: 'public', revision: 8 } });
+    });
     expect(reads).toBe(0);
     expect(sent).toHaveLength(2);
     expect(host.textContent).toBe('');
@@ -1118,14 +1367,27 @@ test('read-only Reading composition preserves exported writer predicates and rej
     const h = readOnlySetup();
     try {
       for (const token of [null, 'injected-foreign-token']) {
-        await render(createElement(QueryClientProvider, { client: h.client },
-          createElement(SettingsSessionContext.Provider, { value: h.owner },
-            createElement(ReadingNavigation, { csrfToken: null },
-              createElement(Probe, { key: String(token), token })))));
+        await render(
+          createElement(
+            QueryClientProvider,
+            { client: h.client },
+            createElement(
+              SettingsSessionContext.Provider,
+              { value: h.owner },
+              createElement(
+                ReadingNavigation,
+                { csrfToken: null },
+                createElement(Probe, { key: String(token), token }),
+              ),
+            ),
+          ),
+        );
         expect(host.textContent).toBe(`read:${token === null}/write:false/navigation:false`);
         expect(host.textContent).not.toContain(m.settings_reading_session_changed());
       }
-      await act(async () => { h.owner.retire(); });
+      await act(async () => {
+        h.owner.retire();
+      });
       expect(host.textContent).toContain(m.settings_reading_session_changed());
       expect(host.querySelector('output')).toBeNull();
     } finally {
@@ -1149,13 +1411,20 @@ test('a standalone injected row still obeys an inherited owner without a QueryCl
       read: async () => ({ ok: true as const, value: collection }),
     };
     try {
-      await render(createElement(SettingsSessionContext.Provider, { value: h.owner },
-        createElement('ul', null, createElement(CollectionRow, { collection, io }))));
+      await render(
+        createElement(
+          SettingsSessionContext.Provider,
+          { value: h.owner },
+          createElement('ul', null, createElement(CollectionRow, { collection, io })),
+        ),
+      );
       const select = host.querySelector('select')!;
       expect(select.disabled).toBe(false);
       await choose(select, 'public');
       expect(writes).toBe(1);
-      await act(async () => { transitions['synchronous subject away and back'](h.client); });
+      await act(async () => {
+        transitions['synchronous subject away and back'](h.client);
+      });
       expect(select.disabled).toBe(true);
       await choose(select, 'unlisted');
       expect(writes).toBe(1);

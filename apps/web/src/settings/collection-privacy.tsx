@@ -81,10 +81,7 @@ export function CollectionRow(props: CollectionRowProps) {
   const client = useContext(QueryClientContext);
   const owner = useSettingsSessionOwner(undefined, undefined, !!props.io);
   // Explicit isolated IO has no session or exposure producer. An installed owner still takes precedence.
-  if (!client)
-    return (
-      <CollectionRowView {...props} owner={owner} canSave={!!props.io} canRead={!!props.io} />
-    );
+  if (!client) return <CollectionRowView {...props} owner={owner} canSave={!!props.io} canRead={!!props.io} />;
   return <AdmittedCollectionRow {...props} owner={owner} />;
 }
 
@@ -109,14 +106,14 @@ function CollectionRowView({
         collection,
         owner
           ? collectionPrivacyIO(owner, io ? { save: (data) => io.save(data), read: (id) => io.read(id) } : undefined)
-          : io ?? {
+          : (io ?? {
               save: async () => {
                 throw new Error('Settings viewer unavailable');
               },
               read: async () => {
                 throw new Error('Settings viewer unavailable');
               },
-            },
+            }),
         isCurrent,
         () => isCurrent() && mayWrite(),
       ),
@@ -316,7 +313,8 @@ export function CollectionPrivacyView({
   const owner = useSettingsSessionOwner(undefined, undefined, !!io || read !== nativePageRead);
   const isCurrent = useSettingsLiveness(owner?.readCurrent ?? (() => read !== nativePageRead));
   const [pager] = useState(
-    () => new CollectionPrivacyPager((cursor) => (owner ? owner.guardRead(() => read(cursor)) : read(cursor)), isCurrent),
+    () =>
+      new CollectionPrivacyPager((cursor) => (owner ? owner.guardRead(() => read(cursor)) : read(cursor)), isCurrent),
   );
   useSettingsDisposal(pager.dispose);
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);

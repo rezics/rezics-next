@@ -315,10 +315,21 @@ test('a late first-page restart cannot populate a replacement actor or cause ano
 test('separate privacy write custody permits current row reads without creating a command or reserving a draft', async () => {
   let saves = 0;
   let reads = 0;
-  const editor = new CollectionPrivacyEditor(initial, {
-    read: async () => { reads++; return { ok: true, value: initial }; },
-    save: async () => { saves++; return { ok: true, collection: receipt }; },
-  }, () => true, () => false);
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      read: async () => {
+        reads++;
+        return { ok: true, value: initial };
+      },
+      save: async () => {
+        saves++;
+        return { ok: true, collection: receipt };
+      },
+    },
+    () => true,
+    () => false,
+  );
   await editor.reload();
   const before = editor.snapshot();
   await editor.edit('public');

@@ -94,7 +94,11 @@ const standaloneCurrent = () => true;
 const unavailable = () => false;
 
 /** Does not read the session transport. A present QueryClient always requires an installed observation. */
-export function useSettingsSessionOwner(token: string | null | undefined, subject?: string | null, _standalone = false) {
+export function useSettingsSessionOwner(
+  token: string | null | undefined,
+  subject?: string | null,
+  _standalone = false,
+) {
   const client = useContext(QueryClientContext);
   const inherited = useContext(SettingsSessionContext);
   const [local] = useState(() =>
