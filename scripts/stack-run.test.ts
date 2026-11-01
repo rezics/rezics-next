@@ -508,7 +508,7 @@ let outcome;
 try {
   const code = await remoteCheck({
     hosts: [{ name: 'a', address: 'ops@a.test', identity: '/keys/a', memoryMaxGiB: 16,
-      cpuQuotaPercent: 800, slots: 2, processorsPerSlot: 8 }],
+      cpuQuotaPercent: 800, slots: 2, processorsPerSlot: 4 }],
     workspace: process.env.TEST_WORKSPACE,
     command: ['true'],
     expectedSourceSha256: '${'a'.repeat(64)}',
