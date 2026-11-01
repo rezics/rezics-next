@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -13,6 +13,7 @@ import { ViewHeadingActions } from '../pages/view-heading';
 import { definitionText } from './definition-guide';
 import { DefinitionGuideLink } from './definition-guide-view';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
+import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import { EditorFailure } from './statement-editor-view';
 import { MangaInitialField, type MangaRow } from './manga-profile-field';
 import { MangaCorrections, type MangaCorrectionPorts } from './manga-profile-corrections';
@@ -28,6 +29,8 @@ import {
 } from './manga-profile';
 
 export type MangaReady = Extract<MangaRead, { ok: true }>;
+type MangaTermDraft = TermDraft & { id: number };
+
 export function mangaGroupLabels(locale: string) {
   const o = { locale: locale as never };
   return {
@@ -125,8 +128,12 @@ function MangaCreate({
   refresh: () => Promise<unknown>;
 }) {
   const o = { locale: locale as never };
+  const termsId = useId();
+  const nextTermId = useRef(1);
   const [type, setType] = useState<MangaType>('schema:ComicSeries');
-  const [terms, setTerms] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
+  const [terms, setTerms] = useState<MangaTermDraft[]>([
+    { id: 0, language: locale, label: '', description: '', aliases: '' },
+  ]);
   const [drafts, setDrafts] = useState<Record<MangaType, MangaRow[]>>({
     'schema:ComicSeries': [],
     'schema:PublicationVolume': [],
@@ -193,11 +200,13 @@ function MangaCreate({
     if (pointer === '/type') return 'manga-type';
     if (/^\/(labels|aliases|descriptions)\//.test(pointer)) {
       const language = pointer.split('/')[2]?.replaceAll('~1', '/').replaceAll('~0', '~');
-      const index = Math.max(
-        0,
-        terms.findIndex((term) => term.language.trim() === language),
-      );
-      return `manga-${pointer.startsWith('/labels') ? 'label' : pointer.startsWith('/aliases') ? 'aliases' : 'description'}-${index}`;
+      const term = terms.find((row) => row.language.trim() === language) ?? terms[0]!;
+      const field = pointer.startsWith('/labels')
+        ? 'label'
+        : pointer.startsWith('/aliases')
+          ? 'aliases'
+          : 'description';
+      return `${termsId}-${field}-${term.id}`;
     }
     const row = rows.find((row) => pointer.includes(row.statement.property.id));
     return row ? `manga-row-${row.id}` : 'manga-fields';
@@ -302,7 +311,11 @@ function MangaCreate({
         <fieldset disabled={locked} className="space-y-5">
           <legend className="mb-3 text-lg font-semibold">{m.catalogue_create_terms({}, o)}</legend>
           {terms.map((term, index) => (
-            <div key={index} className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2">
+            <div
+              key={term.id}
+              id={`${termsId}-row-${term.id}`}
+              className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2"
+            >
               {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
                 const label = {
                   language: m.catalogue_create_language({}, o),
@@ -311,10 +324,12 @@ function MangaCreate({
                   aliases: m.catalogue_create_aliases({}, o),
                 }[field];
                 const props = {
-                  id: `manga-${field}-${index}`,
+                  id: `${termsId}-${field}-${term.id}`,
                   value: term[field],
                   onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-                    setTerms(terms.map((item, at) => (at === index ? { ...item, [field]: event.target.value } : item)));
+                    setTerms((previous) =>
+                      previous.map((item) => (item.id === term.id ? { ...item, [field]: event.target.value } : item)),
+                    );
                     setFailure(undefined);
                   },
                 };
@@ -325,12 +340,37 @@ function MangaCreate({
                   </Field>
                 );
               })}
+              {index > 0 && (
+                <CreateSubjectLanguageRemove
+                  locale={locale}
+                  rowId={`${termsId}-row-${term.id}`}
+                  focusId={
+                    terms[index + 1]
+                      ? `${termsId}-language-${terms[index + 1]!.id}`
+                      : `${termsId}-add-language`
+                  }
+                  disabled={locked}
+                  onRemove={() => {
+                    if (locked || running.current || request.current) return;
+                    setTerms((previous) => previous.filter((row) => row.id !== term.id));
+                    setFailure(undefined);
+                  }}
+                />
+              )}
             </div>
           ))}
           <Button
+            id={`${termsId}-add-language`}
             type="button"
             variant="outline"
-            onClick={() => setTerms([...terms, { language: '', label: '', description: '', aliases: '' }])}
+            disabled={locked}
+            onClick={() => {
+              if (locked || running.current || request.current) return;
+              setTerms((previous) => [
+                ...previous,
+                { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
+              ]);
+            }}
           >
             {m.catalogue_create_add_language({}, o)}
           </Button>

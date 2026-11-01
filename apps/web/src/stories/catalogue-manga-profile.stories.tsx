@@ -115,15 +115,91 @@ async function fillSeries(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.type(
     await enabled(await canvas.findByRole('textbox', { name: m.catalogue_create_label() })),
-    'The Paper Observatory',
+    getLocale() === 'ja' ? '紙の天文台' : 'The Paper Observatory',
   );
   const language = await addField(canvasElement, m.manga_publication(), 'schema:inLanguage');
   await userEvent.type(await enabled(language.getByRole('textbox', { name: m.correction_value() })), 'ja');
+}
+async function removeAccidentalBlankLanguage(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const terms = within(await canvas.findByRole('group', { name: m.catalogue_create_terms() }));
+  const primaryLabel = terms.getByRole('textbox', { name: m.catalogue_create_label() });
+  const primaryDescription = terms.getByRole('textbox', { name: m.catalogue_create_description() });
+  const primaryAliases = terms.getByRole('textbox', { name: m.catalogue_create_aliases() });
+  const primaryTerm =
+    getLocale() === 'ja'
+      ? {
+          label: '紙の天文台',
+          description: '静かな天文学の謎',
+          aliases: '紙の空\n夜の地図',
+        }
+      : {
+          label: 'The Paper Observatory',
+          description: 'A quiet astronomical mystery',
+          aliases: 'Paper sky\nNight atlas',
+        };
+  const retainedTerm =
+    getLocale() === 'ja'
+      ? {
+          language: 'en',
+          label: 'The Paper Observatory',
+          description: 'A quiet astronomical mystery',
+          aliases: 'Paper sky\nNight atlas',
+        }
+      : {
+          language: 'ja',
+          label: '紙の天文台',
+          description: '静かな天文学の謎',
+          aliases: '紙の空\n夜の地図',
+        };
+  await userEvent.type(primaryDescription, primaryTerm.description);
+  await userEvent.type(primaryAliases, primaryTerm.aliases);
+  await expect(terms.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(1);
+  await expect(terms.queryByRole('button', { name: m.catalogue_create_remove_language() })).toBeNull();
+
+  const addLanguage = await enabled(terms.getByRole('button', { name: m.catalogue_create_add_language() }));
+  await userEvent.click(addLanguage);
+  await userEvent.click(addLanguage);
+  const removeButtons = terms.getAllByRole('button', { name: m.catalogue_create_remove_language() });
+  await expect(removeButtons).toHaveLength(2);
+  const blankRowId = removeButtons[0]!.getAttribute('aria-controls')!;
+  const retainedRowId = removeButtons[1]!.getAttribute('aria-controls')!;
+  const blankRow = canvasElement.ownerDocument.getElementById(blankRowId)!;
+  const retainedRow = canvasElement.ownerDocument.getElementById(retainedRowId)!;
+  const blankLanguage = within(blankRow).getByRole('textbox', { name: m.catalogue_create_language() });
+  const retainedLanguage = within(retainedRow).getByRole('textbox', { name: m.catalogue_create_language() });
+  const retainedLabel = within(retainedRow).getByRole('textbox', { name: m.catalogue_create_label() });
+  const retainedDescription = within(retainedRow).getByRole('textbox', { name: m.catalogue_create_description() });
+  const retainedAliases = within(retainedRow).getByRole('textbox', { name: m.catalogue_create_aliases() });
+  await expect(blankLanguage).toHaveValue('');
+  await userEvent.type(retainedLanguage, retainedTerm.language);
+  await userEvent.type(retainedLabel, retainedTerm.label);
+  await userEvent.type(retainedDescription, retainedTerm.description);
+  await userEvent.type(retainedAliases, retainedTerm.aliases);
+
+  await expect(removeButtons[0]!).toHaveAttribute('type', 'button');
+  await expect(removeButtons[0]!).toHaveAttribute('aria-controls', blankRowId);
+  await userEvent.click(await enabled(removeButtons[0]!));
+  await expect(blankRow).not.toBeInTheDocument();
+  await expect(retainedRow).toBeInTheDocument();
+  await expect(retainedLanguage).toHaveFocus();
+  await expect(terms.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(2);
+  await expect(terms.getAllByRole('button', { name: m.catalogue_create_remove_language() })).toHaveLength(1);
+  await expect(primaryLabel).toHaveValue(primaryTerm.label);
+  await expect(primaryDescription).toHaveValue(primaryTerm.description);
+  await expect(primaryAliases).toHaveValue(primaryTerm.aliases);
+  await expect(retainedLanguage).toHaveValue(retainedTerm.language);
+  await expect(retainedLabel).toHaveValue(retainedTerm.label);
+  await expect(retainedDescription).toHaveValue(retainedTerm.description);
+  await expect(retainedAliases).toHaveValue(retainedTerm.aliases);
+  const inLanguage = within(await canvas.findByRole('region', { name: fieldName('schema:inLanguage') }));
+  await expect(inLanguage.getByRole('textbox', { name: m.correction_value() })).toHaveValue('ja');
 }
 export const CreateSeries: Story = {
   play: async ({ canvasElement }) => {
     await fillSeries(canvasElement);
     const canvas = within(canvasElement);
+    await removeAccidentalBlankLanguage(canvasElement);
     await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByText(m.manga_created())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.candidate_view_public() })).toHaveAttribute(
@@ -196,9 +272,25 @@ export const Uncertain: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await fillSeries(canvasElement);
+    const terms = within(await canvas.findByRole('group', { name: m.catalogue_create_terms() }));
+    await userEvent.click(await enabled(terms.getByRole('button', { name: m.catalogue_create_add_language() })));
+    const language = terms.getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!;
+    const translation = terms.getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!;
+    const translationLanguage = getLocale() === 'ja' ? 'en' : 'ja';
+    const translationLabel = translationLanguage === 'ja' ? '紙の天文台' : 'The Paper Observatory';
+    await userEvent.type(language, translationLanguage);
+    await userEvent.type(translation, translationLabel);
     await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByRole('alert')).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
+    const remove = terms.getByRole('button', { name: m.catalogue_create_remove_language() });
+    await expect(remove).toBeDisabled();
+    await expect(terms.getByRole('button', { name: m.catalogue_create_add_language() })).toBeDisabled();
+    await expect(language).toBeDisabled();
+    await expect(translation).toBeDisabled();
+    remove.click();
+    await expect(terms.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(2);
+    await expect(translation).toHaveValue(translationLabel);
     await userEvent.click(await enabled(canvas.getByRole('button', { name: m.correction_retry() })));
     await expect(await canvas.findByText(m.manga_created())).toBeVisible();
   },
