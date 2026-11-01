@@ -32,32 +32,46 @@ export function QualifiedCredit({
       link={value.link}
       cover={{ ...cover, ...(value.ratio ? { ratio: value.ratio } : {}) }}
       essentialCredit={
-        <ul className="space-y-1 text-sm leading-6">
-          {notes.map((note, index) => (
-            <li key={`note-${index}`}>{note}</li>
-          ))}
-          {qualified.map((note, index) => (
-            <li key={`qualified-${index}`}>
-              {note.subject ? (
-                <value.link
-                  href={relationTargetHref(note.subject, value.locale, value.context)}
-                  lang={note.language}
-                  className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+        <>
+          {(notes.length > 0 || qualified.length > 0) && (
+            <ul className="flex min-w-0 flex-col gap-1 text-sm leading-6">
+              {notes.map((note, index) => (
+                <li key={`note-${index}`}>{note}</li>
+              ))}
+              {qualified.map((note, index) => (
+                <li
+                  key={`qualified-${index}`}
+                  data-property={note.property}
+                  className={
+                    note.property === 'wdt:P3831' ||
+                    note.property === 'wdt:P453' ||
+                    note.property === 'schema:character'
+                      ? 'font-medium'
+                      : undefined
+                  }
                 >
-                  {note.text}
-                </value.link>
-              ) : (
-                <span lang={note.language}>{note.text}</span>
-              )}
-              {note.language && (
-                <>
-                  {' '}
-                  <LanguageTag lang={note.language} locale={value.locale} />
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+                  {note.subject ? (
+                    <value.link
+                      href={relationTargetHref(note.subject, value.locale, value.context)}
+                      lang={note.language}
+                      className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      {note.text}
+                    </value.link>
+                  ) : (
+                    <span lang={note.language}>{note.text}</span>
+                  )}
+                  {note.language && (
+                    <>
+                      {' '}
+                      <LanguageTag lang={note.language} locale={value.locale} />
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       }
     />
   );

@@ -146,7 +146,7 @@ export function CoverCard({
       {credit ? (
         <div
           className={
-            listPresentation?.imageAspect === 'landscape' ? 'w-32 shrink-0 sm:w-48' : 'w-[72px] shrink-0 sm:w-24'
+            listPresentation?.imageAspect === 'landscape' ? 'w-24 shrink-0 sm:w-32' : 'w-[72px] shrink-0 sm:w-24'
           }
         >
           {image}
@@ -218,7 +218,10 @@ export function CoverCard({
           </div>
         )}
         {credit && (
-          <div data-slot="cover-card-essential-credit" className="min-w-0 text-sm leading-6 wrap-anywhere">
+          <div
+            data-slot="cover-card-essential-credit"
+            className="min-w-0 whitespace-normal text-sm leading-6 wrap-anywhere"
+          >
             {essentialCredit}
           </div>
         )}

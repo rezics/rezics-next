@@ -2,7 +2,12 @@ import type { SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
 import { isRecord, type Stmt } from './shared';
 
-export type QualifiedNote = { text: string; subject?: { id: string; label: string }; language?: string };
+export type QualifiedNote = {
+  text: string;
+  property?: string;
+  subject?: { id: string; label: string };
+  language?: string;
+};
 
 /** Preserve one statement's qualifiers. Item labels come only from this response's disclosed related projection. */
 export function qualifiedNotes(statement: Stmt, related: unknown, locale: string): QualifiedNote[] {
@@ -19,6 +24,7 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
   return statement.qualifiers.flatMap((snak): QualifiedNote[] => {
     if (snak.value.type !== 'value' || !Object.hasOwn(labels, snak.property.id)) return [];
     const prefix = labels[snak.property.id]!;
+    const property = snak.property.id;
     const content = snak.value.content;
     if (snak.property.data_type === 'wikibase-item' && typeof content === 'string') {
       const summary =
@@ -26,22 +32,22 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
           ? (related[content] as SubjectSummary | undefined)
           : undefined;
       const label = typeof summary?.label === 'object' ? summary.label?.value : undefined;
-      return summary && label ? [{ text: `${prefix}: ${label}`, subject: { id: summary.id, label } }] : [];
+      return summary && label ? [{ property, text: `${prefix}: ${label}`, subject: { id: summary.id, label } }] : [];
     }
     if (
       (snak.property.data_type === 'string' || snak.property.data_type === 'external-id') &&
       typeof content === 'string'
     )
-      return [{ text: `${prefix}: ${content}` }];
+      return [{ property, text: `${prefix}: ${content}` }];
     if (
       snak.property.data_type === 'monolingualtext' &&
       isRecord(content) &&
       typeof content.text === 'string' &&
       typeof content.language === 'string'
     )
-      return [{ text: `${prefix}: ${content.text}`, language: content.language }];
+      return [{ property, text: `${prefix}: ${content.text}`, language: content.language }];
     if (snak.property.data_type === 'quantity' && isRecord(content) && typeof content.amount === 'string')
-      return [{ text: `${prefix}: ${content.amount}` }];
+      return [{ property, text: `${prefix}: ${content.amount}` }];
     return [];
   });
 }

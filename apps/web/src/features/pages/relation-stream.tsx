@@ -35,6 +35,7 @@ export function RelationStream(props: {
   node: string;
   view: string;
   title: string;
+  titleLang?: string | undefined;
 }) {
   const { value, node, view } = props;
   return (
@@ -51,12 +52,14 @@ function StreamState({
   node,
   view,
   title,
+  titleLang,
 }: {
   value: OverviewValue;
   section: Section;
   node: string;
   view: string;
   title: string;
+  titleLang?: string | undefined;
 }) {
   const queryClient = useQueryClient();
   const router = useRouter({ warn: false });
@@ -148,7 +151,7 @@ function StreamState({
       aria-busy={pending}
       className="min-w-0 space-y-4"
     >
-      <h2 id={`${node}-title`} className="text-2xl font-semibold tracking-tight">
+      <h2 id={`${node}-title`} lang={titleLang} className="text-2xl font-semibold tracking-tight">
         {title}
       </h2>
       {unique.size ? (
@@ -166,6 +169,7 @@ function StreamState({
           href={href}
           onClick={more}
           aria-disabled={pending}
+          aria-describedby={`${node}-title`}
           className={buttonVariants({ variant: 'outline' })}
         >
           {error ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}

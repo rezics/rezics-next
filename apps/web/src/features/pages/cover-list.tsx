@@ -23,7 +23,6 @@ function ItemCard({
   value,
   listPresentationFor,
   facts,
-  credit = false,
 }: {
   item: Item;
   value: RowValue;
@@ -91,6 +90,7 @@ export function CoverList({
   value,
   label,
   preview = false,
+  credit = false,
   listPresentationFor,
   memberFacts,
 }: {
@@ -113,7 +113,7 @@ export function CoverList({
         key={`${item.id}-${index}`}
         item={item}
         value={value}
-        credit={(item.qualified?.length ?? 0) > 0}
+        credit={credits}
         {...(listPresentationFor ? { listPresentationFor } : {})}
         {...(facts ? { facts } : {})}
       />
@@ -128,9 +128,11 @@ export function CoverList({
   });
   if (credits) {
     return (
-      <ul aria-label={label} className="grid min-w-0 gap-6 sm:grid-cols-2">
-        {cards}
-      </ul>
+      <div className="@container">
+        <ul aria-label={label} className="grid min-w-0 gap-6 @2xl:grid-cols-2">
+          {cards}
+        </ul>
+      </div>
     );
   }
   return (

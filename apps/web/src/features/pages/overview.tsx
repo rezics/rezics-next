@@ -484,9 +484,10 @@ function LinkSection(
   title =
     (forward ? definition?.forwardReaderLabel : definition?.readerLabel) ||
     title ||
+    fieldLabel({ text: (forward ? definition?.forwardLabel : definition?.label) || '' }, value.locale).text ||
     readerViewLabel(view, value.locale) ||
-    (forward ? definition?.forwardLabel : definition?.label) ||
     value.unlabelled;
+  const text = pageText(props.title, value.locale);
   if (props.paged === true)
     return (
       <RelationStream
@@ -494,7 +495,8 @@ function LinkSection(
         section={section ?? { ok: false }}
         node={id}
         view={view}
-        title={pageText(props.title, value.locale).text || title}
+        title={text.text || title}
+        titleLang={text.lang}
       />
     );
   if (!section?.ok)
@@ -509,7 +511,6 @@ function LinkSection(
   if (!found) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
   if (found.items.length === 0 && !found.more && !found.count?.value && props.paged !== true) return null;
   const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
-  const text = pageText(props.title, value.locale);
   return (
     <Preview
       slot={slot}
@@ -564,10 +565,13 @@ export function RelationGroups(props: Record<string, unknown>) {
         {nodes.map((node) => {
           const section = value.sections.get(node.id);
           const property = String(node.props.property ?? '');
+          const text = pageText(node.props.title, value.locale);
+          const definition = value.relations[property];
+          const forward = section?.ok && section.read.kind === 'relations';
           const title =
-            pageText(node.props.title, value.locale).text ||
-            value.relations[property]?.readerLabel ||
-            value.relations[property]?.label ||
+            text.text ||
+            (forward ? definition?.forwardReaderLabel : definition?.readerLabel) ||
+            fieldLabel({ text: (forward ? definition?.forwardLabel : definition?.label) || '' }, value.locale).text ||
             heading;
           return (
             <RelationStream
@@ -577,6 +581,7 @@ export function RelationGroups(props: Record<string, unknown>) {
               node={node.id}
               view="relations"
               title={title}
+              titleLang={text.lang}
             />
           );
         })}
