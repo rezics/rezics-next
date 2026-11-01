@@ -40,12 +40,7 @@ export type AgentIdentitySDKReceivingBinding = Readonly<{
   workflowId: string;
   requestDigest: string;
   source: AgentIdentityWorkSource;
-  receiver: Readonly<{
-    partition: 0;
-    epoch: number;
-    generation: string;
-    writerVersion: 1;
-  }>;
+  receiver: Readonly<{ partition: 0; epoch: number; generation: string; writerVersion: 1 }>;
   barrier: HistoryBarrier;
 }>;
 type Pending = Readonly<{ state: 'pending'; gap: string }>;
@@ -122,10 +117,7 @@ export async function lockAgentIdentitySDKWriterState(
   )
     return pending('identity-sdk-current-fence-funding-unavailable');
   try {
-    return {
-      state: 'observed',
-      writer: await lockSdkWorkflowWriterState(tx, expected, client),
-    };
+    return { state: 'observed', writer: await lockSdkWorkflowWriterState(tx, expected, client) };
   } catch (error) {
     // This is the SDK's specific pre-IO placement refusal, not a SQL error or retry.
     if (error instanceof Error && error.message === 'DBOS writer fence requires the same native transaction pool')
@@ -197,12 +189,7 @@ export async function readAgentIdentitySDKReceivingBinding(
       workflowId: mapping.workflowId,
       requestDigest: row.request_digest.toString('hex'),
       source: row.source,
-      receiver: {
-        partition: 0,
-        epoch: row.receiver_epoch,
-        generation: row.receiver_generation,
-        writerVersion: 1,
-      },
+      receiver: { partition: 0, epoch: row.receiver_epoch, generation: row.receiver_generation, writerVersion: 1 },
       barrier: { ...barrier },
     },
   };
@@ -260,10 +247,7 @@ async function receivingBinding(
         tx,
         {
           partition: 0,
-          locator: {
-            artifactType: 'durable-work/v1',
-            workId: binding.custodyId,
-          },
+          locator: { artifactType: 'durable-work/v1', workId: binding.custodyId },
           accounts: binding.source.accounts,
         },
         binding.barrier,
@@ -277,10 +261,7 @@ async function receivingBinding(
           tx,
           {
             partition: 0,
-            locator: {
-              artifactType: 'durable-work/v1',
-              workId: binding.custodyId,
-            },
+            locator: { artifactType: 'durable-work/v1', workId: binding.custodyId },
             accounts: binding.source.accounts,
           },
           binding.barrier,
@@ -358,13 +339,8 @@ export async function retireAgentIdentitySDKWork(
     );
   }
   const check = (
-    await runCommand(
-      pool,
-      {
-        partition: stage.reference.source.partition,
-        deadline: context.deadline,
-      },
-      async (tx) => noEffect(await verifyAgentIdentityRetirementStage(tx, stage)),
+    await runCommand(pool, { partition: stage.reference.source.partition, deadline: context.deadline }, async (tx) =>
+      noEffect(await verifyAgentIdentityRetirementStage(tx, stage)),
     )
   ).value;
   if (check.state === 'pending') return check;
@@ -376,10 +352,7 @@ export async function retireAgentIdentitySDKWork(
       tx,
       {
         partition: 0,
-        locator: {
-          artifactType: 'durable-work/v1',
-          workId: stage.handoff.custodyId,
-        },
+        locator: { artifactType: 'durable-work/v1', workId: stage.handoff.custodyId },
         accounts: stage.handoff.source.accounts,
       },
       stage.reference.barrier,
@@ -418,10 +391,7 @@ export async function retireAgentIdentitySDKWork(
         return pending('identity-history-current-authority-changed');
       return { state: 'recorded', readiness: saved.sdk_readiness } as const;
     }
-    const readiness = {
-      binding: held.handoff.binding,
-      writer: held.handoff.writer,
-    };
+    const readiness = { binding: held.handoff.binding, writer: held.handoff.writer };
     await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(1, 1, 1, 0), AGENT_IDENTITY_HISTORY_GUARD_COST));
     await tx.query(`UPDATE core.agent_identity_work SET history_authority=$2,sdk_readiness=$3 WHERE custody_id=$1`, [
       stage.handoff.custodyId,
@@ -562,12 +532,7 @@ export async function lockRecordedAgentIdentityHistory(
   stage: AgentIdentityRetirementStage,
   context: HistoryReceivingContext,
 ): Promise<
-  | Pending
-  | Readonly<{
-      state: 'guarded';
-      receipt: AgentIdentitySDKRetirementReceipt;
-      writer: SdkWriterState;
-    }>
+  Pending | Readonly<{ state: 'guarded'; receipt: AgentIdentitySDKRetirementReceipt; writer: SdkWriterState }>
 > {
   const { reserveIdentityHistoryWork, nativeWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
   const { pool } = currentCommandResources(tx);
@@ -605,11 +570,7 @@ export async function lockRecordedAgentIdentityHistory(
     row.sdk_closure,
   ]);
   historyDeadline(context, 0);
-  return {
-    state: 'guarded',
-    receipt: row.sdk_retirement_receipt,
-    writer: row.sdk_closure,
-  };
+  return { state: 'guarded', receipt: row.sdk_retirement_receipt, writer: row.sdk_closure };
 }
 
 /** Resolve an original mapped receiving execution using its native physical inventory.

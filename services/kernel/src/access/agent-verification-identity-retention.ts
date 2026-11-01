@@ -112,20 +112,12 @@ function live(tx: CommandTransaction, receipt: AccountReceipt): boolean {
 /** Only the Account writer's actual closed branches survive, never arbitrary JSON fields. */
 function technicalIntent(value: IdentityIntent, receipt: AccountReceipt): IdentityIntent | null {
   if (receipt.kind === 'account-agent.verify' && value.kind === 'merge')
-    return {
-      kind: 'merge',
-      redirected: value.redirected,
-      survivor: value.survivor,
-      release: value.release,
-    };
+    return { kind: 'merge', redirected: value.redirected, survivor: value.survivor, release: value.release };
   if (receipt.kind === 'account-agent.unverify' && value.kind === 'unmerge')
     return {
       kind: 'unmerge',
       original: value.original,
-      undoJob: {
-        jobId: value.undoJob.jobId,
-        epoch: BigInt(value.undoJob.epoch),
-      },
+      undoJob: { jobId: value.undoJob.jobId, epoch: BigInt(value.undoJob.epoch) },
       verificationReceipt: value.verificationReceipt,
       release: value.release,
     };
@@ -213,10 +205,7 @@ async function decodeTechnicalSource(tx: CommandTransaction, receipt: AccountRec
     return null;
   const intent = technicalIntent(row.intent as IdentityIntent, receipt);
   if (!intent) return null;
-  const input = Object.freeze({
-    intent: Object.freeze(intent),
-    receipt: Object.freeze({ ...receipt }),
-  });
+  const input = Object.freeze({ intent: Object.freeze(intent), receipt: Object.freeze({ ...receipt }) });
   const binding = await accepted(tx, input);
   if (
     !binding ||
