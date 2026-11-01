@@ -5,6 +5,8 @@ import type {
   CredentialEffectVerifier,
   TrustedAccessPorts,
   SessionProof,
+  KindConsentParticipant,
+  KindConsentInvalidationReceiver,
 } from '@rezics/auth-contract';
 import type { MetadataConfigurationStore, MetadataScrubPage } from './metadata-scrub.ts';
 export type {
@@ -32,7 +34,27 @@ export type {
   AssignmentProof,
   TrustedAccessPorts,
   SessionProof,
+  KindConsentConsumer,
+  KindConsentReference,
+  KindConsentEnrollmentInput,
+  KindConsentEnrollmentResult,
+  KindConsentInvalidationInput,
+  KindConsentInvalidationResult,
+  KindConsentVerificationResult,
+  KindConsentParticipant,
+  KindConsentInvalidationReceiver,
+  KindConsentOperation,
+  KindConsentWorkDeclaration,
 } from '@rezics/auth-contract';
+export {
+  createKindConsentParticipant,
+  kindConsentOperationBound,
+  KIND_CONSENT_PAGE_SIZE,
+  kindConsentTransitionPageBound,
+  type KindConsentChange,
+  type KindConsentChangeResult,
+  type KindConsentWriter,
+} from './kind-consent.ts';
 export {
   createNativeWorkflowProofPorts,
   type NativeWorkflowProofPorts,
@@ -147,6 +169,9 @@ export interface AuthServiceOptions {
   secret: string;
   signing: { activeKid: string; privateKeys: JWK[] };
   trustedAccess: TrustedAccessPorts;
+  /** Native Source receiving owner. Missing composition stays fail closed when
+   * any enrolled consumer would need invalidation. */
+  kindConsentReceiver?: KindConsentInvalidationReceiver;
   /** Trusted clock supplied by native contract harnesses; production uses wall time. */
   clock?: () => Date;
   /** Trusted mounted x-action catalogue, supplied by production composition. */
@@ -227,6 +252,12 @@ export interface AuthService {
   security: SecurityInventory;
   verifier: VerifierConfiguration;
   internal: {
+    /** Native Auth-owned participant used before Collection Kind evidence work. */
+    kindConsentParticipant: KindConsentParticipant;
+    /** One bounded page of durable Auth-to-Source invalidation recovery. */
+    continueKindConsentInvalidations(): Promise<import('./kind-consent.ts').KindConsentChangeResult | null>;
+    /** Auth-native erasure callers close Kind dependencies before their page. */
+    fenceKindConsentErasure(obligationId: string): Promise<void>;
     /** Auth-owned read closure; composition receives no database or credential material. */
     resolveRecoveryEstablishment(reference: unknown): Promise<RecoveryEstablishmentEvidence | null>;
     /** Trusted server composition only; the exact native human proof is live only

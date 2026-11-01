@@ -17,6 +17,37 @@ this service. Token issuance accepts `requested_by` only after current Access
 proof of a principal-created assignment for the authenticated actor. Unverified
 `requested_by` and all caller-supplied `act` values are rejected.
 
+## Native Collection Kind consent closure
+
+`@rezics/auth-contract` exports `KindConsentParticipant` and
+`KindConsentInvalidationReceiver`; `@rezics/auth/kind-consent` exports
+`createKindConsentParticipant`. These are trusted native composition ports.
+`participant.enroll` binds the account, client, original requested scopes and
+the exact Collection Kind route/owner/collection/preparation/origin locators.
+It returns only an opaque Auth lookup reference and the intersection of stored
+consent, current client coverage and any pending consent ceiling. First-party
+client status does not imply consent. The reference is not a grant or an allow
+verdict. The Source consumer must establish request provenance before calling
+the participant and must keep its own adoption guard.
+
+Auth consent and client writers close the durable enrollment frontier before
+making their exact authority change visible. Auth releases its database checkout
+before calling the native same-home receiver. Each transition advances at most
+100 enrolled consumers per call; the receiver must commit an immutable fence and
+then verify that exact current fence before Auth records the receipt. Lost or
+ambiguous replies retry the same transition identity. A missing receiver or an
+unverified result keeps the transition pending and prevents the Auth mutation.
+The default maintenance workflow advances pending invalidation pages. Restored
+Auth service and isolated restore-host admission fence the restored generation
+before opening normal admission. Database guards also reject direct consent,
+client, coverage and client-reduction authority writes that bypass an active or
+unresolved Kind closure.
+
+This is the Auth producer boundary only. A Source implementation must still
+adopt the exported types and methods, provide its native invalidate/verify
+receiver, and serialize adoption against its local fence before the automatic
+Collection Kind journey is complete.
+
 ## Restored database admission
 
 A deployment restoring Auth declares `restoredGeneration: { kind: 'RESTORED',

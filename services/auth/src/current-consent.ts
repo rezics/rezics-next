@@ -47,7 +47,10 @@ export function createCurrentConsentReader({ database }: { database: Pool }): {
          FROM auth_consent c JOIN auth_client a ON a.client_id=c.client_id
          JOIN auth_client_coverage v ON v.client_id=a.client_id AND v.ready
          WHERE c.account_id=$1 AND c.client_id=$2
-           AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=$2)`,
+           AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=$2)
+           AND NOT EXISTS (SELECT 1 FROM auth_kind_consent_transition t
+             WHERE t.state<>'applied' AND (t.transition_kind='restore' OR
+               (t.client_id=$2 AND (t.account_id IS NULL OR t.account_id=$1))))`,
         [actorAccountId, clientId],
       );
       const row = result.rows[0];

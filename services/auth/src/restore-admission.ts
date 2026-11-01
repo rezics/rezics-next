@@ -14,6 +14,7 @@ import { erasureHistoryPage } from './erasure-history.ts';
 import { installNativeRoleCoverage, reconcileNativeRoleCoveragePage } from './erasure-coverage.ts';
 import type { NativeConsumerRuntime } from './erasure-consumers.ts';
 import type { AuthErasureLivePorts, AuthErasureLiveReceiver } from '@rezics/auth-contract';
+import type { KindConsentInvalidationReceiver } from '@rezics/auth-contract';
 import { reconcileRestoredAuthPage, stageRestoredAuthLive, restoreDatabaseWithin } from './restore-live.ts';
 
 export type AuthRestorePendingCode =
@@ -109,6 +110,9 @@ export interface AuthRestoredGeneration {
   /** Trusted composition binds the original native Source factory to this exact
    * verified receiver. This is not a request or a readiness callback. */
   live?: (receiver: AuthErasureLiveReceiver) => AuthErasureLivePorts;
+  /** Native same-home Kind invalidation receiver required before restored Auth
+   * admissions can reopen when the restored image contains enrolled consumers. */
+  kindConsentReceiver?: KindConsentInvalidationReceiver;
 }
 
 function fail(code: AuthRestorePendingCode): never {

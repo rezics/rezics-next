@@ -290,6 +290,7 @@ async function transaction<T>(pool: Pool, action: (connection: PoolClient) => Pr
   const connection = await pool.connect();
   try {
     await connection.query('BEGIN');
+    await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['auth-kind-consent-frontier']);
     await requireErasureCursorVersion(connection);
     await requireNativePhaseVersion(connection);
     const result = await action(connection);
@@ -516,7 +517,11 @@ export async function nativeErasurePage(
   id: string,
   runtime?: NativeConsumerRuntime,
   restoreGeneration?: string,
+  beforePage?: (id: string, restoreGeneration?: string) => Promise<void>,
 ): Promise<ErasurePage> {
+  // Auth's Kind producer closes and verifies its bounded frontier before this
+  // native Auth transaction can touch consent/client authority.
+  await beforePage?.(id, restoreGeneration);
   let held: NativeConsumerLocator | undefined;
   const result = await transaction(pool, async (connection) => {
     const identity = (
@@ -887,7 +892,11 @@ export async function nativeErasurePage(
 /** Native scheduling survives deletion of every DBOS row. A tick does one page;
  * a pending owner cannot starve later owners because the revision rotates it.
  */
-export async function redriveNativeErasure(pool: Pool, runtime?: NativeConsumerRuntime): Promise<number> {
+export async function redriveNativeErasure(
+  pool: Pool,
+  runtime?: NativeConsumerRuntime,
+  beforePage?: (id: string, restoreGeneration?: string) => Promise<void>,
+): Promise<number> {
   // The same default recovery tick completes deployment classification even
   // before the first account deletion and after loss of its initiating caller.
   const coverage = await reconcileNativeRoleCoveragePage(pool);
@@ -899,6 +908,6 @@ export async function redriveNativeErasure(pool: Pool, runtime?: NativeConsumerR
     )
   ).rows[0];
   if (!next) return 0;
-  await nativeErasurePage(pool, next.id, runtime);
+  await nativeErasurePage(pool, next.id, runtime, undefined, beforePage);
   return 1;
 }

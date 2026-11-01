@@ -1725,7 +1725,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       await install({ ...input, registrationId: ref.registrationId });
       return activateRegistration(ref.registrationId);
     },
-    redriveNativeErasure: () => redriveNativeErasure(database, nativeConsumers),
+    redriveNativeErasure: () =>
+      redriveNativeErasure(database, nativeConsumers, (obligationId) => auth.internal.fenceKindConsentErasure(obligationId)),
     async expireDueRegistrations() {
       active();
       let afterExpiry = '-infinity';

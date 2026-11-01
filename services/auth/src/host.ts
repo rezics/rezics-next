@@ -30,11 +30,16 @@ import {
   type AuthRestorePendingCode,
 } from './restore-admission.ts';
 import { reconcileRestoredAuthPage } from './restore-live.ts';
+import { createKindConsentParticipant } from './kind-consent.ts';
 
 /** Deployment lifecycle for an isolated restored database. It exposes no
  * handler, signer, SDK or maintenance writer. Durable native cursors, not this
  * timer or an in-memory ready bit, own all future reconciliation. */
 export function createAuthRestoreHost(options: { database: Pool; restoredGeneration: AuthRestoredGeneration }) {
+  const kindConsent = createKindConsentParticipant({
+    database: options.database,
+    receiver: options.restoredGeneration.kindConsentReceiver,
+  }).writer;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<{ pending: AuthRestorePendingCode }> | undefined;
   let running = false;
@@ -42,7 +47,15 @@ export function createAuthRestoreHost(options: { database: Pool; restoredGenerat
   let lastError: unknown;
   const reconcile = () => {
     if (stopping) return Promise.reject(new Error('Auth restore host is stopped'));
-    return (active ??= reconcileRestoredAuthPage(options.database, options.restoredGeneration)
+    return (active ??= (async () => {
+      const fenced = await kindConsent.fenceAll({
+        transitionKey: `kind-consent:restore:${options.restoredGeneration.generation}`,
+        operation: 'restore-admission',
+        identity: options.restoredGeneration.generation,
+      });
+      if (fenced.status !== 'applied') return { pending: 'source-consumer-pending' as const };
+      return reconcileRestoredAuthPage(options.database, options.restoredGeneration);
+    })()
       .catch((error: unknown) => {
         if (error instanceof AuthRestoreAdmissionError) return { pending: error.code };
         throw error;

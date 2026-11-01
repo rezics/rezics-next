@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./membership-workflows": "./src/membership-workflows.ts",
+    "./kind-consent": "./src/kind-consent.ts",
     "./current-consent": "./src/current-consent.ts",
     "./internal-consent": "./src/internal-consent.ts",
     "./website-maintenance": "./src/website-maintenance.ts"

@@ -1,4 +1,5 @@
 export type * from './auth-erasure-live.ts';
+export type * from './kind-consent.ts';
 import type { AuthErasureObligationPorts } from './auth-erasure-obligations.ts';
 import type { ReadNativeCreationContext } from './native-creation-context.ts';
 export type * from './native-creation-context.ts';

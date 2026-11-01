@@ -10,6 +10,7 @@ export async function eraseConsentPage(database: Pool): Promise<string | null> {
   const connection = await database.connect();
   try {
     await connection.query('BEGIN');
+    await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['auth-kind-consent-frontier']);
     // Admit one raw schedule before locking. SKIP LOCKED cannot walk an arbitrary
     // locked prefix; another tick retries this exact bounded candidate.
     const due = (

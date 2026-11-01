@@ -1,4 +1,4 @@
-import { requireRestoredAuthAdmission } from './restore-admission.ts';
+import { AuthRestoreAdmissionError, requireRestoredAuthAdmission } from './restore-admission.ts';
 import { configureClientLabel, scrubMetadataConfigurationPage } from './metadata-scrub.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { emitAuthDiagnostic } from './diagnostics.ts';
@@ -43,6 +43,7 @@ import { completeCopy, eraseCopy } from './erasure-copy.ts';
 import { chargeAccountAttempt } from './rate-limit.ts';
 import { eraseDueConsents, hasDueConsentErasure } from './consent-erasure.ts';
 import { clientAuthority } from './account-workflows.ts';
+import { createKindConsentParticipant } from './kind-consent.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
 import { recoveryDelivery } from './recovery-delivery.ts';
@@ -65,6 +66,7 @@ import type {
   InvalidationReceipt,
   SessionAuthorizationInput,
   SessionProof,
+  WebsiteClientRegistration,
 } from './index.ts';
 
 export { WEBSITE_CLIENT_ID } from './website.ts';
@@ -170,6 +172,18 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 }
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
+  const kindConsent = createKindConsentParticipant({
+    database: options.database,
+    receiver: options.kindConsentReceiver ?? options.restoredGeneration?.kindConsentReceiver,
+  });
+  if (options.restoredGeneration) {
+    const fenced = await kindConsent.writer.fenceAll({
+      transitionKey: `kind-consent:restore:${options.restoredGeneration.generation}`,
+      operation: 'restore-admission',
+      identity: options.restoredGeneration.generation,
+    });
+    if (fenced.status !== 'applied') throw new AuthRestoreAdmissionError('source-consumer-pending');
+  }
   await requireRestoredAuthAdmission(options.database, options.restoredGeneration);
   installNativeRoleProducer(options.database);
   await installNativeRoleCoverage(options.database);
@@ -197,8 +211,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       throw new Denied();
     },
     scopes,
+    kindConsent.writer,
   );
-  const { database, withIssuance, withConsent, materialize } = authority;
+  const { database, withIssuance, withConsent, afterIssuance, materialize } = authority;
   const inventory = securityInventory(database, options.secret, options.issuer, trustedNowSeconds);
   issuerOrigin(options.issuer);
   const audience = new URL(options.audience);
@@ -216,6 +231,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   // request cannot install it through a header, body or native endpoint name.
   const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
   const proofHash = (token: string) => createHash('sha256').update(token).digest('hex');
+  async function fenceKindConsentErasure(obligationId: string) {
+    const changed = await kindConsent.writer.fenceAll({
+      transitionKey: `kind-consent:erasure:${digestOf(obligationId)}`,
+      operation: 'erasure-drain',
+      identity: obligationId,
+    });
+    if (changed.status !== 'applied') throw new Denied(503);
+  }
 
   const credentials = credentialEffects(database, options.secret);
   const barrierProofs = createBarrierProofVerifier({ database });
@@ -340,7 +363,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     // confidential OAuth client. Its registry identity is reserved for bootstrap.
     if (clientId === WEBSITE_CLIENT_ID) throw new Denied(status);
     const result = await database.query<Client>(
-      'SELECT client_id, CASE WHEN display_name_writer=1 THEN display_name END AS display_name, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
+      `SELECT client_id, CASE WHEN display_name_writer=1 THEN display_name END AS display_name, first_party, scopes
+       FROM auth_client WHERE client_id=$1
+        AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready)
+        AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)`,
       [clientId],
     );
     if (!result.rows[0]) throw new Denied(status);
@@ -372,21 +398,58 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   // scopes. It adds to the stored consent and never narrows it; only the reduction barrier does that.
   async function recordOpeningConsent(accountId: string, selected: Binding) {
     if ((await clientFor(selected.clientId)).first_party) return;
-    await database.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-      `auth-consent:${accountId}:${selected.clientId}`,
-    ]);
-    await database.query(
-      `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
-       ON CONFLICT (account_id,client_id) DO UPDATE
-       SET scopes=ARRAY(SELECT s FROM unnest(auth_consent.scopes || EXCLUDED.scopes) AS s GROUP BY s ORDER BY s COLLATE "C")
-       WHERE auth_consent.pending_reference IS NULL`,
-      [accountId, selected.clientId, selected.scopes],
+    const previous = await withConsent(accountId, selected.clientId, async (connection) =>
+      (
+        await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
+          'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+          [accountId, selected.clientId],
+        )
+      ).rows[0] ?? null,
     );
+    const previousScopes = previous?.scopes ?? [];
+    const granted = [...new Set([...previousScopes, ...selected.scopes])].sort();
+    const expectedRevision = previous?.revision ?? '0';
+    const sameScopes = (left: readonly string[], right: readonly string[]) =>
+      JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+    const transitionKey = `kind-consent:opening:${createHash('sha256')
+      .update(JSON.stringify([accountId, selected.clientId, expectedRevision, granted]))
+      .digest('hex')}`;
+    await afterIssuance(async () => {
+      const changed = await kindConsent.writer.change({
+        transitionKey,
+        kind: 'consent',
+        accountId,
+        clientId: selected.clientId,
+        target: { operation: 'consent-upsert', scopes: granted, pendingScopes: null, pendingReference: null },
+        async apply(connection) {
+          const current = (
+            await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
+              'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+              [accountId, selected.clientId],
+            )
+          ).rows[0] ?? null;
+          if (
+            (current?.revision ?? '0') !== expectedRevision ||
+            !sameScopes(current?.scopes ?? [], previousScopes) ||
+            current?.pending_reference !== (previous?.pending_reference ?? null)
+          )
+            return;
+          await connection.query(
+            `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
+             ON CONFLICT (account_id,client_id) DO UPDATE SET scopes=EXCLUDED.scopes
+             WHERE auth_consent.pending_reference IS NULL`,
+            [accountId, selected.clientId, granted],
+          );
+        },
+      });
+      if (changed.status !== 'applied') throw new Denied(503);
+    });
   }
   const website = websiteRoutes({
     options,
     scopeLimit,
     database,
+    materialize,
     native: getAuth,
     withIssuance,
     sessionProof,
@@ -1108,6 +1171,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       accessTokenLifetimeSeconds: 300,
     },
     internal: {
+      kindConsentParticipant: kindConsent.participant,
+      continueKindConsentInvalidations: () => kindConsent.writer.continuePending(),
       resolveRecoveryEstablishment: recoveryEstablishment.resolve,
       async accessTokenForProof(proof) {
         const scope = proofScope.getStore();
@@ -1163,7 +1228,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
       pruneExpiredSessions: (batch) => pruneExpiredSessions(database, batch),
-      eraseDueConsents: (batch) => eraseDueConsents(database, batch),
+      async eraseDueConsents(batch) {
+        await fenceKindConsentErasure('consent-erasure-maintenance');
+        return eraseDueConsents(database, batch);
+      },
       hasDueConsentErasure: () => hasDueConsentErasure(database),
       pruneExpiredProtocolState: (batch) => pruneExpiredProtocolState(database, batch),
       trimSessionHistory: (accountId, batch) => trimSessionHistory(database, accountId, batch),
@@ -1326,8 +1394,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         await completeCopy(database, id);
         return eraseCopy(database, id);
       },
-      nativeErasurePage: (id) => nativeErasurePage(database, id),
-      redriveNativeErasure: () => redriveNativeErasure(database),
+      fenceKindConsentErasure,
+      nativeErasurePage: (id) => nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure),
+      redriveNativeErasure: () => redriveNativeErasure(database, undefined, fenceKindConsentErasure),
       async eraseAccount(accountId) {
         const account = trustedAccess.readErasureAccount
           ? await trustedAccess.readErasureAccount(accountId)
@@ -1338,7 +1407,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         // Direct native callers share the exact obligation with host recovery.
         // Every page commits/releases before continuing; no owner/client list is retained.
         for (;;) {
-          const page = await nativeErasurePage(database, id);
+          const page = await nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure);
           if (page.state !== 'more') return;
         }
       },
@@ -1683,12 +1752,18 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           current.authnEpoch < input.barrier.minimumAuthnEpoch
         )
           throw new Denied();
-        const connection = await database.connect();
-        try {
-          await connection.query('BEGIN');
-          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-            `auth-consent:${input.accountId}:${client.client_id}`,
-          ]);
+        const changed = await kindConsent.writer.change({
+          transitionKey: `kind-consent:barrier-reduction:${digestOf([
+            input.accountId,
+            client.client_id,
+            input.barrier.receiptId,
+            input.barrier.minimumAuthnEpoch,
+          ])}`,
+          kind: 'consent',
+          accountId: input.accountId,
+          clientId: client.client_id,
+          target: { operation: 'consent-upsert', scopes: granted },
+          async apply(connection) {
           const prior = (
             await connection.query<{ scopes: string[] }>(
               'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
@@ -1713,13 +1788,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             client.client_id,
             granted,
           ]);
-          await connection.query('COMMIT');
-        } catch (error) {
-          await connection.query('ROLLBACK');
-          throw error;
-        } finally {
-          connection.release();
-        }
+          },
+        });
+        if (changed.status !== 'applied') throw new Denied(503);
         await (await getContext()).internalAdapter.deleteUserSessions(input.accountId);
       },
       ...authority.internal,
@@ -1727,7 +1798,65 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (cleanup?.boundedCleanup) return authority.cleanupFencedSessions(accountId, cleanup.barrier);
         await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },
-      registerWebsiteClient: website.register,
+      async registerWebsiteClient(registration: WebsiteClientRegistration) {
+        const granted = scopes(registration.scopes);
+        const previous = (
+          await database.query<{ scopes: string[]; first_party: boolean }>(
+            'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+            [WEBSITE_CLIENT_ID],
+          )
+        ).rows[0];
+        if (
+          previous &&
+          previous.first_party &&
+          JSON.stringify(previous.scopes) === JSON.stringify(granted)
+        ) {
+          await website.register({ ...registration, scopes: granted });
+          return;
+        }
+        const desired = { operation: 'client-config', scopes: granted, firstParty: true };
+        const open = (
+          await database.query<{ transition_key: string; target: unknown }>(
+            `SELECT transition_key,target FROM auth_kind_consent_transition
+             WHERE client_id=$1 AND account_id IS NULL AND state<>'applied'
+             ORDER BY created_at DESC LIMIT 1`,
+            [WEBSITE_CLIENT_ID],
+          )
+        ).rows[0];
+        const sameTarget = (target: unknown) => {
+          if (!target || typeof target !== 'object') return false;
+          const value = target as Record<string, unknown>;
+          return (
+            value.operation === desired.operation &&
+            value.firstParty === desired.firstParty &&
+            JSON.stringify(value.scopes) === JSON.stringify(desired.scopes)
+          );
+        };
+        const previousTransition = (
+          await database.query<{ transition_id: string }>(
+            `SELECT transition_id::text FROM auth_kind_consent_transition
+             WHERE client_id=$1 ORDER BY created_at DESC,transition_id DESC LIMIT 1`,
+            [WEBSITE_CLIENT_ID],
+          )
+        ).rows[0]?.transition_id ?? null;
+        const transitionKey = open && sameTarget(open.target)
+          ? open.transition_key
+          : `kind-consent:website-client:${digestOf([
+              previous?.scopes ?? null,
+              previous?.first_party ?? null,
+              granted,
+              previousTransition,
+              registration,
+            ])}`;
+        const changed = await kindConsent.writer.change({
+          transitionKey,
+          kind: 'client',
+          clientId: WEBSITE_CLIENT_ID,
+          target: desired,
+          apply: (connection) => website.register({ ...registration, scopes: granted }, connection),
+        });
+        if (changed.status !== 'applied') throw new Denied(503);
+      },
       scrubMetadataConfiguration: (store) => scrubMetadataConfigurationPage(database, store),
       async registerClient(input) {
         if (input.mode !== undefined && input.mode !== 'create-or-match') throw new Denied(400);
@@ -1741,16 +1870,27 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (typeof input.firstParty !== 'boolean') throw new Denied(400);
         const granted = scopes(input.scopes);
         if (id === WEBSITE_CLIENT_ID || granted.includes('media:complete')) throw new Denied(400);
-        const connection = await database.connect();
-        try {
-          await connection.query('BEGIN');
-          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-client:${id}`]);
+        const observed = (
+          await database.query<{ scopes: string[]; first_party: boolean }>(
+            'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+            [id],
+          )
+        ).rows[0] ?? null;
+        const sameAuthority = !!observed && observed.first_party === input.firstParty &&
+          JSON.stringify(observed.scopes) === JSON.stringify(granted);
+        const applyRegistration = async (connection: PoolClient, expected: typeof observed) => {
           if ((await connection.query('SELECT client_id FROM auth_client_reduction WHERE client_id=$1', [id])).rowCount)
             throw new Denied();
           const previous = (
             await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE', [id])
-          ).rows[0];
-          // Shrink requires a durable multi-account coordinator. Refuse it at this boundary.
+          ).rows[0] ?? null;
+          if (
+            expected &&
+            (!previous || previous.first_party !== expected.first_party || JSON.stringify(previous.scopes) !== JSON.stringify(expected.scopes))
+          )
+            return false;
+          if (!expected && previous) return false;
+          // Shrink requires the existing durable multi-account coordinator.
           if (
             previous &&
             (previous.scopes.some((scope) => !granted.includes(scope)) || (previous.first_party && !input.firstParty))
@@ -1763,8 +1903,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               previous.scopes.some((scope) => !granted.includes(scope))
             )
               throw new Denied();
-            await connection.query('COMMIT');
-            return;
+            return true;
           }
           await configureClientLabel(connection, id, displayName);
           await connection.query(
@@ -1776,13 +1915,66 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP)',
               [id],
             );
-          await connection.query('COMMIT');
-        } catch (error) {
-          await connection.query('ROLLBACK');
-          throw error;
-        } finally {
-          connection.release();
+          return true;
+        };
+        if (!observed || sameAuthority) {
+          const connection = await database.connect();
+          try {
+            await connection.query('BEGIN');
+            await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-client:${id}`]);
+            if (!(await applyRegistration(connection, observed))) throw new Denied(503);
+            await connection.query('COMMIT');
+          } catch (error) {
+            await connection.query('ROLLBACK');
+            throw error;
+          } finally {
+            connection.release();
+          }
+          return;
         }
+        const desired = { operation: 'client-config', scopes: granted, firstParty: input.firstParty };
+        const open = (
+          await database.query<{ transition_key: string; target: unknown }>(
+            `SELECT transition_key,target FROM auth_kind_consent_transition
+             WHERE client_id=$1 AND account_id IS NULL AND state<>'applied'
+             ORDER BY created_at DESC LIMIT 1`,
+            [id],
+          )
+        ).rows[0];
+        const matchesTarget = (target: unknown) => {
+          if (!target || typeof target !== 'object') return false;
+          const value = target as Record<string, unknown>;
+          return value.operation === desired.operation && value.firstParty === desired.firstParty &&
+            JSON.stringify(value.scopes) === JSON.stringify(desired.scopes);
+        };
+        const lastTransition = (
+          await database.query<{ transition_id: string }>(
+            `SELECT transition_id::text FROM auth_kind_consent_transition
+             WHERE client_id=$1 ORDER BY created_at DESC,transition_id DESC LIMIT 1`,
+            [id],
+          )
+        ).rows[0]?.transition_id ?? null;
+        const transitionKey = open && matchesTarget(open.target)
+          ? open.transition_key
+          : `kind-consent:client:${digestOf([id, observed.scopes, observed.first_party, desired, lastTransition])}`;
+        const changed = await kindConsent.writer.change({
+          transitionKey,
+          kind: 'client',
+          clientId: id,
+          target: desired,
+          async apply(connection) {
+            await applyRegistration(connection, observed);
+          },
+        });
+        if (changed.status !== 'applied') throw new Denied(503);
+        const committed = (
+          await database.query<{ scopes: string[]; first_party: boolean }>(
+            'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+            [id],
+          )
+        ).rows[0];
+        if (!committed || committed.first_party !== input.firstParty || JSON.stringify(committed.scopes) !== JSON.stringify(granted))
+          throw new Denied(503);
       },
     },
     security: {
@@ -2365,7 +2557,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           fields(body, ['client_id', 'scope']);
           const clientId = text(body.client_id);
           const granted = scopes(body.scope);
-          const reduction = await withIssuance(clientId, async () => {
+          const outcome = await withIssuance(clientId, async () => {
             const native = await getAuth().api.getSession({
               headers: request.headers,
               query: { disableCookieCache: true, disableRefresh: true },
@@ -2396,13 +2588,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 // Only a current native human session can supersede a pending
                 // request. A first-party materialization never clears it.
                 await humanProof(request.headers);
-                await connection.query(
-                  `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
-                   ON CONFLICT (account_id,client_id) DO UPDATE
-                   SET scopes=EXCLUDED.scopes,pending_scopes=NULL,pending_reference=NULL`,
-                  [account.accountId, clientId, granted],
-                );
-                return null;
+                return {
+                  kind: 'grant' as const,
+                  accountId: account.accountId,
+                  revision: previous?.revision ?? '0',
+                  previousScopes: previous?.scopes ?? [],
+                  pendingReference: previous?.pending_reference ?? null,
+                  sessionId: session.id,
+                };
               }
               if (!trustedAccess.invalidateAccount) throw new Denied();
               const evidence = [
@@ -2442,19 +2635,92 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 ...(openingReceiptId === undefined ? {} : { openingReceiptId }),
               };
               if (resuming && previous.pending_reference !== proof.reference) throw new Denied();
-              // Publish the ceiling with the proof, preserving original scopes
-              // and revision for immutable evidence and the final compare-and-set.
-              await connection.query(
-                'UPDATE auth_consent SET pending_scopes=$3,pending_reference=$4 WHERE account_id=$1 AND client_id=$2',
-                [account.accountId, clientId, granted, proof.reference],
-              );
-              return { proof, revision: previous.revision, clientScopes: client.scopes };
+              // The native Kind frontier is closed and receiving fences commit
+              // before the pending ceiling becomes visible.
+              return {
+                kind: 'reduction' as const,
+                proof,
+                revision: previous.revision,
+                previousScopes: previous.scopes,
+                clientScopes: client.scopes,
+              };
             });
           });
-          if (reduction) {
+          if (outcome?.kind === 'grant') {
+            const transitionKey = `kind-consent:grant:${digestOf([
+              outcome.accountId,
+              clientId,
+              outcome.sessionId,
+              granted,
+            ])}`;
+            const changed = await kindConsent.writer.change({
+              transitionKey,
+              kind: 'consent',
+              accountId: outcome.accountId,
+              clientId,
+              target: { operation: 'consent-upsert', scopes: granted, pendingScopes: null, pendingReference: null },
+              async apply(connection) {
+                const current = (
+                  await connection.query<{
+                    scopes: string[];
+                    revision: string;
+                    pending_reference: string | null;
+                  }>(
+                    'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                    [outcome.accountId, clientId],
+                  )
+                ).rows[0] ?? null;
+                if (
+                  (current?.revision ?? '0') !== outcome.revision ||
+                  JSON.stringify(current?.scopes ?? []) !== JSON.stringify(outcome.previousScopes) ||
+                  current?.pending_reference !== outcome.pendingReference
+                )
+                  return;
+                await connection.query(
+                  `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
+                   ON CONFLICT (account_id,client_id) DO UPDATE
+                   SET scopes=EXCLUDED.scopes,pending_scopes=NULL,pending_reference=NULL`,
+                  [outcome.accountId, clientId, granted],
+                );
+              },
+            });
+            if (changed.status !== 'applied') throw new Denied(503);
+          }
+          if (outcome?.kind === 'reduction') {
             // Both issuance context and every Auth connection/client lock have
             // ended. Access's verifier may borrow the very same max=1 pool.
-            const { proof } = reduction;
+            const { proof } = outcome;
+            const changed = await kindConsent.writer.change({
+              transitionKey: `kind-consent:reduction:${proof.operationKey}`,
+              kind: 'consent',
+              accountId: proof.accountId,
+              clientId,
+              target: { operation: 'consent-pending', pendingScopes: granted, pendingReference: proof.reference },
+              async apply(connection) {
+                const current = (
+                  await connection.query<{
+                    scopes: string[];
+                    revision: string;
+                    pending_reference: string | null;
+                  }>(
+                    'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                    [proof.accountId, clientId],
+                  )
+                ).rows[0];
+                if (
+                  !current ||
+                  current.revision !== outcome.revision ||
+                  JSON.stringify(current.scopes) !== JSON.stringify(outcome.previousScopes) ||
+                  (current.pending_reference !== null && current.pending_reference !== proof.reference)
+                )
+                  return;
+                await connection.query(
+                  'UPDATE auth_consent SET pending_scopes=$3,pending_reference=$4 WHERE account_id=$1 AND client_id=$2',
+                  [proof.accountId, clientId, granted, proof.reference],
+                );
+              },
+            });
+            if (changed.status !== 'applied') throw new Denied(503);
             if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
             const receipt = await trustedAccess.invalidateAccount!({
               accountId: proof.accountId,
@@ -2466,17 +2732,27 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             });
             invalidation(receipt, proof.accountId, proof.previousEpoch);
             await confirmReceipt(receipt, 'consent-reduction', proof.operationKey);
-            await withIssuance(clientId, () =>
-              withConsent(proof.accountId, clientId, async (connection) => {
-                const client = await clientFor(clientId);
-                if (
-                  client.first_party ||
-                  JSON.stringify(client.scopes) !== JSON.stringify(reduction.clientScopes) ||
-                  granted.some((scope) => !client.scopes.includes(scope)) ||
-                  (await activeActor(proof.accountId, true)).authnEpoch !== receipt.minimumAuthnEpoch ||
-                  !(await barrierProofs.verify(proof.reference, proof))
-                )
-                  throw new Denied();
+            const client = await clientFor(clientId);
+            if (
+              client.first_party ||
+              JSON.stringify(client.scopes) !== JSON.stringify(outcome.clientScopes) ||
+              granted.some((scope) => !client.scopes.includes(scope)) ||
+              (await activeActor(proof.accountId, true)).authnEpoch !== receipt.minimumAuthnEpoch ||
+              !(await barrierProofs.verify(proof.reference, proof))
+            )
+              throw new Denied();
+            const completed = await kindConsent.writer.change({
+              transitionKey: `kind-consent:reduction-complete:${proof.operationKey}`,
+              kind: 'consent',
+              accountId: proof.accountId,
+              clientId,
+              target: {
+                operation: 'consent-upsert',
+                scopes: granted,
+                pendingScopes: null,
+                pendingReference: null,
+              },
+              async apply(connection) {
                 if (
                   !(
                     await connection.query(
@@ -2489,8 +2765,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 )
                   throw new Denied();
                 await applyBarrier(connection, proof.reference, receipt, 'consent-reduction');
-              }),
-            );
+              },
+            });
+            if (completed.status !== 'applied') throw new Denied(503);
             await (await getContext()).internalAdapter.deleteUserSessions(proof.accountId);
             await trustedAccess.completeBarrier?.({
               accountId: proof.accountId,

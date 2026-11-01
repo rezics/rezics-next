@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { AUTH_CURSOR_VERSION, requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
 import { createHash } from 'node:crypto';
+import type { KindConsentWriter } from './kind-consent.ts';
 
 type Progress = {
   operation_id: string;
@@ -119,8 +120,15 @@ export function clientAuthority(
   access: TrustedAccessPorts,
   deny: () => never,
   normalize: (value: unknown) => string[],
+  kindConsent: KindConsentWriter,
 ) {
-  const issuance = new AsyncLocalStorage<{ clientId: string; connection: PoolClient }>();
+  const sameScopes = (left: readonly string[], right: readonly string[]) =>
+    JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+  const issuance = new AsyncLocalStorage<{
+    clientId: string;
+    connection: PoolClient;
+    afterRelease: Array<() => Promise<void>>;
+  }>();
   const nativeReduction = new AsyncLocalStorage<{ operationId: string; obligationId: string }>();
   // Route both native Better Auth and our hooks through the held connection.
   // A request never holds one pool slot while waiting for a second slot.
@@ -148,6 +156,9 @@ export function clientAuthority(
     }
     const connection = await pool.connect();
     let locked = false;
+    let completed = false;
+    let value!: T;
+    const context = { clientId, connection, afterRelease: [] as Array<() => Promise<void>> };
     try {
       await connection.query('SELECT pg_advisory_lock_shared(hashtextextended($1, 0))', [`auth-client:${clientId}`]);
       locked = true;
@@ -158,7 +169,8 @@ export function clientAuthority(
         [clientId],
       );
       if (!admitted.rowCount) deny();
-      return await issuance.run({ clientId, connection }, action);
+      value = await issuance.run(context, action);
+      completed = true;
     } finally {
       try {
         if (locked)
@@ -171,16 +183,47 @@ export function clientAuthority(
       }
       connection.release();
     }
+    if (completed) for (const callback of context.afterRelease) await callback();
+    return value;
+  }
+  async function afterIssuance(callback: () => Promise<void>) {
+    const context = issuance.getStore();
+    if (!context) return callback();
+    context.afterRelease.push(callback);
   }
   async function materialize(accountId: string, clientId: string, scopes: string[], firstParty: boolean) {
     if (issuance.getStore()?.clientId !== clientId) deny();
-    if (firstParty)
-      await database.query(
-        `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
-         ON CONFLICT (account_id,client_id) DO UPDATE SET scopes=EXCLUDED.scopes
-         WHERE auth_consent.pending_reference IS NULL`,
-        [accountId, clientId, scopes],
-      );
+    if (firstParty) {
+      const granted = normalize(scopes);
+      const transitionKey = `kind-consent:materialize:${createHash('sha256')
+        .update(JSON.stringify([accountId, clientId, granted]))
+        .digest('hex')}`;
+      await afterIssuance(async () => {
+        const changed = await kindConsent.change({
+          transitionKey,
+          kind: 'consent',
+          accountId,
+          clientId,
+          target: { operation: 'consent-upsert', scopes: granted, pendingScopes: null, pendingReference: null },
+          async apply(connection) {
+            const client = (
+              await connection.query<{ scopes: string[]; first_party: boolean }>(
+                'SELECT scopes,first_party FROM auth_client WHERE client_id=$1 FOR KEY SHARE',
+                [clientId],
+              )
+            ).rows[0];
+            if (!client || !client.first_party || !sameScopes(client.scopes, granted)) return;
+            await connection.query(
+              `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
+               ON CONFLICT (account_id,client_id) DO UPDATE SET scopes=EXCLUDED.scopes
+               WHERE auth_consent.pending_reference IS NULL`,
+              [accountId, clientId, granted],
+            );
+          },
+        });
+        if (changed.status !== 'applied') deny();
+      });
+    }
   }
   async function withConsent<T>(
     accountId: string,
@@ -208,10 +251,9 @@ export function clientAuthority(
     const connection = await pool.connect();
     try {
       await connection.query('BEGIN');
-      await connection.query(
-        "SELECT set_config('auth.cursor_worker','2',true),pg_advisory_xact_lock(hashtextextended($1,0))",
-        [`auth-client:${clientId}`],
-      );
+      await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
+      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['auth-kind-consent-frontier']);
+      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-client:${clientId}`]);
       const native = nativeReduction.getStore();
       if (native) await admitNativeReduction(connection, clientId, native.operationId, native.obligationId);
       const value = await action(connection);
@@ -253,7 +295,20 @@ export function clientAuthority(
     async beginClientReduction(input) {
       const granted = normalize(input.scopes);
       if (!input.operationId || typeof input.firstParty !== 'boolean') deny();
-      await transaction(input.clientId, async (connection) => {
+      const changed = await kindConsent.change({
+        transitionKey: `kind-consent:client-reduction-start:${input.operationId}`,
+        kind: 'client',
+        clientId: input.clientId,
+        target: {
+          operation: 'client-reduction-start',
+          operationId: input.operationId,
+          scopes: granted,
+          firstParty: input.firstParty,
+        },
+        async apply(connection) {
+        await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
+        const native = nativeReduction.getStore();
+        if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
         const coverage = await connection.query(
           'SELECT client_id FROM auth_client_coverage WHERE client_id=$1 AND ready',
           [input.clientId],
@@ -283,7 +338,9 @@ export function clientAuthority(
           )
         ).rows[0]!;
         if (gate.operation_id !== input.operationId) deny();
+        },
       });
+      if (changed.status !== 'applied') deny();
     },
     async clientReductionPage(input) {
       bounded(input.limit);
@@ -408,7 +465,21 @@ export function clientAuthority(
       });
     },
     async finishClientReduction(input) {
-      await transaction(input.clientId, async (connection) => {
+      const granted = normalize(input.scopes);
+      const changed = await kindConsent.change({
+        transitionKey: `kind-consent:client-reduction-finish:${input.operationId}`,
+        kind: 'client',
+        clientId: input.clientId,
+        target: {
+          operation: 'client-reduction-finish',
+          operationId: input.operationId,
+          scopes: granted,
+          firstParty: input.firstParty,
+        },
+        async apply(connection) {
+        await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
+        const native = nativeReduction.getStore();
+        if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
         const row = await progress(connection, input.clientId, input.operationId);
         same(row, input);
         if (row.completed) return;
@@ -444,7 +515,9 @@ export function clientAuthority(
           input.clientId,
           input.operationId,
         ]);
+        },
       });
+      if (changed.status !== 'applied') deny();
     },
     async continueNativeClientReduction(input, ports) {
       const row = (
@@ -616,5 +689,5 @@ export function clientAuthority(
       );
     });
   }
-  return { database, withIssuance, withConsent, materialize, internal, cleanupFencedSessions };
+  return { database, withIssuance, withConsent, afterIssuance, materialize, internal, cleanupFencedSessions };
 }

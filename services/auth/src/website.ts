@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { compactVerify, createLocalJWKSet, decodeProtectedHeader, errors, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { BetterAuthPlugin } from 'better-auth';
 import { APIError } from 'better-auth/api';
 import type { AuthServiceOptions, PublicJwks, SessionProof, WebsiteClientRegistration } from './index.ts';
@@ -132,6 +132,7 @@ export function websiteRoutes(input: {
   options: AuthServiceOptions;
   scopeLimit: number;
   database: Pool;
+  materialize(accountId: string, clientId: string, scopes: string[], firstParty: boolean): Promise<void>;
   native: () => NativePort;
   withIssuance<T>(clientId: string, run: () => Promise<T>): Promise<T>;
   sessionProof(headers: Headers): Promise<SessionProof>;
@@ -393,7 +394,7 @@ export function websiteRoutes(input: {
         amr: selected.session.authMethods.split(' '),
       };
     },
-    async register(registration: WebsiteClientRegistration) {
+    async register(registration: WebsiteClientRegistration, suppliedConnection?: PoolClient) {
       const scopes = [...new Set(registration.scopes)].sort();
       if (
         scopes.length > input.scopeLimit ||
@@ -431,12 +432,15 @@ export function websiteRoutes(input: {
       }
       const redirects = uris(registration.redirectUris),
         logout = uris(registration.postLogoutRedirectUris);
-      const connection = await database.connect();
+      const connection = suppliedConnection ?? (await database.connect());
+      const ownsTransaction = suppliedConnection === undefined;
       try {
-        await connection.query('BEGIN');
-        await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
-          `auth-client:${WEBSITE_CLIENT_ID}`,
-        ]);
+        if (ownsTransaction) {
+          await connection.query('BEGIN');
+          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+            `auth-client:${WEBSITE_CLIENT_ID}`,
+          ]);
+        }
         if (
           (await connection.query('SELECT 1 FROM auth_client_reduction WHERE client_id=$1', [WEBSITE_CLIENT_ID]))
             .rowCount
@@ -483,12 +487,12 @@ export function websiteRoutes(input: {
           'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP) ON CONFLICT (client_id) DO NOTHING',
           [WEBSITE_CLIENT_ID],
         );
-        await connection.query('COMMIT');
+        if (ownsTransaction) await connection.query('COMMIT');
       } catch (error) {
-        await connection.query('ROLLBACK');
+        if (ownsTransaction) await connection.query('ROLLBACK');
         throw error;
       } finally {
-        connection.release();
+        if (ownsTransaction) connection.release();
       }
     },
     async handler(request: Request): Promise<Response | undefined> {
@@ -571,10 +575,7 @@ export function websiteRoutes(input: {
           }
           return input.withIssuance(WEBSITE_CLIENT_ID, async () => {
             if (current && !stepUp) {
-              await database.query(
-                `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id,client_id) DO NOTHING`,
-                [current.session.userId, WEBSITE_CLIENT_ID, registered.scopes],
-              );
+              await input.materialize(current.session.userId, WEBSITE_CLIENT_ID, registered.scopes, true);
               await proof(current.session, scopes);
             }
             const response = await input.native().handler(nativeRequest(request, '/oauth2/authorize', fields));

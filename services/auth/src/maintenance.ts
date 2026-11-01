@@ -53,6 +53,9 @@ export function registerAuthMaintenance(
   });
   const sweepExpiredVerifications = step('sweepExpiredVerifications', () => auth.internal.pruneExpiredVerifications());
   const nativeErasure = step('nativeErasure', redrive);
+  const kindConsent = step('kindConsentInvalidations', async () =>
+    (await auth.internal.continueKindConsentInvalidations()) ? 1 : 0,
+  );
   const sharedCopies = step('sharedCopies', () => auth.internal.redriveErasureHistory());
   const eraseDueConsents = step('eraseDueConsents', () => auth.internal.eraseDueConsents(CONSENT_ERASURE_BATCH));
   const scrubConfiguration = metadataConfigurationStores.map((store) =>
@@ -65,6 +68,7 @@ export function registerAuthMaintenance(
       await sweepExpiredVerifications();
       for (const scrub of scrubConfiguration) await scrub();
       await nativeErasure();
+      await kindConsent();
       if (await auth.internal.hasDueConsentErasure()) await eraseDueConsents();
       await sharedCopies();
     },
