@@ -135,8 +135,51 @@ const failure = (scenario: AlbumScenario, text: () => string): Story => ({
 export const Ready: Story = {};
 export const LanguageRowRecovery: Story = {
   args: { scenario: 'uncertain', onCreate: createObserver() },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: default album creation at 390px measures real term, scalar, credit, qualifier, citation and action targets, wrapped labels and saved-reader links. Existing language recovery and exact payload/key retry oracles remain. Browser, native and visual verification are deferred.',
+      },
+    },
+  },
   play: async ({ canvasElement, args }) => {
     const canvas = await fill(canvasElement);
+    const document = canvasElement.ownerDocument;
+    const form = canvas.getByRole('textbox', { name: m.catalogue_create_label() }).closest('form')!;
+    await expect(document.documentElement.clientWidth).toBe(390);
+    // Inspect native target and rendered text geometry, independently of the caller's classes.
+    const phoneControls = async (region: HTMLElement) => {
+      const bounds = region.getBoundingClientRect();
+      await expect(region.scrollWidth).toBeLessThanOrEqual(region.clientWidth + 1);
+      for (const target of region.querySelectorAll<HTMLElement>(
+        'input:not([type="hidden"]), textarea, select, button[data-slot="button"], a',
+      )) {
+        const rect = target.getBoundingClientRect();
+        const parent = target.parentElement!.getBoundingClientRect();
+        await expect(rect.height).toBeGreaterThanOrEqual(44);
+        await expect(rect.width).toBeGreaterThanOrEqual(44);
+        await expect(rect.left).toBeGreaterThanOrEqual(Math.max(bounds.left, parent.left) - 1);
+        await expect(rect.right).toBeLessThanOrEqual(Math.min(bounds.right, parent.right) + 1);
+      }
+      for (const label of region.querySelectorAll<HTMLElement>('[data-slot="field-label"], button, a')) {
+        const box = label.getBoundingClientRect();
+        const walker = document.createTreeWalker(label, 4 /* SHOW_TEXT */);
+        while (walker.nextNode()) {
+          if (!walker.currentNode.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(walker.currentNode);
+          for (const line of range.getClientRects()) {
+            await expect(line.left).toBeGreaterThanOrEqual(box.left - 1);
+            await expect(line.right).toBeLessThanOrEqual(box.right + 1);
+            await expect(line.top).toBeGreaterThanOrEqual(box.top - 1);
+            await expect(line.bottom).toBeLessThanOrEqual(box.bottom + 1);
+          }
+        }
+      }
+    };
+    await phoneControls(form);
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:contributor');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const artist = within(canvas.getByRole('group', { name: fieldName('schema:contributor') }));
@@ -148,8 +191,25 @@ export const LanguageRowRecovery: Story = {
       artist.getByRole('textbox', { name: m.relation_citation() }),
       'https://artist.example/harbour',
     );
+    await userEvent.selectOptions(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P1932');
+    const creditedAs = artist.getByRole('textbox', { name: fieldName('wdt:P1932') });
+    await userEvent.type(creditedAs, 'The Harbour Ensemble');
+    await userEvent.selectOptions(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
+    await userEvent.type(artist.getByRole('combobox', { name: fieldName('wdt:P3831') }), 'Performer');
+    await userEvent.click(await within(document.body).findByRole('option', { name: /Performer/ }));
+    await phoneControls(form);
+    const removeCredit = artist.getByRole('button', { name: `${m.relation_remove()}: ${fieldName('wdt:P1932')}` });
+    // On a phone removal wraps below its input instead of squeezing the value into the remaining width.
+    await expect(removeCredit.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      creditedAs.getBoundingClientRect().bottom,
+    );
+    await userEvent.click(removeCredit);
+    await userEvent.click(artist.getByRole('button', { name: `${m.relation_remove()}: ${fieldName('wdt:P3831')}` }));
+    await expect(artist.queryByRole('textbox', { name: fieldName('wdt:P1932') })).toBeNull();
+    await expect(artist.queryByRole('combobox', { name: fieldName('wdt:P3831') })).toBeNull();
     const observed = args.onCreate as ReturnType<typeof createObserver>;
     const terms = await recoverLanguageRow(canvasElement, m.album_create(), observed, 'Harbour sessions', '港の演奏');
+    await phoneControls(form);
     await retryLanguageRecovery(canvasElement, m.album_create(), m.catalogue_create_retry(), observed, {
       type: 'schema:MusicAlbum',
       ...terms,
@@ -200,6 +260,9 @@ export const LanguageRowRecovery: Story = {
       },
     });
     await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
+    const reader = canvas.getByRole('link', { name: m.catalogue_create_open() });
+    await expect(reader).toHaveAttribute('href', `/${getLocale()}/subjects/${albumId}/harbour-sessions`);
+    await phoneControls(reader.closest('section')!);
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };

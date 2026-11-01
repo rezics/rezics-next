@@ -26,6 +26,16 @@ import { DefinitionMeaning } from './definition-meaning';
 
 type Row = { id: string; statement: StatementInput };
 
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
+// NativeSelect accepts the wrapper class; size the actual native target as well.
+const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+// QualifierInput has no class prop. Keep its caller's input/label sizing local to these rows.
+const qualifierClassName =
+  'min-w-0 w-full sm:w-auto sm:basis-64 sm:flex-1 [&_input]:min-h-11 md:pointer-fine:[&_input]:min-h-8 [&_[data-slot=field-label]]:min-w-0 [&_[data-slot=field-label]]:max-w-full [&_[data-slot=field-label]]:flex-wrap [&_[data-slot=field-label]]:[overflow-wrap:anywhere]';
+
 /** Initial facts only. Every optional assertion begins with the reader explicitly adding its field. */
 export function AlbumProfileCreate({
   release: initialRelease,
@@ -104,11 +114,11 @@ export function AlbumProfileCreate({
 
   if (created)
     return (
-      <section className="space-y-4 rounded-xl border border-border p-5">
+      <section className="min-w-0 space-y-4 rounded-xl border border-border p-5">
         <p role="status">{m.catalogue_create_created({}, o)}</p>
         <code className="break-all text-sm">{created.id}</code>
         {created.reader.state === 'ready' ? (
-          <a className={buttonVariants()} href={created.reader.href}>
+          <a className={buttonVariants({ className: actionClassName })} href={created.reader.href}>
             {m.catalogue_create_open({}, o)}
           </a>
         ) : (
@@ -119,6 +129,7 @@ export function AlbumProfileCreate({
                 : m.catalogue_create_reader_unavailable({}, o)}
             </p>
             <Button
+              className={actionClassName}
               disabled={busy}
               onClick={async () => {
                 if (running.current) return;
@@ -143,7 +154,7 @@ export function AlbumProfileCreate({
 
   return (
     <form
-      className="space-y-6"
+      className="min-w-0 space-y-6"
       aria-busy={busy}
       onSubmit={(event) => {
         event.preventDefault();
@@ -151,13 +162,19 @@ export function AlbumProfileCreate({
       }}
     >
       <a
-        className={buttonVariants({ variant: 'outline' })}
+        className={buttonVariants({ variant: 'outline', className: actionClassName })}
         href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
       >
         {m.catalogue_create_search({}, o)}
       </a>
-      <fieldset id="album-terms" disabled={locked} className="space-y-5 rounded-xl border border-border p-4 sm:p-5">
-        <legend className="px-2 font-semibold">{m.catalogue_create_terms({}, o)}</legend>
+      <fieldset
+        id="album-terms"
+        disabled={locked}
+        className="min-w-0 space-y-5 rounded-xl border border-border p-4 sm:p-5"
+      >
+        <legend className="max-w-full px-2 font-semibold [overflow-wrap:anywhere]">
+          {m.catalogue_create_terms({}, o)}
+        </legend>
         {terms.map((term, index) => (
           <fieldset
             key={term.id}
@@ -175,16 +192,20 @@ export function AlbumProfileCreate({
               const update = (value: string) =>
                 setTerms((previous) => previous.map((row) => (row.id === term.id ? { ...row, [field]: value } : row)));
               return (
-                <Field key={field}>
-                  <FieldLabel htmlFor={`${termsId}-${field}-${term.id}`}>{label}</FieldLabel>
+                <Field key={field} className="min-w-0">
+                  <FieldLabel className={labelClassName} htmlFor={`${termsId}-${field}-${term.id}`}>
+                    {label}
+                  </FieldLabel>
                   {field === 'aliases' ? (
                     <Textarea
+                      className="min-w-0"
                       id={`${termsId}-${field}-${term.id}`}
                       value={term[field]}
                       onChange={(event) => update(event.target.value)}
                     />
                   ) : (
                     <Input
+                      className={inputClassName}
                       id={`${termsId}-${field}-${term.id}`}
                       value={term[field]}
                       onChange={(event) => update(event.target.value)}
@@ -243,7 +264,9 @@ export function AlbumProfileCreate({
         ))}
         <fieldset disabled={locked} className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
           <Field className="w-full min-w-0 sm:flex-1">
-            <FieldLabel htmlFor="album-field">{m.character_add_fact({}, o)}</FieldLabel>
+            <FieldLabel className={labelClassName} htmlFor="album-field">
+              {m.character_add_fact({}, o)}
+            </FieldLabel>
             <NativeSelect
               id="album-field"
               className="w-full [&>select]:min-h-11"
@@ -292,6 +315,7 @@ export function AlbumProfileCreate({
         <div className="space-y-3">
           <p role="alert">{m.album_missing({}, o)}</p>
           <Button
+            className={actionClassName}
             type="button"
             variant="outline"
             disabled={busy}
@@ -334,7 +358,10 @@ export function AlbumProfileCreate({
             const row = rows.find((row) => error.pointer.includes(row.statement.property.id));
             return (
               <p key={index}>
-                <a className="underline" href={row ? `#album-row-${row.id}` : '#album-terms'}>
+                <a
+                  className="inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8"
+                  href={row ? `#album-row-${row.id}` : '#album-terms'}
+                >
                   {row
                     ? pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale).text
                     : m.catalogue_create_terms({}, o)}
@@ -345,6 +372,7 @@ export function AlbumProfileCreate({
           })}
           {pending.current && definiteFailure && (
             <Button
+              className={actionClassName}
               type="button"
               variant="outline"
               onClick={() => {
@@ -357,7 +385,11 @@ export function AlbumProfileCreate({
           )}
         </div>
       )}
-      <Button type="submit" disabled={busy || !enabled || metadataFailure || (!!pending.current && !!definiteFailure)}>
+      <Button
+        className={actionClassName}
+        type="submit"
+        disabled={busy || !enabled || metadataFailure || (!!pending.current && !!definiteFailure)}
+      >
         {busy
           ? m.catalogue_create_saving({}, o)
           : pending.current
@@ -417,7 +449,7 @@ function AlbumInitialField({
       disabled={disabled}
       className="min-w-0 space-y-4 rounded-xl border border-border p-4 sm:p-5"
     >
-      <legend className="px-2 font-semibold">
+      <legend className="max-w-full px-2 font-semibold [overflow-wrap:anywhere]">
         <DefinitionMeaning values={definition?.labels} locale={locale} />
       </legend>
       {(!definition || !release.types[albumType]?.properties.includes(statement.property.id)) && (
@@ -450,8 +482,8 @@ function AlbumInitialField({
       {qualifiers.map((part, at) => {
         const metadata = release.properties[part.property.id];
         return (
-          <div key={at} className="flex min-w-0 items-end gap-2">
-            <div className="min-w-0 flex-1">
+          <div key={at} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className={qualifierClassName}>
               <QualifierInput
                 definition={
                   metadata
@@ -479,6 +511,7 @@ function AlbumInitialField({
               />
             </div>
             <Button
+              className={actionClassName}
               type="button"
               variant="outline"
               aria-label={`${m.relation_remove({}, o)}: ${named(part.property.id)}`}
@@ -490,9 +523,12 @@ function AlbumInitialField({
         );
       })}
       {!!definition?.qualifiers.length && (
-        <Field>
-          <FieldLabel htmlFor={`album-qualifier-${row.id}`}>{m.relation_qualifier({}, o)}</FieldLabel>
+        <Field className="min-w-0">
+          <FieldLabel className={labelClassName} htmlFor={`album-qualifier-${row.id}`}>
+            {m.relation_qualifier({}, o)}
+          </FieldLabel>
           <NativeSelect
+            className={selectClassName}
             id={`album-qualifier-${row.id}`}
             value=""
             onChange={(event) => {
@@ -515,9 +551,12 @@ function AlbumInitialField({
           </NativeSelect>
         </Field>
       )}
-      <Field>
-        <FieldLabel htmlFor={`album-citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
+      <Field className="min-w-0">
+        <FieldLabel className={labelClassName} htmlFor={`album-citation-${row.id}`}>
+          {m.relation_citation({}, o)}
+        </FieldLabel>
         <Input
+          className={inputClassName}
           id={`album-citation-${row.id}`}
           type="url"
           value={
@@ -541,7 +580,7 @@ function AlbumInitialField({
           }
         />
       </Field>
-      <Button type="button" variant="ghost" onClick={remove}>
+      <Button className={actionClassName} type="button" variant="ghost" onClick={remove}>
         {m.recipe_remove_field({}, o)}
       </Button>
     </fieldset>
