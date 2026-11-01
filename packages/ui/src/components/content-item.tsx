@@ -6,6 +6,8 @@ export interface ContentItemProps extends Omit<HTMLAttributes<HTMLLIElement>, 't
   title: string;
   href?: string;
   titleLang?: string;
+  /** Optional adapter selector on the visible heading. */
+  titleDataSlot?: string;
   headingLevel?: 2 | 3 | 4;
   visual?: ReactNode;
   context?: ReactNode;
@@ -26,6 +28,7 @@ export function ContentItem({
   title,
   href,
   titleLang,
+  titleDataSlot,
   headingLevel = 2,
   visual,
   context,
@@ -74,6 +77,7 @@ export function ContentItem({
           <Heading
             id={titleId}
             lang={titleLang}
+            data-slot={titleDataSlot}
             data-content-item-slot="title"
             className="line-clamp-2 text-[17px] leading-snug font-semibold sm:text-lg md:text-xl sm:line-clamp-1"
           >

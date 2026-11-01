@@ -52,6 +52,7 @@ export function MemberListRow({
       href={href}
       title={title}
       titleLang={titleLang}
+      titleDataSlot="member-list-row-title"
       forceOverlay={storyOverlay}
       className={className}
       visual={

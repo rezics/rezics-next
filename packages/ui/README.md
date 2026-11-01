@@ -232,8 +232,10 @@ inherited hints or fact values. The caller supplies already available, localized
 `MemberListRow` keeps its existing public props for Search and Collection callers while adapting to `ContentItem`: the
 title is the shared named heading and stretched primary link, the decorative `Cover` remains the leading visual, its
 supplied children stay together as raised metadata, and `trailing` remains an independent control slot. Its
-`storyOverlay` prop enables the shared forced overlay for stories. The adapter does not fetch or derive member facts;
-the caller supplies any already available localized facts and links.
+`storyOverlay` prop enables the shared forced overlay for stories. The existing `member-list-row-title` selector stays
+on the actual heading alongside ContentItem's `data-content-item-slot="title"`; the cover keeps its
+`member-list-row-cover` selector. The adapter does not fetch or derive member facts; the caller supplies any already
+available localized facts and links.
 
 The current released hints and exact Type fallbacks all select portrait 5:7. Unknown Types retain a valid
 configured composition ratio, otherwise the same portrait default. A Collection kind may guide composition;

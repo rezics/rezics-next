@@ -48,6 +48,7 @@ test('MemberListRow composes its supplied subject facts and trailing control thr
   expect(html.match(/<h[234]\b/g)?.length).toBe(1);
   expect(html).toContain('<h2');
   expect(html).toContain('data-content-item-slot="title"');
+  expect(html).toMatch(/<h2\b[^>]*data-slot="member-list-row-title"/);
   expect(html).toContain('data-overlay="visible"');
   expect(html).toContain('lang="ja"');
   expect(html).toContain('data-slot="member-list-row-cover"');
