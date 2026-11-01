@@ -64,10 +64,7 @@ import {
   type PublicationConfirmation,
   type PublicationTransport,
 } from './curation-publish';
-import {
-  type CurationAdmissionLease,
-  CurationReaderAdmission,
-} from './curation-reader-admission';
+import { type CurationAdmissionLease, CurationReaderAdmission } from './curation-reader-admission';
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
 import { CurationNavigationGuard } from './curation-navigation-guard';
 
@@ -149,9 +146,7 @@ function failureView(failure: CurationReadFailure) {
 }
 
 /** Admit the mounted private editor against both the same-read SSR identity and observed session changes. */
-export function PresentationViewEditor({
-  ...props
-}: PresentationViewEditorProps) {
+export function PresentationViewEditor({ ...props }: PresentationViewEditorProps) {
   if (props.admission) return <ActualPresentationViewEditor {...props} admission={props.admission} />;
   return <StandalonePresentationViewEditor {...props} />;
 }
@@ -208,7 +203,9 @@ function ActualPresentationViewEditor({
           if (result.reader !== expectedReader) {
             const refusal = { ok: false as const, reason: 'forbidden' as const, admissionChanged: true };
             setFreshResult((previous) =>
-              admission.canRead(expectedReader, version) ? { reader: expectedReader, version, result: refusal } : previous,
+              admission.canRead(expectedReader, version)
+                ? { reader: expectedReader, version, result: refusal }
+                : previous,
             );
             return;
           }
@@ -250,8 +247,7 @@ function ActualPresentationViewEditor({
     readCurrent(reader, snapshot.version, invocationTransport);
   }
 
-  const currentFreshAdmission =
-    lease?.kind === 'fresh' && freshResult?.lease === lease ? freshResult.result : null;
+  const currentFreshAdmission = lease?.kind === 'fresh' && freshResult?.lease === lease ? freshResult.result : null;
   const currentAdmission = initialAdmission ?? currentFreshAdmission;
 
   if (snapshot.session.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' });
@@ -618,7 +614,8 @@ function AdmittedPresentationViewEditor({
         const target = original && currentCorrection(draft.profile, original);
         setOwned(setEditorOpen, true);
         setOwned(setCorrection, target ? { ...target } : null);
-        setOwned(setMessage,
+        setOwned(
+          setMessage,
           target
             ? source && JSON.stringify(source) !== JSON.stringify(draft.profile)
               ? m.curation_correction_later()
@@ -628,7 +625,10 @@ function AdmittedPresentationViewEditor({
               : m.curation_correction_unknown(),
         );
         if (target)
-          setOwned(setDraft, (value) => value && { ...value, selection: { template: target.template, view: target.view } });
+          setOwned(
+            setDraft,
+            (value) => value && { ...value, selection: { template: target.template, view: target.view } },
+          );
         else setOwned(setFocusRegion, (value) => value + 1);
       },
     };

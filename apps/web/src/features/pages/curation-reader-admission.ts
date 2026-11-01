@@ -54,8 +54,7 @@ function sessionCacheSnapshot(client: QueryClient): SessionCacheSnapshot {
   if (!query) return { query: null, phase: 'unknown', session: unknownSession };
 
   const state = query.state;
-  if (state.status === 'error')
-    return { query, phase: 'error', session: { state: 'unavailable' } };
+  if (state.status === 'error') return { query, phase: 'error', session: { state: 'unavailable' } };
 
   const data = state.data;
   if (!data || typeof data !== 'object' || !('state' in data))
@@ -168,12 +167,7 @@ export class CurationReaderAdmission {
     return () => this.listeners.delete(listener);
   };
 
-  private publish(
-    session: CurationSessionObservation,
-    lease: Lease | null,
-    incrementVersion = true,
-    notify = true,
-  ) {
+  private publish(session: CurationSessionObservation, lease: Lease | null, incrementVersion = true, notify = true) {
     this.snapshot = {
       version: this.snapshot.version + (incrementVersion ? 1 : 0),
       session,
@@ -205,13 +199,9 @@ export class CurationReaderAdmission {
     return true;
   }
 
-  private refreshFromCache(
-    event?: { type?: string; query?: { queryKey?: readonly unknown[] } },
-    notify = true,
-  ) {
+  private refreshFromCache(event?: { type?: string; query?: { queryKey?: readonly unknown[] } }, notify = true) {
     if (this.replaced) return;
-    const isSessionEvent =
-      !event || (event.query && JSON.stringify(event.query.queryKey) === queryKey);
+    const isSessionEvent = !event || (event.query && JSON.stringify(event.query.queryKey) === queryKey);
     if (!isSessionEvent) return;
 
     const previous = this.raw;
@@ -328,8 +318,7 @@ export class CurationReaderAdmission {
 
     this.refreshFromCache(undefined, false);
     const session = this.snapshot.session;
-    const compatible =
-      session.state === 'unknown' || (session.state === 'signed-in' && session.subject === reader);
+    const compatible = session.state === 'unknown' || (session.state === 'signed-in' && session.subject === reader);
     if (!compatible) {
       this.securityInvalidated = true;
       markRetired(this.queryClient, reader);

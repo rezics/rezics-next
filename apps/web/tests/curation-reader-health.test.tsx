@@ -55,21 +55,30 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
-  const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const previousGlobals = new Map(
+    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
 
-  const [{ createRoot }, { QueryClient, QueryClientProvider, useQueryClient }, routerTools, session, page, { m }, runtime] =
-    await Promise.all([
-      import('react-dom/client'),
-      import('@tanstack/react-query'),
-      import('@tanstack/react-router'),
-      import('../src/session/query'),
-      import('../src/features/pages/curate-view'),
-      import('../src/paraglide/messages.js'),
-      import('../src/paraglide/runtime.js'),
-    ]);
+  const [
+    { createRoot },
+    { QueryClient, QueryClientProvider, useQueryClient },
+    routerTools,
+    session,
+    page,
+    { m },
+    runtime,
+  ] = await Promise.all([
+    import('react-dom/client'),
+    import('@tanstack/react-query'),
+    import('@tanstack/react-router'),
+    import('../src/session/query'),
+    import('../src/features/pages/curate-view'),
+    import('../src/paraglide/messages.js'),
+    import('../src/paraglide/runtime.js'),
+  ]);
   await runtime.setLocale('en');
 
   const readerA = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d8801';
@@ -82,7 +91,9 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     format: PROFILE_FORMAT,
     generic: { views: { overview: documentFor('overview', text), details: documentFor('details', text) } },
     bases: [],
-    types: [{ type: 'schema:Book', views: { overview: documentFor('book', text), details: documentFor('details', text) } }],
+    types: [
+      { type: 'schema:Book', views: { overview: documentFor('book', text), details: documentFor('details', text) } },
+    ],
     routes: [{ route, document: { root: { props: {} }, content: [] } }],
   });
   const readFor = (reader: string, profile: PresentationProfile, head: number): CurationRead => ({
@@ -141,7 +152,11 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     createElement(
       StrictMode,
       null,
-      createElement(QueryClientProvider, { client: activeClient }, createElement(routerTools.RouterProvider, { router })),
+      createElement(
+        QueryClientProvider,
+        { client: activeClient },
+        createElement(routerTools.RouterProvider, { router }),
+      ),
     );
   const host = window.document.createElement('main');
   window.document.body.append(host);
@@ -194,7 +209,12 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     subject,
     csrfToken,
   });
-  const admit = async (client: InstanceType<typeof QueryClient>, reader: string, index: number, profile: PresentationProfile) => {
+  const admit = async (
+    client: InstanceType<typeof QueryClient>,
+    reader: string,
+    index: number,
+    profile: PresentationProfile,
+  ) => {
     await act(async () => client.setQueryData(session.sessionQuery.queryKey, signedIn(reader, null)));
     await settle(() => reads.length > index, `fresh BFF admission for ${reader}`);
     expect(reads[index]!.reader).toBe(reader);
@@ -255,9 +275,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(original.expectedHead).toBe(7);
     expect(original.profile).not.toEqual(profileA);
     expect(original.keys.publish).not.toBe(original.keys.activate);
-    await act(async () =>
-      publishes[0]!.work.resolve({ ok: false, reason: 'unavailable', outcome: 'unknown' }),
-    );
+    await act(async () => publishes[0]!.work.resolve({ ok: false, reason: 'unavailable', outcome: 'unknown' }));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'unknown original outcome');
 
     // Retry is now explicit. Cache A/B/A publishes synchronously retire it before React commits.
@@ -284,9 +302,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     recoveredASelect.focus();
     const recoveredAStatuses = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
     oldRetry?.();
-    await act(async () =>
-      publishes[1]!.work.resolve({ ok: true, digest: profileDigest(original.profile), head: 8 }),
-    );
+    await act(async () => publishes[1]!.work.resolve({ ok: true, digest: profileDigest(original.profile), head: 8 }));
     await flush();
     expect(publishes).toHaveLength(2);
     expect(window.document.activeElement).toBe(recoveredASelect);
@@ -324,13 +340,17 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(reads).toHaveLength(1);
     await admit(activeClient, readerA, 1, profileA);
     expect(host.textContent).toContain(m.curation_unknown());
-    const recoveredErrorSelect = host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>;
+    const recoveredErrorSelect = host.querySelector('#curation-template') as InstanceType<
+      typeof window.HTMLSelectElement
+    >;
     recoveredErrorSelect.focus();
     const recoveredErrorStatuses = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
     await act(async () => publishes[2]!.work.reject(new TypeError('late retired publish rejection')));
     await flush();
     expect(window.document.activeElement).toBe(recoveredErrorSelect);
-    expect([...host.querySelectorAll('[role="status"]')].map((node) => node.textContent)).toEqual(recoveredErrorStatuses);
+    expect([...host.querySelectorAll('[role="status"]')].map((node) => node.textContent)).toEqual(
+      recoveredErrorStatuses,
+    );
     expect(host.textContent).not.toContain(m.presentation_editor_published());
 
     // Removal and equal-data recreation is a fresh loss; captured retry cannot use the replacement visit.
@@ -348,15 +368,17 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await settle(() => reads.length === 3, 'fresh A admission after removal and recreation');
     await act(async () => reads[2]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'original remains uncertain');
-    const recoveredRemovalSelect = host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>;
+    const recoveredRemovalSelect = host.querySelector('#curation-template') as InstanceType<
+      typeof window.HTMLSelectElement
+    >;
     recoveredRemovalSelect.focus();
     const recoveredRemovalStatuses = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
-    await act(async () =>
-      publishes[3]!.work.resolve({ ok: false, reason: 'forbidden' }),
-    );
+    await act(async () => publishes[3]!.work.resolve({ ok: false, reason: 'forbidden' }));
     await flush();
     expect(window.document.activeElement).toBe(recoveredRemovalSelect);
-    expect([...host.querySelectorAll('[role="status"]')].map((node) => node.textContent)).toEqual(recoveredRemovalStatuses);
+    expect([...host.querySelectorAll('[role="status"]')].map((node) => node.textContent)).toEqual(
+      recoveredRemovalStatuses,
+    );
     expect(publishes[3]!.input).toEqual(original);
 
     // A held original-reader recovery inspection cannot write state after an unknown session publication.
@@ -366,10 +388,11 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     const unknownInspect = clickHandler(button(m.curation_reload_head()));
     const unknownRetry = clickHandler(button(m.curation_retry_original()));
     await act(async () => {
-      activeClient.setQueryData(
-        session.sessionQuery.queryKey,
-        { state: 'unknown', subject: null, csrfToken: null } as never,
-      );
+      activeClient.setQueryData(session.sessionQuery.queryKey, {
+        state: 'unknown',
+        subject: null,
+        csrfToken: null,
+      } as never);
       unknownInspect?.();
       unknownRetry?.();
     });
@@ -381,7 +404,9 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(host.textContent).not.toContain(m.curation_actual_head({ head: 12, digest: profileDigest(profileA) }));
 
     // Sign-out after observed admission conceals all private recovery until a fresh matching read.
-    await act(async () => activeClient.setQueryData(session.sessionQuery.queryKey, { state: 'signed-out', subject: null }));
+    await act(async () =>
+      activeClient.setQueryData(session.sessionQuery.queryKey, { state: 'signed-out', subject: null }),
+    );
     expect(host.textContent).not.toContain('/private-a');
     await admit(activeClient, readerA, 4, profileA);
     expect(host.textContent).toContain(m.curation_unknown());
@@ -396,7 +421,10 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(publishes).toHaveLength(4);
     await settle(() => reads.length === 6, 'fresh admission on replacement QueryClient');
     await act(async () => reads[5]!.work.resolve(readFor(readerA, profileA, 7)));
-    await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'replacement provider retains original intent');
+    await settle(
+      () => host.textContent?.includes(m.curation_unknown()) ?? false,
+      'replacement provider retains original intent',
+    );
 
     // A healthy B reader gets a new publication lane and cannot see A's retained intent or private edits.
     await act(async () => replacementClient.setQueryData(session.sessionQuery.queryKey, signedIn(readerB, 'csrf-b')));
@@ -409,9 +437,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await click(m.curation_publish());
     await settle(() => publishes.length === 5, 'healthy B publication');
     expect(publishes[4]!.reader).toBe(readerB);
-    await act(async () =>
-      publishes[4]!.work.resolve({ digest: profileDigest(profileB), head: 32, ok: true }),
-    );
+    await act(async () => publishes[4]!.work.resolve({ digest: profileDigest(profileB), head: 32, ok: true }));
     await settle(() => host.textContent?.includes(m.presentation_editor_published()) ?? false, 'B publication receipt');
     expect(host.textContent).not.toContain(m.curation_unknown());
 
@@ -436,13 +462,17 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await settle(() => reads.length === 9, 'fresh admission after unmount');
     await act(async () => reads[8]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'unmounted intent recovered');
-    const recoveredUnmountSelect = host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>;
+    const recoveredUnmountSelect = host.querySelector('#curation-template') as InstanceType<
+      typeof window.HTMLSelectElement
+    >;
     recoveredUnmountSelect.focus();
     const recoveredUnmountStatuses = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
     await act(async () => publishes[5]!.work.reject(new TypeError('late unmounted publish')));
     await flush();
     expect(window.document.activeElement).toBe(recoveredUnmountSelect);
-    expect([...host.querySelectorAll('[role="status"]')].map((node) => node.textContent)).toEqual(recoveredUnmountStatuses);
+    expect([...host.querySelectorAll('[role="status"]')].map((node) => node.textContent)).toEqual(
+      recoveredUnmountStatuses,
+    );
     expect(publishes[5]!.input).toEqual(original);
   } finally {
     await act(async () => {

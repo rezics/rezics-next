@@ -152,12 +152,7 @@ export function CurationPublicationRecovery({
                 {m.curation_retry_original()}
               </Button>
             )}
-            <Button
-              variant="outline"
-              className="min-h-11 whitespace-normal"
-              disabled={busy}
-              onClick={inspect}
-            >
+            <Button variant="outline" className="min-h-11 whitespace-normal" disabled={busy} onClick={inspect}>
               {m.curation_reload_head()}
             </Button>
             {result?.ok === false && result.reason === 'invalid' ? (

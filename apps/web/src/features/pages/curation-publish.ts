@@ -107,12 +107,15 @@ export class CurationPublication {
     this.operation = null;
     this.stopLease?.();
     this.stopLease = null;
-    this.update({
-      busy: false,
-      active: null,
-      readFailure: null,
-      ...(uncertain ? { result: { ok: false, reason: 'unavailable', outcome: 'unknown' } as const } : {}),
-    }, notify);
+    this.update(
+      {
+        busy: false,
+        active: null,
+        readFailure: null,
+        ...(uncertain ? { result: { ok: false, reason: 'unavailable', outcome: 'unknown' } as const } : {}),
+      },
+      notify,
+    );
   }
 
   private visit(incarnation: number): CurationPublicationVisit {
