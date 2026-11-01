@@ -102,7 +102,9 @@ export function homeFeedStoryPage(
       state === 'empty' || state === 'preparing' || state === 'unavailable'
         ? []
         : state === 'partial' && personal
-          ? [discovery, continued]
+          ? kind === undefined || kind === first.type
+            ? [discovery, continued]
+            : []
           : items,
     next: !cursor && (kind !== undefined || (state === 'mixed' && personal)) ? 'illustrative-signed-frontier' : null,
     asOf: '2026-11-01T00:00:00.000Z',

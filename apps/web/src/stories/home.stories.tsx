@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within, userEvent } from 'storybook/test';
+import { expect, within, userEvent, waitFor } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
@@ -75,10 +75,14 @@ export const KindSelection: Story = {
     const canvas = within(context.canvasElement);
     await canvas.findByRole('link', { name: 'Letters from B-612' });
     await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
-    await canvas.findByRole('option', { name: 'Book' });
+    await waitFor(() =>
+      expect(
+        canvas.getByRole('combobox', { name: m.home_kind_label() }).querySelector('option[value="schema:Book"]'),
+      ).not.toBeNull(),
+    );
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.home_kind_label() }), 'schema:Book');
     await expect(canvas.getByRole('combobox', { name: m.home_kind_label() })).toHaveValue('schema:Book');
-    await expect(await canvas.findByRole('link', { name: 'The Little Prince' })).toBeVisible();
+    await waitFor(() => expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull());
     await expect(canvas.queryByRole('link', { name: 'Letters from B-612' })).toBeNull();
   },
 };
@@ -100,11 +104,19 @@ export const KindChoicesNextPage: Story = {
     const canvas = within(context.canvasElement);
     await canvas.findByRole('link', { name: 'Letters from B-612' });
     await userEvent.click(await canvas.findByRole('button', { name: m.home_kinds_load() }));
-    await canvas.findByRole('option', { name: 'Book' });
+    await waitFor(() =>
+      expect(
+        canvas.getByRole('combobox', { name: m.home_kind_label() }).querySelector('option[value="schema:Book"]'),
+      ).not.toBeNull(),
+    );
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.home_kind_label() }), 'schema:Book');
-    await canvas.findByRole('link', { name: 'The Little Prince' });
+    await waitFor(() => expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull());
     await userEvent.click(canvas.getByRole('button', { name: m.home_kinds_next() }));
-    await expect(await canvas.findByRole('option', { name: 'Account' })).toBeVisible();
+    await waitFor(() =>
+      expect(
+        canvas.getByRole('combobox', { name: m.home_kind_label() }).querySelector('option[value="account"]'),
+      ).not.toBeNull(),
+    );
     await expect(canvas.getByRole('combobox', { name: m.home_kind_label() })).toHaveValue('schema:Book');
   },
 };

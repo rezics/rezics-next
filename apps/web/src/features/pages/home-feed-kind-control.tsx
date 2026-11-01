@@ -62,11 +62,18 @@ export function HomeFeedKindControl({
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        {snapshot.status === 'idle' ? (
-          <Button className="min-h-11 whitespace-normal" variant="outline" onClick={() => void choices.load()}>
-            {m.home_kinds_load({}, options)}
-          </Button>
-        ) : null}
+        <Button
+          className="min-h-11 whitespace-normal"
+          variant="outline"
+          disabled={snapshot.status === 'loading' || (snapshot.status === 'ready' && !snapshot.kinds?.next)}
+          onClick={() => void choices.load(failure ? choices.retryCursor() : (snapshot.kinds?.next ?? undefined))}
+        >
+          {failure
+            ? m.home_kinds_retry({}, options)
+            : snapshot.kinds
+              ? m.home_kinds_next({}, options)
+              : m.home_kinds_load({}, options)}
+        </Button>
       </div>
       {snapshot.status !== 'idle' && snapshot.status !== 'ready' ? (
         <p role={failure ? 'alert' : 'status'} className="text-sm text-muted-foreground">
@@ -77,24 +84,6 @@ export function HomeFeedKindControl({
         <p role="status" className="text-sm text-muted-foreground">
           {m.home_kinds_empty({}, options)}
         </p>
-      ) : null}
-      {failure ? (
-        <Button
-          className="min-h-11 whitespace-normal"
-          variant="outline"
-          onClick={() => void choices.load(choices.retryCursor())}
-        >
-          {m.home_kinds_retry({}, options)}
-        </Button>
-      ) : snapshot.kinds?.next ? (
-        <Button
-          className="min-h-11 whitespace-normal"
-          variant="outline"
-          disabled={snapshot.status === 'loading'}
-          onClick={() => void choices.load(snapshot.kinds!.next!)}
-        >
-          {m.home_kinds_next({}, options)}
-        </Button>
       ) : null}
     </section>
   );
