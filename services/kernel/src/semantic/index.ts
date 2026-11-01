@@ -50,6 +50,11 @@ export type {
   PublicSourceBootstrapResult,
   PublicSourceBootstrapRecovery,
   NativeSourceRepairReceipt,
+  NativeSourceRepairLocator,
+  NativeSourceRepairRead,
+  NativeSourceRepairStepRead,
+  NativeSourceRepairStepVerification,
+  NativeSourceRepairVerification,
   PublicSourceRepair,
   PublicSourceRepairPage,
 } from './public-filter-source-binding.ts';

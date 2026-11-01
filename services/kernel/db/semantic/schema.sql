@@ -2981,6 +2981,38 @@ END $$;
 
 
 --
+-- Name: validate_public_filter_repair_advance(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_filter_repair_advance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.transaction_id IS NULL OR NEW.native_xid IS DISTINCT FROM pg_current_xact_id()
+    OR NOT EXISTS (
+      SELECT 1 FROM core.partition p
+      WHERE p.partition_no = NEW.partition_no AND p.epoch = NEW.owner_epoch
+        AND p.position = NEW.position AND p.write_state = 'active'
+        AND p.xmin = pg_current_xact_id()::xid
+    ) OR NOT EXISTS (
+      SELECT 1 FROM core.outbox e
+      WHERE e.partition_no = NEW.partition_no AND e.position = NEW.position
+        AND e.epoch = NEW.owner_epoch AND e.event_seq = 0 AND e.event_count = 1
+        AND e.type = 'com.rezics.semantic.public-source.advanced.v1'
+        AND e.subject = NEW.subject_id::text
+        AND e.data = jsonb_build_object('id',NEW.subject_id::text,
+          'bootstrap',NEW.bootstrap::text,'execution',NEW.execution)
+        AND e.xmin = pg_current_xact_id()::xid
+    ) THEN
+    RAISE EXCEPTION 'Public Source advancement lacks original same-command native custody'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: validate_record_deletion_commit(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -5964,9 +5996,12 @@ CREATE TABLE semantic.public_filter_repair_advance (
     subject_id uuid NOT NULL,
     owner_epoch integer NOT NULL,
     "position" bigint NOT NULL,
+    transaction_id uuid,
+    native_xid xid8,
     CONSTRAINT public_filter_repair_advance_check CHECK (((route / 16) = partition_no)),
     CONSTRAINT public_filter_repair_advance_owner_epoch_check CHECK ((owner_epoch > 0)),
-    CONSTRAINT public_filter_repair_advance_position_check CHECK (("position" > 0))
+    CONSTRAINT public_filter_repair_advance_position_check CHECK (("position" > 0)),
+    CONSTRAINT public_filter_repair_advance_provenance CHECK (((transaction_id IS NULL) = (native_xid IS NULL)))
 );
 
 
@@ -5982,6 +6017,13 @@ CREATE TABLE semantic.public_filter_repair_step (
     predecessor uuid,
     state text NOT NULL,
     complete boolean NOT NULL,
+    input_limit integer,
+    receipt_protocol integer,
+    repair_locator_digests bytea,
+    CONSTRAINT public_filter_repair_step_input_limit_check CHECK (((input_limit >= 1) AND (input_limit <= 256))),
+    CONSTRAINT public_filter_repair_step_provenance CHECK (((input_limit IS NULL) = (receipt_protocol IS NULL))),
+    CONSTRAINT public_filter_repair_step_receipt_protocol_check CHECK ((receipt_protocol = 1)),
+    CONSTRAINT public_filter_repair_locator_digests_bound CHECK (((repair_locator_digests IS NULL) OR ((input_limit IS NOT NULL) AND (octet_length(repair_locator_digests) <= 8192) AND (mod(octet_length(repair_locator_digests), 32) = 0) AND ((octet_length(repair_locator_digests) / 32) <= input_limit)))),
     CONSTRAINT public_filter_repair_step_state_check CHECK ((octet_length(state) <= 16384))
 );
 
@@ -11160,6 +11202,27 @@ CREATE CONSTRAINT TRIGGER provider_review_queue_capture AFTER INSERT OR UPDATE O
 
 
 --
+-- Name: public_filter_repair_advance public_filter_repair_advance_commit; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER public_filter_repair_advance_commit AFTER INSERT ON semantic.public_filter_repair_advance DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_filter_repair_advance();
+
+
+--
+-- Name: public_filter_repair_advance public_filter_repair_advance_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_advance_immutable BEFORE DELETE OR UPDATE ON semantic.public_filter_repair_advance FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: public_filter_repair_step public_filter_repair_step_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_step_immutable BEFORE DELETE OR UPDATE ON semantic.public_filter_repair_step FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: record_lifecycle record_lifecycle_native_commit; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -12112,6 +12175,14 @@ ALTER TABLE ONLY semantic.public_filter_read_definition
 
 ALTER TABLE ONLY semantic.public_filter_repair_advance
     ADD CONSTRAINT public_filter_repair_advance_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: public_filter_repair_step public_filter_repair_predecessor; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_repair_step
+    ADD CONSTRAINT public_filter_repair_predecessor FOREIGN KEY (partition_no, bootstrap, execution, predecessor) REFERENCES semantic.public_filter_repair_step(partition_no, bootstrap, execution, step);
 
 
 --
