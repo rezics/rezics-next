@@ -63,6 +63,10 @@ consulted. The supplied bounded-legacy owner decision was read completely by its
 exact path. It remains an external launch input, not an adopted repository
 architecture decision created here.
 
+That input is
+`/home/edge/projects/rezics/rezics-next/.temp/goal/performance/decisions/work-client-bounded-legacy-contract.md`,
+SHA-256 `3f4bfc31d156d965fbaa32dc3fbf69af5dd1a1a3d47ba930e8ab3375d8655727`.
+
 The complete 242-line accounting reconciliation and all three authored tests were
 read using `git show` at `1196dc8d59bf3e91b335e473db13d719b70ed9d4`:
 
@@ -119,6 +123,12 @@ deletes input, output, operations and status. The bounded port uses the same
 four-table body with children disabled, one READ COMMITTED attempt, pre-funded
 rollback and unchanged permanent writer/restore authority. These facts establish
 which transactions must maintain a projection, not that such hooks exist.
+
+The reused upstream reference `search-worker-outcome-harness/dbos-transact-ts`
+was read at `980dc55095f445b189aecb59e7f3334345179f65`, MIT (`LICENSE`),
+specifically [`src/client.ts`](https://github.com/dbos-inc/dbos-transact-ts/blob/980dc55095f445b189aecb59e7f3334345179f65/src/client.ts)
+for caller-owned transactional enqueue. Its revision is evidence, not a substitute
+for the pinned installed artifact or the downstream patch.
 
 ## Exact semantic target
 
