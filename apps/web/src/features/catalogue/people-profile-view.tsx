@@ -389,12 +389,7 @@ export function PeopleProfileEditor({
         ) : (
           <>
             <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
-            <Button
-              type="button"
-              variant="outline"
-              className={peopleActionTarget}
-              onClick={() => void query.refetch()}
-            >
+            <Button type="button" variant="outline" className={peopleActionTarget} onClick={() => void query.refetch()}>
               {m.catalogue_create_retry({}, o)}
             </Button>
           </>
