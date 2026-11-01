@@ -277,18 +277,6 @@ function shelfFailure(result: Result<unknown>): { kind: 'denied' | 'unavailable'
 
 export type ShelfReadInput = { realmId: string; cursor?: string; credentialMode: ReadCredentialMode };
 
-export function loadRealmShelfPage(
-  client: KernelClient,
-  request: Request,
-  sessionEnv: Partial<SessionEnv>,
-  input: ShelfReadInput & { list: 'boards' },
-): Promise<ShelfPage<RealmBoard>>;
-export function loadRealmShelfPage(
-  client: KernelClient,
-  request: Request,
-  sessionEnv: Partial<SessionEnv>,
-  input: ShelfReadInput & { list: 'publications' },
-): Promise<ShelfPage<PublishedSubject>>;
 /** Continue exactly one native list, retaining its own reader-bound cursor and fixed page size. */
 export function loadRealmShelfPageWithOrigin(
   client: KernelClient,
@@ -365,6 +353,18 @@ export async function loadRealmShelfPageWithOrigin(
 }
 
 /** Compatibility helper for consumers that only need the original shelf value. */
+export function loadRealmShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' },
+): Promise<ShelfPage<RealmBoard>>;
+export function loadRealmShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'publications' },
+): Promise<ShelfPage<PublishedSubject>>;
 export async function loadRealmShelfPage(
   client: KernelClient,
   request: Request,
