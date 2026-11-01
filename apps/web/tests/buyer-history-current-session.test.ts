@@ -34,9 +34,7 @@ mock.module('cloudflare:workers', () => ({
       get: () => ({
         credential: async () => {
           preparations++;
-          return status === 'active'
-            ? { status, accessToken, subject: 'buyer', csrfToken }
-            : { status, csrfToken };
+          return status === 'active' ? { status, accessToken, subject: 'buyer', csrfToken } : { status, csrfToken };
         },
       }),
     },
