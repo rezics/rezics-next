@@ -1006,17 +1006,20 @@ function SubjectLibrarySlotView({
     void removeLabel(label);
   }
 
+  const undoReceipt =
+    entryUndo ??
+    (uncertainRestore.current ? { subjectId: subject.id, ...uncertainRestore.current.receipt } : undefined);
   return (
     <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
-      {entryUndo && data.entryAvailable ? (
+      {undoReceipt && data.entryAvailable ? (
         <div
           onSubmit={(event) => {
             if (!hydrated) return;
             event.preventDefault();
-            if (entryUndo.subjectId === subject.id) void restoreEntry(entryUndo);
+            if (undoReceipt.subjectId === subject.id) void restoreEntry(undoReceipt);
           }}
         >
-          <EntryUndoForm undo={entryUndo} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
+          <EntryUndoForm undo={undoReceipt} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
         </div>
       ) : null}
       {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}

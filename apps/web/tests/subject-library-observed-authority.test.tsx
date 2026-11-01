@@ -609,6 +609,32 @@ test('Healthy rotation and equivalent refresh preserve independent uncertain ent
   expect(labels).toHaveLength(2);
   expect(host.textContent).toContain(m.library_subject_collection_added());
   expect(host.querySelector('[data-subject-label-chip]')).toBeNull();
+  // Exact entry Undo uncertainty also survives an admission outage without replaying automatically.
+  await ready({
+    ...baseline(),
+    csrfToken: 'rotated',
+    provenance: { ...baseline().provenance!, csrfToken: 'rotated' },
+    undo: { subjectId: subject.id, deletionId: id(63), revision: 14 },
+  });
+  await submit('form:has(input[name="deletionId"])');
+  const receipt = restores[0]!.data;
+  await act(async () => restores[0]!.reject(new Error('restore outcome unknown')));
+  await act(async () =>
+    client
+      .getQueryCache()
+      .find({ queryKey: scopedKey(), exact: true })!
+      .setState({
+        status: 'error',
+        error: new Error('authority unavailable'),
+      }),
+  );
+  await act(async () => client.setQueryData(scopedKey(), { subject: 'A', admitted }));
+  await ready({ ...baseline(), csrfToken: 'rotated', provenance: { ...baseline().provenance!, csrfToken: 'rotated' } });
+  expect(restores).toHaveLength(1);
+  await submit('form:has(input[name="deletionId"])');
+  expect(restores[1]!.data).toEqual(receipt);
+  expect(restores[1]!.csrf).toBe('rotated');
+  await act(async () => restores[1]!.resolve({ ok: false, reason: 'stale' }));
 });
 
 test('The existing leaf accepts only actual scoped reads, partitions exact address/cursors and retires reads before commit without old seed revival', async () => {
