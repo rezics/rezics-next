@@ -546,6 +546,7 @@ test('The original Source owner durably guards exact History readiness and closu
   const decided = await commands.approve(await context('staff'), { requestId: requested.value.id, key: randomUUID() });
   const saved = await readAgentVerificationWorkflowRequest(f.pool, requested.value.id);
   if (!saved?.decisionReceiptId) throw new Error('Expected actual original decision');
+  if (!decided.value.decisionReceiptId) throw new Error('Expected committed decision receipt');
   expect(saved.decisionReceiptId).toBe(decided.value.decisionReceiptId);
   const workflow = { ...saved, receiptId: saved.decisionReceiptId };
   await recordPendingAgentVerification(f.pool, workflow, () => new Date());

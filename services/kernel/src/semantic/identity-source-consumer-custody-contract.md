@@ -411,7 +411,7 @@ at 2048 and 4096 bytes before dispatch and checked again natively. The row locks
 not enqueue work or dispatch nested owner writers.
 
 The recheck allowance covers the barrier, Account row, original intent/partition,
-optional technical-source fallback (technical source/native commit/partition),
+optional technical-source fallback (technical source/partition/History domain),
 accepted binding validation and its native joins, at most two physical technical roles,
 and original History source/partition/domain association, including its input CTE.
 It allows eight statements for both original and fallback branches, with 32 bounded
