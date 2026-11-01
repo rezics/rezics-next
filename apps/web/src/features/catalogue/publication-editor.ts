@@ -181,10 +181,11 @@ export async function createPublication(
   sessionEnv: Partial<SessionEnv>,
   command: PublicationCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const read = await readPublicationEditor(client, command.work, locale);
   if (!read.ok) return { ok: false, reason: read.reason === 'invalid' ? 'invalid' : 'unavailable' };
   const errors = validatePublication(read, command.item, command.relation);
   if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
-  return createSubjectRecord(client, request, sessionEnv, command, locale);
+  return createSubjectRecord(client, request, sessionEnv, command, locale, preparedAuthorization);
 }

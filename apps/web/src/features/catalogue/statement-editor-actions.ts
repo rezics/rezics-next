@@ -1,11 +1,8 @@
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../../kernel/client';
-import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
 import {
   readCandidates,
   selectCandidate,
@@ -40,12 +37,12 @@ export function editorAddress(value: unknown): EditorAddress {
   };
 }
 
-
 // POST actions use the existing origin, session and CSRF middleware. Credentials stay on the server.
 export const readCorrection = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(editorAddress))
   .handler(async ({ data }): Promise<EditorRead> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     return readStatementEditor(kernelClient(), data);
   });
 

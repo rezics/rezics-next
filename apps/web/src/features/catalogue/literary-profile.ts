@@ -83,10 +83,11 @@ export async function createLiteraryWork(
   env: Partial<SessionEnv>,
   command: LiteraryCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const metadata = await readLiteraryProfile(client);
   if (!metadata.ok) return { ok: false, reason: 'unavailable' };
   const errors = validateLiteraryItem(metadata.release, command.item, locale);
   if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
-  return createSubjectRecord(client, request, env, command, locale);
+  return createSubjectRecord(client, request, env, command, locale, preparedAuthorization);
 }

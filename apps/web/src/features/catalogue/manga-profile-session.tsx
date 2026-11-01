@@ -52,7 +52,8 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
                     ? { ...read, public: read.public, source: null }
                     : { ok: false, reason: 'unavailable' };
                 },
-                propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+                propose: (data) =>
+                  submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
               },
               review: (_property, initialSession) => {
                 return {
@@ -84,6 +85,7 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
 }
 
 function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const [open, setOpen] = useState(false);
   const o = { locale: locale as never };

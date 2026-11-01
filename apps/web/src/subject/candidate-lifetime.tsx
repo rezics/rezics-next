@@ -30,7 +30,10 @@ function useLifetime(identity: string, reader: string, parent?: CandidateWork | 
       retire: () => {
         retired = true;
       },
-      active: () => !retired && mounted.current && (!parent || ('active' in parent ? (parent as Lifetime).active() : parent.live())),
+      active: () =>
+        !retired &&
+        mounted.current &&
+        (!parent || ('active' in parent ? (parent as Lifetime).active() : parent.live())),
       live: () => !!reader && value.active(),
     };
     previous.current = { identity, parent, value };
@@ -147,7 +150,8 @@ function sessionChanges(client: QueryClient) {
 }
 
 /** Public reads still retire with their mount/admission, without requiring sign-in. */
-export function useCatalogueLifetime(address: string) {
-  const parent = useContext(Reader);
-  return useLifetime(address, parent?.reader ?? '', parent);
+export function useCatalogueLifetime(address: string, ancestor?: Lifetime | null) {
+  const reader = useContext(Reader);
+  const parent = ancestor ?? reader;
+  return useLifetime(JSON.stringify([address, reader?.generation]), reader?.reader ?? parent?.reader ?? '', parent);
 }

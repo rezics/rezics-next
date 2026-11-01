@@ -22,19 +22,29 @@ export const loadMangaProfile = createServerFn({ method: 'GET', strict: false })
     return readMangaProfile(kernelClient(), data);
   });
 export const createCatalogueManga = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: MangaCommand): MangaCommand => {
-    if (
-      !input ||
-      !mangaUuid.test(input.key) ||
-      !input.item ||
-      !isMangaType(input.item.type) ||
-      typeof input.independent !== 'boolean'
-    )
-      throw new Error('Invalid manga creation');
-    return { key: input.key, item: input.item, independent: input.independent };
-  }))
+  .validator(
+    originalReaderInput((input: MangaCommand): MangaCommand => {
+      if (
+        !input ||
+        !mangaUuid.test(input.key) ||
+        !input.item ||
+        !isMangaType(input.item.type) ||
+        typeof input.independent !== 'boolean'
+      )
+        throw new Error('Invalid manga creation');
+      return { key: input.key, item: input.item, independent: input.independent };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createManga(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createManga(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });

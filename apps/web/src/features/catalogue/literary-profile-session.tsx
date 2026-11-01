@@ -23,6 +23,7 @@ import {
 import type { LiteraryCommand } from './literary-profile';
 
 function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
+  const editorWork = useCatalogueLifetime('transport');
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const read = (property?: string, session?: string) =>
     loadAuthoredField({ data: editorRequest({ id, property, session }, editorWork), headers: csrfHeaders() });
@@ -78,7 +79,11 @@ function LiteraryProfileSessionLive({ id, locale }: { id?: string; locale: strin
       session={state}
       transport={{
         load: () => loadLiteraryProfile({ data: id }),
-        submit: (command) => createCatalogueLiteraryWork({ data: editorRequest(command as LiteraryCommand, editorWork), headers: csrfHeaders() }),
+        submit: (command) =>
+          createCatalogueLiteraryWork({
+            data: editorRequest(command as LiteraryCommand, editorWork),
+            headers: csrfHeaders(),
+          }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       facts={{

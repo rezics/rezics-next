@@ -155,6 +155,7 @@ export async function createManga(
   env: Partial<SessionEnv>,
   command: MangaCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const read = await readMangaProfile(client);
   if (!read.ok) return { ok: false, reason: 'unavailable' };
@@ -173,5 +174,5 @@ export async function createManga(
     )
       return { ok: false, reason: 'invalid' };
   }
-  return createSubjectRecord(client, request, env, command, locale);
+  return createSubjectRecord(client, request, env, command, locale, preparedAuthorization);
 }

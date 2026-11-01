@@ -95,9 +95,10 @@ export async function createAlbum(
   sessionEnv: Partial<SessionEnv>,
   command: AlbumCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   if (command.item.type !== albumType) return { ok: false, reason: 'invalid' };
   // The native writer validates current definitions and owns receipt replay. A new release must not
   // prevent retrying an uncertain command that the native writer may already have committed.
-  return createSubjectRecord(client, request, sessionEnv, command, locale);
+  return createSubjectRecord(client, request, sessionEnv, command, locale, preparedAuthorization);
 }

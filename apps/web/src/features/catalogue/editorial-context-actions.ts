@@ -1,12 +1,9 @@
 import { candidateAuthorization } from '../../subject/candidate-admission';
 import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import { MediaProblem } from '../../media/kernel';
 import { kernelClient } from '../../kernel/client';
-import { prepareSession, viewerCredential } from '../../session/request';
-import type { SessionEnv } from '../../session/client';
 import {
   editorialAddress,
   editorialCommand,
@@ -20,8 +17,6 @@ import {
 async function credential(expectedReader: string): Promise<string | EditorialFailure> {
   setResponseHeader('cache-control', 'private, no-store');
   try {
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
     return (await candidateAuthorization(expectedReader)) ?? { ok: false, reason: 'denied' };
   } catch (error) {
     return {

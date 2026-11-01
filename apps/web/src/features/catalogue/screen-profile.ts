@@ -115,11 +115,12 @@ export async function createScreenProfile(
   env: Partial<SessionEnv>,
   command: ScreenCommand,
   locale: string,
+  preparedAuthorization?: string,
 ) {
   if (!isScreenType(command.item.type)) return { ok: false as const, reason: 'invalid' as const };
   // Native validation and idempotency own this frozen command, including retries after a lost response.
   // Revalidating against a newer release here could discard the key of an already-created subject.
-  return createSubjectRecord(client, request, env, command, locale);
+  return createSubjectRecord(client, request, env, command, locale, preparedAuthorization);
 }
 export function screenName(release: Release, property: string, locale: string) {
   const label = pickText(release.properties[property]?.labels ?? {}, locale);

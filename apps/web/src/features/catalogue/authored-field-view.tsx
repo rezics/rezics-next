@@ -1,4 +1,3 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCandidateWork, type CandidateWork } from '../../subject/candidate-lifetime';
 import { useEffect, useReducer, useRef, useState, type ComponentProps } from 'react';
 import { RichTextEditor } from '@rezics/ui';
@@ -66,10 +65,7 @@ function Body({ body, locale }: { body: AuthoredBody | null | undefined; locale:
 }
 
 /** Always composes a new original work; existing rich documents and candidates remain intact. */
-export const AuthoredField = catalogueEditor(AuthoredFieldLive);
-
-function AuthoredFieldLive(props: Omit<ComponentProps<typeof AuthoredFieldLive>, 'work'>) {
-  const lifetime = useEditorLifetime();
+export function AuthoredField(props: Omit<ComponentProps<typeof AuthoredFieldLive>, 'work'>) {
   const subject = useRef<string | undefined>(undefined);
   if (props.initial.ok) subject.current = props.initial.public.subject.id;
   const work = useCandidateWork(JSON.stringify([subject.current, props.locale]), props.transport.reader);
@@ -145,7 +141,6 @@ function AuthoredFieldLive({
     readingOnly = false,
     origin: CandidateWork = work,
   ) {
-    if (!lifetime.active()) return;
     if (!work.live() || !origin.live() || running.current || (command && !reviewDraft)) return;
     requestedProperty.current = nextProperty;
     running.current = true;
@@ -159,13 +154,11 @@ function AuthoredFieldLive({
         !readingOnly && proposed && reviewing && nextProperty === property
           ? await transport.review(property, proposed.candidate, undefined, session.current, origin)
           : undefined;
-          if (!lifetime.active()) return;
       if (!work.live() || !origin.live()) return;
       const next: AuthoredRead = comparison
         ? (comparison.current ??
           (comparison.comparison.ok ? { ok: false, reason: 'unavailable' } : comparison.comparison))
         : await transport.read(nextProperty || undefined, session.current);
-        if (!lifetime.active()) return;
       if (!work.live() || !origin.live()) return;
       if (comparison) {
         setProposalBody(comparison.body);
@@ -182,7 +175,6 @@ function AuthoredFieldLive({
         session.current = next.session ?? session.current;
       }
     } catch {
-      if (!lifetime.active()) return;
       if (!work.live() || !origin.live()) return;
       setCurrent(undefined);
       setProposalBody(undefined);
@@ -190,7 +182,6 @@ function AuthoredFieldLive({
       setReadFailure('unavailable');
       dispatch({ type: 'read', read: { ok: false, reason: 'unavailable' }, reviewDraft });
     } finally {
-      if (!lifetime.active()) return;
       if (!work.live() || !origin.live()) return;
       running.current = false;
       setBusy(false);
@@ -199,7 +190,6 @@ function AuthoredFieldLive({
   }
 
   async function rereadAfterDenial(origin: CandidateWork = work) {
-    if (!lifetime.active()) return;
     if (!work.live() || !origin.live()) return;
     // A write denial clears private comparison data. Only a fresh public read may restore selected text.
     setCurrent(undefined);
@@ -207,20 +197,17 @@ function AuthoredFieldLive({
     setReviewing(false);
     try {
       const next = await transport.read(property || undefined, session.current);
-      if (!lifetime.active()) return;
       if (!work.live() || !origin.live()) return;
       if (next.ok) {
         session.current = next.session ?? session.current;
         setCurrent(next);
       }
     } catch {
-      if (!lifetime.active()) return;
       // Keep the unavailable read empty; neither the draft nor the previous body is a fallback.
     }
   }
 
   async function submit() {
-    if (!lifetime.active()) return;
     if (
       !work.live() ||
       running.current ||
@@ -251,21 +238,17 @@ function AuthoredFieldLive({
     dispatch({ type: 'submit', command: request });
     try {
       const result = await transport.propose(request);
-      if (!lifetime.active()) return;
       if (!work.live()) return;
       dispatch({ type: 'result', result });
       if (result.ok) {
         session.current = result.session ?? session.current;
       } else {
         if (result.reason === 'denied') await rereadAfterDenial();
-        if (!lifetime.active()) return;
       }
     } catch {
-      if (!lifetime.active()) return;
       if (!work.live()) return;
       dispatch({ type: 'result', result: { ok: false, reason: 'unavailable' } });
     } finally {
-      if (!lifetime.active()) return;
       if (!work.live()) return;
       running.current = false;
       setBusy(false);
@@ -302,7 +285,6 @@ function AuthoredFieldLive({
         continuity ?? session.current,
         origin,
       );
-      if (!lifetime.active()) return;
       if (!work.live() || !origin.live()) return { ok: false, reason: 'denied' };
       if (result.comparison.ok) session.current = result.comparison.session ?? session.current;
       if (result.current) setCurrent(result.current);
@@ -312,18 +294,15 @@ function AuthoredFieldLive({
     confirm: async (input, origin = work) => {
       if (!work.live() || !origin.live()) return { ok: false, reason: 'denied' };
       const result = await confirm(input, origin);
-      if (!lifetime.active()) return;
       if (!work.live() || !origin.live()) return result;
       setProposalBody(undefined);
       if (result.ok) {
         session.current = result.session ?? session.current;
         // Read the actual public statement and its authorized body, never the submission or decision receipt.
         await refresh(property, false, false, origin);
-        if (!lifetime.active()) return;
       } else if (result.reason === 'denied') {
         dispatch({ type: 'denied' });
         await rereadAfterDenial(origin);
-        if (!lifetime.active()) return;
       }
       return result;
     },

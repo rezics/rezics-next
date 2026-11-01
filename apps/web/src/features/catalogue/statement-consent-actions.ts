@@ -1,10 +1,10 @@
-import { candidateAuthorization } from '../../subject/candidate-admission';
+import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { prepareSession, sessionSubject } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
 import {
   consentAddress,
@@ -16,7 +16,6 @@ import {
   type ConsentResult,
   type ConsentPublic,
 } from './statement-consent';
-
 
 function readInput(value: unknown) {
   const address = consentAddress(value);
@@ -52,8 +51,17 @@ export const changeConsent = createServerFn({ method: 'POST', strict: false })
       : { ok: false, reason: 'denied' };
   });
 export const refreshConsentPublic = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput(readInput))
+  .validator((input: Parameters<typeof readInput>[0] & { expectedReader?: string | null }) => ({
+    ...readInput(input),
+    expectedReader:
+      input && typeof input === 'object' && input.expectedReader != null ? expectedCandidateReader(input) : null,
+  }))
   .handler(async ({ data }): Promise<ConsentPublic> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { state: 'denied' };
+    setResponseHeader('cache-control', 'private, no-store');
+    if (data.expectedReader !== null) {
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      if (sessionSubject(request) !== data.expectedReader) return { state: 'denied' };
+    } else if (data.session) return { state: 'denied' };
     return readConsentPublic(kernelClient(), data, data.session, data.terminal);
   });

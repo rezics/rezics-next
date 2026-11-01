@@ -72,8 +72,8 @@ function RelationEditorLive({
   const options = { locale: locale as never };
   const formId = useId();
   const [read, setRead] = useState(initial);
-  const [draft, setDraft] = useState<RelationDraft>(() => blankDraft(''));
-  const [slot, setSlot] = useState<RelationSlot>();
+  const [draft, setDraft] = useState<RelationDraft>(() => structuredClone(composition?.statement ?? blankDraft('')));
+  const [slot, setSlot] = useState<RelationSlot>(composition?.slot);
   const [candidate, setCandidate] = useState<Candidate>();
   const [rank, setRank] = useState<'normal' | 'preferred'>('normal');
   const [citation, setCitation] = useState('');
@@ -83,13 +83,6 @@ function RelationEditorLive({
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
   const [proposedId, setProposedId] = useState<string>();
-  const [compositionSeed, setCompositionSeed] = useState<typeof composition>();
-  // Reset only for a different explicit seed; ordinary rerenders preserve the editor's draft and key.
-  if (composition && composition !== compositionSeed) {
-    setCompositionSeed(composition);
-    setDraft(structuredClone(composition.statement));
-    setSlot(composition.slot);
-  }
   const [ownConsent, setOwnConsent] = useState(false);
   const [consentEntry, setConsentEntry] = useState<ConsentAddress>();
   const nativeSession = useRef<string | undefined>(undefined);

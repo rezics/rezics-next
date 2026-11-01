@@ -19,14 +19,24 @@ export const loadLiteraryProfile = createServerFn({ method: 'GET', strict: false
     return readLiteraryProfile(kernelClient(), data);
   });
 export const createCatalogueLiteraryWork = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((command: LiteraryCommand) => {
-    if (!command || typeof command.key !== 'string' || !uuid.test(command.key) || !command.item)
-      throw new Error('Invalid work request');
-    // The shared release validator rejects unknown fields, including ingestion Source metadata.
-    return { key: command.key, item: command.item };
-  }))
+  .validator(
+    originalReaderInput((command: LiteraryCommand) => {
+      if (!command || typeof command.key !== 'string' || !uuid.test(command.key) || !command.item)
+        throw new Error('Invalid work request');
+      // The shared release validator rejects unknown fields, including ingestion Source metadata.
+      return { key: command.key, item: command.item };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createLiteraryWork(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createLiteraryWork(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });

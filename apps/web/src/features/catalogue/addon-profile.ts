@@ -100,10 +100,11 @@ export async function createAddon(
   env: Partial<SessionEnv>,
   command: CreateSubjectCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const read = await readAddonProfile(client, {});
   if (!read.ok) return { ok: false, reason: 'unavailable' };
   const errors = validateAddon(read.release, command.item);
   if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
-  return createSubjectRecord(client, request, env, command, locale);
+  return createSubjectRecord(client, request, env, command, locale, preparedAuthorization);
 }

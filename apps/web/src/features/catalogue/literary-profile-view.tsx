@@ -261,7 +261,7 @@ function LiteraryProfileLive({
             ...transport,
             definitions: async (refresh) => {
               const metadata = refresh || query.data?.ok === false ? (await query.refetch()).data : read;
-              if (!lifetime.active()) return;
+              if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
               return metadata?.ok
                 ? { ok: true, types: createTypes(metadata.release, locale).filter((type) => isLiteraryType(type.id)) }
                 : { ok: false };

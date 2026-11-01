@@ -30,7 +30,11 @@ function NewSubjectPage() {
       onNavigate={(href) => window.location.assign(href)}
       transport={{
         definitions: (refresh = false) => readCreateDefinitions({ data: refresh }),
-        submit: (command) => createCatalogueSubject({ data: editorRequest(command, editorWork), headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        submit: (command) =>
+          createCatalogueSubject({
+            data: editorRequest(command, editorWork),
+            headers: { 'X-CSRF-Token': csrfToken ?? '' },
+          }),
         read: (id) => readCreatedCatalogueSubject({ data: id }),
       }}
     />

@@ -37,7 +37,11 @@ function PublicationRoute() {
       search={(text, signal) => relationTargetSearch(text, signal, locale)}
       transport={{
         load: () => loadPublicationEditor({ data: work }),
-        submit: (command) => createWorkPublication({ data: editorRequest(command, editorWork), headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        submit: (command) =>
+          createWorkPublication({
+            data: editorRequest(command, editorWork),
+            headers: { 'X-CSRF-Token': csrfToken ?? '' },
+          }),
         read: (id) => readCreatedCatalogueSubject({ data: id }),
       }}
     />

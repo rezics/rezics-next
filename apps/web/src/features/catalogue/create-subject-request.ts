@@ -51,13 +51,14 @@ export async function createSubjectRecord(
   sessionEnv: Partial<SessionEnv>,
   command: CreateSubjectCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const errors = checkSubjectStructure(command.item).violations;
   if (!command.item.type) errors.push({ pointer: '/type', code: 'required' });
   if (!uuid.test(command.key) || errors.length) return { ok: false, reason: 'invalid', errors };
   try {
-    const stale = await prepareSession(request, sessionEnv);
-    const authorization = viewerCredential(request);
+    const stale = preparedAuthorization ? false : await prepareSession(request, sessionEnv);
+    const authorization = preparedAuthorization ?? viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'signed-out' };
     const headers = { authorization, 'idempotency-key': command.key };
     const response = await client.subjects.post(command.item, { headers });

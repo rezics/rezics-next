@@ -29,19 +29,31 @@ export const loadAddonProfile = createServerFn({ method: 'GET', strict: false })
     return readAddonProfile(kernelClient(), data);
   });
 export const createCatalogueAddon = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: CreateSubjectCommand): CreateSubjectCommand => {
-    if (
-      !input ||
-      !addonUuid.test(input.key) ||
-      !input.item ||
-      input.item.type !== addonType ||
-      Object.keys(input.item).some((key) => !['type', 'labels', 'descriptions', 'aliases', 'statements'].includes(key))
-    )
-      throw new Error('Invalid add-on creation');
-    return { key: input.key, item: input.item };
-  }))
+  .validator(
+    originalReaderInput((input: CreateSubjectCommand): CreateSubjectCommand => {
+      if (
+        !input ||
+        !addonUuid.test(input.key) ||
+        !input.item ||
+        input.item.type !== addonType ||
+        Object.keys(input.item).some(
+          (key) => !['type', 'labels', 'descriptions', 'aliases', 'statements'].includes(key),
+        )
+      )
+        throw new Error('Invalid add-on creation');
+      return { key: input.key, item: input.item };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createAddon(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createAddon(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });

@@ -340,11 +340,17 @@ function SubjectFactsLive({
     setDrafts(sealed);
     setBusy(true);
     try {
-      await sendFacts(sealed, (command) => {
-        if (!lifetime.active()) throw new Error('Retired catalogue editor');
-        return transport.propose(command);
-      }, (property, result) => lifetime.active() &&
-        setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
+      await sendFacts(
+        sealed,
+        (command) => {
+          if (!lifetime.active()) throw new Error('Retired catalogue editor');
+          return transport.propose(command);
+        },
+        (property, result) =>
+          lifetime.active() &&
+          setDrafts((previous) =>
+            previous.map((draft) => (draft.property === property ? { ...draft, result } : draft)),
+          ),
       );
       if (!lifetime.active()) return;
     } finally {

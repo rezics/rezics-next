@@ -29,7 +29,8 @@ function EditorialContextSessionLive({
   const transport = useMemo<EditorialTransport>(
     () => ({
       read: (address) => readEditorialWorkspace({ data: editorRequest(address, editorWork), headers: csrfHeaders() }),
-      submit: (command) => changeEditorialWorkspace({ data: editorRequest(command, editorWork), headers: csrfHeaders() }),
+      submit: (command) =>
+        changeEditorialWorkspace({ data: editorRequest(command, editorWork), headers: csrfHeaders() }),
     }),
     [editorWork],
   );

@@ -17,21 +17,33 @@ export const loadScreenProfile = createServerFn({ method: 'GET', strict: false }
     return readScreenProfile(kernelClient(), data);
   });
 export const createCatalogueScreen = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: ScreenCommand) => {
-    if (
-      !input ||
-      !uuid.test(input.key) ||
-      !input.item ||
-      checkSubjectStructure(input.item).violations.length ||
-      !input.item.statements ||
-      Object.keys(input).some((key) => !['item', 'key'].includes(key)) ||
-      Object.keys(input.item).some((key) => !['type', 'labels', 'descriptions', 'aliases', 'statements'].includes(key))
-    )
-      throw new Error('Invalid screen profile creation');
-    return { key: input.key, item: input.item };
-  }))
+  .validator(
+    originalReaderInput((input: ScreenCommand) => {
+      if (
+        !input ||
+        !uuid.test(input.key) ||
+        !input.item ||
+        checkSubjectStructure(input.item).violations.length ||
+        !input.item.statements ||
+        Object.keys(input).some((key) => !['item', 'key'].includes(key)) ||
+        Object.keys(input.item).some(
+          (key) => !['type', 'labels', 'descriptions', 'aliases', 'statements'].includes(key),
+        )
+      )
+        throw new Error('Invalid screen profile creation');
+      return { key: input.key, item: input.item };
+    }),
+  )
   .handler(async ({ data }) => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false as const, reason: 'denied' as const };
     setResponseHeader('cache-control', 'private, no-store');
-    return createScreenProfile(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createScreenProfile(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });

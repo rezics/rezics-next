@@ -56,7 +56,11 @@ function GameProfileLive({
   onNavigate: (href: string) => void;
 }) {
   const lifetime = useEditorLifetime();
-  const query = useQuery({ queryKey: [...['game-profile', id ?? 'new', locale], lifetime.generation], queryFn: transport.load, retry: false });
+  const query = useQuery({
+    queryKey: [...['game-profile', id ?? 'new', locale], lifetime.generation],
+    queryFn: transport.load,
+    retry: false,
+  });
   const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
   const o = { locale: locale as never };
   const read = query.data;
@@ -112,7 +116,7 @@ function GameProfileLive({
           transport={{
             definitions: async (refresh) => {
               const current = refresh ? (await query.refetch()).data : read;
-              if (!lifetime.active()) return;
+              if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
               return current?.ok ? { ok: true, types: gameDefinitions(current.release, locale) } : { ok: false };
             },
             submit: (command) => {

@@ -38,16 +38,20 @@ function GameProfileSessionLive({ id, locale }: { id?: string; locale: string })
         create: (data) => createCatalogueGame({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
         facts: {
-          read: () => readCorrection({ data: editorRequest({ id: id! }, editorWork)}),
+          read: () => readCorrection({ data: editorRequest({ id: id! }, editorWork) }),
           propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         },
         classifications: {
-          read: () => readCorrection({ data: editorRequest({ id: id! }, editorWork)}),
-          propose: (data) => proposeGameClassification({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          read: () => readCorrection({ data: editorRequest({ id: id! }, editorWork) }),
+          propose: (data) =>
+            proposeGameClassification({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         },
         relations: {
           read: (slot, cursor, session) =>
-            readSubjectRelationEditor({ data: editorRequest({ id: id!, slot, cursor, session }, editorWork), headers: csrfHeaders() }),
+            readSubjectRelationEditor({
+              data: editorRequest({ id: id!, slot, cursor, session }, editorWork),
+              headers: csrfHeaders(),
+            }),
           propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
           confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         },

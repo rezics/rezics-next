@@ -4,7 +4,6 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import { prepareSession, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
 import { MediaProblem } from '../../media/kernel';
 import { proposalInput, type ProposalResult } from './statement-editor';
@@ -122,15 +121,25 @@ export const loadRecipeEditor = createServerFn({ method: 'GET', strict: false })
     return readRecipeEditor(kernelClient(), requestLocale() ?? 'en', data);
   });
 export const createCatalogueRecipe = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: RecipeCommand): RecipeCommand => {
-    if (!input || !recipeUuid.test(input.key) || !input.item || input.item.type !== 'schema:Recipe')
-      throw new Error('Invalid recipe request');
-    return { key: input.key, item: input.item };
-  }))
+  .validator(
+    originalReaderInput((input: RecipeCommand): RecipeCommand => {
+      if (!input || !recipeUuid.test(input.key) || !input.item || input.item.type !== 'schema:Recipe')
+        throw new Error('Invalid recipe request');
+      return { key: input.key, item: input.item };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createRecipe(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createRecipe(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });
 export const submitRecipeCorrection = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(proposalInput))
@@ -138,9 +147,7 @@ export const submitRecipeCorrection = createServerFn({ method: 'POST', strict: f
     setResponseHeader('cache-control', 'private, no-store');
     if ('invalid' in data) return { ok: false, reason: 'invalid' };
     try {
-      const request = getRequest();
-      await prepareSession(request, env as Partial<SessionEnv>);
-      const authorization = viewerCredential(request);
+      const authorization = await candidateAuthorization(data.expectedReader);
       if (!authorization) return { ok: false, reason: 'denied' };
       return await proposeRecipe(kernelClient(), authorization, data, requestLocale() ?? 'en');
     } catch (error) {

@@ -157,12 +157,13 @@ export async function createPeopleProfile(
   sessionEnv: Partial<SessionEnv>,
   command: PeopleCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   try {
     const release = await profileRelease(client);
     const errors = validatePeopleItem(command.item, release);
     if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
-    return createSubjectRecord(client, request, sessionEnv, command, locale);
+    return createSubjectRecord(client, request, sessionEnv, command, locale, preparedAuthorization);
   } catch {
     return { ok: false, reason: 'unavailable' };
   }

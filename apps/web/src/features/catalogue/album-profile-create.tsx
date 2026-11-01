@@ -107,7 +107,7 @@ function AlbumProfileCreateLive({
               setMetadataFailure(false);
             } else setMetadataFailure(true);
           } catch {
-      if (!lifetime.active()) return;
+            if (!lifetime.active()) return;
             setMetadataFailure(true);
           }
         }
@@ -148,10 +148,10 @@ function AlbumProfileCreateLive({
                 try {
                   setCreated({ ...created, reader: await transport.read(created.id) });
                 } catch {
-      if (!lifetime.active()) return;
+                  if (!lifetime.active()) return;
                   setCreated({ ...created, reader: { state: 'unavailable' } });
                 } finally {
-      if (!lifetime.active()) return;
+                  if (!lifetime.active()) return;
                   running.current = false;
                   setBusy(false);
                 }
@@ -343,10 +343,10 @@ function AlbumProfileCreateLive({
                   setMetadataFailure(false);
                 }
               } catch {
-      if (!lifetime.active()) return;
+                if (!lifetime.active()) return;
                 setMetadataFailure(true);
               } finally {
-      if (!lifetime.active()) return;
+                if (!lifetime.active()) return;
                 running.current = false;
                 setBusy(false);
               }

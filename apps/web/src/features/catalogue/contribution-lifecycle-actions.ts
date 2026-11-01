@@ -1,11 +1,8 @@
 import { candidateAuthorization } from '../../subject/candidate-admission';
 import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../../kernel/client';
-import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
 import {
   changeContribution,
   contributionAddressInput,
@@ -14,8 +11,6 @@ import {
   type ContributionAvailability,
   type ContributionResult,
 } from './contribution-lifecycle';
-
-
 
 // Existing POST session middleware supplies origin and CSRF checks. No credentials cross this BFF.
 export const changeOwnContribution = createServerFn({ method: 'POST', strict: false })
@@ -27,12 +22,14 @@ export const changeOwnContribution = createServerFn({ method: 'POST', strict: fa
   });
 
 export const rereadOwnContribution = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((value: unknown) => {
-    const input = contributionAddressInput(value);
-    if (Object.keys(value as object).some((key) => !['id', 'candidate', 'property', 'session'].includes(key)))
-      throw new Error('Invalid contribution address');
-    return input;
-  }))
+  .validator(
+    originalReaderInput((value: unknown) => {
+      const input = contributionAddressInput(value);
+      if (Object.keys(value as object).some((key) => !['id', 'candidate', 'property', 'session'].includes(key)))
+        throw new Error('Invalid contribution address');
+      return input;
+    }),
+  )
   .handler(async ({ data }): Promise<ContributionAvailability> => {
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { subject: 'unavailable', candidate: 'unconfirmed', selected: null };

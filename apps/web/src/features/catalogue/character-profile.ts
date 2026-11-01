@@ -125,10 +125,11 @@ export async function createCharacter(
   env: Partial<SessionEnv>,
   command: CharacterCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const current = await readCharacterProfile(client, {});
   if (!current.ok) return { ok: false, reason: 'unavailable' };
   const errors = validateCharacter(current.release, command.item);
   if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
-  return createSubjectRecord(client, request, env, command, locale);
+  return createSubjectRecord(client, request, env, command, locale, preparedAuthorization);
 }

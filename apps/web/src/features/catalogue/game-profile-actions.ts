@@ -6,7 +6,6 @@ import { env } from 'cloudflare:workers';
 import { pickText } from '@rezics/composition';
 import { checkSubjectStructure } from '@rezics/definitions/validate';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import { prepareSession, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
 import { MediaProblem } from '../../media/kernel';
 import { readCandidates, type CandidateRead } from '../../subject/candidates';
@@ -24,19 +23,22 @@ export const loadGameProfile = createServerFn({ method: 'GET', strict: false })
     return readGameProfile(kernelClient(), data);
   });
 export const createCatalogueGame = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((command: GameCommand) => {
-    if (
-      !command ||
-      typeof command.key !== 'string' ||
-      !gameUuid.test(command.key) ||
-      checkSubjectStructure(command.item).violations.length ||
-      !command.item.statements
-    )
-      throw new Error('Invalid game creation');
-    return command;
-  }))
+  .validator(
+    originalReaderInput((command: GameCommand) => {
+      if (
+        !command ||
+        typeof command.key !== 'string' ||
+        !gameUuid.test(command.key) ||
+        checkSubjectStructure(command.item).violations.length ||
+        !command.item.statements
+      )
+        throw new Error('Invalid game creation');
+      return command;
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     try {
       return await createGameProfile(
@@ -45,6 +47,7 @@ export const createCatalogueGame = createServerFn({ method: 'POST', strict: fals
         env as Partial<SessionEnv>,
         data,
         requestLocale() ?? 'en',
+        authorization,
       );
     } catch (error) {
       return {

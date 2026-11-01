@@ -109,7 +109,7 @@ function EditorialContextWorkspaceLive({
           ...(operation === 'create' ? { labels: { [language]: name.trim() } } : { id: currentId }),
         });
       } catch {
-      if (!lifetime.active()) return;
+        if (!lifetime.active()) return;
         setFailure({ ok: false, reason: 'invalid' });
         return;
       }

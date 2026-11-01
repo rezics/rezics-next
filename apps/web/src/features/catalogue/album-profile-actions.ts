@@ -23,13 +23,23 @@ export const loadAlbumProfile = createServerFn({ method: 'GET', strict: false })
   });
 
 export const createCatalogueAlbum = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: AlbumCommand): AlbumCommand => {
-    if (!input || !albumUuid.test(input.key) || !input.item || input.item.type !== albumType)
-      throw new Error('Invalid album request');
-    return { key: input.key, item: input.item };
-  }))
+  .validator(
+    originalReaderInput((input: AlbumCommand): AlbumCommand => {
+      if (!input || !albumUuid.test(input.key) || !input.item || input.item.type !== albumType)
+        throw new Error('Invalid album request');
+      return { key: input.key, item: input.item };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createAlbum(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createAlbum(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });

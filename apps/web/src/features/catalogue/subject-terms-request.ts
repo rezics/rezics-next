@@ -96,7 +96,8 @@ export async function patchSubjectTerms(
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'signed-out' };
-    if (expectedReader !== undefined && sessionSubject(request) !== expectedReader) return { ok: false, reason: 'denied' };
+    if (expectedReader !== undefined && sessionSubject(request) !== expectedReader)
+      return { ok: false, reason: 'denied' };
     const requestHeaders = {
       authorization,
       'if-match': command.etag,

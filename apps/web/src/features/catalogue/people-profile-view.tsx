@@ -191,14 +191,14 @@ function PeopleCreate({
         transport={{
           definitions: async (refresh) => {
             const next = refresh ? await transport.load() : read;
-            if (!lifetime.active()) return;
+            if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
             if (!next.ok) return { ok: false };
             if (refresh) setRead(next);
             return { ok: true, types: next.profiles.map(({ id, label, description }) => ({ id, label, description })) };
           },
           submit: async (command) => {
             const result = await transport.create(command);
-            if (!lifetime.active()) return;
+            if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
             setFailure(result.ok ? undefined : result);
             return result;
           },
@@ -465,7 +465,7 @@ function PeopleProfileEditorLive({
           propose,
           read: async () => {
             const next = await transport.load();
-            if (!lifetime.active()) return;
+            if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
             return next.ok && next.public
               ? { ok: true, public: next.public, release: next.release, source: null }
               : next.ok

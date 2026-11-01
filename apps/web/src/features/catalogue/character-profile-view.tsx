@@ -170,15 +170,18 @@ function CharacterProfileLive({
                     <Button
                       disabled={reading}
                       onClick={async () => {
+                        if (!lifetime.active()) return;
                         if (reading) return;
                         setReading(true);
                         try {
-                          setCreated({ ...created, reader: await transport.read(created.id) });
+                          const reader = await transport.read(created.id);
+                          if (!lifetime.active()) return;
+                          setCreated({ ...created, reader });
                         } catch {
-      if (!lifetime.active()) return;
+                          if (!lifetime.active()) return;
                           setCreated({ ...created, reader: { state: 'unavailable' } });
                         } finally {
-      if (!lifetime.active()) return;
+                          if (!lifetime.active()) return;
                           setReading(false);
                         }
                       }}

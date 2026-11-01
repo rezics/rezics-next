@@ -1,4 +1,4 @@
-import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
+import { expectedCandidateReader } from '../../subject/candidate-admission';
 import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -18,7 +18,11 @@ export const loadCatalogueTerms = createServerFn({ method: 'GET', strict: false 
       (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384))
     )
       throw new Error('Invalid terms read');
-    return { expectedReader: input.expectedReader == null ? null : expectedCandidateReader(input), id: input.id, ...(input.session === undefined ? {} : { session: input.session }) };
+    return {
+      expectedReader: input.expectedReader == null ? null : expectedCandidateReader(input),
+      id: input.id,
+      ...(input.session === undefined ? {} : { session: input.session }),
+    };
   })
   .handler(async ({ data }): Promise<TermsRead> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -31,7 +35,7 @@ export const loadCatalogueTerms = createServerFn({ method: 'GET', strict: false 
         kernelClient(),
         data.id,
         requestLocale() ?? 'en',
-        data.expectedReader === null ? undefined : viewerCredential(request) ?? undefined,
+        data.expectedReader === null ? undefined : (viewerCredential(request) ?? undefined),
         data.session,
       );
     } catch {
@@ -40,18 +44,26 @@ export const loadCatalogueTerms = createServerFn({ method: 'GET', strict: false 
   });
 
 export const saveCatalogueTerms = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: TermsCommand): TermsCommand => {
-    if (!isTermsCommand(input)) throw new Error('Invalid terms patch');
-    return {
-      id: input.id,
-      etag: input.etag,
-      key: input.key,
-      patch: input.patch,
-      ...(input.session ? { session: input.session } : {}),
-    };
-  }))
+  .validator(
+    originalReaderInput((input: TermsCommand): TermsCommand => {
+      if (!isTermsCommand(input)) throw new Error('Invalid terms patch');
+      return {
+        id: input.id,
+        etag: input.etag,
+        key: input.key,
+        patch: input.patch,
+        ...(input.session ? { session: input.session } : {}),
+      };
+    }),
+  )
   .handler(async ({ data }): Promise<TermsResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return patchSubjectTerms(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en', data.expectedReader);
+    return patchSubjectTerms(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      data.expectedReader,
+    );
   });

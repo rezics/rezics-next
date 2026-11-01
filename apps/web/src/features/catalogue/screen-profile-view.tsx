@@ -124,7 +124,7 @@ function ScreenProfileLive({
           transport={{
             definitions: async (refresh) => {
               const next = refresh ? (await query.refetch()).data : read;
-              if (!lifetime.active()) return;
+              if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
               return next?.ok ? { ok: true, types: screenCreateTypes(next.release, locale) } : { ok: false };
             },
             submit: (command) => transport.create(command as ScreenCommand),

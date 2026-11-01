@@ -6,23 +6,50 @@ const Work = createContext<ReturnType<typeof useCatalogueLifetime> | null>(null)
 /** Each independent editor owns its address and command; callback identities are not addresses. */
 export function catalogueEditor<Props extends object>(Component: ComponentType<Props>) {
   return function CatalogueEditor(props: Props) {
-    const value = (key: string) => Reflect.get(props, key);
-    const composition = value('composition');
-    const work = useCatalogueLifetime(JSON.stringify([
-      value('id'), value('work'), value('locale'), value('realm'), value('context'),
-      value('address'), value('property'), value('statement'),
-      composition?.slot, composition?.statement,
-    ]));
+    const value = (key: string): unknown => Reflect.get(props, key);
+    const composition = value('composition') as { slot?: unknown; statement?: unknown } | undefined;
+    const initial = value('initial') as { public?: { subject?: { id?: string } }; property?: unknown } | undefined;
+    const row = value('row') as { statement?: { id?: string; property?: { id?: string } } } | undefined;
+    const read = value('read') as { public?: { subject?: { id?: string } } } | undefined;
+    const ancestor = useContext(Work);
+    const work = useCatalogueLifetime(
+      JSON.stringify([
+        value('id'),
+        value('work'),
+        value('locale'),
+        value('realm'),
+        value('context'),
+        value('address'),
+        value('property'),
+        value('statement'),
+        composition?.slot,
+        composition?.statement,
+        initial?.public?.subject?.id,
+        initial?.property,
+        read?.public?.subject?.id,
+        row?.statement?.id,
+        row?.statement?.property?.id,
+      ]),
+      ancestor,
+    );
     const bound = { ...props };
     for (const key of Object.keys(bound)) {
-      if (['transport', 'editors', 'facts', 'relations', 'review', 'confirm', 'propose', 'search', 'refresh'].includes(key))
+      if (
+        ['transport', 'editors', 'facts', 'relations', 'review', 'confirm', 'propose', 'search', 'refresh'].includes(
+          key,
+        )
+      )
         Reflect.set(bound, key, fence(value(key), work));
       else if (key.startsWith('on') && typeof value(key) === 'function') {
-        const callback = value(key);
-        Reflect.set(bound, key, (...args: unknown[]) => work.active() ? callback(...args) : undefined);
+        const callback = value(key) as (...args: unknown[]) => unknown;
+        Reflect.set(bound, key, (...args: unknown[]) => (work.active() ? callback(...args) : undefined));
       }
     }
-    return <Work.Provider value={work}><Component key={work.generation} {...bound} /></Work.Provider>;
+    return (
+      <Work.Provider value={work}>
+        <Component key={work.generation} {...bound} />
+      </Work.Provider>
+    );
   };
 }
 
@@ -36,15 +63,17 @@ export function useEditorLifetime() {
  * Check both sides of the promise: a retired read must never populate a Query cache.
  */
 function fence(value: unknown, work: ReturnType<typeof useCatalogueLifetime>): unknown {
-  if (typeof value === 'function') return (...args: unknown[]) => {
-    if (!work.active()) throw new Error('Retired catalogue editor');
-    const result = value(...args);
-    if (result && typeof result.then === 'function') return result.then((next: unknown) => {
+  if (typeof value === 'function')
+    return (...args: unknown[]) => {
       if (!work.active()) throw new Error('Retired catalogue editor');
-      return next;
-    });
-    return fence(result, work);
-  };
+      const result = value(...args);
+      if (result && typeof result.then === 'function')
+        return result.then((next: unknown) => {
+          if (!work.active()) throw new Error('Retired catalogue editor');
+          return next;
+        });
+      return fence(result, work);
+    };
   if (!value || typeof value !== 'object' || isValidElement(value) || Array.isArray(value)) return value;
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, fence(child, work)]));
 }

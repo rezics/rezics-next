@@ -101,12 +101,13 @@ export async function createRecipe(
   sessionEnv: Partial<SessionEnv>,
   command: RecipeCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const read = await readRecipeEditor(client, locale);
   if (!read.ok) return { ok: false, reason: 'unavailable' };
   const errors = validateRecipe(read.release, command.item, locale);
   if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
-  return createSubjectRecord(client, request, sessionEnv, command, locale);
+  return createSubjectRecord(client, request, sessionEnv, command, locale, preparedAuthorization);
 }
 export async function proposeRecipe(
   client: KernelClient,

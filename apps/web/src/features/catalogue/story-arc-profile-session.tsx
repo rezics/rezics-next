@@ -73,7 +73,10 @@ function StoryArcProfileSessionLive({
       }}
       relations={(id) => ({
         read: (slot, cursor, session) =>
-          readSubjectRelationEditor({ data: editorRequest({ id, slot, cursor, session }, editorWork), headers: csrfHeaders() }),
+          readSubjectRelationEditor({
+            data: editorRequest({ id, slot, cursor, session }, editorWork),
+            headers: csrfHeaders(),
+          }),
         propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       })}

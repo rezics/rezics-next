@@ -40,10 +40,16 @@ function WorkPartsSessionLive({
       search={search}
       transport={{
         read: (stream, cursor, session) =>
-          readSubjectWorkParts({ data: editorRequest({ id, stream, cursor, session }, editorWork), headers: csrfHeaders() }),
+          readSubjectWorkParts({
+            data: editorRequest({ id, stream, cursor, session }, editorWork),
+            headers: csrfHeaders(),
+          }),
         relation: (holder) => ({
           read: (slot, cursor, session) =>
-            readSubjectRelationEditor({ data: editorRequest({ id: holder, slot, cursor, session }, editorWork), headers: csrfHeaders() }),
+            readSubjectRelationEditor({
+              data: editorRequest({ id: holder, slot, cursor, session }, editorWork),
+              headers: csrfHeaders(),
+            }),
           propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
           confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         }),

@@ -22,7 +22,8 @@ function PeopleProfileSessionLive({ id, work, locale }: PeopleAddress & { locale
       session={state}
       transport={{
         load: () => loadPeopleProfile({ data: { ...(id ? { id } : {}), ...(work !== undefined ? { work } : {}) } }),
-        create: (data) => createCataloguePeopleProfile({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        create: (data) =>
+          createCataloguePeopleProfile({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       propose={(data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() })}

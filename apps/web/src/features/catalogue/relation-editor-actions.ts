@@ -1,12 +1,9 @@
 import { candidateAuthorization } from '../../subject/candidate-admission';
 import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import type { Release } from '@rezics/definitions';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import { prepareSession, viewerCredential } from '../../session/request';
-import type { SessionEnv } from '../../session/client';
 import { readRelease } from '../../subject/definitions';
 import {
   confirmRelation,
@@ -79,21 +76,23 @@ export const readSubjectRelationEditor = createServerFn({ method: 'POST', strict
   });
 
 export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: unknown): RelationProposal => {
-    const checked = address(input);
-    const value = record(input);
-    if (!checked.slot || typeof value.key !== 'string' || !uuid.test(value.key)) throw new Error('Invalid proposal');
-    // The native release validator checks the full statement and admitted qualifiers before sending it.
-    const statement = record(value.statement);
-    if (!Array.isArray(statement.qualifiers) || !Array.isArray(statement.references))
-      throw new Error('Invalid statement');
-    return {
-      id: checked.id,
-      slot: checked.slot,
-      key: value.key,
-      statement: statement as RelationProposal['statement'],
-    };
-  }))
+  .validator(
+    originalReaderInput((input: unknown): RelationProposal => {
+      const checked = address(input);
+      const value = record(input);
+      if (!checked.slot || typeof value.key !== 'string' || !uuid.test(value.key)) throw new Error('Invalid proposal');
+      // The native release validator checks the full statement and admitted qualifiers before sending it.
+      const statement = record(value.statement);
+      if (!Array.isArray(statement.qualifiers) || !Array.isArray(statement.references))
+        throw new Error('Invalid statement');
+      return {
+        id: checked.id,
+        slot: checked.slot,
+        key: value.key,
+        statement: statement as RelationProposal['statement'],
+      };
+    }),
+  )
   .handler(async ({ data }): Promise<RelationProposalResult> => {
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
@@ -105,32 +104,34 @@ export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: f
   });
 
 export const confirmSubjectRelation = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: unknown): RelationConfirmation => {
-    const checked = address(input);
-    const value = record(input);
-    if (
-      !checked.slot ||
-      typeof value.candidate !== 'string' ||
-      !uuid.test(value.candidate) ||
-      typeof value.key !== 'string' ||
-      !uuid.test(value.key) ||
-      (value.operation !== 'accept' && value.operation !== 'reject' && value.operation !== 'adopt') ||
-      (value.head !== null && (!Number.isSafeInteger(value.head) || Number(value.head) < 1)) ||
-      (value.rank !== undefined && value.rank !== 'normal' && value.rank !== 'preferred')
-    )
-      throw new Error('Invalid confirmation');
-    return {
-      id: checked.id,
-      slot: checked.slot,
-      candidate: value.candidate,
-      key: value.key,
-      operation: value.operation,
-      head: value.head as number | null,
-      ...(checked.cursor ? { cursor: checked.cursor } : {}),
-      ...(checked.session ? { session: checked.session } : {}),
-      ...(value.rank ? { rank: value.rank as 'normal' | 'preferred' } : {}),
-    };
-  }))
+  .validator(
+    originalReaderInput((input: unknown): RelationConfirmation => {
+      const checked = address(input);
+      const value = record(input);
+      if (
+        !checked.slot ||
+        typeof value.candidate !== 'string' ||
+        !uuid.test(value.candidate) ||
+        typeof value.key !== 'string' ||
+        !uuid.test(value.key) ||
+        (value.operation !== 'accept' && value.operation !== 'reject' && value.operation !== 'adopt') ||
+        (value.head !== null && (!Number.isSafeInteger(value.head) || Number(value.head) < 1)) ||
+        (value.rank !== undefined && value.rank !== 'normal' && value.rank !== 'preferred')
+      )
+        throw new Error('Invalid confirmation');
+      return {
+        id: checked.id,
+        slot: checked.slot,
+        candidate: value.candidate,
+        key: value.key,
+        operation: value.operation,
+        head: value.head as number | null,
+        ...(checked.cursor ? { cursor: checked.cursor } : {}),
+        ...(checked.session ? { session: checked.session } : {}),
+        ...(value.rank ? { rank: value.rank as 'normal' | 'preferred' } : {}),
+      };
+    }),
+  )
   .handler(async ({ data }): Promise<RelationResult> => {
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };

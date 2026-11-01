@@ -98,6 +98,7 @@ export async function createGameProfile(
   sessionEnv: Partial<SessionEnv>,
   command: GameCommand,
   locale: string,
+  preparedAuthorization?: string,
 ): Promise<CreateResult> {
   const read = await readGameProfile(client);
   if (!read.ok) return { ok: false, reason: 'unavailable' };
@@ -108,7 +109,7 @@ export async function createGameProfile(
   )
     draft.errors.push({ pointer: '/statements', code: 'invalid_format' });
   if (draft.errors.length) return { ok: false, reason: 'invalid', errors: draft.errors, refreshDefinitions: true };
-  return createSubjectRecord(client, request, sessionEnv, command, locale);
+  return createSubjectRecord(client, request, sessionEnv, command, locale, preparedAuthorization);
 }
 export function gameDefinitions(release: Release, locale: string) {
   return Object.entries(release.types).flatMap(([id, type]) => {

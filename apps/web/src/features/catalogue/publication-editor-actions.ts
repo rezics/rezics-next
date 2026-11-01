@@ -22,21 +22,24 @@ export const loadPublicationEditor = createServerFn({ method: 'GET', strict: fal
   });
 
 export const createWorkPublication = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: PublicationCommand): PublicationCommand => {
-    if (
-      !input ||
-      !publicationUuid.test(input.work) ||
-      !publicationUuid.test(input.key) ||
-      typeof input.relation !== 'string' ||
-      input.relation.length > 256 ||
-      !input.item ||
-      typeof input.item.type !== 'string'
-    )
-      throw new Error('Invalid publication request');
-    return { work: input.work, relation: input.relation, key: input.key, item: input.item };
-  }))
+  .validator(
+    originalReaderInput((input: PublicationCommand): PublicationCommand => {
+      if (
+        !input ||
+        !publicationUuid.test(input.work) ||
+        !publicationUuid.test(input.key) ||
+        typeof input.relation !== 'string' ||
+        input.relation.length > 256 ||
+        !input.item ||
+        typeof input.item.type !== 'string'
+      )
+        throw new Error('Invalid publication request');
+      return { work: input.work, relation: input.relation, key: input.key, item: input.item };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
     try {
       return await createPublication(
@@ -45,6 +48,7 @@ export const createWorkPublication = createServerFn({ method: 'POST', strict: fa
         env as Partial<SessionEnv>,
         data,
         requestLocale() ?? 'en',
+        authorization,
       );
     } catch {
       return { ok: false, reason: 'unavailable' };

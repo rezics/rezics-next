@@ -91,10 +91,14 @@ function ConsentRoute() {
       address={address}
       locale={locale}
       transport={{
-        read: (cursor, session) => readConsent({ data: editorRequest({ ...address, cursor, session }, editorWork), headers: csrfHeaders() }),
+        read: (cursor, session) =>
+          readConsent({ data: editorRequest({ ...address, cursor, session }, editorWork), headers: csrfHeaders() }),
         change: (data) => changeConsent({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         public: (session, terminal) =>
-          refreshConsentPublic({ data: editorRequest({ ...address, session, terminal }, editorWork), headers: csrfHeaders() }),
+          refreshConsentPublic({
+            data: editorRequest({ ...address, session, terminal }, editorWork),
+            headers: csrfHeaders(),
+          }),
       }}
     />
   );

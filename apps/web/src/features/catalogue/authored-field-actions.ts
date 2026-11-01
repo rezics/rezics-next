@@ -1,11 +1,8 @@
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
 import { selectCandidate, type CandidateCommand, type CandidateResult } from '../../subject/candidates';
 import type { ProposalResult } from './statement-editor';
 import {
@@ -40,33 +37,35 @@ function address(value: unknown): AuthoredAddress {
   };
 }
 
-
 // The existing POST server-function middleware owns origin/session/CSRF checks. No credential enters the DTO.
 export const loadAuthoredField = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(address))
   .handler(async ({ data }): Promise<AuthoredRead> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     return readAuthoredField(kernelClient(), data, requestLocale() ?? 'en');
   });
 
 export const submitAuthoredField = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((value: unknown): AuthoredCommand | { invalid: true } => {
-    const input = record(value);
-    const base = address(value);
-    if (
-      typeof input.key !== 'string' ||
-      !uuid.test(input.key) ||
-      Object.keys(input).some((key) => !['id', 'key', 'statement', 'session'].includes(key)) ||
-      validateAuthored(input.statement).length
-    )
-      return { invalid: true };
-    return {
-      id: base.id,
-      key: input.key,
-      statement: input.statement as AuthoredCommand['statement'],
-      ...(base.session ? { session: base.session } : {}),
-    };
-  }))
+  .validator(
+    originalReaderInput((value: unknown): AuthoredCommand | { invalid: true } => {
+      const input = record(value);
+      const base = address(value);
+      if (
+        typeof input.key !== 'string' ||
+        !uuid.test(input.key) ||
+        Object.keys(input).some((key) => !['id', 'key', 'statement', 'session'].includes(key)) ||
+        validateAuthored(input.statement).length
+      )
+        return { invalid: true };
+      return {
+        id: base.id,
+        key: input.key,
+        statement: input.statement as AuthoredCommand['statement'],
+        ...(base.session ? { session: base.session } : {}),
+      };
+    }),
+  )
   .handler(async ({ data }): Promise<ProposalResult> => {
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };

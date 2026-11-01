@@ -147,6 +147,7 @@ function AlbumCorrections({
   search: EntityPickerSearch;
   editors: AlbumEditors;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [read, setRead] = useState<FactsCurrent>(initial);
   const [loadFailure, setLoadFailure] =
@@ -163,6 +164,7 @@ function AlbumCorrections({
   const label = subject?.labels;
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   const reload = async () => {
+    if (!lifetime.active()) return;
     if (running.current) return;
     running.current = true;
     setBusy(true);
@@ -183,15 +185,17 @@ function AlbumCorrections({
     }
   };
   const submit = async () => {
+    if (!lifetime.active()) return;
     if (running.current || !current || !enabled || loadFailure || !changed.length) return;
     running.current = true;
     setBusy(true);
     try {
       const sealed = sealFacts(current.public.subject.id, current.release, drafts);
       setDrafts(sealed);
-      await sendFacts(sealed, editors.facts.propose, (property, result) =>
-        setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
-      );
+      await sendFacts(sealed, editors.facts.propose, (property, result) => {
+        if (!lifetime.active()) return;
+        setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft)));
+      });
       if (!lifetime.active()) return;
     } finally {
       if (!lifetime.active()) return;
@@ -324,6 +328,7 @@ function AlbumCorrections({
               page: null,
             }}
             onSelected={async () => {
+              if (!lifetime.active()) return;
               await Promise.all([reload(), editors.onSelected?.()]);
               if (!lifetime.active()) return;
             }}

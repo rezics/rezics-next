@@ -95,7 +95,12 @@ function StatementConsentPageLive({
   const ownershipId = useId();
   const actionButtons = useRef<Partial<Record<ConsentCommand['operation'], HTMLButtonElement | null>>>({});
   const returnFocus = useRef<ConsentCommand['operation'] | undefined>(undefined);
-  const focusConfirmation = useCallback((node: HTMLHeadingElement | null) => lifetime.active() && node?.focus(), [lifetime]);
+  const focusConfirmation = useCallback(
+    (node: HTMLHeadingElement | null) => {
+      if (lifetime.active()) node?.focus();
+    },
+    [lifetime],
+  );
   const [read, setRead] = useState(initial);
   const [result, setResult] = useState<Extract<ConsentResult, { ok: true }>>();
   const [failure, setFailure] = useState<ConsentFailure>();

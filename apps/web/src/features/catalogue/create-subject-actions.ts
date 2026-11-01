@@ -27,24 +27,34 @@ export const readCreateDefinitions = createServerFn({ method: 'GET' })
   });
 
 export const createCatalogueSubject = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: CreateSubjectCommand): CreateSubjectCommand => {
-    if (!input || typeof input.key !== 'string' || !input.item || typeof input.item.type !== 'string')
-      throw new Error('Invalid subject request');
-    // Initial terms only: never admit statements, caller-selected IDs or custom definitions through this form.
-    return {
-      key: input.key,
-      item: {
-        type: input.item.type,
-        labels: input.item.labels,
-        ...(input.item.descriptions === undefined ? {} : { descriptions: input.item.descriptions }),
-        ...(input.item.aliases === undefined ? {} : { aliases: input.item.aliases }),
-      },
-    };
-  }))
+  .validator(
+    originalReaderInput((input: CreateSubjectCommand): CreateSubjectCommand => {
+      if (!input || typeof input.key !== 'string' || !input.item || typeof input.item.type !== 'string')
+        throw new Error('Invalid subject request');
+      // Initial terms only: never admit statements, caller-selected IDs or custom definitions through this form.
+      return {
+        key: input.key,
+        item: {
+          type: input.item.type,
+          labels: input.item.labels,
+          ...(input.item.descriptions === undefined ? {} : { descriptions: input.item.descriptions }),
+          ...(input.item.aliases === undefined ? {} : { aliases: input.item.aliases }),
+        },
+      };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createSubjectRecord(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createSubjectRecord(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });
 
 export const readCreatedCatalogueSubject = createServerFn({ method: 'GET' })

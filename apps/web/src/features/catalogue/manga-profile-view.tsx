@@ -132,6 +132,7 @@ function MangaCreate({
   search: EntityPickerSearch;
   refresh: () => Promise<unknown>;
 }) {
+  const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const termsId = useId();
   const nextTermId = useRef(1);
@@ -240,16 +241,19 @@ function MangaCreate({
             <Button
               disabled={busy}
               onClick={async () => {
+                if (!lifetime.active()) return;
                 if (running.current) return;
                 running.current = true;
                 setBusy(true);
                 try {
-                  setCreated({ ...created, reader: await transport.read(created.id) });
+                  const reader = await transport.read(created.id);
+                  if (!lifetime.active()) return;
+                  setCreated({ ...created, reader });
                 } catch {
-      if (!lifetime.active()) return;
+                  if (!lifetime.active()) return;
                   setCreated({ ...created, reader: { state: 'unavailable' } });
                 } finally {
-      if (!lifetime.active()) return;
+                  if (!lifetime.active()) return;
                   running.current = false;
                   setBusy(false);
                 }

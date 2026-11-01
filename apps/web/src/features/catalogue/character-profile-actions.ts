@@ -31,20 +31,32 @@ export const loadCharacterProfile = createServerFn({ method: 'GET', strict: fals
     return readCharacterProfile(kernelClient(), data);
   });
 export const createCatalogueCharacter = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: CharacterCommand): CharacterCommand => {
-    if (
-      !input ||
-      !characterUuid.test(input.key) ||
-      !input.item ||
-      input.item.type !== characterType ||
-      !input.item.statements ||
-      Object.keys(input.item).some((key) => !['type', 'labels', 'descriptions', 'aliases', 'statements'].includes(key))
-    )
-      throw new Error('Invalid character creation');
-    return { key: input.key, item: input.item };
-  }))
+  .validator(
+    originalReaderInput((input: CharacterCommand): CharacterCommand => {
+      if (
+        !input ||
+        !characterUuid.test(input.key) ||
+        !input.item ||
+        input.item.type !== characterType ||
+        !input.item.statements ||
+        Object.keys(input.item).some(
+          (key) => !['type', 'labels', 'descriptions', 'aliases', 'statements'].includes(key),
+        )
+      )
+        throw new Error('Invalid character creation');
+      return { key: input.key, item: input.item };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createCharacter(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createCharacter(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });

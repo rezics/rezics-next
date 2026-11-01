@@ -31,20 +31,30 @@ export const loadPeopleProfile = createServerFn({ method: 'GET', strict: false }
   });
 
 export const createCataloguePeopleProfile = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput((input: PeopleCommand): PeopleCommand => {
-    if (
-      !input ||
-      typeof input.key !== 'string' ||
-      !peopleUuid.test(input.key) ||
-      !input.item ||
-      typeof input.item.type !== 'string' ||
-      Object.keys(input).some((key) => key !== 'key' && key !== 'item')
-    )
-      throw new Error('Invalid catalogue profile request');
-    return { key: input.key, item: input.item };
-  }))
+  .validator(
+    originalReaderInput((input: PeopleCommand): PeopleCommand => {
+      if (
+        !input ||
+        typeof input.key !== 'string' ||
+        !peopleUuid.test(input.key) ||
+        !input.item ||
+        typeof input.item.type !== 'string' ||
+        Object.keys(input).some((key) => key !== 'key' && key !== 'item')
+      )
+        throw new Error('Invalid catalogue profile request');
+      return { key: input.key, item: input.item };
+    }),
+  )
   .handler(async ({ data }): Promise<CreateResult> => {
-    if (!(await candidateAuthorization(data.expectedReader))) return { ok: false, reason: 'denied' };
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
-    return createPeopleProfile(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, requestLocale() ?? 'en');
+    return createPeopleProfile(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      requestLocale() ?? 'en',
+      authorization,
+    );
   });
