@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -95,12 +95,12 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
                 const writeLabel =
                   board.purpose === 'reviews' ? m.subject_community_review() : m.subject_community_discuss();
                 return (
-                  <ListRow key={board.id} className="flex items-center gap-4 py-4">
-                    <ListRowLink href={href}>{title}</ListRowLink>
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <h2 aria-hidden="true" className="text-lg font-semibold tracking-tight text-balance">
-                        {title}
-                      </h2>
+                  <ContentItem
+                    key={board.id}
+                    title={title}
+                    headingLevel={2}
+                    href={href}
+                    metadata={
                       <MetaLine
                         className="text-sm text-muted-foreground"
                         items={[
@@ -109,8 +109,8 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
                           board.visibility === 'protected' ? m.board_directory_protected() : m.board_directory_public(),
                         ]}
                       />
-                    </div>
-                    <ListRowControl>
+                    }
+                    actions={
                       <a
                         href={
                           write
@@ -128,8 +128,8 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
                       >
                         {write ? writeLabel : m.board_directory_open()}
                       </a>
-                    </ListRowControl>
-                  </ListRow>
+                    }
+                  />
                 );
               })}
             </ul>

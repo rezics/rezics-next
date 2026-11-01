@@ -142,7 +142,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Global board choice uses the default directory and existing composer destinations. Subject presets survive purpose, cursor and retry navigation. One native page is requested per action; listing never grants creation. Initial DTO states and the recorded board are illustrative. Navigation uses the native adapter with existing recordings; an absent collection response remains unavailable. No successful native listing or permission is implied.',
+          'Ready boards use shared ContentItem rows with level-two titles and supplied global, purpose and access metadata. The primary title opens the board; its independent action opens, discusses or reviews it. Global board choice uses the default directory and existing composer destinations. Subject presets survive purpose, cursor and retry navigation. One native page is requested per action; listing never grants creation. Initial DTO states and the recorded board are illustrative. Navigation uses the native adapter with existing recordings; an absent collection response remains unavailable. No successful native listing or permission is implied.',
       },
     },
     viewport: {
