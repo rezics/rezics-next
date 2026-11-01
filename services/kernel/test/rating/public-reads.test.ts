@@ -395,9 +395,12 @@ test('The mounted rating-question directory returns bounded current native metad
   const denial = randomUUID();
   const directory = '/v1/rating-questions';
   const pagePath = (cursor: string, limit = 20) => `${directory}?limit=${limit}&cursor=${encodeURIComponent(cursor)}`;
-  const credentialRead = (path: string, token: string) => app.handle(new Request(`http://kernel.test${path}`, {
-    headers: { authorization: `Bearer ${token}` },
-  }));
+  const credentialRead = (path: string, token: string) =>
+    app.handle(
+      new Request(`http://kernel.test${path}`, {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+    );
   const problem = async (response: Response, status: number, code: string) => {
     expect(response.headers.get('content-type')).toContain('application/problem+json');
     expect(await json(response, status)).toMatchObject({ status, code, type: `https://rezics.com/problems/${code}` });
@@ -407,8 +410,16 @@ test('The mounted rating-question directory returns bounded current native metad
       await database.admin.query(
         `INSERT INTO rating.question (id, owner_id, revision, label, grain, minimum_units, maximum_units, step_units)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [question.id, accountIds.reader, question.revision, question.label, question.grain,
-          question.scale.min, question.scale.max, question.scale.displayStep],
+        [
+          question.id,
+          accountIds.reader,
+          question.revision,
+          question.label,
+          question.grain,
+          question.scale.min,
+          question.scale.max,
+          question.scale.displayStep,
+        ],
       );
 
     const operation = openApiDocument(app).paths[directory]?.get;
@@ -426,7 +437,9 @@ test('The mounted rating-question directory returns bounded current native metad
     for (const persona of ['reader', 'outsider'] as const) {
       const page = await json(await request('GET', directory, persona));
       expect(page.ratingQuestions).toEqual(expectedFirst);
-      expect(await json(await request('GET', `/v1/rating-questions/${questions[0]!.id}`, persona))).toEqual(questions[0]);
+      expect(await json(await request('GET', `/v1/rating-questions/${questions[0]!.id}`, persona))).toEqual(
+        questions[0],
+      );
     }
     expect(await json(await request('GET', `/v1/rating-questions/${standardQuestion}`))).toEqual(standard);
     await problem(await request('GET', `/v1/rating-questions/${newId(0)}`), 404, 'not_found');
@@ -444,19 +457,40 @@ test('The mounted rating-question directory returns bounded current native metad
     changed.scale = { min: 4, max: 28, displayStep: 4 };
     await database.admin.query(
       `UPDATE rating.question SET revision=$2, label=$3, grain=$4, minimum_units=$5, maximum_units=$6, step_units=$7 WHERE id=$1`,
-      [changed.id, changed.revision, changed.label, changed.grain,
-        changed.scale.min, changed.scale.max, changed.scale.displayStep],
+      [
+        changed.id,
+        changed.revision,
+        changed.label,
+        changed.grain,
+        changed.scale.min,
+        changed.scale.max,
+        changed.scale.displayStep,
+      ],
     );
     const last = await json(await request('GET', pagePath(first.next)));
     expect(last).toEqual({ ratingQuestions: questions.slice(19), next: null });
     expect(await json(await request('GET', `/v1/rating-questions/${changed.id}`))).toEqual(changed);
-    expect(new Set([...first.ratingQuestions, ...last.ratingQuestions].map((row: { id: string }) => row.id)).size).toBe(25);
+    expect(new Set([...first.ratingQuestions, ...last.ratingQuestions].map((row: { id: string }) => row.id)).size).toBe(
+      25,
+    );
 
     for (const query of [
-      'limit=0', 'limit=21', 'limit=-1', 'limit=1.5', 'limit=no', 'limit=',
-      'limit=1&limit=1', 'cursor=a&cursor=b', 'cursor=', `cursor=${'a'.repeat(4097)}`,
-      'query=Question', 'grain=work', `selectedId=${standardQuestion}`, 'total=true',
-    ]) await problem(await request('GET', `${directory}?${query}`), 400, 'invalid_request');
+      'limit=0',
+      'limit=21',
+      'limit=-1',
+      'limit=1.5',
+      'limit=no',
+      'limit=',
+      'limit=1&limit=1',
+      'cursor=a&cursor=b',
+      'cursor=',
+      `cursor=${'a'.repeat(4097)}`,
+      'query=Question',
+      'grain=work',
+      `selectedId=${standardQuestion}`,
+      'total=true',
+    ])
+      await problem(await request('GET', `${directory}?${query}`), 400, 'invalid_request');
     await problem(await request('GET', `${directory}?cursor=malformed`), 400, 'invalid_cursor');
     const tampered = `${first.next.slice(0, -1)}${first.next.endsWith('a') ? 'b' : 'a'}`;
     await problem(await request('GET', pagePath(tampered)), 400, 'invalid_cursor');
@@ -494,7 +528,9 @@ test('The mounted rating-question directory returns bounded current native metad
     await database.admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
     expect((await request('GET', pagePath(readerPage.next), 'reader')).status).toBe(200);
 
-    await database.admin.query('DELETE FROM rating.question WHERE id = ANY($1::uuid[])', [questions.slice(19).map((q) => q.id)]);
+    await database.admin.query('DELETE FROM rating.question WHERE id = ANY($1::uuid[])', [
+      questions.slice(19).map((q) => q.id),
+    ]);
     expect(await json(await request('GET', pagePath(first.next)))).toEqual({ ratingQuestions: [], next: null });
   } finally {
     clockOffset = 0;

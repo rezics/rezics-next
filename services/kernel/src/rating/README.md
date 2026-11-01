@@ -209,6 +209,7 @@ reads use current Global `definitions:read`, including its native anonymous publ
     size; B-tree descent grows logarithmically. No alternate catalogue or ownership-derived authority.
   - **Growth check:** native growth execution is deferred. The mounted paging/authority regression in
     `test/rating/public-reads.test.ts` is authored but unrun; workspace typing alone is not native or feed proof.
+
 - `GET /v1/subjects/{id}/figure` is public under `subject:read`, with `404` for an unknown or unreadable subject.
   It returns `200 { figure }` using the reusable OpenAPI `PublicFigure` component:
   `{ questionId, populationId, scale: { min, max, displayStep }, count, state, mean, score }`.
