@@ -390,9 +390,9 @@ test('successful preparation-intent unlink with a lost durable reference clear i
     }),
   ).rejects.toThrow(/interrupted/);
   expect(existsSync(reference!.file)).toBe(false);
-  expect((await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state })).preparationIntent).toEqual(
-    reference,
-  );
+  expect(
+    (await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state })).preparationIntent,
+  ).toEqual(reference);
 
   const recovered = await discardCheckRunPreparationIntent(
     fixture.registration.invocationId,
@@ -458,17 +458,13 @@ test('successful preparation-intent unlink with a lost durable clear recovers fi
   const intentReference = before.preparationIntent;
   expect(intentReference).not.toBeNull();
   const final = finalFor(fixture, 'settled');
-  const interrupted = await acceptFinal(
-    fixture,
-    final,
-    {
-      stateDirectory: fixture.state,
-      removePrivateFile: (path) => {
-        unlinkSync(path);
-        if (path === intentReference!.file) throw new Error('durable intent reference clear was interrupted');
-      },
+  const interrupted = await acceptFinal(fixture, final, {
+    stateDirectory: fixture.state,
+    removePrivateFile: (path) => {
+      unlinkSync(path);
+      if (path === intentReference!.file) throw new Error('durable intent reference clear was interrupted');
     },
-  );
+  });
   expect(interrupted.final).toEqual(final);
   expect(interrupted.preparationIntent).toEqual(intentReference);
   expect(interrupted.finalCustody?.privateFiles).toBe('unknown');
@@ -574,8 +570,9 @@ test('Original lifetime custody survives lost reference clear rejected evidence 
   const fixture = await preparedInvocation();
   await queueAndStart(fixture);
   const original = finalFor(fixture, 'unknown');
-  const intentReference = (await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state }))
-    .preparationIntent;
+  const intentReference = (
+    await getCheckRunStatus(fixture.registration.invocationId, { stateDirectory: fixture.state })
+  ).preparationIntent;
   expect(intentReference).not.toBeNull();
 
   const staged = await stageCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(original)}\n`, {

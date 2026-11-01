@@ -462,11 +462,7 @@ function privateReferenceSha256(reference: { file: string; sha256: string } | nu
 function aggregateFinalCustodyStatus(
   custody: Pick<CheckRunFinalCustody, 'delivery' | 'privateFiles' | 'reconciliation'>,
 ): CheckRunFinalCustodyAggregate {
-  if (
-    custody.delivery === 'unknown' ||
-    custody.privateFiles === 'unknown' ||
-    custody.reconciliation === 'unknown'
-  )
+  if (custody.delivery === 'unknown' || custody.privateFiles === 'unknown' || custody.reconciliation === 'unknown')
     return 'unknown';
   if (custody.delivery === 'pending' || custody.privateFiles === 'pending') return 'pending';
   return 'settled';
@@ -1695,18 +1691,15 @@ function retainedPreparationIntentDescriptor(
   reference: { file: string; sha256: string },
 ): string {
   const suffix = '.intent.json';
-  if (
-    !record.candidateWorkspace ||
-    !reference.file.endsWith(suffix) ||
-    resolve(reference.file) !== reference.file
-  )
+  if (!record.candidateWorkspace || !reference.file.endsWith(suffix) || resolve(reference.file) !== reference.file)
     throw new Error('check-run-settlement: preparation intent reference is not bound to a retained candidate');
   const descriptorFile = reference.file.slice(0, -suffix.length);
   if (
     !descriptorFile ||
     checkRunPreparationIntentFile(descriptorFile) !== reference.file ||
     (record.descriptor &&
-      (record.descriptor.file !== descriptorFile || !isAbsolute(record.descriptor.file) ||
+      (record.descriptor.file !== descriptorFile ||
+        !isAbsolute(record.descriptor.file) ||
         resolve(record.descriptor.file) !== record.descriptor.file))
   )
     throw new Error('check-run-settlement: preparation intent path differs from its durable descriptor identity');
