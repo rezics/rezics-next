@@ -121,7 +121,18 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     await act(async () => root.render(null));
     queryClient.clear();
     const staleTerms = catalogueTermsFixture('stale');
-    const submitStale = mock(staleTerms.transport.submit);
+    let resumeWrite!: () => void;
+    const writePending = new Promise<void>((resolve) => {
+      resumeWrite = resolve;
+    });
+    let pauseWrite = true;
+    const submitStale = mock(async (command: Parameters<typeof staleTerms.transport.submit>[0]) => {
+      if (pauseWrite) {
+        pauseWrite = false;
+        await writePending;
+      }
+      return staleTerms.transport.submit(command);
+    });
     const readStale = mock(staleTerms.transport.read);
     await act(async () => {
       root.render(
@@ -164,6 +175,18 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     await select('terms-language', 'en');
     expect(host.querySelector('#terms-labels')!.value).toBe('Phone draft');
     await act(async () => button(m.catalogue_terms_save()).click());
+    expect(host.querySelector('form')!.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('#terms-language')!.disabled).toBe(true);
+    expect(host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(button(m.catalogue_create_add_language()).disabled).toBe(true);
+    await act(async () => {
+      host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(submitStale).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resumeWrite();
+      await submitStale.mock.results[0]!.value;
+    });
     expect(host.textContent).toContain(m.catalogue_terms_stale());
     expect(button(m.catalogue_terms_save()).disabled).toBe(true);
     expect(host.querySelector('fieldset')!.disabled).toBe(true);
