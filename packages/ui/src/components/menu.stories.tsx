@@ -193,7 +193,9 @@ function FilterFields({
           {Array.from({ length: 48 }, (_, index) => (
             <label key={index} className="flex min-w-0 items-start gap-2 break-words text-sm">
               <input type="checkbox" />
-              <span>{index + 1}. {extraCriteria}</span>
+              <span>
+                {index + 1}. {extraCriteria}
+              </span>
             </label>
           ))}
         </fieldset>
@@ -359,7 +361,9 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     browser.dispatchEvent(new Event('scroll'));
     await waitFor(() => {
       const next = filterPanel.getBoundingClientRect();
-      expect(Math.abs(next.left - initialFilterRect.left) + Math.abs(next.top - initialFilterRect.top)).toBeGreaterThan(12);
+      expect(Math.abs(next.left - initialFilterRect.left) + Math.abs(next.top - initialFilterRect.top)).toBeGreaterThan(
+        12,
+      );
     });
     await expectPanelInViewport(filterPanel);
     await expect(loadCriteria).toHaveFocus();
@@ -401,7 +405,9 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
           removeListener() {},
           addEventListener() {},
           removeEventListener() {},
-          dispatchEvent() { return true; },
+          dispatchEvent() {
+            return true;
+          },
         } as MediaQueryList;
       }
       return originalMatchMedia(query);

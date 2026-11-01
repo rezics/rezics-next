@@ -215,10 +215,7 @@ export function ShelfToolbar(p: Props) {
         <Menu
           title={l.view}
           trigger={
-            <Button
-              variant="outline"
-              className="min-w-0 max-w-full whitespace-normal break-words text-left sm:hidden"
-            >
+            <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left sm:hidden">
               {l.view} {badge}
             </Button>
           }
@@ -235,9 +232,15 @@ export function ShelfToolbar(p: Props) {
                   {l.display}
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="sort" className="min-w-0">{sort}</TabsContent>
-              <TabsContent value="filter" className="min-w-0">{filter}</TabsContent>
-              <TabsContent value="display" className="min-w-0">{display}</TabsContent>
+              <TabsContent value="sort" className="min-w-0">
+                {sort}
+              </TabsContent>
+              <TabsContent value="filter" className="min-w-0">
+                {filter}
+              </TabsContent>
+              <TabsContent value="display" className="min-w-0">
+                {display}
+              </TabsContent>
             </Tabs>
           }
         />

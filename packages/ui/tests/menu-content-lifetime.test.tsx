@@ -42,7 +42,9 @@ test('custom ShelfToolbar forms stay bounded and live through their Menu lifetim
     };
     const outcomes = result.testResults
       .flatMap((file) => file.assertionResults)
-      .map((assertion) => `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim());
+      .map((assertion) =>
+        `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
+      );
     expect(outcomes).toEqual(['Shelf Toolbar Custom Forms Desktop: passed']);
   } finally {
     rmSync(output, { recursive: true, force: true });

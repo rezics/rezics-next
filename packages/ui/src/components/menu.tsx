@@ -273,11 +273,7 @@ export function Menu({
                 return;
               }
               const target = details.event.target;
-              if (
-                details.reason === 'outside-press' &&
-                target instanceof Element &&
-                target.closest('nav a[href]')
-              ) {
+              if (details.reason === 'outside-press' && target instanceof Element && target.closest('nav a[href]')) {
                 details.cancel();
                 return;
               }
