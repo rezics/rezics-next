@@ -70,7 +70,7 @@ export async function loadBuyerOrders(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<BuyerOrderPage> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) throw notFound();
   const authorization = viewerCredential(request);
   if (!authorization) throw notFound();
 
@@ -80,6 +80,7 @@ export async function loadBuyerOrders(
     result = await client.orders.get({
       query: { limit: ORDER_HISTORY_PAGE_SIZE, ...(input.cursor ? { cursor: input.cursor } : {}) },
       headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
   } catch {
     throw new Error('Native order history is unavailable');

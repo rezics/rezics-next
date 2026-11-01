@@ -61,13 +61,14 @@ export async function loadBuyerEntitlements(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<BuyerEntitlementsPage> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
   const authorization = viewerCredential(request);
   if (!authorization) return { kind: 'denied' };
   try {
     const result = await client.entitlements.get({
       query: { limit: ENTITLEMENTS_PAGE_SIZE, ...(input.cursor ? { cursor: input.cursor } : {}) },
       headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     if (result.error || result.status !== 200 || !result.data) return failure(result.status);
     const page = result.data;
@@ -93,11 +94,14 @@ export async function loadBuyerEntitlement(
   id: string,
 ): Promise<BuyerEntitlementPage> {
   if (!UUID.test(id)) return { kind: 'denied' };
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
   const authorization = viewerCredential(request);
   if (!authorization) return { kind: 'denied' };
   try {
-    const result = await client.entitlements({ entitlementId: id }).get({ headers: { authorization } });
+    const result = await client.entitlements({ entitlementId: id }).get({
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
     if (result.error || result.status !== 200 || !result.data) return failure(result.status);
     const row = result.data.entitlement;
     if (row.id !== id || !validRecord(row)) return { kind: 'unavailable' };
