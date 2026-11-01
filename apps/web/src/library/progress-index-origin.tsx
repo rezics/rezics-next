@@ -33,7 +33,7 @@ export type ProgressAuthority = {
   isCurrent: () => boolean;
   permits: (operation: Operation, rendered: boolean) => boolean;
   headers: () => { 'x-csrf-token': string } | null;
-  rowCurrent: (row: ProgressIndex['sessions'][number]) => boolean;
+  rowCurrent: (context: string) => boolean;
 };
 
 /** Stored native context, independently of current summary labels and covers. */

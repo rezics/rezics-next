@@ -171,13 +171,19 @@ export function CurrentViewerProgressIndexPage({
     const state = client.getQueryState<CurrentViewerProgressIndex>(queryKey);
     return !origin.retired && origin.validate() && state?.status !== 'error' && matches(currentResult());
   });
+  const rowSource = useRef<{ page?: ProgressIndex; contexts: Set<string> }>({ contexts: new Set() });
   const authority: ProgressAuthority = {
     key: source,
     isCurrent: () => origin.isCurrent() && source.isCurrent(),
     permits: (operation, rendered) =>
       !source.retired && source.validate() && hydrated && progressIndexAdmission(client, operation, rendered),
-    rowCurrent: (row) =>
-      currentResult()?.page.sessions.some((actual) => progressRowContext(actual) === progressRowContext(row)) ?? false,
+    rowCurrent: (context) => {
+      const page = currentResult()?.page;
+      if (rowSource.current.page !== page) {
+        rowSource.current = { ...(page ? { page } : {}), contexts: new Set(page?.sessions.map(progressRowContext)) };
+      }
+      return rowSource.current.contexts.has(context);
+    },
     headers: () => {
       if (!origin.isCurrent() || !source.isCurrent() || !hydrated) return null;
       const now = progressIndexSession(client, renderedSession);
@@ -546,19 +552,20 @@ function SessionRow({
   admission.current = { completable, abandonable };
   // Only a meaningful fresh row invalidates a completion within an observed viewer lifetime.
   const identity = authority ? JSON.stringify(initial) : sourcePage;
+  const nativeContext = progressRowContext(initial);
   const complete = useProgressAction(
     authority,
     'progress_session.complete',
     completable,
     identity,
-    () => authority?.rowCurrent(initial) !== false,
+    () => authority?.rowCurrent(nativeContext) !== false,
   );
   const abandon = useProgressAction(
     authority,
     'progress_session.abandon',
     abandonable,
     identity,
-    () => authority?.rowCurrent(initial) !== false,
+    () => authority?.rowCurrent(nativeContext) !== false,
   );
   const row = useProgressEpisode(identity, () => true);
   const current = (action?: 'complete' | 'abandon') =>
