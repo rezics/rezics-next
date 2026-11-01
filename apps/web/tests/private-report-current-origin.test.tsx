@@ -328,11 +328,18 @@ test('Complete named-label shelf and private follow reports preserves current au
       await page.release(0);
       await until(() => page.visible('A'));
       const retained = page.retained();
+      const obsolete = page.client
+        .getQueryCache()
+        .findAll({ queryKey: kind === 'shelf' ? ['library', 'label-shelf'] : ['library-private-follow-counts'] })
+        .find((query) => query.getObserversCount() > 0)!;
       // All changes and retained callbacks occur in one synchronous task, before React can commit.
       await act(async () => {
         page.client.setQueryData(sessionQuery.queryKey, session('B'));
         page.client.setQueryData(sessionQuery.queryKey, session('A'));
         page.refuse(retained);
+        // Even an imperative retained query dispatch must precheck its originating observation.
+        void obsolete.fetch().catch(() => {});
+        expect(page.calls).toHaveLength(1);
       });
       await until(() => page.calls.length === 2);
       expect(page.visible('A')).toBe(false);

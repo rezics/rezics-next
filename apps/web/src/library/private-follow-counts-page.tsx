@@ -156,7 +156,8 @@ export function PrivateFollowCountsPage({
   const { origin, value, hydrated } = usePrivateReportOrigin(reportAddress(context, locale), locale, (href) =>
     reportAddressAt(href, locale),
   );
-  const current = origin.capture('personal_library');
+  const enrolled = origin.capture('personal_library');
+  const current = () => enrolled() && origin.read().owner === value.owner && origin.read().subject === value.subject;
   const lifetime = { key: origin.version('personal_library'), isCurrent: current, locale };
   const payload = useRef<{ owner: number; page?: Awaited<ReturnType<FollowCountsReader>> }>({ owner: value.owner });
   if (payload.current.owner !== value.owner) payload.current = { owner: value.owner };

@@ -131,7 +131,8 @@ export function CurrentLabelShelf({
         : { state: 'preparing' };
     return <LabelShelfPage page={serverPage} locale={locale} display={display} />;
   }
-  const current = origin.capture(...readGroups);
+  const enrolled = origin.capture(...readGroups);
+  const current = () => enrolled() && origin.read().owner === value.owner && origin.read().subject === value.subject;
   if (!value.subject || !routeId.test(source.labelId) || !current()) {
     const page: LabelShelfPageData = {
       state:
@@ -149,6 +150,8 @@ export function CurrentLabelShelf({
     <LabelShelfRead
       key={origin.version(...readGroups)}
       origin={origin}
+      originatingRead={current}
+      episode={origin.version(...readGroups)}
       payload={payload.current}
       subject={value.subject}
       source={source}
@@ -161,6 +164,8 @@ export function CurrentLabelShelf({
 
 function LabelShelfRead({
   origin,
+  originatingRead,
+  episode,
   payload,
   subject,
   source,
@@ -169,6 +174,8 @@ function LabelShelfRead({
   read,
 }: {
   origin: ReturnType<typeof usePrivateReportOrigin>['origin'];
+  originatingRead: () => boolean;
+  episode: string;
   payload: Payload;
   subject: string;
   source: LabelShelfSource;
@@ -177,10 +184,11 @@ function LabelShelfRead({
   read: ReadShelf;
 }) {
   const client = useQueryClient();
-  const current = origin.capture(...readGroups);
-  const key = ['library', 'label-shelf', subject, sourceKey(source), locale, origin.version(...readGroups)];
+  const current = originatingRead;
+  const key = ['library', 'label-shelf', subject, sourceKey(source), locale, episode];
   const query = useQuery({
     queryKey: key,
+    enabled: current(),
     staleTime: Infinity,
     gcTime: 0,
     retry: false,
