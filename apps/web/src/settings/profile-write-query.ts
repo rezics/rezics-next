@@ -1,5 +1,5 @@
-import { hashKey, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { hashKey, QueryObserver, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { personalRead } from '../kernel/query';
 import { sessionQuery, useSession } from '../session/query';
 import { readProfile, saveProfile } from './actions';
@@ -175,22 +175,34 @@ export function useProfileEditor() {
   }, [client, entry, owner]);
   const readable = !entry.retired && owner.canRead();
   const writable = !entry.retired && owner.canWrite();
-  const query = useQuery({
-    ...personalRead,
-    queryKey: owner.key,
-    queryFn: async () => {
-      if (!entry.current()) throw new Error('Profile unavailable');
-      const profile = profileReadValue(await readProfile());
-      if (!entry.current()) throw new Error('Profile unavailable');
-      if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
-      return profile;
-    },
-    enabled: personalRead.enabled && readable,
-    retry: false,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
+  // useQuery retains its constructor's client. This observer instead belongs to the attached source,
+  // so a provider replacement cannot build the successor's private query in the previous cache.
+  const observer = useMemo(
+    () =>
+      new QueryObserver(client, {
+        ...personalRead,
+        queryKey: owner.key,
+        queryFn: async () => {
+          if (!entry.current()) throw new Error('Profile unavailable');
+          const profile = profileReadValue(await readProfile());
+          if (!entry.current()) throw new Error('Profile unavailable');
+          if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
+          return profile;
+        },
+        enabled: personalRead.enabled && readable,
+        retry: false,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+      }),
+    [client, entry, owner, readable],
+  );
+  const subscribeQuery = useCallback((listener: () => void) => observer.subscribe(listener), [observer]);
+  const query = useSyncExternalStore(
+    subscribeQuery,
+    () => observer.getCurrentResult(),
+    () => observer.getCurrentResult(),
+  );
   useLayoutEffect(() => {
     if (query.isError) readUnavailable(entry, query.error);
     else if (readable && query.data) owner.editor.receive(query.data);
