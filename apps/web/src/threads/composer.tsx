@@ -44,7 +44,12 @@ function useComposerLifetime() {
       return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
     };
     const owner = identity();
-    const state = {
+    const state: {
+      controller: AbortController;
+      retired: boolean;
+      retire: () => void;
+      current: (signal?: AbortSignal) => boolean;
+    } = {
       controller: new AbortController(),
       retired: false,
       retire() {
