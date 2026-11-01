@@ -395,6 +395,13 @@ test('directional deletion survives denied reads and create loss, while cache AB
   });
   const a = writes.at(-1)!;
   expect(a.input).toEqual({ targetId, following: false, idempotencyKey: key });
+  await act(async () => {
+    // Exact operation admission is supplied by the shared exposure primitive. GET/PUT
+    // retirement must not cancel this independently admitted DELETE or its completion.
+    client.setQueryData(exposureQuery.queryKey, ['follow.delete']);
+    await tick();
+  });
+  expect(host.querySelector('[data-slot="follow-control"]')?.getAttribute('aria-busy')).toBe('true');
   await settle(a, { ok: false, reason: 'unavailable' });
   // A permitted supplied removal uses no read/create; the callbacks belong to their original rows.
   await paint(<FollowTargetControl targetId={targetId} following onRemoved={() => removedA++} idempotencyKey={key} />);

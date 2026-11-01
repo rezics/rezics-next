@@ -98,7 +98,7 @@ function FollowControlState({
   onAccepted,
 }: FollowControlProps) {
   const [current, setCurrent] = useState(initial);
-  const [pending, setPending] = useState(false);
+  const [pendingState, setPending] = useState(false);
   const [failure, setFailure] = useState<Exclude<FollowWriteResult, { ok: true }>['reason'] | null>(null);
   const [removed, setRemoved] = useState(false);
   const attempt = useRef<FollowWriteInput | null>(null);
@@ -156,6 +156,7 @@ function FollowControlState({
     },
     [],
   );
+  const pending = pendingState && inFlight.current !== null;
   const action = signedOut
     ? null
     : attempt.current

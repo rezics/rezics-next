@@ -151,10 +151,16 @@ export function MineFollowingPageView({
     ...page,
     follows: page.follows.map(({ idempotencyKey: _key, ...follow }) => follow),
   });
-  const ref = useRef({ key: lifetime, parent: origin?.lifetime, active: true, mounted: false });
+  const ref = useRef({
+    key: lifetime,
+    id: crypto.randomUUID(),
+    parent: origin?.lifetime,
+    active: true,
+    mounted: false,
+  });
   if (ref.current.key !== lifetime || ref.current.parent !== origin?.lifetime) {
     ref.current.active = false;
-    ref.current = { key: lifetime, parent: origin?.lifetime, active: true, mounted: false };
+    ref.current = { key: lifetime, id: crypto.randomUUID(), parent: origin?.lifetime, active: true, mounted: false };
   }
   const row = ref.current;
   useLayoutEffect(() => {
@@ -167,7 +173,7 @@ export function MineFollowingPageView({
     lifetime: row,
     isCurrent: () => row.active && row.mounted && (origin?.isCurrent() ?? true),
   };
-  return <MineFollowingPageState key={lifetime} page={page} origin={originating} status={status} onRetry={onRetry} />;
+  return <MineFollowingPageState key={row.id} page={page} origin={originating} status={status} onRetry={onRetry} />;
 }
 
 function MineFollowingPageState({
