@@ -5,7 +5,7 @@ import { Field, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import type { Editor, Extensions, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { imageTypes, trackPosition } from './editor-uploads.ts';
 
@@ -97,7 +97,7 @@ export function ImageInsert({
   const [alt, setAlt] = useState('');
   const tracked = useRef<ReturnType<typeof trackPosition> | null>(null);
   const field = useId();
-  useEffect(() => {
+  useLayoutEffect(() => {
     tracked.current = trackPosition(editor, position);
     return () => {
       tracked.current?.stop();
@@ -119,7 +119,7 @@ export function ImageInsert({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (file) {
+          if (file && editor.isEditable) {
             onInsert([file], tracked.current?.get() ?? position, alt);
             onClose();
           }
@@ -141,7 +141,7 @@ export function ImageInsert({
             <Input id={field} value={alt} onChange={(event) => setAlt(event.target.value)} />
           </Field>
           <Field orientation="horizontal">
-            <Button type="submit" disabled={!file}>
+            <Button type="submit" disabled={!file || !editor.isEditable}>
               {labels.insertImage}
             </Button>
             <Button

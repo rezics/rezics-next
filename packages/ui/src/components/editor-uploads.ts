@@ -32,34 +32,59 @@ export interface UploadEntry {
   controller: AbortController;
 }
 
+type UploadSource = () => ImageUploader | undefined;
+
 /** A stored upload remains pending until its occurrence is published to the composer. */
 export function editorUploads(
   editor: Editor,
   profile: DocumentProfile,
-  upload: ImageUploader,
+  upload: UploadSource,
   changed: (state: UploadState, count: number, entries: UploadEntry[]) => void,
   publish: () => void,
   rejected: (reason: 'unsupportedImage' | 'imageLimit') => void,
+  canUpload: () => boolean = () => true,
 ) {
   const entries = new Map<string, UploadEntry>();
+  const uploaders = new WeakMap<UploadEntry, ImageUploader>();
+  const attempts = new WeakMap<UploadEntry, symbol>();
   let disposed = false;
+  let lastReport = '';
+  function active() {
+    return !disposed && !editor.isDestroyed && canUpload();
+  }
   function report() {
-    if (disposed) return;
+    if (!active()) return;
     const items = [...entries.values()];
     const count = items.filter((entry) => entry.phase !== 'failed').length;
-    changed(count ? 'pending' : items.length ? 'failed' : 'ready', count, items);
+    const state = count ? 'pending' : items.length ? 'failed' : 'ready';
+    const signature = `${state}:${count}:${items.map((entry) => `${entry.id}:${entry.phase}`).join(',')}`;
+    if (signature === lastReport) return;
+    lastReport = signature;
+    changed(state, count, items);
   }
   function remove(entry: UploadEntry) {
     entry.controller.abort();
     entry.tracked.stop();
-    entries.delete(entry.id);
+    if (entries.get(entry.id) === entry) entries.delete(entry.id);
   }
   async function send(entry: UploadEntry) {
+    const uploader = uploaders.get(entry);
+    if (!uploader || !active() || !editor.isEditable) return;
+    const controller = entry.controller;
+    const attempt = Symbol();
+    attempts.set(entry, attempt);
+    const current = () =>
+      active() &&
+      editor.isEditable &&
+      entries.get(entry.id) === entry &&
+      attempts.get(entry) === attempt &&
+      entry.controller === controller &&
+      !controller.signal.aborted;
     entry.phase = 'pending';
     report();
     try {
-      const image = await upload(entry.file, entry.controller.signal);
-      if (disposed || entry.controller.signal.aborted || editor.isDestroyed) return;
+      const image = await uploader(entry.file, controller.signal);
+      if (!current()) return;
       if (
         typeof image.src !== 'string' ||
         !image.src.trim() ||
@@ -87,22 +112,26 @@ export function editorUploads(
           return true;
         })
         .run();
+      if (!current()) return;
       let present = false;
       editor.state.doc.descendants((node) => {
         if (node.type.name === 'image' && node.attrs.id === entry.id) present = true;
       });
       if (!inserted || !present) throw new Error('Image insertion rejected');
       entry.phase = 'stored';
+      if (!current()) return;
       publish();
     } catch {
-      if (disposed || entry.controller.signal.aborted) return;
+      if (!current()) return;
       entry.phase = 'failed';
     }
     report();
   }
   return {
     add(files: File[], position: number, alt = '') {
-      if (disposed || !editor.isEditable || !editor.schema.nodes.image) return;
+      if (!active() || !editor.isEditable || !editor.schema.nodes.image) return;
+      const uploader = upload();
+      if (!uploader) return;
       let media = 0;
       editor.state.doc.descendants((node) => {
         if (node.type.name === 'image' || node.type.name === 'media') media++;
@@ -125,10 +154,12 @@ export function editorUploads(
           controller: new AbortController(),
         };
         entries.set(entry.id, entry);
+        uploaders.set(entry, uploader);
         void send(entry);
       }
     },
     snapshot(document: ProseMirrorNode) {
+      if (!active()) return;
       document.descendants((node) => {
         const entry = entries.get(node.attrs.id);
         if (node.type.name === 'image' && entry?.phase === 'stored') remove(entry);
@@ -137,7 +168,7 @@ export function editorUploads(
     },
     retry(id: string) {
       const entry = entries.get(id);
-      if (entry?.phase === 'failed' && editor.isEditable) {
+      if (entry?.phase === 'failed' && active() && editor.isEditable) {
         entry.controller = new AbortController();
         void send(entry);
       }
@@ -150,7 +181,7 @@ export function editorUploads(
     destroy() {
       disposed = true;
       for (const entry of entries.values()) remove(entry);
-      changed('ready', 0, []);
+      entries.clear();
     },
   };
 }

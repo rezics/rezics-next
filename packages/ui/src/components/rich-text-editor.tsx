@@ -13,7 +13,16 @@ import { history } from '@tiptap/pm/history';
 import { NodeSelection, Plugin } from '@tiptap/pm/state';
 import { useEditor } from '@tiptap/react';
 import { ImageIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { cn } from '../utils.ts';
 import { EditorSurface, editorAttributes, editorExtensions, sanitizePastedHTML } from './editor-surface.ts';
 import { assertSnapshotSize, editorSnapshot } from './rich-text-editor-snapshot.ts';
@@ -169,6 +178,10 @@ function normalizeEditorValue(value: DocumentSnapshot): DocumentSnapshot {
   }
 }
 
+function snapshotKey(snapshot: DocumentSnapshot): string {
+  return JSON.stringify(snapshot);
+}
+
 /** Controlled editor for snapshots in the text and blocks document profiles. */
 export function RichTextEditor({
   value,
@@ -199,24 +212,38 @@ export function RichTextEditor({
     assertSnapshotSize(snapshot);
     return snapshot;
   }, [value]);
+  const controlledKey = snapshotKey(normalizedValue);
+  const editable = !disabled && !readOnly;
   const latest = useRef({ onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload });
   latest.current = { onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload };
 
-  const emitted = useRef<DocumentSnapshot | null>(null);
-  const lastProp = useRef(value);
+  const controlled = useRef({ key: controlledKey, profile: value.profile });
+  const emittedKey = useRef<string | null>(null);
   const lastPublishedDoc = useRef<TiptapEditor['state']['doc'] | null>(null);
+  const publishedEditor = useRef<TiptapEditor | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const publishRef = useRef<(editor: TiptapEditor) => void>(() => undefined);
+  const publishRef = useRef<(editor: TiptapEditor, epoch: number) => void>(() => undefined);
+  const documentEpoch = useRef(0);
+  const [documentRevision, setDocumentRevision] = useState(0);
+  const mounted = useRef(false);
+  const editableRef = useRef(editable);
+  editableRef.current = editable;
+  const lastEditable = useRef(editable);
+  const lastUploadEnabled = useRef(!!upload);
+  const currentEditor = useRef<TiptapEditor | null>(null);
+  const syncedEditor = useRef<TiptapEditor | null>(null);
   const [snapshotError, setSnapshotError] = useState(false);
-  const editable = !disabled && !readOnly;
   const hasUpload = !!upload;
   const menuContainer = useRef<HTMLDivElement>(null);
   const [linkRange, setLinkRange] = useState<LinkRange | null>(null);
   const [imagePosition, setImagePosition] = useState<number | null>(null);
   const [uploadEntries, setUploadEntries] = useState<UploadEntry[]>([]);
+  const uploadEntriesRef = useRef<UploadEntry[]>([]);
+  const uploadStatus = useRef<{ state: UploadState; count: number }>({ state: 'ready', count: 0 });
   const [uploadMessage, setUploadMessage] = useState('');
   const [touchSheetOpen, setTouchSheetOpen] = useState(false);
   const uploads = useRef<ReturnType<typeof editorUploads> | null>(null);
+  const uploadLease = useRef<symbol | null>(null);
   const resolvedLabels = useMemo(() => ({ ...richTextEditorLabels, ...labels }), [labels]);
 
   const labelsRef = useRef(resolvedLabels);
@@ -229,8 +256,16 @@ export function RichTextEditor({
   const pendingMovedUnit = useRef<PendingMovedUnit | null>(null);
 
   const publish = useCallback(
-    (editor: TiptapEditor) => {
-      if (editor.isDestroyed || editor.view.composing || lastPublishedDoc.current === editor.state.doc) return;
+    (editor: TiptapEditor, epoch: number) => {
+      if (
+        !mounted.current ||
+        epoch !== documentEpoch.current ||
+        editor !== currentEditor.current ||
+        editor.isDestroyed ||
+        editor.view.composing ||
+        lastPublishedDoc.current === editor.state.doc
+      )
+        return;
 
       let snapshot: DocumentSnapshot;
       try {
@@ -241,8 +276,9 @@ export function RichTextEditor({
       }
 
       setSnapshotError(false);
-      emitted.current = snapshot;
+      emittedKey.current = snapshotKey(snapshot);
       lastPublishedDoc.current = editor.state.doc;
+      publishedEditor.current = editor;
       latest.current.onChange(snapshot);
       uploads.current?.snapshot(editor.state.doc);
     },
@@ -253,23 +289,24 @@ export function RichTextEditor({
   const schedulePublish = useCallback((editor: TiptapEditor) => {
     if (editor.isDestroyed || editor.view.composing) return;
     if (timer.current !== null) clearTimeout(timer.current);
+    const epoch = documentEpoch.current;
     timer.current = setTimeout(() => {
       timer.current = null;
-      publishRef.current(editor);
+      publishRef.current(editor, epoch);
     }, 150);
   }, []);
 
-  const flushPublish = useCallback((editor: TiptapEditor) => {
+  const flushPublish = useCallback((editor: TiptapEditor, epoch = documentEpoch.current) => {
     if (timer.current !== null) {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    publishRef.current(editor);
+    publishRef.current(editor, epoch);
   }, []);
 
   const scheduleRef = useRef(schedulePublish);
   scheduleRef.current = schedulePublish;
-  const flushRef = useRef(flushPublish);
+  const flushRef = useRef<(editor: TiptapEditor, epoch?: number) => void>(() => undefined);
   flushRef.current = flushPublish;
 
   const editor = useEditor(
@@ -385,65 +422,187 @@ export function RichTextEditor({
     [value.profile, placeholder, maxLength],
   );
 
-  useEffect(() => {
-    latest.current.onUploadState?.('ready', 0);
-    if (!editor || !hasUpload || !editor.schema.nodes.image) return;
-    const manager = editorUploads(
-      editor,
-      value.profile,
-      (file, signal) => latest.current.upload!(file, signal),
-      (state, count, entries) => {
-        setUploadEntries(entries);
-        latest.current.onUploadState?.(state, count);
-      },
-      () => flushRef.current(editor),
-      (reason) => setUploadMessage(labelsRef.current[reason]),
-    );
-    uploads.current = manager;
-    return () => {
-      uploads.current = null;
-      manager.destroy();
-    };
-  }, [editor, hasUpload, value.profile]);
-
-  useEffect(() => {
-    if (!editor) return;
-    editor.setEditable(editable, false);
-    editor.setOptions({
-      editorProps: {
-        ...editor.options.editorProps,
-        attributes: editorAttributes({
-          label,
-          ...(lang === undefined ? {} : { lang }),
-          ...(dir === undefined ? {} : { dir }),
-          disabled,
-          readOnly,
-        }),
-        transformPastedHTML: sanitizePastedHTML,
-      },
-    });
-
-    if (lastProp.current !== value) {
-      lastProp.current = value;
-      if (emitted.current === value) {
-        emitted.current = null;
-      } else {
-        const next = normalizeEditorValue(value);
-        assertSnapshotSize(next);
-        editor.commands.setContent(next.doc as JSONContent, { emitUpdate: false });
-      }
-      lastPublishedDoc.current = editor.state.doc;
-    } else if (lastPublishedDoc.current === null) {
-      lastPublishedDoc.current = editor.state.doc;
-    }
-  }, [editor, editable, label, lang, dir, disabled, readOnly, value]);
-
-  useEffect(
-    () => () => {
-      if (timer.current !== null) clearTimeout(timer.current);
+  const resetUploadState = useCallback(
+    (notify: boolean) => {
+      const hadState =
+        uploadEntriesRef.current.length > 0 || uploadStatus.current.state !== 'ready' || uploadStatus.current.count !== 0;
+      uploadEntriesRef.current = [];
+      setUploadEntries((entries) => (entries.length ? [] : entries));
+      setUploadMessage('');
+      if (!hadState) return;
+      uploadStatus.current = { state: 'ready', count: 0 };
+      if (notify) latest.current.onUploadState?.('ready', 0);
     },
     [],
   );
+
+  const retireUploads = useCallback(
+    (notify: boolean, restart = false) => {
+      const manager = uploads.current;
+      uploads.current = null;
+      uploadLease.current = null;
+      manager?.destroy();
+      resetUploadState(notify);
+      if (restart) setDocumentRevision((revision) => revision + 1);
+    },
+    [resetUploadState],
+  );
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (timer.current !== null) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    currentEditor.current = editor;
+    return () => {
+      if (currentEditor.current === editor) currentEditor.current = null;
+    };
+  }, [editor]);
+
+  useLayoutEffect(() => {
+    const schemaMatchesProfile =
+      editor !== null && Boolean(editor.schema.nodes.image) === (value.profile === 'blocks');
+    const previous = controlled.current;
+    const profileChanged = previous.profile !== value.profile;
+    const incomingChanged = previous.key !== controlledKey || profileChanged;
+    const editorChanged = syncedEditor.current !== null && syncedEditor.current !== editor;
+    syncedEditor.current = editor;
+    const wasEditable = lastEditable.current;
+    const wasUploadEnabled = lastUploadEnabled.current;
+    lastEditable.current = editable;
+    lastUploadEnabled.current = hasUpload;
+
+    if (editor) {
+      editor.setEditable(editable, false);
+      editor.setOptions({
+        editorProps: {
+          ...editor.options.editorProps,
+          attributes: editorAttributes({
+            label,
+            ...(lang === undefined ? {} : { lang }),
+            ...(dir === undefined ? {} : { dir }),
+            disabled,
+            readOnly,
+          }),
+          transformPastedHTML: sanitizePastedHTML,
+        },
+      });
+    }
+
+    let externalReplacement = false;
+    let echo = false;
+    if (incomingChanged) {
+      controlled.current = { key: controlledKey, profile: value.profile };
+      echo = !profileChanged && emittedKey.current === controlledKey;
+      let sameAsEditor = false;
+      if (!profileChanged && schemaMatchesProfile && editor) {
+        try {
+          sameAsEditor = snapshotKey(editorSnapshot(editor.state.doc, value.profile)) === controlledKey;
+        } catch {
+          sameAsEditor = false;
+        }
+      }
+      externalReplacement = profileChanged || (!echo && !sameAsEditor);
+    }
+
+    const lostEditability = wasEditable && !editable;
+    const lostUploader = wasUploadEnabled && !hasUpload;
+    if (externalReplacement || editorChanged || lostEditability || lostUploader) {
+      if (externalReplacement) {
+        emittedKey.current = null;
+        documentEpoch.current += 1;
+      } else if (incomingChanged && echo) {
+        emittedKey.current = null;
+      }
+      if (externalReplacement || editorChanged) {
+        if (timer.current !== null) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+      }
+      retireUploads(true, externalReplacement && !editorChanged);
+      setImagePosition(null);
+      setLinkRange(null);
+      setTouchSheetOpen(false);
+      if (externalReplacement) {
+        setSnapshotError(false);
+        if (schemaMatchesProfile && editor) {
+          editor.commands.setContent(normalizedValue.doc as JSONContent, { emitUpdate: false });
+          lastPublishedDoc.current = editor.state.doc;
+          publishedEditor.current = editor;
+        } else {
+          lastPublishedDoc.current = null;
+          publishedEditor.current = null;
+        }
+      }
+    } else if (incomingChanged && echo) {
+      emittedKey.current = null;
+    } else if (incomingChanged) {
+      emittedKey.current = null;
+    }
+
+    if (editor && schemaMatchesProfile && publishedEditor.current !== editor) {
+      lastPublishedDoc.current = editor.state.doc;
+      publishedEditor.current = editor;
+    } else if (editor && schemaMatchesProfile && lastPublishedDoc.current === null) {
+      lastPublishedDoc.current = editor.state.doc;
+      publishedEditor.current = editor;
+    }
+  }, [editor, editable, hasUpload, label, lang, dir, disabled, readOnly, controlledKey, value.profile, retireUploads]);
+
+  useLayoutEffect(() => {
+    if (!editor || !editable || !hasUpload || Boolean(editor.schema.nodes.image) !== (value.profile === 'blocks'))
+      return;
+
+    const lease = Symbol('editor upload document');
+    const ownerEpoch = documentEpoch.current;
+    uploadLease.current = lease;
+    const current = () =>
+      mounted.current &&
+      uploadLease.current === lease &&
+      documentEpoch.current === ownerEpoch &&
+      currentEditor.current === editor &&
+      editableRef.current &&
+      !editor.isDestroyed &&
+      editor.isEditable;
+    const manager = editorUploads(
+      editor,
+      value.profile,
+      () => latest.current.upload,
+      (state, count, entries) => {
+        if (!current()) return;
+        uploadEntriesRef.current = entries;
+        setUploadEntries(entries);
+        if (state === 'pending') setUploadMessage('');
+        if (uploadStatus.current.state !== state || uploadStatus.current.count !== count) {
+          uploadStatus.current = { state, count };
+          latest.current.onUploadState?.(state, count);
+        }
+      },
+      () => {
+        if (current()) flushRef.current(editor, ownerEpoch);
+      },
+      (reason) => {
+        if (current()) setUploadMessage(labelsRef.current[reason]);
+      },
+      current,
+    );
+    uploads.current = manager;
+    return () => {
+      if (uploadLease.current !== lease) return;
+      uploads.current = null;
+      uploadLease.current = null;
+      manager.destroy();
+      resetUploadState(true);
+    };
+  }, [editor, editable, hasUpload, value.profile, documentRevision, resetUploadState]);
 
   const openLink = useCallback(() => {
     if (!editor?.isEditable || !editor.schema.marks.link) return;
