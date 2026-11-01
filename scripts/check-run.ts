@@ -805,7 +805,7 @@ export async function runCheck(
       cwd,
       command: ['env', ...Object.entries(overlay).map(([name, value]) => `${name}=${value}`), ...frozenArgs],
       returns,
-      prepare: preparation,
+      ...(preparation.length === 0 ? {} : { prepare: preparation }),
       ...(cancellation === undefined ? {} : { cancellation }),
       ...(requestedPriority === undefined ? {} : { priority: requestedPriority }),
       started: (host) => {

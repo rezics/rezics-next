@@ -101,11 +101,12 @@ test('discovery, preload, shell, native-stack, browser, server, database, and un
     writeFileSync(file, source);
     expect(classifyCheck(['bun', 'test', `packages/util/test/${name}`], root).placement, name).toBe('remote');
   }
-  for (const [name, source] of [
+  const suspiciousTests: Array<[string, string]> = [
     ['server-call.test.ts', 'Bun.serve({ fetch() { return new Response(); } });\n'],
     ['dynamic-import.test.ts', 'const dependency = "playwright"; await import(dependency);\n'],
     ['process-test.test.ts', "import { spawnSync } from 'node:child_process';\nvoid spawnSync;\n"],
-  ]) {
+  ];
+  for (const [name, source] of suspiciousTests) {
     const file = join(root, 'packages/util/test', name);
     writeFileSync(file, source);
     expect(classifyCheck(['bun', 'test', `packages/util/test/${name}`], root).placement, name).toBe('remote');

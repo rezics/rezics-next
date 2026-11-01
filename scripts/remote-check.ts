@@ -47,7 +47,7 @@ import {
   writeFileSync,
   writeSync,
 } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { stageCheckGit } from './check-git.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
 import { PERFORMANCE_HOST_NAMES } from './check-placement.ts';
