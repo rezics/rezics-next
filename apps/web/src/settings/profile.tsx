@@ -13,6 +13,7 @@ import { ProfileEditor, profileFieldErrors, type ProfileScope, type ProfileEdito
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
 import { ProfileLinks } from './profile-links';
+import { ProfilePreview } from './profile-preview';
 import type { AvatarResume, AvatarUpload } from './profile-avatar-upload';
 import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
 import { usePreferenceRetry } from './preference-failure-retry';
@@ -156,7 +157,8 @@ export function ProfileCard({
   const controls = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLDivElement | null>>({});
   const pendingFocus = useRef<string | undefined>(undefined);
   const submittedDraft = useRef<typeof profile>(null);
-  const errors = profile && validationAttempt > 0 ? profileFieldErrors(profile) : {};
+  const validationErrors = profile ? profileFieldErrors(profile) : {};
+  const errors = profile && validationAttempt > 0 ? validationErrors : {};
   useEffect(() => {
     const field = pendingFocus.current;
     pendingFocus.current = undefined;
@@ -332,6 +334,20 @@ export function ProfileCard({
                 fieldError={fieldError}
               />
             </div>
+            {profile && !closed ? (
+              <ProfilePreview
+                displayName={profile.displayName}
+                biography={profile.biography}
+                avatar={profile.avatar}
+                localAvatarUrl={avatar.state.url}
+                hasUnsavedChanges={changed || !!avatar.state.url}
+                links={profile.links.slice(0, 5).map((link, index) => ({
+                  label: link.label,
+                  url: link.url,
+                  valid: !validationErrors[`label-${index}`] && !validationErrors[`url-${index}`],
+                }))}
+              />
+            ) : null}
             <div className="flex flex-wrap gap-3">
               <Button
                 type="submit"
