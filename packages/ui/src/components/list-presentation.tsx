@@ -8,7 +8,7 @@ import {
   type CoverSummary,
   type ListPresentation,
 } from './cover.tsx';
-import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
+import { ContentItem } from './content-item.tsx';
 import { cn } from '../utils.ts';
 
 /** A member row keeps its actual Type, cover, title and bounded supplied details together. */
@@ -46,44 +46,37 @@ export function MemberListRow({
   children?: ReactNode;
 }) {
   const presentation = listPresentationForCover(subject, listPresentation);
+  const hasChildren = children !== null && children !== undefined && typeof children !== 'boolean';
   return (
-    <ListRow forceOverlay={storyOverlay} className={cn('flex min-w-0 items-start gap-4 py-2', className)}>
-      <ListRowLink href={href} lang={titleLang}>
-        {title}
-      </ListRowLink>
-      <div
-        data-slot="member-list-row-cover"
-        className={cn(
-          'shrink-0 [&_button]:relative [&_button]:z-10',
-          presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24',
-        )}
-      >
-        <Cover
-          subject={subject}
-          cover={cover}
-          size="fill"
-          src={src}
-          decorative
-          {...(presentation ? { listPresentation: presentation } : {})}
-          {...(ratio ? { ratio } : {})}
-          {...(suitability ? { suitability } : {})}
-          {...(labels ? { labels } : {})}
-        />
-      </div>
-      <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-        <div data-slot="item-content" className="min-w-0 space-y-1">
-          <h2
-            aria-hidden="true"
-            data-slot="member-list-row-title"
-            lang={titleLang}
-            className="line-clamp-2 text-base leading-snug font-semibold"
-          >
-            {title}
-          </h2>
-          {children}
+    <ContentItem
+      href={href}
+      title={title}
+      titleLang={titleLang}
+      forceOverlay={storyOverlay}
+      className={className}
+      visual={
+        <div
+          data-slot="member-list-row-cover"
+          className={cn(
+            'shrink-0 [&_button]:relative [&_button]:z-10',
+            presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24',
+          )}
+        >
+          <Cover
+            subject={subject}
+            cover={cover}
+            size="fill"
+            src={src}
+            decorative
+            {...(presentation ? { listPresentation: presentation } : {})}
+            {...(ratio ? { ratio } : {})}
+            {...(suitability ? { suitability } : {})}
+            {...(labels ? { labels } : {})}
+          />
         </div>
-        {trailing != null && <ListRowControl className="shrink-0">{trailing}</ListRowControl>}
-      </div>
-    </ListRow>
+      }
+      {...(hasChildren ? { metadata: <div className="w-full space-y-1">{children}</div> } : {})}
+      {...(trailing != null ? { trailing } : {})}
+    />
   );
 }

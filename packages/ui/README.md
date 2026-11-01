@@ -229,6 +229,12 @@ from `@rezics/ui/list-presentation` and the `ListPresentation` type from `@rezic
 or square 1:1; `keyFacts` selects up to four ordered unique effective property CURIEs. The renderer never invents
 inherited hints or fact values. The caller supplies already available, localized facts as content or card metadata.
 
+`MemberListRow` keeps its existing public props for Search and Collection callers while adapting to `ContentItem`: the
+title is the shared named heading and stretched primary link, the decorative `Cover` remains the leading visual, its
+supplied children stay together as raised metadata, and `trailing` remains an independent control slot. Its
+`storyOverlay` prop enables the shared forced overlay for stories. The adapter does not fetch or derive member facts;
+the caller supplies any already available localized facts and links.
+
 The current released hints and exact Type fallbacks all select portrait 5:7. Unknown Types retain a valid
 configured composition ratio, otherwise the same portrait default. A Collection kind may guide composition;
 it never rewrites a member's actual Type. Rows use 72/96 px portrait and square frames and 128/192 px explicitly

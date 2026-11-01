@@ -236,6 +236,39 @@ export const KeyFacts: Story = {
   ),
 };
 
+export const IntegratedMember: Story = {
+  render: () => (
+    <ul className="max-w-3xl">
+      <MemberListRow
+        href="/book"
+        subject={book}
+        cover={summary(book, 'landscape')}
+        src={imageSource}
+        title={book.title}
+        titleLang="en"
+        listPresentation={{ imageAspect: 'landscape', keyFacts: ['schema:genre'] }}
+        ratio="5:7"
+        storyOverlay
+        trailing={<button type="button">More actions</button>}
+      >
+        <p data-slot="member-list-row-facts" className="text-sm">
+          Genre: <a href="/genres/fantasy">Fantasy</a>
+        </p>
+      </MemberListRow>
+    </ul>
+  ),
+  async play({ canvasElement }) {
+    await expect(canvasElement.querySelector('[data-overlay="visible"]')).not.toBeNull();
+    await expect(within(canvasElement).getByRole('heading', { name: book.title })).toBeVisible();
+    await expect(within(canvasElement).getByRole('link', { name: book.title })).toHaveAttribute('href', '/book');
+    await expect(within(canvasElement).getByRole('link', { name: 'Fantasy' })).toHaveAttribute(
+      'href',
+      '/genres/fantasy',
+    );
+    await expect(within(canvasElement).getByRole('button', { name: 'More actions' })).toBeVisible();
+  },
+};
+
 export const UnknownType: Story = {
   render: () => (
     <ul className="max-w-3xl">
