@@ -719,7 +719,9 @@ function LabelAssignmentRemoveForm({
   locale,
   csrfToken,
   display,
+  isCurrent,
 }: {
+  isCurrent?: () => boolean;
   display: ShelfDisplay;
   entry: LabelShelfEntry;
   labelName: string;
@@ -730,7 +732,13 @@ function LabelAssignmentRemoveForm({
   const labelNameId = useId();
   if (!admitted) return null;
   return (
-    <form method="post" action={shelfHref(locale, { label: entry.labelId, ...display })}>
+    <form
+      method="post"
+      action={shelfHref(locale, { label: entry.labelId, ...display })}
+      onSubmit={(event) => {
+        if (isCurrent && !isCurrent()) event.preventDefault();
+      }}
+    >
       <input type="hidden" name="intent" value="unassign" />
       <input type="hidden" name="subjectId" value={entry.subjectId} />
       <input type="hidden" name="labelId" value={entry.labelId} />
@@ -764,7 +772,9 @@ export function LabelShelfEntries({
   size,
   columns,
   csrfToken,
+  isCurrent,
 }: {
+  isCurrent?: () => boolean;
   columns?: string;
   entries: LabelShelfEntry[];
   label: { id: string; name: string };
@@ -806,6 +816,7 @@ export function LabelShelfEntries({
                       content={
                         <LabelAssignmentRemoveForm
                           display={display}
+                          {...(isCurrent ? { isCurrent } : {})}
                           entry={entry}
                           labelName={label.name}
                           locale={locale}
@@ -831,6 +842,7 @@ export function LabelShelfEntries({
                     menu: (
                       <LabelAssignmentRemoveForm
                         display={display}
+                        {...(isCurrent ? { isCurrent } : {})}
                         entry={entry}
                         labelName={label.name}
                         locale={locale}
@@ -855,6 +867,7 @@ export function LabelShelfEntries({
                 <Tombstone shape="row" />
                 <LabelAssignmentRemoveForm
                   display={display}
+                  {...(isCurrent ? { isCurrent } : {})}
                   entry={entry}
                   labelName={label.name}
                   locale={locale}
@@ -878,6 +891,7 @@ export function LabelShelfEntries({
                     menu: (
                       <LabelAssignmentRemoveForm
                         display={display}
+                        {...(isCurrent ? { isCurrent } : {})}
                         entry={entry}
                         labelName={label.name}
                         locale={locale}
@@ -912,6 +926,7 @@ export function LabelShelfEntries({
                     <Tombstone shape="row" />
                     <LabelAssignmentRemoveForm
                       display={display}
+                      {...(isCurrent ? { isCurrent } : {})}
                       entry={entry}
                       labelName={label.name}
                       locale={locale}
@@ -939,6 +954,7 @@ export function LabelShelfEntries({
                 </a>
                 <LabelAssignmentRemoveForm
                   display={display}
+                  {...(isCurrent ? { isCurrent } : {})}
                   entry={entry}
                   labelName={label.name}
                   locale={locale}

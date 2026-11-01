@@ -448,10 +448,14 @@ export function LabelShelfPage({
   page,
   locale,
   display,
+  isCurrent,
+  canUnassign,
 }: {
   page: LabelShelfPageData;
   locale: string;
   display: Display;
+  isCurrent?: () => boolean;
+  canUnassign?: () => boolean;
 }) {
   if (page.state === 'unavailable' || page.state === 'denied' || page.state === 'preparing')
     return (
@@ -484,13 +488,14 @@ export function LabelShelfPage({
     <div className="max-w-6xl space-y-6 text-foreground">
       <PageHeading>{page.label.name}</PageHeading>
       <SubjectLabelNotice {...(page.labelResult !== undefined ? { result: page.labelResult } : {})} />
-      <DisplayControls locale={locale} display={display} label={page.label.id} />
+      <DisplayControls locale={locale} display={display} label={page.label.id} {...(isCurrent ? { isCurrent } : {})} />
       {page.entries.length ? (
         <LabelShelfEntries
           entries={page.entries}
           label={page.label}
           locale={locale}
           {...display}
+          {...(canUnassign ? { isCurrent: canUnassign } : {})}
           csrfToken={page.csrfToken ?? null}
         />
       ) : (
@@ -502,6 +507,9 @@ export function LabelShelfPage({
       )}
       {page.next ? (
         <a
+          onClick={(event) => {
+            if (isCurrent && !isCurrent()) event.preventDefault();
+          }}
           href={shelfHref(locale, { label: page.label.id, ...display, cursor: page.next })}
           className={buttonVariants({ variant: 'outline', size: 'lg' })}
         >
@@ -510,7 +518,14 @@ export function LabelShelfPage({
       ) : null}
       {page.undo ? (
         <Exposure operation="library_label.unassign">
-          <form data-label-undo method="post" action={shelfHref(locale, { label: page.label.id, ...display })}>
+          <form
+            data-label-undo
+            method="post"
+            action={shelfHref(locale, { label: page.label.id, ...display })}
+            onSubmit={(event) => {
+              if (canUnassign && !canUnassign()) event.preventDefault();
+            }}
+          >
             <input type="hidden" name="intent" value="restore" />
             <input type="hidden" name="subjectId" value={page.undo.subjectId} />
             <input type="hidden" name="labelId" value={page.undo.labelId} />

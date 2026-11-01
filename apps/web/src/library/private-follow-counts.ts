@@ -4,6 +4,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { personalRead } from '../kernel/query';
+import { requestLocale } from '../kernel/client';
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
@@ -21,7 +22,7 @@ export type FollowCountsRead = {
   target: FollowCountState | null;
 };
 export type FollowCountsViewer = { subject: string; csrfToken: string };
-export type FollowCountsPage = FollowCountsRead & { viewer: FollowCountsViewer | null };
+export type FollowCountsPage = FollowCountsRead & { viewer: FollowCountsViewer | null; locale?: string };
 export type FollowCountsReader = (input: { data: FollowCountsSearch }) => Promise<FollowCountsPage>;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -123,25 +124,28 @@ export async function loadPrivateFollowCounts(
 ): Promise<FollowCountsPage> {
   const context = followCountsSearch(input);
   let viewer: FollowCountsViewer | null = null;
+  const locale = requestLocale(request) ?? 'en';
   try {
-    if (await prepareSession(request, env)) return { viewer, context, outgoing: { state: 'signed-out' }, target: null };
+    if (await prepareSession(request, env))
+      return { locale, viewer, context, outgoing: { state: 'signed-out' }, target: null };
     const authorization = viewerCredential(request);
     const subject = sessionSubject(request);
     const csrfToken = requestCsrfToken(request);
     if (!authorization || !subject || !csrfToken)
-      return { viewer, context, outgoing: { state: 'signed-out' }, target: null };
+      return { locale, viewer, context, outgoing: { state: 'signed-out' }, target: null };
     viewer = { subject, csrfToken };
-    if (client) return { viewer, ...(await readFollowCounts(client, authorization, context)) };
+    if (client) return { locale, viewer, ...(await readFollowCounts(client, authorization, context)) };
   } catch (error) {
     if (error instanceof MediaProblem)
       return {
+        locale,
         viewer,
         context,
         outgoing: failure(error.problem.status, error.problem, new Headers(error.headers).get('retry-after')),
         target: null,
       };
   }
-  return { viewer, context, outgoing: { state: 'unavailable' }, target: null };
+  return { locale, viewer, context, outgoing: { state: 'unavailable' }, target: null };
 }
 
 export const readPrivateFollowCountsPage = createServerFn({ method: 'GET' })
@@ -164,10 +168,16 @@ export function privateFollowCountsQuery(
   viewer: FollowCountsViewer,
   input: FollowCountsSearch,
   read: FollowCountsReader = readPrivateFollowCountsPage,
-  lifetime?: { key: string; isCurrent: () => boolean },
+  lifetime?: { key: string; isCurrent: () => boolean; locale?: string },
 ) {
   const context = followCountsSearch(input);
-  const retired: FollowCountsPage = { viewer: null, context, outgoing: { state: 'unavailable' }, target: null };
+  const retired: FollowCountsPage = {
+    viewer: null,
+    context,
+    outgoing: { state: 'unavailable' },
+    target: null,
+    ...(lifetime?.locale ? { locale: lifetime.locale } : {}),
+  };
   return queryOptions({
     ...personalRead,
     queryKey: [
@@ -181,12 +191,13 @@ export function privateFollowCountsQuery(
     ],
     queryFn: async ({ signal }): Promise<FollowCountsPage> => {
       signal.throwIfAborted();
-      if (lifetime && !lifetime.isCurrent()) return retired;
+      if (!viewer.subject.trim() || !viewer.csrfToken.trim() || (lifetime && !lifetime.isCurrent())) return retired;
       const page = await read({ data: context });
       signal.throwIfAborted();
       if (lifetime && !lifetime.isCurrent()) return retired;
       const actualContext = followCountsSearch(page.context);
       if (
+        (lifetime?.locale !== undefined && page.locale !== lifetime.locale) ||
         page.viewer?.subject !== viewer.subject ||
         page.viewer.csrfToken !== viewer.csrfToken ||
         actualContext.targetType !== context.targetType ||
@@ -196,6 +207,7 @@ export function privateFollowCountsQuery(
         return {
           viewer: null,
           context,
+          ...(lifetime?.locale ? { locale: lifetime.locale } : {}),
           outgoing: page.viewer === null && page.outgoing.state !== 'ready' ? page.outgoing : { state: 'unavailable' },
           target: null,
         };

@@ -1,11 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useEffect, useRef } from 'react';
-import { useOperation } from '../kernel/exposure';
-import { personalRead } from '../kernel/query';
+import { useRef } from 'react';
+import { usePrivateReportOrigin, usePrivateReportPayload } from './private-report-current-origin';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { useSession } from '../session/query';
 import { PageHeading } from '../shell/page-heading';
 import { privateFollowCountsHref } from './private-follow-counts-link';
 import {
@@ -133,7 +131,17 @@ export function PrivateFollowCountsPageView({
   );
 }
 
-type CurrentRead = { identity: string; key: string; isCurrent: () => boolean };
+function reportAddress(context: FollowCountsSearch, locale: string): string {
+  return JSON.stringify([context.targetType, context.targetId, !!context.invalidContext, locale]);
+}
+
+function reportAddressAt(href: string, locale: string): string {
+  const url = new URL(href, 'https://report.invalid');
+  const parts = url.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+  return parts.at(-1) === 'follow-counts' && parts.at(-2) === 'library' && parts.length <= 3
+    ? reportAddress(followCountsSearch(Object.fromEntries(url.searchParams)), parts.length === 3 ? parts[0]! : locale)
+    : href;
+}
 
 export function PrivateFollowCountsPage({
   context: input,
@@ -142,70 +150,74 @@ export function PrivateFollowCountsPage({
   context: FollowCountsSearch;
   read?: FollowCountsReader;
 }) {
-  const session = useSession();
-  // Both native count routes belong to personal_library. This is UI admission only.
-  const admitted = useOperation('follow.list');
+  const client = useQueryClient();
   const context = followCountsSearch(input);
-  const viewer = { subject: session.subject ?? '', csrfToken: session.csrfToken ?? '' };
-  const identity =
-    session.state === 'signed-in' && viewer.subject && viewer.csrfToken && admitted
-      ? JSON.stringify([viewer.subject, viewer.csrfToken, context, getLocale()])
-      : null;
-  const mounted = useRef(true);
-  const current = useRef<CurrentRead | null>(null);
-  // Retire during render, before a stale callback or pending completion can act.
-  // A return to the same identity/context receives a new, unseeded cache entry.
-  if (identity === null) current.current = null;
-  else if (current.current?.identity !== identity) {
-    const lifetime: CurrentRead = {
-      identity,
-      key: crypto.randomUUID(),
-      isCurrent: () => mounted.current && current.current === lifetime,
-    };
-    current.current = lifetime;
-  }
-  const lifetime = current.current;
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const locale = getLocale();
+  const { origin, value, hydrated } = usePrivateReportOrigin(reportAddress(context, locale), locale, (href) =>
+    reportAddressAt(href, locale),
+  );
+  const current = origin.capture('personal_library');
+  const lifetime = { key: origin.version('personal_library'), isCurrent: current, locale };
+  const payload = useRef<{ owner: number; page?: Awaited<ReturnType<FollowCountsReader>> }>({ owner: value.owner });
+  if (payload.current.owner !== value.owner) payload.current = { owner: value.owner };
+  const options = privateFollowCountsQuery(
+    { subject: value.subject ?? '', csrfToken: value.csrfToken },
+    context,
+    read,
+    lifetime,
+  );
   const query = useQuery({
-    ...privateFollowCountsQuery(viewer, context, read, lifetime ?? undefined),
-    enabled: personalRead.enabled && lifetime !== null,
+    ...options,
+    enabled: hydrated && current(),
+    // A healthy refresh keeps the actual read and its captured credential; it does not perform another GET.
+    ...(payload.current.page ? { initialData: payload.current.page } : {}),
   });
-  const busy = session.state === 'unknown' || (lifetime !== null && (query.isPending || query.isFetching));
+  const capturePayload = usePrivateReportPayload(client, options.queryKey);
+  const sameRead = capturePayload(query.data);
+  const sameReload = capturePayload(query.data, false);
+  const busy = !hydrated || value.state === 'unknown' || (current() && (query.isPending || query.isFetching));
   const outcome: FollowCountState = {
     state:
-      session.state === 'unknown'
+      !hydrated || value.state === 'unknown'
         ? 'loading'
-        : session.state === 'signed-out'
+        : value.state === 'signed-out'
           ? 'signed-out'
-          : session.state !== 'signed-in' || !viewer.subject || !viewer.csrfToken
+          : !value.subject
             ? 'unavailable'
-            : !admitted
+            : value.authority && !current()
               ? 'closed'
-              : busy
+              : busy || !value.authority
                 ? 'loading'
                 : 'unavailable',
   };
-  const page: FollowCountsRead =
-    lifetime?.isCurrent() && !query.isFetching && !query.isError && query.data
-      ? query.data
-      : {
-          context,
-          outgoing: outcome,
-          target: context.targetType && context.targetId ? outcome : null,
-        };
+  const candidate = query.data;
+  const actualContext = followCountsSearch(candidate?.context);
+  const matches =
+    candidate &&
+    candidate.locale === locale &&
+    actualContext.targetType === context.targetType &&
+    actualContext.targetId === context.targetId &&
+    !!actualContext.invalidContext === !!context.invalidContext &&
+    (candidate.viewer === null
+      ? candidate.outgoing.state !== 'ready' && candidate.target?.state !== 'ready'
+      : candidate.viewer.subject === value.subject &&
+        (candidate.viewer.csrfToken === value.csrfToken || candidate === payload.current.page));
+  const accepted = hydrated && current() && sameRead() && !query.isFetching && matches ? candidate : undefined;
+  if (accepted) payload.current.page = accepted;
+  const page: FollowCountsRead = accepted ?? {
+    context,
+    outgoing: outcome,
+    target: context.targetType && context.targetId ? outcome : null,
+  };
   return (
     <PrivateFollowCountsPageView
       page={page}
       busy={busy}
-      {...(lifetime
+      {...(hydrated && current()
         ? {
             onReload: () => {
-              if (lifetime.isCurrent() && !query.isFetching) void query.refetch();
+              if (current() && sameReload() && client.getQueryState(options.queryKey)?.fetchStatus !== 'fetching')
+                void query.refetch();
             },
           }
         : {})}
