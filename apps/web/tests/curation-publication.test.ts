@@ -11,6 +11,7 @@ const profile = (): PresentationProfile => ({
   types: [],
   routes: [],
 });
+const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
 const changed = (draft: PresentationProfile) =>
   withTemplate(
     draft,
@@ -80,6 +81,7 @@ function wire(loss: Loss) {
     publish: (input: PublishInput) => publishProfile(client, { ...input, authorization: 'Bearer current-session' }),
     read: async (): Promise<ActiveCuration> => ({
       ok: true,
+      reader,
       head,
       digest: profileDigest(activeProfile),
       profile: activeProfile,
@@ -105,7 +107,7 @@ function wire(loss: Loss) {
 test('the actual immutable profile publish-and-activate flow resolves unknown outcomes with stable original operation keys and preserves drafts during current-head conflicts', async () => {
   for (const loss of ['publish-response', 'activate-before', 'activate-response'] as const) {
     const native = wire(loss);
-    const publication = new CurationPublication(native.transport);
+    const publication = new CurationPublication(reader, native.transport);
     const draft = profile();
     expect(await publication.start(draft, 7)).toBeNull();
     const original = publication.getSnapshot().intent!;
@@ -140,7 +142,7 @@ test('the actual immutable profile publish-and-activate flow resolves unknown ou
   for (const choice of ['keep', 'discard'] as const) {
     const native = wire('none');
     native.moveHead();
-    const publication = new CurationPublication(native.transport);
+    const publication = new CurationPublication(reader, native.transport);
     const draft = profile();
     expect(await publication.start(draft, 7)).toBeNull();
     const pending = publication.getSnapshot().intent!;
@@ -161,7 +163,7 @@ test('the actual immutable profile publish-and-activate flow resolves unknown ou
 
 test('revocation after an ambiguous activation is checked on replay before any receipt can complete the intent', async () => {
   const native = wire('activate-response');
-  const publication = new CurationPublication(native.transport);
+  const publication = new CurationPublication(reader, native.transport);
   await publication.start(profile(), 7);
   const original = publication.getSnapshot().intent;
   native.revoke();
@@ -177,7 +179,7 @@ test('revocation after an ambiguous activation is checked on replay before any r
 
 test('an active read, even matching an uncertain activation, never invents confirmation or permits a new intent', async () => {
   const native = wire('activate-response');
-  const publication = new CurationPublication(native.transport);
+  const publication = new CurationPublication(reader, native.transport);
   await publication.start(profile(), 7);
   const original = publication.getSnapshot().intent;
   await publication.inspect();
@@ -196,7 +198,7 @@ test('typed validation, rate limits and unavailability retain the original inten
   ];
   for (const failure of failures) {
     const seen: PublishInput[] = [];
-    const publication = new CurationPublication({
+    const publication = new CurationPublication(reader, {
       publish: async (input) => {
         seen.push(input);
         return structuredClone(failure);
@@ -220,7 +222,7 @@ test('typed validation, rate limits and unavailability retain the original inten
 
 test('a revised invalid draft starts only by explicit replacement, with fresh keys and whole-profile validation', async () => {
   const seen: PublishInput[] = [];
-  const publication = new CurationPublication({
+  const publication = new CurationPublication(reader, {
     publish: async (input) => {
       seen.push(input);
       return { ok: false, reason: 'invalid', errors: [{ pointer: '/generic', code: 'invalid_format' }] };
@@ -247,7 +249,7 @@ test('a revised invalid draft starts only by explicit replacement, with fresh ke
 test('a pending request cannot be duplicated, and a malformed success cannot discard its intent', async () => {
   let complete!: (result: { ok: true; digest: string; head: number }) => void;
   let calls = 0;
-  const publication = new CurationPublication({
+  const publication = new CurationPublication(reader, {
     publish: () => {
       calls++;
       return new Promise((resolve) => {

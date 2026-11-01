@@ -3,7 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { createContext, useRef, useState, type FormEvent } from 'react';
+import { createContext, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { AnonymousSessionContext } from '../../session/query';
 import { FeatureSlotsProvider } from '../../shell/feature-slots';
@@ -92,9 +92,18 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
   const [result, setResult] = useState<PresentationPreview | null>(initial ?? null);
   const [busy, setBusy] = useState(false);
   const request = useRef(0);
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      request.current += 1;
+    };
+  }, []);
   const o = { locale: locale as never };
 
   function clear() {
+    if (!mounted.current) return;
     request.current += 1;
     setBusy(false);
     setResult(null);
@@ -102,6 +111,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
 
   async function inspect(event: FormEvent) {
     event.preventDefault();
+    if (!mounted.current) return;
     const serial = ++request.current;
     setBusy(true);
     setResult(null);
@@ -117,11 +127,11 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
     };
     try {
       const next = await read(input);
-      if (serial === request.current) setResult(next);
+      if (mounted.current && serial === request.current) setResult(next);
     } catch {
-      if (serial === request.current) setResult({ ok: false, reason: 'unavailable' });
+      if (mounted.current && serial === request.current) setResult({ ok: false, reason: 'unavailable' });
     } finally {
-      if (serial === request.current) setBusy(false);
+      if (mounted.current && serial === request.current) setBusy(false);
     }
   }
 

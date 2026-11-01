@@ -4,6 +4,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -62,6 +63,10 @@ const PageEditor = lazy(() => import('./editor').then((module) => ({ default: mo
 
 /** The existing whole-profile publication helper owns transport; no retry protocol lives in the editor. */
 export type CurationEditorTransport = PublicationTransport;
+export type ObservedCurationSession = {
+  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  subject?: string | null;
+};
 
 const editorTheme = {
   '--puck-color-surface': 'var(--card)',
@@ -100,24 +105,225 @@ export function presentationViewNames(): Record<View, string> {
   };
 }
 
+type PresentationViewEditorProps = {
+  initial: CurationRead;
+  locale: string;
+  transport: CurationEditorTransport;
+  observedSession?: ObservedCurationSession;
+  preview?: ReactNode;
+};
+
+type EditorLifecycle = { identity: string | null; epoch: number; reader: string | null };
+type AdmissionResult = { epoch: number; reader: string; result: CurationRead };
+type RetainedPublication = { publication: CurationPublication; transport: CurationEditorTransport };
+type CurationReadFailure = Exclude<CurationRead, { ok: true }>;
+
+function failureView(failure: CurationReadFailure) {
+  if (failure.reason === 'forbidden') return <ErrorPage />;
+  return (
+    <div className="space-y-4">
+      <CurationFailureNotice failure={failure} />
+    </div>
+  );
+}
+
+/** Admit the mounted private editor against both the same-read SSR identity and observed session changes. */
 export function PresentationViewEditor({
   initial,
   locale,
   transport,
+  observedSession = { state: 'unknown' },
+  preview,
+}: PresentationViewEditorProps) {
+  const transportRef = useRef(transport);
+  transportRef.current = transport;
+  const publications = useRef(new Map<string, RetainedPublication>());
+  const [lifecycle, setLifecycle] = useState<EditorLifecycle>(() => ({
+    identity: null,
+    epoch: 0,
+    reader: initial.ok ? initial.reader : null,
+  }));
+  const lifecycleRef = useRef(lifecycle);
+  lifecycleRef.current = lifecycle;
+
+  if (observedSession.state !== 'unknown') {
+    const identity =
+      observedSession.state === 'signed-in' && observedSession.subject
+        ? `signed-in:${observedSession.subject}`
+        : observedSession.state;
+    if (lifecycle.identity === null) {
+      const matchesInitial =
+        observedSession.state === 'signed-in' &&
+        observedSession.subject !== null &&
+        observedSession.subject !== undefined &&
+        initial.ok &&
+        initial.reader === observedSession.subject &&
+        lifecycle.epoch === 0;
+      setLifecycle({
+        identity,
+        epoch: lifecycle.epoch + (matchesInitial ? 0 : 1),
+        reader: observedSession.state === 'signed-in' ? (observedSession.subject ?? null) : null,
+      });
+    } else if (lifecycle.identity !== identity) {
+      setLifecycle({
+        identity,
+        epoch: lifecycle.epoch + 1,
+        reader: observedSession.state === 'signed-in' ? (observedSession.subject ?? null) : null,
+      });
+    }
+  } else if (lifecycle.identity === null && initial.ok && initial.reader !== lifecycle.reader) {
+    // A replacement same-read result is a new admission even before browser session hydration completes.
+    setLifecycle({ identity: null, epoch: lifecycle.epoch + 1, reader: initial.reader });
+  }
+
+  const [admission, setAdmission] = useState<AdmissionResult | null>(null);
+  const admissionRequest = useRef(0);
+  const reader = lifecycle.reader;
+  const initialAdmission = lifecycle.epoch === 0 && initial.ok && reader === initial.reader;
+  const needsRead = lifecycle.epoch > 0 && reader !== null;
+  const currentAdmission = initialAdmission
+    ? initial
+    : admission?.epoch === lifecycle.epoch && admission.reader === reader
+      ? admission.result
+      : null;
+
+  useEffect(() => {
+    if (!needsRead || !reader) return;
+    let retired = false;
+    const epoch = lifecycle.epoch;
+    const serial = ++admissionRequest.current;
+    void transportRef.current
+      .read(reader)
+      .then((result) => {
+        if (
+          retired ||
+          admissionRequest.current !== serial ||
+          lifecycleRef.current.epoch !== epoch ||
+          lifecycleRef.current.reader !== reader
+        )
+          return;
+        setAdmission({ epoch, reader, result });
+      })
+      .catch(() => {
+        if (
+          retired ||
+          admissionRequest.current !== serial ||
+          lifecycleRef.current.epoch !== epoch ||
+          lifecycleRef.current.reader !== reader
+        )
+          return;
+        setAdmission({ epoch, reader, result: { ok: false, reason: 'unavailable' } });
+      });
+    return () => {
+      retired = true;
+      if (admissionRequest.current === serial) admissionRequest.current += 1;
+    };
+  }, [lifecycle.epoch, needsRead, reader]);
+
+  function retryAdmission() {
+    if (!needsRead || !reader) return;
+    const epoch = lifecycle.epoch;
+    const serial = ++admissionRequest.current;
+    void transportRef.current
+      .read(reader)
+      .then((result) => {
+        if (
+          admissionRequest.current === serial &&
+          lifecycleRef.current.epoch === epoch &&
+          lifecycleRef.current.reader === reader
+        )
+          setAdmission({ epoch, reader, result });
+      })
+      .catch(() => {
+        if (
+          admissionRequest.current === serial &&
+          lifecycleRef.current.epoch === epoch &&
+          lifecycleRef.current.reader === reader
+        )
+          setAdmission({ epoch, reader, result: { ok: false, reason: 'unavailable' } });
+      });
+  }
+
+  if (observedSession.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' });
+  if (observedSession.state === 'unavailable') return failureView({ ok: false, reason: 'unavailable' });
+  if (observedSession.state === 'signed-in' && !reader) return failureView({ ok: false, reason: 'forbidden' });
+  if (!reader && observedSession.state === 'unknown')
+    return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'forbidden' });
+  if (!currentAdmission) {
+    if (!needsRead) return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'unavailable' });
+    return <p role="status">{m.curation_loading()}</p>;
+  }
+  if (!currentAdmission.ok)
+    return currentAdmission.reason === 'unavailable' && needsRead ? (
+      <div className="space-y-4">
+        {failureView(currentAdmission)}
+        <Button onClick={retryAdmission}>{m.curation_reload()}</Button>
+      </div>
+    ) : (
+      failureView(currentAdmission)
+    );
+  if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' });
+
+  let retained = publications.current.get(reader);
+  if (!retained) {
+    const publicationTransport: CurationEditorTransport = {
+      publish: (intent, expectedReader) => transportRef.current.publish(intent, expectedReader),
+      read: (expectedReader) => transportRef.current.read(expectedReader),
+    };
+    retained = { publication: new CurationPublication(reader, publicationTransport), transport: publicationTransport };
+    publications.current.set(reader, retained);
+  }
+  return (
+    <AdmittedPresentationViewEditor
+      key={`${lifecycle.epoch}:${reader}`}
+      initial={currentAdmission}
+      locale={locale}
+      reader={reader}
+      epoch={lifecycle.epoch}
+      transportRef={transportRef}
+      retained={retained}
+      preview={preview}
+    />
+  );
+}
+
+function AdmittedPresentationViewEditor({
+  initial,
+  locale,
+  reader,
+  epoch,
+  transportRef,
+  retained,
   preview,
 }: {
-  initial: CurationRead;
+  initial: Extract<CurationRead, { ok: true }>;
   locale: string;
-  transport: CurationEditorTransport;
+  reader: string;
+  epoch: number;
+  transportRef: { current: CurationEditorTransport };
+  retained: RetainedPublication;
   preview?: ReactNode;
 }) {
-  const [current, setCurrent] = useState(initial);
+  const [current, setCurrent] = useState<CurationRead>(initial);
   const [draft, setDraft] = useState(() => (initial.ok ? presentationDraft(initial) : null));
   const [failure, setFailure] = useState<CurationFailure | null>(null);
   const [failureProfile, setFailureProfile] = useState(initial.ok ? initial.profile : null);
   const [message, setMessage] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [publication] = useState(() => new CurationPublication(transport));
+  const publication = retained.publication;
+  const lifetime = useRef({ active: false, epoch });
+  lifetime.current.epoch = epoch;
+  const isCurrent = () => lifetime.current.active && lifetime.current.epoch === epoch;
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  useLayoutEffect(() => {
+    lifetime.current.active = true;
+    publication.activate(retained.transport);
+    return () => {
+      lifetime.current.active = false;
+      publication.retire();
+    };
+  }, [epoch, publication, retained]);
   const publicationState = useSyncExternalStore(
     publication.subscribe,
     publication.getSnapshot,
@@ -136,9 +342,23 @@ export function PresentationViewEditor({
   const pageRegion = useRef<HTMLElement>(null);
   const [focusRegion, setFocusRegion] = useState(0);
   useEffect(() => {
-    if (focusRegion) editorRegion.current?.focus();
+    if (focusRegion && isCurrent()) editorRegion.current?.focus();
   }, [focusRegion]);
   const dirty = useMemo(() => draft !== null && hasDraftChanges(draft), [draft]);
+  const initialVersion = `${initial.reader}:${initial.digest}:${initial.head}`;
+  const previousInitial = useRef(initialVersion);
+  useEffect(() => {
+    if (previousInitial.current === initialVersion) return;
+    previousInitial.current = initialVersion;
+    if (!isCurrent() || dirty || publication.getSnapshot().intent) return;
+    setCurrent(initial);
+    setDraft(presentationDraft(initial));
+    setFailure(null);
+    setFailureProfile(initial.profile);
+    setCorrection(null);
+    setMessage('');
+    setGeneration((value) => value + 1);
+  }, [initialVersion]);
   const navigationGuard = (
     <CurationNavigationGuard dirty={dirty} retainedPublication={pendingPublication} fallbackFocus={pageRegion} />
   );
@@ -152,16 +372,33 @@ export function PresentationViewEditor({
   const templateLabel = (template: Template) =>
     template.key === null ? scopeNames.generic : `${scopeNames[template.scope]}: ${template.key}`;
   const invalidPublication = publicationState.result?.ok === false && publicationState.result.reason === 'invalid';
+  const admissionFailure =
+    (publicationState.result?.ok === false &&
+      publicationState.result.reason === 'forbidden' &&
+      publicationState.result.admissionChanged &&
+      publicationState.result) ||
+    (publicationState.readFailure?.reason === 'signed-out' && publicationState.readFailure) ||
+    (publicationState.readFailure?.reason === 'forbidden' &&
+      publicationState.readFailure.admissionChanged &&
+      publicationState.readFailure);
   const laterChanges =
     !!draft &&
     !!publicationState.intent &&
     JSON.stringify(draft.profile) !== JSON.stringify(publicationState.intent.profile);
   const unresolvedPublication = pendingPublication && !invalidPublication;
 
+  if (admissionFailure)
+    return (
+      <>
+        <CurationNavigationGuard dirty={false} retainedPublication={pendingPublication} fallbackFocus={pageRegion} />
+        <CurationFailureNotice failure={admissionFailure} />
+      </>
+    );
+
   function validationCorrection(source: typeof failureProfile) {
     return {
       describe(pointer: string) {
-        const target = source && resolveCorrection(source, pointer, locale);
+        const target = source && resolveCorrection(source, pointer, localeRef.current);
         return target
           ? m.curation_correction_target({
               template: templateLabel(target.template),
@@ -172,8 +409,8 @@ export function PresentationViewEditor({
           : m.curation_correction_unknown();
       },
       correct(pointer: string) {
-        if (!draft || busy) return;
-        const original = source && resolveCorrection(source, pointer, locale);
+        if (!isCurrent() || !draft || busy) return;
+        const original = source && resolveCorrection(source, pointer, localeRef.current);
         const target = original && currentCorrection(draft.profile, original);
         setEditorOpen(true);
         setCorrection(target ? { ...target } : null);
@@ -202,7 +439,7 @@ export function PresentationViewEditor({
     );
 
   async function reload() {
-    if (inFlight.current) return;
+    if (!isCurrent() || inFlight.current) return;
     if (publication.getSnapshot().intent) {
       await publication.inspect();
       return;
@@ -213,8 +450,14 @@ export function PresentationViewEditor({
     setCorrection(null);
     setMessage('');
     try {
-      const next = await transport.read();
+      const next = await transportRef.current.read(reader);
+      if (!isCurrent()) return;
       if (next.ok) {
+        if (next.reader !== reader) {
+          setCurrent({ ok: false, reason: 'forbidden' });
+          setDraft(null);
+          return;
+        }
         setCurrent(next);
         setDraft(presentationDraft(next));
         setGeneration((value) => value + 1);
@@ -224,15 +467,18 @@ export function PresentationViewEditor({
         setDraft(null);
       } else setFailure(next);
     } catch {
+      if (!isCurrent()) return;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
-      inFlight.current = false;
-      setLoadingProfile(false);
+      if (isCurrent()) {
+        inFlight.current = false;
+        setLoadingProfile(false);
+      }
     }
   }
 
   function change(data: PageEditorData) {
-    if (!draft || inFlight.current) return;
+    if (!isCurrent() || !draft || inFlight.current) return;
     const selection = draft.selection;
     setDraft((value) => value && editView(value, selection, data));
     setFailure(null);
@@ -241,7 +487,7 @@ export function PresentationViewEditor({
 
   function addTemplate(event: FormEvent) {
     event.preventDefault();
-    if (!draft || inFlight.current || publication.getSnapshot().busy) return;
+    if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy) return;
     const template = { scope, key };
     if (profileTemplates(draft.profile).some((item) => item.scope === scope && item.key === key)) {
       setFailure({
@@ -270,7 +516,8 @@ export function PresentationViewEditor({
   }
 
   function published(confirmation: PublicationConfirmation) {
-    const saved = { profile: confirmation.intent.profile, ...confirmation.result };
+    if (!isCurrent() || confirmation.intent.reader !== reader) return;
+    const saved = { reader, profile: confirmation.intent.profile, ...confirmation.result };
     setCurrent(saved);
     setDraft((value) => value && confirmPresentationDraft(value, confirmation));
     setCorrection(null);
@@ -278,7 +525,7 @@ export function PresentationViewEditor({
   }
 
   async function publish(edited?: CompositionDocument) {
-    if (!draft || inFlight.current || publication.getSnapshot().busy || unresolvedPublication) return;
+    if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy || unresolvedPublication) return;
     // onChange normally already captured this data; onPublish can deliver a final synchronous edit.
     const profile = edited
       ? withView(draft.profile, draft.selection.template, draft.selection.view, edited)
@@ -295,7 +542,7 @@ export function PresentationViewEditor({
     const confirmation = invalidPublication
       ? await publication.replaceInvalid(profile, draft.saved.head)
       : await publication.start(profile, draft.saved.head);
-    if (confirmation) published(confirmation);
+    if (isCurrent() && confirmation) published(confirmation);
   }
 
   if (!draft)
@@ -359,6 +606,7 @@ export function PresentationViewEditor({
         onPublished={published}
         correction={validationCorrection(publicationState.intent?.profile ?? profile)}
         onReviewed={(_reviewed, choice) => {
+          if (!isCurrent()) return;
           // reconcile('keep') returns the draft on the reviewed head. The dirty baseline is the actual read.
           const active = publicationState.active;
           if (!active) return;
@@ -379,12 +627,14 @@ export function PresentationViewEditor({
               {m.curation_publish()}
             </Button>
           )}
-          <Button variant="outline" disabled={!dirty} onClick={() => setConfirm('discard')}>
+          <Button variant="outline" disabled={!dirty} onClick={() => isCurrent() && setConfirm('discard')}>
             {m.curation_view_discard()}
           </Button>
           <Button
             variant="outline"
-            onClick={() => (!pendingPublication && dirty ? setConfirm('reload') : void reload())}
+            onClick={() =>
+              isCurrent() && (!pendingPublication && dirty ? setConfirm('reload') : void reload())
+            }
           >
             {m.curation_reload()}
           </Button>
@@ -400,6 +650,7 @@ export function PresentationViewEditor({
                 id="curation-template"
                 value={JSON.stringify(selection.template)}
                 onChange={(event) => {
+                  if (!isCurrent()) return;
                   const template = templates.find((item) => JSON.stringify(item) === event.target.value);
                   if (template) {
                     setCorrection(null);
@@ -421,6 +672,7 @@ export function PresentationViewEditor({
                 id="curation-view"
                 value={selection.view}
                 onChange={(event) => {
+                  if (!isCurrent()) return;
                   const view = views.find((item) => item === event.target.value);
                   if (view) {
                     setCorrection(null);
@@ -450,7 +702,7 @@ export function PresentationViewEditor({
               <h2 className="break-words font-semibold">
                 {templateLabel(selection.template)} · {viewNames[selection.view]}
               </h2>
-              <Button variant="outline" onClick={() => setEditorOpen(false)}>
+              <Button variant="outline" onClick={() => isCurrent() && setEditorOpen(false)}>
                 {m.curation_close()}
               </Button>
             </div>
@@ -470,6 +722,7 @@ export function PresentationViewEditor({
                     publishDisabled={unresolvedPublication || busy || (invalidPublication && !laterChanges)}
                     correction={correction}
                     onInvalid={(errors, document) => {
+                      if (!isCurrent()) return;
                       const invalid = withView(profile, selection.template, selection.view, document);
                       setFailure({
                         ok: false,
@@ -489,7 +742,7 @@ export function PresentationViewEditor({
             </div>
           </section>
         ) : (
-          <Button variant="outline" onClick={() => setEditorOpen(true)}>
+          <Button variant="outline" onClick={() => isCurrent() && setEditorOpen(true)}>
             {selection.template.scope}: {selection.template.key ?? m.curation_generic()}
           </Button>
         )}
@@ -502,7 +755,7 @@ export function PresentationViewEditor({
               <NativeSelect
                 id="curation-scope"
                 value={scope}
-                onChange={(event) => setScope(event.target.value as 'type' | 'route')}
+                onChange={(event) => isCurrent() && setScope(event.target.value as 'type' | 'route')}
               >
                 <NativeSelectOption value="type">{scopeNames.type}</NativeSelectOption>
                 <NativeSelectOption value="route">{scopeNames.route}</NativeSelectOption>
@@ -513,7 +766,7 @@ export function PresentationViewEditor({
               <Input
                 id="curation-key"
                 value={key}
-                onChange={(event) => setKey(event.target.value)}
+                onChange={(event) => isCurrent() && setKey(event.target.value)}
                 required
                 autoComplete="off"
               />
@@ -541,6 +794,7 @@ export function PresentationViewEditor({
             <AlertDialogCancel>{m.curation_keep()}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
+                if (!isCurrent()) return;
                 if (confirm === 'reload') void reload();
                 else {
                   setDraft((value) => value && discardPresentationDraft(value));

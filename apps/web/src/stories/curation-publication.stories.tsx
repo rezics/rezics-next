@@ -3,7 +3,7 @@ import { createKernelClient } from '@rezics/client';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { CurationView } from '../features/pages/curate-view';
+import { PresentationViewEditor } from '../features/pages/curate-view-editor';
 import { publishProfile } from '../features/pages/curate';
 import type { PublicationTransport } from '../features/pages/curation-publish';
 import { m } from '../paraglide/messages.js';
@@ -17,6 +17,7 @@ const initialProfile: PresentationProfile = {
   types: [],
   routes: [],
 };
+const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
 
 function PublicationStory({ scenario }: { scenario: Scenario }) {
   const transport = useMemo((): PublicationTransport => {
@@ -54,13 +55,15 @@ function PublicationStory({ scenario }: { scenario: Scenario }) {
     const client = createKernelClient('https://kernel.invalid', { fetch });
     return {
       publish: (input) => publishProfile(client, { ...input, authorization: 'Bearer story-session' }),
-      read: async () => ({ ok: true, head: 9, digest: profileDigest(initialProfile), profile: initialProfile }),
+      read: async () => ({ ok: true, reader, head: 9, digest: profileDigest(initialProfile), profile: initialProfile }),
     };
   }, [scenario]);
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-8">
-      <CurationView
-        initial={{ ok: true, profile: initialProfile, head: 7, digest: profileDigest(initialProfile) }}
+      <PresentationViewEditor
+        initial={{ ok: true, reader, profile: initialProfile, head: 7, digest: profileDigest(initialProfile) }}
+        observedSession={{ state: 'signed-in', subject: reader }}
+        locale="en"
         transport={transport}
       />
     </div>

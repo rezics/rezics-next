@@ -1,6 +1,6 @@
 import { platformRegistry, profileDigest, validateProfile, type PresentationProfile } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useSyncExternalStore } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { m } from '../../paraglide/messages.js';
 import {
   CurationPublication,
@@ -73,6 +73,13 @@ export function CurationPublicationRecovery({
   onReviewed: (active: ActiveCuration, choice: 'keep' | 'discard') => void;
   correction?: ValidationCorrection;
 }) {
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, [publication]);
   const { intent, result, active, readFailure, busy } = useSyncExternalStore(
     publication.subscribe,
     publication.getSnapshot,
@@ -82,12 +89,14 @@ export function CurationPublicationRecovery({
   const stale = result?.ok === false && result.reason === 'stale';
   const invalid = result?.ok === false && result.reason === 'invalid';
   function reconcile(choice: 'keep' | 'discard') {
+    if (!mounted.current) return;
     const reviewed = publication.reconcile(profile, choice);
     if (reviewed) onReviewed(reviewed, choice);
   }
   async function retry() {
+    if (!mounted.current) return;
     const confirmation = await publication.retry();
-    if (confirmation) onPublished(confirmation);
+    if (mounted.current && confirmation) onPublished(confirmation);
   }
   return (
     <section
@@ -154,8 +163,9 @@ export function CurationPublicationRecovery({
                   profileDigest(profile) === profileDigest(intent.profile)
                 }
                 onClick={async () => {
+                  if (!mounted.current) return;
                   const confirmation = await publication.replaceInvalid(profile, head);
-                  if (confirmation) onPublished(confirmation);
+                  if (mounted.current && confirmation) onPublished(confirmation);
                 }}
               >
                 {m.curation_new_intent()}

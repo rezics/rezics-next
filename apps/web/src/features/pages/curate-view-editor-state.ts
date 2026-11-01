@@ -208,7 +208,7 @@ export function confirmPresentationDraft(
 ): PresentationDraft {
   return {
     ...draft,
-    saved: { ok: true, profile: intent.profile, digest: result.digest, head: result.head },
+    saved: { ok: true, reader: intent.reader, profile: intent.profile, digest: result.digest, head: result.head },
   };
 }
 

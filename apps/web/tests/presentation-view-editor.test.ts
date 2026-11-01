@@ -61,7 +61,13 @@ const profile = (): PresentationProfile => ({
   ],
   routes: [{ route: '/', document: document('home') }],
 });
-const snapshot = () => ({ ok: true as const, profile: profile(), head: 7, digest: `sha256:${'a'.repeat(64)}` });
+const snapshot = () => ({
+  ok: true as const,
+  reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
+  profile: profile(),
+  head: 7,
+  digest: `sha256:${'a'.repeat(64)}`,
+});
 const generic: Template = { scope: 'generic', key: null };
 const book: Template = { scope: 'type', key: 'schema:Book' };
 

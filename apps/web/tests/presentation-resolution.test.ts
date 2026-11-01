@@ -325,11 +325,11 @@ test('presentation editing and published preview put draft meaning first and kee
 
   const editorHtml = renderToString(
     createElement(PresentationViewEditor, {
-      initial: { ok: true, profile, digest, head: 17 },
+      initial: { ok: true, reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', profile, digest, head: 17 },
       locale: 'en',
       transport: {
         publish: async () => ({ ok: true, digest, head: 18 }),
-        read: async () => ({ ok: true, profile, digest, head: 17 }),
+        read: async () => ({ ok: true, reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', profile, digest, head: 17 }),
       },
     }),
   );
@@ -347,9 +347,10 @@ test('presentation editing and published preview put draft meaning first and kee
   expect(closedDisclosureContaining(editorHtml, m.curation_fallback())).toBeDefined();
 
   const publication = new CurationPublication(
+    '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
     {
       publish: async () => ({ ok: false, reason: 'stale' }),
-      read: async () => ({ ok: true, profile, digest, head: 18 }),
+      read: async () => ({ ok: true, reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', profile, digest, head: 18 }),
     },
     () => 'test-publication-key',
   );

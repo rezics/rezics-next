@@ -4,7 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { curationFailure, publishProfile, type CurationFailure, type PublishInput, type PublishResult } from './curate';
 import { pickText } from '@rezics/composition';
 import { readRelease } from '../../subject/definitions';
@@ -25,9 +25,12 @@ import {
 } from '../../subject/candidates';
 
 export type CurationRead =
-  | { ok: true; digest: string; head: number; profile: PresentationProfile }
+  | { ok: true; reader: string; digest: string; head: number; profile: PresentationProfile }
   | { ok: false; reason: 'signed-out' }
   | CurationFailure;
+
+type CurationReadInput = { expectedReader?: string } | undefined;
+type PublicationRequest = { expectedReader: string; intent: PublishInput | CurationFailure };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/i;
 
@@ -60,6 +63,36 @@ function validateInput(input: unknown): PublishInput | CurationFailure {
   };
 }
 
+function expectedReaderInput(input: unknown): CurationReadInput {
+  if (input === undefined) return undefined;
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    !('expectedReader' in input) ||
+    typeof input.expectedReader !== 'string' ||
+    !uuid.test(input.expectedReader) ||
+    Object.keys(input).some((key) => key !== 'expectedReader')
+  )
+    throw new Error('Invalid curation reader');
+  return { expectedReader: input.expectedReader };
+}
+
+function validatePublicationRequest(input: unknown): PublicationRequest {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    !('expectedReader' in input) ||
+    typeof input.expectedReader !== 'string' ||
+    !uuid.test(input.expectedReader) ||
+    !('intent' in input)
+  )
+    throw new Error('Invalid curation reader');
+  const intent = validateInput(input.intent);
+  return { expectedReader: input.expectedReader, intent };
+}
+
 async function sessionBearer() {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
@@ -67,13 +100,26 @@ async function sessionBearer() {
   return viewerCredential(request);
 }
 
+/** The reader and credential are both taken from the same prepared request. */
+async function curationAdmission() {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  await prepareSession(request, env as Partial<SessionEnv>);
+  return {
+    authorization: viewerCredential(request),
+    reader: sessionSubject(request),
+  };
+}
+
 // POST server functions use the site's origin and session-token CSRF middleware.
 // Composition props are typed as unknown; validateProfile checks their JSON shape.
 export const readCuration = createServerFn({ method: 'POST', strict: false })
-  .validator(() => undefined)
-  .handler(async (): Promise<CurationRead> => {
-    const authorization = await sessionBearer();
+  .validator(expectedReaderInput)
+  .handler(async ({ data }): Promise<CurationRead> => {
+    const { authorization, reader } = await curationAdmission();
     if (!authorization) return { ok: false, reason: 'signed-out' };
+    if (!reader || (data?.expectedReader !== undefined && data.expectedReader !== reader))
+      return { ok: false, reason: 'forbidden', admissionChanged: true };
     try {
       const client = kernelClient();
       const active = await client.presentation.active.get({ headers: { authorization } });
@@ -85,19 +131,21 @@ export const readCuration = createServerFn({ method: 'POST', strict: false })
       if (result.status >= 400) return curationFailure(result.status, result.error?.value, result.headers);
       if (!result.data || validateProfile(platformRegistry, result.data.profile).length > 0)
         return { ok: false, reason: 'unavailable' };
-      return { ok: true, ...active.data, profile: result.data.profile as PresentationProfile };
+      return { ok: true, reader, ...active.data, profile: result.data.profile as PresentationProfile };
     } catch {
       return { ok: false, reason: 'unavailable' };
     }
   });
 
 export const publishCuration = createServerFn({ method: 'POST' })
-  .validator(validateInput)
+  .validator(validatePublicationRequest)
   .handler(async ({ data }): Promise<PublishResult> => {
-    const authorization = await sessionBearer();
-    if (!authorization) return { ok: false, reason: 'forbidden' };
-    if ('ok' in data) return data;
-    return publishProfile(kernelClient(), { ...data, authorization });
+    const { authorization, reader } = await curationAdmission();
+    if (!authorization) return { ok: false, reason: 'forbidden', admissionChanged: true };
+    if (!reader || reader !== data.expectedReader)
+      return { ok: false, reason: 'forbidden', admissionChanged: true };
+    if ('ok' in data.intent) return data.intent;
+    return publishProfile(kernelClient(), { ...data.intent, authorization });
   });
 
 /** Inspection uses the current session only at the BFF; every native read is explicitly anonymous. */

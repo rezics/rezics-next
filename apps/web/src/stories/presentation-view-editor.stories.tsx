@@ -63,7 +63,8 @@ const profile: PresentationProfile = {
   ],
   routes: [{ route: '/', document: pageDocument('home', 1) }],
 };
-const initial = { ok: true as const, profile, digest: `sha256:${'a'.repeat(64)}`, head: 7 };
+const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
+const initial = { ok: true as const, reader, profile, digest: `sha256:${'a'.repeat(64)}`, head: 7 };
 const transport: CurationEditorTransport = {
   read: async () => initial,
   publish: async () => ({ ok: false, reason: 'unavailable' }),

@@ -12,7 +12,8 @@ import {
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
 export type CurationFailure =
-  | { ok: false; reason: 'stale' | 'forbidden' }
+  | { ok: false; reason: 'stale' }
+  | { ok: false; reason: 'forbidden'; admissionChanged?: boolean }
   | { ok: false; reason: 'unavailable'; outcome?: 'unknown'; phase?: 'publish' | 'activate' }
   | { ok: false; reason: 'invalid'; errors: { pointer: string; code: string }[] }
   | { ok: false; reason: 'rate-limited'; retryAfter?: number };

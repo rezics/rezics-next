@@ -46,7 +46,13 @@ test('default presentation editor takes a native invalid publication to its actu
     types: [{ type: 'schema:Book', views: { overview: document('book'), details: document('details') } }],
     routes: [],
   };
-  const initial = { ok: true as const, profile, head: 7, digest: profileDigest(profile) };
+  const initial = {
+    ok: true as const,
+    reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
+    profile,
+    head: 7,
+    digest: profileDigest(profile),
+  };
   const attempts: PublishInput[] = [];
   const host = window.document.createElement('div');
   window.document.body.append(host);

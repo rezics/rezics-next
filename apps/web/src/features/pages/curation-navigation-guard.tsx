@@ -1,5 +1,5 @@
 import { useBlocker, useRouter } from '@tanstack/react-router';
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +55,18 @@ function RouterDepartureGuard({ protect, retainedPublication, fallbackFocus }: G
     enableBeforeUnload: false,
     withResolver: true,
   });
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  useLayoutEffect(
+    () => () => {
+      const pending = blockerRef.current;
+      if (pending.status === 'blocked' && !resolved.current) {
+        resolved.current = true;
+        pending.reset();
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     // If a pending publication finishes without a later draft, close any outstanding prompt by staying.
@@ -77,7 +89,13 @@ function RouterDepartureGuard({ protect, retainedPublication, fallbackFocus }: G
       <AlertDialogContent
         initialFocus={stayButton}
         finalFocus={() =>
-          leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : fallbackFocus.current
+          leaving.current
+            ? false
+            : returnFocus.current?.isConnected
+              ? returnFocus.current
+              : fallbackFocus.current?.isConnected
+                ? fallbackFocus.current
+                : false
         }
       >
         <AlertDialogHeader>

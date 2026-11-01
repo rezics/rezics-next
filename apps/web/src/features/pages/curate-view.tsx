@@ -12,8 +12,9 @@ import { PresentationPreviewPanel, PresentationPreviewContext } from './presenta
 import { readPresentationPreview } from './curate-actions';
 
 const publicationTransport: PublicationTransport = {
-  read: () => readCuration({ headers: csrfHeaders() }),
-  publish: (data) => publishCuration({ data, headers: csrfHeaders() }),
+  read: (expectedReader) => readCuration({ data: { expectedReader }, headers: csrfHeaders() }),
+  publish: (intent, expectedReader) =>
+    publishCuration({ data: { intent, expectedReader }, headers: csrfHeaders() }),
 };
 
 /** The subject's private curation region shares the existing prepared BFF transport. */
@@ -46,11 +47,13 @@ export function CurationView({
   transport?: PublicationTransport;
 }) {
   const preview = useContext(PresentationPreviewContext);
+  const session = useSession();
   const locale = getLocale();
   return (
     <PresentationViewEditor
       initial={initial}
       locale={locale}
+      observedSession={session}
       transport={transport}
       preview={
         <PresentationPreviewPanel
