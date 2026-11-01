@@ -65,7 +65,14 @@ export type SetupFailure = {
   kind: 'failure';
   reason: 'conflict' | 'denied' | 'invalid' | 'unavailable';
   status: number;
+  /** Actual reader from the same prepared request; absent on local and standalone results. */
+  reader?: SetupReaderProvenance;
 };
+/** A browser may compare a server read with its current subject without receiving credentials. */
+export type SetupReaderProvenance = { kind: 'session'; subject: string } | { kind: 'unbound' };
+export function setupReaderMatches(reader: SetupReaderProvenance | undefined, expectedSubject: string | null): boolean {
+  return reader?.kind === 'session' && !!expectedSubject && reader.subject === expectedSubject;
+}
 export type SetupResult =
   | SetupFailure
   | { kind: 'space'; space: SetupSpace }
@@ -76,6 +83,8 @@ export type SetupSnapshot = {
   space: SetupSpace | null;
   realm: SetupRealm | null;
   permitted: { address: boolean; settings: boolean; scheme: boolean; board: boolean };
+  /** Additive, serializable provenance supplied by the setup server wrappers. */
+  reader?: SetupReaderProvenance;
 };
 
 export function applySetupResult(snapshot: SetupSnapshot, result: SetupResult): SetupSnapshot {
@@ -88,7 +97,7 @@ export function applySetupResult(snapshot: SetupSnapshot, result: SetupResult): 
     };
   return snapshot;
 }
-export type SetupChoice = { id: string; label: string };
+export type SetupChoice = { id: string; label: string; reader?: SetupReaderProvenance };
 export const setupReadSchema = v.strictObject({ spaceId: v.optional(id) });
 export const setupChoiceSchema = v.strictObject({ id, kind: v.picklist(['context', 'scheme', 'concept']) });
 type Auth = { headers: { authorization: string } };

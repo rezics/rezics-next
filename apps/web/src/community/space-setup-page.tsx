@@ -17,11 +17,13 @@ import {
 import { nativeContextChoiceSource } from './setup-context-native';
 import { setupBoardChoiceSource } from './setup-board-picker';
 import { SpaceSetupForm, type SetupTransport } from './space-setup-form';
-import type { SetupSnapshot, SetupFailure } from './space-setup';
+import { setupReaderMatches, type SetupSnapshot, type SetupFailure } from './space-setup';
 import {
   SpaceSetupCallerLifetime,
   SpaceSetupCallerLifetimeContext,
+  type SpaceSetupInitialAdmission,
   claimSpaceSetupInitialSnapshot,
+  spaceSetupInitialAdmissionMatchesReader,
   spaceSetupInitialSnapshotMatches,
   spaceSetupSessionSource,
   spaceSetupInitialSnapshotAvailable,
@@ -53,15 +55,13 @@ function sessionMatches(
   );
 }
 
-function unavailableRead(spaceId?: string): Promise<SetupSnapshot | SetupFailure> {
-  return Promise.resolve(spaceId ? denied : unavailable);
-}
-
 export function SpaceSetupPage({
   initial,
+  admission,
   spaceId,
 }: {
   initial: SetupSnapshot | SetupFailure;
+  admission?: SpaceSetupInitialAdmission;
   spaceId?: string | undefined;
 }) {
   const { csrfToken, state, subject } = useSession();
@@ -75,19 +75,21 @@ export function SpaceSetupPage({
     sessionSource?.snapshot ?? noRevision,
   );
   const cached = sessionSource?.read();
-  const initialSessionMatches = spaceSetupInitialSnapshotMatches(initial, sessionSource, cached);
+  const initialLoaderMatches = spaceSetupInitialAdmissionMatchesReader(initial, admission);
+  const initialSessionMatches = spaceSetupInitialSnapshotMatches(initial, sessionSource, cached, admission);
   const sessionDataUpdateCount = sessionSource?.dataUpdateCount() ?? 0;
   const sessionDataUpdatedAt = sessionSource?.dataUpdatedAt() ?? 0;
+  const sessionObservation = sessionSource?.observation();
   const cacheMatches = sessionMatches(cached, { state, subject, csrfToken });
-  const ready =
+  const readReady =
     hydrated &&
     !!queryClient &&
     cacheMatches &&
+    sessionObservation?.status === 'success' &&
     state === 'signed-in' &&
     typeof subject === 'string' &&
-    subject.length > 0 &&
-    typeof csrfToken === 'string' &&
-    csrfToken.length > 0;
+    subject.length > 0;
+  const commandReady = readReady && typeof csrfToken === 'string' && csrfToken.length > 0;
   const targetSpaceId = spaceId ?? (initial.kind === 'ready' ? (initial.space?.id ?? null) : null);
   const targetRealmId = initial.kind === 'ready' ? (initial.realm?.id ?? null) : null;
   const targetMismatch = !!spaceId && initial.kind === 'ready' && initial.space?.id !== spaceId;
@@ -103,6 +105,8 @@ export function SpaceSetupPage({
       state,
       subject,
       csrfToken,
+      readReady,
+      commandReady,
       locale,
       targetSpaceId,
       initialIdentity,
@@ -117,10 +121,14 @@ export function SpaceSetupPage({
       if (!queryClient) return sessionSource === null;
       if (!sessionSource || spaceSetupSessionSource(queryClient) !== sessionSource) return false;
       const current = sessionSource.read();
+      const observation = sessionSource.observation();
       return (
+        observation.status === 'success' &&
         sessionSource.snapshot() === sessionRevision &&
         sessionSource.dataUpdateCount() === sessionDataUpdateCount &&
         sessionSource.dataUpdatedAt() === sessionDataUpdatedAt &&
+        observation.errorUpdateCount === sessionObservation?.errorUpdateCount &&
+        observation.errorUpdatedAt === sessionObservation?.errorUpdatedAt &&
         sessionMatches(current, capturedSession)
       );
     };
@@ -129,12 +137,16 @@ export function SpaceSetupPage({
         targetSpaceId,
         subject: subject ?? null,
         csrfToken,
-        ready,
+        readReady,
+        commandReady,
+        ready: commandReady,
         locale,
         sessionSource,
         sessionRevision,
         sessionDataUpdateCount,
         sessionDataUpdatedAt,
+        sessionErrorUpdateCount: sessionObservation?.errorUpdateCount ?? 0,
+        sessionErrorUpdatedAt: sessionObservation?.errorUpdatedAt ?? 0,
       },
       valid,
       sessionSource?.subscribe,
@@ -149,7 +161,8 @@ export function SpaceSetupPage({
     state,
     subject,
     csrfToken,
-    ready,
+    readReady,
+    commandReady,
     locale,
     targetSpaceId,
     targetMismatch,
@@ -159,10 +172,13 @@ export function SpaceSetupPage({
     () =>
       setupBoardChoiceSource(async (input) => {
         const ticket = caller.ticket();
-        if (!caller.binding.ready || !caller.current())
-          return { kind: 'failure', reason: caller.current() ? 'denied' : 'unavailable', status: 503 };
+        if (!caller.current()) return { kind: 'failure', reason: 'unavailable', status: 503 };
+        if (!caller.binding.readReady)
+          return { kind: 'failure', reason: caller.binding.subject ? 'denied' : 'unavailable', status: 503 };
         const result = await readSpaceSetupBoardChoices({ data: { ...input, locale } });
-        return caller.owns(ticket) ? result : { kind: 'failure', reason: 'unavailable', status: 503 };
+        return caller.owns(ticket) && setupReaderMatches(result.reader, caller.binding.subject)
+          ? result
+          : { kind: 'failure', reason: 'unavailable', status: 503 };
       }),
     [caller, locale],
   );
@@ -170,30 +186,33 @@ export function SpaceSetupPage({
   const transport = useMemo<SetupTransport>(() => {
     let createdSpaceId: string | null = null;
     let createdRealmId: string | null = null;
-    const authorized = () => caller.binding.ready && caller.current();
+    const readable = () => caller.binding.readReady && caller.current();
+    const writable = () => caller.binding.commandReady && caller.current();
     const currentFailure = (): SetupFailure => (caller.current() ? denied : unavailable);
     return {
       contexts: nativeContextChoiceSource(
         async (input) => {
           const ticket = caller.ticket();
-          if (!authorized()) return { kind: caller.current() ? 'denied' : 'unavailable' };
+          if (!readable()) return { kind: caller.current() && caller.binding.subject ? 'denied' : 'unavailable' };
           const result = await searchSpaceSetupContexts({
             data: { query: input.query, ...(input.cursor !== undefined ? { cursor: input.cursor } : {}) },
             ...(input.signal ? { signal: input.signal } : {}),
           });
-          return caller.owns(ticket) ? result : { kind: 'unavailable' };
+          return caller.owns(ticket) && setupReaderMatches(result.reader, caller.binding.subject)
+            ? result
+            : { kind: 'unavailable' };
         },
         async (id) => {
           const ticket = caller.ticket();
-          if (!authorized()) return currentFailure();
+          if (!readable()) return currentFailure();
           const result = await resolveSpaceSetupChoice({ data: { kind: 'context', id } });
-          return caller.owns(ticket) ? result : unavailable;
+          return caller.owns(ticket) && setupReaderMatches(result.reader, caller.binding.subject) ? result : unavailable;
         },
         locale,
       ),
       command: async (data) => {
         const ticket = caller.ticket();
-        if (!authorized()) return currentFailure();
+        if (!writable()) return currentFailure();
         const expectedSpaceId = targetSpaceId ?? createdSpaceId;
         const expectedRealmId = targetRealmId ?? createdRealmId;
         if (
@@ -224,22 +243,22 @@ export function SpaceSetupPage({
       },
       read: async (id) => {
         const ticket = caller.ticket();
-        if (!authorized()) return currentFailure();
+        if (!readable()) return currentFailure();
         const requested = id ?? targetSpaceId ?? createdSpaceId ?? undefined;
         if (targetSpaceId && requested !== targetSpaceId) return denied;
         if (!targetSpaceId && createdSpaceId && requested !== createdSpaceId) return denied;
         if (!targetSpaceId && !createdSpaceId && id) return denied;
         const result = await readSpaceSetup({ data: requested ? { spaceId: requested } : {} });
-        if (!caller.owns(ticket)) return unavailable;
+        if (!caller.owns(ticket) || !setupReaderMatches(result.reader, caller.binding.subject)) return unavailable;
         const expected = targetSpaceId ?? createdSpaceId;
         if (expected && result.kind === 'ready' && result.space?.id !== expected) return unavailable;
         return result;
       },
       choice: async (kind, id) => {
         const ticket = caller.ticket();
-        if (!authorized()) return currentFailure();
+        if (!readable()) return currentFailure();
         const result = await resolveSpaceSetupChoice({ data: { kind, id } });
-        if (!caller.owns(ticket)) return unavailable;
+        if (!caller.owns(ticket) || !setupReaderMatches(result.reader, caller.binding.subject)) return unavailable;
         if (!('kind' in result) && result.id !== id) return unavailable;
         return result;
       },
@@ -250,8 +269,15 @@ export function SpaceSetupPage({
     if (hydrated) claimSpaceSetupInitialSnapshot(initial);
   }, [initial, hydrated]);
   let formInitial: SetupSnapshot | SetupFailure;
-  if (!hydrated) formInitial = initial;
-  else if (ready && initialSessionMatches && !targetMismatch && spaceSetupInitialSnapshotAvailable(initial))
+  if (!hydrated)
+    formInitial = initialLoaderMatches && initialSessionMatches && !targetMismatch ? initial : unavailable;
+  else if (
+    readReady &&
+    initialLoaderMatches &&
+    initialSessionMatches &&
+    !targetMismatch &&
+    spaceSetupInitialSnapshotAvailable(initial)
+  )
     formInitial = initial;
   else formInitial = targetMismatch ? denied : unavailable;
 
@@ -279,16 +305,16 @@ export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
   const cached = sessionSource?.read();
   const dataUpdateCount = sessionSource?.dataUpdateCount() ?? 0;
   const dataUpdatedAt = sessionSource?.dataUpdatedAt() ?? 0;
+  const observation = sessionSource?.observation();
   const matches = sessionMatches(cached, session);
-  const ready =
+  const readReady =
     hydrated &&
     !!queryClient &&
     matches &&
+    observation?.status === 'success' &&
     session.state === 'signed-in' &&
     typeof session.subject === 'string' &&
-    session.subject.length > 0 &&
-    typeof session.csrfToken === 'string' &&
-    session.csrfToken.length > 0;
+    session.subject.length > 0;
   const boundary = useMemo(
     () => ({}),
     [
@@ -300,19 +326,25 @@ export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
       session.state,
       session.subject,
       session.csrfToken,
+      observation?.errorUpdateCount,
+      observation?.errorUpdatedAt,
       spaceId,
     ],
   );
   const activeBoundary = useRef(boundary);
   activeBoundary.current = boundary;
   const current = () => {
-    if (!ready || activeBoundary.current !== boundary || !queryClient || !sessionSource) return false;
+    if (!readReady || activeBoundary.current !== boundary || !queryClient || !sessionSource) return false;
     const latest = sessionSource.read();
+    const latestObservation = sessionSource.observation();
     return (
+      latestObservation.status === 'success' &&
       spaceSetupSessionSource(queryClient) === sessionSource &&
       sessionSource.snapshot() === sessionRevision &&
       sessionSource.dataUpdateCount() === dataUpdateCount &&
       sessionSource.dataUpdatedAt() === dataUpdatedAt &&
+      latestObservation.errorUpdateCount === observation?.errorUpdateCount &&
+      latestObservation.errorUpdatedAt === observation?.errorUpdatedAt &&
       sessionMatches(latest, session)
     );
   };
@@ -323,6 +355,8 @@ export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
     sessionRevision,
     dataUpdateCount,
     dataUpdatedAt,
+    observation?.errorUpdateCount ?? 0,
+    observation?.errorUpdatedAt ?? 0,
     session.subject ?? null,
   ] as const;
   const { data } = useQuery({
@@ -330,10 +364,11 @@ export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
     queryFn: async () => {
       if (!current()) throw new Error('Space setup entry caller retired');
       const result = await readSpaceSetup({ data: { spaceId } });
-      if (!current()) throw new Error('Space setup entry caller retired');
+      if (!current() || !setupReaderMatches(result.reader, session.subject ?? null))
+        throw new Error('Space setup entry caller retired');
       return result;
     },
-    enabled: personalRead.enabled && ready,
+    enabled: personalRead.enabled && readReady,
     staleTime: 0,
     retry: false,
   });

@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, useState, type ReactNode } from 'react';
+import { act, StrictMode, isValidElement, useState, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { SetupChoice, SetupCommand, SetupFailure, SetupResult, SetupSnapshot } from '../src/community/space-setup';
 import type { BoardChoiceSource } from '../src/community/setup-board-picker';
@@ -113,7 +113,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = a
 const { sessionQuery } = await import('../src/session/query');
 const { SpaceSetupEntry, SpaceSetupPage } = await import('../src/community/space-setup-page');
 const { SpaceSetupForm } = await import('../src/stories/patterns/space-setup/space-setup');
-const { bindSpaceSetupInitialSnapshot, captureSpaceSetupInitialAdmission } =
+const { captureSpaceSetupInitialAdmission, type SpaceSetupInitialAdmission } =
   await import('../src/community/space-setup-lifetime');
 const { m } = await import('../src/paraglide/messages.js');
 const id = (number: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(number).padStart(12, '0')}`;
@@ -151,6 +151,10 @@ const existing: SetupSnapshot = {
 };
 const unavailable: SetupFailure = { kind: 'failure', reason: 'unavailable', status: 503 };
 const retiredLabel = 'Retired private Context label';
+const loaderAdmissions = new WeakMap<object, SpaceSetupInitialAdmission>();
+function authenticated<T extends object>(value: T): T & { reader: { kind: 'session'; subject: string } } {
+  return { ...value, reader: { kind: 'session', subject } };
+}
 const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
@@ -163,7 +167,8 @@ let replaceBoardSource: ((source: BoardChoiceSource) => void) | undefined;
 function PageFrame({ initial, spaceId: target }: { initial: ReadResult; spaceId?: string }) {
   const [, setRevision] = useState(0);
   rerender = () => setRevision((revision) => revision + 1);
-  return <SpaceSetupPage initial={initial} spaceId={target} />;
+  const admission = loaderAdmissions.get(initial);
+  return <SpaceSetupPage initial={initial} admission={admission} spaceId={target} />;
 }
 
 function DynamicFormFrame({
@@ -206,7 +211,7 @@ async function close() {
 async function mount(
   content: ReactNode,
   session: unknown = viewer(),
-  bindSnapshot?: object,
+  bindSnapshot?: ReadResult,
   sessionAtRender?: unknown,
 ) {
   await close();
@@ -216,7 +221,20 @@ async function mount(
   searches.length = 0;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session);
-  if (bindSnapshot) bindSpaceSetupInitialSnapshot(bindSnapshot, captureSpaceSetupInitialAdmission(client));
+  const initial =
+    bindSnapshot ??
+    (isValidElement(content) && content.type === PageFrame
+      ? (content.props as { initial: ReadResult }).initial
+      : undefined);
+  if (initial) {
+    const actualSubject =
+      session && typeof session === 'object' && 'state' in session && session.state === 'signed-in' &&
+      'subject' in session && typeof session.subject === 'string'
+        ? session.subject
+        : undefined;
+    if (actualSubject) initial.reader = { kind: 'session', subject: actualSubject };
+    loaderAdmissions.set(initial, captureSpaceSetupInitialAdmission(client));
+  }
   if (sessionAtRender !== undefined) client.setQueryData(sessionQuery.queryKey, sessionAtRender);
   const route = createRootRoute({ component: () => content });
   router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/realms/new'] }) });
@@ -295,10 +313,13 @@ test('same-account session revisions retire Space setup command/read callbacks a
   await setSession(viewer('csrf-two'));
   hidden('Private draft from first caller');
   const readsBeforeLateCommand = reads.length;
-  await settle(commands[0]!.pending, {
-    kind: 'space',
-    space: { id: spaceId, head: id(7), title: 'Late private result', summary: '', address: null, realmId: null },
-  });
+  await settle(
+    commands[0]!.pending,
+    authenticated({
+      kind: 'space' as const,
+      space: { id: spaceId, head: id(7), title: 'Late private result', summary: '', address: null, realmId: null },
+    }),
+  );
   expect(reads).toHaveLength(readsBeforeLateCommand);
   hidden('Late private result');
 
@@ -363,9 +384,9 @@ test('SpaceSetupEntry fences private query cache across same-account replacement
   expect(reads).toHaveLength(1);
   await setSession(viewer('csrf-two'));
   expect(reads).toHaveLength(2);
-  await settle(reads[0]!.pending, result);
+  await settle(reads[0]!.pending, authenticated(result));
   hidden(m.space_setup_entry());
-  await settle(reads[1]!.pending, result);
+  await settle(reads[1]!.pending, authenticated(result));
   expect(host.textContent).toContain(m.space_setup_entry());
 
   await act(async () => {
@@ -375,7 +396,7 @@ test('SpaceSetupEntry fences private query cache across same-account replacement
   });
   expect(reads).toHaveLength(3);
   hidden(m.space_setup_entry());
-  await settle(reads[2]!.pending, result);
+  await settle(reads[2]!.pending, authenticated(result));
   expect(host.textContent).toContain(m.space_setup_entry());
 });
 
@@ -402,8 +423,11 @@ test('StrictMode page retires current, search and exact Context resolutions on s
 
   await setSession(viewer('csrf-two'));
   expect(searches[0]!.signal?.aborted).toBe(true);
-  for (const choice of choices) await settle(choice.pending, { id: contextId, label: retiredLabel });
-  searches[0]!.pending.resolve({ contexts: [{ id: contextId, label: retiredLabel }], next: null });
+  for (const choice of choices)
+    await settle(choice.pending, authenticated({ id: contextId, label: retiredLabel }));
+  searches[0]!.pending.resolve(
+    authenticated({ contexts: [{ id: contextId, label: retiredLabel }], next: null }),
+  );
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });

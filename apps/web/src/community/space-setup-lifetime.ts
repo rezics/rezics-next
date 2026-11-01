@@ -11,24 +11,38 @@ export type SpaceSetupSessionRecord = {
 export type SpaceSetupSessionSource = {
   readonly id: number;
   read(): SpaceSetupSessionRecord | undefined;
+  observation(): SpaceSetupSessionObservation;
   dataUpdateCount(): number;
   dataUpdatedAt(): number;
   snapshot(): number;
   subscribe(listener: () => void): () => void;
 };
 
+export type SpaceSetupSessionObservation = {
+  present: boolean;
+  status: 'pending' | 'error' | 'success' | 'missing';
+  dataUpdateCount: number;
+  dataUpdatedAt: number;
+  errorUpdateCount: number;
+  errorUpdatedAt: number;
+};
+
 const sources = new WeakMap<QueryClient, SpaceSetupSessionSource>();
 let nextSourceId = 0;
 const consumedInitialSnapshots = new WeakSet<object>();
+const initialAdmissionSources = new WeakMap<object, SpaceSetupSessionSource>();
 export type SpaceSetupInitialAdmission = {
   state: string;
   subject: string | null;
-  csrfToken: string | null;
+  csrfAvailable: boolean;
   sessionRevision: number;
   dataUpdateCount: number;
   dataUpdatedAt: number;
+  queryStatus: SpaceSetupSessionObservation['status'];
+  errorUpdateCount: number;
+  errorUpdatedAt: number;
+  observationScope: 'query-client-local';
 };
-const initialSnapshotSessions = new WeakMap<object, SpaceSetupInitialAdmission>();
 
 /** A loader snapshot seeds only its first browser visit, even if its caller remounts. */
 export function claimSpaceSetupInitialSnapshot(snapshot: object) {
@@ -46,60 +60,113 @@ export function spaceSetupInitialSnapshotAvailable(snapshot: object) {
 export function captureSpaceSetupInitialAdmission(client: QueryClient): SpaceSetupInitialAdmission {
   const source = spaceSetupSessionSource(client);
   const session = source.read();
-  return {
+  const observation = source.observation();
+  const admission: SpaceSetupInitialAdmission = {
     state: session?.state ?? 'unknown',
     subject: session?.subject ?? null,
-    csrfToken: session?.csrfToken ?? null,
+    csrfAvailable: typeof session?.csrfToken === 'string' && session.csrfToken.length > 0,
     sessionRevision: source.snapshot(),
-    dataUpdateCount: source.dataUpdateCount(),
-    dataUpdatedAt: source.dataUpdatedAt(),
+    dataUpdateCount: observation.dataUpdateCount,
+    dataUpdatedAt: observation.dataUpdatedAt,
+    queryStatus: observation.status,
+    errorUpdateCount: observation.errorUpdateCount,
+    errorUpdatedAt: observation.errorUpdatedAt,
+    observationScope: 'query-client-local',
   };
+  initialAdmissionSources.set(admission, source);
+  return admission;
 }
 
-/** Attach the loader-start admission to its result without changing the public snapshot shape. */
-export function bindSpaceSetupInitialSnapshot(snapshot: object, admission: SpaceSetupInitialAdmission) {
-  initialSnapshotSessions.set(snapshot, admission);
+/** The serializable route envelope and its actual server reader must agree before hydration. */
+export function spaceSetupInitialAdmissionMatchesReader(
+  snapshot: { reader?: { kind: string; subject?: string } },
+  admission: SpaceSetupInitialAdmission | undefined,
+) {
+  return Boolean(
+    admission &&
+      admission.observationScope === 'query-client-local' &&
+      admission.queryStatus === 'success' &&
+      admission.state === 'signed-in' &&
+      admission.subject &&
+      snapshot.reader?.kind === 'session' &&
+      snapshot.reader.subject === admission.subject,
+  );
 }
 
-/** A route snapshot is usable only under the cache state that admitted its original read. */
+/**
+ * Cross-cache admission compares the expected identity and actual reader. QueryClient-local counters
+ * are recorded for the original observation but cannot prove an unobserved cross-cache ABA.
+ */
 export function spaceSetupInitialSnapshotMatches(
-  snapshot: object,
+  snapshot: { reader?: { kind: string; subject?: string } },
   source: SpaceSetupSessionSource | null,
   session: SpaceSetupSessionRecord | undefined,
+  admission: SpaceSetupInitialAdmission | undefined,
 ) {
-  const binding = initialSnapshotSessions.get(snapshot);
-  if (!binding) return true;
+  const originalSource = admission ? initialAdmissionSources.get(admission) : undefined;
+  const currentObservation = source?.observation();
+  const sameObservedSource = originalSource === source && !!source;
   return (
+    spaceSetupInitialAdmissionMatchesReader(snapshot, admission) &&
     !!source &&
     !!session &&
-    session.state === binding.state &&
-    (session.subject ?? null) === binding.subject &&
-    (session.csrfToken ?? null) === binding.csrfToken &&
-    source.snapshot() === binding.sessionRevision &&
-    source.dataUpdateCount() === binding.dataUpdateCount &&
-    source.dataUpdatedAt() === binding.dataUpdatedAt
+    currentObservation?.status === 'success' &&
+    session.state === admission!.state &&
+    (session.subject ?? null) === admission!.subject &&
+    (typeof session.csrfToken === 'string' && session.csrfToken.length > 0) === admission!.csrfAvailable &&
+    (!sameObservedSource ||
+      (source.snapshot() === admission!.sessionRevision &&
+        currentObservation.dataUpdateCount === admission!.dataUpdateCount &&
+        currentObservation.dataUpdatedAt === admission!.dataUpdatedAt &&
+        currentObservation.status === admission!.queryStatus &&
+        currentObservation.errorUpdateCount === admission!.errorUpdateCount &&
+        currentObservation.errorUpdatedAt === admission!.errorUpdatedAt))
   );
 }
 
 function observeSpaceSetupSession(client: QueryClient): SpaceSetupSessionSource {
   const read = () => client.getQueryData<SpaceSetupSessionRecord>(sessionQuery.queryKey);
-  const dataUpdateCount = () => client.getQueryState(sessionQuery.queryKey)?.dataUpdateCount ?? 0;
-  const dataUpdatedAt = () => client.getQueryState(sessionQuery.queryKey)?.dataUpdatedAt ?? 0;
+  const observation = (): SpaceSetupSessionObservation => {
+    const state = client.getQueryState(sessionQuery.queryKey);
+    return {
+      present: !!state,
+      status: state?.status ?? 'missing',
+      dataUpdateCount: state?.dataUpdateCount ?? 0,
+      dataUpdatedAt: state?.dataUpdatedAt ?? 0,
+      errorUpdateCount: state?.errorUpdateCount ?? 0,
+      errorUpdatedAt: state?.errorUpdatedAt ?? 0,
+    };
+  };
+  const dataUpdateCount = () => observation().dataUpdateCount;
+  const dataUpdatedAt = () => observation().dataUpdatedAt;
   const identity = () => {
     const session = read();
+    const seen = observation();
     return JSON.stringify([
+      seen.present,
+      seen.status,
       session?.state ?? 'unknown',
       session?.subject ?? null,
       session?.csrfToken ?? null,
-      dataUpdateCount(),
-      dataUpdatedAt(),
+      seen.dataUpdateCount,
+      seen.dataUpdatedAt,
+      seen.errorUpdateCount,
+      seen.errorUpdatedAt,
     ]);
   };
   let previous = identity();
   let revision = 0;
   const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe(({ query }) => {
+  client.getQueryCache().subscribe((event) => {
+    const { query } = event;
     if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+    if (event.type === 'removed') {
+      const next = identity();
+      previous = next;
+      revision++;
+      for (const listener of listeners) listener();
+      return;
+    }
     const next = identity();
     if (next === previous) return;
     previous = next;
@@ -109,6 +176,7 @@ function observeSpaceSetupSession(client: QueryClient): SpaceSetupSessionSource 
   return {
     id: ++nextSourceId,
     read,
+    observation,
     dataUpdateCount,
     dataUpdatedAt,
     snapshot: () => revision,
@@ -133,12 +201,18 @@ export type SpaceSetupCallerBinding = {
   readonly targetSpaceId: string | null;
   readonly subject: string | null;
   readonly csrfToken: string | null;
+  /** Read preparation can be healthy even when CSRF is unavailable for commands. */
+  readonly readReady: boolean;
+  readonly commandReady: boolean;
+  /** Compatibility alias for callers that use ready to mean write authority. */
   readonly ready: boolean;
   readonly locale: string;
   readonly sessionSource: SpaceSetupSessionSource | null;
   readonly sessionRevision: number;
   readonly sessionDataUpdateCount: number;
   readonly sessionDataUpdatedAt: number;
+  readonly sessionErrorUpdateCount: number;
+  readonly sessionErrorUpdatedAt: number;
 };
 
 let nextLifetimeId = 0;
@@ -236,12 +310,16 @@ export function standaloneSpaceSetupLifetime() {
       targetSpaceId: null,
       subject: null,
       csrfToken: null,
+      readReady: true,
+      commandReady: true,
       ready: true,
       locale: 'en',
       sessionSource: null,
       sessionRevision: 0,
       sessionDataUpdateCount: 0,
       sessionDataUpdatedAt: 0,
+      sessionErrorUpdateCount: 0,
+      sessionErrorUpdatedAt: 0,
     },
     () => true,
     undefined,

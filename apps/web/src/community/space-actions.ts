@@ -23,6 +23,8 @@ import {
   setupCommandSchema,
   setupReadSchema,
   setupChoiceSchema,
+  type SetupFailure,
+  type SetupReaderProvenance,
 } from './space-setup';
 import {
   requestRealmMembership,
@@ -233,6 +235,25 @@ async function setupCredential() {
   return authorization;
 }
 
+/** Prepare one read credential and report only the subject proven by that same request. */
+async function setupReadPreparation() {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  await prepareSession(request, env as Partial<SessionEnv>);
+  const authorization = viewerCredential(request);
+  const subject = sessionSubject(request);
+  const reader: SetupReaderProvenance = authorization && subject ? { kind: 'session', subject } : { kind: 'unbound' };
+  return { authorization, reader, request };
+}
+
+function withSetupReader<T extends object>(result: T, reader: SetupReaderProvenance): T & { reader: SetupReaderProvenance } {
+  return { ...result, reader };
+}
+
+function setupReadDenied(reader: SetupReaderProvenance): SetupFailure {
+  return withSetupReader({ kind: 'failure', reason: 'denied', status: 401 } as const, reader);
+}
+
 async function lifecycleAdapter() {
   const authorization = await setupCredential();
   return nativeContainerLifecycleAdapter(kernelClient(), authorization, requestLocale() ?? 'en');
@@ -252,34 +273,49 @@ export const readContainerLifecycleDestination = createServerFn({ method: 'GET' 
 
 export const readSpaceSetup = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(setupReadSchema, input))
-  .handler(async ({ data }) => readSetup(kernelClient(), await setupCredential(), data.spaceId));
+  .handler(async ({ data }) => {
+    const prepared = await setupReadPreparation();
+    const result = prepared.authorization
+      ? await readSetup(kernelClient(), prepared.authorization, data.spaceId)
+      : setupReadDenied(prepared.reader);
+    return withSetupReader(result, prepared.reader);
+  });
 
 export const resolveSpaceSetupChoice = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(setupChoiceSchema, input))
-  .handler(async ({ data }) => readSetupChoice(kernelClient(), await setupCredential(), data, requestLocale() ?? 'en'));
+  .handler(async ({ data }) => {
+    const prepared = await setupReadPreparation();
+    const result = prepared.authorization
+      ? await readSetupChoice(kernelClient(), prepared.authorization, data, requestLocale() ?? 'en')
+      : setupReadDenied(prepared.reader);
+    return withSetupReader(result, prepared.reader);
+  });
 
 export const searchSpaceSetupContexts = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(setupContextDirectorySchema, input))
-  .handler(async ({ data }) =>
-    readSetupContextDirectory(kernelClient().contexts, await setupCredential(), {
-      query: data.query,
-      ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
-      signal: getRequest().signal,
-    }),
-  );
+  .handler(async ({ data }) => {
+    const prepared = await setupReadPreparation();
+    const result = prepared.authorization
+      ? await readSetupContextDirectory(kernelClient().contexts, prepared.authorization, {
+          query: data.query,
+          ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
+          signal: prepared.request.signal,
+        })
+      : { kind: 'denied' as const };
+    return withSetupReader(result, prepared.reader);
+  });
 
 export const readSpaceSetupBoardChoices = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(boardChoiceReadSchema, input))
   .handler(async ({ data }) => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
-    return readNativeBoardChoices(
+    const prepared = await setupReadPreparation();
+    const result = await readNativeBoardChoices(
       kernelClient(data.locale),
-      viewerCredential(request),
+      prepared.authorization,
       requestLanguages(data.locale),
       data,
     );
+    return withSetupReader(result, prepared.reader);
   });
 
 export const changeSpaceSetup = createServerFn({ method: 'POST' })

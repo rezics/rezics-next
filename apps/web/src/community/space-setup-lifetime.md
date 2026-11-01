@@ -1,28 +1,42 @@
 # Space setup caller lifetime
 
-The setup page admits one mounted caller for its Space target, signed-in subject, CSRF token, readiness,
-locale, and the current QueryClient session source and revision. Every admitted native action closes over that
-caller. A session cache write, replacement, readiness change, locale change, source replacement, or unmount retires
-its callbacks before queued work or a follow-up read can start. A later caller starts from the route's current
-admission state; it does not inherit draft text, resolved choices, expected heads, or an uncertain command from a
-retired caller. StrictMode effect replay reconnects the same mounted caller while its earlier work stays retired.
-The route loader captures its session-cache tuple and revision before reading the initial snapshot and carries that
-admission beside the unchanged snapshot shape through hydration. The page accepts that snapshot only when the
-current cache still matches it, then claims it once after commit.
+The setup page admits one mounted caller for its Space target, signed-in subject, command readiness, locale, and the
+current QueryClient session source and revision. Read readiness is separate from command readiness: a healthy
+authenticated session with no CSRF token may read the original setup, Context directory and exact Context, and Board
+scheme/concept choices, while every command remains disabled. Each server read reports the subject established by the
+same prepared request and credential used for its bounded native read. An explicit credential with no session subject
+is unbound and cannot borrow the browser's current identity.
 
-Each explicit write still uses one immutable command at a time. Only an uncertain outcome retains the exact command
-and idempotency key for a retry within that caller's lifetime. A successful returned Space, Realm, or Board identity
-is applied before the existing bounded refresh, so a failed refresh cannot erase the native result. Conflict and
-denial require the existing explicit refresh path. No lifecycle or permission authority is inferred from Context
-directory or Board choice display data.
+The route captures the original QueryClient/session observation before its unchanged `readSpaceSetup` call. The
+serializable loader result carries that observation and the read's actual reader through route serialization and
+hydration; neither contains a bearer credential, CSRF token, or seal. The page requires an actual session reader and a
+matching admitted subject. A bare browser snapshot is not an admission. When the loader and page share one in-memory
+QueryClient, its revision and update/error observations also reject a replacement that happened during the read.
+Across an independent SSR/browser cache, those local counters are observations only. There is no shared monotonic
+session producer in this repository: an away-and-back replacement to the same subject, readiness and final session
+values between server capture and browser hydration cannot be distinguished from no replacement. The current
+session subject and actual request reader still have to agree; the undetected case is limited to that unobserved
+cross-cache ABA interval.
 
-Context exact/current reads and one-page searches are scoped to the mounted picker and its text, head, and source
-generation. Board one-page reads are scoped to source, scheme, query, and pager generation; only native-provided
-continuation tokens are used. Cancellation retires callbacks even when the native reader cannot cancel its I/O.
+The session source retires callers on successful equal-value cache replacement, identity or credential changes,
+retained-data errors, cache removal, unknown/sign-out transitions and any observed batched away-and-back sequence.
+It ignores fetch status and observer-only events. Source replacement, target/search or locale changes, loss of
+readiness and final unmount retire queued work. StrictMode effect replay reconnects the visit, while work carrying its
+old ticket stays retired. Guards run before queued work, after settlement, before publication or merge, and before
+retry, refresh, finalization or cache insertion. A retired callback cannot clear a later operation's busy state.
 
-`SpaceSetupEntry` observes the existing session QueryClient source and revisions in its private query key and checks
-that source again when a read resolves. An old same-account result therefore cannot become visible after CSRF,
-readiness, or away-and-back cache changes.
+Every admitted command closes over its caller and CSRF token. One immutable command and idempotency key remain in
+place after an uncertain result; a retry reuses the exact command. Definite refusals permit editing under the existing
+rules. Successful Space, Realm and Board identities are applied before the bounded follow-up read, so a failed read
+does not lose a confirmed result or replay the accepted command. Context/Subject resolution, the bounded twenty-item
+Context directory, Board scheme/concept limits, native ordering/cursors, freshness and disclosure remain with their
+existing readers and command authorities.
 
-The composition coverage in `apps/web/tests/space-setup-lifetime.test.tsx` is authored for post-integration
-acceptance. It is intentionally not a claim that native acceptance has run.
+`SpaceSetupEntry` captures the session source before its read, checks the actual reader before returning a result to
+its private cache, and keys each generation by the observed source revision. No lifecycle or permission authority is
+inferred from Context directory or Board display data. No additional native read, polling or per-row hydration is
+performed.
+
+The connected regression suite in `apps/web/tests/space-setup-reader-compatibility.test.tsx` covers the production
+route, server preparation/read wrappers, caller, form and choice readers after integration. Its assertions are
+authored but have not been run. Existing native and command acceptance remains the authority for those outcomes.

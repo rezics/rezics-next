@@ -78,6 +78,7 @@ function TextField({
   maxLength = 1024,
   multiline = false,
   description,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -85,6 +86,7 @@ function TextField({
   maxLength?: number;
   multiline?: boolean;
   description?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   const props = {
@@ -92,6 +94,7 @@ function TextField({
     value,
     maxLength,
     required: !multiline,
+    disabled,
     'aria-describedby': description ? `${id}-hint` : undefined,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value),
   };
@@ -108,17 +111,25 @@ function SelectField({
   value,
   onChange,
   children,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange(value: string): void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect id={id} value={value} onChange={(e) => onChange(e.target.value)} className="w-full">
+      <NativeSelect
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full"
+      >
         {children}
       </NativeSelect>
     </Field>
@@ -328,7 +339,9 @@ function SpaceSetupFormVisit({
   const [purpose, setPurpose] = useState<'discussion' | 'reviews'>('discussion');
   const callerCurrent = caller.current();
   const callerRetired = caller.isRetired();
-  const locked = busy || pending !== null || needsRefresh || !callerCurrent || !caller.binding.ready;
+  const readReady = caller.binding.readReady ?? caller.binding.ready;
+  const commandReady = caller.binding.commandReady ?? caller.binding.ready;
+  const locked = busy || pending !== null || needsRefresh || !callerCurrent || !readReady;
   const { space, realm, permitted } = snapshot;
   const concept = currentBoardConcept(currentConceptSelection, realm?.schemeId ?? null)?.choice ?? null;
   useEffect(() => {
@@ -347,8 +360,18 @@ function SpaceSetupFormVisit({
     }
   }, [boardChoices]);
 
+  const observedTicket = useRef(caller.ticket());
+  useEffect(() => {
+    const ticket = caller.ticket();
+    if (observedTicket.current === ticket) return;
+    observedTicket.current = ticket;
+    operation.current++;
+    inFlight.current = false;
+    setBusy(false);
+  }, [caller, callerRevision]);
+
   async function refresh(spaceId = space?.id) {
-    if (inFlight.current || !caller.binding.ready || !caller.current()) return;
+    if (inFlight.current || !readReady || !caller.current()) return;
     const ticket = caller.ticket();
     const request = ++operation.current;
     inFlight.current = true;
@@ -376,14 +399,14 @@ function SpaceSetupFormVisit({
       if (caller.owns(ticket) && operation.current === request)
         setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
     } finally {
-      if (operation.current === request) {
+      if (caller.owns(ticket) && operation.current === request) {
         inFlight.current = false;
-        if (caller.owns(ticket)) setBusy(false);
+        setBusy(false);
       }
     }
   }
   async function submit(draft: SetupDraftCommand) {
-    if (inFlight.current || !loaded || (needsRefresh && !pending) || !caller.binding.ready || !caller.current()) return;
+    if (inFlight.current || !loaded || (needsRefresh && !pending) || !commandReady || !caller.current()) return;
     const ticket = caller.ticket();
     const request = ++operation.current;
     inFlight.current = true;
@@ -425,9 +448,9 @@ function SpaceSetupFormVisit({
       if (caller.owns(ticket) && operation.current === request)
         setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
     } finally {
-      if (operation.current === request) {
+      if (caller.owns(ticket) && operation.current === request) {
         inFlight.current = false;
-        if (caller.owns(ticket)) setBusy(false);
+        setBusy(false);
       }
     }
   }
@@ -474,7 +497,7 @@ function SpaceSetupFormVisit({
           : m.space_setup_create_board();
   function submitStep(event: React.FormEvent) {
     event.preventDefault();
-    if (!canEdit || locked) return;
+    if (!canEdit || locked || !commandReady) return;
     if (step === 0) {
       void submit(
         space
@@ -577,13 +600,13 @@ function SpaceSetupFormVisit({
             <div className="mb-6 space-y-3 rounded-xl border border-border bg-muted p-4" role="alert">
               <p className="text-sm leading-relaxed">{problemText(problem)}</p>
               {pending ? (
-                <Button disabled={busy || !callerCurrent || !caller.binding.ready} onClick={() => void submit(pending)}>
+                <Button disabled={busy || !callerCurrent || !commandReady} onClick={() => void submit(pending)}>
                   {m.space_setup_retry()}
                 </Button>
               ) : (
                 <Button
                   variant="outline"
-                  disabled={busy || !callerCurrent || !caller.binding.ready}
+                  disabled={busy || !callerCurrent || !readReady}
                   onClick={() => void refresh()}
                 >
                   {m.space_setup_refresh()}
@@ -626,6 +649,7 @@ function SpaceSetupFormVisit({
                           value={address}
                           onChange={setAddress}
                           maxLength={64}
+                          disabled={!commandReady}
                           description={m.space_setup_address_hint()}
                         />
                       ) : null}
@@ -636,6 +660,7 @@ function SpaceSetupFormVisit({
                         label={m.space_setup_title()}
                         value={spaceTitle}
                         onChange={setSpaceTitle}
+                        disabled={!commandReady}
                         description={m.space_setup_title_hint()}
                       />
                       <TextField
@@ -644,6 +669,7 @@ function SpaceSetupFormVisit({
                         onChange={setSpaceSummary}
                         multiline
                         maxLength={4096}
+                        disabled={!commandReady}
                         description={m.space_setup_summary_hint()}
                       />
                     </>
@@ -654,6 +680,7 @@ function SpaceSetupFormVisit({
                       label={m.space_setup_title()}
                       value={realmTitle}
                       onChange={setRealmTitle}
+                      disabled={!commandReady}
                       description={m.space_setup_realm_title_hint()}
                     />
                     <TextField
@@ -662,11 +689,13 @@ function SpaceSetupFormVisit({
                       onChange={setRealmSummary}
                       multiline
                       maxLength={4096}
+                      disabled={!commandReady}
                       description={m.space_setup_summary_hint()}
                     />
                     <SelectField
                       label={m.space_setup_visibility()}
                       value={visibility}
+                      disabled={!commandReady}
                       onChange={(value) => {
                         if (value === 'public' || value === 'protected') setVisibility(value);
                       }}
@@ -700,6 +729,7 @@ function SpaceSetupFormVisit({
                       label={m.space_setup_title()}
                       value={boardTitle}
                       onChange={setBoardTitle}
+                      disabled={!commandReady}
                       description={m.space_setup_board_title_hint()}
                     />
                     <SetupBoardPicker
@@ -718,6 +748,7 @@ function SpaceSetupFormVisit({
                     <SelectField
                       label={m.space_setup_visibility()}
                       value={boardVisibility}
+                      disabled={!commandReady}
                       onChange={(value) => {
                         if (value === 'published' || value === 'protected' || value === 'draft')
                           setBoardVisibility(value);
@@ -730,6 +761,7 @@ function SpaceSetupFormVisit({
                     <SelectField
                       label={m.space_setup_purpose()}
                       value={purpose}
+                      disabled={!commandReady}
                       onChange={(value) => {
                         if (value === 'discussion' || value === 'reviews') setPurpose(value);
                       }}
@@ -746,7 +778,7 @@ function SpaceSetupFormVisit({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={busy || !callerCurrent || !caller.binding.ready}
+                    disabled={busy || !callerCurrent || !readReady}
                     onClick={() => void refresh()}
                   >
                     {m.space_setup_refresh()}
@@ -777,7 +809,7 @@ function SpaceSetupFormVisit({
                     : !scheme) ? (
                   nextButton(step + 1)
                 ) : (
-                  <Button type="submit" disabled={locked || !loaded || !canEdit || choiceMissing}>
+                  <Button type="submit" disabled={locked || !loaded || !canEdit || !commandReady || choiceMissing}>
                     {primaryLabel}
                     <ArrowRight aria-hidden="true" />
                   </Button>
