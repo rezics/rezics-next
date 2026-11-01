@@ -232,7 +232,7 @@ export function RatingsView({
         )}
       </div>
       <p data-slot="rating-global" className="text-sm font-medium">
-        {m.subject_ratings_global({}, options)}
+        {m.rating_population_source_global({}, options)}
       </p>
       {status('global')}
       {!headline && globalFigure && question && (
@@ -245,7 +245,7 @@ export function RatingsView({
             <>
               <p>
                 {m.subject_ratings_realm_count(
-                  { count: number(globalFigure.count), population: m.subject_ratings_global({}, options) },
+                  { count: number(globalFigure.count), population: m.rating_population_source_global({}, options) },
                   options,
                 )}
               </p>

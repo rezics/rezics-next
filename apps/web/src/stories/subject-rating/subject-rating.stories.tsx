@@ -344,7 +344,7 @@ export const PopulationChooser: Story = {
     await expect(view.getByText(m.rating_population_choose())).toHaveFocus();
     const next = view.getByRole('button', { name: m.rating_population_next() });
     await expect(next).toBeDisabled();
-    await expect(view.getAllByText(m.subject_ratings_global()).length).toBeGreaterThan(0);
+    await expect(view.getAllByText(m.rating_population_source_global()).length).toBeGreaterThan(0);
     await expect(context.canvasElement.scrollWidth).toBeLessThanOrEqual(context.canvasElement.clientWidth);
   },
 };
