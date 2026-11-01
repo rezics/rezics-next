@@ -292,7 +292,7 @@ export class BoardPageCaller {
     if (!this.check('input')) throw new Error('Board page caller retired');
   }
 
-  queryOptions<T extends { queryKey: readonly unknown[] }>(options: T): T {
+  queryOptions<T extends { queryKey: readonly unknown[]; queryFn?: unknown }>(options: T): T {
     const queryKey =
       this.input.credentialMode === 'session' ? [...options.queryKey, 'board-page-caller', this.id] : options.queryKey;
     this.queryKey = queryKey;
