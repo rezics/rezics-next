@@ -21,7 +21,13 @@ const subscribe = () => () => {};
 const anonymousExposureKey = ['exposure', 'anonymous'] as const;
 const offerAddress = (pathname: string) => pathname.match(/(?:^|\/)offers\/([^/]+)\/?$/)?.[1] ?? null;
 const identity = (offerId: string, authority: Authority) =>
-  JSON.stringify([offerId, authority.state, authority.subject ?? null, authority.admitted, Boolean(authority.csrfToken)]);
+  JSON.stringify([
+    offerId,
+    authority.state,
+    authority.subject ?? null,
+    authority.admitted,
+    Boolean(authority.csrfToken),
+  ]);
 
 export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
   const session = useSession();
@@ -43,8 +49,10 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
     const sessionState = client.getQueryState<ReturnType<typeof useSession>>(sessionQuery.queryKey);
     const current = anonymous
       ? { state: 'signed-out' as const, subject: null, csrfToken: null }
-      : (sessionState?.status === 'success' ? sessionState.data : undefined) ??
-        { state: 'unknown' as const, csrfToken: null };
+      : ((sessionState?.status === 'success' ? sessionState.data : undefined) ?? {
+          state: 'unknown' as const,
+          csrfToken: null,
+        });
     const exposure = client.getQueryState<string[]>(
       current.state === 'signed-out' ? anonymousExposureKey : exposureQuery.queryKey,
     );
@@ -106,7 +114,12 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
     credential: () => (isCurrent() ? authority().csrfToken : null),
   };
   return (
-    <OfferPurchase key={current.generation} observedOffer={observedOffer} authority={currentAuthority} origin={origin} />
+    <OfferPurchase
+      key={current.generation}
+      observedOffer={observedOffer}
+      authority={currentAuthority}
+      origin={origin}
+    />
   );
 }
 
@@ -169,20 +182,19 @@ function OfferPurchase({
 
   // A local child render may run before a queued authority replacement commits.
   const currentExisting = phase === 'existing' && origin.isCurrent() ? existing : null;
-  const note =
-    currentExisting
-      ? currentExisting.code === 'benefit_already_owned'
-        ? m.offer_already_owned()
-        : m.offer_acquisition_pending()
-      : phase === 'terms-changed'
-        ? m.offer_terms_changed()
-        : phase === 'unavailable'
-          ? m.offer_unavailable()
-          : phase === 'retry'
-            ? m.offer_retry_note()
-            : phase === 'closed'
-              ? m.offer_start_closed()
-              : null;
+  const note = currentExisting
+    ? currentExisting.code === 'benefit_already_owned'
+      ? m.offer_already_owned()
+      : m.offer_acquisition_pending()
+    : phase === 'terms-changed'
+      ? m.offer_terms_changed()
+      : phase === 'unavailable'
+        ? m.offer_unavailable()
+        : phase === 'retry'
+          ? m.offer_retry_note()
+          : phase === 'closed'
+            ? m.offer_start_closed()
+            : null;
   const buyDisabled = !canStart || !termsKnown || phase !== 'ready';
 
   return (

@@ -16,21 +16,35 @@ const buyer: Viewer = { state: 'signed-in', subject: id(80), csrfToken: 'buyer-c
 const other: Viewer = { ...buyer, subject: id(81), csrfToken: 'other-csrf' };
 const signedOut: Viewer = { state: 'signed-out', subject: null, csrfToken: null };
 const first: OfferPageData = {
-  id: id(1), revision: 7, title: 'Original fixed edition', currency: 'usd', unitAmountMinor: 1200,
-  state: 'active', price: '$12.00', taxBehavior: 'exclusive',
+  id: id(1),
+  revision: 7,
+  title: 'Original fixed edition',
+  currency: 'usd',
+  unitAmountMinor: 1200,
+  state: 'active',
+  price: '$12.00',
+  taxBehavior: 'exclusive',
   moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
   idempotencyKey: id(2),
   subject: {
     subject: { id: fixedEditionTerms.targetSubjectId, title: 'Original subject', types: ['schema:Book'] },
-    cover: null, href: null,
+    cover: null,
+    href: null,
   },
   benefit: { kind: 'mapped', terms: fixedEditionTerms },
 };
 const second: OfferPageData = {
-  ...first, id: id(3), revision: 9, idempotencyKey: id(4), title: 'Replacement edition', price: '$24.00',
+  ...first,
+  id: id(3),
+  revision: 9,
+  idempotencyKey: id(4),
+  title: 'Replacement edition',
+  price: '$24.00',
 };
 const intent = (offer: OfferPageData) => ({
-  offerId: offer.id, expectedOfferRevision: offer.revision, idempotencyKey: offer.idempotencyKey,
+  offerId: offer.id,
+  expectedOfferRevision: offer.revision,
+  idempotencyKey: offer.idempotencyKey,
 });
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -44,7 +58,11 @@ const checkout = (url = 'https://checkout.stripe.com/current') => Response.json(
 // constructed responses do not establish native or browser evidence.
 async function withPage(run: (page: Awaited<ReturnType<typeof mountPage>>) => Promise<void>, routed = false) {
   const page = await mountPage(routed);
-  try { await run(page); } finally { await page.dispose(); }
+  try {
+    await run(page);
+  } finally {
+    await page.dispose();
+  }
 }
 async function mountPage(routed: boolean) {
   const { Window } = await import(
@@ -52,14 +70,26 @@ async function mountPage(routed: boolean) {
   );
   const window = new Window({ url: `https://site.test/en/offers/${first.id}?from=subject` });
   const globals = {
-    window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    HTMLButtonElement: window.HTMLButtonElement, Element: window.Element, Node: window.Node,
-    NodeFilter: window.NodeFilter, Document: window.Document, ShadowRoot: window.ShadowRoot,
-    DocumentFragment: window.DocumentFragment, MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver, Event: window.Event, MouseEvent: window.MouseEvent,
-    PointerEvent: window.PointerEvent, getComputedStyle: window.getComputedStyle.bind(window),
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -126,11 +156,24 @@ async function mountPage(routed: boolean) {
     return button;
   };
   return {
-    host, client, router, m, calls, redirects, render, action, session, admission,
+    host,
+    client,
+    router,
+    m,
+    calls,
+    redirects,
+    render,
+    action,
+    session,
+    admission,
     enqueue: (response: Response | Promise<Response>) => responses.push(Promise.resolve(response)),
-    click: async (label = m.offer_buy()) => { await act(async () => action(label).click()); },
+    click: async (label = m.offer_buy()) => {
+      await act(async () => action(label).click());
+    },
     settle: async <T,>(work: ReturnType<typeof deferred<T>>, value: T) => {
-      await act(async () => { work.resolve(value); });
+      await act(async () => {
+        work.resolve(value);
+      });
     },
     async dispose() {
       await act(async () => root.unmount());
@@ -151,8 +194,11 @@ async function mountPage(routed: boolean) {
 test('signed-in without an actual subject or credential cannot acquire; unknown keeps public offer terms', async () => {
   await withPage(async (page) => {
     for (const viewer of [
-      { state: 'signed-in' as const, csrfToken: buyer.csrfToken }, { ...buyer, subject: null }, { ...buyer, subject: '' },
-      { ...buyer, csrfToken: null }, { state: 'unknown' as const, csrfToken: null },
+      { state: 'signed-in' as const, csrfToken: buyer.csrfToken },
+      { ...buyer, subject: null },
+      { ...buyer, subject: '' },
+      { ...buyer, csrfToken: null },
+      { state: 'unknown' as const, csrfToken: null },
     ]) {
       await page.render(first, viewer);
       expect(page.host.textContent).toContain(first.title);
@@ -179,7 +225,9 @@ test('actual cache replacement retires the retained button before commit, includ
     });
     expect(page.action().disabled).toBe(false);
     for (const lost of [
-      { ...buyer, subject: null }, { ...buyer, csrfToken: null }, signedOut,
+      { ...buyer, subject: null },
+      { ...buyer, csrfToken: null },
+      signedOut,
       { state: 'unknown' as const, csrfToken: null },
     ]) {
       const retained = page.action();
@@ -220,8 +268,12 @@ test('actual offer navigation retires the retained action before the replacement
       expect(page.calls).toEqual([]);
     });
     try {
-      await act(async () => { await page.router.navigate({ href: `/en/offers/${second.id}` }); });
-    } finally { unsubscribe(); }
+      await act(async () => {
+        await page.router.navigate({ href: `/en/offers/${second.id}` });
+      });
+    } finally {
+      unsubscribe();
+    }
     expect(page.action().disabled).toBe(true);
     await page.render(second, other);
     expect(page.action().disabled).toBe(false);
@@ -264,7 +316,8 @@ test('current viewer/offer can acquire while the old one is pending; viewer and 
 
 test('cache retirement during decoding refuses late checkout and private recovery, even after ABA before commit', async () => {
   for (const response of [
-    checkout(), Response.json(acquisitionProblems.owned, { status: 409 }),
+    checkout(),
+    Response.json(acquisitionProblems.owned, { status: 409 }),
     Response.json(acquisitionProblems.pending, { status: 409 }),
   ]) {
     await withPage(async (page) => {
@@ -309,7 +362,10 @@ test('same owner refresh and token rotation retain exact uncertain consent, requ
       const pending = deferred<Response>();
       page.enqueue(pending.promise);
       await page.render();
-      await act(async () => { page.action().click(); page.action().click(); });
+      await act(async () => {
+        page.action().click();
+        page.action().click();
+      });
       const refreshed = { ...second, id: first.id, state: 'delisted' as const, benefit: { kind: 'unknown' as const } };
       await page.render(refreshed, { ...buyer, csrfToken: 'rotated-while-pending' });
       expect(page.host.textContent).toContain(first.title);
@@ -335,7 +391,9 @@ test('same owner refresh and token rotation retain exact uncertain consent, requ
       ]);
       expect(page.redirects).toEqual(['https://checkout.stripe.com/current']);
     });
-  } finally { factory.mockRestore(); }
+  } finally {
+    factory.mockRestore();
+  }
 });
 
 test('signed-out sign-in uses actual public admission and isolated anonymous context without borrowing the viewer', async () => {
@@ -350,9 +408,13 @@ test('signed-out sign-in uses actual public admission and isolated anonymous con
     });
     expect(page.redirects).toEqual([]);
     await page.render(first, buyer, true);
-    await act(async () => { page.admission(false, 'anonymous'); });
+    await act(async () => {
+      page.admission(false, 'anonymous');
+    });
     expect(page.action().disabled).toBe(true);
-    await act(async () => { page.admission(true, 'anonymous'); });
+    await act(async () => {
+      page.admission(true, 'anonymous');
+    });
     expect(page.action().disabled).toBe(false);
     const isolated = page.action();
     await act(async () => {
