@@ -78,11 +78,12 @@ export function ZoneConfigurationEditor({
   const [copied, setCopied] = useState<'copied' | 'failed' | null>(null);
   const { saved, draft, loaded } = state;
   useEffect(() => {
+    if (!session.isCurrent()) return;
     setComposing(false);
     setCopied(null);
   }, [state.generation]);
   useEffect(() => {
-    if (saved) setVisibility(saved.zone.visibility);
+    if (session.isCurrent() && saved) setVisibility(saved.zone.visibility);
   }, [saved?.zone.visibility]);
   useEffect(() => {
     const leave = (event: BeforeUnloadEvent) => {
@@ -100,6 +101,7 @@ export function ZoneConfigurationEditor({
     ? readerHref(saved.zone.id, saved.configuration.pages.some((item) => item.route === route) ? route : '', locale)
     : '';
   function changeDocument(document: CompositionDocument) {
+    if (!session.isCurrent()) return;
     const current = session.snapshot().draft;
     if (!current) return;
     session.edit({
@@ -111,7 +113,7 @@ export function ZoneConfigurationEditor({
     });
   }
   function changeRoute(value: string) {
-    if (!draft) return;
+    if (!session.isCurrent() || !draft) return;
     if (!value || draft.configuration.pages.some((item) => item !== page && item.route === value)) return;
     const pages = draft.configuration.pages
       .map((item) => (item === page ? { ...item, route: value } : item))
@@ -121,7 +123,7 @@ export function ZoneConfigurationEditor({
     setComposing(false);
   }
   function toggle(id: string, checked: boolean, scope: boolean) {
-    if (!draft) return;
+    if (!session.isCurrent() || !draft) return;
     if (scope)
       session.edit({
         ...draft,
@@ -142,10 +144,20 @@ export function ZoneConfigurationEditor({
       if (session.isCurrent()) setCopied('failed');
     }
   }
+  if (!session.isCurrent()) return <EditorLoading />;
   const scopeOptions = loaded.options.scopes;
   const mountOptions = loaded.options.collections;
   return (
-    <article className="min-w-0 space-y-6 text-foreground" aria-busy={state.busy}>
+    <article
+      onClickCapture={(event) => {
+        if (!session.isCurrent()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      className="min-w-0 space-y-6 text-foreground"
+      aria-busy={state.busy}
+    >
       <header className="space-y-3">
         <PageHeading>{m.zone_editor_heading()}</PageHeading>
         <p className="max-w-3xl text-muted-foreground">{m.zone_editor_live_note()}</p>
@@ -246,6 +258,7 @@ export function ZoneConfigurationEditor({
                 disabled={disabled}
                 value={route}
                 onChange={(event) => {
+                  if (!session.isCurrent()) return;
                   setSelected(event.target.value);
                   setComposing(false);
                   session.clearPreview();
@@ -276,6 +289,7 @@ export function ZoneConfigurationEditor({
                   variant="outline"
                   disabled={editDisabled || route === ''}
                   onClick={() => {
+                    if (!session.isCurrent()) return;
                     session.edit({
                       ...draft,
                       configuration: {
@@ -297,7 +311,9 @@ export function ZoneConfigurationEditor({
                 <Input
                   id="zone-new-route"
                   value={newRoute}
-                  onChange={(event) => setNewRoute(event.target.value)}
+                  onChange={(event) => {
+                    if (session.isCurrent()) setNewRoute(event.target.value);
+                  }}
                   disabled={editDisabled || draft.configuration.pages.length >= 16}
                   maxLength={255}
                 />
@@ -311,6 +327,7 @@ export function ZoneConfigurationEditor({
                   draft.configuration.pages.some((item) => item.route === newRoute)
                 }
                 onClick={() => {
+                  if (!session.isCurrent()) return;
                   const pages = [
                     ...draft.configuration.pages,
                     { route: newRoute, document: { root: { props: {} }, content: [] } },
@@ -328,7 +345,9 @@ export function ZoneConfigurationEditor({
             <Button
               variant="outline"
               disabled={editDisabled}
-              onClick={() => setComposing(!composing)}
+              onClick={() => {
+                if (session.isCurrent()) setComposing(!composing);
+              }}
               aria-expanded={composing}
             >
               {m.zone_editor_compose()}
@@ -434,7 +453,9 @@ export function ZoneConfigurationEditor({
                 id="zone-visibility"
                 value={visibility}
                 disabled={disabled || !writeEnabled || !loaded.permissions.publish}
-                onChange={(event) => setVisibility(event.target.value as Visibility)}
+                onChange={(event) => {
+                  if (session.isCurrent()) setVisibility(event.target.value as Visibility);
+                }}
               >
                 <NativeSelectOption value="private">{m.library_visibility_private()}</NativeSelectOption>
                 <NativeSelectOption value="unlisted">{m.library_visibility_unlisted()}</NativeSelectOption>

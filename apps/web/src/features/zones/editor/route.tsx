@@ -85,7 +85,13 @@ export function ZoneEditorRoute({
         ) : (
           <EditorLoading />
         )}
-        <Button onClick={() => void router.invalidate()}>{m.zone_editor_retry()}</Button>
+        <Button
+          onClick={() => {
+            if (lifetime.isCurrent(capture)) void router.invalidate();
+          }}
+        >
+          {m.zone_editor_retry()}
+        </Button>
       </section>
     );
   }
@@ -134,18 +140,31 @@ function AdmittedZoneEditor({
       isCurrent: () => lifetime.isCurrent(capture),
       observation: reader,
       retire: () => lifetime.retire(capture),
+      canWrite: () => lifetime.isCurrent(capture) && hasValidOwnerCsrfToken(capture.csrfToken),
     });
   });
   useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
   const blocker = useBlocker({ shouldBlockFn: () => session.dirty(), withResolver: true });
+  if (!session.isCurrent()) return <EditorLoading />;
   return (
     <>
       {blocker.status === 'blocked' ? (
         <section role="alert" className="mb-6 space-y-3 rounded-xl border border-border p-4">
           <p>{m.zone_editor_leave()}</p>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => blocker.reset()}>{m.zone_editor_stay()}</Button>
-            <Button variant="outline" onClick={() => blocker.proceed()}>
+            <Button
+              onClick={() => {
+                if (session.isCurrent()) blocker.reset();
+              }}
+            >
+              {m.zone_editor_stay()}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (session.isCurrent()) blocker.proceed();
+              }}
+            >
               {m.zone_editor_discard()}
             </Button>
           </div>
@@ -166,8 +185,9 @@ export async function loadZoneEditor(
   locale: string,
   queryClient: Parameters<typeof captureOwnerRead>[0],
   search: unknown = {},
+  signal?: AbortSignal,
 ) {
-  const requestedOwner = captureOwnerRead(queryClient);
+  const requestedOwner = captureOwnerRead(queryClient, signal);
   const initial = requestedOwner
     ? await readConfiguration({
         data: { id, locale, expectedReader: requestedOwner.reader, admission: requestedOwner.admission },

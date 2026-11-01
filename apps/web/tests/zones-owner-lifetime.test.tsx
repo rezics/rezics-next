@@ -24,6 +24,8 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -50,6 +52,7 @@ type OwnedReadArgs<T> = { data: T; headers?: Record<string, string> };
 let backendViewer: Viewer = { state: 'signed-in', subject: 'A', csrfToken: null };
 let nextEditorRead: ReturnType<typeof deferred<Loaded>> | undefined;
 let nextEditorWrite: 'unavailable' | undefined;
+let heldEditorWrite: ReturnType<typeof deferred<Result<ZoneOwned>>> | undefined;
 let delayedPreview: ReturnType<typeof deferred<Preview>> | undefined;
 let delayedChoices: ReturnType<typeof deferred<Loaded['options']['collections']>> | undefined;
 const editorReads: ReadData[] = [];
@@ -105,6 +108,11 @@ const editorServer = {
       !/^[A-Za-z0-9_-]{22}$/.test(headers?.['X-CSRF-Token'] ?? '')
     )
       return { kind: 'failure', status: 403, code: 'forbidden' };
+    if (heldEditorWrite) {
+      const pending = heldEditorWrite;
+      heldEditorWrite = undefined;
+      return pending.promise;
+    }
     if (nextEditorWrite === 'unavailable') {
       nextEditorWrite = undefined;
       return { kind: 'failure', status: 503, code: 'dependency_unavailable', ownerObservation: observation };
@@ -696,5 +704,1083 @@ test('ZoneEditorSession ignores delayed results after error, removal, replacemen
         client.clear();
       }
     }
+  }
+});
+
+// UNRUN: connected original-visit regressions. These retain real rendered handlers and
+// invoke them in the SAME stack as a cache/route change, before React can run effects.
+const { getLocale } = await import('../src/paraglide/runtime.js');
+const { notifyManager } = await import('@tanstack/react-query');
+type BrowserCapture = NonNullable<Parameters<typeof createZone>[1]>;
+type CreateInput = Parameters<typeof createZone>[0];
+type LifecycleInput = Parameters<typeof changeZone>[0];
+function retainHandler(element: Element, name = 'onClick'): () => void {
+  const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'));
+  const handler = key && Reflect.get(element, key)?.[name];
+  if (typeof handler !== 'function') throw new Error(`Missing mounted React ${name}`);
+  return () => {
+    const nativeEvent = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+    handler({
+      nativeEvent,
+      target: element,
+      currentTarget: element,
+      get defaultPrevented() {
+        return nativeEvent.defaultPrevented;
+      },
+      preventDefault: () => nativeEvent.preventDefault(),
+      stopPropagation: () => nativeEvent.stopPropagation(),
+      isPropagationStopped: () => false,
+      isDefaultPrevented: () => nativeEvent.defaultPrevented,
+      persist: () => {},
+    });
+  };
+}
+function trashConfirmation(): HTMLButtonElement {
+  const node = [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+    (node) => node.textContent?.trim() === m.zones_owner_trash_action({}, { locale: 'en' }),
+  );
+  if (!node) throw new Error('Missing mounted trash confirmation');
+  return node;
+}
+async function mountedVisit(path: string, strict = false, scenario: 'list' | 'trash' | 'uncertain' = 'list') {
+  setLocale('en', { reload: false });
+  backendViewer = signedIn('A', csrfA);
+  editorLoaded = structuredClone(editorFixture.initial);
+  if (editorLoaded.options.collections.kind === 'ready') editorLoaded.options.collections.value.next = 'bounded-next';
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(sessionQuery.queryKey, backendViewer);
+  const native = zonesFixture(scenario);
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  const state = {
+    owner: null as InstanceType<typeof OwnerLifetime> | null,
+    creates: [] as { input: CreateInput; capture: BrowserCapture }[],
+    changes: [] as { input: LifecycleInput; capture: BrowserCapture }[],
+    navigations: [] as string[],
+    reloads: 0,
+    reads: 0,
+    admissions: [] as OwnerReadObservation[],
+    commandGate: undefined as ReturnType<typeof deferred<CommandOutcome>> | undefined,
+    readGate: undefined as ReturnType<typeof deferred<ListOutcome>> | undefined,
+    reloadGate: undefined as ReturnType<typeof deferred<void>> | undefined,
+    stopped: false,
+  };
+  const base = createRootRouteWithContext<{ queryClient: InstanceType<typeof QueryClient> }>()({ component: Outlet });
+  const search = (input: Record<string, unknown>) => ({
+    ...(String(input.trash) === '1' ? { trash: '1' } : {}),
+    ...(typeof input.marker === 'string' && input.marker ? { marker: input.marker } : {}),
+  });
+  function List() {
+    const location = useLocation();
+    const { outcome, requestedOwner } = useLoaderData({ strict: false }) as {
+      outcome: ListOutcome;
+      requestedOwner: OwnerReadObservation | null;
+    };
+    const { lifetime } = useOwnerLifetime(
+      JSON.stringify([getLocale(), location.pathname, location.search]),
+      requestedOwner,
+    );
+    state.owner = lifetime;
+    return (
+      <ZonesOwnerWorkspace
+        locale={getLocale()}
+        input={{ deleted: String((location.search as { trash?: unknown }).trash) === '1' }}
+        owner={lifetime}
+        outcome={outcome}
+        onChange={async (input, capture) => {
+          if (!capture) throw new Error('Missing command capture');
+          state.changes.push({ input: structuredClone(input), capture });
+          const gate = state.commandGate;
+          state.commandGate = undefined;
+          const result = await changeOwnedZone(
+            native.client,
+            request('POST', capture.csrfToken),
+            sessionEnv,
+            input,
+            capture.observation,
+          );
+          return gate ? gate.promise : result;
+        }}
+        onReload={() => {
+          state.reloads++;
+          const gate = state.reloadGate;
+          state.reloadGate = undefined;
+          return gate ? gate.promise : visitRouter.invalidate();
+        }}
+      />
+    );
+  }
+  function Create() {
+    const location = useLocation();
+    const { lifetime } = useOwnerLifetime(JSON.stringify([getLocale(), location.pathname, location.search]));
+    state.owner = lifetime;
+    return (
+      <CreateZone
+        locale={getLocale()}
+        session="signed-in"
+        owner={lifetime}
+        onCreate={async (input, capture) => {
+          if (!capture) throw new Error('Missing create capture');
+          state.creates.push({ input: structuredClone(input), capture });
+          const gate = state.commandGate;
+          state.commandGate = undefined;
+          const result = await createOwnedZone(
+            native.client,
+            request('POST', capture.csrfToken),
+            sessionEnv,
+            input,
+            capture.observation,
+          );
+          return gate ? gate.promise : result;
+        }}
+        onNavigate={(href) => {
+          state.navigations.push(href);
+          void visitRouter.navigate({ to: '/my/zones/$id/edit', params: { id: href.split('/').at(-2)! } });
+        }}
+      />
+    );
+  }
+  function Edit() {
+    const { id } = useParams({ strict: false }) as { id: string };
+    const location = useLocation();
+    const data = useLoaderData({ strict: false }) as Awaited<ReturnType<typeof loadZoneEditor>>;
+    return (
+      <ZoneEditorRoute
+        id={id}
+        locale={getLocale()}
+        initial={data.initial}
+        requestedOwner={data.requestedOwner}
+        readMatchesRoute={
+          data.loadedFor.id === id &&
+          data.loadedFor.locale === getLocale() &&
+          data.loadedFor.search === JSON.stringify(location.search)
+        }
+      />
+    );
+  }
+  const list = createRoute({
+    getParentRoute: () => base,
+    path: '/my/zones',
+    validateSearch: search,
+    loaderDeps: ({ search }) => search,
+    loader: async ({ context, deps, abortController }) => {
+      state.reads++;
+      const requestedOwner = captureOwnerRead(context.queryClient, abortController.signal);
+      if (requestedOwner) state.admissions.push(requestedOwner);
+      const gate = state.readGate;
+      state.readGate = undefined;
+      const result = requestedOwner
+        ? await readOwnedZones(
+            native.client,
+            request('GET', backendViewer.csrfToken),
+            sessionEnv,
+            { deleted: deps.trash === '1' },
+            requestedOwner,
+          )
+        : { kind: 'signed-out' as const };
+      return { outcome: gate ? await gate.promise : result, requestedOwner };
+    },
+    component: List,
+  });
+  const create = createRoute({
+    getParentRoute: () => base,
+    path: '/my/zones/new',
+    validateSearch: search,
+    component: Create,
+  });
+  const edit = createRoute({
+    getParentRoute: () => base,
+    path: '/my/zones/$id/edit',
+    validateSearch: search,
+    loaderDeps: ({ search }) => search,
+    loader: ({ params, context, deps, abortController }) =>
+      loadZoneEditor(params.id, getLocale(), context.queryClient, deps, abortController.signal),
+    component: Edit,
+  });
+  const other = createRoute({ getParentRoute: () => base, path: '/elsewhere', component: () => <p>Other visit</p> });
+  const visitRouter = createRouter({
+    routeTree: base.addChildren([list, create, edit, other]),
+    history: createMemoryHistory({ initialEntries: [path] }),
+    context: { queryClient: client },
+  });
+  await settle(() =>
+    root.render(
+      <QueryClientProvider client={client}>
+        {strict ? (
+          <StrictMode>
+            <RouterProvider router={visitRouter} />
+          </StrictMode>
+        ) : (
+          <RouterProvider router={visitRouter} />
+        )}
+      </QueryClientProvider>,
+    ),
+  );
+  await until(() =>
+    path.includes('/edit')
+      ? !!host.querySelector('#zone-label-en')
+      : path.includes('/new')
+        ? !!host.querySelector('#zone-starter')
+        : !!host.querySelector('article'),
+  );
+  return {
+    state,
+    client,
+    native,
+    host,
+    root,
+    router: visitRouter,
+    async close() {
+      if (!state.stopped)
+        await settle(() => {
+          root.unmount();
+          state.stopped = true;
+        });
+      client.clear();
+      host.remove();
+    },
+  };
+}
+type MountedVisit = Awaited<ReturnType<typeof mountedVisit>>;
+type SessionChange = 'equal-query' | 'csrf-only' | 'aba' | 'error' | 'remove';
+function changeSessionBeforeEffects(visit: MountedVisit, change: SessionChange) {
+  const query = visit.client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })!;
+  const original = query.state;
+  if (change === 'equal-query') {
+    // Actual new Query, byte-identical session data, timestamps AND update count.
+    visit.client.getQueryCache().remove(query);
+    visit.client.getQueryCache().build(visit.client, sessionQuery, original);
+  } else if (change === 'csrf-only') {
+    backendViewer = signedIn('A', csrfB);
+    query.setState({ data: backendViewer });
+  } else if (change === 'aba')
+    notifyManager.batch(() => {
+      query.setState({ data: signedIn('B', csrfB) });
+      query.setState(original);
+    });
+  else if (change === 'error') query.setState({ status: 'error', error: new Error('session unavailable') });
+  else visit.client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+}
+async function fillCreate(visit: MountedVisit, label = 'Original private draft') {
+  await settle(() => setInput(visit.host, '#zone-starter', 'book'));
+  await settle(() => setInput(visit.host, '#zone-label-en', label));
+}
+function totals(visit: MountedVisit) {
+  return [
+    visit.native.calls.length,
+    visit.state.reloads,
+    visit.state.navigations.length,
+    editorReads.length,
+    editorWrites.length,
+    editorPreviews.length,
+    editorChoices.length,
+  ];
+}
+
+for (const change of ['equal-query', 'csrf-only', 'aba', 'error', 'remove'] as const) {
+  test(`UNRUN mounted create and uncertain retry refuse ${change} synchronously`, async () => {
+    for (const uncertain of [false, true]) {
+      const visit = await mountedVisit('/my/zones/new', false, 'uncertain');
+      try {
+        await fillCreate(visit);
+        const originalSubmit = retainHandler(visit.host.querySelector('form')!, 'onSubmit');
+        if (uncertain) {
+          await settle(originalSubmit);
+          await until(() => visit.host.textContent?.includes(m.zones_create_uncertain({}, { locale: 'en' })) ?? false);
+          expect(visit.state.creates).toHaveLength(1);
+        }
+        const callback = uncertain
+          ? retainHandler(button(visit.host, m.zones_owner_retry({}, { locale: 'en' })))
+          : originalSubmit;
+        const before = totals(visit);
+        await settle(() => {
+          changeSessionBeforeEffects(visit, change);
+          callback();
+          originalSubmit(); // A separately retained pre-busy submit cannot reconstruct the command.
+        });
+        expect(totals(visit)).toEqual(before);
+        expect(visit.host.textContent).not.toContain('Original private draft');
+        expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Original private draft');
+        expect(visit.host.textContent).not.toContain(m.zones_create_uncertain({}, { locale: 'en' }));
+        // A fresh admission, including one that returns to the very same reader, is usable.
+        backendViewer = signedIn('A', csrfC);
+        await settle(() => visit.client.setQueryData(sessionQuery.queryKey, backendViewer));
+        await until(() => !!visit.host.querySelector('#zone-starter'));
+        await fillCreate(visit, 'Fresh private site');
+        await settle(() => button(visit.host, m.zones_create_submit({}, { locale: 'en' })).click());
+        await until(() => visit.state.creates.length === (uncertain ? 2 : 1));
+        expect(visit.state.creates.at(-1)!.capture.csrfToken).toBe(csrfC);
+        if (uncertain) {
+          expect(visit.state.creates[1]!.input.key).not.toBe(visit.state.creates[0]!.input.key);
+          expect(visit.state.creates[1]!.capture.observation.admission).not.toBe(
+            visit.state.creates[0]!.capture.observation.admission,
+          );
+        }
+      } finally {
+        await visit.close();
+      }
+    }
+  });
+
+  test(`UNRUN mounted list confirmation, retry and refresh refuse ${change} before effects`, async () => {
+    for (const action of ['confirmation', 'retry', 'refresh', 'restore'] as const) {
+      const visit = await mountedVisit(
+        action === 'restore' ? '/my/zones?trash=1' : '/my/zones',
+        false,
+        action === 'restore' ? 'trash' : action === 'retry' ? 'uncertain' : 'list',
+      );
+      try {
+        let callback: () => void;
+        if (action === 'confirmation' || action === 'retry') {
+          await settle(() => button(visit.host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
+          callback = retainHandler(trashConfirmation());
+          if (action === 'retry') {
+            await settle(callback);
+            await until(
+              () => visit.host.textContent?.includes(m.zones_owner_unavailable({}, { locale: 'en' })) ?? false,
+            );
+            callback = retainHandler(button(visit.host, m.zones_owner_retry({}, { locale: 'en' })));
+          }
+        } else
+          callback = retainHandler(
+            button(
+              visit.host,
+              action === 'restore'
+                ? m.zones_owner_restore({}, { locale: 'en' })
+                : m.zones_owner_refresh({}, { locale: 'en' }),
+            ),
+          );
+        const before = totals(visit);
+        await settle(() => {
+          changeSessionBeforeEffects(visit, change);
+          callback();
+        });
+        expect(totals(visit)).toEqual(before);
+        expect(visit.host.querySelector('[data-slot="content-item"]')).toBeNull();
+        expect(visit.host.textContent).not.toContain(fixtureZone().labels.en!);
+        expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+        expect(visit.host.textContent).not.toContain(m.zones_owner_unavailable({}, { locale: 'en' }));
+        backendViewer = signedIn('A', csrfC);
+        await settle(() => visit.client.setQueryData(sessionQuery.queryKey, backendViewer));
+        await settle(() => visit.router.invalidate());
+        await until(() => !!visit.host.querySelector('article'));
+        const count = visit.state.reloads;
+        await settle(() => button(visit.host, m.zones_owner_refresh({}, { locale: 'en' })).click());
+        expect(visit.state.reloads).toBe(count + 1);
+      } finally {
+        await visit.close();
+      }
+    }
+  });
+
+  test(`UNRUN connected editor callbacks and drafts retire on ${change} without transport`, async () => {
+    const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
+    try {
+      const preview = retainHandler(button(visit.host, m.zone_editor_preview()));
+      const choices = retainHandler(button(visit.host, m.zone_editor_more()));
+      const refresh = retainHandler(button(visit.host, m.zone_editor_refresh()));
+      await settle(() => setInput(visit.host, '#zone-visibility', 'public'));
+      const publish = retainHandler(button(visit.host, m.zone_editor_publish()));
+      await settle(() => setInput(visit.host, '#zone-label-en', 'Old secret editor draft'));
+      const save = retainHandler(button(visit.host, m.zone_editor_save()));
+      const before = totals(visit);
+      await settle(() => {
+        changeSessionBeforeEffects(visit, change);
+        preview();
+        choices();
+        refresh();
+        save();
+        publish();
+      });
+      expect(totals(visit).slice(0, 3)).toEqual(before.slice(0, 3));
+      // Only the route's one bounded replacement initial read is allowed; no old callback transport.
+      expect(editorWrites.length).toBe(before[4]!);
+      expect(editorPreviews.length).toBe(before[5]!);
+      expect(editorChoices.length).toBe(before[6]!);
+      expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Old secret editor draft');
+      backendViewer = signedIn('A', csrfC);
+      await settle(() => visit.client.setQueryData(sessionQuery.queryKey, backendViewer));
+      await settle(() => visit.router.invalidate());
+      await until(() => !!visit.host.querySelector('#zone-label-en'));
+      await settle(() => setInput(visit.host, '#zone-label-en', 'Current editor work'));
+      await settle(() => button(visit.host, m.zone_editor_save()).click());
+      await until(() => editorWrites.length === before[4]! + 1);
+      expect(editorWrites.at(-1)!.csrf).toBe(csrfC);
+    } finally {
+      await visit.close();
+    }
+  });
+}
+
+for (const strict of [false, true]) {
+  test(`UNRUN healthy reader rerenders and ${strict ? 'StrictMode replay' : 'ordinary mounts'} preserve exact uncertain commands`, async () => {
+    const create = await mountedVisit('/my/zones/new', strict, 'uncertain');
+    try {
+      await fillCreate(create, 'Unchanged request body');
+      const submit = retainHandler(create.host.querySelector('form')!, 'onSubmit');
+      await settle(submit);
+      await until(() => create.host.textContent?.includes(m.zones_create_uncertain({}, { locale: 'en' })) ?? false);
+      const retry = retainHandler(button(create.host, m.zones_owner_retry({}, { locale: 'en' })));
+      const before = totals(create);
+      await settle(() => {
+        // A healthy cache notification and unrelated Query must not retire the reader.
+        create.client
+          .getQueryCache()
+          .find({ queryKey: sessionQuery.queryKey, exact: true })!
+          .setState({ fetchStatus: 'idle' });
+        create.client.setQueryData(['unrelated-zone-control'], 1);
+        submit(); // Pre-uncertainty callback cannot issue a second command/key.
+      });
+      expect(totals(create)).toEqual(before);
+      await settle(retry);
+      await until(() => create.state.creates.length === 2 && create.state.navigations.length === 1);
+      expect(create.state.creates[1]!.input).toEqual(create.state.creates[0]!.input);
+      expect(create.state.creates[1]!.capture).toBe(create.state.creates[0]!.capture);
+      const writes = create.native.calls.filter((call) => call.method === 'POST');
+      expect(writes).toHaveLength(2);
+      expect(writes[1]).toEqual(writes[0]); // Native body, key, authorization, URL and method.
+    } finally {
+      await create.close();
+    }
+    const list = await mountedVisit('/my/zones', strict, 'uncertain');
+    try {
+      await settle(() => button(list.host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
+      await settle(() => trashConfirmation().click());
+      await until(() => list.host.textContent?.includes(m.zones_owner_unavailable({}, { locale: 'en' })) ?? false);
+      await settle(() => button(list.host, m.zones_owner_retry({}, { locale: 'en' })).click());
+      await until(() => list.state.changes.length === 2);
+      expect(list.state.changes[1]!.input).toEqual(list.state.changes[0]!.input);
+      expect(list.state.changes[1]!.capture).toBe(list.state.changes[0]!.capture);
+      const writes = list.native.calls.filter((call) => call.method === 'DELETE');
+      expect(writes).toHaveLength(2);
+      expect(writes[1]).toEqual(writes[0]);
+    } finally {
+      await list.close();
+    }
+    const editor = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`, strict);
+    try {
+      await settle(() => setInput(editor.host, '#zone-label-en', 'Immutable saved body'));
+      const start = editorWrites.length;
+      nextEditorWrite = 'unavailable';
+      await settle(() => button(editor.host, m.zone_editor_save()).click());
+      await until(() => editorWrites.length === start + 1 && !editor.host.querySelector('[aria-busy="true"]'));
+      const original = structuredClone(editorWrites[start]!);
+      await settle(() => editor.client.setQueryData(['healthy-rerender'], 1));
+      await settle(() => button(editor.host, m.zone_editor_save()).click());
+      await until(() => editorWrites.length === start + 2);
+      expect(editorWrites[start + 1]).toEqual(original); // Native ID, revision, body, key, locale, admission and CSRF.
+      expect(editor.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).toBe('Immutable saved body');
+    } finally {
+      await editor.close();
+    }
+  });
+}
+
+for (const change of ['equal-query', 'csrf-only', 'aba'] as const) {
+  for (const result of ['success', 'failure', 'throw'] as const) {
+    test(`UNRUN late create/list ${result} after ${change} cannot navigate, reload, focus or clear new busy state`, async () => {
+      for (const surface of ['create', 'list', 'restore'] as const) {
+        const visit = await mountedVisit(
+          surface === 'create' ? '/my/zones/new' : surface === 'restore' ? '/my/zones?trash=1' : '/my/zones',
+          false,
+          surface === 'restore' ? 'trash' : 'list',
+        );
+        const gate = deferred<CommandOutcome>();
+        try {
+          visit.state.commandGate = gate;
+          if (surface === 'create') {
+            await fillCreate(visit);
+            await settle(() => button(visit.host, m.zones_create_submit({}, { locale: 'en' })).click());
+          } else if (surface === 'list') {
+            await settle(() => button(visit.host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
+            await settle(() => trashConfirmation().click());
+          } else await settle(() => button(visit.host, m.zones_owner_restore({}, { locale: 'en' })).click());
+          await until(
+            () =>
+              visit.state.creates.length + visit.state.changes.length === 1 &&
+              visit.native.calls.some((call) => call.method !== 'GET'),
+          );
+          const oldCapture = (visit.state.creates[0] ?? visit.state.changes[0])!.capture;
+          await settle(() => changeSessionBeforeEffects(visit, change));
+          let fresh: ReturnType<typeof deferred<CommandOutcome>> | undefined;
+          if (surface === 'create') {
+            await until(() => !!visit.host.querySelector('#zone-starter'));
+            await fillCreate(visit, 'New pending draft');
+            fresh = deferred<CommandOutcome>();
+            visit.state.commandGate = fresh;
+            await settle(() => button(visit.host, m.zones_create_submit({}, { locale: 'en' })).click());
+            await until(() => visit.state.creates.length === 2);
+          }
+          const before = totals(visit);
+          let focus = 0;
+          const originalFocus = window.HTMLElement.prototype.focus;
+          window.HTMLElement.prototype.focus = function (...args) {
+            focus++;
+            return originalFocus.apply(this, args);
+          };
+          try {
+            if (result === 'throw') gate.reject(new Error('Original private command lost'));
+            else
+              gate.resolve(
+                result === 'success'
+                  ? { kind: 'saved', zone: fixtureZone(), ownerObservation: oldCapture.observation }
+                  : { kind: 'unavailable', ownerObservation: oldCapture.observation },
+              );
+            await flush();
+            expect(totals(visit)).toEqual(before);
+            expect(focus).toBe(0);
+            expect(visit.host.textContent).not.toContain(m.zones_create_saved({}, { locale: 'en' }));
+            expect(visit.host.textContent).not.toContain(m.zones_owner_trashed({}, { locale: 'en' }));
+            expect(visit.host.textContent).not.toContain(m.zones_owner_restored({}, { locale: 'en' }));
+            if (surface === 'create') {
+              expect(visit.host.querySelector('form')?.getAttribute('aria-busy')).toBe('true');
+              expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).toBe('New pending draft');
+            }
+          } finally {
+            window.HTMLElement.prototype.focus = originalFocus;
+          }
+          if (fresh) {
+            const newCapture = visit.state.creates[1]!.capture;
+            fresh.resolve({ kind: 'unavailable', ownerObservation: newCapture.observation });
+            await flush();
+            expect(visit.host.querySelector('form')?.getAttribute('aria-busy')).toBe('false');
+            expect(visit.state.creates[1]!.input.key).not.toBe(visit.state.creates[0]!.input.key);
+          }
+        } finally {
+          await visit.close();
+        }
+      }
+    });
+  }
+}
+
+for (const phase of ['write', 'retry-read', 'preview', 'choices', 'read'] as const) {
+  for (const result of ['success', 'failure', 'throw'] as const) {
+    test(`UNRUN connected late editor ${phase}/${result} stays hidden and cannot start secondary work`, async () => {
+      const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
+      const writing = deferred<Result<ZoneOwned>>();
+      const reading = deferred<Loaded>();
+      const previewing = deferred<Preview>();
+      const choosing = deferred<Loaded['options']['collections']>();
+      try {
+        if (phase === 'write' || phase === 'retry-read') {
+          await settle(() => setInput(visit.host, '#zone-label-en', 'Private retired write'));
+          heldEditorWrite = writing;
+          await settle(() => button(visit.host, m.zone_editor_save()).click());
+        } else if (phase === 'read') {
+          nextEditorRead = reading;
+          await settle(() => button(visit.host, m.zone_editor_refresh()).click());
+        } else if (phase === 'preview') {
+          delayedPreview = previewing;
+          await settle(() => button(visit.host, m.zone_editor_preview()).click());
+        } else {
+          delayedChoices = choosing;
+          await settle(() => button(visit.host, m.zone_editor_more()).click());
+        }
+        const call =
+          phase === 'write' || phase === 'retry-read'
+            ? editorWrites.at(-1)!.data
+            : phase === 'preview'
+              ? editorPreviews.at(-1)!
+              : phase === 'choices'
+                ? editorChoices.at(-1)!
+                : editorReads.at(-1)!;
+        const ownerObservation = { reader: call.expectedReader!, admission: call.admission! };
+        const failure = { kind: 'failure' as const, status: 503, code: 'old_private_failure', ownerObservation };
+        if (phase === 'retry-read') {
+          nextEditorRead = reading;
+          const count = editorReads.length;
+          writing.resolve(failure);
+          await until(() => editorReads.length === count + 1);
+        }
+        await settle(() => changeSessionBeforeEffects(visit, 'equal-query'));
+        await until(() => !!visit.host.querySelector('#zone-label-en'));
+        await settle(() => setInput(visit.host, '#zone-label-en', 'Replacement live draft'));
+        // Keep a replacement command busy while the original finishes.
+        const freshWrite = deferred<Result<ZoneOwned>>();
+        heldEditorWrite = freshWrite;
+        await settle(() => button(visit.host, m.zone_editor_save()).click());
+        const before = totals(visit);
+        const old = loadedFor(fixtureZoneId, ownerObservation);
+        if (old.resource.kind === 'ready') old.resource.value.configuration.labels.en = 'Old private result';
+        const pending =
+          phase === 'write' ? writing : phase === 'preview' ? previewing : phase === 'choices' ? choosing : reading;
+        if (result === 'throw') pending.reject(new Error('Old private read rejected'));
+        else if (phase === 'write')
+          writing.resolve(result === 'success' ? { kind: 'ready', value: fixtureZone(), ownerObservation } : failure);
+        else if (phase === 'preview')
+          previewing.resolve(
+            result === 'success' ? { kind: 'preparing', retryAfter: 'private-old-delay', ownerObservation } : failure,
+          );
+        else if (phase === 'choices')
+          choosing.resolve(
+            result === 'success'
+              ? {
+                  kind: 'ready',
+                  value: { items: [{ id: 'old', title: 'Old private choice' }], next: null },
+                  ownerObservation,
+                }
+              : failure,
+          );
+        else reading.resolve(result === 'success' ? old : { ...old, resource: failure });
+        await flush();
+        expect(totals(visit)).toEqual(before);
+        expect(visit.host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
+        expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).toBe('Replacement live draft');
+        for (const hidden of ['Old private result', 'Old private choice', 'old_private_failure', 'private-old-delay'])
+          expect(visit.host.textContent).not.toContain(hidden);
+        const freshCall = editorWrites.at(-1)!.data;
+        freshWrite.resolve({
+          kind: 'ready',
+          value: fixtureZone(),
+          ownerObservation: {
+            reader: freshCall.expectedReader!,
+            admission: freshCall.admission!,
+          },
+        });
+        await until(() => visit.host.querySelector('article')?.getAttribute('aria-busy') === 'false');
+      } finally {
+        await visit.close();
+      }
+    });
+  }
+}
+
+for (const transition of ['route', 'id', 'search', 'locale', 'unmount'] as const) {
+  test(`UNRUN retained private callbacks retire on ${transition}, including a return to the same address`, async () => {
+    for (const surface of ['create', 'list', 'editor'] as const) {
+      const start =
+        surface === 'create' ? '/my/zones/new' : surface === 'list' ? '/my/zones' : `/my/zones/${fixtureZoneId}/edit`;
+      const visit = await mountedVisit(start);
+      try {
+        const callbacks: (() => void)[] = [];
+        if (surface === 'create') {
+          await fillCreate(visit, 'Old address draft');
+          callbacks.push(retainHandler(visit.host.querySelector('form')!, 'onSubmit'));
+        } else if (surface === 'list') {
+          callbacks.push(retainHandler(button(visit.host, m.zones_owner_refresh({}, { locale: 'en' }))));
+          await settle(() => button(visit.host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
+          callbacks.push(retainHandler(trashConfirmation()));
+        } else {
+          callbacks.push(
+            retainHandler(button(visit.host, m.zone_editor_preview())),
+            retainHandler(button(visit.host, m.zone_editor_more())),
+            retainHandler(button(visit.host, m.zone_editor_refresh())),
+          );
+        }
+        let before: number[] = [];
+        const invoke = () => {
+          before = totals(visit);
+          for (const callback of callbacks) callback();
+          expect(totals(visit)).toEqual(before);
+        };
+        if (transition === 'unmount')
+          await settle(() => {
+            visit.root.unmount();
+            visit.state.stopped = true;
+            invoke();
+          });
+        else if (transition === 'locale') {
+          await settle(() => {
+            setLocale('ja', { reload: false });
+            invoke();
+          });
+          setLocale('en', { reload: false });
+          // Returning to the original locale never revives its retired work.
+          await settle(invoke);
+        } else {
+          const stop = visit.router.subscribe('onBeforeNavigate', invoke);
+          try {
+            if (transition === 'search')
+              await settle(() => visit.router.navigate({ to: start, search: { marker: 'replacement' } }));
+            else if (transition === 'id' && surface === 'editor')
+              await settle(() =>
+                visit.router.navigate({
+                  to: '/my/zones/$id/edit',
+                  params: { id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e71' },
+                }),
+              );
+            else await settle(() => visit.router.navigate({ to: '/elsewhere' }));
+          } finally {
+            stop();
+          }
+          // Invoke once more after the original controls have genuinely left the tree.
+          await settle(invoke);
+          await settle(() => visit.router.navigate({ to: start }));
+          await settle(invoke);
+          expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Old address draft');
+        }
+      } finally {
+        setLocale('en', { reload: false });
+        await visit.close();
+      }
+    }
+  });
+}
+
+test('UNRUN original loader completions cannot install private data on an equal-counter replacement Query', async () => {
+  for (const surface of ['list', 'editor'] as const) {
+    const visit = await mountedVisit(surface === 'list' ? '/my/zones' : `/my/zones/${fixtureZoneId}/edit`);
+    try {
+      let reload: Promise<unknown> | undefined;
+      const listGate = deferred<ListOutcome>();
+      const editorGate = deferred<Loaded>();
+      if (surface === 'list') visit.state.readGate = listGate;
+      else nextEditorRead = editorGate;
+      const count = surface === 'list' ? visit.state.reads : editorReads.length;
+      // Start a real router loader. Its completion carries its original requested reader.
+      await settle(() => {
+        reload = visit.router.invalidate();
+      });
+      await until(() => (surface === 'list' ? visit.state.reads : editorReads.length) === count + 1);
+      const oldObservation =
+        surface === 'list'
+          ? visit.state.admissions.at(-1)!
+          : {
+              reader: editorReads.at(-1)!.expectedReader!,
+              admission: editorReads.at(-1)!.admission!,
+            };
+      await settle(() => changeSessionBeforeEffects(visit, 'equal-query'));
+      if (surface === 'list')
+        listGate.resolve({
+          kind: 'ready',
+          page: {
+            zones: [{ ...fixtureZone(), labels: { en: 'Secret old loader list' } }],
+            next: null,
+          },
+          ownerObservation: oldObservation,
+        });
+      else {
+        const old = loadedFor(fixtureZoneId, oldObservation);
+        if (old.resource.kind === 'ready') old.resource.value.configuration.labels.en = 'Secret old loader editor';
+        editorGate.resolve(old);
+      }
+      await settle(async () => {
+        await reload;
+      });
+      expect(visit.host.textContent).not.toContain('Secret old loader list');
+      expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Secret old loader editor');
+      if (surface === 'list') await settle(() => visit.router.invalidate());
+      await until(() =>
+        surface === 'list' ? !!visit.host.querySelector('article') : !!visit.host.querySelector('#zone-label-en'),
+      );
+      expect(visit.host.textContent).not.toContain('Secret old loader list');
+      expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Secret old loader editor');
+    } finally {
+      await visit.close();
+    }
+  }
+});
+
+test('UNRUN editor uncertain retries cannot adopt a replacement token or Query before effects', async () => {
+  for (const change of ['equal-query', 'csrf-only', 'aba'] as const) {
+    const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
+    try {
+      await settle(() => setInput(visit.host, '#zone-label-en', 'Frozen original editor command'));
+      nextEditorWrite = 'unavailable';
+      const count = editorWrites.length;
+      await settle(() => button(visit.host, m.zone_editor_save()).click());
+      await until(() => editorWrites.length === count + 1 && !visit.host.querySelector('[aria-busy="true"]'));
+      const original = structuredClone(editorWrites[count]!);
+      const retry = retainHandler(button(visit.host, m.zone_editor_save()));
+      await settle(() => {
+        changeSessionBeforeEffects(visit, change);
+        retry();
+      });
+      expect(editorWrites.length).toBe(count + 1);
+      await until(() => !!visit.host.querySelector('#zone-label-en'));
+      expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe(
+        'Frozen original editor command',
+      );
+      await settle(() => setInput(visit.host, '#zone-label-en', 'Fresh explicit editor command'));
+      await settle(() => button(visit.host, m.zone_editor_save()).click());
+      await until(() => editorWrites.length === count + 2);
+      const fresh = editorWrites[count + 1]!;
+      expect(fresh.data.key).not.toBe(original.data.key);
+      expect(fresh.data.admission).not.toBe(original.data.admission);
+      expect(fresh.data.id).toBe(original.data.id);
+      expect(fresh.data.operation === 'save' && fresh.data.body.configuration.labels.en).toBe(
+        'Fresh explicit editor command',
+      );
+    } finally {
+      await visit.close();
+    }
+  }
+});
+
+test('UNRUN queued focus and a late list refresh finally cannot affect a new admission', async () => {
+  const originalRaf = globalThis.requestAnimationFrame;
+  const originalFocus = window.HTMLElement.prototype.focus;
+  const queued: FrameRequestCallback[] = [];
+  let focuses = 0;
+  globalThis.requestAnimationFrame = (callback) => {
+    queued.push(callback);
+    return queued.length;
+  };
+  window.HTMLElement.prototype.focus = function (...args) {
+    focuses++;
+    return originalFocus.apply(this, args);
+  };
+  try {
+    for (const surface of ['create', 'list'] as const) {
+      const visit = await mountedVisit(
+        surface === 'create' ? '/my/zones/new' : '/my/zones',
+        false,
+        surface === 'create' ? 'uncertain' : 'list',
+      );
+      try {
+        if (surface === 'create') {
+          await fillCreate(visit);
+          await settle(() => button(visit.host, m.zones_create_submit({}, { locale: 'en' })).click());
+          await until(() => visit.host.textContent?.includes(m.zones_create_uncertain({}, { locale: 'en' })) ?? false);
+        } else {
+          visit.state.reloadGate = deferred<void>();
+          await settle(() => button(visit.host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
+          await settle(() => trashConfirmation().click());
+          await until(() => visit.state.reloads === 1);
+        }
+        expect(queued.length).toBeGreaterThan(0);
+        await settle(() => changeSessionBeforeEffects(visit, 'csrf-only'));
+        const before = totals(visit);
+        const beforeFocus = focuses;
+        await settle(() => {
+          for (const callback of queued.splice(0)) callback(0);
+        });
+        expect(focuses).toBe(beforeFocus);
+        expect(totals(visit)).toEqual(before);
+      } finally {
+        await visit.close();
+        queued.length = 0;
+      }
+    }
+    const visit = await mountedVisit('/my/zones');
+    try {
+      const original = deferred<void>();
+      visit.state.reloadGate = original;
+      await settle(() => button(visit.host, m.zones_owner_refresh({}, { locale: 'en' })).click());
+      await settle(() => changeSessionBeforeEffects(visit, 'csrf-only'));
+      await settle(() => visit.router.invalidate());
+      await until(() => !!visit.host.querySelector('article'));
+      const fresh = deferred<void>();
+      visit.state.reloadGate = fresh;
+      await settle(() => button(visit.host, m.zones_owner_refresh({}, { locale: 'en' })).click());
+      const before = totals(visit);
+      original.reject(new Error('Old refresh failed'));
+      await flush();
+      expect(totals(visit)).toEqual(before);
+      expect(visit.host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
+      expect(visit.host.textContent).not.toContain(m.zones_owner_unavailable({}, { locale: 'en' }));
+      fresh.resolve();
+      await flush();
+      expect(visit.host.querySelector('article')?.getAttribute('aria-busy')).toBe('false');
+    } finally {
+      await visit.close();
+    }
+  } finally {
+    globalThis.requestAnimationFrame = originalRaf;
+    window.HTMLElement.prototype.focus = originalFocus;
+  }
+});
+
+test('UNRUN same-counter CSRF loss retains fresh preview/choices reads, and gain starts fresh write continuity', async () => {
+  const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
+  try {
+    await settle(() => setInput(visit.host, '#zone-visibility', 'public'));
+    const oldPublish = retainHandler(button(visit.host, m.zone_editor_publish()));
+    const count = editorWrites.length;
+    await settle(() => {
+      backendViewer = signedIn('A', null);
+      visit.client
+        .getQueryCache()
+        .find({ queryKey: sessionQuery.queryKey, exact: true })!
+        .setState({ data: backendViewer });
+      oldPublish();
+    });
+    await until(() => !!visit.host.querySelector('#zone-label-en'));
+    expect(editorWrites.length).toBe(count);
+    expect(button(visit.host, m.zone_editor_publish()).disabled).toBe(true);
+    const previewCount = editorPreviews.length;
+    const choiceCount = editorChoices.length;
+    await settle(() => button(visit.host, m.zone_editor_preview()).click());
+    await until(() => editorPreviews.length === previewCount + 1 && !visit.host.querySelector('[aria-busy="true"]'));
+    await settle(() => button(visit.host, m.zone_editor_more()).click());
+    await until(() => editorChoices.length === choiceCount + 1);
+    expect(visit.host.textContent).toContain('Later collection');
+    const readAdmission = editorChoices.at(-1)!.admission;
+    await settle(() => {
+      backendViewer = signedIn('A', csrfC);
+      visit.client
+        .getQueryCache()
+        .find({ queryKey: sessionQuery.queryKey, exact: true })!
+        .setState({ data: backendViewer });
+      oldPublish();
+    });
+    expect(editorWrites.length).toBe(count);
+    await until(() => !!visit.host.querySelector('#zone-label-en'));
+    await settle(() => setInput(visit.host, '#zone-visibility', 'public'));
+    await settle(() => button(visit.host, m.zone_editor_publish()).click());
+    await until(() => editorWrites.length === count + 1);
+    expect(editorWrites.at(-1)!.csrf).toBe(csrfC);
+    expect(editorWrites.at(-1)!.data.admission).not.toBe(readAdmission);
+  } finally {
+    await visit.close();
+  }
+});
+
+for (const transition of ['route', 'search', 'locale', 'unmount'] as const) {
+  test(`UNRUN in-flight private continuations stay retired after ${transition}`, async () => {
+    for (const phase of ['create', 'lifecycle', 'write', 'retry-read', 'preview', 'choices'] as const) {
+      for (const result of ['success', 'failure'] as const) {
+        const visit = await mountedVisit(
+          phase === 'create'
+            ? '/my/zones/new'
+            : phase === 'lifecycle'
+              ? '/my/zones'
+              : `/my/zones/${fixtureZoneId}/edit`,
+        );
+        const command = deferred<CommandOutcome>();
+        const writing = deferred<Result<ZoneOwned>>();
+        const reading = deferred<Loaded>();
+        const previewing = deferred<Preview>();
+        const choosing = deferred<Loaded['options']['collections']>();
+        try {
+          let observation: OwnerReadObservation;
+          if (phase === 'create') {
+            visit.state.commandGate = command;
+            await fillCreate(visit);
+            await settle(() => button(visit.host, m.zones_create_submit({}, { locale: 'en' })).click());
+            await until(() => visit.state.creates.length === 1);
+            observation = visit.state.creates[0]!.capture.observation;
+          } else if (phase === 'lifecycle') {
+            visit.state.commandGate = command;
+            await settle(() => button(visit.host, m.zones_owner_trash_action({}, { locale: 'en' })).click());
+            await settle(() => trashConfirmation().click());
+            await until(() => visit.state.changes.length === 1);
+            observation = visit.state.changes[0]!.capture.observation;
+          } else {
+            if (phase === 'write' || phase === 'retry-read') {
+              // A clean publish is effectful without a dirty-navigation confirmation.
+              heldEditorWrite = writing;
+              await settle(() => setInput(visit.host, '#zone-visibility', 'public'));
+              await settle(() => button(visit.host, m.zone_editor_publish()).click());
+            } else if (phase === 'preview') {
+              delayedPreview = previewing;
+              await settle(() => button(visit.host, m.zone_editor_preview()).click());
+            } else {
+              delayedChoices = choosing;
+              await settle(() => button(visit.host, m.zone_editor_more()).click());
+            }
+            const call =
+              phase === 'preview'
+                ? editorPreviews.at(-1)!
+                : phase === 'choices'
+                  ? editorChoices.at(-1)!
+                  : editorWrites.at(-1)!.data;
+            observation = { reader: call.expectedReader!, admission: call.admission! };
+            if (phase === 'retry-read') {
+              nextEditorRead = reading;
+              const reads = editorReads.length;
+              writing.resolve({
+                kind: 'failure',
+                status: 503,
+                code: 'dependency_unavailable',
+                ownerObservation: observation,
+              });
+              await until(() => editorReads.length === reads + 1);
+            }
+          }
+          if (transition === 'unmount')
+            await settle(() => {
+              visit.root.unmount();
+              visit.state.stopped = true;
+            });
+          else if (transition === 'locale')
+            await settle(() => {
+              setLocale('ja', { reload: false });
+              // Force a real route notification while preserving its address.
+              visit.client.setQueryData(['locale-rerender'], 'ja');
+            });
+          else if (transition === 'search')
+            await settle(() =>
+              visit.router.navigate({
+                to: visit.router.state.location.pathname,
+                search: { marker: 'replacement' },
+              }),
+            );
+          else await settle(() => visit.router.navigate({ to: '/elsewhere' }));
+          const before = totals(visit);
+          const failure = {
+            kind: 'failure' as const,
+            status: 503,
+            code: 'retired_result',
+            ownerObservation: observation,
+          };
+          if (phase === 'create' || phase === 'lifecycle')
+            command.resolve(
+              result === 'success'
+                ? { kind: 'saved', zone: fixtureZone(), ownerObservation: observation }
+                : { kind: 'unavailable', ownerObservation: observation },
+            );
+          else if (phase === 'write')
+            writing.resolve(
+              result === 'success' ? { kind: 'ready', value: fixtureZone(), ownerObservation: observation } : failure,
+            );
+          else if (phase === 'retry-read') {
+            const old = loadedFor(fixtureZoneId, observation);
+            reading.resolve(result === 'success' ? old : { ...old, resource: failure });
+          } else if (phase === 'preview')
+            previewing.resolve(
+              result === 'success'
+                ? { kind: 'preparing', retryAfter: 'retired-preview', ownerObservation: observation }
+                : failure,
+            );
+          else
+            choosing.resolve(
+              result === 'success'
+                ? {
+                    kind: 'ready',
+                    value: { items: [{ id: 'old', title: 'Retired private mount' }], next: null },
+                    ownerObservation: observation,
+                  }
+                : failure,
+            );
+          await flush();
+          expect(totals(visit)).toEqual(before);
+          for (const hidden of ['retired_result', 'retired-preview', 'Retired private mount'])
+            expect(visit.host.textContent).not.toContain(hidden);
+          if (transition === 'unmount') expect(visit.host.textContent).toBe('');
+        } finally {
+          setLocale('en', { reload: false });
+          await visit.close();
+        }
+      }
+    }
+  });
+}
+
+test('UNRUN stale leave controls cannot reset or proceed after a CSRF-only admission change', async () => {
+  const visit = await mountedVisit(`/my/zones/${fixtureZoneId}/edit`);
+  try {
+    await settle(() => setInput(visit.host, '#zone-label-en', 'Old dirty confirmation'));
+    await settle(() => {
+      void visit.router.navigate({ to: '/elsewhere' });
+    });
+    await until(() => visit.host.textContent?.includes(m.zone_editor_leave()) ?? false);
+    const stay = retainHandler(button(visit.host, m.zone_editor_stay()));
+    const discard = retainHandler(button(visit.host, m.zone_editor_discard()));
+    const address = visit.router.state.location.href;
+    const before = totals(visit);
+    await settle(() => {
+      changeSessionBeforeEffects(visit, 'csrf-only');
+      stay();
+      discard();
+    });
+    expect(visit.router.state.location.href).toBe(address);
+    expect(visit.state.navigations).toHaveLength(before[2]!);
+    expect(visit.host.textContent).not.toContain(m.zone_editor_leave());
+    expect(visit.host.querySelector<HTMLInputElement>('#zone-label-en')?.value).not.toBe('Old dirty confirmation');
+  } finally {
+    await visit.close();
   }
 });

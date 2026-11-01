@@ -83,15 +83,17 @@ export class ZoneEditorSession {
   private attempt: { signature: string; input: Mutation } | undefined;
   private readonly ownerCurrent: () => boolean;
   private readonly ownerObservation: OwnerReadObservation | undefined;
+  private readonly ownerCanWrite: () => boolean;
   private readonly retireOwner: (() => void) | undefined;
   constructor(
     private readonly transport: Transport,
     loaded: Loaded,
     private key = () => crypto.randomUUID(),
-    owner?: { isCurrent(): boolean; observation: OwnerReadObservation; retire(): void },
+    owner?: { isCurrent(): boolean; observation: OwnerReadObservation; retire(): void; canWrite?(): boolean },
   ) {
     this.ownerCurrent = owner ? owner.isCurrent : () => true;
     this.ownerObservation = owner?.observation;
+    this.ownerCanWrite = owner?.canWrite ?? (() => true);
     this.retireOwner = owner?.retire;
     const saved = loaded.resource.kind === 'ready' ? loaded.resource.value : undefined;
     this.state = {
@@ -160,6 +162,7 @@ export class ZoneEditorSession {
     if (!this.current() || this.state.busy) return;
     this.update({ busy: true });
     try {
+      if (!this.current()) return;
       const loaded = await this.transport.load();
       if (!this.current() || !this.matchesOwner(loaded)) return;
       if (this.state.draft) {
@@ -211,7 +214,7 @@ export class ZoneEditorSession {
     await this.write('publish', visibility);
   }
   private async write(operation: 'save' | 'publish', visibility?: Visibility) {
-    if (!this.current()) return;
+    if (!this.current() || !this.ownerCanWrite()) return;
     const { saved, draft, loaded, busy, conflict } = this.state;
     if (!saved || !draft || busy || conflict || !loaded.permissions[operation === 'save' ? 'configure' : 'publish'])
       return;
@@ -236,7 +239,7 @@ export class ZoneEditorSession {
       operation === 'save'
         ? ({ operation, body: structuredClone(draft) } as const)
         : ({ operation, body: { visibility: visibility! } } as const);
-    const signature = JSON.stringify([saved.zone.revision, request]);
+    const signature = JSON.stringify([saved.zone.id, saved.zone.revision, request]);
     if (this.attempt?.signature !== signature)
       this.attempt = {
         signature,
@@ -246,7 +249,8 @@ export class ZoneEditorSession {
     let result: Result<ZoneOwned>;
     let received = true;
     try {
-      result = await this.transport.mutate(this.attempt.input);
+      if (!this.current() || !this.ownerCanWrite()) return;
+      result = await this.transport.mutate(structuredClone(this.attempt.input));
     } catch {
       result = this.localFailure();
       received = false;
@@ -265,6 +269,7 @@ export class ZoneEditorSession {
       // An uncertain network result may already have committed. Read before offering a retry.
       let current: Loaded | undefined;
       try {
+        if (!this.current()) return;
         current = await this.transport.load();
       } catch {
         /* Keep the draft and the original retry request. */
@@ -293,6 +298,7 @@ export class ZoneEditorSession {
       return;
     this.update({ busy: true, preview: undefined, notice: undefined });
     try {
+      if (!this.current()) return;
       const preview = await this.transport.preview(route);
       if (!this.current() || !this.matchesOwner(preview)) return;
       this.update({ preview, busy: false });
@@ -309,6 +315,7 @@ export class ZoneEditorSession {
     let result: Options['collections'];
     let received = true;
     try {
+      if (!this.current()) return;
       result = await this.transport.collections(current.value.next);
     } catch {
       result = this.localFailure();

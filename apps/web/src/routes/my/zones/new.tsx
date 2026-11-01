@@ -28,7 +28,7 @@ function CreateZoneRoute() {
       locale={locale}
       session={state}
       onCreate={(command, admission): Promise<CommandOutcome> => {
-        if (!admission) return Promise.resolve({ kind: 'stale' });
+        if (!lifetime.isCurrent(admission)) return Promise.resolve({ kind: 'stale' });
         return createMyZone({
           data: {
             ...command,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { pickZoneName } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
@@ -41,17 +41,24 @@ function DeleteZone({
   locale,
   disabled,
   onConfirm,
+  isCurrent,
 }: {
   zone: OwnedZone;
   locale: string;
   disabled: boolean;
   onConfirm: () => void;
+  isCurrent: () => boolean;
 }) {
   const [open, setOpen] = useState(false);
   const options = { locale: locale as never };
   const title = pickZoneName(zone, locale).text || m.zones_owner_unnamed({}, options);
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(value) => {
+        if (isCurrent()) setOpen(value);
+      }}
+    >
       <AlertDialogTrigger render={<Button variant="ghost" disabled={disabled} />}>
         {m.zones_owner_trash_action({}, options)}
       </AlertDialogTrigger>
@@ -61,10 +68,20 @@ function DeleteZone({
           <AlertDialogDescription>{m.zones_owner_confirm_description({}, options)}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{m.zones_owner_cancel({}, options)}</AlertDialogCancel>
+          <AlertDialogCancel
+            onClick={(event) => {
+              if (!isCurrent()) event.preventDefault();
+            }}
+          >
+            {m.zones_owner_cancel({}, options)}
+          </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            onClick={() => {
+            onClick={(event) => {
+              if (!isCurrent()) {
+                event.preventDefault();
+                return;
+              }
               setOpen(false);
               onConfirm();
             }}
@@ -77,10 +94,22 @@ function DeleteZone({
   );
 }
 
-export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, onReload }: WorkspaceProps) {
+const noSubscription = () => () => {};
+const fixtureSnapshot = () => null;
+export function ZonesOwnerWorkspace(props: WorkspaceProps) {
+  const snapshot = useSyncExternalStore(
+    props.owner?.subscribe ?? noSubscription,
+    props.owner?.snapshot ?? fixtureSnapshot,
+    props.owner?.snapshot ?? fixtureSnapshot,
+  );
+  return <OwnerVisit key={snapshot?.incarnation ?? 'fixture'} {...props} />;
+}
+
+function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: WorkspaceProps) {
   const options = { locale: locale as never };
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  const retained = useRef<LifecycleCommand | null>(null);
   const confirmation = useRef<HTMLParagraphElement>(null);
   const [pending, setPending] = useState<LifecycleCommand | null>(null);
   const [result, setResult] = useState<CommandOutcome | null>(null);
@@ -88,27 +117,36 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
   const paths = zonePaths(locale);
   const capture = owner?.capture();
   const currentRead = !owner || owner.owns(outcome?.ownerObservation);
-  const visibleOutcome = owner && outcome?.kind === 'ready' && !currentRead ? null : outcome;
+  const visibleOutcome = owner && !currentRead ? null : outcome;
   useEffect(() => {
-    if (outcome?.kind !== 'ready' || !input.deleted) return;
+    if (outcome?.kind !== 'ready' || !input.deleted || (owner && !owner.isCurrent(capture))) return;
     const deadlines = outcome.page.zones.flatMap((zone) => (zone.restoreUntil ? [Date.parse(zone.restoreUntil)] : []));
     const next = Math.min(...deadlines.filter((deadline) => deadline > Date.now()));
     if (!Number.isFinite(next)) return;
-    const timer = setTimeout(() => setNow(Date.now()), Math.min(next - Date.now() + 1, 2_147_483_647));
+    const timer = setTimeout(
+      () => {
+        if (!owner || owner.isCurrent(capture)) setNow(Date.now());
+      },
+      Math.min(next - Date.now() + 1, 2_147_483_647),
+    );
     return () => clearTimeout(timer);
-  }, [outcome, input.deleted, now]);
+  }, [outcome, input.deleted, now, owner, capture]);
 
   async function submit(command: LifecycleCommand) {
-    const admission = owner?.capture();
-    if (owner && (!admission || !owner.owns(outcome?.ownerObservation))) return;
-    if (inFlight.current) return;
+    const admission = capture;
+    if (owner && !owner.isCurrent(admission)) return;
+    if (owner && (!admission || !hasValidOwnerCsrfToken(admission.csrfToken) || !owner.owns(outcome?.ownerObservation)))
+      return;
+    if (inFlight.current || (retained.current && retained.current !== command)) return;
+    const original = retained.current ?? structuredClone(command);
+    retained.current = original;
     inFlight.current = true;
     setBusy(true);
-    setPending(command);
+    setPending(original);
     let changed: CommandOutcome;
     let received = true;
     try {
-      changed = await onChange(command, admission ?? undefined);
+      changed = await onChange(structuredClone(original), admission ?? undefined);
     } catch {
       changed = { kind: 'unavailable' };
       received = false;
@@ -126,7 +164,10 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
     }
     setResult(changed);
     // Delivery uncertainty retains the original CAS and key; reload never silently retries a command.
-    if (changed.kind !== 'unavailable') setPending(null);
+    if (changed.kind !== 'unavailable') {
+      retained.current = null;
+      setPending(null);
+    }
     inFlight.current = false;
     setBusy(false);
     if (changed.kind === 'saved') {
@@ -149,16 +190,9 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
     !currentRead ||
     (!!owner && (!capture || !hasValidOwnerCsrfToken(capture.csrfToken)));
   async function refresh() {
-    if (busy || pending) return;
-    const admission = owner?.capture();
-    if (owner && !admission) {
-      try {
-        await onReload();
-      } catch {
-        /* A fresh route read is the only safe retry after this visit retired. */
-      }
-      return;
-    }
+    if (busy || pending || inFlight.current || retained.current) return;
+    const admission = capture;
+    if (owner && !owner.isCurrent(admission)) return;
     setBusy(true);
     try {
       await onReload();
@@ -170,8 +204,23 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
       if (!owner || owner.isCurrent(admission)) setBusy(false);
     }
   }
+  if (owner && !owner.isCurrent(capture))
+    return outcome?.kind === 'signed-out' ? (
+      <ZoneFeedback failure={{ kind: 'signed-out' }} locale={locale} />
+    ) : (
+      <p role="status">{m.zones_owner_loading({}, options)}</p>
+    );
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground" aria-busy={busy}>
+    <article
+      onClickCapture={(event) => {
+        if (owner && !owner.isCurrent(capture)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      className="mx-auto w-full max-w-3xl space-y-6 text-foreground"
+      aria-busy={busy}
+    >
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-3">
           <PageHeading>{m.zones_owner_title({}, options)}</PageHeading>
@@ -214,8 +263,9 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
             busy
               ? undefined
               : () => {
-                  if (pending) void submit(pending);
-                  else void refresh();
+                  if (pending) {
+                    if (retained.current === pending) void submit(pending);
+                  } else void refresh();
                 }
           }
         />
@@ -306,6 +356,7 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
                           zone={zone}
                           locale={locale}
                           disabled={blocked}
+                          isCurrent={() => !owner || owner.isCurrent(capture)}
                           onConfirm={() =>
                             void submit({
                               id: zone.id,

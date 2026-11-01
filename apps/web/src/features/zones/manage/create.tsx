@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { pickText, UI_LOCALES, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
@@ -20,7 +20,18 @@ export type CreateProps = {
   onNavigate: (href: string) => void;
 };
 
-export function CreateZone({ locale, session, owner, onCreate, onNavigate }: CreateProps) {
+const noSubscription = () => () => {};
+const fixtureSnapshot = () => null;
+export function CreateZone(props: CreateProps) {
+  const snapshot = useSyncExternalStore(
+    props.owner?.subscribe ?? noSubscription,
+    props.owner?.snapshot ?? fixtureSnapshot,
+    props.owner?.snapshot ?? fixtureSnapshot,
+  );
+  return <CreateVisit key={snapshot?.incarnation ?? 'fixture'} {...props} />;
+}
+
+function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreateProps) {
   const options = { locale: locale as never };
   const [starter, setStarter] = useState('');
   const [labels, setLabels] = useState<ZoneConfiguration['labels'] | null>(null);
@@ -31,6 +42,7 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
   const [result, setResult] = useState<CommandOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  const retained = useRef<CreateCommand | null>(null);
   const alert = useRef<HTMLDivElement>(null);
   const choose = useRef<HTMLSelectElement>(null);
   const capture = owner?.capture();
@@ -38,16 +50,20 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
   const frozen = busy || command !== null;
 
   async function send(input: CreateCommand) {
-    const admission = owner?.capture();
+    const admission = capture;
+    if (owner && !owner.isCurrent(admission)) return;
     if (owner && (!admission || !hasValidOwnerCsrfToken(admission.csrfToken))) return;
-    if (inFlight.current) return;
+    if (inFlight.current || (retained.current && retained.current !== input)) return;
+    // The original command and credentials belong to this rendered admission.
+    const original = retained.current ?? structuredClone(input);
+    retained.current = original;
     inFlight.current = true;
     setBusy(true);
-    setCommand(input);
+    setCommand(original);
     let saved: CommandOutcome;
     let received = true;
     try {
-      saved = await onCreate(input, admission ?? undefined);
+      saved = await onCreate(structuredClone(original), admission ?? undefined);
     } catch {
       saved = { kind: 'unavailable' };
       received = false;
@@ -64,7 +80,10 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
       return;
     }
     setResult(saved);
-    if (saved.kind !== 'unavailable' && saved.kind !== 'conflict' && saved.kind !== 'saved') setCommand(null);
+    if (saved.kind !== 'unavailable' && saved.kind !== 'conflict' && saved.kind !== 'saved') {
+      retained.current = null;
+      setCommand(null);
+    }
     setBusy(false);
     inFlight.current = false;
     if (saved.kind === 'saved') {
@@ -86,15 +105,31 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
     const fields = invalidLabels(labels, primaryLanguage);
     if (fields.length) {
       setResult({ kind: 'invalid', fields });
-      requestAnimationFrame(() => alert.current?.focus());
+      requestAnimationFrame(() => {
+        if (!owner || owner.isCurrent(capture)) alert.current?.focus();
+      });
       return;
     }
     void send({ starter, primaryLanguage, labels: structuredClone(labels), key: crypto.randomUUID() });
   }
 
+  if (owner && !owner.isCurrent(capture))
+    return session === 'signed-out' ? (
+      <ZoneFeedback failure={{ kind: 'signed-out' }} locale={locale} returnTo={zonePaths(locale).create} />
+    ) : (
+      <p role="status">{m.zones_owner_loading({}, options)}</p>
+    );
   const invalid = result?.kind === 'invalid';
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
+    <article
+      onClickCapture={(event) => {
+        if (owner && !owner.isCurrent(capture)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      className="mx-auto w-full max-w-3xl space-y-6 text-foreground"
+    >
       <a className="underline" href={zonePaths(locale).list}>
         {m.zones_owner_title({}, options)}
       </a>
@@ -137,6 +172,7 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
               aria-invalid={invalid && !starter}
               aria-describedby="zone-starter-help"
               onChange={(event) => {
+                if (owner && !owner.isCurrent(capture)) return;
                 const id = event.target.value;
                 setStarter(id);
                 setLabels((current) => current ?? (copyStarter(id) ? {} : null));
@@ -160,6 +196,7 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
               disabled={frozen}
               errors={invalid ? result.fields : undefined}
               onChange={(names) => {
+                if (owner && !owner.isCurrent(capture)) return;
                 setLabels(names.labels);
                 setPrimaryLanguage(names.primaryLanguage);
                 setResult(null);
@@ -172,13 +209,21 @@ export function CreateZone({ locale, session, owner, onCreate, onNavigate }: Cre
               <ZoneFeedback
                 failure={result}
                 locale={locale}
-                onRetry={result.kind === 'unavailable' && command && !busy ? () => void send(command) : undefined}
+                onRetry={
+                  result.kind === 'unavailable' && command && !busy
+                    ? () => {
+                        if (retained.current === command) void send(command);
+                      }
+                    : undefined
+                }
               />
               {result.kind === 'unavailable' ? <p>{m.zones_create_uncertain({}, options)}</p> : null}
               {result.kind === 'conflict' ? (
                 <Button
                   variant="outline"
                   onClick={() => {
+                    if (owner && !owner.isCurrent(capture)) return;
+                    retained.current = null;
                     setCommand(null);
                     setResult(null);
                     choose.current?.focus();

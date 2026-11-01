@@ -11,7 +11,8 @@ export const Route = createFileRoute('/my/zones/$id/edit')({
   beforeLoad: requireSignedIn,
   staticData: { sessionReread: true },
   loaderDeps: ({ search }) => ({ search }),
-  loader: ({ params, context, deps }) => loadZoneEditor(params.id, getLocale(), context.queryClient, deps.search),
+  loader: ({ params, context, deps, abortController }) =>
+    loadZoneEditor(params.id, getLocale(), context.queryClient, deps.search, abortController.signal),
   head: ({ match }) =>
     pageHead({ title: m.zone_editor_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   pendingComponent: EditorLoading,

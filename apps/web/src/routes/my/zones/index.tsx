@@ -12,8 +12,8 @@ import type { CommandOutcome, ListOutcome } from '../../../features/zones/manage
 export const Route = createFileRoute('/my/zones/')({
   validateSearch: listInput,
   loaderDeps: ({ search }) => ({ input: listInput(search), locale: getLocale() }),
-  loader: async ({ context, deps }) => {
-    const requestedOwner = captureOwnerRead(context.queryClient);
+  loader: async ({ context, deps, abortController }) => {
+    const requestedOwner = captureOwnerRead(context.queryClient, abortController.signal);
     const outcome = requestedOwner
       ? await readMyZones({
           data: { ...deps.input, expectedReader: requestedOwner.reader, admission: requestedOwner.admission },
@@ -59,10 +59,10 @@ function MyZonesRoute() {
       key={`${routeKey}:${snapshot.incarnation}`}
       locale={locale}
       input={input}
-      outcome={visibleOutcome}
+      outcome={sessionState === 'signed-out' ? visibleOutcome : currentRead ? visibleOutcome : null}
       owner={lifetime}
       onChange={(command, capture): Promise<CommandOutcome> => {
-        if (!capture) return Promise.resolve({ kind: 'stale' });
+        if (!lifetime.isCurrent(capture)) return Promise.resolve({ kind: 'stale' });
         return changeMyZone({
           data: {
             ...command,
