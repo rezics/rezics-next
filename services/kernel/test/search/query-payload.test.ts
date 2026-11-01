@@ -160,7 +160,7 @@ test('an in-flight native search retains the original admitted generation and si
   expect(result.hits).toHaveLength(1);
   expect(result.hits[0]!.sort).toEqual([id]);
   expect(observed.calls).toHaveLength(1);
-  expect(observed.calls[0]!.path).toBe(`//_search/template`);
+  expect(observed.calls[0]!.path).toBe(`/${index}/_search/template`);
   expect(input.generation).toBe(2);
 });
 
