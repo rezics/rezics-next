@@ -85,7 +85,7 @@ export function ShelfListRow({
       className="items-center"
       href={href}
       title={title}
-      titleLang={titleLang}
+      {...(titleLang !== undefined ? { titleLang } : {})}
       visual={
         <div className="flex shrink-0 items-center gap-3">
           {selectable && (
