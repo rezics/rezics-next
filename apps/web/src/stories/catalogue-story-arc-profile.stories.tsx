@@ -62,12 +62,57 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function assertCallerTarget(
+  target: HTMLElement,
+  container: HTMLElement,
+  view: Window,
+  phoneOrCoarse: boolean,
+) {
+  const bounds = container.getBoundingClientRect();
+  const rect = target.getBoundingClientRect();
+  await expect(target).toBeVisible();
+  await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+  await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+  await expect(target.scrollWidth).toBeLessThanOrEqual(target.clientWidth + 1);
+  await expect(target.scrollHeight).toBeLessThanOrEqual(target.clientHeight + 1);
+  if (phoneOrCoarse) {
+    await expect(rect.height).toBeGreaterThanOrEqual(44);
+    await expect(rect.width).toBeGreaterThanOrEqual(44);
+  } else {
+    await expect(rect.height).toBeLessThan(44);
+  }
+}
+
 export const RouteEntry: Story = { render: () => <PageStory visitor="Signed In" path="/catalogue/story-arc" /> };
 export const Create: Story = {};
 export const CurrentArc: Story = { args: { existing: true } };
 export const WorkOrder: Story = {
   args: { existing: true, work: true },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const article = canvas.getByRole('article');
+    const view = canvasElement.ownerDocument.defaultView;
+    if (!view) throw new Error('Story Arc profile story requires a browser window.');
+    const phoneOrCoarse =
+      canvasElement.ownerDocument.documentElement.clientWidth < 768 || view.matchMedia('(pointer: coarse)').matches;
+    const publicProfile = canvas.getByRole('link', { name: m.candidate_view_public() });
+    const reload = canvas.getByRole('button', { name: m.correction_reload() });
+    const identity = within(canvas.getByRole('navigation', { name: m.facts_other_editors() }));
+    const terms = identity.getByRole('link', { name: m.catalogue_terms_title() });
+    const context = identity.getByRole('link', { name: m.context_title() });
+    const relations = canvas.getByRole('link', { name: m.relation_title() });
+    const work = within(canvas.getByRole('region', { name: m.story_arc_work() })).getByRole('link');
+    const callerActions = [publicProfile, reload, terms, context, relations, work];
+    for (const action of callerActions) await assertCallerTarget(action, article, view, phoneOrCoarse);
+
+    publicProfile.focus();
+    await userEvent.tab();
+    await expect(reload).toHaveFocus();
+    await expect(view.getComputedStyle(reload).outlineWidth).not.toBe('0px');
+    await userEvent.tab();
+    await expect(terms).toHaveFocus();
+    await expect(view.getComputedStyle(terms).outlineWidth).not.toBe('0px');
     await reviewSlot(canvasElement);
   },
 };
@@ -79,11 +124,31 @@ async function create(canvasElement: HTMLElement) {
   return canvas;
 }
 export const Created: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     const link = await canvas.findByRole('link', { name: m.catalogue_create_open() });
     expect(link.getAttribute('href')).toContain(`/subjects/${storyArcCreatedId}/a-real-arc`);
-    await expect(canvas.findByRole('link', { name: m.story_arc_continue() })).resolves.toBeVisible();
+    const continueLink = await canvas.findByRole('link', { name: m.story_arc_continue() });
+    await expect(continueLink).toBeVisible();
+
+    const article = canvas.getByRole('article');
+    const view = canvasElement.ownerDocument.defaultView;
+    if (!view) throw new Error('Story Arc profile story requires a browser window.');
+    const phoneOrCoarse =
+      canvasElement.ownerDocument.documentElement.clientWidth < 768 || view.matchMedia('(pointer: coarse)').matches;
+    const reload = canvas.getByRole('button', { name: m.correction_reload() });
+    const existing = canvas.getByRole('textbox', { name: m.story_arc_choose_existing() });
+    const work = canvas.getByRole('textbox', { name: m.story_arc_choose_work() });
+    for (const action of [reload, existing, work, continueLink])
+      await assertCallerTarget(action, article, view, phoneOrCoarse);
+
+    reload.focus();
+    await userEvent.tab();
+    await expect(existing).toHaveFocus();
+    const inputGroup = existing.closest<HTMLElement>('[data-slot="input-group"]');
+    if (!inputGroup) throw new Error('Story Arc existing-subject picker has no focus ring container.');
+    await expect(view.getComputedStyle(inputGroup).boxShadow).not.toBe('none');
   },
 };
 export const UncertainRetry: Story = {

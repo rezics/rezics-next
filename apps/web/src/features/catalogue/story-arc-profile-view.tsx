@@ -26,6 +26,13 @@ import {
   type StoryArcTransport,
 } from './story-arc-profile';
 
+const callerActionClass =
+  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:h-8 md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-1';
+const callerTextActionClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-0';
+const callerPickerClass =
+  '[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-11 [&_[data-slot=input-group-control]]:h-auto [&_[data-slot=input-group-control]]:min-h-11 md:pointer-fine:[&_[data-slot=input-group]]:h-8 md:pointer-fine:[&_[data-slot=input-group]]:min-h-8 md:pointer-fine:[&_[data-slot=input-group-control]]:h-8 md:pointer-fine:[&_[data-slot=input-group-control]]:min-h-8';
+
 export type StoryArcProfileProps = StoryArcAddress & {
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
@@ -76,7 +83,7 @@ export function StoryArcProfile({
         actions={
           href &&
           query.data?.ok && (
-            <a href={href} className={buttonVariants({ variant: 'outline' })}>
+            <a href={href} className={buttonVariants({ variant: 'outline', className: callerActionClass })}>
               {m.candidate_view_public({}, o)}
             </a>
           )
@@ -87,7 +94,12 @@ export function StoryArcProfile({
       {(query.isError || (query.data && !query.data.ok)) && (
         <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
       )}
-      <Button variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>
+      <Button
+        variant="outline"
+        className={callerActionClass}
+        disabled={query.isFetching}
+        onClick={() => void query.refetch()}
+      >
         {m.correction_reload({}, o)}
       </Button>
       {session !== 'signed-in' && (
@@ -98,7 +110,10 @@ export function StoryArcProfile({
               ? m.catalogue_create_unavailable({}, o)
               : m.candidate_loading({}, o)}{' '}
           {session === 'signed-out' && (
-            <a className="underline" href={`/auth/sign-in?return_to=${encodeURIComponent(address)}`}>
+            <a
+              className={`${callerTextActionClass} underline`}
+              href={`/auth/sign-in?return_to=${encodeURIComponent(address)}`}
+            >
               {m.account_sign_in({}, o)}
             </a>
           )}
@@ -119,12 +134,12 @@ export function StoryArcProfile({
                 <code className="block break-all text-sm">{arc.subject.id}</code>
                 {href && (
                   <nav className="flex flex-wrap gap-3" aria-label={m.facts_other_editors({}, o)}>
-                    <a href={`${href}/terms`} className="underline">
+                    <a href={`${href}/terms`} className={`${callerTextActionClass} underline`}>
                       {m.catalogue_terms_title({}, o)}
                     </a>
                     <a
                       href={`${href}/context-review?${new URLSearchParams({ context: arc.subject.context })}`}
-                      className="underline"
+                      className={`${callerTextActionClass} underline`}
                     >
                       {m.context_title({}, o)}
                     </a>
@@ -135,6 +150,7 @@ export function StoryArcProfile({
               <div hidden={!editable} className="space-y-6">
                 <EntityPicker
                   label={m.story_arc_choose_existing({}, o)}
+                  className={callerPickerClass}
                   value={[]}
                   src={coverSrc}
                   search={async (text, signal) =>
@@ -164,7 +180,7 @@ export function StoryArcProfile({
                 {createdHref && (
                   <a
                     href={`${createdHref}/story-arc${work ? `?work=${encodeURIComponent(work)}` : ''}`}
-                    className={buttonVariants()}
+                    className={buttonVariants({ className: callerActionClass })}
                   >
                     {m.story_arc_continue({}, o)}
                   </a>
@@ -197,7 +213,10 @@ export function StoryArcProfile({
               <section className="space-y-4">
                 <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
                 <p className="text-sm text-muted-foreground">{m.story_arc_relations_help({}, o)}</p>
-                <a href={`${href}/relation-edit`} className={buttonVariants({ variant: 'outline' })}>
+                <a
+                  href={`${href}/relation-edit`}
+                  className={buttonVariants({ variant: 'outline', className: callerActionClass })}
+                >
                   {m.relation_title({}, o)}
                 </a>
               </section>
@@ -212,7 +231,7 @@ export function StoryArcProfile({
             {current.work ? (
               <>
                 <a
-                  className="underline"
+                  className={`${callerTextActionClass} underline`}
                   lang={pageText(current.work.subject.labels, locale).lang}
                   href={
                     subjectHref(
@@ -245,6 +264,7 @@ export function StoryArcProfile({
             ) : (
               <EntityPicker
                 label={m.story_arc_choose_work({}, o)}
+                className={callerPickerClass}
                 value={[]}
                 src={coverSrc}
                 disabled={!editable}
