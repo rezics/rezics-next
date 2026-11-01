@@ -243,7 +243,12 @@ test('CoverCard layers each supplied native control above the stretched link wit
   const state = createElement(
     'div',
     null,
-    createElement('details', null, createElement('summary', null, 'Expand status'), createElement('p', null, 'Current')),
+    createElement(
+      'details',
+      null,
+      createElement('summary', null, 'Expand status'),
+      createElement('p', null, 'Current'),
+    ),
     createElement('button', { type: 'button' }, 'Refresh status'),
   );
   const html = renderToStaticMarkup(
@@ -276,9 +281,7 @@ test('CoverCard layers each supplied native control above the stretched link wit
       createElement(CoverCard, { title: 'Unavailable destination', cover }),
     ),
   );
-  const cards = [...html.matchAll(/<article\b[^>]*data-slot="cover-card"[\s\S]*?<\/article>/gu)].map(
-    ([card]) => card!,
-  );
+  const cards = [...html.matchAll(/<article\b[^>]*data-slot="cover-card"[\s\S]*?<\/article>/gu)].map(([card]) => card!);
   expect(cards).toHaveLength(4);
 
   const controlSelectors = [
@@ -311,7 +314,10 @@ test('CoverCard layers each supplied native control above the stretched link wit
     expect(slotOpening).not.toContain('class="relative z-20');
   }
 
-  for (const [card, destination] of [[cards[0]!, '/works/secondary'], [cards[1]!, '/works/metadata']] as const) {
+  for (const [card, destination] of [
+    [cards[0]!, '/works/secondary'],
+    [cards[1]!, '/works/metadata'],
+  ] as const) {
     const primary = card.match(/<a\b[^>]*data-slot="cover-card-title"[^>]*>[\s\S]*?<\/a>/)?.[0];
     expect(primary).toContain(`href="${destination}"`);
     assertPrimaryAnchorHasNoInteractiveDescendants(primary!, 'cover-card-title');

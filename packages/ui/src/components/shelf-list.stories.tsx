@@ -94,9 +94,7 @@ function Example() {
               },
             ]}
             progress={
-              index === 2
-                ? { value: null, label: 'Progress unknown' }
-                : { value: count / 12, label: `Ep ${count}/12` }
+              index === 2 ? { value: null, label: 'Progress unknown' } : { value: count / 12, label: `Ep ${count}/12` }
             }
             stepper={
               index === 2

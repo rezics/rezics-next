@@ -71,9 +71,7 @@ test('CoverCard keeps supplied metadata and exactly one known or unknown progres
       }),
     ),
   );
-  const cards = [...html.matchAll(/<article\b[^>]*data-slot="cover-card"[\s\S]*?<\/article>/gu)].map(
-    ([card]) => card!,
-  );
+  const cards = [...html.matchAll(/<article\b[^>]*data-slot="cover-card"[\s\S]*?<\/article>/gu)].map(([card]) => card!);
   expect(cards).toHaveLength(2);
   expect(cards[0]!.match(/data-slot="cover-card-state"/g)).toHaveLength(1);
   expect(cards[0]!.match(/data-slot="progress-row"/g)).toHaveLength(1);

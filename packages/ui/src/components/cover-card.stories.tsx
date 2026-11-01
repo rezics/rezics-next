@@ -348,10 +348,7 @@ function IndependentControlsExample() {
           onSelectedChange={() => setSelectionActionCount((count) => count + 1)}
           secondary={<button type="button">Open independent action</button>}
         />
-        <CoverCard
-          title="No destination is available"
-          cover={{ subject: subjects[3]!, cover: null, src: () => '' }}
-        />
+        <CoverCard title="No destination is available" cover={{ subject: subjects[3]!, cover: null, src: () => '' }} />
       </CoverGrid>
       <p role="status">
         Followed: {String(followed)}; saved: {String(saved)}; metadata checks: {metadataChecks}; selection actions:{' '}
