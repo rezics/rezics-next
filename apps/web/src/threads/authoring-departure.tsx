@@ -66,6 +66,15 @@ export class AuthoringDepartureState {
     this.listeners.forEach((listener) => listener());
   }
 
+  private settleNavigation(stay: boolean) {
+    const decision = this.decision;
+    if (decision?.kind !== 'navigation') return;
+    this.decision = null;
+    this.leaving = !stay;
+    this.notify();
+    decision.resolve(stay);
+  }
+
   register(draft: Draft) {
     const id = ++this.nextId;
     if (this.active) this.drafts.set(id, draft);
@@ -118,19 +127,23 @@ export class AuthoringDepartureState {
   stay = () => {
     const decision = this.decision;
     if (!decision) return;
-    this.decision = null;
-    this.notify();
-    if (decision.kind === 'navigation') decision.resolve(true);
+    if (decision.kind === 'navigation') this.settleNavigation(true);
+    else {
+      this.decision = null;
+      this.notify();
+    }
   };
 
   leave = () => {
     const decision = this.decision;
     if (!decision) return;
-    this.decision = null;
-    this.leaving = true;
-    this.notify();
-    if (decision.kind === 'navigation') decision.resolve(false);
-    else this.drafts.get(decision.draftId)?.discard();
+    if (decision.kind === 'navigation') this.settleNavigation(false);
+    else {
+      this.decision = null;
+      this.leaving = true;
+      this.notify();
+      this.drafts.get(decision.draftId)?.discard();
+    }
   };
 
   deactivate = () => {
