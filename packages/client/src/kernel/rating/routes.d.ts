@@ -5627,6 +5627,107 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             };
         };
     };
+} & {
+    v1: {
+        "rating-questions": {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    limit?: string | number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        ratingQuestions: {
+                            id: string;
+                            revision: number;
+                            label: string;
+                            grain: "character" | "episode" | "release" | "work";
+                            scale: {
+                                min: number;
+                                max: number;
+                                displayStep: number;
+                            };
+                        }[];
+                        next: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    403: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
