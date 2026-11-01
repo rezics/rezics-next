@@ -55,7 +55,7 @@ function Example({ scenario = 'ready', onRequests }: ExampleProps) {
   return (
     <PatternStory visitor="Signed In">
       <AppShell>
-        <EditorExample scenario={scenario} onRequests={onRequests} />
+        <EditorExample scenario={scenario} {...(onRequests ? { onRequests } : {})} />
       </AppShell>
     </PatternStory>
   );
