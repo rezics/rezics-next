@@ -182,8 +182,7 @@ test('production reader envelope binds the actual same prepared request and keep
           return chain;
         },
         handler<T extends (input: { data: unknown }) => unknown>(handler: T) {
-          return (input: { data: unknown }) =>
-            Promise.resolve(handler({ ...input, data: validate(input.data) }));
+          return (input: { data: unknown }) => Promise.resolve(handler({ ...input, data: validate(input.data) }));
         },
       };
       return chain;

@@ -353,7 +353,11 @@ export class ExposureVisit {
     )
       return;
 
-    if (result && result.sessionSubject === ticket.expectedSubject && this.source.read().subject === ticket.expectedSubject) {
+    if (
+      result &&
+      result.sessionSubject === ticket.expectedSubject &&
+      this.source.read().subject === ticket.expectedSubject
+    ) {
       this.readerSubject = result.sessionSubject;
       this.expectedSubject = result.sessionSubject;
       this.page = result.page;
@@ -425,7 +429,8 @@ export function useExposureVisit(envelope: ExposureReaderEnvelope, io: ExposureB
   } | null>(null);
 
   const previous = record.current;
-  const newInput = !previous || previous.client !== client || previous.source !== source || previous.envelope !== envelope;
+  const newInput =
+    !previous || previous.client !== client || previous.source !== source || previous.envelope !== envelope;
   if (newInput || previous!.visit.retired) {
     const history = previous?.visit.successorHistory() ?? null;
     previous?.visit.retire(false);

@@ -41,14 +41,22 @@ test('explicit retry keeps its first CSRF continuation and retirement preserves 
   const original = controller.intent;
   const tokens: string[] = [];
   const uncertain: Outcome = { status: 'uncertain', operation: original!, current: { status: 'unavailable' } };
-  expect((await controller.send(async (_intent, token) => {
-    tokens.push(token ?? '');
-    return uncertain;
-  }, 'csrf-original'))?.status).toBe('uncertain');
-  expect((await controller.send(async (_intent, token) => {
-    tokens.push(token ?? '');
-    return { status: 'uncertain', operation: original!, current: { status: 'unavailable' } };
-  }, 'csrf-replacement'))?.status).toBe('uncertain');
+  expect(
+    (
+      await controller.send(async (_intent, token) => {
+        tokens.push(token ?? '');
+        return uncertain;
+      }, 'csrf-original')
+    )?.status,
+  ).toBe('uncertain');
+  expect(
+    (
+      await controller.send(async (_intent, token) => {
+        tokens.push(token ?? '');
+        return { status: 'uncertain', operation: original!, current: { status: 'unavailable' } };
+      }, 'csrf-replacement')
+    )?.status,
+  ).toBe('uncertain');
   expect(tokens).toEqual(['csrf-original', 'csrf-original']);
   expect(controller.intent).toBe(original);
 

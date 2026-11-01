@@ -45,7 +45,10 @@ mock.module('../src/platform/exposure/actions', () => ({
     data,
     headers,
   }: {
-    data: { operation: Extract<Outcome, { status: 'recorded' | 'uncertain' }>['operation']; query: Record<string, unknown> };
+    data: {
+      operation: Extract<Outcome, { status: 'recorded' | 'uncertain' }>['operation'];
+      query: Record<string, unknown>;
+    };
     headers: Record<string, string>;
   }) => {
     const result = deferred<Outcome>();
@@ -85,7 +88,9 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -157,7 +162,11 @@ async function replaceSession(client: QueryClientType, session: unknown) {
 }
 
 function createApp(client: InstanceType<typeof QueryClient>, router: ReturnType<typeof createRouter>) {
-  return createElement(QueryClientProvider, { client }, createElement(StrictMode, null, createElement(RouterProvider, { router })));
+  return createElement(
+    QueryClientProvider,
+    { client },
+    createElement(StrictMode, null, createElement(RouterProvider, { router })),
+  );
 }
 
 function makeRouter(client: InstanceType<typeof QueryClient>) {

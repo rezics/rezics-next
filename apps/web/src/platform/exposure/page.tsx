@@ -302,8 +302,10 @@ export function PlatformExposureBoundPage({ initial, io }: { initial: ExposureRe
 }
 
 function hasGroup(page: Extract<Page, { status: 'ready' }>, group: string) {
-  return page.groups.includes(group) ||
-    (page.current.status === 'available' && page.current.exposureGroups.some((row) => row.group === group));
+  return (
+    page.groups.includes(group) ||
+    (page.current.status === 'available' && page.current.exposureGroups.some((row) => row.group === group))
+  );
 }
 
 function unavailablePage(): Page {

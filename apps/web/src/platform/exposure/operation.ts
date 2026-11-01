@@ -34,7 +34,10 @@ export class ExposureOperation {
     this.busy = false;
   }
 
-  async send(change: (intent: Intent, csrfToken?: string) => Promise<Outcome>, csrfToken?: string): Promise<Outcome | null> {
+  async send(
+    change: (intent: Intent, csrfToken?: string) => Promise<Outcome>,
+    csrfToken?: string,
+  ): Promise<Outcome | null> {
     if (this.retired || this.busy || !this.intent || this.outcome?.status === 'recorded') return null;
     this.busy = true;
     const operation = this.intent;
