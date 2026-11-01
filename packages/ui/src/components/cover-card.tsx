@@ -10,6 +10,8 @@ import {
 import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRadius, listPresentationForCover, type CoverProps, type CoverRatio } from './cover.tsx';
+import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from './content-item.tsx';
+import { ListRowControl } from './list-row.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
 export type CoverDensity = 'small' | 'medium' | 'large';
@@ -28,6 +30,7 @@ export type CoverCardLink = ComponentType<{
   lang?: string | undefined;
   title?: string | undefined;
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  'aria-label'?: string | undefined;
   className?: string | undefined;
   'data-slot'?: string | undefined;
   children: ReactNode;
@@ -116,7 +119,10 @@ export function CoverCard({
   );
   const actions =
     menu != null || menuEntries != null || menuTrigger != null ? (
-      <span data-slot="cover-card-actions" className="relative z-10 flex shrink-0 items-center">
+      <span
+        data-slot="cover-card-actions"
+        className="relative z-20 flex min-h-11 min-w-11 shrink-0 items-center justify-center [&_a]:min-h-11 [&_a]:min-w-11 [&_button]:min-h-11 [&_button]:min-w-11"
+      >
         {menuTrigger ?? (
           <Menu
             title={menuLabel ?? `More actions for ${title}`}
@@ -125,7 +131,7 @@ export function CoverCard({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="shrink-0"
+                className="min-h-11 min-w-11 shrink-0"
                 aria-label={menuLabel ?? `More actions for ${title}`}
               >
                 <EllipsisIcon aria-hidden />
@@ -138,10 +144,11 @@ export function CoverCard({
       </span>
     ) : null;
   return (
-    <article
+    <ContentItemFrame
+      as="article"
       onPointerDown={onPointerDown}
       data-slot="cover-card"
-      className={`group relative flex min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring ${credit ? 'items-start gap-4' : 'h-full flex-col'}`}
+      className={`flex min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring ${credit ? 'items-start gap-4' : 'h-full flex-col'}`}
     >
       {credit ? (
         <div
@@ -181,34 +188,39 @@ export function CoverCard({
               aria-label={title}
               data-shelf-select
               onClick={onSelect}
-              className="absolute top-2 left-2 z-20 hidden size-5 items-center justify-center rounded border bg-background opacity-0 pointer-fine:flex group-hover:opacity-100 focus:opacity-100"
-            />
+              className="absolute top-0 left-0 z-20 flex size-11 items-start justify-start rounded-sm opacity-100 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              <span aria-hidden className="mt-2 ml-2 size-5 rounded border bg-background" />
+            </button>
           )}
         </>
       )}
       {badge != null && <div className="pointer-events-none absolute top-2 right-2 z-10">{badge}</div>}
       <div data-slot="cover-card-text" className={`flex min-w-0 flex-1 flex-col ${credit ? 'gap-2' : 'gap-1 p-2'}`}>
-        {selectable ? (
-          <span data-slot="cover-card-title" className={titleClass} lang={titleLang}>
-            {title}
-          </span>
-        ) : href === undefined ? (
-          <div data-slot="cover-card-title" lang={titleLang} className={titleClass}>
-            {title}
-          </div>
-        ) : (
-          <Link
-            href={href}
-            lang={titleLang}
-            aria-label={linkLabel}
-            title={small ? title : undefined}
-            onClick={onClick}
-            data-slot="cover-card-title"
-            className={`${titleClass} outline-none ${credit ? 'underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring' : "after:absolute after:inset-0 after:z-[1] after:content-['']"}`}
-          >
-            {title}
-          </Link>
-        )}
+        <ContentItemHeading
+          level={3}
+          lang={titleLang}
+          data-slot={selectable || href === undefined ? 'cover-card-title' : undefined}
+          className={selectable || href === undefined ? titleClass : 'min-w-0'}
+        >
+          {selectable || href === undefined ? (
+            title
+          ) : (
+            <ContentItemTitleLink
+              as={Link}
+              href={href}
+              lang={titleLang}
+              aria-label={linkLabel}
+              title={small ? title : undefined}
+              onClick={onClick}
+              data-slot="cover-card-title"
+              stretch={!credit}
+              className={`${titleClass} outline-none ${credit ? 'underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring' : ''}`}
+            >
+              {title}
+            </ContentItemTitleLink>
+          )}
+        </ContentItemHeading>
         {(meta ?? secondary) != null && (
           <div
             data-slot="cover-card-secondary"
@@ -218,34 +230,38 @@ export function CoverCard({
           </div>
         )}
         {credit && (
-          <div
-            data-slot="cover-card-essential-credit"
-            className="min-w-0 whitespace-normal text-sm leading-6 wrap-anywhere"
-          >
-            {essentialCredit}
-          </div>
+          <ListRowControl className="z-20">
+            <div
+              data-slot="cover-card-essential-credit"
+              className="min-w-0 whitespace-normal text-sm leading-6 wrap-anywhere"
+            >
+              {essentialCredit}
+            </div>
+          </ListRowControl>
         )}
         {status != null && (
-          <div data-slot="cover-card-status-row" className="flex min-w-0 justify-center pt-0.5">
-            {status.href !== undefined ? (
-              <a
-                href={status.href}
-                aria-label={status.label}
-                data-slot="cover-card-status"
-                className="relative z-10 block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {status.label}
-              </a>
-            ) : (
-              <span
-                aria-label={status.label}
-                data-slot="cover-card-status"
-                className="block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground"
-              >
-                {status.label}
-              </span>
-            )}
-          </div>
+          <ListRowControl className="z-20">
+            <div data-slot="cover-card-status-row" className="flex min-w-0 justify-center pt-0.5">
+              {status.href !== undefined ? (
+                <a
+                  href={status.href}
+                  aria-label={status.label}
+                  data-slot="cover-card-status"
+                  className="relative z-10 block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {status.label}
+                </a>
+              ) : (
+                <span
+                  aria-label={status.label}
+                  data-slot="cover-card-status"
+                  className="block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground"
+                >
+                  {status.label}
+                </span>
+              )}
+            </div>
+          </ListRowControl>
         )}
       </div>
       {(progress != null || state != null || actions != null) && (
@@ -263,7 +279,7 @@ export function CoverCard({
           {actions != null && <div className="ml-auto">{actions}</div>}
         </div>
       )}
-    </article>
+    </ContentItemFrame>
   );
 }
 

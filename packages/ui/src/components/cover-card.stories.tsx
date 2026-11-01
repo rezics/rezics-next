@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { sharedRatio } from './cover.tsx';
-import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
+import { CoverCard, CoverGrid, CoverRow, type CoverCardLink } from './cover-card.tsx';
 
 const subjects = [
   { id: 'book', title: 'A very long book title that continues over more than two lines', types: ['schema:Book'] },
@@ -263,6 +263,115 @@ export const Status: Story = {
       await expect([...rows.values()].every((heights) => Math.max(...heights) - Math.min(...heights) < 1)).toBe(true);
     }
     container.style.width = '';
+  },
+};
+
+const CompatibilityLink: CoverCardLink = ({ href, children, ...props }) => (
+  <a href={href} {...props}>
+    {children}
+  </a>
+);
+
+function ComposedCompatibilityExample() {
+  const [selected, setSelected] = useState(false);
+  const [selectionCount, setSelectionCount] = useState(0);
+
+  return (
+    <div className="space-y-8">
+      <CoverGrid ratio="2:3" density="medium">
+        <CoverCard
+          href="/works/book"
+          link={CompatibilityLink}
+          title="A translated work"
+          titleLang="ja"
+          linkLabel="Continue A translated work"
+          cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
+          status={{ label: 'Reading', href: '/library/book' }}
+          progress={{ value: null, label: 'Progress unknown' }}
+          menuEntries={[{ type: 'item', label: 'Remove', onSelect: () => {} }]}
+        />
+        <CoverCard
+          href="/works/selected"
+          title="Selectable work"
+          cover={{ subject: subjects[1]!, cover: null, src: () => '' }}
+          selectable
+          selected={selected}
+          onSelectedChange={setSelected}
+        />
+      </CoverGrid>
+
+      <CoverRow ratio="2:3" label="Qualified credits">
+        <CoverCard
+          href="/works/qualified"
+          link={CompatibilityLink}
+          title="Qualified work"
+          cover={{ subject: subjects[2]!, cover: null, src: () => '' }}
+          essentialCredit={
+            <ul className="flex min-w-0 flex-col gap-1 text-sm leading-6">
+              <li>
+                Writer: <a href="/people/author">A. Author</a>
+              </li>
+              <li>
+                Character: <a href="/subjects/character">Mira</a>
+              </li>
+            </ul>
+          }
+          status={{ label: 'Credited', href: '/credits' }}
+          menuEntries={[{ type: 'item', label: 'Edit credit', onSelect: () => {} }]}
+          onSelect={() => setSelectionCount((count) => count + 1)}
+        />
+      </CoverRow>
+      <p role="status">Separate selection actions: {selectionCount}</p>
+    </div>
+  );
+}
+
+export const ComposedCompatibility: Story = {
+  render: () => <ComposedCompatibilityExample />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const linkedArticle = canvas.getByRole('heading', { name: 'A translated work' }).closest('article')!;
+    const titleLink = within(linkedArticle).getByRole('link', { name: 'Continue A translated work' });
+    const statusLink = within(linkedArticle).getByRole('link', { name: 'Reading' });
+    await expect(titleLink).toHaveAttribute('href', '/works/book');
+    await expect(titleLink.tagName).toBe('A');
+    await expect(titleLink.querySelector('a, button, input')).toBeNull();
+    await expect(statusLink).toHaveAttribute('href', '/library/book');
+    await expect(titleLink.contains(statusLink)).toBe(false);
+    titleLink.focus();
+    await userEvent.tab();
+    await expect(statusLink).toHaveFocus();
+
+    const menuButton = within(linkedArticle).getByRole('button', {
+      name: 'More actions for A translated work',
+    });
+    await expect(menuButton.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    await userEvent.click(menuButton);
+    await expect(
+      within(await settled(await screen.findByRole('menu'))).getByRole('menuitem', { name: 'Remove' }),
+    ).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await dismissed('menu');
+
+    const selectionButton = canvas.getByRole('button', { name: 'Selectable work' });
+    await expect(selectionButton).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(selectionButton);
+    await expect(selectionButton).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(selectionButton);
+    await expect(selectionButton).toHaveAttribute('aria-pressed', 'false');
+
+    const creditArticle = canvas.getByRole('heading', { name: 'Qualified work' }).closest('article')!;
+    const creditTitle = within(creditArticle).getByRole('link', { name: 'Qualified work' });
+    const writerLink = within(creditArticle).getByRole('link', { name: 'A. Author' });
+    const checkbox = within(creditArticle).getByRole('checkbox', { name: 'Qualified work' });
+    await expect(writerLink).toHaveAttribute('href', '/people/author');
+    await expect(creditTitle.querySelector('a, button, input')).toBeNull();
+    await expect(checkbox.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    creditTitle.focus();
+    await userEvent.tab();
+    await expect(writerLink).toHaveFocus();
+    await userEvent.click(checkbox);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Separate selection actions: 1');
   },
 };
 

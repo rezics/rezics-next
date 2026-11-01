@@ -1,6 +1,12 @@
 import type { AnchorHTMLAttributes, HTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '../utils.ts';
 
+/** Shared hover, focus and press surface for ContentItem rows and tiles. */
+export const listRowFrameClassName = cn(
+  'group relative isolate before:pointer-events-none before:absolute before:-inset-1 before:z-[-1] before:rounded-xl before:bg-foreground/[0.03] before:opacity-0 before:transition-opacity before:content-[""]',
+  '[@media(hover:hover)_and_(pointer:fine)]:hover:before:opacity-100 has-[:focus-visible]:before:opacity-100 active:before:opacity-100 data-[overlay=visible]:before:opacity-100 motion-reduce:before:transition-none',
+);
+
 export interface ListRowProps extends Omit<HTMLAttributes<HTMLLIElement>, 'children'> {
   children: ReactNode;
   ref?: Ref<HTMLLIElement>;
@@ -20,11 +26,7 @@ export function ListRow({ children, forceOverlay = false, className, ref, ...pro
       {...props}
       data-slot="list-row"
       data-overlay={forceOverlay ? 'visible' : undefined}
-      className={cn(
-        'group relative isolate before:pointer-events-none before:absolute before:-inset-1 before:z-[-1] before:rounded-xl before:bg-foreground/[0.03] before:opacity-0 before:transition-opacity before:content-[""]',
-        '[@media(hover:hover)_and_(pointer:fine)]:hover:before:opacity-100 has-[:focus-visible]:before:opacity-100 active:before:opacity-100 data-[overlay=visible]:before:opacity-100',
-        className,
-      )}
+      className={cn(listRowFrameClassName, className)}
     >
       {children}
     </li>

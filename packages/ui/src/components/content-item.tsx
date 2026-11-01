@@ -1,6 +1,72 @@
-import { useId, type HTMLAttributes, type ReactNode } from 'react';
+import { useId, type ComponentType, type HTMLAttributes, type MouseEvent, type ReactNode } from 'react';
 import { cn } from '../utils.ts';
-import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
+import { ListRow, ListRowControl, ListRowLink, listRowFrameClassName } from './list-row.tsx';
+
+export type ContentItemHeadingLevel = 2 | 3 | 4;
+
+/** A shared semantic heading for row and tile titles. */
+export interface ContentItemHeadingProps extends HTMLAttributes<HTMLHeadingElement> {
+  level?: ContentItemHeadingLevel;
+}
+
+export function ContentItemHeading({ level = 2, ...props }: ContentItemHeadingProps) {
+  const Heading = `h${level}` as 'h2' | 'h3' | 'h4';
+  return <Heading {...props} data-content-item-slot="title" />;
+}
+
+type ContentItemLinkProps = {
+  href: string;
+  lang?: string | undefined;
+  title?: string | undefined;
+  'aria-label'?: string | undefined;
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  className?: string | undefined;
+  'data-slot'?: string | undefined;
+  children: ReactNode;
+};
+
+export type ContentItemLinkComponent = 'a' | ComponentType<ContentItemLinkProps>;
+
+/** A real primary title link; tile mode stretches its hit area without wrapping any controls. */
+export interface ContentItemTitleLinkProps extends ContentItemLinkProps {
+  as?: ContentItemLinkComponent;
+  stretch?: boolean;
+}
+
+export function ContentItemTitleLink({
+  as: Link = 'a',
+  stretch = true,
+  className,
+  ...props
+}: ContentItemTitleLinkProps) {
+  return (
+    <Link
+      {...props}
+      className={cn(stretch && "after:absolute after:inset-0 after:z-[1] after:content-['']", className)}
+    />
+  );
+}
+
+/** A ContentItem frame can use article semantics in a tile while sharing the list-row interaction surface. */
+export interface ContentItemFrameProps extends HTMLAttributes<HTMLElement> {
+  as?: 'article' | 'div';
+  forceOverlay?: boolean;
+}
+
+export function ContentItemFrame({
+  as: Frame = 'article',
+  forceOverlay = false,
+  className,
+  ...props
+}: ContentItemFrameProps) {
+  return (
+    <Frame
+      {...props}
+      data-overlay={forceOverlay ? 'visible' : undefined}
+      className={cn(listRowFrameClassName, className)}
+    />
+  );
+}
 
 export interface ContentItemProps extends Omit<HTMLAttributes<HTMLLIElement>, 'title' | 'children'> {
   title: string;
@@ -8,7 +74,7 @@ export interface ContentItemProps extends Omit<HTMLAttributes<HTMLLIElement>, 't
   titleLang?: string;
   /** Optional adapter selector on the visible heading. */
   titleDataSlot?: string;
-  headingLevel?: 2 | 3 | 4;
+  headingLevel?: ContentItemHeadingLevel;
   visual?: ReactNode;
   context?: ReactNode;
   metadata?: ReactNode;
@@ -42,7 +108,6 @@ export function ContentItem({
   ...liProps
 }: ContentItemProps) {
   const titleId = useId();
-  const Heading = `h${headingLevel}` as 'h2' | 'h3' | 'h4';
   const hasRail = hasSlot(state) || hasSlot(actions) || hasSlot(trailing);
 
   return (
@@ -50,7 +115,7 @@ export function ContentItem({
       {...liProps}
       forceOverlay={forceOverlay}
       className={cn(
-        'flex min-w-0 items-start gap-3 py-3 motion-reduce:before:transition-none sm:gap-4 sm:py-4',
+        'flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4',
         className,
       )}
     >
@@ -74,15 +139,15 @@ export function ContentItem({
               {context}
             </div>
           )}
-          <Heading
+          <ContentItemHeading
+            level={headingLevel}
             id={titleId}
             lang={titleLang}
             data-slot={titleDataSlot}
-            data-content-item-slot="title"
             className="line-clamp-2 text-[17px] leading-snug font-semibold sm:text-lg md:text-xl sm:line-clamp-1"
           >
             {title}
-          </Heading>
+          </ContentItemHeading>
           {hasSlot(metadata) && (
             <ListRowControl
               data-content-item-slot="metadata"
