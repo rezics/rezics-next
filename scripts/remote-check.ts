@@ -53,6 +53,147 @@ import { stageCheckGit } from './check-git.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
 import { checkHostRunSliceUnitName, checkHostScopeUnitStem, PERFORMANCE_HOST_NAMES } from './check-placement.ts';
 
+/** Exact root-relative files owned by the remote-check producer lifecycle. */
+export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
+  '.alive',
+  '.bun-install-complete',
+  '.command-result',
+  '.command-result.pending',
+  '.preparation-started',
+  '.remote-check-slot-count',
+  '.remote-check-supervisor',
+  '.remote-check-supervisor.pending',
+  '.resource-terminal-ready',
+  '.resource-terminal-sampled',
+  'command-phases.tsv',
+  'command-started',
+  'exit-status',
+  'exit-status.pending',
+  'physical-resources.json',
+  'physical-resources.json.pending',
+  'preparation-install.json',
+  'preparation-status.json',
+  'run-lifetime-status.json',
+  'run-lifetime-status.json.pending',
+] as const;
+
+/** Exact root-relative mutable runtime cache owned by the pinned Bun producer. */
+export const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES = ['bun-runtime-transpiler-cache'] as const;
+
+/** Run-local scratch paths are excluded separately from the root control namespace. */
+const REMOTE_CHECK_RUN_SCRATCH_PATHS = ['.temp/check-host', '.temp/node-compile-cache'] as const;
+
+const REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_FILES);
+const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES);
+const REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON = JSON.stringify(REMOTE_CHECK_RUN_SCRATCH_PATHS);
+
+type ExpectedSourceManifest = NonNullable<RemoteCheck['expectedSourceManifest']>;
+
+function isSafeSourcePath(path: unknown): path is string {
+  if (
+    typeof path !== 'string' ||
+    path.length === 0 ||
+    Buffer.byteLength(path) > 1024 ||
+    path.startsWith('/') ||
+    /^[A-Za-z]:/.test(path) ||
+    /[\\\\\0\r\n]/.test(path) ||
+    path.split('/').some((part) => part === '' || part === '.' || part === '..')
+  )
+    return false;
+  return true;
+}
+
+function collidesWithProducerControl(path: string): boolean {
+  const namespaces = [
+    ...REMOTE_CHECK_PRODUCER_CONTROL_FILES,
+    ...REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES,
+    ...REMOTE_CHECK_RUN_SCRATCH_PATHS,
+  ];
+  return namespaces.some(
+    (reserved) => path === reserved || path.startsWith(`${reserved}/`) || reserved.startsWith(`${path}/`),
+  );
+}
+
+/** Reject candidate upload names before any run control can overwrite a same-name candidate path. */
+export function validateCandidateUploadPaths(paths: readonly string[]): void {
+  for (const path of paths) {
+    if (!isSafeSourcePath(path) || collidesWithProducerControl(path))
+      throw new Error(`remote-check: candidate upload path is invalid or reserved: ${String(path)}`);
+  }
+}
+
+/** Validate generic source evidence before a manifest is staged or any candidate bytes are uploaded. */
+export function validateExpectedSourceManifest(
+  manifest: ExpectedSourceManifest,
+  expectedSourceSha256?: string,
+): void {
+  if (
+    !manifest ||
+    Object.keys(manifest).sort().join(',') !== 'deleted,entries,head,indexTree,sourceSha256' ||
+    !/^[a-f0-9]{64}$/.test(manifest.sourceSha256) ||
+    (expectedSourceSha256 !== undefined && expectedSourceSha256 !== manifest.sourceSha256) ||
+    !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(manifest.head) ||
+    !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(manifest.indexTree) ||
+    !Array.isArray(manifest.entries) ||
+    manifest.entries.length > 50_000 ||
+    !Array.isArray(manifest.deleted) ||
+    manifest.deleted.length > 50_000
+  ) {
+    throw new Error('remote-check: expected source manifest identity or bounds are invalid');
+  }
+
+  const entries = new Map<string, ExpectedSourceManifest['entries'][number]>();
+  for (const entry of manifest.entries) {
+    if (
+      !entry ||
+      Object.keys(entry).sort().join(',') !== 'kind,mode,path,sha256,target' ||
+      !isSafeSourcePath(entry.path) ||
+      collidesWithProducerControl(entry.path) ||
+      !Number.isInteger(entry.mode) ||
+      entry.mode < 0 ||
+      entry.mode > 0o7777 ||
+      (entry.kind !== 'file' && entry.kind !== 'link') ||
+      !/^[a-f0-9]{64}$/.test(entry.sha256) ||
+      (entry.kind === 'file' && entry.target !== null) ||
+      (entry.kind === 'link' &&
+        (typeof entry.target !== 'string' ||
+          Buffer.byteLength(entry.target) > 4096 ||
+          entry.target.includes('\0') ||
+          createHash('sha256').update(entry.target).digest('hex') !== entry.sha256))
+    ) {
+      throw new Error(`remote-check: expected source manifest contains an invalid or reserved entry: ${String(entry?.path)}`);
+    }
+    if (entries.has(entry.path)) throw new Error(`remote-check: expected source manifest has a duplicate path: ${entry.path}`);
+    entries.set(entry.path, entry);
+  }
+
+  const deleted = new Set<string>();
+  for (const path of manifest.deleted) {
+    if (!isSafeSourcePath(path) || collidesWithProducerControl(path))
+      throw new Error(`remote-check: expected source manifest contains an invalid or reserved deleted path: ${String(path)}`);
+    if (deleted.has(path) || entries.has(path))
+      throw new Error(`remote-check: expected source manifest has a duplicate or present deleted path: ${path}`);
+    deleted.add(path);
+  }
+
+  const bytes = Buffer.byteLength(JSON.stringify(manifest)) + 1;
+  if (bytes > 8 * 1024 * 1024) throw new Error('remote-check: expected source manifest exceeds its transport bound');
+
+  const digest = createHash('sha256');
+  const sortedEntries = [...entries.values()].sort((left, right) =>
+    Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)),
+  );
+  for (const entry of sortedEntries) {
+    digest.update(`${entry.path}\0${entry.mode}\0`);
+    digest.update(`${entry.kind}\0${entry.kind === 'link' ? entry.target : entry.sha256}\0`);
+  }
+  for (const path of [...deleted].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))))
+    digest.update(`deleted\0${path}\0`);
+  digest.update(`HEAD\0${manifest.head}\0index\0${manifest.indexTree}\0`);
+  if (digest.digest('hex') !== manifest.sourceSha256)
+    throw new Error('remote-check: expected source manifest does not match its fingerprint');
+}
+
 export type Host = {
   name: string;
   address: string;
@@ -1304,6 +1445,144 @@ function stopSupervisor(directory: string): string {
   return `python3 -c ${quote(supervisorStopProgram)} ${directory}`;
 }
 
+/** Shared exact-path and owner validation used at both source and prepared-input lifecycle boundaries. */
+const producerControlValidationPython = String.raw`import math,re
+CONTROL_ROOT_FILES=set(${REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON})
+CONTROL_ROOT_DIRECTORIES=set(${REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON})
+RUN_SCRATCH_PATHS=set(${REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON})
+CONTROL_MAX_JSON_BYTES=262144
+CONTROL_MAX_FILES=50000
+CONTROL_MAX_BYTES=1024*1024*1024
+
+def control_info(root,name,maximum,required=False,empty=False):
+    path=root/name
+    if not os.path.lexists(path):
+        if required: raise SystemExit('producer control is missing: '+name)
+        return None
+    try: info=os.lstat(path)
+    except OSError: raise SystemExit('producer control cannot be inspected: '+name)
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_nlink!=1 or
+            info.st_mode & 0o022 or info.st_size<0 or info.st_size>maximum or (empty and info.st_size!=0)):
+        raise SystemExit('producer control has an invalid file identity: '+name)
+    return info
+
+def read_control_bytes(root,name,maximum,required=True):
+    info=control_info(root,name,maximum,required)
+    if info is None: return None
+    path=root/name
+    try:
+        descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+        with os.fdopen(descriptor,'rb') as source:
+            opened=os.fstat(source.fileno())
+            if (opened.st_dev,opened.st_ino,opened.st_uid,opened.st_size)!=(info.st_dev,info.st_ino,info.st_uid,info.st_size):
+                raise SystemExit('producer control changed while it was read: '+name)
+            raw=source.read(maximum+1)
+    except OSError: raise SystemExit('producer control cannot be read: '+name)
+    if len(raw)>maximum: raise SystemExit('producer control exceeds its bound: '+name)
+    return raw
+
+def read_control_json(root,name,required=True):
+    raw=read_control_bytes(root,name,CONTROL_MAX_JSON_BYTES,required)
+    if raw is None: return None
+    try: value=json.loads(raw)
+    except (UnicodeDecodeError,ValueError): raise SystemExit('producer control is malformed: '+name)
+    if not isinstance(value,dict): raise SystemExit('producer control identity is malformed: '+name)
+    return value
+
+def validate_cache_tree(root,name):
+    path=root/name
+    if not os.path.lexists(path): return False
+    try: info=os.lstat(path)
+    except OSError: raise SystemExit('producer control cache cannot be inspected: '+name)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode & 0o022:
+        raise SystemExit('producer control cache has an invalid directory identity: '+name)
+    pending=[path]
+    count=0
+    total=0
+    while pending:
+        parent=pending.pop()
+        try:
+            with os.scandir(parent) as children: names=[item.name for item in children]
+        except OSError: raise SystemExit('producer control cache cannot be read: '+name)
+        for child in names:
+            full=parent/child
+            try: item=os.lstat(full)
+            except OSError: raise SystemExit('producer control cache changed while it was inspected: '+name)
+            if item.st_uid!=os.getuid() or item.st_mode & 0o022:
+                raise SystemExit('producer control cache has a foreign or writable entry: '+name)
+            count+=1
+            if count>CONTROL_MAX_FILES: raise SystemExit('producer control cache exceeds its file bound: '+name)
+            if stat.S_ISDIR(item.st_mode): pending.append(full)
+            elif stat.S_ISREG(item.st_mode):
+                total+=item.st_size
+                if total>CONTROL_MAX_BYTES: raise SystemExit('producer control cache exceeds its byte bound: '+name)
+            else: raise SystemExit('producer control cache contains a link or special file: '+name)
+    return True
+
+def validate_producer_controls(root,run,host,stage):
+    if not re.fullmatch(r'[a-z0-9-]{1,64}',run) or not isinstance(host,str) or not host or len(host.encode())>256:
+        raise SystemExit('producer control run identity is invalid')
+    try: root_info=os.lstat(root)
+    except OSError: raise SystemExit('producer control workspace is unavailable')
+    if (not stat.S_ISDIR(root_info.st_mode) or root_info.st_uid!=os.getuid() or root_info.st_mode & 0o022):
+        raise SystemExit('producer control workspace has an invalid owner or type')
+
+    marker=read_control_json(root,'.remote-check-supervisor')
+    if set(marker)!={'schema','host','run','pid','started','group','uid'}:
+        raise SystemExit('producer supervisor identity has an invalid shape')
+    if (marker.get('schema')!=1 or marker.get('host')!=host or marker.get('run')!=run or
+            type(marker.get('pid')) is not int or marker['pid']<2 or
+            not isinstance(marker.get('started'),str) or not marker['started'].isdigit() or
+            type(marker.get('group')) is not int or marker['group']!=marker['pid'] or
+            type(marker.get('uid')) is not int or marker['uid']!=os.getuid()):
+        raise SystemExit('producer supervisor identity is foreign or malformed')
+    if control_info(root,'.alive',0,required=True,empty=True) is None:
+        raise SystemExit('producer liveness marker is missing')
+    control_info(root,'.remote-check-slot-count',16,required=True)
+    try:
+        slot_text=read_control_bytes(root,'.remote-check-slot-count',16).decode('ascii')
+        slot_value=int(slot_text.strip())
+    except (OSError,UnicodeDecodeError,ValueError):
+        raise SystemExit('producer slot identity is malformed')
+    if slot_value<1 or slot_value>50000 or not re.fullmatch(r'[1-9][0-9]{0,4}\n?',slot_text):
+        raise SystemExit('producer slot identity is malformed')
+
+    if stage=='source':
+        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor'}
+    elif stage=='prepared':
+        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
+                 '.bun-install-complete','.preparation-started','preparation-install.json'}
+        if control_info(root,'.bun-install-complete',0,required=True,empty=True) is None:
+            raise SystemExit('producer install completion is missing')
+        preparation=read_control_json(root,'.preparation-started')
+        if set(preparation)!={'schema','host','run','deadline','limitMs'}:
+            raise SystemExit('producer preparation identity has an invalid shape')
+        if (preparation.get('schema')!=1 or preparation.get('host')!=host or preparation.get('run')!=run or
+                type(preparation.get('deadline')) not in (int,float) or not math.isfinite(preparation['deadline']) or
+                type(preparation.get('limitMs')) is not int or not 1<=preparation['limitMs']<=7200000):
+            raise SystemExit('producer preparation identity is foreign or malformed')
+        installed=read_control_json(root,'preparation-install.json')
+        if set(installed)!={'schema','host','run','cache','nativeCache','key','packages','nativeChecks'}:
+            raise SystemExit('producer install receipt has an invalid shape')
+        if (installed.get('schema')!=1 or installed.get('host')!=host or installed.get('run')!=run or
+                installed.get('cache') not in ('hit','miss') or
+                installed.get('nativeCache') not in (None,'hit','miss') or
+                not isinstance(installed.get('key'),str) or not re.fullmatch(r'[a-f0-9]{64}',installed['key']) or
+                not isinstance(installed.get('packages'),list) or len(installed['packages'])>CONTROL_MAX_FILES or
+                not isinstance(installed.get('nativeChecks'),list) or len(installed['nativeChecks'])>CONTROL_MAX_FILES):
+            raise SystemExit('producer install receipt identity is foreign or malformed')
+    else:
+        raise SystemExit('producer control lifecycle stage is invalid')
+
+    for name in CONTROL_ROOT_FILES:
+        if name in allowed: continue
+        if os.path.lexists(root/name): raise SystemExit('producer control appeared at the wrong lifecycle stage: '+name)
+    for name in CONTROL_ROOT_DIRECTORIES:
+        if name in allowed and validate_cache_tree(root,name): continue
+        if os.path.lexists(root/name): raise SystemExit('producer control directory appeared at the wrong lifecycle stage: '+name)
+    return True
+`;
+
 /** Both normal cleanup and the stale-directory sweep remove only containers labelled for this run. */
 function cleanupCommands(removeDirectory = true): string {
   if (removeDirectory) {
@@ -1352,6 +1631,10 @@ import sys
 import tempfile
 import time
 
+CONTROL_ROOT_FILES=set(${REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON})
+CONTROL_ROOT_DIRECTORIES=set(${REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON})
+RUN_SCRATCH_PATHS=set(${REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON})
+
 
 def digest(path):
     value = hashlib.sha256()
@@ -1364,11 +1647,7 @@ def digest(path):
 def inventory(root):
     result = {}
     # These belong to the transport/supervisor, or are disposable runtime caches, never lifecycle outputs.
-    excluded = {'.git', '.alive', '.bun-install-complete', 'exit-status', 'command-started',
-                'preparation-status.json', 'preparation-install.json', '.preparation-started',
-                '.remote-check-supervisor', '.command-result', 'run-lifetime-status.json', 'bun-runtime-transpiler-cache',
-                'physical-resources.json', '.resource-terminal-ready', '.resource-terminal-sampled',
-                '.temp/check-host', '.temp/node-compile-cache'}
+    excluded = {'.git'} | CONTROL_ROOT_FILES | CONTROL_ROOT_DIRECTORIES | RUN_SCRATCH_PATHS
     for parent, directories, files in os.walk(root, followlinks=False):
         for name in sorted(directories + files):
             path = Path(parent) / name
@@ -1614,7 +1893,9 @@ def install():
                             packages.append({'name': package['name'], 'version': package['version']})
                     except (OSError, ValueError):
                         pass
-            receipt = {'cache': 'hit' if hit else 'miss', 'nativeCache': None if hit else ('hit' if native_hit else 'miss'),
+            receipt = {'schema': 1, 'host': os.environ['REMOTE_CHECK_HOST'],
+                       'run': os.environ['REZICS_CHECK_RUN'],
+                       'cache': 'hit' if hit else 'miss', 'nativeCache': None if hit else ('hit' if native_hit else 'miss'),
                        'key': key, 'packages': packages, 'nativeChecks': manifest['nativeChecks']}
             (root / 'preparation-install.json').write_text(json.dumps(receipt, sort_keys=True))
             if time.monotonic() >= deadline:
@@ -1703,7 +1984,8 @@ def supervise():
     root = Path(directory)
     started = time.monotonic()
     deadline = min(started + int(limit_ms) / 1000, float(os.environ.get('REMOTE_CHECK_HOST_PREPARATION_DEADLINE', 'inf')))
-    (root / '.preparation-started').write_text(json.dumps({'deadline': deadline, 'limitMs': int(limit_ms)}))
+    (root / '.preparation-started').write_text(json.dumps(
+        {'schema': 1, 'host': host, 'run': run, 'deadline': deadline, 'limitMs': int(limit_ms)}, sort_keys=True))
     wall_started_ns = time.time_ns()
     # Without adoption and waitpid, double-forked installer children can survive their launcher or become zombies.
     libc = ctypes.CDLL(None, use_errno=True)
@@ -1996,7 +2278,9 @@ def lifetime():
     for sig in [signal.SIGHUP, signal.SIGTERM, signal.SIGINT]:
         signal.signal(sig, lambda number, frame: interrupted.append(number))
     fields = Path('/proc/' + str(os.getpid()) + '/stat').read_text().rsplit(')', 1)[1].split()
-    durable(root / '.remote-check-supervisor', json.dumps({'pid': os.getpid(), 'started': fields[19], 'group': os.getpgrp()}))
+    supervisor = {'schema': 1, 'host': host, 'run': run, 'pid': os.getpid(),
+                  'started': fields[19], 'group': os.getpgrp(), 'uid': os.getuid()}
+    durable(root / '.remote-check-supervisor', json.dumps(supervisor, sort_keys=True))
     with os.fdopen(3) as source:
         script = source.read()
     child = subprocess.Popen(['sh', '-c', script], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1',
@@ -2139,90 +2423,180 @@ export function ownedLocalCommand(command: readonly string[]): string[] {
     : [...command];
 }
 
-const sourceInputVerificationProgram = String.raw`import hashlib,json,os,stat,sys
+export const sourceInputVerificationProgram = String.raw`import hashlib,json,os,stat,sys
 from pathlib import Path
+${producerControlValidationPython}
 root=Path(sys.argv[1])
 manifest_path=root/'.temp/check-host'/('source-manifest-'+sys.argv[3]+'.json')
 expected=sys.argv[2]
-if not manifest_path.is_file() or manifest_path.stat().st_size > 8*1024*1024:
+run=sys.argv[3]
+host=sys.argv[4]
+try: manifest_info=os.lstat(manifest_path)
+except OSError: raise SystemExit('source manifest is missing or cannot be inspected')
+if (not stat.S_ISREG(manifest_info.st_mode) or manifest_info.st_uid!=os.getuid() or
+        stat.S_IMODE(manifest_info.st_mode)!=0o600 or manifest_info.st_nlink!=1 or
+        manifest_info.st_size<1 or manifest_info.st_size>8*1024*1024):
     raise SystemExit('source manifest is missing or oversized')
-manifest=json.loads(manifest_path.read_text())
-if manifest.get('sourceSha256') != expected or len(manifest.get('entries', [])) > 50000 or len(manifest.get('deleted', [])) > 50000:
+try:
+    descriptor=os.open(manifest_path,os.O_RDONLY|os.O_NOFOLLOW)
+    with os.fdopen(descriptor,'rb') as source:
+        opened=os.fstat(source.fileno())
+        if (opened.st_dev,opened.st_ino,opened.st_uid,opened.st_size)!=(manifest_info.st_dev,manifest_info.st_ino,manifest_info.st_uid,manifest_info.st_size):
+            raise SystemExit('source manifest changed while it was read')
+        manifest=json.loads(source.read(8*1024*1024+1))
+except (OSError,UnicodeDecodeError,ValueError):
+    raise SystemExit('source manifest is malformed or unsafe')
+if (not isinstance(manifest,dict) or set(manifest)!={'sourceSha256','head','indexTree','entries','deleted'} or
+        manifest.get('sourceSha256') != expected or not isinstance(manifest.get('entries'),list) or
+        not isinstance(manifest.get('deleted'),list) or len(manifest['entries']) > 50000 or len(manifest['deleted']) > 50000 or
+        not re.fullmatch(r'[a-f0-9]{64}',str(expected)) or
+        not re.fullmatch(r'[a-f0-9]{40}(?:[a-f0-9]{24})?',str(manifest.get('head'))) or
+        not re.fullmatch(r'[a-f0-9]{40}(?:[a-f0-9]{24})?',str(manifest.get('indexTree')))):
     raise SystemExit('source manifest identity or bounds are invalid')
 entries=manifest['entries']
+for entry in entries:
+    if not isinstance(entry,dict) or set(entry)!={'path','mode','kind','sha256','target'}:
+        raise SystemExit('source manifest entry shape is invalid')
+    if not isinstance(entry.get('path'),str):
+        raise SystemExit('source manifest contains an unsafe path')
 digest=hashlib.sha256()
 expected_paths=set()
+deleted_paths=set()
+control_names=CONTROL_ROOT_FILES|CONTROL_ROOT_DIRECTORIES|RUN_SCRATCH_PATHS
+def safe_source_path(path):
+    return (isinstance(path,str) and bool(path) and not path.startswith('/') and
+            not re.match(r'^[A-Za-z]:',path) and
+            not any(character in path for character in ('\\','\x00','\r','\n')) and
+            len(path.encode())<=1024 and all(part not in ('','.','..') for part in path.split('/')))
+def reserved_source_path(path):
+    return any(path==name or path.startswith(name+'/') or name.startswith(path+'/') for name in control_names)
 for entry in sorted(entries,key=lambda item:item['path']):
     path=entry['path']
-    if not isinstance(path,str) or not path or path.startswith('/') or '\x00' in path or len(path.encode())>1024 or any(part in ('','.','..') for part in path.split('/')):
-        raise SystemExit('source manifest contains an unsafe path')
+    if not safe_source_path(path): raise SystemExit('source manifest contains an unsafe path')
+    if reserved_source_path(path): raise SystemExit('source manifest collides with a reserved producer control: '+path)
+    if type(entry['mode']) is not int or entry['mode']<0 or entry['mode']>0o7777 or entry['kind'] not in ('file','link') or not re.fullmatch(r'[a-f0-9]{64}',str(entry['sha256'])):
+        raise SystemExit('source manifest entry identity is invalid: '+path)
+    if (entry['kind']=='file' and entry['target'] is not None) or (entry['kind']=='link' and
+            (not isinstance(entry['target'],str) or len(entry['target'].encode())>4096 or '\x00' in entry['target'] or
+             hashlib.sha256(entry['target'].encode()).hexdigest()!=entry['sha256'])):
+        raise SystemExit('source manifest link or file identity is invalid: '+path)
+    if path in expected_paths: raise SystemExit('source manifest contains a duplicate path')
     expected_paths.add(path)
-    absolute=root/path
+    absolute=root
+    for part in path.split('/')[:-1]:
+        absolute=absolute/part
+        parent_info=os.lstat(absolute)
+        if not stat.S_ISDIR(parent_info.st_mode): raise SystemExit('source path traverses a non-directory: '+path)
+    absolute=absolute/path.split('/')[-1]
     info=os.lstat(absolute)
     mode=stat.S_IMODE(info.st_mode)
-    if mode != entry['mode']:
-        raise SystemExit('source mode mismatch: '+path)
+    if mode != entry['mode']: raise SystemExit('source mode mismatch: '+path)
     digest.update((path+'\x00'+str(mode)+'\x00').encode())
     if stat.S_ISREG(info.st_mode):
+        if entry['kind']!='file': raise SystemExit('source type mismatch: '+path)
         value=hashlib.sha256()
-        with absolute.open('rb') as source:
-            for block in iter(lambda:source.read(1024*1024),b''): value.update(block)
+        try:
+            descriptor=os.open(absolute,os.O_RDONLY|os.O_NOFOLLOW)
+            with os.fdopen(descriptor,'rb') as source:
+                opened=os.fstat(source.fileno())
+                if (opened.st_dev,opened.st_ino,opened.st_mode,opened.st_size)!=(info.st_dev,info.st_ino,info.st_mode,info.st_size):
+                    raise SystemExit('source changed while it was read: '+path)
+                for block in iter(lambda:source.read(1024*1024),b''): value.update(block)
+        except OSError: raise SystemExit('source file cannot be read safely: '+path)
         actual=value.hexdigest()
-        if entry['kind']!='file' or entry['sha256']!=actual:
-            raise SystemExit('source bytes mismatch: '+path)
+        if entry['sha256']!=actual: raise SystemExit('source bytes mismatch: '+path)
         digest.update(('file\x00'+actual+'\x00').encode())
     elif stat.S_ISLNK(info.st_mode):
         target=os.readlink(absolute)
-        if entry['kind']!='link' or entry['target']!=target or entry['sha256']!=hashlib.sha256(target.encode()).hexdigest():
+        if entry['kind']!='link' or entry['target']!=target or hashlib.sha256(target.encode()).hexdigest()!=entry['sha256']:
             raise SystemExit('source link mismatch: '+path)
         digest.update(('link\x00'+target+'\x00').encode())
     else:
         raise SystemExit('unsupported source input: '+path)
-for path in sorted(manifest['deleted']): digest.update(('deleted\x00'+path+'\x00').encode())
+for path in manifest['deleted']:
+    if not safe_source_path(path) or reserved_source_path(path): raise SystemExit('source manifest contains an unsafe deleted path')
+    if path in deleted_paths or path in expected_paths: raise SystemExit('source manifest deleted paths overlap')
+    deleted_paths.add(path)
+for path in sorted(deleted_paths): digest.update(('deleted\x00'+path+'\x00').encode())
 digest.update(('HEAD\x00'+manifest['head']+'\x00index\x00'+manifest['indexTree']+'\x00').encode())
 if digest.hexdigest()!=expected:
     raise SystemExit('source manifest fingerprint does not match the frozen candidate')
+validate_producer_controls(root,run,host,'source')
 skip={'build','dist','out','coverage','.next','.turbo','playwright-report','test-results','node_modules','.git','.temp'}
 actual_paths=set()
+def add_actual_path(path):
+    actual_paths.add(path)
+    if len(actual_paths)>50000:
+        raise SystemExit('uploaded source file count exceeds its bound')
 for current,dirs,files in os.walk(root,followlinks=False):
     dirs[:]=[name for name in dirs if name not in skip]
     for name in list(dirs):
         full=Path(current)/name
+        relative_path=full.relative_to(root).as_posix()
+        if relative_path in CONTROL_ROOT_DIRECTORIES:
+            dirs.remove(name)
+            continue
         if full.is_symlink():
-            actual_paths.add(full.relative_to(root).as_posix())
+            add_actual_path(relative_path)
             dirs.remove(name)
     for name in files:
         full=Path(current)/name
         rel=full.relative_to(root).as_posix()
         if any(part in skip for part in rel.split('/')): continue
-        actual_paths.add(rel)
+        if rel in CONTROL_ROOT_FILES: continue
+        add_actual_path(rel)
 if actual_paths!=expected_paths:
     raise SystemExit('uploaded source file set does not match the frozen candidate')
 `;
 
-const preparedInputEvidenceProgram = String.raw`import hashlib,json,os,stat,sys
+export const preparedInputEvidenceProgram = String.raw`import hashlib,json,os,stat,sys
 from pathlib import Path
+${producerControlValidationPython}
 root=Path(sys.argv[1])
 run=sys.argv[2]
 host=sys.argv[3]
 source=sys.argv[4]
+receipt_root=Path(sys.argv[5])
+if not re.fullmatch(r'[a-f0-9]{64}',source): raise SystemExit('prepared source identity is invalid')
+validate_producer_controls(root,run,host,'prepared')
 max_files=50000
 max_bytes=1024*1024*1024
 skip={'.git','.temp','node_modules'}
+control_files=CONTROL_ROOT_FILES
+control_directories=CONTROL_ROOT_DIRECTORIES
 entries=[]
 total=0
 def add(path,full,info):
     global total
-    if len(path.encode())>1024: raise ValueError('prepared input path exceeds its bound')
+    if (not path or len(path.encode())>1024 or path.startswith('/') or re.match(r'^[A-Za-z]:',path) or
+            any(character in path for character in ('\\','\x00','\r','\n')) or
+            any(part in ('','.','..') for part in path.split('/'))):
+        raise ValueError('prepared input path is unsafe')
+    if len(entries)>=max_files: raise ValueError('prepared input file count exceeds its bound')
     mode=stat.S_IMODE(info.st_mode)
     if stat.S_ISREG(info.st_mode):
+        size=info.st_size
+        if size<0 or total+size>max_bytes: raise ValueError('prepared input bytes exceed their bound')
         value=hashlib.sha256()
-        with full.open('rb') as source_file:
-            for block in iter(lambda:source_file.read(1024*1024),b''): value.update(block)
-        size=info.st_size; kind='file'; digest=value.hexdigest()
+        try:
+            descriptor=os.open(full,os.O_RDONLY|os.O_NOFOLLOW)
+            with os.fdopen(descriptor,'rb') as source_file:
+                opened=os.fstat(source_file.fileno())
+                if (opened.st_dev,opened.st_ino,opened.st_mode,opened.st_size)!=(info.st_dev,info.st_ino,info.st_mode,info.st_size):
+                    raise ValueError('prepared input changed while it was read')
+                read=0
+                for block in iter(lambda:source_file.read(1024*1024),b''):
+                    read+=len(block)
+                    if total+read>max_bytes: raise ValueError('prepared input bytes exceed their bound')
+                    value.update(block)
+                if read!=size: raise ValueError('prepared input size changed while it was read')
+        except OSError as error: raise ValueError('prepared input cannot be read safely') from error
+        kind='file'; digest=value.hexdigest()
     elif stat.S_ISLNK(info.st_mode):
         target=os.readlink(full).encode()
-        size=len(target); kind='link'; digest=hashlib.sha256(target).hexdigest()
+        size=len(target)
+        if total+size>max_bytes: raise ValueError('prepared input bytes exceed their bound')
+        kind='link'; digest=hashlib.sha256(target).hexdigest()
     else: raise ValueError('unsupported prepared input type')
     total+=size
     if total>max_bytes: raise ValueError('prepared input bytes exceed their bound')
@@ -2231,19 +2605,33 @@ for current,dirs,files in os.walk(root,followlinks=False):
     dirs[:]=[name for name in dirs if name not in skip]
     for name in list(dirs):
         full=Path(current)/name
+        rel=full.relative_to(root).as_posix()
+        if rel in control_directories:
+            dirs.remove(name)
+            continue
         if full.is_symlink():
-            add(full.relative_to(root).as_posix(),full,os.lstat(full)); dirs.remove(name)
+            add(rel,full,os.lstat(full)); dirs.remove(name)
     for name in files:
         full=Path(current)/name
         rel=full.relative_to(root).as_posix()
         if any(part in skip for part in rel.split('/')): continue
+        if rel in control_files: continue
         add(rel,full,os.lstat(full))
-        if len(entries)>max_files: raise ValueError('prepared input file count exceeds its bound')
 entries.sort(key=lambda item:item['path'])
 manifest=json.dumps(entries,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
 result={'schema':1,'host':host,'run':run,'sourceSha256':source,'manifestSha256':hashlib.sha256(manifest).hexdigest(),'fileCount':len(entries),'totalBytes':total}
-target=Path('/srv/rezics-check/receipts')/run/'prepared-inputs.json'
-target.parent.mkdir(parents=True,exist_ok=True)
+if not receipt_root.is_absolute() or os.path.realpath(receipt_root)!=str(receipt_root):
+    raise SystemExit('prepared receipt root is unsafe')
+receipt_root.mkdir(parents=True,exist_ok=True)
+receipt_info=os.lstat(receipt_root)
+if not stat.S_ISDIR(receipt_info.st_mode) or receipt_info.st_uid!=os.getuid() or receipt_info.st_mode & 0o022:
+    raise SystemExit('prepared receipt root has an invalid owner or type')
+target=receipt_root/run/'prepared-inputs.json'
+target.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+parent_info=os.lstat(target.parent)
+if not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid!=os.getuid() or parent_info.st_mode & 0o022:
+    raise SystemExit('prepared receipt directory has an invalid owner or type')
+if os.path.lexists(target): raise SystemExit('prepared receipt already exists')
 temporary=target.with_name(target.name+'.'+str(os.getpid())+'.pending')
 with temporary.open('x') as output:
     output.write(json.dumps(result,separators=(',',':'))+'\n'); output.flush(); os.fsync(output.fileno())
@@ -2338,14 +2726,14 @@ export function runScript(
     })
     .join('\n');
   const sourceVerification = expectedSourceSha256
-    ? `if ! python3 -c ${quote(sourceInputVerificationProgram)} ${quote(directory)} ${quote(expectedSourceSha256)} ${quote(id)}; then
+    ? `if ! python3 -c ${quote(sourceInputVerificationProgram)} ${quote(directory)} ${quote(expectedSourceSha256)} ${quote(id)} ${quote(hostName)}; then
       echo "remote-check: frozen source upload verification failed" >&2
       exit 70
     fi`
     : '';
   const preparedInputsEvidence = expectedSourceSha256
     ? `if [ "$code" -eq 0 ]; then
-      if ! python3 -c ${quote(preparedInputEvidenceProgram)} ${quote(directory)} ${quote(id)} ${quote(hostName)} ${quote(expectedSourceSha256)}; then
+      if ! python3 -c ${quote(preparedInputEvidenceProgram)} ${quote(directory)} ${quote(id)} ${quote(hostName)} ${quote(expectedSourceSha256)} ${quote(`${ROOT}/receipts`)}; then
         echo "remote-check: prepared input evidence unavailable" >&2
         code=70
       fi
@@ -2579,6 +2967,13 @@ function refreshBaseScript(id: string, directory: string, gitArtifactRelativePat
     gitArtifactRelativePath === undefined
       ? ''
       : `rm -rf -- ${quote(`${ROOT}/bases/.new-${id}/${gitArtifactRelativePath}`)}`;
+  const removeProducerControls = [
+    ...REMOTE_CHECK_PRODUCER_CONTROL_FILES,
+    ...REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES,
+    ...REMOTE_CHECK_RUN_SCRATCH_PATHS,
+  ]
+    .map((path) => `rm -rf -- ${quote(`${ROOT}/bases/.new-${id}/${path}`)}`)
+    .join('\n  ');
   return `# REMOTE_CHECK_BASE_REFRESH
 set -eu
 if [ -d ${quote(directory)} ]; then
@@ -2597,6 +2992,7 @@ if [ "$refresh" -eq 1 ]; then
   rm -rf -- "$staging"
   mkdir -p "$staging"
   cp -a ${quote(directory)}/. "$staging"/
+  ${removeProducerControls}
   ${removeGitArtifacts}
   mv -- "$staging" "$target"
   ln -s "$target" ${ROOT}/bases/.current-${id}
@@ -4344,6 +4740,11 @@ async function uploadRun(
 ): Promise<PreparedRun> {
   const directory = `${ROOT}/runs/${id}`;
   const transferLimit = transferTimeout(options);
+  validateCandidateUploadPaths(files);
+  if ((options.expectedSourceSha256 === undefined) !== (options.expectedSourceManifest === undefined))
+    throw new Error('remote-check: generic source evidence requires both its fingerprint and manifest');
+  if (options.expectedSourceManifest)
+    validateExpectedSourceManifest(options.expectedSourceManifest, options.expectedSourceSha256);
   const base = await baseState(host, connectionId, transferLimit);
   if (signal.aborted) throw new Aborted();
   let localGitStage: string | undefined;
@@ -4353,11 +4754,7 @@ async function uploadRun(
   try {
     const uploadFiles = [...files];
     if (options.expectedSourceManifest) {
-      if (options.expectedSourceSha256 !== options.expectedSourceManifest.sourceSha256)
-        throw new Error('remote-check: expected source manifest does not match its fingerprint');
       const manifestBytes = Buffer.from(`${JSON.stringify(options.expectedSourceManifest)}\n`);
-      if (manifestBytes.byteLength > 8 * 1024 * 1024)
-        throw new Error('remote-check: expected source manifest exceeds its transport bound');
       const temporaryRoot = join(resolve(options.workspace), '.temp', 'check-host');
       mkdirSync(temporaryRoot, { recursive: true, mode: 0o700 });
       const directoryStat = lstatSync(temporaryRoot);
