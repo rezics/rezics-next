@@ -2,21 +2,18 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { cleanupAll, ownBunProcess, type ProcessCustody } from './support/server-custody.ts';
 import emptySearch from '../src/kernel/recorded/search-empty.json';
 
 let child: ReturnType<typeof Bun.spawn> | undefined;
+let storybookCustody: ProcessCustody | undefined;
 let browser: Browser | undefined;
 let origin: string;
 afterAll(async () => {
-  await browser?.close();
-  if (child) {
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-    }
-    await child.exited;
-  }
+  await cleanupAll([
+    { label: 'Header search browser', run: () => browser?.close(), timeoutMs: 5000 },
+    { label: 'Header search Storybook group', run: () => storybookCustody?.close(), timeoutMs: 7000 },
+  ]);
 });
 
 beforeAll(async () => {
@@ -35,19 +32,15 @@ beforeAll(async () => {
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  let output = '';
-  const capture = async (stream: ReadableStream<Uint8Array>) => {
-    for await (const chunk of stream) output = (output + Buffer.from(chunk).toString()).slice(-8000);
-  };
-  void capture(child.stdout as ReadableStream<Uint8Array>);
-  void capture(child.stderr as ReadableStream<Uint8Array>);
+  const custody = (storybookCustody = ownBunProcess(child, { label: 'Header search Storybook' }));
   const deadline = Date.now() + 150_000;
   for (;;) {
-    if (child.exitCode !== null) throw new Error(`Storybook exited with ${child.exitCode}:\n${output}`);
+    if (child.exitCode !== null)
+      throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
     try {
       if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(5000) })).ok) break;
     } catch {}
-    if (Date.now() > deadline) throw new Error(`Storybook did not become ready:\n${output}`);
+    if (Date.now() > deadline) throw new Error(`Storybook did not become ready:\n${custody.diagnostics()}`);
     await Bun.sleep(500);
   }
 

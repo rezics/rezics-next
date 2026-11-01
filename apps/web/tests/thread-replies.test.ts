@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
@@ -12,9 +12,25 @@ import { m } from '../src/paraglide/messages.js';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, type Browser } from 'playwright';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 import { documentText, documentVersion, normalizeDocument, type DocumentNode } from '@rezics/document';
 import thread from '../src/kernel/recorded/thread.json';
+
+let activeBrowser: Browser | undefined;
+let activeStorybook: ProcessCustody | undefined;
+let activeBrowserClose: Promise<void> | undefined;
+
+function closeActiveBrowser(): Promise<void> {
+  return (activeBrowserClose ??= activeBrowser?.close() ?? Promise.resolve());
+}
+
+afterAll(async () => {
+  await cleanupAll([
+    { label: 'Thread replies browser', run: closeActiveBrowser, timeoutMs: 5000 },
+    { label: 'Thread replies Storybook group', run: () => activeStorybook?.close(), timeoutMs: 7000 },
+  ]);
+});
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const body = fromPlainText('Keep this selected-parent reply.', 'blocks');
@@ -156,25 +172,20 @@ test('real composed reading Page and Pattern keep selected parent and keyboard d
     ['dev', '--ci', '--host', '127.0.0.1', '--port', String(port)],
     { cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CI: '1' } },
   );
-  let output = '';
-  const record = (chunk: Buffer) => {
-    output = (output + chunk.toString()).slice(-8000);
-  };
-  child.stdout!.on('data', record);
-  child.stderr!.on('data', record);
+  const custody = (activeStorybook = ownNodeProcess(child, { label: 'Thread replies Storybook' }));
   const origin = `http://127.0.0.1:${port}`;
-  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
-  try {
+  await withCleanup(async () => {
     const deadline = Date.now() + 150_000;
     for (;;) {
-      if (child.exitCode !== null) throw new Error(`Storybook exited (${child.exitCode}): ${output}`);
+      if (child.exitCode !== null)
+        throw new Error(`Storybook exited (${child.exitCode}): ${custody.diagnostics()}`);
       try {
         if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(1000) })).ok) break;
       } catch {}
-      if (Date.now() > deadline) throw new Error(`Storybook did not start: ${output}`);
+      if (Date.now() > deadline) throw new Error(`Storybook did not start: ${custody.diagnostics()}`);
       await Bun.sleep(200);
     }
-    browser = await chromium.launch();
+    const browser = (activeBrowser = await chromium.launch());
     for (const tier of ['pages', 'patterns']) {
       for (const theme of ['light', 'dark']) {
         const context = await browser.newContext({
@@ -182,7 +193,7 @@ test('real composed reading Page and Pattern keep selected parent and keyboard d
           reducedMotion: 'reduce',
         });
         const page = await context.newPage();
-        try {
+        await withCleanup(async () => {
           for (const state of ['selected-parent', 'cancelled-parent']) {
             const storyId = `${tier}-community-thread-reading--${state}`;
             await page.goto(`${origin}/iframe.html?id=${storyId}&globals=locale:en;theme:${theme}`);
@@ -251,16 +262,11 @@ test('real composed reading Page and Pattern keep selected parent and keyboard d
             expect(await page.getByRole('textbox', { name: m.thread_reply_label() }).count()).toBe(1);
             await editorNode?.dispose();
           }
-        } finally {
-          await context.close();
-        }
+        }, [{ label: 'Thread replies browser context', run: () => context.close(), timeoutMs: 5000 }]);
       }
     }
-  } finally {
-    await browser?.close();
-    if (child.pid && child.exitCode === null) {
-      process.kill(-child.pid, 'SIGTERM');
-      await new Promise<void>((resolve) => child.once('close', () => resolve()));
-    }
-  }
+  }, [
+    { label: 'Thread replies browser', run: closeActiveBrowser, timeoutMs: 5000 },
+    { label: 'Thread replies Storybook group', run: () => custody.close(), timeoutMs: 7000 },
+  ]);
 }, 900_000);

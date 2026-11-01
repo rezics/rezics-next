@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createServer } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { cleanupAll, ownBunProcess, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -32,18 +33,53 @@ const timeout = 1_800_000;
 const executable = (name: string) =>
   [app, ui].map((directory) => join(directory, 'node_modules/.bin', name)).find(existsSync)!;
 let child: ChildProcess | undefined;
+let storybookCustody: ProcessCustody | undefined;
 let browser: Browser | undefined;
 let serverPromise: Promise<string> | undefined;
 let browserPromise: Promise<Browser> | undefined;
 
 async function command(args: string[], cwd = app) {
-  const run = Bun.spawn(args, { cwd, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, CI: '1' } });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(run.stdout).text(),
-    new Response(run.stderr).text(),
-    run.exited,
-  ]);
-  return { code, output: `${stdout}\n${stderr}` };
+  let stdout = '';
+  let stderr = '';
+  const run = Bun.spawn(args, {
+    cwd,
+    detached: true,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, CI: '1' },
+  });
+  const custody = ownBunProcess(run, {
+    label: `Page stories command ${args[0] ?? 'without argv'}`,
+    onOutput: (chunk, stream) => {
+      if (stream === 'stdout') stdout += Buffer.from(chunk).toString();
+      else stderr += Buffer.from(chunk).toString();
+    },
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await withCleanup(async () => {
+      const code = await Promise.race([
+        run.exited,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Page stories command timed out: ${args[0] ?? 'without argv'}`)),
+            1_700_000,
+          );
+        }),
+      ]);
+      await custody.close();
+      await custody.outputSettled;
+      return { code, output: `${stdout}\n${stderr}` };
+    }, [
+      {
+        label: `Page stories command group ${args[0] ?? 'without argv'}`,
+        run: () => custody.close(),
+        timeoutMs: 7000,
+      },
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Copied from session.test.ts: reserve a port and keep the server in its own process group.
@@ -60,26 +96,23 @@ function freePort(): Promise<number> {
 
 async function storybook() {
   const port = await freePort();
-  let output = '';
-  const keep = (chunk: Buffer) => {
-    output = (output + chunk.toString()).slice(-8000);
-  };
   child = spawn(executable('storybook'), ['dev', '--ci', '--host', '127.0.0.1', '--port', String(port)], {
     cwd: app,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1' },
   });
-  child.stdout!.on('data', keep);
-  child.stderr!.on('data', keep);
+  const custody = (storybookCustody = ownNodeProcess(child, { label: 'Page stories Storybook' }));
   const origin = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 150_000;
   for (;;) {
-    if (child.exitCode !== null) throw new Error(`Storybook exited with ${child.exitCode}:\n${output}`);
+    if (child.exitCode !== null)
+      throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
     try {
       if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(10_000) })).ok) return origin;
     } catch {}
-    if (Date.now() > deadline) throw new Error(`Storybook did not serve its index in time:\n${output}`);
+    if (Date.now() > deadline)
+      throw new Error(`Storybook did not serve its index in time:\n${custody.diagnostics()}`);
     await Bun.sleep(500);
   }
 }
@@ -247,12 +280,29 @@ function dependencies(file: string, seen = new Set<string>()): Set<string> {
 }
 
 afterAll(async () => {
-  await browser?.close();
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
-  rmSync(temporary, { recursive: true, force: true });
+  await cleanupAll([
+    { label: 'Page stories browser', run: () => browser?.close(), timeoutMs: 5000 },
+    {
+      label: 'Page stories Storybook group and fixtures',
+      timeoutMs: 8000,
+      run: async () => {
+        let custodyError: unknown;
+        try {
+          await storybookCustody?.close();
+        } catch (error) {
+          custodyError = error;
+        }
+        if (storybookCustody && !storybookCustody.settled) {
+          throw new AggregateError(
+            [custodyError, new Error(`Preserved unsafe temporary fixture directory: ${temporary}`)],
+            'Page stories process group did not settle; temporary fixtures were preserved',
+          );
+        }
+        rmSync(temporary, { recursive: true, force: true });
+        if (custodyError) throw custodyError;
+      },
+    },
+  ]);
 });
 
 test(

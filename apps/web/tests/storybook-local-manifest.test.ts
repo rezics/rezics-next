@@ -1,8 +1,9 @@
-import { expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
+import { afterAll, expect, test } from 'bun:test';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 type Entry = { id: string; name: string; type: string; title: string; tags: string[]; importPath: string };
@@ -21,6 +22,24 @@ type Reply = {
     content?: { type: string; text?: string }[];
   };
 };
+const activeCustodies = new Set<ProcessCustody>();
+const activeLogClosers = new Set<() => void>();
+
+afterAll(async () => {
+  await cleanupAll(
+    [
+      ...[...activeCustodies].map((custody) => ({
+        label: `Storybook manifest group ${custody.pid ?? 'without pid'}`,
+        run: () => custody.close(),
+        timeoutMs: 7000,
+      })),
+      ...[...activeLogClosers].map((closeLog) => ({
+        label: 'Storybook manifest log descriptor',
+        run: closeLog,
+      })),
+    ],
+  );
+});
 
 async function unusedPort() {
   const socket = createServer();
@@ -51,36 +70,44 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
     const origin = `http://127.0.0.1:${port}`;
     const logPath = resolve(directory, 'server.log');
     const log = openSync(logPath, 'w');
-    const child = spawn(
-      'bun',
-      ['run', '--cwd', workspace, 'storybook', '--host', '127.0.0.1', '--port', String(port), '--exact-port', '--ci'],
-      {
-        cwd: root,
-        // Web retains its UI ref, pointed at this attempt's UI endpoint (stopped between catalogues).
-        env: {
-          ...process.env,
-          CACHE_DIR: resolve(directory, 'cache'),
-          STORYBOOK_UI_URL: `http://127.0.0.1:${uiPort}`,
-        },
-        detached: true,
-        stdio: ['ignore', log, log],
-      },
-    );
-    closeSync(log);
     let terminal: string | undefined;
-    const exited = new Promise<void>((done) => {
+    const stages: string[] = [];
+    let child: ChildProcess | undefined;
+    let custody: ProcessCustody | undefined;
+    let logOpen = true;
+    const closeLog = () => {
+      if (!logOpen) return;
+      closeSync(log);
+      logOpen = false;
+      activeLogClosers.delete(closeLog);
+    };
+    activeLogClosers.add(closeLog);
+    await withCleanup(async () => {
+      child = spawn(
+        'bun',
+        ['run', '--cwd', workspace, 'storybook', '--host', '127.0.0.1', '--port', String(port), '--exact-port', '--ci'],
+        {
+          cwd: root,
+          // Web retains its UI ref, pointed at this attempt's UI endpoint (stopped between catalogues).
+          env: {
+            ...process.env,
+            CACHE_DIR: resolve(directory, 'cache'),
+            STORYBOOK_UI_URL: `http://127.0.0.1:${uiPort}`,
+          },
+          detached: true,
+          stdio: ['ignore', log, log],
+        },
+      );
+      custody = ownNodeProcess(child, { label: `Storybook manifest ${workspace}` });
+      activeCustodies.add(custody);
       child.once('error', (error) => {
         terminal = error.message;
-        done();
       });
       child.once('exit', (code, signal) => {
         terminal = `exit=${code}, signal=${signal}`;
-        done();
       });
-    });
-    writeFileSync(resolve(directory, 'ownership.json'), JSON.stringify({ pid: child.pid, workspace, root, origin }));
-    const stages: string[] = [];
-    try {
+      closeLog();
+      writeFileSync(resolve(directory, 'ownership.json'), JSON.stringify({ pid: child.pid, workspace, root, origin }));
       const startupDeadline = Date.now() + 120_000;
       while (
         !/Storybook[^\n]*started|Local:\s*http/.test(readFileSync(logPath, 'utf8').replace(/\x1b\[[0-9;]*m/g, ''))
@@ -195,10 +222,27 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
       expect(snippet?.length).toBeGreaterThan(0);
       expect(story).toContain(snippet!);
       stages.push('local MCP component and story selected');
-    } finally {
-      if (!terminal && child.pid) process.kill(-child.pid, 'SIGTERM');
-      await exited;
-      writeFileSync(resolve(directory, 'terminal.json'), JSON.stringify({ stages, terminal }));
-    }
+    }, [
+      {
+        label: `Storybook manifest ${workspace} process group and terminal receipt`,
+        timeoutMs: 8000,
+        run: async () => {
+          let custodyError: unknown;
+          try {
+            await custody?.close();
+          } catch (error) {
+            custodyError = error;
+          }
+          try {
+            writeFileSync(resolve(directory, 'terminal.json'), JSON.stringify({ stages, terminal }));
+          } catch (error) {
+            if (custodyError) throw new AggregateError([custodyError, error], 'Storybook cleanup and receipt failed');
+            throw error;
+          }
+          if (custodyError) throw custodyError;
+        },
+      },
+      { label: `Storybook manifest ${workspace} log descriptor`, run: closeLog },
+    ]);
   }
 }, 600_000);

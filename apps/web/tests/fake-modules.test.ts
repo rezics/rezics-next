@@ -1,17 +1,56 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, type Browser } from 'playwright';
+import { cleanupAll, ownBunProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const root = join(app, '../..');
 const timeout = 300_000;
+const activeDirectories = new Map<string, ProcessCustody | undefined>();
+const activeBrowsers = new Set<Browser>();
+
+afterAll(async () => {
+  await cleanupAll([
+    ...[...activeDirectories.keys()].map((directory) => ({
+      label: `Fake-module fixture ${directory}`,
+      timeoutMs: 8000,
+      run: async () => {
+        const custody = activeDirectories.get(directory);
+        let closeError: unknown;
+        try {
+          await custody?.close();
+        } catch (error) {
+          closeError = error;
+        }
+        if (custody && !custody.settled)
+          throw new AggregateError(
+            [closeError, new Error(`Preserved unsafe fake-module fixture: ${directory}`)],
+            'Fake-module fixture process group did not settle; fixture was preserved',
+          );
+        rmSync(directory, { recursive: true, force: true });
+        activeDirectories.delete(directory);
+        if (closeError) throw closeError;
+      },
+    })),
+    ...[...activeBrowsers].map((browser) => ({
+      label: 'Fake-module browser',
+      timeoutMs: 5000,
+      run: async () => {
+        await browser.close();
+        activeBrowsers.delete(browser);
+      },
+    })),
+  ]);
+});
 
 // Exercise fresh discovery in a new process, without adding temporary files to the real source tree.
 function sandbox() {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(root, '.temp/fake-modules-'));
+  activeDirectories.set(directory, undefined);
+  try {
   cpSync(join(app, 'src/kernel'), join(directory, 'src/kernel'), { recursive: true });
   symlinkSync(join(app, 'node_modules'), join(directory, 'node_modules'), 'dir');
   const kernel = join(directory, 'src/kernel');
@@ -73,6 +112,15 @@ function sandbox() {
   );
   writeFileSync(join(directory, 'exercise.ts'), exercise);
   return directory;
+  } catch (primary) {
+    try {
+      rmSync(directory, { recursive: true, force: true });
+      activeDirectories.delete(directory);
+    } catch (cleanup) {
+      throw new AggregateError([primary, cleanup], 'Fake-module sandbox setup and cleanup failed', { cause: primary });
+    }
+    throw primary;
+  }
 }
 
 const exercise = `
@@ -152,22 +200,53 @@ test(
   'new route, recording and fixture files are discovered under Bun without shared edits',
   async () => {
     const directory = sandbox();
-    try {
+    let stdout = '';
+    let stderr = '';
+    let custody: ReturnType<typeof ownBunProcess> | undefined;
+    await withCleanup(async () => {
       writeFileSync(
         join(directory, 'run.ts'),
         `import { exercise } from './exercise.ts'; console.log(JSON.stringify(await exercise()));`,
       );
-      const child = Bun.spawn(['bun', join(directory, 'run.ts')], { cwd: directory, stdout: 'pipe', stderr: 'pipe' });
-      const [code, stdout, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
+      const child = Bun.spawn(['bun', join(directory, 'run.ts')], {
+        cwd: directory,
+        detached: true,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      custody = ownBunProcess(child, {
+        label: 'Fake-module fixture program',
+        onOutput: (chunk, stream) => {
+          if (stream === 'stdout') stdout += Buffer.from(chunk).toString();
+          else stderr += Buffer.from(chunk).toString();
+        },
+      });
+      activeDirectories.set(directory, custody);
+      const code = await child.exited;
+      await custody.outputSettled;
       expect(code, stderr).toBe(0);
       verify(JSON.parse(stdout));
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
+    }, [
+      {
+        label: 'Fake-module fixture group and sandbox',
+        run: async () => {
+          let closeError: unknown;
+          try {
+            await custody?.close();
+          } catch (error) {
+            closeError = error;
+          }
+          if (custody && !custody.settled)
+            throw new AggregateError(
+              [closeError, new Error(`Preserved unsafe fake-module sandbox: ${directory}`)],
+              'Fake-module fixture group did not settle; sandbox was preserved',
+            );
+          rmSync(directory, { recursive: true, force: true });
+          activeDirectories.delete(directory);
+          if (closeError) throw closeError;
+        },
+      },
+    ]);
   },
   timeout,
 );
@@ -185,27 +264,29 @@ test(
   'Storybook discovers the same new files through Vite in the browser',
   async () => {
     const directory = sandbox();
-    const port = await freePort();
-    mkdirSync(join(directory, '.storybook'));
-    writeFileSync(
-      join(directory, '.storybook/main.ts'),
-      `export default { framework: { name: '@storybook/react-vite', options: {} }, stories: ['../extension.stories.tsx'],
+    let custody: ReturnType<typeof ownBunProcess> | undefined;
+    let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+    await withCleanup(async () => {
+      const port = await freePort();
+      mkdirSync(join(directory, '.storybook'));
+      writeFileSync(
+        join(directory, '.storybook/main.ts'),
+        `export default { framework: { name: '@storybook/react-vite', options: {} }, stories: ['../extension.stories.tsx'],
       core: { disableTelemetry: true }, viteFinal: config => ({ ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))} }) };`,
-    );
-    writeFileSync(
-      join(directory, 'extension.stories.tsx'),
-      `import React from 'react'; import { exercise } from './exercise.ts';
+      );
+      writeFileSync(
+        join(directory, 'extension.stories.tsx'),
+        `import React from 'react'; import { exercise } from './exercise.ts';
      export default { title: 'Extensions' };
      export const AddedFiles = { loaders: [async () => ({ result: await exercise() })],
        render: (_, { loaded }) => <pre data-result>{JSON.stringify(loaded.result)}</pre> };`,
-    );
-    const child = Bun.spawn(
-      ['bun', join(app, 'node_modules/.bin/storybook'), 'dev', '--ci', '--disable-telemetry', '--port', String(port)],
-      { cwd: directory, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, BROWSER: 'none' } },
-    );
-    const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
-    let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
-    try {
+      );
+      const child = Bun.spawn(
+        ['bun', join(app, 'node_modules/.bin/storybook'), 'dev', '--ci', '--disable-telemetry', '--port', String(port)],
+        { cwd: directory, detached: true, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, BROWSER: 'none' } },
+      );
+      const serverCustody = (custody = ownBunProcess(child, { label: 'Fake-module Storybook' }));
+      activeDirectories.set(directory, serverCustody);
       const origin = `http://127.0.0.1:${port}`;
       const deadline = Date.now() + 180_000;
       while (true) {
@@ -213,12 +294,12 @@ test(
           if ((await fetch(`${origin}/index.json`)).ok) break;
         } catch {}
         if (child.exitCode !== null || Date.now() > deadline) {
-          if (child.exitCode === null) child.kill();
-          throw new Error(`Storybook did not start: ${(await output).join('\n')}`);
+          throw new Error(`Storybook did not start: ${serverCustody.diagnostics()}`);
         }
         await Bun.sleep(100);
       }
       browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
+      activeBrowsers.add(browser);
       const page = await browser.newPage();
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
@@ -226,13 +307,36 @@ test(
       await page.locator('[data-result]').waitFor({ timeout: 120_000 });
       verify(JSON.parse((await page.locator('[data-result]').textContent())!));
       expect(errors).toEqual([]);
-    } finally {
-      await browser?.close();
-      child.kill();
-      await child.exited;
-      await output;
-      rmSync(directory, { recursive: true, force: true });
-    }
+    }, [
+      {
+        label: 'Fake-module browser',
+        run: async () => {
+          if (!browser) return;
+          await browser.close();
+          activeBrowsers.delete(browser);
+        },
+        timeoutMs: 5000,
+      },
+      {
+        label: 'Fake-module Storybook group and sandbox',
+        run: async () => {
+          let closeError: unknown;
+          try {
+            await custody?.close();
+          } catch (error) {
+            closeError = error;
+          }
+          if (custody && !custody.settled)
+            throw new AggregateError(
+              [closeError, new Error(`Preserved unsafe Storybook sandbox: ${directory}`)],
+              'Fake-module Storybook group did not settle; sandbox was preserved',
+            );
+          rmSync(directory, { recursive: true, force: true });
+          activeDirectories.delete(directory);
+          if (closeError) throw closeError;
+        },
+      },
+    ]);
   },
   timeout,
 );

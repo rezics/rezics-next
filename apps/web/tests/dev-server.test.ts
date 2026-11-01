@@ -1,9 +1,48 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { startDevServer, type DevServerOptions } from './support/dev-server.ts';
 
 const root = join(import.meta.dir, '../../..');
 const budgets = { ready: 10_000, firstResponse: 10_000, warmUp: 30_000 };
+const fixturePidFiles: string[] = [];
+let fixtureNumber = 0;
+
+function fixtureGroupExists(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ESRCH') return false;
+    if (code === 'EPERM') return true;
+    throw error;
+  }
+}
+
+afterAll(async () => {
+  const failures: unknown[] = [];
+  for (const file of fixturePidFiles) {
+    if (!existsSync(file)) continue;
+    try {
+      const { pid } = JSON.parse(readFileSync(file, 'utf8')) as { pid: number };
+      if (fixtureGroupExists(pid)) {
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
+      }
+      const deadline = Date.now() + 2500;
+      while (fixtureGroupExists(pid) && Date.now() < deadline) await Bun.sleep(10);
+      if (fixtureGroupExists(pid)) throw new Error(`Independent dev-server fixture cleanup could not remove group ${pid}`);
+      rmSync(file, { force: true });
+    } catch (error) {
+      failures.push(new Error(`Independent dev-server fixture cleanup failed; evidence: ${file}`, { cause: error }));
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, 'Independent dev-server fixture cleanup failed');
+});
 
 function fake(
   options: {
@@ -15,16 +54,22 @@ function fake(
     hang?: boolean;
   } = {},
 ): DevServerOptions {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const pidFile = join(root, '.temp', `dev-server-custody-${process.pid}-${++fixtureNumber}.json`);
+  fixturePidFiles.push(pidFile);
   return {
     budgets,
     pollIntervalMs: 20,
     warmUpPaths: [],
+    env: { CUSTODY_FIXTURE_PID_FILE: pidFile },
     command: ({ port }) => [
       process.execPath,
       '-e',
       `
       const child = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)']);
       process.on('SIGTERM', async () => { child.kill(); await child.exited; process.exit(0); });
+      require('node:fs').writeFileSync(process.env.CUSTODY_FIXTURE_PID_FILE,
+        JSON.stringify({ pid: process.pid, child: child.pid }));
       const server = Bun.serve({ hostname: '127.0.0.1', port: ${port}, fetch(request) {
         if (${!!options.hang}) return new Promise(() => {});
         if (new URL(request.url).pathname === '/pids') return Response.json([process.pid, child.pid]);

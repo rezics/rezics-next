@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { basename, join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { cleanupAll, ownNodeProcess, type ProcessCustody } from './support/server-custody.ts';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { requestLanguages } from '../src/kernel/languages';
 import searchRecording from '../src/kernel/recorded/search.json' with { type: 'json' };
@@ -11,6 +12,7 @@ const app = join(import.meta.dir, '..');
 const timeout = 900_000;
 const executable = (name: string) => join(app, 'node_modules/.bin', name);
 let child: ChildProcess | undefined;
+let storybookCustody: ProcessCustody | undefined;
 let browser: Browser | undefined;
 let serverPromise: Promise<string> | undefined;
 const browserErrors = new WeakMap<Page, string[]>();
@@ -29,36 +31,32 @@ function freePort(): Promise<number> {
 
 async function storybook(): Promise<string> {
   const port = await freePort();
-  let output = '';
-  const keep = (chunk: Buffer) => {
-    output = (output + chunk.toString()).slice(-8000);
-  };
   child = spawn(executable('storybook'), ['dev', '--ci', '--host', '127.0.0.1', '--port', String(port)], {
     cwd: app,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1' },
   });
-  child.stdout!.on('data', keep);
-  child.stderr!.on('data', keep);
+  const custody = (storybookCustody = ownNodeProcess(child, { label: 'Search identity Storybook' }));
   const origin = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 150_000;
   for (;;) {
-    if (child.exitCode !== null) throw new Error(`Storybook exited with ${child.exitCode}:\n${output}`);
+    if (child.exitCode !== null)
+      throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
     try {
       if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(10_000) })).ok) return origin;
     } catch {}
-    if (Date.now() > deadline) throw new Error(`Storybook did not serve its index in time:\n${output}`);
+    if (Date.now() > deadline)
+      throw new Error(`Storybook did not serve its index in time:\n${custody.diagnostics()}`);
     await Bun.sleep(500);
   }
 }
 
 afterAll(async () => {
-  await browser?.close();
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await cleanupAll([
+    { label: 'Search identity browser', run: () => browser?.close(), timeoutMs: 5000 },
+    { label: 'Search identity Storybook group', run: () => storybookCustody?.close(), timeoutMs: 7000 },
+  ]);
 });
 
 async function openStory(visitor: 'Signed In' | 'Signed Out', locale: string): Promise<Page> {

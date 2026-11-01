@@ -1,6 +1,7 @@
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
+import { cleanupAll, ownBunProcess, withCleanup } from './server-custody.ts';
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
 const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
@@ -55,14 +56,31 @@ export async function startDevServer(
   const budgets = { ...phaseBudgets, ...options.budgets };
   const firstPath = options.firstPath ?? '/en';
   let readyAt: number | undefined;
-  let output = '';
   let phase: Phase = 'ready';
   let path = firstPath;
   let phaseStart = spawnedAt;
   let lastError: unknown = new Error('Vite ready line has not been printed');
   let browser: Browser | undefined;
   let stopped: Promise<void> | undefined;
+  let abortCleanupError: unknown;
+  let output = '';
+  let ready!: () => void;
+  const readiness = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  const keep = (chunk: Uint8Array) => {
+    const combined = output + Buffer.from(chunk).toString();
+    output = combined.slice(-8000);
+    if (
+      readyAt === undefined &&
+      /\bVITE\s+v\S+\s+ready in\s+[\d.]+\s*(?:ms|s)\b/i.test(combined.replace(/\x1b\[[0-9;]*m/g, ''))
+    ) {
+      readyAt = now();
+      ready();
+    }
+  };
   let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>;
+  let custody: ReturnType<typeof ownBunProcess>;
   try {
     const childEnvironment: NodeJS.ProcessEnv = {
       ...process.env,
@@ -79,35 +97,15 @@ export async function startDevServer(
       stdout: 'pipe',
       stderr: 'pipe',
     });
+    custody = ownBunProcess(child, {
+      label: 'Vite dev server',
+      onOutput: keep,
+    });
   } catch (error) {
     throw new Error(
       `dev server ready failed for ${path}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
     );
   }
-  let ready!: () => void;
-  const readiness = new Promise<void>((resolve) => {
-    ready = resolve;
-  });
-  const keep = (chunk: Uint8Array) => {
-    const combined = output + Buffer.from(chunk).toString();
-    output = combined.slice(-8000);
-    if (
-      readyAt === undefined &&
-      /\bVITE\s+v\S+\s+ready in\s+[\d.]+\s*(?:ms|s)\b/i.test(combined.replace(/\x1b\[[0-9;]*m/g, ''))
-    ) {
-      readyAt = now();
-      ready();
-    }
-  };
-  async function capture(stream: ReadableStream<Uint8Array>) {
-    try {
-      for await (const chunk of stream) keep(chunk);
-    } catch (error) {
-      keep(Buffer.from(`\nOutput capture error: ${String(error)}\n`));
-    }
-  }
-  const captured = Promise.all([capture(child.stdout), capture(child.stderr)]);
-  // Native Bun process completion does not wait for inherited output pipes to close.
   const exited = child.exited.then((code) => new Error(`dev server exited with ${code}`));
   const exitFailure = exited.then((error) => {
     throw error;
@@ -115,43 +113,19 @@ export async function startDevServer(
   // The server can exit between phases, when no race is attached yet.
   void exitFailure.catch(() => {});
 
-  const signalGroup = (signal: NodeJS.Signals) => {
-    if (!child.pid) return;
-    try {
-      process.kill(-child.pid, signal);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-    }
-  };
+  let abortServer: () => void;
   const stop = () =>
     (stopped ??= (async () => {
       options.signal?.removeEventListener('abort', abortServer);
-      let browserError: unknown;
-      try {
-        await browser?.close();
-      } catch (error) {
-        browserError = error;
-      }
-      signalGroup('SIGTERM');
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          exited,
-          new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, 2000);
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-        // A leader may exit while a descendant still owns a listener or ignores SIGTERM.
-        signalGroup('SIGKILL');
-        await exited;
-        await captured;
-      }
-      if (browserError) throw browserError;
+      await cleanupAll([
+        { label: 'dev-server browser', run: () => browser?.close(), timeoutMs: 5000 },
+        { label: 'dev-server process group', run: () => custody.close(), timeoutMs: 7000 },
+      ]);
     })());
-  const abortServer = () => {
-    void stop().catch(() => {});
+  abortServer = () => {
+    void stop().catch((error) => {
+      abortCleanupError = error;
+    });
   };
 
   const record = (started: number) => {
@@ -234,7 +208,7 @@ export async function startDevServer(
           ...options.contextOptions,
           javaScriptEnabled: options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true,
         });
-        try {
+        await withCleanup(async () => {
           const page = await context.newPage();
           for (const warmUpPath of options.warmUpPaths) {
             path = warmUpPath;
@@ -249,26 +223,27 @@ export async function startDevServer(
             }
             record(began);
           }
-        } finally {
-          await context.close();
-        }
+        }, [{ label: 'dev-server warm-up context', run: () => context.close(), timeoutMs: 5000 }]);
       });
-      await browser?.close();
+      await cleanupAll([{ label: 'dev-server warm-up browser', run: () => browser?.close(), timeoutMs: 5000 }]);
       browser = undefined;
     }
     if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
     options.signal?.addEventListener('abort', abortServer, { once: true });
-    return { origin, stop, diagnostics: () => output };
+    return {
+      origin,
+      stop,
+      diagnostics: () => (abortCleanupError ? `${output}\nCleanup error: ${String(abortCleanupError)}` : output),
+    };
   } catch (error) {
     const elapsed = now() - phaseStart;
-    let cleanup = '';
-    try {
-      await stop();
-    } catch (cleanupError) {
-      cleanup = `\nCleanup error: ${String(cleanupError)}`;
-    }
-    throw new Error(
-      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${output}${cleanup}`,
+    const primary = new Error(
+      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
+      { cause: error },
     );
+    await withCleanup(async () => {
+      throw primary;
+    }, [{ label: 'dev-server startup cleanup', run: stop, timeoutMs: 8000 }]);
+    throw primary;
   }
 }

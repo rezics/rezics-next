@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { basename, join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { cleanupAll, ownNodeProcess, type ProcessCustody } from './support/server-custody.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CoverCard } from '@rezics/ui/cover-card';
@@ -16,6 +17,7 @@ const { typeFrame } = await import('../src/subject/definitions.ts');
 
 const timeout = 900_000;
 let storybookChild: ChildProcess | undefined;
+let storybookCustody: ProcessCustody | undefined;
 let browser: Browser | undefined;
 let storybookPromise: Promise<{ origin: string; entries: Record<string, StoryEntry> }> | undefined;
 
@@ -35,10 +37,6 @@ function freePort(): Promise<number> {
 async function stories(): Promise<{ origin: string; entries: Record<string, StoryEntry> }> {
   storybookPromise ??= (async () => {
     const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
     const executable = join(app, 'node_modules/.bin/storybook');
     storybookChild = spawn(executable, ['dev', '--ci', '--host', '127.0.0.1', '--port', String(port)], {
       cwd: app,
@@ -46,13 +44,12 @@ async function stories(): Promise<{ origin: string; entries: Record<string, Stor
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1' },
     });
-    storybookChild.stdout!.on('data', keep);
-    storybookChild.stderr!.on('data', keep);
+    const custody = (storybookCustody = ownNodeProcess(storybookChild, { label: 'Cover tile Storybook' }));
     const origin = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + 150_000;
     for (;;) {
       if (storybookChild.exitCode !== null)
-        throw new Error(`Storybook exited with ${storybookChild.exitCode}:\n${output}`);
+        throw new Error(`Storybook exited with ${storybookChild.exitCode}:\n${custody.diagnostics()}`);
       try {
         const response = await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(10_000) });
         if (response.ok) {
@@ -60,7 +57,8 @@ async function stories(): Promise<{ origin: string; entries: Record<string, Stor
           return { origin, entries: index.entries };
         }
       } catch {}
-      if (Date.now() > deadline) throw new Error(`Storybook did not serve its index in time:\n${output}`);
+      if (Date.now() > deadline)
+        throw new Error(`Storybook did not serve its index in time:\n${custody.diagnostics()}`);
       await Bun.sleep(500);
     }
   })();
@@ -99,11 +97,10 @@ async function openStory(file: string, name: string, locale: string, width: numb
 }
 
 afterAll(async () => {
-  await browser?.close();
-  if (storybookChild?.pid)
-    try {
-      process.kill(-storybookChild.pid, 'SIGTERM');
-    } catch {}
+  await cleanupAll([
+    { label: 'Cover tile browser', run: () => browser?.close(), timeoutMs: 5000 },
+    { label: 'Cover tile Storybook group', run: () => storybookCustody?.close(), timeoutMs: 7000 },
+  ]);
 });
 
 const cover = {
