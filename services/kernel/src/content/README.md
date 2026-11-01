@@ -507,7 +507,7 @@ this change adds no deletion path.
 
 ### Cost
 
-### Selected report pages
+#### Selected report pages
 
 - Touches: one board-candidate or exact-target index range of at most `limit + 1` raw references; at most
   `limit` current native report inspections, target disclosure and exact board-placement checks, plus the
@@ -517,7 +517,6 @@ this change adds no deletion path.
   advance the last examined position. No refill, total, private allow-bit index or whole-queue scan.
 - Growth check: deferred to controller integration; existing report growth regressions remain applicable and
   selected current-status/sparse-cursor HTTP regressions are authored but unrun in this source delivery.
-
 
 #### Subject reaction merge page
 
