@@ -1,5 +1,12 @@
 export type LibraryEntryStateWrite = string;
 
+// The native shelf's public-Type grammar. Bound URL input before testing the opaque value.
+export function libraryShelfType(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length <= 2048 && /^[a-z][a-z0-9_]*:[\x21-\x7e]+$(?![\s\S])/.test(value)
+    ? value
+    : undefined;
+}
+
 const entryStateId = /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/;
 
 export function libraryEntryStateWrite(value: string | undefined): LibraryEntryStateWrite | undefined {
@@ -45,6 +52,7 @@ const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 /** What the shelf's address says. A value that is not one of the documented ones is absent. */
 export type ShelfSearch = {
+  type?: string;
   state?: LibraryEntryStateWrite;
   orderBy?: ShelfSort['orderBy'];
   direction?: ShelfSort['direction'];
@@ -68,7 +76,9 @@ export function validateShelfSearch(search: Record<string, unknown>): ShelfSearc
   const columns = shelfColumns(search.columns);
   const cursor = typeof search.cursor === 'string' && search.cursor ? search.cursor : undefined;
   const label = typeof search.label === 'string' && routeId.test(search.label) ? search.label : undefined;
+  const type = !label ? libraryShelfType(search.type) : undefined;
   return {
+    ...(type ? { type } : {}),
     ...(state ? { state } : {}),
     ...(!label && orderBy ? { orderBy } : {}),
     ...(!label && direction ? { direction } : {}),
@@ -90,6 +100,7 @@ export function shelfDisplay(search: ShelfSearch): ShelfDisplay {
 export function shelfHref(
   locale: string,
   view: {
+    type?: string;
     label?: string;
     state?: LibraryEntryStateWrite | null;
     orderBy?: ShelfSort['orderBy'];
@@ -101,6 +112,8 @@ export function shelfHref(
   },
 ): string {
   const params = new URLSearchParams();
+  const type = !view.label ? libraryShelfType(view.type) : undefined;
+  if (type) params.set('type', type);
   if (view.label) params.set('label', view.label);
   if (view.state) params.set('state', view.state);
   if (!view.label && view.orderBy) params.set('orderBy', view.orderBy);

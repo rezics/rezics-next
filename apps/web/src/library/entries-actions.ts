@@ -4,7 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import type { Locale } from '../paraglide/runtime.js';
 import { kernelClient, requestLocale } from '../kernel/client';
-import { nameSubjectTypes, readRelease } from '../subject/definitions';
+import { nameSubjectTypes, readRelease, typeNames } from '../subject/definitions';
 import { m } from '../paraglide/messages.js';
 import type { SessionEnv } from '../session/client';
 import {
@@ -72,10 +72,11 @@ async function nameRestoreResult(result: LibraryRestoreResult): Promise<LibraryR
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function validateRead(input: unknown): Pick<ShelfSearch, 'state' | 'cursor' | 'orderBy' | 'direction'> {
+function validateRead(input: unknown): Pick<ShelfSearch, 'type' | 'state' | 'cursor' | 'orderBy' | 'direction'> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-  const { state, cursor, orderBy, direction } = validateShelfSearch(input as Record<string, unknown>);
+  const { type, state, cursor, orderBy, direction } = validateShelfSearch(input as Record<string, unknown>);
   return {
+    ...(type ? { type } : {}),
     ...(state ? { state } : {}),
     ...(cursor ? { cursor } : {}),
     ...(orderBy ? { orderBy } : {}),
@@ -128,8 +129,13 @@ export const readPersonalLibrary = createServerFn({ method: 'GET' })
   .validator(validateRead)
   .handler(async ({ data }): Promise<PersonalLibraryView> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const view = await loadPersonalLibrary(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
-    if (!view.signedIn || view.readState) return view;
+    let view = await loadPersonalLibrary(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    if (!view.signedIn) return view;
+    if (view.type) {
+      const label = (await typeNames([view.type], requestLocale() ?? 'en')).get(view.type);
+      if (label) view = { ...view, typeLabel: label };
+    }
+    if (view.readState) return view;
     await nameSubjectTypes(view.entries.map((entry) => entry.subject));
     const release = await readRelease().catch(() => undefined);
     return presentLibraryStateLabels(view, release, requestLocale() ?? 'en');

@@ -1,4 +1,10 @@
-import { libraryEntryStateWrite, shelfSort, type LibraryEntryStateWrite, type ShelfSort } from './shelf-params';
+import {
+  libraryEntryStateWrite,
+  libraryShelfType,
+  shelfSort,
+  type LibraryEntryStateWrite,
+  type ShelfSort,
+} from './shelf-params';
 export { libraryEntryStateWrite, type LibraryEntryStateWrite } from './shelf-params';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
@@ -46,6 +52,8 @@ export type PersonalLibraryView =
   | { signedIn: false }
   | {
       signedIn: true;
+      type?: string;
+      typeLabel?: string;
       state?: LibraryEntryStateWrite;
       stateLabel?: string;
       sort?: ShelfSort;
@@ -162,9 +170,10 @@ export async function readEntryPage(
   state: LibraryEntryStateWrite | undefined,
   limit?: number,
   sort?: ShelfSort,
+  type?: string,
 ) {
   const result = await client.libraryEntries.get({
-    query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort },
+    query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort, ...(type ? { type } : {}) },
     headers: { authorization },
   });
   if (sort) {
@@ -220,12 +229,19 @@ export async function loadPersonalLibrary(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { state?: string; cursor?: string; orderBy?: ShelfSort['orderBy']; direction?: ShelfSort['direction'] },
+  input: {
+    type?: string;
+    state?: string;
+    cursor?: string;
+    orderBy?: ShelfSort['orderBy'];
+    direction?: ShelfSort['direction'];
+  },
 ): Promise<PersonalLibraryView> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   if (!authorization) return { signedIn: false };
   const state = libraryEntryStateWrite(input.state);
+  const type = libraryShelfType(input.type);
   const sort = shelfSort({
     ...(state ? { state } : {}),
     ...(input.orderBy ? { orderBy: input.orderBy } : {}),
@@ -236,11 +252,11 @@ export async function loadPersonalLibrary(
   let page: Awaited<ReturnType<typeof readEntryPage>>;
   try {
     try {
-      page = await readEntryPage(client, authorization, input.cursor, state, undefined, sort);
+      page = await readEntryPage(client, authorization, input.cursor, state, undefined, sort, type);
     } catch (error) {
       if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
       cursorReset = true;
-      page = await readEntryPage(client, authorization, undefined, state, undefined, sort);
+      page = await readEntryPage(client, authorization, undefined, state, undefined, sort, type);
     }
   } catch (error) {
     const readState = isPlatformClosedError(error)
@@ -249,10 +265,20 @@ export async function loadPersonalLibrary(
         ? error.state
         : undefined;
     if (!readState) throw error;
-    return { signedIn: true, ...(state ? { state } : {}), sort, sortExplicit, readState, entries: [], next: null };
+    return {
+      signedIn: true,
+      ...(type ? { type } : {}),
+      ...(state ? { state } : {}),
+      sort,
+      sortExplicit,
+      readState,
+      entries: [],
+      next: null,
+    };
   }
   return {
     signedIn: true,
+    ...(type ? { type } : {}),
     ...(state ? { state } : {}),
     sort,
     sortExplicit,

@@ -15,6 +15,7 @@ import { PatternStory } from './page';
 import recordedDefinitions from '../kernel/recorded/definitions-release.json';
 import { libraryStateOptions } from '../library/profiles';
 import type { Release } from '../subject/definitions';
+import { setLibraryEntriesStoryMode } from '../kernel/fake/library-entries-story';
 
 const meta = {
   decorators: [
@@ -25,6 +26,7 @@ const meta = {
     ),
   ],
   title: 'Patterns/Library/Personal Library',
+  beforeEach: () => setLibraryEntriesStoryMode('recorded'),
   parameters: { layout: 'fullscreen', admitted: ['personal_library', 'reading_progress', 'collections'] },
 } satisfies Meta;
 export default meta;
@@ -129,6 +131,22 @@ export const ContinueUnknown: Story = uncertain({ state: 'unknown' }, () => m.li
 export const ContinueUnavailable: Story = uncertain({ state: 'unavailable', status: 503 }, () =>
   m.library_continue_unavailable(),
 );
+
+export const TypePickerSecondPage: Story = {
+  name: 'Type chooser, another bounded page',
+  ...example({ state: 'loaded', entries: [], next: null }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const action = await canvas.findByRole('button', { name: m.library_type_action({ type: m.library_types_all() }) });
+    await waitFor(() => expect(action).toBeEnabled());
+    await userEvent.click(action);
+    const dialog = within(await within(document.body).findByRole('dialog', { name: m.library_types_heading() }));
+    await userEvent.click(await dialog.findByRole('button', { name: m.library_types_next() }));
+    await expect(await dialog.findByRole('button', { name: m.library_types_first() })).toBeVisible();
+    await expect(dialog.queryByRole('button', { name: m.library_types_next() })).toBeNull();
+    await expect(dialog.getByRole('link', { name: m.library_types_all() })).toBeVisible();
+  },
+};
 
 function ChronologicalPage({ page }: { page: PersonalLibraryView }) {
   const location = useLocation();

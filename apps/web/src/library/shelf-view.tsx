@@ -99,6 +99,7 @@ type Controls = ReturnType<typeof useShelfRows> & {
   hydrated: boolean;
   sort?: ShelfSort;
   filterSort?: ShelfSort;
+  type?: string;
   layout: ShelfLayout;
   size: ShelfSize;
   columns?: string;
@@ -112,6 +113,7 @@ function stateHref(state: LibraryEntryStateRead, locale: string, controls: Contr
   const writable = libraryEntryStateWrite(state);
   return writable
     ? shelfHref(locale, {
+        ...(controls.type ? { type: controls.type } : {}),
         state: writable,
         ...controls.filterSort,
         layout: controls.layout,
@@ -519,6 +521,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
             const { state: _state, cursor: _cursor, columns: _columns, ...rest } = previous;
             return {
               ...rest,
+              ...(controls.type ? { type: controls.type } : {}),
               ...(state ? { state } : {}),
               orderBy,
               direction,
@@ -533,6 +536,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
   );
 }
 type ShelfEntriesProps = {
+  type?: string;
   entries: PersonalLibraryEntry[];
   locale: string;
   layout: ShelfLayout;
@@ -551,7 +555,7 @@ export function ShelfEntries(props: ShelfEntriesProps) {
   // selection on these same rows; actor, source URL and replacement loader rows still reset the page.
   const sourceUrl = new URL(location.href, 'https://shelf.invalid');
   sourceUrl.searchParams.delete('columns');
-  const context = `${session.subject ?? session.state}:${props.locale}:${sourceUrl.href}:${props.state ?? ''}`;
+  const context = `${session.subject ?? session.state}:${props.locale}:${sourceUrl.href}:${props.type ?? ''}:${props.state ?? ''}`;
   const [source, setSource] = useState({ entries: props.entries, context, generation: 0 });
   const [mutationLease] = useState(shelfMutationLease);
   if (source.entries !== props.entries || source.context !== context) {
@@ -567,6 +571,7 @@ function ShelfEntriesPage({
   size,
   sort,
   filterSort,
+  type,
   columns,
   cursor,
   state,
@@ -581,6 +586,7 @@ function ShelfEntriesPage({
     layout,
     size,
     ...(columns ? { columns } : {}),
+    ...(type ? { type } : {}),
     ...(sort ? { sort } : {}),
     ...(filterSort ? { filterSort } : {}),
   };
@@ -628,6 +634,7 @@ function ShelfEntriesPage({
                 size,
                 ...sort,
                 ...(columns ? { columns } : {}),
+                ...(type ? { type } : {}),
                 ...(state ? { state } : {}),
                 ...(cursor ? { cursor } : {}),
               })}

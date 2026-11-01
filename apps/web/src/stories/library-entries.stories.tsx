@@ -6,7 +6,10 @@ import { getLocale } from '../paraglide/runtime.js';
 import { displayLibraryTitle } from '../library/title';
 import { PageStory, exposureStory, libraryEntriesReady, pageReady, pagePaths } from './page';
 import entries from '../kernel/recorded/library-entries.json';
-import { setLibraryEntriesStoryMode } from '../kernel/fake/library-entries-story';
+import { setLibraryEntriesStoryMode, setLibraryTypesStoryState } from '../kernel/fake/library-entries-story';
+import { pickText } from '@rezics/composition';
+import { displayTypeLabel } from '../subject/definitions';
+import definitions from '../kernel/recorded/definitions-release.json';
 import { setContinueStorySize } from '../kernel/fake/library-continue';
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 
@@ -181,5 +184,67 @@ export const SelectedLabelChoice: Story = {
     await userEvent.click(await dialog.findByRole('checkbox', { name: 'Reading list' }));
     await expect(dialog.getByRole('button', { name: m.library_selected_labels_apply() })).toBeEnabled();
     await expect(dialog.getByText(m.library_selected_labels_description())).toBeVisible();
+  },
+};
+
+function movieLabel() {
+  return displayTypeLabel(pickText(definitions.release.types['schema:Movie'].labels, getLocale()).text, getLocale());
+}
+
+export const TypeSelected: Story = {
+  name: 'Owner, Type selected',
+  beforeEach: () => setLibraryEntriesStoryMode('type-filter'),
+  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?layout=list&size=l`} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const action = await canvas.findByRole('button', { name: m.library_type_action({ type: m.library_types_all() }) });
+    await waitFor(() => expect(action).toBeEnabled());
+    await userEvent.click(action);
+    const dialog = within(await within(document.body).findByRole('dialog', { name: m.library_types_heading() }));
+    await userEvent.click(await dialog.findByRole('button', { name: m.library_types_next() }));
+    await userEvent.click(await dialog.findByRole('link', { name: movieLabel() }));
+    await expect(await canvas.findByText(m.library_type_filtered({ type: movieLabel() }))).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.library_type_clear() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library?orderBy=lastActivity&direction=desc&layout=list&size=l`,
+    );
+  },
+};
+
+export const TypeNoMatch: Story = {
+  name: 'Owner, no entries match Type',
+  beforeEach: () => setLibraryEntriesStoryMode('type-empty'),
+  render: () => (
+    <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?type=schema%3AMovie&layout=list&size=l`} />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(m.library_type_empty_title({ type: movieLabel() }))).toBeVisible();
+    expect(canvas.queryByText(m.library_empty_title())).toBeNull();
+    expect(canvas.getAllByRole('link', { name: m.library_type_clear() }).length).toBeGreaterThan(0);
+  },
+};
+
+export const TypePickerUnavailable: Story = {
+  name: 'Owner, Type picker failed with shelf retained',
+  beforeEach: () => {
+    setLibraryEntriesStoryMode('type-filter');
+    setLibraryTypesStoryState('unavailable');
+  },
+  render: () => (
+    <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?type=schema%3AMovie&layout=list&size=l`} />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const action = await canvas.findByRole('button', { name: m.library_type_action({ type: movieLabel() }) });
+    await waitFor(() => expect(action).toBeEnabled());
+    await userEvent.click(action);
+    const dialog = within(await within(document.body).findByRole('dialog', { name: m.library_types_heading() }));
+    await expect(await dialog.findByText(m.library_types_unavailable())).toBeVisible();
+    await expect(dialog.getByRole('button', { name: m.library_types_retry() })).toBeEnabled();
+    expect(canvas.queryAllByRole('listitem').length).toBeGreaterThan(0);
   },
 };

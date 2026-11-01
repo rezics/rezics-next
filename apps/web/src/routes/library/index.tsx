@@ -125,9 +125,10 @@ export const Route = createFileRoute('/library/')({
   // there; reading through the validator again keeps only the documented values.
   // Columns, layout and size are display state; native reads and keysets depend only on the source below.
   loaderDeps: ({ search }) => {
-    const { state, cursor, label, orderBy, direction } = validateShelfSearch(search);
+    const { state, cursor, label, orderBy, direction, type } = validateShelfSearch(search);
     return {
       state,
+      type,
       cursor,
       label,
       orderBy,
@@ -164,6 +165,7 @@ export const Route = createFileRoute('/library/')({
           orderBy: deps.orderBy,
           direction: deps.direction,
           ...(deps.state ? { state: deps.state } : {}),
+          ...(deps.type ? { type: deps.type } : {}),
           ...(deps.cursor ? { cursor: deps.cursor } : {}),
         },
       }),

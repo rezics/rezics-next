@@ -35,6 +35,7 @@ import { useHydrated } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
 import { SubjectLabelNotice } from './subject-labels.tsx';
+import { ShelfTypes } from './shelf-types';
 
 type Display = ShelfDisplay;
 function layoutLabel(layout: ShelfLayout): string {
@@ -49,6 +50,7 @@ function sizeLabel(size: ShelfSize): string {
 }
 function DisplayControls({
   state,
+  type,
   locale,
   display,
   label,
@@ -58,6 +60,7 @@ function DisplayControls({
   tableAvailable,
 }: {
   state?: LibraryEntryStateWrite;
+  type?: string;
   locale: string;
   display: Display;
   label?: string;
@@ -68,7 +71,8 @@ function DisplayControls({
 }) {
   const hydrated = useHydrated();
   const navigate = useNavigate();
-  const stateSearch = { ...(state ? { state } : {}), ...sort, ...(cursor ? { cursor } : {}) };
+  const typeSearch = type ? { type } : {};
+  const stateSearch = { ...typeSearch, ...(state ? { state } : {}), ...sort, ...(cursor ? { cursor } : {}) };
   const labelSearch = label ? { label } : {};
   if (!hydrated) {
     const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
@@ -103,7 +107,7 @@ function DisplayControls({
         {state ? (
           <a
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, { ...filterSort, ...display, ...labelSearch })}
+            href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
           >
             {m.library_clear_state()}
           </a>
@@ -161,7 +165,7 @@ function DisplayControls({
       {state ? (
         <a
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          href={shelfHref(locale, { ...filterSort, ...display, ...labelSearch })}
+            href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
         >
           {m.library_clear_state()}
         </a>
@@ -174,11 +178,13 @@ function DisplayControls({
 function SortControls({
   locale,
   state,
+  type,
   display,
   sort,
 }: {
   locale: string;
   state?: string;
+  type?: string;
   display: Display;
   sort: ShelfSort;
 }) {
@@ -188,6 +194,7 @@ function SortControls({
   return (
     <form method="get" action={`/${locale}/library`} className="flex flex-wrap items-end gap-2">
       {state ? <input type="hidden" name="state" value={state} /> : null}
+      {type ? <input type="hidden" name="type" value={type} /> : null}
       <input type="hidden" name="layout" value={display.layout} />
       <input type="hidden" name="size" value={display.size} />
       {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
@@ -251,6 +258,9 @@ export function PersonalLibraryPage({
   const sort = page.sort ?? shelfSort(page);
   const filterSort = page.sortExplicit ? sort : undefined;
   const effectiveCursor = page.cursorReset ? undefined : cursor;
+  const typeSearch = page.type ? { type: page.type } : {};
+  const clearTypeHref = shelfHref(locale, { ...(page.state ? { state: page.state } : {}), ...sort, ...display });
+  const typeLabel = page.typeLabel ?? m.library_type_unnamed();
   const heading = page.state
     ? m.library_tracked_entries_state({ status: page.stateLabel ?? m.library_other() })
     : m.library_tracked_entries();
@@ -301,6 +311,7 @@ export function PersonalLibraryPage({
           </h2>
           <Exposure operation="library_entry.list">
             <DisplayControls
+              {...typeSearch}
               {...(page.state ? { state: page.state } : {})}
               locale={locale}
               display={display}
@@ -312,13 +323,30 @@ export function PersonalLibraryPage({
           </Exposure>
         </div>
         <SortControls
-          key={`${sort.orderBy}:${sort.direction}`}
+          key={`${page.type ?? ''}:${page.state ?? ''}:${sort.orderBy}:${sort.direction}`}
           locale={locale}
           {...(page.state ? { state: page.state } : {})}
           display={display}
           sort={sort}
+          {...typeSearch}
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <ShelfTypes
+            key={`${locale}:${page.type ?? ''}`}
+            locale={locale}
+            view={{ ...typeSearch, ...(page.state ? { state: page.state } : {}), ...sort, ...display }}
+            {...(page.typeLabel ? { typeLabel: page.typeLabel } : {})}
+          />
+          {page.type ? (
+            <a href={clearTypeHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              {m.library_type_clear()}
+            </a>
+          ) : null}
+        </div>
         {page.cursorReset ? <p role="status">{m.library_sort_restarted()}</p> : null}
+        {page.type ? (
+          <p className="text-sm text-muted-foreground">{m.library_type_filtered({ type: typeLabel })}</p>
+        ) : null}
         {page.state ? (
           <p className="text-sm text-muted-foreground">
             {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
@@ -336,7 +364,8 @@ export function PersonalLibraryPage({
           </p>
         ) : page.entries.length ? (
           <ShelfEntries
-            key={`${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
+            key={`${page.type ?? ''}:${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
+            {...typeSearch}
             sort={sort}
             {...(filterSort ? { filterSort } : {})}
             {...(page.state ? { state: page.state } : {})}
@@ -347,17 +376,25 @@ export function PersonalLibraryPage({
           />
         ) : (
           <ShelfEmpty
-            kind={page.state ? 'no-match' : 'library'}
+            kind={page.type || page.state ? 'no-match' : 'library'}
             title={
-              page.state
-                ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
-                : m.library_empty_title()
+              page.type
+                ? m.library_type_empty_title({ type: typeLabel })
+                : page.state
+                  ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
+                  : m.library_empty_title()
             }
-            description={page.state ? m.library_filter_empty_description() : m.library_empty_description()}
+            description={page.type || page.state ? m.library_filter_empty_description() : m.library_empty_description()}
             actions={
-              <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
-                {m.library_browse()}
-              </a>
+              page.type ? (
+                <a href={clearTypeHref} className={buttonVariants({ variant: 'outline' })}>
+                  {m.library_type_clear()}
+                </a>
+              ) : (
+                <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
+                  {m.library_browse()}
+                </a>
+              )
             }
           />
         )}
@@ -365,6 +402,7 @@ export function PersonalLibraryPage({
           <a
             className={buttonVariants({ variant: 'outline' })}
             href={shelfHref(locale, {
+              ...typeSearch,
               ...(page.state ? { state: page.state } : {}),
               ...sort,
               cursor: page.next,
