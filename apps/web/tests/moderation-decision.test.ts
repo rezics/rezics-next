@@ -4,14 +4,41 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
 import * as localStart from '../.storybook/react-start';
 
+const start = await import('@tanstack/react-start');
+const startServer = await import('@tanstack/react-start/server');
 const environment: Record<string, unknown> = {};
+let currentRequest = new Request('https://site.test/moderation/decisions/decision-1');
 let requestViewer = 'author-1';
-let requestEpoch = 'session-one';
+let requestEpoch = 'AAAAAAAAAAAAAAAAAAAAAA';
 const responseHeaders = new Headers();
 mock.module('cloudflare:workers', () => ({ env: environment }));
 // Run the actual BFF handlers locally, selecting the real browser session hook only in the DOM.
 mock.module('@tanstack/react-start', () => ({
+  ...start,
   ...localStart,
+  createServerFn(options: { method: string }) {
+    const bridge = localStart.createServerFn();
+    const chain = {
+      validator(validate: (input: unknown) => unknown) {
+        bridge.validator(validate);
+        return chain;
+      },
+      handler(handler: (...args: never[]) => unknown) {
+        const invoke = bridge.handler(handler);
+        return (input?: { data?: unknown; headers?: HeadersInit }) => {
+          const headers = new Headers(input?.headers);
+          headers.set('cookie', `__Host-rezics_session=${'a'.repeat(43)}`);
+          headers.set('origin', 'https://site.test');
+          currentRequest = new Request('https://site.test/moderation/decisions/decision-1', {
+            method: options.method,
+            headers,
+          });
+          return invoke(input as never);
+        };
+      },
+    };
+    return chain;
+  },
   createIsomorphicFn() {
     let server: Function;
     return {
@@ -28,10 +55,8 @@ mock.module('@tanstack/react-start', () => ({
   },
 }));
 mock.module('@tanstack/react-start/server', () => ({
-  getRequest: () =>
-    new Request('https://site.test/moderation/decisions/decision-1', {
-      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
-    }),
+  ...startServer,
+  getRequest: () => currentRequest,
   setResponseHeader: (key: string, value: string) => responseHeaders.set(key, value),
 }));
 const { loadDecisionPage, canAppealDecision } = await import('../src/moderation/decision-read');
@@ -360,6 +385,7 @@ test('The default private Decision page retires statements, appeal drafts and la
   let mode: 'ready' | 'unavailable' | 'denied' | 'final-denial' | 'platform-closed' = 'ready';
   let decisionReads = 0;
   let loseFirstCommand = true;
+  let commandConfirmation = false;
   let gateRead: Promise<void> | null = null;
   let gateCommand: Promise<void> | null = null;
   let releaseRead!: () => void;
@@ -377,6 +403,7 @@ test('The default private Decision page retires statements, appeal drafts and la
   );
   Object.assign(environment, {
     KERNEL_ORIGIN: 'https://kernel.test',
+    SITE_ORIGINS: 'https://site.test',
     AUTH_ISSUER: 'https://auth.test',
     API_RESOURCE: 'https://kernel.test',
     WEBSITE_SCOPES: 'openid',
@@ -420,9 +447,12 @@ test('The default private Decision page retires statements, appeal drafts and la
             resolvedAt: null,
           },
         });
+        commandConfirmation = true;
         return Response.json({ id: 'appeal-1' }, { status: 201 });
       }
-      expect(request.cache).toBe('no-store');
+      // appeal.ts owns the command's confirmation read; page reads always opt out of transport caching.
+      if (!commandConfirmation) expect(request.cache).toBe('no-store');
+      commandConfirmation = false;
       expect(['Bearer author-1', 'Bearer another-viewer']).toContain(request.headers.get('authorization'));
       const ordinal = ++decisionReads;
       if (gateRead) {
@@ -477,9 +507,9 @@ test('The default private Decision page retires statements, appeal drafts and la
     expect(host.querySelector('a[href*="/threads/"]')).toBeNull();
   };
   try {
-    await session('author-1', 'session-one');
+    await session('author-1', 'AAAAAAAAAAAAAAAAAAAAAA');
     page = await readDecisionPage({ data: { id: decision.id } });
-    expect(page).toMatchObject({ target: null, viewerId: 'author-1', sessionEpoch: 'session-one' });
+    expect(page).toMatchObject({ target: null, viewerId: 'author-1', sessionEpoch: 'AAAAAAAAAAAAAAAAAAAAAA' });
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
     expect(calls.map((request) => new URL(request.url).pathname)).toEqual([
       '/v1/moderation-decisions/decision-1',
@@ -494,14 +524,14 @@ test('The default private Decision page retires statements, appeal drafts and la
       releaseRead = resolve;
     });
     await click(m.decision_refresh());
-    await session('another-viewer', 'another-session');
+    await session('another-viewer', 'AgICAgICAgICAgICAgICAg');
     concealed();
     await act(async () => {
       releaseRead();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     concealed();
-    await session('author-1', 'session-one');
+    await session('author-1', 'AAAAAAAAAAAAAAAAAAAAAA');
     concealed(); // Returning to the old session cannot restore its retired page or draft.
     expect(commands).toHaveLength(0);
     await click(m.moderation_decision_read_retry());
@@ -527,7 +557,7 @@ test('The default private Decision page retires statements, appeal drafts and la
     expect(commands).toHaveLength(2);
     expect(commands[1]).toEqual(commands[0]);
     // Same author, different browser session: target absence supplies no exemption.
-    await session('author-1', 'session-two');
+    await session('author-1', 'AQEBAQEBAQEBAQEBAQEBAQ');
     concealed();
     await act(async () => {
       releaseCommand();
@@ -538,7 +568,7 @@ test('The default private Decision page retires statements, appeal drafts and la
     expect(host.textContent).not.toContain(m.decision_status_pending());
     await session(null, null);
     concealed();
-    await session('author-1', 'session-one');
+    await session('author-1', 'AAAAAAAAAAAAAAAAAAAAAA');
     concealed();
     await click(m.moderation_decision_read_retry());
     expect(host.textContent).toContain(m.decision_status_pending());
