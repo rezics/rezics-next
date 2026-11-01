@@ -6,6 +6,7 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { cn } from '@rezics/ui/utils';
 import { useRef, useState, type FormEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
@@ -20,6 +21,18 @@ import {
 } from './publication-editor';
 import { ScalarControl } from './statement-editor-view';
 import type { SnakInput } from './statement-editor';
+
+// Caller sizing preserves dense fine-pointer desktops and lets translated actions wrap.
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
+// NativeSelect applies className to its wrapper, so size the native target inside it.
+const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
+const linkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
+const actionLinkClassName = cn(buttonVariants(), actionClassName);
+const outlineLinkClassName = cn(buttonVariants({ variant: 'outline' }), actionClassName);
 
 /** Ordinary initial facts for one independently identified publication, anchored to an existing work. */
 export function PublicationEditor({
@@ -149,7 +162,7 @@ export function PublicationEditor({
   }
 
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
+    <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-3">
         <PageHeading>{m.publication_add({}, o)}</PageHeading>
         <p className="text-muted-foreground">{m.publication_intro({}, o)}</p>
@@ -158,7 +171,7 @@ export function PublicationEditor({
         <section role="status" className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
           <p>{m.catalogue_create_created({}, o)}</p>
           {created.reader.state === 'ready' ? (
-            <a href={created.reader.href} className={buttonVariants()}>
+            <a href={created.reader.href} className={actionLinkClassName}>
               {m.catalogue_create_open({}, o)}
             </a>
           ) : (
@@ -168,7 +181,7 @@ export function PublicationEditor({
                   ? m.catalogue_create_concealed({}, o)
                   : m.catalogue_create_reader_unavailable({}, o)}
               </p>
-              <Button variant="outline" disabled={busy} onClick={() => void openCreated()}>
+              <Button className={actionClassName} variant="outline" disabled={busy} onClick={() => void openCreated()}>
                 {m.catalogue_create_retry({}, o)}
               </Button>
             </>
@@ -187,11 +200,11 @@ export function PublicationEditor({
                     : m.catalogue_create_unavailable({}, o)}
               </p>
               {query.data?.ok === false && query.data.reason === 'invalid' ? (
-                <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
+                <a href={`/${locale}/search`} className={outlineLinkClassName}>
                   {m.catalogue_create_search({}, o)}
                 </a>
               ) : (
-                <Button variant="outline" onClick={() => void query.refetch()}>
+                <Button className={actionClassName} variant="outline" onClick={() => void query.refetch()}>
                   {m.catalogue_create_retry({}, o)}
                 </Button>
               )}
@@ -201,7 +214,7 @@ export function PublicationEditor({
             <>
               <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
                 <p className="text-sm text-muted-foreground">{m.publication_work({}, o)}</p>
-                <a href={back} className="font-medium underline">
+                <a href={back} className={`${linkClassName} font-medium`}>
                   {title || m.subject_value_unlabelled({}, o)}
                 </a>
                 <p>{m.publication_duplicate({}, o)}</p>
@@ -209,7 +222,7 @@ export function PublicationEditor({
                   href={`/${locale}/search?q=${encodeURIComponent(label.trim() || title)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className={buttonVariants({ variant: 'outline' })}
+                  className={outlineLinkClassName}
                 >
                   {m.publication_search({}, o)}
                 </a>
@@ -224,7 +237,7 @@ export function PublicationEditor({
                     <p>
                       {m.catalogue_create_signed_out({}, o)}{' '}
                       <a
-                        className="underline"
+                        className={linkClassName}
                         href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/catalogue/publication?work=${work}`)}`}
                       >
                         {m.account_sign_in({}, o)}
@@ -246,8 +259,11 @@ export function PublicationEditor({
                       </p>
                     )}
                     <Field data-invalid={invalid('/labels') || undefined}>
-                      <FieldLabel htmlFor="publication-label">{m.catalogue_create_label({}, o)}</FieldLabel>
+                      <FieldLabel className={labelClassName} htmlFor="publication-label">
+                        {m.catalogue_create_label({}, o)}
+                      </FieldLabel>
                       <Input
+                        className={inputClassName}
                         id="publication-label"
                         value={label}
                         required
@@ -257,8 +273,11 @@ export function PublicationEditor({
                       />
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="publication-language">{m.catalogue_create_language({}, o)}</FieldLabel>
+                      <FieldLabel className={labelClassName} htmlFor="publication-language">
+                        {m.catalogue_create_language({}, o)}
+                      </FieldLabel>
                       <Input
+                        className={inputClassName}
                         id="publication-language"
                         value={language}
                         maxLength={64}
@@ -270,8 +289,11 @@ export function PublicationEditor({
                       </FieldDescription>
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="publication-relation">{m.relation_property({}, o)}</FieldLabel>
+                      <FieldLabel className={labelClassName} htmlFor="publication-relation">
+                        {m.relation_property({}, o)}
+                      </FieldLabel>
                       <NativeSelect
+                        className={selectClassName}
                         id="publication-relation"
                         value={relation}
                         onChange={(e) => edit(() => setRelation(e.target.value))}
@@ -290,7 +312,12 @@ export function PublicationEditor({
                         aria-invalid={invalid('/independent')}
                         onCheckedChange={(value) => edit(() => setIndependent(value))}
                       />
-                      <FieldLabel htmlFor="publication-independent">{m.publication_independent({}, o)}</FieldLabel>
+                      <FieldLabel
+                        className={`${labelClassName} min-h-11 min-w-11 items-center md:pointer-fine:min-h-8`}
+                        htmlFor="publication-independent"
+                      >
+                        {m.publication_independent({}, o)}
+                      </FieldLabel>
                     </Field>
                   </fieldset>
                   {Object.entries(facts).map(([property, value]) => (
@@ -334,6 +361,7 @@ export function PublicationEditor({
                         <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>
                       )}
                       <Button
+                        className={actionClassName}
                         type="button"
                         variant="ghost"
                         onClick={() =>
@@ -348,9 +376,16 @@ export function PublicationEditor({
                     </fieldset>
                   ))}
                   <fieldset disabled={disabled} className="flex min-w-0 flex-wrap items-end gap-3">
-                    <Field className="min-w-0 flex-1">
-                      <FieldLabel htmlFor="publication-field">{m.publication_field({}, o)}</FieldLabel>
-                      <NativeSelect id="publication-field" value={field} onChange={(e) => setField(e.target.value)}>
+                    <Field className="min-w-0 basis-full sm:flex-1 sm:basis-64">
+                      <FieldLabel className={labelClassName} htmlFor="publication-field">
+                        {m.publication_field({}, o)}
+                      </FieldLabel>
+                      <NativeSelect
+                        className={selectClassName}
+                        id="publication-field"
+                        value={field}
+                        onChange={(e) => setField(e.target.value)}
+                      >
                         <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
                         {profile.fields
                           .filter((id) => !Object.hasOwn(facts, id))
@@ -362,6 +397,7 @@ export function PublicationEditor({
                       </NativeSelect>
                     </Field>
                     <Button
+                      className={actionClassName}
                       type="button"
                       variant="outline"
                       disabled={!field}
@@ -385,8 +421,11 @@ export function PublicationEditor({
                   {read.release.properties['schema:url'] && (
                     <fieldset disabled={disabled}>
                       <Field>
-                        <FieldLabel htmlFor="publication-citation">{m.relation_citation({}, o)}</FieldLabel>
+                        <FieldLabel className={labelClassName} htmlFor="publication-citation">
+                          {m.relation_citation({}, o)}
+                        </FieldLabel>
                         <Input
+                          className={inputClassName}
                           id="publication-citation"
                           type="url"
                           value={citation}
@@ -421,7 +460,7 @@ export function PublicationEditor({
                             ).values(),
                           ].map((control) => (
                             <li key={control.id}>
-                              <a className="underline" href={`#${control.id}`}>
+                              <a className={linkClassName} href={`#${control.id}`}>
                                 {control.label}
                               </a>
                             </li>
@@ -430,21 +469,30 @@ export function PublicationEditor({
                       ) : null}
                       {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, o)}</p>}
                       {failure.reason === 'conflict' && (
-                        <Button type="button" variant="outline" onClick={() => edit(() => {})}>
+                        <Button
+                          className={actionClassName}
+                          type="button"
+                          variant="outline"
+                          onClick={() => edit(() => {})}
+                        >
                           {m.catalogue_create_review_new({}, o)}
                         </Button>
                       )}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict'}>
+                    <Button
+                      className={actionClassName}
+                      type="submit"
+                      disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict'}
+                    >
                       {busy
                         ? m.catalogue_create_saving({}, o)
                         : uncertain
                           ? m.catalogue_create_retry({}, o)
                           : m.publication_submit({}, o)}
                     </Button>
-                    <a href={back} className={buttonVariants({ variant: 'outline' })}>
+                    <a href={back} className={outlineLinkClassName}>
                       {m.publication_back({}, o)}
                     </a>
                   </div>
