@@ -130,7 +130,9 @@ describe('Continue and private follow counts discard refused current-session con
         if (path === '/v1/followCounts/outgoing' || path === `/v1/followCounts/collection/${target.targetId}`)
           return Response.json(
             status === 200
-              ? path.endsWith('/outgoing') ? { followingCount: 0 } : { ...target, followerCount: 8 }
+              ? path.endsWith('/outgoing')
+                ? { followingCount: 0 }
+                : { ...target, followerCount: 8 }
               : { code },
             { status, headers: { 'retry-after': '7' } },
           );
@@ -140,18 +142,23 @@ describe('Continue and private follow counts discard refused current-session con
     const source = mock(nativeContinueSource);
     const continued = await loadContinueState(client, request, env, { cursor }, source);
     expect(source).toHaveBeenCalledWith(
-      client, 'Bearer current-token', { limit: CONTINUE_LIMIT, cursor }, request.signal,
+      client,
+      'Bearer current-token',
+      { limit: CONTINUE_LIMIT, cursor },
+      request.signal,
     );
     expect(current.reads).toEqual(['fresh']);
     expect(continued).toMatchObject({
       state: 'loaded',
       next,
-      entries: [{
-        subjectId: row.subjectId,
-        label: 'Current book',
-        summary: row.subject,
-        progress: { sessionId: row.activeProgressSession.id, amount: '25', total: '100' },
-      }],
+      entries: [
+        {
+          subjectId: row.subjectId,
+          label: 'Current book',
+          summary: row.subject,
+          progress: { sessionId: row.activeProgressSession.id, amount: '25', total: '100' },
+        },
+      ],
     });
     expect(await loadPrivateFollowCounts(client, request, env, target)).toEqual({
       viewer,
@@ -170,10 +177,15 @@ describe('Continue and private follow counts discard refused current-session con
       {},
       {},
     ]);
-    expect(calls.every((call) =>
-      call.method === 'GET' && call.cache === 'no-store' && call.redirect === 'manual'
-      && call.headers.get('authorization') === 'Bearer current-token',
-    )).toBe(true);
+    expect(
+      calls.every(
+        (call) =>
+          call.method === 'GET' &&
+          call.cache === 'no-store' &&
+          call.redirect === 'manual' &&
+          call.headers.get('authorization') === 'Bearer current-token',
+      ),
+    ).toBe(true);
     expect(await loadPrivateFollowCounts(null, request, env, target)).toEqual({
       viewer,
       context: target,
