@@ -1,8 +1,7 @@
-import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
+import { useCreatorCurrentOrigin } from './creator-current-origin';
 import {
   acceptsStatementsCurrent,
   readCreatorStatementCurrent,
@@ -16,10 +15,9 @@ import {
 import { CreatorStatementPage } from './creator-statement-page';
 import { CreatorStatementsPage } from './creator-statements-page';
 
-const subscribe = () => () => {};
 type Page = CreatorStatementsData | CreatorStatementData | { kind: 'preparing' };
 type CurrentRead = CreatorStatementsCurrentRead<CreatorStatementsData | CreatorStatementData>;
-type Origin = { active: boolean };
+type Origin = ReturnType<typeof useCreatorCurrentOrigin>['origin'];
 type Outcome = { kind: 'accepted'; value: CurrentRead } | { kind: 'failed' };
 
 export function CreatorStatementsCurrent({
@@ -74,47 +72,26 @@ function StatementPresentation({ address, page }: { address: CreatorStatementsAd
   );
 }
 
-/** Retirement happens during render, before any retained private child or callback can be used. */
+/** A retired origin cannot be revived by a later layout effect, including viewer ABA. */
 function StatementsBoundary({ initial, address }: { initial: CurrentRead; address: CreatorStatementsAddress }) {
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
-  const session = useSession();
-  const selling = useOperation('payout_statement.list');
-  const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
-  const admitted = hydrated ? selling : !!initial.sessionSubject;
-  const key = JSON.stringify([subject || null, admitted, address]);
-  const [scope, setScope] = useState(() => ({ key, generation: 0, seed: true, origin: { active: true } }));
-  if (scope.key !== key) {
-    scope.origin.active = false;
-    setScope({ key, generation: scope.generation + 1, seed: false, origin: { active: true } });
-  }
-  useLayoutEffect(() => {
-    scope.origin.active = true;
-    return () => {
-      scope.origin.active = false;
-    };
-  }, [scope.origin]);
+  const current = useCreatorCurrentOrigin('payout_statement.list', JSON.stringify(address));
+  const { hydrated, origin, seed } = current;
+  const subject = hydrated ? current.subject : initial.sessionSubject;
+  const admitted = hydrated ? origin.isCurrent() : !!initial.sessionSubject;
   if (!subject || !admitted) {
-    const kind =
-      hydrated && session.state === 'unavailable'
-        ? 'unavailable'
-        : hydrated && (session.state === 'unknown' || (session.state === 'signed-in' && !subject))
-          ? 'preparing'
-          : 'denied';
+    const kind = current.state === 'unavailable' || current.admission === 'unavailable'
+      ? 'unavailable' : current.state === 'signed-out' || current.admission === 'closed' ? 'denied' : 'preparing';
     return <StatementPresentation address={address} page={{ kind }} />;
   }
   return (
     <StatementsRead
-      key={scope.generation}
+      key={origin.id}
       initial={initial}
       address={address}
       subject={subject}
       hydrated={hydrated}
-      seed={scope.seed}
-      origin={scope.origin}
+      seed={seed}
+      origin={origin}
     />
   );
 }
@@ -145,19 +122,22 @@ function StatementsRead({
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState<Outcome | undefined>(() =>
-    seed && acceptsStatementsCurrent(initial, subject, address) ? { kind: 'accepted', value: initial } : undefined,
+    (() => {
+      const value = (origin.workspace.read as CurrentRead | undefined) ?? (seed ? initial : undefined);
+      return value && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : undefined;
+    })(),
   );
   const query = useQuery<Outcome | null>({
     ...personalRead,
-    queryKey: ['creator-statements-current', subject, address, lifetime],
-    enabled: hydrated && personalRead.enabled,
+    queryKey: ['creator-statements-current', subject, address, origin.id, lifetime],
+    enabled: hydrated && origin.isCurrent() && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.active) return null;
+      if (!origin.isCurrent()) return null;
       try {
         const value = await readCurrent(address);
-        return origin.active && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : null;
+        return origin.isCurrent() && acceptsStatementsCurrent(value, subject, address) ? { kind: 'accepted', value } : null;
       } catch {
-        return origin.active ? { kind: 'failed' } : null;
+        return origin.isCurrent() ? { kind: 'failed' } : null;
       }
     },
     ...(initialData ? { initialData } : {}),
@@ -174,11 +154,13 @@ function StatementsRead({
     page: initialData?.kind === 'accepted' ? initialData.value.page : ({ kind: 'preparing' } as Page),
   }));
   // Foreign/obsolete responses, including their completion, never replace accepted current data.
-  if (query.data && query.data !== display.observed) {
+  if (origin.isCurrent() && query.data && query.data !== display.observed) {
     setDisplay({
       observed: query.data,
       page: query.data.kind === 'accepted' ? query.data.value.page : { kind: 'unavailable' },
     });
   }
+  if (hydrated && !origin.isCurrent()) return <StatementPresentation address={address} page={{ kind: 'preparing' }} />;
+  if (display.observed?.kind === 'accepted' && origin.isCurrent()) origin.workspace.read = display.observed.value;
   return <StatementPresentation address={address} page={display.page} />;
 }

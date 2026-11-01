@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -27,33 +28,57 @@ function OwnedOfferControls({
   locale: string;
   guard?: CreatorOfferGuard | undefined;
 }) {
+  if (guard) return <OfferCommands offer={offer} data={data} locale={locale} guard={guard} />;
+  return <StandaloneOfferCommands offer={offer} data={data} locale={locale} />;
+}
+
+function StandaloneOfferCommands({ offer, data, locale }: {
+  offer: CreatorOffer; data: CreatorOffersPageData; locale: string;
+}) {
+  const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, offer.id]),
+    offer.contentEdition?.creatorAccountId);
+  return <OfferCommands key={current.origin.id} offer={offer} data={data} locale={locale} guard={current.origin} />;
+}
+
+type ChangeIntent = {
+  observed: CreatorOffer;
+  text: string;
+  pending: CreatorOfferMutation | null;
+  keys: CreatorOffersPageData['keys'][string] | undefined;
+  rule: NonNullable<CreatorOffersPageData['schema']>['configuredSaleCurrencies'][number] | undefined;
+  result: CreatorOfferResult;
+};
+
+function OfferCommands({ offer, data, locale, guard }: {
+  offer: CreatorOffer; data: CreatorOffersPageData; locale: string; guard: CreatorOfferGuard;
+}) {
+  const memory = useCreatorIntent<ChangeIntent>(guard, offer.id);
+  const [resume] = useState(memory.value);
   // Keep the observed row and original command stable while a write's outcome is uncertain.
-  const [observed] = useState(offer);
-  const [text, setText] = useState('');
-  const [result, setResult] = useState<CreatorOfferResult | null>(null);
+  const [observed] = useState(resume?.observed ?? offer);
+  const [text, setText] = useState(resume?.text ?? '');
+  const [result, setResult] = useState<CreatorOfferResult | null>(resume?.result ?? null);
   const [busy, setBusy] = useState(false);
-  const pending = useRef<CreatorOfferMutation | null>(null);
-  const locked = useRef(false);
-  const keys = useRef(data.keys[observed.id]);
-  const [rule] = useState(() =>
-    data.schema?.configuredSaleCurrencies.find((row) => row.currency === observed.currency),
-  );
-  const currentData = useRef(data);
-  currentData.current = data;
-  const mounted = useRef(false);
+  const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
+  const locked = useRef(resume?.result.kind === 'saved');
+  const keys = useRef(resume ? resume.keys : data.keys[observed.id]);
+  const [rule] = useState(() => resume ? resume.rule :
+    data.schema?.configuredSaleCurrencies.find((row) => row.currency === observed.currency));
+  const mounted = useRef({ active: false });
   useLayoutEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
+    const current = { active: true };
+    mounted.current = current;
+    return () => { current.active = false; };
   }, []);
-  const isCurrent = () => mounted.current && (guard ? guard.isCurrent() : currentData.current.selling);
-  const csrf = () => (guard ? guard.csrfToken() : currentData.current.csrfToken);
+  const isCurrent = () => mounted.current.active && guard.isCurrent();
+  const csrf = () => guard.csrfToken();
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
   const editable =
-    observed.state === 'active' && data.selling && !!csrf() && !!keys.current && (!guard || guard.isCurrent());
+    observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
   async function change(operation: 'reprice' | 'delist') {
+    const lifetime = mounted.current;
+    const owns = () => lifetime.active && guard.isCurrent();
     const csrfToken = csrf();
     if (!isCurrent() || !csrfToken || locked.current || !editable || result?.kind === 'saved') return;
     if (!pending.current) {
@@ -66,22 +91,24 @@ function OwnedOfferControls({
           ? { operation, offerId: observed.id, idempotencyKey: key }
           : { operation, offerId: observed.id, idempotencyKey: key, unitAmountMinor: amount! };
     }
+    memory.value = { observed, text, pending: pending.current, keys: keys.current, rule, result: { kind: 'retry' } };
     locked.current = true;
     setBusy(true);
     let saved = false;
     try {
       const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': csrfToken } });
-      if (!isCurrent()) return;
+      if (!owns()) return;
       saved = next.kind === 'saved';
       setResult(next);
       if (next.kind !== 'retry' && next.kind !== 'saved') {
         pending.current = null;
         keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
       }
+      memory.value = { observed, text, pending: pending.current, keys: keys.current, rule, result: next };
     } catch {
-      if (isCurrent()) setResult({ kind: 'retry' });
+      if (owns()) setResult({ kind: 'retry' });
     } finally {
-      if (isCurrent()) {
+      if (owns()) {
         locked.current = saved;
         setBusy(false);
       }
@@ -100,7 +127,7 @@ function OwnedOfferControls({
           <CreatorPriceField
             rule={rule}
             text={text}
-            onChange={setText}
+            onChange={(next) => { if (isCurrent()) setText(next); }}
             locale={locale}
             disabled={!editable || frozen}
           />

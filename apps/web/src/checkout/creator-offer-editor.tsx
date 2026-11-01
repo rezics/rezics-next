@@ -4,8 +4,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { useOperation } from '../kernel/exposure';
-import { useSession } from '../session/query';
+import { useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { parseCreatorPrice } from './creator-price';
 import { formatMinorAmount } from './money';
 import type { ConfiguredSaleCurrencyRule } from './money-schema';
@@ -161,60 +160,28 @@ export function CreatorOfferEditor({
   locale: string;
   guard?: CreatorOfferGuard;
 }) {
-  const session = useSession();
-  // The existing owned-offer operation resolves the shared selling gate.
-  const selling = useOperation('offer.list');
-  const identity = JSON.stringify([
-    data.editor.kind === 'ready' ? data.editor.edition.editionId : data.editor.kind,
-    guard ? null : session.state,
-    guard ? null : (session.subject ?? null),
-    guard ? null : selling,
-    data.selling,
-  ]);
-  const [lifetime, setLifetime] = useState(() => ({
-    identity,
-    generation: 0,
-    createKey: data.createKey,
-    origin: { active: true, csrfToken: null as string | null, admitted: false },
-  }));
-  if (lifetime.identity !== identity) {
-    // Returning to a retired viewer/edition must not reuse a dispatched creation key.
-    lifetime.origin.active = false;
-    setLifetime({
-      identity,
-      generation: lifetime.generation + 1,
-      createKey: crypto.randomUUID(),
-      origin: { active: true, csrfToken: null, admitted: false },
-    });
-  }
-  lifetime.origin.csrfToken = session.csrfToken;
-  lifetime.origin.admitted =
-    session.state === 'signed-in' &&
-    Boolean(session.subject) &&
-    Boolean(session.csrfToken) &&
-    Boolean(data.csrfToken) &&
-    selling &&
-    data.selling;
-  useLayoutEffect(() => {
-    lifetime.origin.active = true;
-    return () => {
-      lifetime.origin.active = false;
-    };
-  }, [lifetime.origin]);
-  const fallback = {
-    isCurrent: () => lifetime.origin.active && lifetime.origin.admitted,
-    csrfToken: () => lifetime.origin.csrfToken,
-  };
-  return (
-    <CreatorOfferForm
-      key={lifetime.generation}
-      data={data}
-      locale={locale}
-      createKey={lifetime.createKey}
-      guard={guard ?? fallback}
-    />
-  );
+  if (guard) return <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} />;
+  return <StandaloneCreatorOfferEditor data={data} locale={locale} />;
 }
+
+function StandaloneCreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
+  const edition = data.editor.kind === 'ready' ? data.editor.edition : undefined;
+  const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, edition?.editionId ?? data.editor.kind]),
+    edition?.creatorAccountId);
+  return <CreatorOfferForm key={current.origin.id} data={data} locale={locale}
+    createKey={current.seed ? data.createKey : current.origin.id} guard={current.origin} />;
+}
+
+type CreateIntent = {
+  editor: CreatorEditorPageData['editor'];
+  rules: readonly ConfiguredSaleCurrencyRule[];
+  intent: CreatorPriceIntent;
+  title: string;
+  taxCode: string;
+  pending: CreatorOfferMutation | null;
+  key: string;
+  result: CreatorOfferResult;
+};
 
 function CreatorOfferForm({
   data,
@@ -227,16 +194,18 @@ function CreatorOfferForm({
   createKey: string;
   guard: CreatorOfferGuard;
 }) {
-  const [intent, setIntent] = useState<CreatorPriceIntent>({ currency: '', text: '' });
+  const memory = useCreatorIntent<CreateIntent>(guard, 'create');
+  const [resume] = useState(memory.value);
+  const [intent, setIntent] = useState<CreatorPriceIntent>(resume?.intent ?? { currency: '', text: '' });
   const { currency, text } = intent;
-  const [title, setTitle] = useState('');
-  const [taxCode, setTaxCode] = useState('');
-  const [result, setResult] = useState<CreatorOfferResult | null>(null);
+  const [title, setTitle] = useState(resume?.title ?? '');
+  const [taxCode, setTaxCode] = useState(resume?.taxCode ?? '');
+  const [result, setResult] = useState<CreatorOfferResult | null>(resume?.result ?? null);
   const [busy, setBusy] = useState(false);
-  const pending = useRef<CreatorOfferMutation | null>(null);
-  const submittedRules = useRef<readonly ConfiguredSaleCurrencyRule[] | null>(null);
-  const locked = useRef(false);
-  const key = useRef(createKey);
+  const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
+  const submittedRules = useRef<readonly ConfiguredSaleCurrencyRule[] | null>(resume?.rules ?? null);
+  const locked = useRef(resume?.result.kind === 'saved');
+  const key = useRef(resume?.key ?? createKey);
   const lifetime = useRef({ active: false });
   useLayoutEffect(() => {
     const current = { active: true };
@@ -248,7 +217,7 @@ function CreatorOfferForm({
   }, []);
   const fieldId = useId();
   // The selected edition and its price facts are the observed create operand, including on retry.
-  const [editor] = useState(data.editor);
+  const [editor] = useState(resume?.editor ?? data.editor);
   const rules = submittedRules.current ?? (editor.kind === 'ready' ? editor.schema.configuredSaleCurrencies : []);
   const rule = rules.find((row) => row.currency === currency);
   const amount = parsedPrice(text, rule);
@@ -282,6 +251,8 @@ function CreatorOfferForm({
       };
       submittedRules.current = rules;
     }
+    memory.value = { editor, rules, intent, title, taxCode, pending: pending.current, key: key.current,
+      result: { kind: 'retry' } };
     locked.current = true;
     setBusy(true);
     let saved = false;
@@ -295,6 +266,7 @@ function CreatorOfferForm({
         submittedRules.current = null;
         key.current = crypto.randomUUID();
       }
+      memory.value = { editor, rules, intent, title, taxCode, pending: pending.current, key: key.current, result: next };
     } catch {
       if (current.active && guard.isCurrent()) setResult({ kind: 'retry' });
     } finally {
@@ -359,11 +331,11 @@ function CreatorOfferForm({
                 maxLength={1024}
                 value={title}
                 disabled={frozen}
-                onChange={(event) => setTitle(event.target.value)}
+                onChange={(event) => { if (guard.isCurrent()) setTitle(event.target.value); }}
                 className="min-h-11"
               />
             </Field>
-            <CreatorPriceFields rules={rules} intent={intent} onChange={setIntent} locale={locale} disabled={frozen} />
+            <CreatorPriceFields rules={rules} intent={intent} onChange={(next) => { if (guard.isCurrent()) setIntent(next); }} locale={locale} disabled={frozen} />
             <Field>
               <FieldLabel htmlFor={`${fieldId}-tax`}>{m.creator_tax_code()}</FieldLabel>
               <Input
@@ -373,7 +345,7 @@ function CreatorOfferForm({
                 maxLength={256}
                 value={taxCode}
                 disabled={frozen}
-                onChange={(event) => setTaxCode(event.target.value)}
+                onChange={(event) => { if (guard.isCurrent()) setTaxCode(event.target.value); }}
                 className="min-h-11"
               />
               <p className="text-sm text-muted-foreground">{m.creator_tax_code_hint()}</p>

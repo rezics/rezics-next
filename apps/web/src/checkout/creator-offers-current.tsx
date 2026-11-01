@@ -1,8 +1,8 @@
-import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
+import { useCreatorCurrentOrigin } from './creator-current-origin';
 import { PendingPage } from '../shell/pending';
 import { CreatorOfferEditor } from './creator-offer-editor';
 import { CreatorOffersPage } from './creator-offers-page';
@@ -16,9 +16,8 @@ import {
 } from './creator-offers';
 
 type Read = CreatorOffersCurrentRead | CreatorEditorCurrentRead;
-type Origin = { active: boolean; csrfToken: string | null };
+type Origin = ReturnType<typeof useCreatorCurrentOrigin>['origin'];
 type Props = { initial: Read; address: CreatorOfferAddress; locale: string; offerPageAvailable?: boolean };
-const subscribe = () => () => {};
 
 function matches(value: Read | undefined, subject: string, address: CreatorOfferAddress): value is Read {
   if (!value || value.sessionSubject !== subject || value.requested.kind !== address.kind) return false;
@@ -99,55 +98,27 @@ function Notice({
   );
 }
 
-/** Retire synchronously on observed replacement, including address/viewer/admission ABA. */
+/** Cache observation fences retained reads and commands before React commits a replacement. */
 function CreatorCurrent(props: Props) {
   const { initial, address, locale } = props;
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
-  const session = useSession();
-  const selling = useOperation('offer.list');
-  const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
-  const admitted = hydrated ? selling : initial.data.selling;
-  const identity = JSON.stringify([subject ?? null, admitted, address]);
-  const [scope, setScope] = useState(() => ({
-    identity,
-    generation: 0,
-    seed: true,
-    origin: { active: true, csrfToken: null } as Origin,
-  }));
-  if (scope.identity !== identity) {
-    scope.origin.active = false;
-    setScope({ identity, generation: scope.generation + 1, seed: false, origin: { active: true, csrfToken: null } });
-  }
-  // Token rotation is not a new intent. Retired callbacks keep their retired origin object.
-  scope.origin.csrfToken = hydrated ? session.csrfToken : null;
-  useLayoutEffect(() => {
-    scope.origin.active = true;
-    return () => {
-      scope.origin.active = false;
-    };
-  }, [scope.origin]);
-  if (!subject) {
-    const kind =
-      hydrated && session.state === 'unavailable'
-        ? 'unavailable'
-        : hydrated && (session.state === 'unknown' || session.state === 'signed-in')
-          ? 'preparing'
-          : 'denied';
+  const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, address]));
+  const { hydrated, origin, seed } = current;
+  const subject = hydrated ? current.subject : initial.sessionSubject;
+  const admitted = hydrated ? origin.isCurrent() : initial.data.selling;
+  if (!subject || !admitted) {
+    const kind = current.state === 'unavailable' || current.admission === 'unavailable'
+      ? 'unavailable' : current.state === 'signed-out' ? 'denied'
+      : current.admission === 'closed' ? 'closed' : 'preparing';
     return <Notice kind={kind} address={address} locale={locale} />;
   }
-  if (!admitted) return <Notice kind="closed" address={address} locale={locale} />;
   return (
     <CreatorRead
-      key={scope.generation}
+      key={origin.id}
       {...props}
       subject={subject}
       hydrated={hydrated}
-      seed={scope.seed}
-      origin={scope.origin}
+      seed={seed}
+      origin={origin}
     />
   );
 }
@@ -178,23 +149,24 @@ function CreatorRead({
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState<Outcome | undefined>(() =>
-    seed && matches(initial, subject, address) ? { kind: 'accepted', value: initial } : undefined,
+    (() => {
+      const retained = origin.workspace.read as Read | undefined;
+      const value = retained ?? (seed ? initial : undefined);
+      return matches(value, subject, address) ? { kind: 'accepted', value } : undefined;
+    })(),
   );
-  const [guard] = useState<CreatorOfferGuard>(() => ({
-    isCurrent: () => origin.active,
-    csrfToken: () => origin.csrfToken,
-  }));
+  const guard: CreatorOfferGuard = origin;
   const query = useQuery<Outcome | null>({
     ...personalRead,
-    queryKey: ['creator-offers-current', subject, address, lifetime],
-    enabled: hydrated && personalRead.enabled,
+    queryKey: ['creator-offers-current', subject, locale, address, origin.id, lifetime],
+    enabled: hydrated && origin.isCurrent() && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.active) return null;
+      if (!origin.isCurrent()) return null;
       try {
         const value = await read(address);
-        return origin.active && matches(value, subject, address) ? { kind: 'accepted', value } : null;
+        return origin.isCurrent() && matches(value, subject, address) ? { kind: 'accepted', value } : null;
       } catch {
-        return origin.active ? { kind: 'failed' } : null;
+        return origin.isCurrent() ? { kind: 'failed' } : null;
       }
     },
     ...(initialData ? { initialData } : {}),
@@ -210,13 +182,15 @@ function CreatorRead({
   }));
   // A loader refresh is not a new admitted origin. Keep its observed rows/edition and
   // command operands mounted, even if that refresh omits a row or temporarily fails.
-  if (query.data && query.data !== display.outcome) {
+  if (origin.isCurrent() && query.data && query.data !== display.outcome) {
     setDisplay({
       ...display,
       outcome: query.data,
       value: query.data.kind === 'accepted' ? query.data.value : undefined,
     });
   }
+  if (hydrated && !origin.isCurrent()) return <Notice kind="preparing" address={address} locale={locale} />;
+  if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
   const data = display.value?.data;
   if (!data)
     return (
