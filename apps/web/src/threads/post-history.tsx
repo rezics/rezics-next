@@ -12,6 +12,11 @@ import { revisionDocumentImage } from './exact-revision-media';
 import { readPostHistory } from './reads';
 import { RevisionProvenance } from './revision-provenance-view';
 import {
+  historicalBindingCurrent,
+  sameHistoricalReadBinding,
+  type HistoricalReaderSource,
+} from './historical-reader-provenance';
+import {
   historySessionReady,
   PostHistoryLifetime,
   postHistorySessionSource,
@@ -37,21 +42,29 @@ export function PostHistory(props: PostHistoryProps) {
   const { postId, viewerId, readAuthority } = props;
   const client = useContext(QueryClientContext);
   const source = client && typeof window !== 'undefined' ? postHistorySessionSource(client) : undefined;
+  const observation = source?.read();
   const revision = useSyncExternalStore(
     source?.subscribe ?? noSubscription,
-    source?.snapshot ?? serverRevision,
+    source?.revision ?? serverRevision,
     serverRevision,
   );
+  const locale = getLocale();
+  const credentialMode =
+    observation?.state === 'signed-in' && observation.subject
+      ? 'session'
+      : !source && viewerId
+        ? 'session'
+        : 'anonymous';
   const binding = useMemo(
-    () => ({ postId, viewerId, readAuthority, source, revision }),
-    [postId, viewerId, readAuthority, source, revision],
+    () => ({ postId, viewerId, readAuthority, source, revision, locale, credentialMode }),
+    [postId, viewerId, readAuthority, source, revision, locale, credentialMode],
   );
   const current = useRef(binding);
   current.current = binding;
   const lifetime = useMemo(
     () =>
       new PostHistoryLifetime(
-        () => current.current === binding && (!source || source.snapshot() === revision),
+        () => current.current === binding && (!source || source.revision() === revision),
         source?.subscribe,
       ),
     [binding, source, revision],
@@ -68,6 +81,9 @@ export function PostHistory(props: PostHistoryProps) {
       key={lifetime.id}
       {...props}
       lifetime={lifetime}
+      source={source}
+      locale={locale}
+      credentialMode={credentialMode}
       ready={() => historySessionReady(source, viewerId)}
     />
   );
@@ -80,9 +96,15 @@ function HistoryDisclosure({
   review = false,
   className = 'mt-3',
   lifetime,
+  source,
+  locale,
+  credentialMode,
   ready,
 }: PostHistoryProps & {
   lifetime: PostHistoryLifetime;
+  source: HistoricalReaderSource | undefined;
+  locale: string;
+  credentialMode: 'anonymous' | 'session';
   ready: () => boolean;
 }) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
@@ -103,31 +125,60 @@ function HistoryDisclosure({
   const connection = lifetime.ticket();
 
   async function load(cursor?: string) {
-    const request = lifetime.begin(connection);
+    const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
     if (!request) return;
     lifetime.update(connection, (view) => ({ ...view, loading: true }));
     try {
       // Fence the queued transport itself, before it can borrow replacement session credentials.
       await Promise.resolve();
-      if (!lifetime.owns(request)) return;
-      const result = ready()
-        ? await readPostHistory({ data: { postId, ...(cursor ? { cursor } : {}) } })
-        : { available: false as const };
-      if (!lifetime.owns(request)) return;
-      if (!result.available) {
+      if (!lifetime.owns(request) || !historicalBindingCurrent(source, request.binding)) return;
+      if (!ready()) {
         lifetime.update(connection, (view) => ({ ...view, available: false, loaded: true, failedCursor: cursor }));
         return;
       }
-      const entries = result.revisions.map((revision) => ({ revision, documentMedia: result.documentMedia }));
+      const result = await readPostHistory({
+        data: {
+          postId,
+          ...(cursor !== undefined ? { cursor } : {}),
+          locale,
+          credentialMode,
+          binding: request.binding,
+        },
+      });
+      if (!lifetime.owns(request)) return;
+      const target = request.binding.target;
+      const resultBinding = result.provenance?.binding;
+      if (
+        !resultBinding ||
+        !sameHistoricalReadBinding(request.binding, resultBinding) ||
+        target.kind !== 'post-history' ||
+        target.postId !== postId ||
+        target.cursor !== (cursor ?? null) ||
+        target.locale !== locale ||
+        target.credentialMode !== credentialMode ||
+        !Number.isSafeInteger(result.provenance.responseGeneration) ||
+        result.provenance.responseGeneration <= 0 ||
+        !historicalBindingCurrent(source, request.binding, result.provenance.actualReader) ||
+        !lifetime.acceptReader(request, result.provenance.actualReader)
+      ) {
+        if (lifetime.owns(request)) lifetime.resetDisclosure(connection);
+        return;
+      }
+      if (!result.data.available) {
+        lifetime.update(connection, (view) => ({ ...view, available: false, loaded: true, failedCursor: cursor }));
+        return;
+      }
+      const page = result.data;
+      const entries = page.revisions.map((revision) => ({ revision, documentMedia: page.documentMedia }));
       lifetime.update(connection, (view) => ({
         ...view,
         revisions: cursor ? [...view.revisions, ...entries] : entries,
-        authors: { ...(view.authors ?? {}), ...(result.authors ?? {}) },
-        mentions: { ...view.mentions, ...result.mentions },
-        subjects: [...new Map([...view.subjects, ...result.subjects].map((subject) => [subject.id, subject])).values()],
-        reviewVotes: { ...view.reviewVotes, ...result.reviewVotes },
-        next: result.next,
-        now: result.now,
+        authors: { ...(view.authors ?? {}), ...(page.authors ?? {}) },
+        mentions: { ...view.mentions, ...page.mentions },
+        subjects: [...new Map([...view.subjects, ...page.subjects].map((subject) => [subject.id, subject])).values()],
+        reviewVotes: { ...view.reviewVotes, ...page.reviewVotes },
+        next: page.next,
+        now: page.now,
         loaded: true,
         available: true,
         failedCursor: undefined,

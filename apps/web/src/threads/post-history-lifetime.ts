@@ -1,67 +1,31 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { readPostHistory } from './reads';
+import {
+  createHistoricalReadBinding,
+  historicalActualMatches,
+  historicalReaderSource,
+  type HistoricalActualReader,
+  type HistoricalReadBinding,
+  type HistoricalReaderSource,
+} from './historical-reader-provenance';
 
-export type HistoryPage = Extract<Awaited<ReturnType<typeof readPostHistory>>, { available: true }>;
-type BrowserSession = { state: string; subject?: string | null; csrfToken?: string | null };
-
-/** A read-only observation of the existing browser cache, shared only by history disclosures. */
-const sources = new WeakMap<QueryClient, ReturnType<typeof observeSession>>();
-function observeSession(client: QueryClient) {
-  const read = () => client.getQueryData<BrowserSession>(['session']);
-  const identity = () => {
-    const session = read();
-    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
-  };
-  let previous = identity();
-  let revision = 0;
-  const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe((event) => {
-    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
-    // A successful replacement is significant even if structural sharing preserves the old tuple.
-    // Fetch/status/observer notifications do not replace a reading lifetime.
-    const next = identity();
-    const replaced =
-      event.type === 'added' ||
-      event.type === 'removed' ||
-      (event.type === 'updated' && event.action.type === 'success');
-    if (previous === next && !replaced) return;
-    previous = next;
-    revision++;
-    for (const listener of listeners) listener();
-  });
-  return {
-    read,
-    snapshot: () => revision,
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-}
+type HistoryResponse = Awaited<ReturnType<typeof readPostHistory>>;
+export type HistoryPage = Extract<HistoryResponse['data'], { available: true }>;
+export type HistoryReadData = HistoryResponse['data'];
 
 export function postHistorySessionSource(client: QueryClient) {
-  let source = sources.get(client);
-  if (!source) {
-    source = observeSession(client);
-    sources.set(client, source);
-  }
-  return source;
+  return historicalReaderSource(client);
 }
 
-/** Caller readiness only; the existing native reader still decides disclosure. */
-export function historySessionReady(
-  source: ReturnType<typeof postHistorySessionSource> | undefined,
-  viewerId?: string,
-) {
+/** Read admission needs a prepared reader, never a write-only CSRF token. */
+export function historySessionReady(source: HistoricalReaderSource | undefined, viewerId?: string) {
   if (!source) return true; // Prepared standalone fixtures have no browser session producer.
   const session = source.read();
-  if (session?.state === 'signed-out') return viewerId === undefined;
+  if (!session.healthy) return false;
+  if (session.state === 'signed-out') return viewerId === undefined;
   return (
-    session?.state === 'signed-in' &&
+    session.state === 'signed-in' &&
     !!session.subject &&
-    !!session.csrfToken &&
     (viewerId === undefined || viewerId === session.subject)
   );
 }
@@ -98,10 +62,16 @@ function emptyHistory(): HistoryView {
   };
 }
 
-type HistoryRequest = { connection: number; read: number };
+type HistoryRequest = {
+  connection: number;
+  read: number;
+  cursor?: string;
+  binding: HistoricalReadBinding;
+};
+
 let sequence = 0;
 
-/** One original caller/session visit. It owns data and guards, never credentials or a transport. */
+/** One original caller/session visit. It owns disclosure and requests, never credentials or a transport. */
 export class PostHistoryLifetime {
   readonly id = ++sequence;
   private retired = false;
@@ -109,8 +79,10 @@ export class PostHistoryLifetime {
   private connection = 0;
   private read = 0;
   private pending: HistoryRequest | undefined;
+  private actualReader: HistoricalActualReader | undefined;
   private view = emptyHistory();
   private listeners = new Set<() => void>();
+
   constructor(
     private valid: () => boolean,
     private watch?: (listener: () => void) => () => void,
@@ -119,45 +91,105 @@ export class PostHistoryLifetime {
   private notify() {
     for (const listener of this.listeners) listener();
   }
+
   retire = (notify = true) => {
     if (this.retired) return;
     this.retired = true;
+    this.connected = false;
     this.connection++;
     this.pending = undefined;
+    this.actualReader = undefined;
     this.view = emptyHistory();
     if (notify) this.notify();
   };
+
   current = () => {
     if (!this.retired && !this.valid()) this.retire();
     return !this.retired && this.connected;
   };
+
   snapshot = () => {
     this.current();
     return this.view;
   };
+
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
     };
   };
+
   ticket = () => this.connection;
   ownsConnection = (ticket: number) => this.current() && ticket === this.connection;
+
   update(ticket: number, update: (view: HistoryView) => HistoryView) {
     if (!this.ownsConnection(ticket)) return;
     this.view = update(this.view);
     this.notify();
   }
-  begin(ticket: number) {
+
+  begin(
+    ticket: number,
+    source?: HistoricalReaderSource,
+    postId = 'standalone-post',
+    cursor?: string,
+    locale = 'en',
+    credentialMode: 'anonymous' | 'session' = 'anonymous',
+    expectedSubject?: string,
+  ) {
     if (!this.ownsConnection(ticket) || this.pending) return;
-    return (this.pending = { connection: ticket, read: ++this.read });
+    const read = ++this.read;
+    const binding = createHistoricalReadBinding(
+      source,
+      { kind: 'post-history', postId, cursor: cursor ?? null, locale, credentialMode },
+      this.id,
+      ticket,
+      read,
+      expectedSubject,
+    );
+    return (this.pending = {
+      connection: ticket,
+      read,
+      ...(cursor !== undefined ? { cursor } : {}),
+      binding,
+    });
   }
+
   owns = (request: HistoryRequest) => this.ownsConnection(request.connection) && this.pending === request;
+
+  acceptReader(request: HistoryRequest, actualReader: HistoricalActualReader) {
+    if (!this.owns(request) || !historicalActualMatches(request.binding, actualReader)) return false;
+    const previous = this.actualReader;
+    if (
+      previous &&
+      (previous.credentialMode !== actualReader.credentialMode ||
+        previous.subject !== actualReader.subject ||
+        previous.complete !== actualReader.complete)
+    ) {
+      this.resetDisclosure(request.connection);
+      return false;
+    }
+    this.actualReader ??= actualReader;
+    return true;
+  }
+
+  resetDisclosure(ticket: number) {
+    if (!this.ownsConnection(ticket)) return;
+    const open = this.view.open;
+    this.connection++;
+    this.pending = undefined;
+    this.actualReader = undefined;
+    this.view = { ...emptyHistory(), open, loaded: open, available: !open };
+    this.notify();
+  }
+
   finish(request: HistoryRequest) {
     if (!this.owns(request)) return;
     this.pending = undefined;
     this.update(request.connection, (view) => ({ ...view, loading: false }));
   }
+
   connect = () => {
     this.connected = true;
     const stop = this.watch?.(() => {
@@ -169,6 +201,7 @@ export class PostHistoryLifetime {
       this.connected = false;
       this.connection++;
       this.pending = undefined;
+      this.actualReader = undefined;
       const open = this.view.open;
       this.view = { ...emptyHistory(), open, loaded: open, available: !open };
       this.notify();

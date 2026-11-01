@@ -1,200 +1,162 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { ReadCredentialMode } from '../kernel/credential';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { EditionCreateEntry } from '../content-editions/edition-create-entry';
 import { ExactRevisionView } from './exact-revision-view';
 import type { ExactRevisionIdentity, ExactRevisionState } from './exact-revision';
+import {
+  createHistoricalReadBinding,
+  historicalActualMatches,
+  historicalBindingCurrent,
+  historicalReaderSource,
+  historicalSessionReaderReady,
+  sameHistoricalReadBinding,
+  type HistoricalReadBinding,
+  type HistoricalReadEnvelope,
+  type HistoricalReadProvenance,
+  type HistoricalReaderSource,
+} from './historical-reader-provenance';
 
-type SessionRecord = { state?: unknown; subject?: unknown; csrfToken?: unknown };
-type SessionSnapshot = {
-  revision: number;
-  authorityRevision: number;
-  tuple: string;
-  state: string;
-  subject: string | null;
-  csrfReady: boolean;
-  dataUpdateCount: number;
-  dataUpdatedAt: number;
+export type ExactRevisionVisit = {
+  admission: {
+    id: string;
+    identity: ExactRevisionIdentity;
+    locale: string;
+    credentialMode: ReadCredentialMode;
+    binding: HistoricalReadBinding;
+  };
+  page: ExactRevisionState;
+  provenance: HistoricalReadProvenance;
 };
 
-type SessionSource = ReturnType<typeof observeSession>;
-type ExactRevisionAdmission = {
-  id: string;
-  identity: ExactRevisionIdentity;
-  locale: string;
-  credentialMode: ReadCredentialMode;
-  session: Omit<SessionSnapshot, 'tuple'>;
-};
+let visitSequence = 0;
 
-/** Loader data is serializable; the exact tuple and source stay attached to its source cache in memory. */
-export type ExactRevisionVisit = { admission: ExactRevisionAdmission; page: ExactRevisionState };
-
-function cacheSnapshot(client: QueryClient) {
-  const query = client.getQueryCache().find({ queryKey: ['session'], exact: true });
-  const record = query?.state.data as SessionRecord | undefined;
-  const state = typeof record?.state === 'string' ? record.state : 'unknown';
-  const subject = typeof record?.subject === 'string' && record.subject ? record.subject : null;
-  const csrfToken = typeof record?.csrfToken === 'string' && record.csrfToken ? record.csrfToken : null;
-  const dataUpdateCount = query?.state.dataUpdateCount ?? 0;
-  const dataUpdatedAt = query?.state.dataUpdatedAt ?? 0;
-  return {
-    state,
-    subject,
-    csrfReady: csrfToken !== null,
-    tuple: JSON.stringify([state, subject, csrfToken]),
-    dataUpdateCount,
-    dataUpdatedAt,
-  };
-}
-
-let sourceSequence = 0;
-function observeSession(client: QueryClient) {
-  let revision = 0;
-  let authorityRevision = 0;
-  let previous = cacheSnapshot(client);
-  let visits = 0;
-  const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe((event) => {
-    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
-    const before = previous;
-    const after = cacheSnapshot(client);
-    const success = event.type === 'updated' && event.action.type === 'success';
-    const removed = event.type === 'removed';
-    if (!success && !removed) return;
-    revision++;
-    if (before.state === 'signed-in' || after.state === 'signed-in') authorityRevision++;
-    previous = after;
-    for (const listener of listeners) listener();
-  });
-  return {
-    id: ++sourceSequence,
-    read: () => ({ ...cacheSnapshot(client), revision, authorityRevision }),
-    revision: () => revision,
-    nextVisit: () => ++visits,
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-}
-
-const sources = new WeakMap<QueryClient, SessionSource>();
-function sessionSource(client: QueryClient) {
-  let source = sources.get(client);
-  if (!source) {
-    source = observeSession(client);
-    sources.set(client, source);
-  }
-  return source;
-}
-
-const visitSources = new WeakMap<ExactRevisionVisit, { source: SessionSource; capturedTuple: string }>();
-const hydratedSources = new WeakMap<ExactRevisionVisit, { source: SessionSource; revision: number; tuple: string }>();
-const retiredVisits = new WeakSet<ExactRevisionVisit>();
-
-function privateSessionReady(snapshot: ReturnType<SessionSource['read']>) {
-  return snapshot.state === 'signed-in' && snapshot.subject !== null && snapshot.csrfReady;
-}
-
-function anonymousCache(snapshot: ReturnType<SessionSource['read']>) {
-  return snapshot.state !== 'signed-in';
-}
-
-function hydrationMatches(admission: ExactRevisionAdmission, snapshot: ReturnType<SessionSource['read']>) {
-  const captured = admission.session;
-  const exact =
-    snapshot.state === captured.state &&
-    snapshot.subject === captured.subject &&
-    snapshot.csrfReady === captured.csrfReady &&
-    snapshot.dataUpdateCount === captured.dataUpdateCount &&
-    snapshot.dataUpdatedAt === captured.dataUpdatedAt;
-  if (exact) return true;
-  // SSR starts public routes before the browser's first signed-out session result exists.
-  // That one prepared anonymous result has the same read authority as the original unknown state.
+function visitMatchesTarget(
+  visit: ExactRevisionVisit,
+  identity: ExactRevisionIdentity,
+  locale: string,
+  credentialMode: ReadCredentialMode,
+) {
+  const { admission } = visit;
+  const target = admission.binding.target;
   return (
-    admission.credentialMode === 'anonymous' &&
-    captured.state === 'unknown' &&
-    captured.subject === null &&
-    !captured.csrfReady &&
-    snapshot.state === 'signed-out' &&
-    snapshot.subject === null &&
-    !snapshot.csrfReady &&
-    snapshot.dataUpdateCount === 1
+    admission.identity.postId === identity.postId &&
+    admission.identity.revisionId === identity.revisionId &&
+    admission.locale === locale &&
+    admission.credentialMode === credentialMode &&
+    target.kind === 'exact-revision' &&
+    target.postId === identity.postId &&
+    target.revisionId === identity.revisionId &&
+    target.locale === locale &&
+    target.credentialMode === credentialMode &&
+    sameHistoricalReadBinding(admission.binding, visit.provenance.binding)
   );
 }
 
-function sessionAdmissionCurrent(
-  visit: ExactRevisionVisit,
-  source: SessionSource,
-  snapshot: ReturnType<SessionSource['read']>,
-) {
-  if (visit.admission.credentialMode === 'session' && !privateSessionReady(snapshot)) return false;
-  if (visit.admission.credentialMode === 'anonymous' && !anonymousCache(snapshot)) return false;
-
-  const local = visitSources.get(visit);
-  if (local?.source === source) {
-    if (visit.admission.credentialMode === 'session')
-      return snapshot.revision === visit.admission.session.revision && snapshot.tuple === local.capturedTuple;
-    return snapshot.authorityRevision === visit.admission.session.authorityRevision;
-  }
-
-  const hydrated = hydratedSources.get(visit);
-  if (hydrated?.source === source) {
-    if (visit.admission.credentialMode === 'session')
-      return snapshot.revision === hydrated.revision && snapshot.tuple === hydrated.tuple;
-    return snapshot.authorityRevision === hydrated.revision && anonymousCache(snapshot);
-  }
-
-  if (!hydrationMatches(visit.admission, snapshot)) return false;
-  hydratedSources.set(visit, {
-    source,
-    revision: visit.admission.credentialMode === 'session' ? snapshot.revision : snapshot.authorityRevision,
-    tuple: snapshot.tuple,
-  });
-  return true;
+function validProvenance(value: unknown): value is HistoricalReadProvenance {
+  if (!value || typeof value !== 'object') return false;
+  const provenance = value as Partial<HistoricalReadProvenance>;
+  const actual = provenance.actualReader;
+  return (
+    !!provenance.binding &&
+    !!actual &&
+    (actual.credentialMode === 'anonymous' || actual.credentialMode === 'session') &&
+    (actual.subject === null || typeof actual.subject === 'string') &&
+    typeof actual.complete === 'boolean' &&
+    Number.isSafeInteger(provenance.responseGeneration) &&
+    (provenance.responseGeneration ?? 0) > 0
+  );
 }
 
-/** Capture the original route cache admission before beginning its one existing exact read. */
+function unavailableForProvenance(): ExactRevisionState {
+  return { state: 'unavailable', status: 404 };
+}
+
+/** Capture the browser/server observation before the one original exact read and keep it on the wire. */
 export async function readExactRevisionVisit(
   client: QueryClient,
   identity: ExactRevisionIdentity,
   locale: string,
   credentialMode: ReadCredentialMode,
-  read: () => Promise<ExactRevisionState>,
+  read: (binding: HistoricalReadBinding) => Promise<HistoricalReadEnvelope<ExactRevisionState>>,
 ): Promise<ExactRevisionVisit> {
-  const source = sessionSource(client);
-  const captured = source.read();
-  const admission: ExactRevisionAdmission = {
-    id: `${source.id}:${source.nextVisit()}`,
+  const source = historicalReaderSource(client);
+  const sourceAtStart = source.read();
+  const binding = createHistoricalReadBinding(
+    source,
+    { kind: 'exact-revision', ...identity, locale, credentialMode },
+    ++visitSequence,
+    0,
+    1,
+  );
+  const admission = {
+    id: binding.id,
     identity: { ...identity },
     locale,
     credentialMode,
-    session: {
-      revision: captured.revision,
-      authorityRevision: captured.authorityRevision,
-      state: captured.state,
-      subject: captured.subject,
-      csrfReady: captured.csrfReady,
-      dataUpdateCount: captured.dataUpdateCount,
-      dataUpdatedAt: captured.dataUpdatedAt,
+    binding,
+  };
+
+  // Let the queued route read observe replacement/removal before it can reach the BFF.
+  await Promise.resolve();
+  if (
+    !historicalBindingCurrent(source, binding) ||
+    (credentialMode === 'session' && !historicalSessionReaderReady(sourceAtStart))
+  ) {
+    return {
+      admission,
+      page: { state: 'loading' },
+      provenance: {
+        binding,
+        actualReader: { credentialMode: 'anonymous', subject: null, complete: false },
+        responseGeneration: 0,
+      },
+    };
+  }
+
+  let result: HistoricalReadEnvelope<ExactRevisionState>;
+  try {
+    result = await read(binding);
+  } catch (error) {
+    if (isPlatformClosedError(error)) throw error;
+    return {
+      admission,
+      page: { state: 'problem', status: 503, code: null },
+      provenance: {
+        binding,
+        actualReader: { credentialMode: 'anonymous', subject: null, complete: false },
+        responseGeneration: 0,
+      },
+    };
+  }
+
+  const provenance = validProvenance(result?.provenance) ? result.provenance : undefined;
+  const bindingMatches =
+    provenance !== undefined &&
+    sameHistoricalReadBinding(binding, provenance.binding);
+  const actualMatches = bindingMatches && historicalActualMatches(binding, provenance.actualReader);
+  const observationMatches =
+    actualMatches && historicalBindingCurrent(source, binding, provenance.actualReader);
+  return {
+    admission,
+    page: observationMatches
+      ? result.data
+      : bindingMatches && actualMatches
+        ? { state: 'loading' }
+        : unavailableForProvenance(),
+    provenance: provenance ?? {
+      binding,
+      actualReader: { credentialMode: 'anonymous', subject: null, complete: false },
+      responseGeneration: 0,
     },
   };
-  let page = await read();
-  const visit: ExactRevisionVisit = { admission, page };
-  visitSources.set(visit, { source, capturedTuple: captured.tuple });
-  if (!sessionAdmissionCurrent(visit, source, source.read())) {
-    page = { state: 'loading' };
-    const retired = { ...visit, page };
-    visitSources.set(retired, { source, capturedTuple: captured.tuple });
-    return retired;
-  }
-  return visit;
 }
 
 type Connection = { generation: number; connected: boolean; retired: boolean; owner: object | null };
 const connections = new WeakMap<ExactRevisionVisit, Connection>();
+const retiredVisits = new WeakSet<ExactRevisionVisit>();
+
 function connectionFor(visit: ExactRevisionVisit) {
   let connection = connections.get(visit);
   if (!connection) {
@@ -204,9 +166,18 @@ function connectionFor(visit: ExactRevisionVisit) {
   return connection;
 }
 
+function retireVisit(visit: ExactRevisionVisit) {
+  retiredVisits.add(visit);
+  visit.page = { state: 'loading' };
+  const connection = connectionFor(visit);
+  connection.retired = true;
+  connection.connected = false;
+  connection.generation++;
+}
+
 function connect(visit: ExactRevisionVisit, owner: object) {
   const connection = connectionFor(visit);
-  if (connection.owner && connection.owner !== owner) connection.retired = true;
+  if (connection.owner && connection.owner !== owner) retireVisit(visit);
   if (retiredVisits.has(visit)) connection.retired = true;
   if (connection.retired) return 0;
   connection.owner = owner;
@@ -219,11 +190,10 @@ function disconnect(visit: ExactRevisionVisit, generation: number) {
   if (!generation || connection.generation !== generation) return;
   connection.connected = false;
   const disconnectedAt = ++connection.generation;
-  // React StrictMode replays layout effects in the same turn and reconnects this visit.
+  // Strict Mode replays layout effects in the same turn and reconnects this visit.
   queueMicrotask(() => {
     if (connection.connected || connection.generation !== disconnectedAt) return;
-    connection.retired = true;
-    retiredVisits.add(visit);
+    retireVisit(visit);
   });
 }
 
@@ -235,6 +205,13 @@ function ownsConnection(visit: ExactRevisionVisit, generation: number) {
     !connection.retired &&
     !retiredVisits.has(visit) &&
     connection.generation === generation
+  );
+}
+
+function sessionAdmissionCurrent(visit: ExactRevisionVisit, source: HistoricalReaderSource) {
+  return (
+    historicalActualMatches(visit.admission.binding, visit.provenance.actualReader) &&
+    historicalBindingCurrent(source, visit.admission.binding, visit.provenance.actualReader)
   );
 }
 
@@ -254,7 +231,7 @@ export function ExactRevisionCaller({
   onRetry: () => void;
 }) {
   const queryClient = useQueryClient();
-  const source = sessionSource(queryClient);
+  const source = historicalReaderSource(queryClient);
   useSyncExternalStore(source.subscribe, source.revision, source.revision);
   const owner = useRef<object | null>(null);
   owner.current ??= {};
@@ -262,7 +239,7 @@ export function ExactRevisionCaller({
     visit: ExactRevisionVisit;
     identity: ExactRevisionIdentity;
     locale: string;
-    mode: string;
+    mode: ReadCredentialMode;
     loading: boolean;
   } | null>(null);
   const previous = active.current;
@@ -274,31 +251,39 @@ export function ExactRevisionCaller({
       previous.locale !== locale ||
       previous.mode !== credentialMode)
   ) {
-    retiredVisits.add(previous.visit);
-    const old = connectionFor(previous.visit);
-    old.retired = true;
-    old.connected = false;
-    old.generation++;
+    retireVisit(previous.visit);
   }
   active.current = { visit, identity, locale, mode: credentialMode, loading };
 
-  const admissionMatches =
-    visit.admission.identity.postId === identity.postId &&
-    visit.admission.identity.revisionId === identity.revisionId &&
-    visit.admission.locale === locale &&
-    visit.admission.credentialMode === credentialMode &&
-    sessionAdmissionCurrent(visit, source, source.read());
-  const unavailable = { state: 'loading' } as const;
-  const page = loading || retiredVisits.has(visit) || !admissionMatches ? unavailable : visit.page;
+  const targetMatches = visitMatchesTarget(visit, identity, locale, credentialMode);
+  const observationCurrent = historicalBindingCurrent(source, visit.admission.binding, visit.provenance.actualReader);
+  const admissionMatches = targetMatches && sessionAdmissionCurrent(visit, source);
+  const generationCurrent = targetMatches && observationCurrent;
+  if (!generationCurrent && !retiredVisits.has(visit)) retireVisit(visit);
+  const page = loading || retiredVisits.has(visit) || !admissionMatches
+    ? !loading && targetMatches && generationCurrent
+      ? visit.page.state === 'ready'
+        ? unavailableForProvenance()
+        : visit.page
+      : { state: 'loading' as const }
+    : visit.page;
+
   const [generation, setGeneration] = useState(0);
   useLayoutEffect(() => {
     const current = connect(visit, owner.current!);
     setGeneration(current);
-    return () => disconnect(visit, current);
-  }, [visit]);
+    const stop = source.subscribe(() => {
+      if (!historicalBindingCurrent(source, visit.admission.binding, visit.provenance.actualReader)) retireVisit(visit);
+    });
+    return () => {
+      stop();
+      disconnect(visit, current);
+    };
+  }, [visit, source]);
 
   const retry = () => {
     const current = active.current;
+    const observation = source.read();
     if (
       current?.visit !== visit ||
       current.identity.postId !== identity.postId ||
@@ -307,13 +292,20 @@ export function ExactRevisionCaller({
       current.mode !== credentialMode ||
       current.loading ||
       !ownsConnection(visit, generation) ||
-      !sessionAdmissionCurrent(visit, source, source.read())
+      !targetMatches ||
+      !historicalBindingCurrent(source, visit.admission.binding) ||
+      (credentialMode === 'session' && !historicalSessionReaderReady(observation))
     )
       return;
-    retiredVisits.add(visit);
+    retireVisit(visit);
     onRetry();
   };
-  const ready = page.state === 'ready' && admissionMatches && !retiredVisits.has(visit);
+
+  const ready =
+    page.state === 'ready' &&
+    admissionMatches &&
+    ownsConnection(visit, generation) &&
+    !retiredVisits.has(visit);
   return (
     <>
       <ExactRevisionView identity={identity} page={page} onRetry={retry} />

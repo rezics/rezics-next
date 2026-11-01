@@ -301,8 +301,21 @@ mock.module('@tanstack/react-start/server', () => ({
 let historyClient: ReturnType<typeof client>;
 mock.module('../src/kernel/client', () => ({ kernelClient: () => historyClient }));
 const { readPostHistory } = await import('../src/threads/reads');
+const { createHistoricalReadBinding } = await import('../src/threads/historical-reader-provenance');
 const { RevisionEntry } = await import('../src/threads/post-history');
-type HistoryPage = Extract<Awaited<ReturnType<typeof readPostHistory>>, { available: true }>;
+type HistoryPage = Extract<Awaited<ReturnType<typeof readPostHistory>>['data'], { available: true }>;
+function historyInput(postId: string, cursor?: string) {
+  const locale = 'en';
+  const credentialMode = 'session' as const;
+  const binding = createHistoricalReadBinding(
+    undefined,
+    { kind: 'post-history', postId, cursor: cursor ?? null, locale, credentialMode },
+    1,
+    0,
+    1,
+  );
+  return { postId, ...(cursor !== undefined ? { cursor } : {}), locale, credentialMode, binding };
+}
 const historyMarkup = (page: HistoryPage, index = 0) =>
   renderToStaticMarkup(
     createElement(RevisionEntry, {
@@ -367,9 +380,10 @@ test('Exact revision and each explicit native history page use the sole delivere
   expect(exactPage.revision.sha256).toBe(selected.sha256);
   expect(html).toContain(selected.licence);
 
-  const firstPage = await readPostHistory({ data: { postId: selected.id } });
-  expect(firstPage.available).toBe(true);
-  if (!firstPage.available) throw new Error('Expected first history page');
+  const firstResponse = await readPostHistory({ data: historyInput(selected.id) });
+  expect(firstResponse.data.available).toBe(true);
+  if (!firstResponse.data.available) throw new Error('Expected first history page');
+  const firstPage = firstResponse.data;
   expect(firstPage.next).toBe(cursor);
   expect(historyMarkup(firstPage)).toContain(`/media/${images[0]}/webp-113`);
   expect(historyMarkup(firstPage).match(/data-state="unavailable"/g)).toHaveLength(34);
@@ -378,9 +392,10 @@ test('Exact revision and each explicit native history page use the sole delivere
   expect(calls.filter((request) => new URL(request.url).pathname.endsWith('/revisions'))).toHaveLength(1);
 
   historyRequest = new Request('https://site.test/en/thread', { headers: { authorization: 'Bearer second-page' } });
-  const secondPage = await readPostHistory({ data: { postId: selected.id, cursor: firstPage.next! } });
-  expect(secondPage.available).toBe(true);
-  if (!secondPage.available) throw new Error('Expected second history page');
+  const secondResponse = await readPostHistory({ data: historyInput(selected.id, firstPage.next!) });
+  expect(secondResponse.data.available).toBe(true);
+  if (!secondResponse.data.available) throw new Error('Expected second history page');
+  const secondPage = secondResponse.data;
   expect(historyMarkup(secondPage)).toContain(`/media/${images[32]}/webp-113`);
   expect(historyMarkup(secondPage)).not.toContain(`/media/${images[0]}/`);
   // A later page cannot refill an earlier page's overflow or omission.
@@ -412,7 +427,7 @@ test('Exact revision and each explicit native history page use the sole delivere
   ]);
   const count = calls.length;
   historyDenied = true;
-  expect(await readPostHistory({ data: { postId: selected.id, cursor } })).toEqual({ available: false });
+  expect((await readPostHistory({ data: historyInput(selected.id, cursor) })).data).toEqual({ available: false });
   expect(calls).toHaveLength(count + 1);
 });
 

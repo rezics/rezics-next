@@ -3,6 +3,11 @@ import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ExactRevisionState } from '../src/threads/exact-revision';
+import type {
+  HistoricalActualReader,
+  HistoricalReadBinding,
+  HistoricalReadEnvelope,
+} from '../src/threads/historical-reader-provenance';
 import { selected, ready as recordedReady, id } from '../src/stories/exact-revision/fixture';
 import accounts from '../src/kernel/recorded/accounts.json';
 
@@ -44,16 +49,25 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-type DeferredRead = ReturnType<typeof deferred<ExactRevisionState>>;
-const reads: { data: { postId: string; revisionId: string; credentialMode: string }; work: DeferredRead }[] = [];
+type DeferredRead = ReturnType<typeof deferred<HistoricalReadEnvelope<ExactRevisionState>>>;
+const reads: {
+  data: { postId: string; revisionId: string; locale: string; credentialMode: string; binding: HistoricalReadBinding };
+  actualReader: HistoricalActualReader;
+  work: DeferredRead;
+}[] = [];
 const editionReads: { postId: string; revisionId: string }[] = [];
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+let activeClient: import('@tanstack/react-query').QueryClient | undefined;
 mock.module('../src/threads/exact-revision-read', () => ({
   readExactRevision: ({ data }: { data: (typeof reads)[number]['data'] }) => {
-    const work = deferred<ExactRevisionState>();
-    reads.push({ data: { ...data }, work });
+    const session = activeClient?.getQueryData<{ state?: string; subject?: string | null }>(['session']);
+    const actualReader: HistoricalActualReader = data.credentialMode === 'session' && session?.state === 'signed-in'
+      ? { credentialMode: 'session', subject: session.subject ?? null, complete: !!session.subject }
+      : { credentialMode: 'anonymous', subject: null, complete: true };
+    const work = deferred<HistoricalReadEnvelope<ExactRevisionState>>();
+    reads.push({ data: { ...data }, actualReader, work });
     return work.promise;
   },
 }));
@@ -161,6 +175,7 @@ async function mount({
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   if (session !== null) client.setQueryData(['session'], session);
+  activeClient = client;
   notifyManager.setScheduler((callback) => callback());
   const parent = createRootRouteWithContext<{
     queryClient: InstanceType<typeof QueryClient>;
@@ -202,7 +217,14 @@ async function mount({
   });
   const settle = async (index: number, page: ExactRevisionState) => {
     await act(async () => {
-      reads[index]!.work.resolve(page);
+      reads[index]!.work.resolve({
+        data: page,
+        provenance: {
+          binding: reads[index]!.data.binding,
+          actualReader: reads[index]!.actualReader,
+          responseGeneration: index + 1,
+        },
+      });
       await operation;
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -263,8 +285,8 @@ afterAll(async () => {
 test('actual exact route keeps healthy anonymous and signed-in reads and an explicit current retry', async () => {
   const anonymous = await mount();
   try {
-    expect(reads.map((read) => read.data)).toEqual([
-      { postId: selected.id, revisionId: selected.revisionId, credentialMode: 'anonymous' },
+    expect(reads.map(({ data }) => ({ postId: data.postId, revisionId: data.revisionId, locale: data.locale, credentialMode: data.credentialMode }))).toEqual([
+      { postId: selected.id, revisionId: selected.revisionId, locale: 'en', credentialMode: 'anonymous' },
     ]);
     await anonymous.settle(0, readyPage);
     expect(anonymous.host.textContent).toContain('The original edition leaves room for the reader to pause.');
@@ -287,9 +309,17 @@ test('actual exact route keeps healthy anonymous and signed-in reads and an expl
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(reads).toHaveLength(2);
-    expect(reads[1]!.data).toEqual({
+    expect(reads[1]!.data).toMatchObject({
       postId: selected.id,
       revisionId: selected.revisionId,
+      locale: 'en',
+      credentialMode: 'session',
+    });
+    expect(reads[1]!.data.binding.target).toEqual({
+      kind: 'exact-revision',
+      postId: selected.id,
+      revisionId: selected.revisionId,
+      locale: 'en',
       credentialMode: 'session',
     });
     await viewer.settle(1, readyPage);
@@ -378,6 +408,7 @@ test('SSR route admission hydrates on the matching browser cache and retires whe
   reads.length = 0;
   setLocale('en', { reload: false });
   const serverClient = new QueryClient();
+  activeClient = serverClient;
   const loader = Route.options.loader as unknown as (input: {
     params: { id: string; revisionId: string };
     context: { queryClient: InstanceType<typeof QueryClient>; credentialMode: Mode };
@@ -386,8 +417,16 @@ test('SSR route admission hydrates on the matching browser cache and retires whe
     params: { id: selected.id, revisionId: selected.revisionId },
     context: { queryClient: serverClient, credentialMode: 'anonymous' },
   });
+  await Promise.resolve();
   expect(reads).toHaveLength(1);
-  reads[0]!.work.resolve(readyPage);
+  reads[0]!.work.resolve({
+    data: readyPage,
+    provenance: {
+      binding: reads[0]!.data.binding,
+      actualReader: reads[0]!.actualReader,
+      responseGeneration: 1,
+    },
+  });
   const visit = await serverVisit;
 
   const browserClient = new QueryClient();
@@ -448,7 +487,12 @@ test('post, revision and locale transitions withhold the old view until the rout
     page.setOperation(navigation);
     await new Promise((resolve) => setTimeout(resolve, 0));
     page.hiddenNow();
-    expect(reads[1]!.data).toEqual({ postId: nextPost, revisionId: nextRevision, credentialMode: 'anonymous' });
+    expect(reads[1]!.data).toMatchObject({
+      postId: nextPost,
+      revisionId: nextRevision,
+      locale: 'en',
+      credentialMode: 'anonymous',
+    });
     oldRetry();
     expect(reads).toHaveLength(2);
     await page.settle(1, readyFor(nextPost, nextRevision));

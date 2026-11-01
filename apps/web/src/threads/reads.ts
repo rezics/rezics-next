@@ -26,6 +26,14 @@ import {
 import type { ThreadDocumentMedia } from './document-media-read';
 import { loadNewThreadPage, type NewThreadPageResult } from './new-thread-read';
 import { loadReplyParent, validateReplyParentInput } from './reply-parent-read';
+import {
+  historicalReadEnvelope,
+  preparedReaderProvenance,
+  validateHistoricalReadBinding,
+  type HistoricalReadBinding,
+  type HistoricalReadEnvelope,
+  type HistoricalReadTarget,
+} from './historical-reader-provenance';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -234,6 +242,22 @@ export const readThreadPersonal = createServerFn({ method: 'GET' })
     return { viewerId, reactions: Object.fromEntries(values), reviewVotes: await reviewVotesRead };
   });
 
+type PostHistoryReadData =
+  | { available: false }
+  | {
+      available: true;
+      revisions: PostRevision[];
+      next: string | null;
+      authors: PageAuthors;
+      mentions: DocumentMentions;
+      subjects: ThreadSubject[];
+      reviewVotes: RevisionVotes;
+      documentMedia: RevisionDocumentMedia;
+      now: string;
+    };
+
+export type PostHistoryReadEnvelope = HistoricalReadEnvelope<PostHistoryReadData>;
+
 export const readPostHistory = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (
@@ -244,55 +268,65 @@ export const readPostHistory = createServerFn({ method: 'GET' })
       input.postId.length > 128 ||
       ('cursor' in input &&
         input.cursor !== undefined &&
-        (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+        (typeof input.cursor !== 'string' || input.cursor.length > 4096)) ||
+      !('locale' in input) ||
+      typeof input.locale !== 'string' ||
+      input.locale.length < 1 ||
+      input.locale.length > 64 ||
+      !('credentialMode' in input) ||
+      (input.credentialMode !== 'anonymous' && input.credentialMode !== 'session')
     )
       throw notFound();
+    const cursor = 'cursor' in input && typeof input.cursor === 'string' ? input.cursor : undefined;
+    const target: HistoricalReadTarget = {
+      kind: 'post-history',
+      postId: input.postId,
+      cursor: cursor ?? null,
+      locale: input.locale,
+      credentialMode: input.credentialMode,
+    };
+    const binding = validateHistoricalReadBinding('binding' in input ? input.binding : undefined, target);
+    if (!binding) throw notFound();
     return {
       postId: input.postId,
-      ...('cursor' in input && typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+      ...(cursor !== undefined ? { cursor } : {}),
+      locale: input.locale,
+      credentialMode: input.credentialMode,
+      binding,
     };
   })
-  .handler(
-    async ({
-      data,
-    }): Promise<
-      | { available: false }
-      | {
-          available: true;
-          revisions: PostRevision[];
-          next: string | null;
-          authors: PageAuthors;
-          mentions: DocumentMentions;
-          subjects: ThreadSubject[];
-          reviewVotes: RevisionVotes;
-          documentMedia: RevisionDocumentMedia;
-          now: string;
-        }
-    > => {
-      setResponseHeader('cache-control', 'private, no-store');
-      const request = getRequest();
-      let authorization: string | null = null;
+  .handler(async ({ data }): Promise<PostHistoryReadEnvelope> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    let authorization: string | null = null;
+    let subject: string | undefined;
+    if (data.credentialMode === 'session') {
       try {
         await prepareSession(request, env as Partial<SessionEnv>);
         authorization = viewerCredential(request);
+        subject = sessionSubject(request);
       } catch {
         authorization = null;
+        subject = undefined;
       }
-      const client = kernelClient();
-      try {
-        const options = {
-          query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
-          ...(authorization ? { headers: { authorization } } : {}),
-        };
-        const result = await client.posts({ id: data.postId }).revisions.get(options);
-        if (result.error || !result.data) return { available: false };
+    }
+    const actualReader = preparedReaderProvenance(authorization, subject);
+    const client = kernelClient();
+    let page: PostHistoryReadData;
+    try {
+      const options = {
+        query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
+        ...(authorization ? { headers: { authorization } } : {}),
+      };
+      const result = await client.posts({ id: data.postId }).revisions.get(options);
+      if (result.error || !result.data) page = { available: false };
+      else {
         const revisions = result.data.revisions;
         const documentMedia = await loadRevisionDocumentMedia(
           client,
           revisionDocumentImageIds(revisions),
           authorization,
         );
-        const viewerId = sessionSubject(request);
         const [authors, mentions, subjects, reviewVotes] = await Promise.all([
           readPageAuthors(
             client,
@@ -303,13 +337,9 @@ export const readPostHistory = createServerFn({ method: 'GET' })
             revisions.map(({ body }) => body),
           ),
           readRevisionSubjects(client, revisions),
-          readAuthorRevisionVotes(
-            client,
-            revisions,
-            viewerId && authorization ? { id: viewerId, authorization } : null,
-          ),
+          readAuthorRevisionVotes(client, revisions, subject && authorization ? { id: subject, authorization } : null),
         ]);
-        return {
+        page = {
           available: true,
           revisions,
           next: result.data.next,
@@ -320,11 +350,12 @@ export const readPostHistory = createServerFn({ method: 'GET' })
           documentMedia,
           now: new Date().toISOString(),
         };
-      } catch {
-        return { available: false };
       }
-    },
-  );
+    } catch {
+      page = { available: false };
+    }
+    return historicalReadEnvelope(data.binding as HistoricalReadBinding, actualReader, page);
+  });
 
 export const readThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)

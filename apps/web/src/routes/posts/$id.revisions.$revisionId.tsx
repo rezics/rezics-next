@@ -16,8 +16,8 @@ export const Route = createFileRoute('/posts/$id/revisions/$revisionId')({
     const identity = { postId: params.id, revisionId: params.revisionId };
     const locale = getLocale();
     const credentialMode = context.credentialMode;
-    return readExactRevisionVisit(context.queryClient, identity, locale, credentialMode, () =>
-      readExactRevision({ data: { ...identity, credentialMode } }),
+    return readExactRevisionVisit(context.queryClient, identity, locale, credentialMode, (binding) =>
+      readExactRevision({ data: { ...identity, locale, credentialMode, binding } }),
     );
   },
   head: () => ({ meta: [{ title: m.exact_revision_heading() }, { name: 'robots', content: 'noindex, follow' }] }),
