@@ -134,7 +134,9 @@ export function mediaSourcesFromVariants(variants: readonly ResolvedMediaVariant
 
 /** Stable identity for the published media summary and the resolver's current URLs. */
 export function mediaImageIncarnation(
-  summary: Pick<MediaSummary, 'media' | 'width' | 'height' | 'placeholder'>,
+  summary: Pick<MediaSummary, 'media' | 'width' | 'height'> & {
+    placeholder?: MediaPlaceholder | null | undefined;
+  },
   variants: readonly ResolvedMediaVariant[],
 ): string {
   return JSON.stringify({

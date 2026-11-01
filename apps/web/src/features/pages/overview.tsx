@@ -848,11 +848,14 @@ export function CollectionList(props: Record<string, unknown>) {
 
 export function Cover(props: Record<string, unknown>) {
   const state = useOverview(props.id);
-  const value = state?.value;
+  const valueForKey = state?.value;
   const section = state?.section;
   const read = subjectRead(section);
   const original = read ? originalLanguage(read.subject) : undefined;
-  const title = read && value ? pageText(read.subject.labels, value.locale, original).text || value.unlabelled : '';
+  const title =
+    read && valueForKey
+      ? pageText(read.subject.labels, valueForKey.locale, original).text || valueForKey.unlabelled
+      : '';
   const image = read ? coverOf(read.summary) : null;
   const subject = read
     ? coverSubject(read.subject.id, title, read.summary, read.subject.type)
@@ -861,10 +864,11 @@ export function Cover(props: Record<string, unknown>) {
   const incarnation = read
     ? coverIncarnation(subject, image, resolved)
     : JSON.stringify(['unavailable-subject', String(props.id)]);
-  const viewer = useIncarnationState(`${incarnation}:${value?.reader.suitability ?? 'blur'}`, () => false);
+  const viewer = useIncarnationState(`${incarnation}:${valueForKey?.reader.suitability ?? 'blur'}`, () => false);
 
   if (!state) return null;
   if (!section) return null;
+  const value = state.value;
   if (!read) return <Failed slot="subject-cover" id={String(props.id)} title={value.cover} locale={value.locale} />;
   const openLabel = m.subject_cover_open({ title }, { locale: value.locale as never });
   const closeLabel = m.subject_cover_close({}, { locale: value.locale as never });
