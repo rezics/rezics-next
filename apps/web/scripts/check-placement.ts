@@ -158,14 +158,11 @@ function git(directory: string, args: string[]): string {
 }
 
 function commonGitDirectory(directory: string, label: string): string {
-  const result = spawnSync(
-    'git',
-    ['-C', directory, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
-    { encoding: 'utf8' },
-  );
+  const result = spawnSync('git', ['-C', directory, 'rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    encoding: 'utf8',
+  });
   if (result.error) throw new Error(`Web check unavailable: cannot resolve the ${label} common Git directory`);
-  if (result.status !== 0)
-    throw new Error(`Web check unavailable: cannot resolve the ${label} common Git directory`);
+  if (result.status !== 0) throw new Error(`Web check unavailable: cannot resolve the ${label} common Git directory`);
   try {
     return realpathSync(result.stdout.trim());
   } catch {
@@ -174,14 +171,14 @@ function commonGitDirectory(directory: string, label: string): string {
 }
 
 function canonicalDevRevision(commonDirectory: string): string {
-  const result = spawnSync(
-    'git',
-    ['--git-dir', commonDirectory, 'rev-parse', '--verify', 'refs/heads/dev^{commit}'],
-    { encoding: 'utf8' },
-  );
+  const result = spawnSync('git', ['--git-dir', commonDirectory, 'rev-parse', '--verify', 'refs/heads/dev^{commit}'], {
+    encoding: 'utf8',
+  });
   if (result.error) throw result.error;
   if (result.status !== 0)
-    throw new Error('Web check unavailable: canonical refs/heads/dev is absent from the candidate common Git directory');
+    throw new Error(
+      'Web check unavailable: canonical refs/heads/dev is absent from the candidate common Git directory',
+    );
   return result.stdout.trim();
 }
 

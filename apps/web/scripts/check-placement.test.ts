@@ -136,11 +136,7 @@ function gitFixtureAdapter(candidateRoot: string) {
   return f;
 }
 
-async function routeWithGitDriver(
-  candidateRoot: string,
-  driverRoot: string,
-  adapter: WebPlacementRuntime,
-) {
+async function routeWithGitDriver(candidateRoot: string, driverRoot: string, adapter: WebPlacementRuntime) {
   return routeWebCheck(
     {
       root: candidateRoot,
@@ -197,9 +193,9 @@ test('unintegrated driver is refused before the trusted process starts', async (
   const gitFixture = createDriverGitFixture();
   try {
     const f = gitFixtureAdapter(gitFixture.candidateRoot);
-    await expect(
-      routeWithGitDriver(gitFixture.candidateRoot, gitFixture.unintegratedRoot, f.adapter),
-    ).rejects.toThrow('not integrated into canonical dev');
+    await expect(routeWithGitDriver(gitFixture.candidateRoot, gitFixture.unintegratedRoot, f.adapter)).rejects.toThrow(
+      'not integrated into canonical dev',
+    );
     expect(f.calls).toHaveLength(0);
   } finally {
     rmSync(gitFixture.temporaryRoot, { recursive: true, force: true });
