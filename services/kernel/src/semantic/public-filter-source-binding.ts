@@ -859,7 +859,7 @@ export function createPublicFilterSourceBinding(
             subject: key.subject_id,
             after: { route: key.route, id: key.subject_id },
             phase: 'advance',
-            advance: randomUUID(),
+            advance: replay?.next.advance ?? randomUUID(),
             version: null,
             projection: null,
           };

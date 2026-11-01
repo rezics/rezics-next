@@ -102,7 +102,17 @@ export type RetainedPublicFilterProjectionRequest = Readonly<{
 }>;
 
 function originalProjectionRequestDigest(request: RetainedPublicFilterProjectionRequest): string {
-  return replayDigest(encodeReplayValue(request));
+  return replayDigest(encodeReplayValue({
+    identity: {
+      bootstrap: request.identity.bootstrap,
+      execution: request.identity.execution,
+      predecessor: request.identity.predecessor,
+    },
+    subject: request.subject,
+    meaning: { digest: request.meaning.digest, type: request.meaning.type },
+    inputLimit: request.inputLimit,
+    frontier: request.frontier,
+  }));
 }
 
 /** Read an original page only. A missing page never falls back to current projection.
