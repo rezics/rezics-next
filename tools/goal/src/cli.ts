@@ -6,6 +6,7 @@ import { installPrivate } from './shared-dependencies.ts';
 
 const workerCommands = [
   'dispatch',
+  'amend',
   'status',
   'retry',
   'priority',
@@ -21,7 +22,7 @@ const workerCommands = [
 const integrationCommands = ['land', 'train', 'promote', 'verify', 'manager', 'inbox', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
 /** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
-export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox']);
+export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox', 'amend']);
 
 /** Runtime injection is confined to the programmatic test entry point. */
 export async function run(

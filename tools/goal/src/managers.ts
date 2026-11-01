@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { connectPool, textInput } from './app-server.ts';
+import { agentEnvironmentKeys } from './agents.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { ProcessIdentity } from './process.ts';
@@ -13,6 +14,10 @@ import type { ManagerWindows } from './windows.ts';
 
 // Managers run with full access, like workers; the maintainer is not there to answer approval requests.
 const FULL_ACCESS = { approvalPolicy: 'never', sandbox: 'danger-full-access' } as const;
+
+function codexThreadConfig(spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>) {
+  return { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 };
+}
 
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
 export type ManagerSpec = {
@@ -393,6 +398,7 @@ export class ManagerSessions {
       resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
     return [
       'env',
+      ...this.providerBoundaryUnsets(),
       `GOAL_MANAGER=${spec.id}`,
       ...configDirectory,
       spec.pool.executable ?? 'claude',
@@ -409,6 +415,16 @@ export class ManagerSessions {
       JSON.stringify(settings),
       prompt,
     ];
+  }
+  private providerBoundaryUnsets(): string[] {
+    const keys = new Set([
+      ...agentEnvironmentKeys(process.env),
+      'GOAL_MANAGER',
+      'GOAL_TASK_ID',
+      'GOAL_ATTEMPT',
+      'GOAL_CHECK_WAIT_FILE',
+    ]);
+    return [...keys].flatMap((key) => ['-u', key]);
   }
   // The opening goes to a file, not argv: the CLI process would otherwise match a `pgrep -f` for any command the
   // opening names, and a manager that stopped its inbox watcher by pattern once killed its own session that way.
@@ -450,7 +466,13 @@ export class ManagerSessions {
     if (client.endpoint) viewer.push('--remote', client.endpoint);
     this.services.windows.register(
       state.id,
-      ['env', `CODEX_HOME=${state.pool.codexHome}`, `GOAL_MANAGER=${state.id}`, ...viewer],
+      [
+        'env',
+        ...this.providerBoundaryUnsets(),
+        `CODEX_HOME=${state.pool.codexHome}`,
+        `GOAL_MANAGER=${state.id}`,
+        ...viewer,
+      ],
       state.cwd,
     );
   }
@@ -510,7 +532,7 @@ export class ManagerSessions {
           ...FULL_ACCESS,
           cwd: spec.cwd,
           model: 'gpt-6.1-sol',
-          config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 },
+          config: codexThreadConfig(spec),
         });
         state.threadId = started.thread.id;
         this.save(state);
@@ -848,7 +870,11 @@ export class ManagerSessions {
         try {
           await client.request('turn/interrupt', { threadId: state.threadId, turnId: state.activeTurnId });
         } catch {
-          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
+          const resumed = await client.request('thread/resume', {
+            ...FULL_ACCESS,
+            threadId: state.threadId,
+            config: codexThreadConfig(state),
+          });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
           if (active) await client.request('turn/interrupt', { threadId: state.threadId, turnId: active.id });
         }
@@ -889,7 +915,11 @@ export class ManagerSessions {
           });
         } catch (error) {
           // A completion can race the steer precondition. Rejoin to learn the live turn, then start/steer.
-          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
+          const resumed = await client.request('thread/resume', {
+            ...FULL_ACCESS,
+            threadId: state.threadId,
+            config: codexThreadConfig(state),
+          });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
           state.activeTurnId = active?.id ?? null;
           this.save(state);
@@ -1017,7 +1047,11 @@ export class ManagerSessions {
           }
           if (current.engine === 'codex' && current.threadId) {
             const client = await this.client(current.pool);
-            const resume = client.request('thread/resume', { ...FULL_ACCESS, threadId: current.threadId });
+            const resume = client.request('thread/resume', {
+              ...FULL_ACCESS,
+              threadId: current.threadId,
+              config: codexThreadConfig(current),
+            });
             reportProgress();
             const resumed = await resume;
             current.activeTurnId =

@@ -43,21 +43,17 @@ does not name another existing wrapper path, the worker runs the command in the 
 does not add a wrapper. Workers do not run the root typecheck, affected checks or other
 regression checks. The task's acceptance command defines when its work is done.
 
-The dev landing train runs regression checks against the combined batch candidate. It runs the root typecheck once,
-each configured affected check whose path patterns match any changed path once, and matching sibling tests once. The
-sibling command prefix is configured by `siblingTests.command` in `defaults.json`; it receives the selected test paths.
-Affected checks come from local settings when configured, otherwise from `defaults.json`, whose tracked list keeps only
-the kernel entry. This lets workspace owners configure their checks locally without making train fixtures run costly
-workspace scripts. If a batch regression fails, no member lands; the train retries members one at a time with each
-member's own checks. A regression found during landing returns to the worker as a retry with the failing log. Promotion
-runs the full gate on the candidate before advancing `main`.
+The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
+once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
+before dev advances. Those checks run through the independent verifier after integration. Promotion runs the full
+gate on the candidate before advancing `main`.
 
 Batching avoids repeating the same typecheck and affected checks for every worker in the batch. Historical check counts
 and costs are recorded in [the check cost report](../../docs/research/check-cost.md).
 
-Every landing command runs in its own process group, including acceptance, integration, affected, sibling and derived
-regeneration commands. The train kills the whole group when a command exits, times out, or the train stops, so a command
-cannot leave background children running. Control-plane tests set affected checks explicitly; when omitted, train
+Every landing command runs in its own process group, including the mandatory typecheck, acceptance, integration,
+affected, sibling and derived regeneration commands. The train gives the group a bounded graceful shutdown before
+forcing any remaining processes to exit. Control-plane tests set affected checks explicitly; when omitted, train
 fixtures use no affected or sibling checks and never inherit the repository's live check defaults.
 
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. Rebase conflicts regenerate declared
@@ -111,6 +107,67 @@ previous turn's `waiting` result. Attempt measurements still include the availab
 up to three resume launch attempts; if all fail before opening a session, Goal stops the attempt and sends one
 environment notice with the launch error line to the supermanager.
 
+Every fresh launch, retry, held-task release and check wake renders a bounded controller receipt from the current task
+generation under its lease. It records the current contract hash and path, task base and worktree identity, plus only the
+declared `after:` dependencies and their integrated commit and Git ancestry proof when available. Lifecycle completion
+does not prove that dependency code is in the task source. Missing, stale, cancelled, truncated or unverifiable facts
+stay unknown in the prompt. A new receipt supersedes future-tense instructions in an older prompt, retry manifest or
+attempt result; recovery does not reuse an older attempt's context.
+
+When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status
+and original log path. It reads only a UUID-owned log in that task's check directory and includes at most 4 KiB of its
+tail. Missing, unreadable, mismatched or truncated evidence is identified as unknown; other check logs and the worker's
+attempt log are not used as substitutes.
+
+When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
+receives the current source-completion policy alongside its canonical contract. Workers finish their own implementation
+and required changed-workspace typing, then commit and return `success`, `blocker:null`, `checks:[]`, naming the code
+completed and the original acceptance/native obligations deferred until after integration. This source result does not
+claim whole-feature, native or Goal completion. Typing alone does not establish product completion: unfinished own
+implementation or absent authority requires an exact blocker. Deferred acceptance alone is neither blocked nor waiting.
+Waiting requires genuinely running registered bare UUID checks owned by that task and attempt; an empty list, completed
+command or product blocker cannot justify it. Normal mode retains the wrapper continuation protocol above.
+
+Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking, with
+its real leases, results and terminal status preserved. It grants no acceptance, native, browser, root or worker-check
+permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
+invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
+live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
+
+Ordinary contracts can be amended before their first worker starts:
+
+```sh
+bun tools/goal/src/cli.ts amend <task> --expected-attempt 0 --brief <file>
+```
+
+`WorkerTasks.amend(taskId, { expectedAttempt: 0, brief }, actor)` is the same receiving boundary. It requires the live,
+unambiguous persisted provider session of the owning manager or configured operations manager. Only ordinary
+generation-zero tasks in `ready`, genuinely dependency-held `held`, or deliberately selected never-started `stopped`
+state are eligible, with no attempt, check, settlement or completed state. A zero counter alone is insufficient:
+stopped tasks refuse any historical attempt, result, landing, integration, proof reservation/registration, worker
+run/evidence path or known or unknown check custody. Retained metadata with no readable ownership cannot establish
+absence of custody and refuses replacement. The submitted full brief passes ordinary path, risk-area and dependency validation, keeps
+the same Goal and manager, preserves normal priority and its grant/history bytes, and retains frozen acceptance
+blocks unchanged. Operations can deliver this same-priority amendment directly; no owner impersonation or priority
+grant is required. Verification registration continues to use its separate existing proof entry.
+
+Under the task lease and SQLite write transaction, amendment saves an immutable current brief and archives both
+contracts, paths and hashes in the existing task events. Identical input returns `unchanged`; accepted changes return
+`amended`, each with the task, generation and current contract hash. Identical stopped input stays stopped. A changed
+stopped contract records its prior stopped state, retains existing stop history and branch/worktree/base/source,
+and enters `held` while any genuine dependency remains unmet, otherwise `ready`. This explicit authenticated full
+replacement is the only stopped-zero transition added here; it does not restart other stopped tasks. A pending first-start intent and capacity ticket
+remain the same single intent and ticket. Amendment does not dispatch, retry, create an attempt, start a provider or
+bypass capacity. The waiting launcher rereads the accepted task under its lease after capacity admission, so the first
+native prompt contains the full latest canonical contract and current verification policy. Removing a held task's last
+dependency uses that same first-start path. Advanced/live generations refuse with their actual current identity and
+log/process handle, without changing them. This command does not steer an active worker.
+
+Each actual worker prompt boundary records its log offset and accumulated check-wait baseline in the existing
+`worker-run-started` event. Recovery uses that boundary's original timestamp rather than restarting its clock. Silence,
+startup and elapsed-limit accounting exclude earlier-turn output and waits, while retaining the current prompt's
+recorded waits across controller restart, capped to its silent interval for adoption.
+
 ## Shared module workspaces (opt in)
 
 Isolated worktrees remain the default. Local settings can name modules as path globs:
@@ -144,11 +201,14 @@ stops processes merely because their working directory is shared. Frozen accepta
 protection and controller commits; undeclared risk areas remain closed.
 
 When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
-worktree. It runs the usual affected checks and task acceptance on that combined candidate before advancing dev
-with its usual expected-head check. Source commits remain intact. Each task's trailer commits determine which
-changes belong to it and whether all its commits are on dev; those tasks become integrated. A task with no trailer
-commits cannot finish by claiming a peer's work. A failing landing returns to the tasks identified by the failing
-acceptance or changed files. Main promotion retains its existing workflow.
+worktree. Before advancing dev, it runs exactly one direct root typecheck on the final combined candidate, including
+any conflict resolution and formatting. `TYPECHECK_CHANGED` contains the actual paths from the batch base to that
+candidate. This guard is mandatory for single, shared-workspace and batched landings, including when
+`integration.devLandingChecks` is false. A compiler failure leaves dev unchanged and returns its full diagnostic to
+the affected task; unrelated batch members remain queued. A passing check advances dev with the expected-head check.
+Source commits remain intact. Each task's trailer commits determine which changes belong to it and whether all its
+commits are on dev; those tasks become integrated. A task with no trailer commits cannot finish by claiming a peer's
+work. Main promotion retains its existing workflow.
 
 A rebase conflict enters the existing same-profile retry path with its conflict files and evidence. The train
 records the full effective target commit, source worker commit and sorted unresolved path set at the conflict. A
@@ -383,7 +443,10 @@ app-server, pool reservation or token budget. The supermanager grants with
 `bun tools/goal/src/cli.ts priority revoke <task> <grant-id>` revokes an unused grant by its grantor. The owner may
 demote with `bun tools/goal/src/cli.ts priority <task> normal` without a grant. Priority history records setter,
 grantor, timestamp and manager-session provenance; older tasks without history remain unknown rather than receiving a
-fabricated setter. Priority commands require the caller's Codex or Claude session ID to match a running persisted
+fabricated setter. Every retry with an amended brief requires the authenticated task owner, even when the effective
+priority stays the same. Repeating the current priority preserves its history and any consumed grant without creating
+another priority decision. A retry that changes priority uses the existing transition and grant rules. Priority
+commands and amended-brief retries require the caller's Codex or Claude session ID to match a running persisted
 manager session; `GOAL_MANAGER` alone is not authorization. Performance's `worker-check` reads this file and passes
 `REMOTE_CHECK_PRIORITY=critical` for remaining checks when its contents are `critical`.
 It writes command output to `.temp/goal/checks/`, records the check duration for the worker deadline and silence monitor,
@@ -432,12 +495,16 @@ requires waiting tasks and `inseparable`.
 ### Acceptance placement
 
 `acceptance.placement` is an optional brief field. Omit it, or set it to `default`, to keep the existing remote-capable
-check policy. Set it to `local` only for the audited local command boundary: `bun run --cwd apps/web typecheck` or
-explicit Bun unit/component test files under `apps/web/tests/`. Local Bun tests may use `-t`/`--test-name-pattern`;
-shell composition is limited to these supported commands joined with `&&` through `sh -c`. Globs, broad test runs,
-scripts, host/integration/database tests, native
-routes, shell expansion and other commands are rejected. The Web boundary is typechecking and individually named
-component tests; it does not include the Web host or native check routes.
+check policy. Set it to `local` only for the audited Web commands: `bun run --cwd apps/web typecheck`, explicitly
+named Bun unit/component test files under `apps/web/tests/`, or the focused runner form
+`bun apps/web/scripts/focused.ts --private-network -- bun test tests/<named-test>.test.ts` from its known `apps/web`
+working directory. The focused runner may have the exact `env -u KERNEL_ORIGIN` and
+`PUBLIC_ORIGIN=http://127.0.0.1:3000` prefix used by the Web command. `sh -c` may join supported commands with `&&`,
+and only the audited `timeout 590 sh -c ...` wrapper is recognized. Local Bun tests may use `-t` or
+`--test-name-pattern` with an explicit selector. Globs, broad test runs, unknown scripts, preloads, browsers, stack
+wrappers, host/integration/database tests, native routes, shell expansion and unrecognized flags are rejected. The
+focused runner uses `apps/web` as its working directory and prepares its local test runtime; it does not enter the Web
+host or native check routes.
 
 ```yaml
 acceptance:
@@ -535,21 +602,18 @@ watchdog does not probe when no hosts file is present and does not include the c
 ## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
-`bun run check` from an isolated checkout. Task acceptance commands are saved with the task and run on the merged
-candidate before either dev integration or promotion to `main`, using configured remote check hosts like other train
-checks. A failed dev acceptance refuses that landing and records the command and first failure. The train runs the same
-command on the dev base and marks an identical fingerprint as pre-existing. Batched landings run each entry's
-acceptance against its cumulative candidate; a failed batch acceptance falls back to single landings so the failing
-task is identified and other entries can proceed. Integration rebases onto
-the integration branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+`bun run check` from an isolated checkout. Task acceptance commands are saved with the task. For dev landings, the
+independent verifier runs them after integration; a failure is reported with the command and first failure and does
+not hold the landing train. Main promotion retains its task acceptance gates. Integration rebases onto the integration
+branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.
-The `integrationChecks` setting lists `{ paths, command }` checks. After
-formatting and scope validation, each check runs in order only when a changed file matches its paths. By default,
-changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` install dependencies and construct the
-kernel. Set it to `[]` to disable the check. Other repositories can override the local `gate` command. Gates and
-dependency installation never run in the main checkout or the worker's checkout.
+The `integrationChecks` setting lists legacy `{ paths, command }` checks. Dev landings no longer run these checks in
+the train. Unmigrated local checks are selected for the independent verifier after integration, except dependency
+installation and root typecheck entries, which remain setup and the mandatory compiler guard respectively. Main and
+stabilize workflows keep their existing gates. Gates and dependency installation never run in the main checkout or
+the worker's checkout.
 
 Task worktrees with the same dependency key share one read-only Bun install under the configured dependency-store root
 (default `<worktree root>/../dependency-stores`). Each tree keeps its own small `node_modules` skeleton and workspace
@@ -559,33 +623,25 @@ and `bunfig.toml`. Store builds use `--backend=copyfile`; the `.bun` tree is mad
 created 69,426 `node_modules` entries per private install (median 4.956 s) versus 27 per shared worktree (median
 0.016 s), after building one shared store.
 
-Workers run only their acceptance command after the last relevant edit. The dev landing batch runs the root typecheck,
-each configured affected check matching any changed path in the batch once, and the matching sibling tests. If a
-regression appears, the batch lands nothing and its members are retried individually with their own checks; the failing
-log returns with the retry. Infrastructure-classified batch failures retry the same batch once before individual
-fallback. Promotion continues to run the full gate. This moves repeated worker and batch regression runs into one
-batch-level check pass, while keeping acceptance as the worker's definition of done.
+Workers run their task acceptance command once after their last relevant edit. Each single, shared-workspace or batch
+dev landing receives one mandatory direct root typecheck on its final candidate. Conflict resolution and formatting
+are included in the checked tree. No affected, sibling, acceptance, native, import, or page-story validation runs
+before the dev ref advances. Infrastructure failures may retry the same compiler command once; compiler errors leave
+dev unchanged and go to their owner. Promotion continues to run the full gate.
 
-The `affectedTests` setting lists `{ paths: string[], command: string[] }` checks and is overridable in local settings
-(use `[]` to disable them). Defaults cover only `services/kernel/**` with its affected test mode. The supermanager adds per-workspace `check`
-commands to local settings when this lands. Configured affected checks run once on the batch candidate with the root
-typecheck and sibling tests.
+`verifierChecks` is the canonical `{ paths: string[], command: string[] }` selection for checks that run after dev
+integration. The defaults cover kernel affected mode, workspace imports, the Personal Library page, Web remote-browser
+regressions and the client page-story/component check. Local `affectedTests` and `integrationChecks` remain compatible
+inputs to this verifier when `verifierChecks` is not explicitly set; `bun install` and old typecheck entries are
+excluded. An explicit `verifierChecks` array replaces those legacy selections. `siblingTests.command` selects sibling
+tests after integration, excluding spec-tree files. These settings cannot disable or add work to the mandatory
+prelanding typecheck.
 
-Each command's status (`passed`, `failed`, or `unverified`), failing test files, duration in milliseconds and output
-are saved on the attempt and carried with its landing request. Completed results survive settlement recovery.
-Kernel's final failed-file summaries, lane errors, Bun reporter failures and `FAIL <test-file>` lines identify
-failing files; passing headings and stack frames do not. A check-host transport failure is retried once; a second
-transport failure is unverified and lands with a note in the landing log. Kernel's database-storage environment failure
-(`SQLSTATE 53100`) is also unverified and carries no failing files. Waiting for a check-host slot has no wall timeout.
-
-Only recorded failures need a train baseline. The train sends only failing files present in the integration base,
-reuses a cached result for that base and command, or runs the command in a separate base worktree, installing
-dependencies there when it has a package manifest. Failing files added by the branch are introduced failures by
-definition; if none of the failing files exist in the base, no baseline runs. The baseline clears
-`KERNEL_CHECK_AFFECTED` to run the full check: a base compared with itself would select no tests. This also makes the
-cached baseline reusable across attempts. A landing is refused only for newly failing test files, named in its gate
-failure; failures shared by the base are allowed. Errors before any test-file result use diagnostic-line comparison.
-An unverified baseline also allows landing with a log note. The train's existing integration checks are unchanged.
+Main and stabilize train checks retain their existing baseline behavior. They compare recorded failing files with the
+integration base, reuse a result for the same base and command, or run a separate base-worktree check. Failing files
+added by the branch are introduced by definition; failures shared with the base are allowed. These checks retain their
+existing transport retries, unverified environment classification and failure logs. Dev verification uses its own
+captured `dev-verified..dev` change set and advances `dev-verified` only after its selected checks pass.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. Every control-plane landing that changes `tools/goal/` uses the same release path, including
@@ -717,17 +773,16 @@ rebase. Only `after:` holds a task.
 
 A `stabilize` branch (`stabilizeBranch`, default `stabilize`) is a frozen candidate cut from the integration branch. A
 non-control-plane brief with `target: stabilize` starts and retries from that branch's head, and dispatch is refused
-while the branch does not exist. The train rebases such a task onto the branch, runs the same integration checks, and compare-and-swap advances
-the branch. It then merges that new head into the integration branch with `git merge --no-ff` in a train worktree,
-retrying up to five times if the integration branch moves. A conflict aborts only that merge: the stabilize branch and
-the task stay integrated at the stabilize commit, and the task's manager and the supermanager receive an inbox notice
-naming the task, the commit and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is
-not integrated, merged or cancelled when its recorded base is an ancestor of the stabilize head. A running attempt is
-left in place; only later integration uses the branch. Briefs without `target` integrate into the integration branch as
-before. Before compare-and-swap advancing `dev`, the train runs each newly included stabilize task's acceptance command
-against the merged `dev` candidate, using the configured check-host environment. A failed command leaves `dev` unchanged
-and the task integrated on stabilize; the task manager and supermanager receive one notice naming the command, first
-failure and merged candidate. Passing commands allow `dev` to advance as usual.
+while the branch does not exist. The train rebases such a task onto the branch, runs the existing stabilize-lane
+checks, and compare-and-swap advances the branch. It then merges that new head into the integration branch with
+`git merge --no-ff` in a train worktree, retrying up to five times if the integration branch moves. Before compare-
+and-swap advancing dev, the train runs the mandatory root typecheck on the exact merged candidate. A compiler failure
+leaves dev unchanged and reports the diagnostic to the task owner. Task acceptance and other configured verification
+run after integration. A merge conflict aborts only that merge: the stabilize branch and the task stay integrated at
+the stabilize commit, and the task's manager and the supermanager receive an inbox notice naming the task, the commit
+and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is not integrated, merged or
+cancelled when its recorded base is an ancestor of the stabilize head. A running attempt is left in place; only later
+integration uses the branch. Briefs without `target` integrate into the integration branch as before.
 
 The train promotes the `dev` head to `main` under a separate lease after the root gate and every task acceptance command
 pass. If a gate fails, the promoter compares its first failure with `main`, then checks task prefixes concurrently up to
@@ -922,6 +977,11 @@ after it remain held because cancellation does not satisfy `after`; each manager
 instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
 dependency that predates this notification is reported once to its manager. The manager decides whether to revise the
 dependency.
+A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
+The next host sweep can then release it under the task lease and start the amended contract from the updated base.
+An amended held contract starts a fresh provider session after its old worker settles. A check waiter with saved checks
+and no terminal attempt record can continue its original session with the current contract; retained check IDs on a
+terminal attempt do not make it a check continuation. An unchanged held retry retains its supported session resume.
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 
@@ -932,8 +992,16 @@ otherwise scoped task briefs and a matching local manager pool supply the defaul
 Each manager host starts a loopback WebSocket app-server for its Codex pool and records the process identity. The host
 stops those app-servers on shutdown, and a replacement host stops any surviving app-server before resuming persisted
 threads. Recovery reopens each Codex viewer on the current endpoint with `codex resume <thread> --remote <endpoint>`.
-Codex managers use a goal budget. Claude uses its configured executable and configuration directory, interactive
-window and turn-accounting hooks.
+The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
+uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
+configured `CLAUDE_CONFIG_DIR`. Managed manager recovery follows the normal host code-version handoff: after Goal code
+changes, the host reexecutes from the current checkout, reopens persisted sessions, and resumes each stored provider
+session while keeping its manager history and budget. An already-running provider keeps its original environment until
+that handoff; the host does not edit a live process environment. A resident supermanager remains an external session
+and is never launched or resumed by host recovery. Codex managers use a goal budget. Claude uses its configured
+executable and configuration directory, interactive window and turn-accounting hooks.
+Codex manager recovery and turn-race rejoins forward the manager's configured effort and `compactTokens` through
+`thread/resume.config`, as thread creation does. Forwarding the threshold does not prove that compaction occurred.
 
 The host listens before it resumes persisted managers, and recovers managers independently so one provider request
 cannot prevent another manager from using the socket. Commands from a recorded manager session store a deduplicated
@@ -960,12 +1028,13 @@ always gates its own frozen integration candidate.
 
 ### Development verification
 
-Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head after the
-merge train has landed its batch. It starts from `dev-verified`, runs the root typecheck with `TYPECHECK_CHANGED`,
-the affected checks for changed paths, and each landed task's acceptance command (except specification and research
-tasks). Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries and rebases use that
-verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the verified commit,
-how many landings `dev` is ahead, and whether verification is pending, running or current.
+Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head independently
+after the merge train has landed its batch; it cannot hold the train lease or block later ready landings. It starts
+from `dev-verified`, runs the root typecheck with the exact `TYPECHECK_CHANGED` closure, matching `verifierChecks`,
+non-spec sibling tests and each landed task's acceptance command (except specification and research tasks). Checks
+use normal remote admission. Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries
+and rebases use that verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the
+verified commit, how many landings `dev` is ahead, and whether verification is pending, running or current.
 
 When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
 landings. For an affected-check failure after a conflict resolution, it attributes the failing integrated resolution
@@ -1031,6 +1100,49 @@ To resume, reverse the steps: set the pools' pacing (`policy.maxBurnPerHour`) an
 managers, tell every manager to resume and retry its stopped tasks, and remove `promotion.paused` once the gate fixes
 are in. A local `<state>/resume.sh` can script these steps for one pause; it is local configuration, not a repository
 file.
+
+## Promotion placement and observations
+
+Future full promotion gates can opt into the measured one-host placement by adding this field to the untracked local
+`.temp/goal/local.json`:
+
+```json
+{
+  "promotionPlacement": {
+    "ordinaryHostsFile": ".temp/goal/remote-check-hosts.json"
+  }
+}
+```
+
+The path is resolved from the main checkout. It must name the existing untracked ordinary remote-check host input in
+the public `{ "hosts": [...] }` schema. Goal reads it through `scripts/remote-check.ts`'s `readHosts` export, checks
+the measured a/b/c topology, then writes a c-only derived host file under the state directory. It preserves c's
+address, SSH identity, slots, memory limit and CPU quota from that input; it does not edit or replace the ordinary host
+file. Missing or changed input, a different host topology, a tracked source, or an invalid gate command fails closed.
+
+For the existing full root gate, Goal derives the supported command
+`env KERNEL_CHECK_CONCURRENCY=5 KERNEL_CHECK_REMOTE=<derived c-only file> GATE_REMOTE_SLOTS=3 bun scripts/gate.ts`.
+The root script forwards those existing settings to its remote invocation. Both workspace groups keep full coverage;
+the one-host gate uses c's existing four ordinary slots, so its two three-slot groups serialize. This is prospective
+placement policy, not a measured throughput result. With one gate holding three slots, ordinary worker capacity is
+11/14 slots (78.57%); counting only a and b leaves 10/14 (71.43%). The groups can take longer when serialized.
+
+Root/controller owns the live migration: review the exact source path and local command, then add
+`promotionPlacement.ordinaryHostsFile` to its untracked local settings. This implementation does not edit live
+`local.json` or `gate-hosts.json`, interrupt an active gate, or run a gate. Ordinary verifier priority and concurrency
+three stay as configured. Promotion still uses the frozen candidate and publishes only after the full gate passes.
+
+Goal persists logical parent and group windows, including separate enqueue, wait, logical admission, preparation,
+execution and terminal times, and stores bounded command metadata. Current public `scripts/remote-check.ts` exposes no
+structured host/run/incarnation/cgroup custody descriptor or terminal custody event. Until its existing owner supplies
+that public boundary, physical status and CPU/memory samples remain explicitly unavailable (`NULL`), never inferred
+from nested log text, caller exit codes, or missing timestamps. The exact measured decision and current evidence are in
+[`reports/delivery-lessons-20261030.md`](reports/delivery-lessons-20261030.md).
+
+The logical candidate commit is not proof of the source revision that a remote client actually launched. Until the
+producer returns an authenticated launch source revision, `scripts/remote-check.ts` hash, integrated producer
+revision, and client cohort, those source fields also remain `NULL`; passing local producer tests establish source
+integration, not rollout into an already queued client.
 
 ## Measurements and historical imports
 
@@ -1101,6 +1213,8 @@ host survival. Detection polls once a second. Host startup errors remain in `man
 `manager-host-supervisor.log`. Graceful shutdown disables restart, state-directory removal ends supervision, and code
 handoff uses the same fenced launch path. Provider recovery and app-server cleanup remain owned by the host.
 Supervisor launch waits for fenced ownership before host readiness; a late launcher leaves removed state absent.
+Host startup, supervisor launch and code handoff remove inherited provider and task session markers through the same
+neutral environment sanitizer, preserving configured Goal paths and the invoking working directory.
 
 Integration, cancellation and stopping explicitly close pending flow stages without fabricating successful stage
 completion or duration. Reporting also uses stored terminal task state to exclude legacy stale queue entries. An
@@ -1260,6 +1374,14 @@ worker code is never imported. Missing/invalid readers record a bounded `histori
 diagnostic, retain uncertain native observations and never abort unrelated orphan/wake/held/retry recovery.
 They do not prevent ordinary original-proof admission or success. No private source path is hardcoded.
 
+For that optional adapter, `ProofBinding` version 1 retains the reservation token, logical check UUID, Goal, task,
+attempt, exact source commit/tree, original argv and canonical cwd. `nativeProofBinding` maps only
+`reservationToken` to the native `token` field. `receiveProofStart` requires the exact binding and result path;
+malformed or mismatched responses remain unknown rather than proving that execution never started. Native
+registration and terminal observation use the producer's check fence. Every physical incarnation retains its
+original argv, ownership and terminal custody evidence; the adapter never writes native result, runner or custody
+records. These native evidence guards remain independent of ordinary logical admission and its three-run cap.
+
 Authenticated registered verification receives its original-command protocol ahead of minimal mode. It invokes the
 exact ordinary wrapper once and returns the actual bare UUID while active. Goal waits and wakes the same session
 with the actual wrapper result; unknown/missing/nonzero results remain non-green. The wrapper record must name the
@@ -1267,51 +1389,14 @@ current task, attempt, cwd and exact original command (the recorded child for an
 one invocation only. No producer token, physical receipt or terminal cleanup chain is needed to verify an ordinary
 wrapper's successful exit. Terminal zero, unchanged captured source and structured worker success with `checks: []`
 settle as `verified`, without a source commit, landing or main advancement. Optional native evidence stays separate.
-Failures retain exact assertion/setup evidence and log references for a separate owner product fix.
+Reports count `verifiedProofs` separately from landed source tasks; verification does not complete a Goal. Failures
+retain exact assertion/setup evidence and log references for a separate owner product fix.
 
 Product/fix tasks retain the exact compiler policy: Kernel/Auth compiler database or check-host placement is
 permitted solely for workspace typing through its existing supported command, leases and terminal result. Workers
 await the existing foreground session without polling, cancellation, duplicates or fabricated check UUIDs.
 Acceptance/native/browser/root/worker-check verification stays deferred. Source success requires the complete own
 implementation and permitted typing with `checks: []`; actual native/combined release remains a controller gate.
-the captured Git tree before native execution can be granted. Advancing integration invalidates that capture.
-
-`verification.ts` exports `ProofProducer.bind(ProofBinding): Promise<ProofBindResult>`,
-`productionProofProducer`, `nativeProofBinding`, and `receiveProofStart`. `ProofBinding` version 1 carries the
-once-generated `reservationToken` and logical `checkId`, `goal`, `taskId`, `attempt`, exact `sourceCommit`/`sourceTree`,
-original `argv` and canonical `cwd`. The adapter maps `reservationToken` to the native `ControllerProofBindingV1.token`
-without changing any other fact. It consumes the delivered async `startControllerWorkerCheck(binding)` API from
-`scripts/worker-check.ts`: matching `started`/`replayed` becomes bound evidence with its exact result path;
-`refused-never-started` alone releases never-started capacity. Unavailable/unknown, malformed fields, changed binding
-or result paths retain uncertain capacity. Captured source must contain the delivered producer integration commit;
-older snapshots remain unavailable and require an owner-authorized fresh capture, never a source swap under a token.
-
-After SQLite admission, the adapter publishes the native reservation in `<state>/check-registry` using the actual
-`validateControllerProofBinding`, `controllerProofReservationPath`, closed reservation validator and `withCheckFence`.
-The async producer call has an isolated process environment for its exact owner/attempt/registry; the existing native
-wrapper owns all execution. Terminal observation validates the actual `validControllerProofRegistration` for every
-physical incarnation and revokes the reservation under that same fence before SQLite releases capacity. The adapter
-never writes native result, runner or custody records. Full controller release validation remains required before
-runtime activation; local typing and fixture validation do not certify native acceptance.
-
-The existing WorkerStore SQLite write transaction admits at most three active proof reservations per Goal, shared
-by all controllers. Pending retries wait without a model through the existing retry-intent path. Model exit, waiting,
-crash, missing registration and unknown custody retain capacity. Only an owned terminal custody result, or explicit
-proven-never-started refusal, releases it. The wrapper's infrastructure rerun retains the same logical reservation.
-Historical unbound managed UUIDs are quarantined against proof capacity until their own terminal custody is known;
-their sessions and raw evidence remain intact, with no retroactive source/token/admission labels. Conservative
-quarantine also covers older product checks whose saved detached UUIDs cannot establish proof identity.
-The adapter reads actual `readWorkerCheckRecord` and `readWorkerCheckHistory` exports; physical records and terminal
-custody proofs for every incarnation are retained with the immutable observation. It never writes native records.
-
-Only a bound registered task gets the final original-proof protocol, including on same-session wake. Global minimal
-verification stays unchanged for product/fix tasks. The binder already started or replayed the one logical invocation;
-the worker receives its current owned records and returns the bare managed UUID while running. It never receives an
-unbound invocation that could mint a second UUID. Goal resumes the same session with actual records, without model polling or an automatic proof fix/retry. Terminal zero,
-valid owned custody, unchanged captured source and structured worker success with `checks: []` settle as `verified`.
-A verified proof never enters the landing queue and never implies main advancement or whole-Goal completion. Reports
-count `verifiedProofs` separately from landed source tasks. Failures retain exact records and log references and reach
-the owning manager for a separate minimal product fix.
 
 ### Explicit control-plane cohort release
 

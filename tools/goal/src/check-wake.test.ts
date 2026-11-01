@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
@@ -47,7 +48,7 @@ async function waitFor(path: string): Promise<void> {
   throw new Error(`timed out waiting for ${path}`);
 }
 
-async function startWaitingAttempt(h: ReturnType<typeof harness>) {
+async function startWaitingAttempt(h: ReturnType<typeof harness>, checks = ['check-a', 'check-b']) {
   const task = h.tasks.dispatch(h.briefFile);
   const startedAt = new Date().toISOString();
   const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n): Attempt => ({
@@ -87,7 +88,7 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>) {
         type: 'item.completed',
         item: {
           type: 'agent_message',
-          text: JSON.stringify({ status: 'waiting', summary: 'checks running', checks: ['check-a', 'check-b'] }),
+          text: JSON.stringify({ status: 'waiting', summary: 'checks running', checks }),
         },
       },
     ]
@@ -109,6 +110,40 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>) {
   expect(landings).toHaveLength(0);
   return { task, ref: { taskId: task.id, attempt: 1 } };
 }
+
+test('same-session wake forwards the newly persisted minimal source-result and compiler policy with terminal evidence', async () => {
+  const h = harness(waitingCli);
+  try {
+    const id = randomUUID();
+    const { task, ref } = await startWaitingAttempt(h, [id]);
+    const session = h.store.attempt(ref).session;
+    const results = join(task.worktree, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    writeFileSync(join(results, `${id}.json`), JSON.stringify({ status: 'finished', exitStatus: 0 }));
+    writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'minimal\n');
+
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const recovery = job.recoverOrphans();
+    await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    await recovery;
+    const prompt = args.at(-1)!;
+    expect(args).toContain('resume');
+    expect(args).toContain(session!);
+    expect(h.store.task(task.id).currentAttempt).toBe(ref.attempt);
+    expect(h.store.attempt(ref).state).toBe('exited');
+    expect(prompt).toContain(h.store.task(task.id).brief.markdown);
+    expect(prompt).toContain(`check ${id}: exit status 0; passed;`);
+    expect(prompt).toContain('return normal status success, blocker:null, checks:[]');
+    expect(prompt).toContain('deferred acceptance alone is neither blocked nor waiting');
+    expect(prompt).toContain('Unfinished own implementation or genuine absent authority must report status blocked');
+    expect(prompt).toContain('actual compiler database or check host is permitted');
+    expect(prompt).toContain('await its EXISTING tool command/session result');
+    expect(prompt).not.toContain('run your acceptance command once');
+  } finally {
+    h.dispose();
+  }
+});
 
 test('a waiting session uses the registered local command on wake even when its saved contract names the old remote route', async () => {
   const h = harness(waitingCli);
@@ -186,6 +221,58 @@ test('an adopted waiting attempt without a resumable session gets the current lo
   }
 });
 
+test('a same-session wake preserves the focused Web command argv under the managed local wrapper', async () => {
+  const h = harness(waitingCli);
+  try {
+    const selector =
+      'every non-English page story contains no untranslated message or type-name text|localized page choices|a subject page renders the subject in the page language on the server|labels fall back to English and keep their own language';
+    const command = [
+      'env',
+      '-u',
+      'KERNEL_ORIGIN',
+      'PUBLIC_ORIGIN=http://127.0.0.1:3000',
+      'bun',
+      'apps/web/scripts/focused.ts',
+      '--private-network',
+      '--',
+      'bun',
+      'test',
+      'tests/page-stories.test.ts',
+      'tests/localized-page-choices.test.ts',
+      'tests/subject.test.ts',
+      '-t',
+      selector,
+    ];
+    writeFileSync(
+      h.briefFile,
+      markdown.replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`),
+    );
+    const { task, ref } = await startWaitingAttempt(h);
+    mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
+    writeFileSync(join(task.worktree, 'scripts/worker-check.ts'), '');
+    const results = join(task.worktree, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    for (const id of ['check-a', 'check-b'])
+      writeFileSync(join(results, `${id}.json`), JSON.stringify({ exitStatus: 0, status: 'finished' }));
+
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const recovery = job.recoverOrphans();
+    await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    const prompt = args.at(-1)!;
+    await recovery;
+    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+    const expected = `bun scripts/worker-check.ts --local -- ${command.map(quote).join(' ')}`;
+    expect(h.store.task(task.id).brief.acceptance).toMatchObject({ placement: 'local', command });
+    expect(prompt).toContain(expected);
+    expect(prompt.match(/bun scripts\/worker-check\.ts --local --/g)).toHaveLength(1);
+    expect(prompt).toContain('The full canonical contract below');
+    expect(h.store.attempt(ref).state).toBe('exited');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('waiting workers release their cap slot and resume the same session with every completed check result', async () => {
   const h = harness(waitingCli);
   try {
@@ -223,6 +310,170 @@ test('waiting workers release their cap slot and resume the same session with ev
     );
     await recovery;
     expect(readFileSync(join(task.worktree, 'result.txt'), 'utf8')).toBe('resumed');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('same-session wake includes bounded evidence from only the exact terminal check logs', async () => {
+  const h = harness(waitingCli);
+  try {
+    const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const [assertionId, longId, nestedId, misroutedId, missingId] = ids as [string, string, string, string, string];
+    const { task, ref } = await startWaitingAttempt(h, ids);
+    const waiting = h.store.attempt(ref);
+    expect(waiting.session).toBe('wake-session');
+    expect(waiting.checks).toEqual(ids);
+
+    const checks = join(task.worktree, '.temp/goal/checks');
+    const results = join(checks, 'results');
+    const runs = join(checks, 'runs');
+    mkdirSync(results, { recursive: true });
+    mkdirSync(runs, { recursive: true });
+    mkdirSync(join(checks, 'nested'), { recursive: true });
+    const assertionLog = '.temp/goal/checks/worker-check-' + assertionId + '.log';
+    const longLog = '.temp/goal/checks/worker-check-' + longId + '.log';
+    const nestedLog = '.temp/goal/checks/nested/worker-check-' + nestedId + '.log';
+    const missingLog = '.temp/goal/checks/worker-check-' + missingId + '.log';
+    const staleAssertion = 'STALE_ATTEMPT_LOG_ASSERTION_MUST_NOT_BE_USED';
+    const nestedAssertion = 'NESTED_UNRELATED_LOG_ASSERTION_MUST_NOT_BE_USED';
+    const largeLogPrefix = 'TRUNCATED_PREFIX_ASSERTION_MUST_NOT_BE_INCLUDED';
+    const assertion =
+      'FAIL apps/web/tests/progress-pages-layout.test.ts:824: Subject picker is absent after unknown subjectId\n' +
+      'AssertionError: expected Subject picker to remain available after unknown subjectId\n';
+    writeFileSync(join(task.worktree, assertionLog), assertion);
+    writeFileSync(
+      join(task.worktree, longLog),
+      Buffer.concat([
+        Buffer.from(`${largeLogPrefix}\n`),
+        Buffer.alloc(5000, 0xff),
+        Buffer.from('\nFinal terminal log line\n'),
+      ]),
+    );
+    writeFileSync(join(task.worktree, nestedLog), nestedAssertion);
+    writeFileSync(waiting.logPath, `${readFileSync(waiting.logPath, 'utf8')}\n${staleAssertion}\n`);
+
+    const command = ['bun', 'test', 'apps/web/tests/progress-pages-layout.test.ts'];
+    const bodies = new Map<string, string>();
+    for (const [index, id] of ids.entries()) {
+      const log = [assertionLog, longLog, nestedLog, assertionLog, missingLog][index]!;
+      const record = {
+        id,
+        cwd: task.worktree,
+        argv: command,
+        status: 'finished',
+        exitCode: 1,
+        log,
+        runnerPid: process.pid,
+        runnerHost: hostname(),
+        failureSummary: index === 0 ? '1 failed, 396 assertions passed' : `check ${index + 1} failed`,
+      };
+      const body = JSON.stringify(record);
+      bodies.set(id, body);
+      writeFileSync(join(results, `${id}.json`), body);
+      writeFileSync(join(runs, `${id}.json`), body);
+    }
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const recovery = job.recoverOrphans();
+    await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    expect(args).toContain('resume');
+    expect(args).toContain('wake-session');
+    const prompt = args.at(-1)!;
+    expect(prompt).toContain(
+      `check ${assertionId}: exit status 1; 1 failed, 396 assertions passed; log path ${assertionLog}`,
+    );
+    expect(prompt).toContain(
+      `check ${assertionId} failure evidence: command ${JSON.stringify(command)}; exit status 1; evidence path ${assertionLog}`,
+    );
+    expect(prompt).toContain('progress-pages-layout.test.ts:824: Subject picker is absent after unknown subjectId');
+    expect(prompt).toContain('expected Subject picker to remain available after unknown subjectId');
+
+    const excerptStart = prompt.indexOf(`BEGIN OWNED CHECK LOG EXCERPT ${longId}\n`);
+    const excerptEnd = prompt.indexOf(`\nEND OWNED CHECK LOG EXCERPT ${longId}`, excerptStart);
+    expect(excerptStart).toBeGreaterThanOrEqual(0);
+    expect(excerptEnd).toBeGreaterThan(excerptStart);
+    expect(
+      Buffer.byteLength(prompt.slice(excerptStart + `BEGIN OWNED CHECK LOG EXCERPT ${longId}\n`.length, excerptEnd)),
+    ).toBeLessThanOrEqual(4096);
+    expect(prompt).toContain('truncated; the complete failure detail is unknown');
+    expect(prompt).not.toContain(largeLogPrefix);
+
+    const nestedDetail = prompt.split('\n').find((line) => line.startsWith(`check ${nestedId} failure evidence:`));
+    expect(nestedDetail).toContain('excerpt unknown');
+    expect(nestedDetail).toContain('original path ' + nestedLog);
+    const misroutedLog = '.temp/goal/checks/worker-check-' + assertionId + '.log';
+    const misroutedDetail = prompt
+      .split('\n')
+      .find((line) => line.startsWith(`check ${misroutedId} failure evidence:`));
+    expect(misroutedDetail).toContain('excerpt unknown');
+    expect(misroutedDetail).toContain('original path ' + misroutedLog);
+    const missingDetail = prompt.split('\n').find((line) => line.startsWith(`check ${missingId} failure evidence:`));
+    expect(missingDetail).toContain('excerpt unknown');
+    expect(missingDetail).toContain('original path ' + missingLog);
+    expect(prompt).not.toContain(nestedAssertion);
+    expect(prompt).not.toContain(staleAssertion);
+    await recovery;
+
+    expect(h.store.task(task.id).currentAttempt).toBe(ref.attempt);
+    expect(h.store.attempt(ref).session).toBe(waiting.session);
+    expect(h.store.attempt(ref).checks).toEqual(ids);
+    for (const id of ids) {
+      expect(readFileSync(join(results, `${id}.json`), 'utf8')).toBe(bodies.get(id)!);
+      expect(readFileSync(join(runs, `${id}.json`), 'utf8')).toBe(bodies.get(id)!);
+    }
+  } finally {
+    h.dispose();
+  }
+});
+
+test('same-session wake delivers a short recorded runtime cause even when the wrapper summary omits it', async () => {
+  const h = harness(waitingCli);
+  try {
+    const id = randomUUID();
+    const { task, ref } = await startWaitingAttempt(h, [id]);
+    const checks = join(task.worktree, '.temp/goal/checks');
+    const results = join(checks, 'results');
+    const runs = join(checks, 'runs');
+    mkdirSync(results, { recursive: true });
+    mkdirSync(runs, { recursive: true });
+    const log = `.temp/goal/checks/worker-check-${id}.log`;
+    const cause = 'ReferenceError: DEFAULT_MAX_MS is not defined';
+    const output = `${cause}\nCheck failed (exit 1).\n`;
+    writeFileSync(join(task.worktree, log), output);
+    const argv = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    const original = JSON.stringify({
+      id,
+      cwd: task.worktree,
+      argv,
+      status: 'finished',
+      exitCode: 1,
+      log,
+      runnerPid: process.pid,
+      runnerHost: hostname(),
+      failureSummary: 'Check failed (exit 1).',
+    });
+    writeFileSync(join(results, `${id}.json`), original);
+    writeFileSync(join(runs, `${id}.json`), original);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.recoverOrphans();
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    expect(args).toContain('resume');
+    expect(args).toContain('wake-session');
+    const prompt = args.at(-1)!;
+    expect(prompt).toContain(
+      `check ${id} failure evidence: command ${JSON.stringify(argv)}; exit status 1; evidence path ${log}`,
+    );
+    expect(prompt).toContain(`excerpt status complete (${Buffer.byteLength(output)} bytes)`);
+    expect(prompt).toContain(
+      `BEGIN OWNED CHECK LOG EXCERPT ${id}\n${output.trim()}\nEND OWNED CHECK LOG EXCERPT ${id}`,
+    );
+    expect(prompt).toContain(cause);
+    expect(h.store.task(task.id).currentAttempt).toBe(ref.attempt);
+    expect(h.store.attempt(ref).session).toBe('wake-session');
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(readFileSync(join(results, `${id}.json`), 'utf8')).toBe(original);
+    expect(readFileSync(join(runs, `${id}.json`), 'utf8')).toBe(original);
   } finally {
     h.dispose();
   }
