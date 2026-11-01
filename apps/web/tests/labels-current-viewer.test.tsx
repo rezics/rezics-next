@@ -220,6 +220,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const dialogs = await import('@rezics/ui/shadcn/dialog');
     const inputs = await import('@rezics/ui/shadcn/input');
     const notifications = await import('@rezics/ui/shadcn/toast');
+    const { undoToast } = await import('@rezics/ui/undo-toast');
     const actions = await import('../src/library/labels-actions');
     const { m } = await import('../src/paraglide/messages.js');
     const menus: MenuProps[] = [];
@@ -416,8 +417,16 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(document.querySelector('[role="dialog"]')!.textContent).toContain(
         m.library_label_delete_confirmation({ name: 'Private B' }),
       );
+      const deleteKey = (document.querySelector('[role="dialog"] input[name="idempotencyKey"]') as HTMLInputElement)
+        .value;
       await submit('delete');
-      expect(writes[4]!.data).toMatchObject({ operation: 'delete', id: 'label-B', revision: 25, name: 'Private B' });
+      expect(writes[4]!.data).toEqual({
+        operation: 'delete',
+        id: 'label-B',
+        revision: 25,
+        name: 'Private B',
+        idempotencyKey: deleteKey,
+      });
       await settleWrite(4, { ok: true, revision: 73 }); // Keep A/B refresh IO pending while C starts using its route.
       await show(session('C'));
       retired('B');
@@ -532,6 +541,48 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       retired('F');
       await show({ state: 'signed-in', csrfToken: 'nonempty-but-no-subject' });
       retired('F');
+
+      await show(session('G'));
+      await settleRead(pendingReads.length - 1, response('G', search));
+      await act(async () => select('rename')());
+      await changeName('G first draft');
+      const firstDraft = writes.length;
+      await submit('rename');
+      await settleWrite(firstDraft, new Error('Uncertain first draft'));
+      await changeName('G changed draft');
+      await submit('rename');
+      expect(writes[firstDraft + 1]!.data.idempotencyKey).not.toBe(writes[firstDraft]!.data.idempotencyKey);
+      expect(writes[firstDraft + 1]!.data).toMatchObject({ id: 'label-G', revision: 7, name: 'G changed draft' });
+      await settleWrite(firstDraft + 1, new Error('Uncertain changed draft'));
+      await submit('rename');
+      expect(writes[firstDraft + 2]!.data).toEqual(writes[firstDraft + 1]!.data);
+      await settleWrite(firstDraft + 2, new Error('Still uncertain'));
+      await act(async () => {
+        const cancel = [...document.querySelectorAll('[role="dialog"] button')].find(
+          (button) => button.textContent === m.action_cancel(),
+        )!;
+        (cancel as HTMLButtonElement).click();
+      });
+      await act(async () => select('delete')());
+      const finalDelete = writes.length;
+      await submit('delete');
+      await settleWrite(finalDelete, { ok: true, revision: 94 });
+      const deletedG = response('G', search);
+      deletedG.page.labels = [];
+      await settleRead(pendingReads.length - 1, deletedG);
+      let unrelatedUndos = 0;
+      await act(async () => {
+        undoToast('Another journey Undo', () => {
+          unrelatedUndos++;
+        });
+      });
+      const unrelatedUndo = toastEntries.at(-1)!;
+      await show({ state: 'signed-out', csrfToken: null });
+      retired('G');
+      // The shared Undo ID now belongs to another journey; retiring G must leave it usable.
+      expect(document.body.textContent).toContain('Another journey Undo');
+      await act(async () => unrelatedUndo.actionProps!.onClick!({} as never));
+      expect(unrelatedUndos).toBe(1);
       expect(hydrationErrors).toEqual([]);
     } finally {
       if (root) await act(async () => root!.unmount());
