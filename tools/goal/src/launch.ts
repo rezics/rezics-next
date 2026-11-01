@@ -40,6 +40,8 @@ export type LaunchOptions = {
   readOnly?: boolean;
   research?: boolean;
   consultation?: boolean;
+  /** A fresh, bounded train editing session through an adapter that supports it. */
+  resolver?: boolean;
   codex?: Settings['codex'];
   resumeSession?: string;
 };
@@ -50,6 +52,10 @@ export function launchCommand(
   const { profile, pool } = options;
   if (pool.cli !== profile.cli) throw new Error('profile and pool CLI disagree');
   const adapter = resolveAdapter(profile.cli);
+  if (options.resolver) {
+    if (options.resumeSession) throw new Error('Train resolution requires a fresh session');
+    if (!adapter.supportsResolver) throw new Error('Agent adapter does not support train resolution');
+  }
   if (options.resumeSession && adapter.canResume) return adapter.resume({ ...options, session: options.resumeSession });
   const { resumeSession: _session, ...fresh } = options;
   return adapter.start(fresh);

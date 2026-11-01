@@ -67,6 +67,7 @@ export const codexAdapter: AgentAdapter = {
   environmentKeys: ['CODEX_HOME', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID'],
   cli: 'codex',
   canResume: true,
+  supportsResolver: true,
   streamsLog: true,
   start(options) {
     return command(options);
@@ -134,6 +135,11 @@ export const codexAdapter: AgentAdapter = {
   },
 };
 function command(options: AgentLaunchOptions): [string, string[]] {
+  const resolver = options.resolver === true;
+  if (resolver) {
+    if (options.resumeSession) throw new Error('Train resolution requires a fresh session');
+    options = { ...options, consultation: true, research: false, readOnly: false };
+  }
   const { profile, pool, worktree, prompt } = options;
   const codex = options.codex ?? defaults.codex;
   const mcp: string[] = [];
@@ -186,11 +192,13 @@ function command(options: AgentLaunchOptions): [string, string[]] {
       '-c',
       'features.multi_agent_v2=false',
       ...mcp,
-      ...(options.readOnly
-        ? [...(options.resumeSession ? [] : ['-s', 'read-only']), '-c', 'approval_policy="never"']
-        : ['--dangerously-bypass-approvals-and-sandbox']),
+      ...(resolver
+        ? ['-s', 'workspace-write', '-c', 'approval_policy="never"']
+        : options.readOnly
+          ? [...(options.resumeSession ? [] : ['-s', 'read-only']), '-c', 'approval_policy="never"']
+          : ['--dangerously-bypass-approvals-and-sandbox']),
       ...(options.research ? ['-c', 'web_search="live"'] : []),
-      ...(!options.readOnly ? ['--output-schema', join(import.meta.dir, '../../worker-result.schema.json')] : []),
+      ...(!options.readOnly && !resolver ? ['--output-schema', join(import.meta.dir, '../../worker-result.schema.json')] : []),
       ...(options.resumeSession ? [] : ['-C', worktree]),
       '--',
       prompt,

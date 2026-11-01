@@ -1,4 +1,5 @@
 import type { AffectedTestResult } from './types.ts';
+import type { ProcessIdentity } from './process.ts';
 
 // The two halves of the control plane meet only here. The worker side owns tasks, attempts, routing, launch,
 // failure classes and evidence bundles; the integration side owns the merge train, manager sessions and inboxes.
@@ -10,12 +11,14 @@ export type AttemptRef = { taskId: string; attempt: number };
 export type ControlPlaneBatchManifest = {
   version: 1;
   managerId: string;
-  members: readonly (AttemptRef & { acceptedCommit: string })[];
+  /** readmitFrom names an exact terminal prior cohort's preparation exclusion, never a worker retry. */
+  members: readonly (AttemptRef & { acceptedCommit: string; readmitFrom?: string })[];
 };
 
 export type ControlPlaneBatchDisposition = AttemptRef & {
   acceptedCommit: string;
   disposition: 'released' | 'already-represented' | 'excluded';
+  phase?: 'preparation' | 'native';
   mergedCommit?: string;
   logPath: string;
   reason?: string;
@@ -25,6 +28,90 @@ export type ControlPlaneBatchDisposition = AttemptRef & {
 export type ControlPlaneBatchResult = {
   batchId: string;
   members: ControlPlaneBatchDisposition[];
+};
+
+export type ControlPlaneBatchSource = AttemptRef & { acceptedCommit: string };
+
+/** Separate native authority for concrete additional files; the worker contract and request stay immutable. */
+export type ControlPlaneScopeApprovalRequest = ControlPlaneBatchSource & {
+  version: 1;
+  managerId: string;
+  contractIdentity: string;
+  requestIdentity: string;
+  additionalPaths: readonly { path: string; reason: string }[];
+};
+
+export type ControlPlaneScopeApprovalReceipt = ControlPlaneScopeApprovalRequest & {
+  id: string;
+  actor: { managerId: string; sessionId: string };
+  approvedAt: string;
+};
+
+/** Complete mapping: a corrected generation can replace only the same task. */
+export type ControlPlaneBatchMemberMapping = {
+  previous: ControlPlaneBatchSource;
+} & ({ disposition: 'replacement'; current: ControlPlaneBatchSource } |
+  { disposition: 'deferred-to-dev'; cause: string });
+
+/** Immutable migration input. Its queue claims remain reserved until the native dev receiver consumes it. */
+export type ControlPlaneBatchDevHandoff = {
+  previousBatchId: string;
+  replacementBatchId: string;
+  ownerId: string;
+  authorization: { order: string; expectedDeferredCount: number };
+  members: (ControlPlaneBatchSource & {
+    queueEntryId: number;
+    claimBatchId: string;
+    request: LandingRequest;
+    contractIdentity: string;
+    cause: string;
+  })[];
+};
+
+export type ControlPlaneBatchDevHandoffRequest = { previousBatchId: string; replacementBatchId: string };
+
+/** Operations supplies verified known dead identities; never a worker receipt or physical capacity release. */
+export type ControlPlaneBatchHandoff = {
+  journalHash: string;
+  controller: ProcessIdentity;
+  ownedCommands: readonly ProcessIdentity[];
+  /** Missing on older callers means a complete inventory. Unknown legacy custody remains explicitly unknown. */
+  inventory?: 'complete' | 'legacy-inventory-unavailable';
+  /** Reference to retained physical terminal/handoff evidence, not a claim that any check passed. */
+  evidence: string;
+  /** Only older journals need this exact retained log evidence; it cannot invent a result. */
+  failures?: readonly { node: string; candidate: string; failedCommand: readonly string[]; output: string }[];
+};
+
+/** One fresh proof for an exact unpublished single-source ref-exhausted journal, never a source retry. */
+export type ControlPlaneBatchRefContinuation = {
+  version: 1;
+  manifest: ControlPlaneBatchManifest;
+  handoff: Omit<ControlPlaneBatchHandoff, 'failures'>;
+  /** SHA-256 of the retained root log documenting all three positive, moved-ref attempts. */
+  logHash: string;
+};
+
+export type ControlPlaneBatchSupersession = {
+  version: 1;
+  previousBatchId: string;
+  replacement: ControlPlaneBatchManifest;
+  handoff: ControlPlaneBatchHandoff;
+  /** Required when a prior generation is corrected or any member is deferred. Covers every prior member exactly once. */
+  memberMapping?: readonly ControlPlaneBatchMemberMapping[];
+  /** Owning manager's retained Root order, including the exact number to hand off to dev. */
+  deferralAuthorization?: ControlPlaneBatchDevHandoff['authorization'];
+  /** Owning manager identifies actual omitted or added producer edits relevant to the retained failure. */
+  changedInputs: readonly { taskId: string; path: string; reason: string }[];
+};
+
+export type ControlPlaneBatchSupersessionResult = {
+  previousBatchId: string;
+  replacementBatchId: string;
+  status: 'superseded/interrupted';
+  members: (AttemptRef & { acceptedCommit: string; disposition: 'failed' | 'unknown' })[];
+  devHandoff?: ControlPlaneBatchDevHandoff;
+  physicalInventory?: 'complete' | 'legacy-inventory-unavailable';
 };
 
 /** Thrown when a write carries an attempt number that is no longer the task's current attempt. */
