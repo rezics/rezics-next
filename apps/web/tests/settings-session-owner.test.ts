@@ -100,116 +100,121 @@ const transitions = {
 };
 
 for (const [name, transition] of Object.entries(transitions)) {
-  test(`Retired Settings sessions cannot resume private reads writes drafts or late receipts from retained cache data: ${name}`, async () => {
-    const h = setup();
-    let dispatches = 0;
-    let confirmed = 4;
-    const preferences = accountPreferenceIO(
-      'alice',
-      h.owner.credential,
-      (v) => {
-        confirmed = v;
-      },
-      {
-        read: async () => {
-          dispatches++;
-          return page;
+  test(
+    name === 'retained data on query error'
+      ? 'Retired Settings sessions cannot resume private reads writes drafts or late receipts from retained cache data'
+      : `Retired Settings sessions cannot resume private reads writes drafts or late receipts from retained cache data: ${name}`,
+    async () => {
+      const h = setup();
+      let dispatches = 0;
+      let confirmed = 4;
+      const preferences = accountPreferenceIO(
+        'alice',
+        h.owner.credential,
+        (v) => {
+          confirmed = v;
         },
-        saveReading: async () => {
-          dispatches++;
-          return { ok: true, preferences: page.preferences };
+        {
+          read: async () => {
+            dispatches++;
+            return page;
+          },
+          saveReading: async () => {
+            dispatches++;
+            return { ok: true, preferences: page.preferences };
+          },
+          saveNotifications: async () => {
+            dispatches++;
+            return { ok: true, notifications: page.notifications, version: 5 };
+          },
         },
-        saveNotifications: async () => {
-          dispatches++;
-          return { ok: true, notifications: page.notifications, version: 5 };
-        },
-      },
-    );
-    const row = new CollectionPrivacyEditor(
-      collection,
-      collectionPrivacyIO(h.owner, {
-        read: async () => {
-          dispatches++;
-          return { ok: true, value: collection };
-        },
-        save: async () => {
-          dispatches++;
-          return { ok: false, reason: 'unavailable' };
-        },
-      }),
-      h.owner.isCurrent,
-    );
-    const pager = new CollectionPrivacyPager(async () => {
-      dispatches++;
-      return { ok: true, value: { collections: [collection], next: 'cursor' } };
-    }, h.owner.isCurrent);
-    const verification = new VerificationRecovery(
-      'alice',
-      verificationRecoveryIO(h.owner, h.client, {
-        read: async () => {
-          dispatches++;
-          return empty;
-        },
-        request: async () => {
-          dispatches++;
-          return { ok: false, status: 503, message: 'unknown' };
-        },
-        withdraw: async () => {
-          dispatches++;
-          return { ok: false, status: 503, message: 'unknown' };
-        },
-      }),
-      h.owner.isCurrent,
-    );
-    const notification = new NotificationEditor(
-      { notifications: page.notifications, version: 4 },
-      preferences.notifications,
-      false,
-      () => confirmed,
-      h.owner.isCurrent,
-    );
-    const drafts = new SettingsNavigationDrafts();
-    drafts.register({ kind: 'notifications', needsDecision: () => h.owner.isCurrent() });
-    const leaving = drafts.block('/settings', '/inbox');
-    const stop = h.owner.subscribe(drafts.refresh);
-    try {
-      transition(h.client);
-      expect(h.owner.isCurrent()).toBe(false);
-      expect(await leaving).toBe(false);
-      await expect(preferences.reading.read()).rejects.toThrow('Settings viewer unavailable');
-      expect(await preferences.reading.save({ expectedVersion: 4, spoilerLevel: 1, idempotencyKey: 'old' })).toEqual({
-        ok: false,
-        reason: 'forbidden',
-      });
-      await notification.edit('reply', false, 4);
-      await notification.restore(4);
-      await notification.reload();
-      await row.edit('public');
-      await row.reload();
-      await row.retry();
-      await pager.load();
-      await pager.restart();
-      await verification.reload();
-      await verification.retry();
-      await verification.withdraw(true);
-      preferences.notifications.confirmed(99);
-      expect(dispatches).toBe(0);
-      expect(confirmed).toBe(4);
-      expect(notification.snapshot().draft).toEqual(page.notifications);
-      expect(row.snapshot().attempt).toBeNull();
-      expect(drafts.needsDecision()).toBe(false);
-      h.client.setQueryData(sessionQuery.queryKey, identity);
-      const fresh = new SettingsSessionOwner(h.client, identity.csrfToken);
-      const end = fresh.mount();
-      expect(fresh.isCurrent()).toBe(true);
-      expect(h.owner.isCurrent()).toBe(false);
-      end();
-      fresh.retire();
-    } finally {
-      stop();
-      h.close();
-    }
-  });
+      );
+      const row = new CollectionPrivacyEditor(
+        collection,
+        collectionPrivacyIO(h.owner, {
+          read: async () => {
+            dispatches++;
+            return { ok: true, value: collection };
+          },
+          save: async () => {
+            dispatches++;
+            return { ok: false, reason: 'unavailable' };
+          },
+        }),
+        h.owner.isCurrent,
+      );
+      const pager = new CollectionPrivacyPager(async () => {
+        dispatches++;
+        return { ok: true, value: { collections: [collection], next: 'cursor' } };
+      }, h.owner.isCurrent);
+      const verification = new VerificationRecovery(
+        'alice',
+        verificationRecoveryIO(h.owner, h.client, {
+          read: async () => {
+            dispatches++;
+            return empty;
+          },
+          request: async () => {
+            dispatches++;
+            return { ok: false, status: 503, message: 'unknown' };
+          },
+          withdraw: async () => {
+            dispatches++;
+            return { ok: false, status: 503, message: 'unknown' };
+          },
+        }),
+        h.owner.isCurrent,
+      );
+      const notification = new NotificationEditor(
+        { notifications: page.notifications, version: 4 },
+        preferences.notifications,
+        false,
+        () => confirmed,
+        h.owner.isCurrent,
+      );
+      const drafts = new SettingsNavigationDrafts();
+      drafts.register({ kind: 'notifications', needsDecision: () => h.owner.isCurrent() });
+      const leaving = drafts.block('/settings', '/inbox');
+      const stop = h.owner.subscribe(drafts.refresh);
+      try {
+        transition(h.client);
+        expect(h.owner.isCurrent()).toBe(false);
+        expect(await leaving).toBe(false);
+        await expect(preferences.reading.read()).rejects.toThrow('Settings viewer unavailable');
+        expect(await preferences.reading.save({ expectedVersion: 4, spoilerLevel: 1, idempotencyKey: 'old' })).toEqual({
+          ok: false,
+          reason: 'forbidden',
+        });
+        await notification.edit('reply', false, 4);
+        await notification.restore(4);
+        await notification.reload();
+        await row.edit('public');
+        await row.reload();
+        await row.retry();
+        await pager.load();
+        await pager.restart();
+        await verification.reload();
+        await verification.retry();
+        await verification.withdraw(true);
+        preferences.notifications.confirmed(99);
+        expect(dispatches).toBe(0);
+        expect(confirmed).toBe(4);
+        expect(notification.snapshot().draft).toEqual(page.notifications);
+        expect(row.snapshot().attempt).toBeNull();
+        expect(drafts.needsDecision()).toBe(false);
+        h.client.setQueryData(sessionQuery.queryKey, identity);
+        const fresh = new SettingsSessionOwner(h.client, identity.csrfToken);
+        const end = fresh.mount();
+        expect(fresh.isCurrent()).toBe(true);
+        expect(h.owner.isCurrent()).toBe(false);
+        end();
+        fresh.retire();
+      } finally {
+        stop();
+        h.close();
+      }
+    },
+  );
 }
 
 test('late Reading and Notifications receipts cannot confirm versions; exact dispatched inputs stay immutable and unresolved', async () => {
@@ -485,6 +490,7 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
   window.document.body.append(host);
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(host as unknown as HTMLElement);
+  let disposed = false;
   try {
     await act(async () => {
       root.render(
@@ -524,16 +530,16 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
     expect(writes).toBe(2);
     await act(async () => {
       root.unmount();
+      disposed = true;
     });
     fresh!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     expect(writes).toBe(2);
   } finally {
-    if (host.isConnected) {
+    if (!disposed)
       await act(async () => {
         root.unmount();
       });
-      host.remove();
-    }
+    host.remove();
     client.clear();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -614,6 +620,105 @@ test('a late privacy row read cannot adopt values or resolve an immutable uncert
     expect(row.snapshot().attempt).toBe(attempt);
     expect(row.needsListRestartProtection()).toBe(true);
     expect(reads).toBe(1);
+  } finally {
+    h.close();
+  }
+});
+
+test('Reading production recovery retries the identical frozen command with its original token and rejects the retired callback', async () => {
+  const h = setup();
+  const calls: unknown[] = [];
+  const tokens: string[] = [];
+  let reads = 0;
+  const receipt = { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 5 };
+  const io = accountPreferenceIO('alice', h.owner.credential, () => {}, {
+    read: async () => {
+      reads++;
+      return { ...page, preferences: receipt };
+    },
+    saveReading: async (input, token) => {
+      calls.push(input);
+      tokens.push(token);
+      return calls.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, preferences: receipt };
+    },
+    saveNotifications: async () => {
+      throw new Error('Unexpected notification write');
+    },
+  });
+  try {
+    const input = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' })!;
+    const bytes = JSON.stringify(input);
+    expect(await sendReading(io.reading, input, false, () => 4)).toMatchObject({ kind: 'uncertain' });
+    expect(await sendReading(io.reading, input, true, () => 4)).toMatchObject({
+      kind: 'confirmed',
+      preferences: receipt,
+    });
+    expect(calls[1]).toBe(calls[0]);
+    expect(JSON.stringify(input)).toBe(bytes);
+    expect(tokens).toEqual(['original-token', 'original-token']);
+    expect(reads).toBe(1);
+    transitions['token rotation and back'](h.client);
+    expect(await sendReading(io.reading, input, true, () => 4)).toMatchObject({ kind: 'uncertain' });
+    expect(calls).toHaveLength(2);
+    expect(reads).toBe(1);
+  } finally {
+    h.close();
+  }
+});
+
+test('Verification withdrawal uses the original explicit token and keeps its exact unknown attempt through retirement', async () => {
+  const h = setup();
+  const sent: unknown[] = [];
+  const tokens: string[] = [];
+  const current: VerificationSnapshot = {
+    ...empty,
+    verificationRequest: {
+      id: 'original-request',
+      accountId: 'alice',
+      accountKind: 'actor',
+      requestedBy: 'alice',
+      catalogueSubjectId: 'agent',
+      statement: 'Evidence',
+      links: [],
+      state: 'pending',
+      reason: null,
+      problem: null,
+      decisionReceiptId: null,
+      decidedBy: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    },
+  };
+  const controller = new VerificationRecovery(
+    'alice',
+    verificationRecoveryIO(h.owner, h.client, {
+      read: async () => current,
+      request: async () => {
+        throw new Error('Unexpected request');
+      },
+      withdraw: async (_, input, token) => {
+        sent.push(input);
+        tokens.push(token);
+        throw new Error('Lost withdrawal response');
+      },
+    }),
+    h.owner.isCurrent,
+  );
+  try {
+    await controller.reload();
+    await controller.withdraw(true);
+    const attempt = controller.snapshot().attempt!;
+    const bytes = JSON.stringify(attempt);
+    await controller.retry();
+    expect(sent[1]).toBe(sent[0]);
+    expect(attempt.requestId).toBe('original-request');
+    transitions['synchronous signed-out and back'](h.client);
+    await controller.retry();
+    await controller.withdraw(true);
+    expect(controller.snapshot().attempt).toBe(attempt);
+    expect(JSON.stringify(attempt)).toBe(bytes);
+    expect(tokens).toEqual(['original-token', 'original-token']);
+    expect(sent).toHaveLength(2);
   } finally {
     h.close();
   }
