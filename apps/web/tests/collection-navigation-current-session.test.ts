@@ -74,7 +74,9 @@ test('real absent-session refusal closes Collection and personal navigation entr
     preparation = 'absent';
     expect(await prepareSession(currentRequest, sessionEnv)).toBe(true);
     for (const [index, read] of reads.entries())
-      expect(await read()).toEqual([signedOut, closedNavigation, signedOut, closedNavigation, { state: 'closed' }][index]);
+      expect(await read()).toEqual(
+        [signedOut, closedNavigation, signedOut, closedNavigation, { state: 'closed' }][index],
+      );
     expect(viewerCredential(currentRequest)).toBe('Bearer current-viewer');
     expect(sessionSubject(currentRequest)).toBe('owner');
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
@@ -119,7 +121,10 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     },
   };
   const collection = {
-    id: 'own-private', title: 'Owner collection', visibility: 'private', memberCount: 31,
+    id: 'own-private',
+    title: 'Owner collection',
+    visibility: 'private',
+    memberCount: 31,
     curator: { handle: 'owner', displayName: 'Owner' },
     previewStatus: 'ready',
     previewMembers: [1, 2, 3].map((id) => ({
@@ -127,23 +132,34 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
       subject: { id: `subject-${id}`, type: 'Book', types: ['Book'], label: `Book ${id}`, cover: null },
     })),
   };
-  const pins = [{ collectionId: collection.id, target: { id: collection.id, title: collection.title } },
-    { collectionId: 'unreadable', target: null }];
+  const pins = [
+    { collectionId: collection.id, target: { id: collection.id, title: collection.title } },
+    { collectionId: 'unreadable', target: null },
+  ];
   const transport = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const call = new Request(input, init);
     calls.push(call);
     const url = new URL(call.url);
     if (url.pathname === '/v1/openapi.json') return Response.json({ paths });
     if (url.pathname === '/v1/libraryPins')
-      return Response.json(pinsStatus === 202 ? { preparing: true } : { pins, revision: 7, next }, { status: pinsStatus });
+      return Response.json(pinsStatus === 202 ? { preparing: true } : { pins, revision: 7, next }, {
+        status: pinsStatus,
+      });
     if (url.pathname === '/v1/collections') {
       if (stale || url.searchParams.get('cursor') === 'stale')
         return Response.json({ code: 'stale_cursor' }, { status: 409 });
       if (collectionStatus !== 200)
-        return Response.json(collectionStatus === 202 ? { preparing: true } : { code: 'forbidden' }, { status: collectionStatus });
-      return Response.json({ collections: [collection,
-        { ...collection, id: 'pending', previewStatus: 'pending', previewMembers: [] },
-        { ...collection, id: 'empty', previewMembers: [] }], next });
+        return Response.json(collectionStatus === 202 ? { preparing: true } : { code: 'forbidden' }, {
+          status: collectionStatus,
+        });
+      return Response.json({
+        collections: [
+          collection,
+          { ...collection, id: 'pending', previewStatus: 'pending', previewMembers: [] },
+          { ...collection, id: 'empty', previewMembers: [] },
+        ],
+        next,
+      });
     }
     throw new Error(`Unexpected private read: ${call.method} ${url}`);
   });
@@ -159,47 +175,75 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     ]);
     const previewStart = calls.length;
     const previews = await readMineCollectionsPage({ data: { layout: 'previews', cursor } });
-    expect(queries(previewStart)).toEqual([{ view: 'FULL', limit: '20', preview: '3', curatorAccountId: 'owner', cursor }]);
+    expect(queries(previewStart)).toEqual([
+      { view: 'FULL', limit: '20', preview: '3', curatorAccountId: 'owner', cursor },
+    ]);
     expect(previews.navigationCollections).toEqual(previews.collections);
     expect(previews.collections.map((item) => item.preview)).toEqual([
       { state: 'loaded', members: collection.previewMembers.map(({ subject }) => subject) },
-      { state: 'preparing' }, { state: 'loaded', members: [], emptyConfirmed: true },
+      { state: 'preparing' },
+      { state: 'loaded', members: [], emptyConfirmed: true },
     ]);
     let start = calls.length;
-    expect(await loadMineCollectionsPage(client, currentRequest, sessionEnv, { cursor: 'stale', layout: 'previews' }))
-      .toMatchObject({ state: 'loaded', cursorReset: true, next });
+    expect(
+      await loadMineCollectionsPage(client, currentRequest, sessionEnv, { cursor: 'stale', layout: 'previews' }),
+    ).toMatchObject({ state: 'loaded', cursorReset: true, next });
     expect(queries(start)).toEqual([
       { view: 'FULL', limit: '20', preview: '3', curatorAccountId: 'owner', cursor: 'stale' },
       { view: 'FULL', limit: '20', preview: '3', curatorAccountId: 'owner' },
     ]);
     stale = true;
     start = calls.length;
-    expect(await loadMineCollectionsPage(client, currentRequest, sessionEnv, { cursor }))
-      .toEqual({ signedIn: true, state: 'unavailable', cursorReset: true, collections: [], next: null });
+    expect(await loadMineCollectionsPage(client, currentRequest, sessionEnv, { cursor })).toEqual({
+      signedIn: true,
+      state: 'unavailable',
+      cursorReset: true,
+      collections: [],
+      next: null,
+    });
     expect(calls.length - start).toBe(2);
     stale = false;
 
     const preparations = credentialReads;
     start = calls.length;
-    expect(await loadMineCollectionsForOwner(client, 'owner', 'Bearer current-viewer')).toMatchObject({ signedIn: true, next });
+    expect(await loadMineCollectionsForOwner(client, 'owner', 'Bearer current-viewer')).toMatchObject({
+      signedIn: true,
+      next,
+    });
     expect(credentialReads).toBe(preparations);
     expect(queries(start)).toEqual([{ view: 'FULL', limit: '100', curatorAccountId: 'owner' }]);
     for (const limit of [8, 100] as const) {
       start = calls.length;
-      const navigation = limit === 8
-        ? await loadLibraryNavigation(client, currentRequest, sessionEnv)
-        : await readLibraryNavigationPage({ data: limit });
-      expect(navigation).toMatchObject({ collectionsState: 'loaded', pins: { state: 'loaded', pins, revision: 7, next, canUpdate: true, canRemove: true } });
-      expect(calls.slice(start).map((call) => new URL(call.url).pathname).sort())
-        .toEqual(['/v1/collections', '/v1/libraryPins', '/v1/openapi.json']);
+      const navigation =
+        limit === 8
+          ? await loadLibraryNavigation(client, currentRequest, sessionEnv)
+          : await readLibraryNavigationPage({ data: limit });
+      expect(navigation).toMatchObject({
+        collectionsState: 'loaded',
+        pins: { state: 'loaded', pins, revision: 7, next, canUpdate: true, canRemove: true },
+      });
+      expect(
+        calls
+          .slice(start)
+          .map((call) => new URL(call.url).pathname)
+          .sort(),
+      ).toEqual(['/v1/collections', '/v1/libraryPins', '/v1/openapi.json']);
       expect(queries(start)).toContainEqual({ limit: String(limit) });
       expect(queries(start)).toContainEqual({ view: 'FULL', limit: '100', curatorAccountId: 'owner' });
     }
     expect(credentialReads).toBe(preparations + 2);
-    for (const [status, state] of [[202, 'preparing'], [403, 'denied'], [503, 'unavailable']] as const) {
+    for (const [status, state] of [
+      [202, 'preparing'],
+      [403, 'denied'],
+      [503, 'unavailable'],
+    ] as const) {
       collectionStatus = status;
-      expect(await loadMineCollectionsPage(client, currentRequest, sessionEnv, {}))
-        .toEqual({ signedIn: true, state, collections: [], next: null });
+      expect(await loadMineCollectionsPage(client, currentRequest, sessionEnv, {})).toEqual({
+        signedIn: true,
+        state,
+        collections: [],
+        next: null,
+      });
     }
     expect(calls.every((call) => call.headers.get('authorization') === 'Bearer current-viewer')).toBe(true);
 
@@ -217,14 +261,28 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     pinsStatus = 403;
     expect(await readLibraryPins(client, 'Bearer authenticated', 100)).toEqual({ state: 'unavailable' });
     pinsStatus = 200;
-    paths = { '/v1/libraryPins': { get: { operationId: 'library_pin.list' }, post: { operationId: 'library_pin.put' } },
-      '/v1/libraryPins/{collectionId}': { put: { operationId: 'collection.update' }, delete: { operationId: 'library_pin.put' } } };
-    expect(await readLibraryPins(client, 'Bearer authenticated', 100)).toEqual({ state: 'loaded', pins, revision: 7, next, canUpdate: false, canRemove: false });
+    paths = {
+      '/v1/libraryPins': { get: { operationId: 'library_pin.list' }, post: { operationId: 'library_pin.put' } },
+      '/v1/libraryPins/{collectionId}': {
+        put: { operationId: 'collection.update' },
+        delete: { operationId: 'library_pin.put' },
+      },
+    };
+    expect(await readLibraryPins(client, 'Bearer authenticated', 100)).toEqual({
+      state: 'loaded',
+      pins,
+      revision: 7,
+      next,
+      canUpdate: false,
+      canRemove: false,
+    });
     paths = { '/v1/libraryPins': { post: { operationId: 'library_pin.list' } } };
     start = calls.length;
     expect(await readLibraryPins(client, 'Bearer authenticated', 8)).toEqual({ state: 'closed' });
     expect(queries(start)).toEqual([{}]);
-    expect(calls.every((call) => call.method === 'GET' && call.cache === 'no-store' && call.redirect === 'manual')).toBe(true);
+    expect(
+      calls.every((call) => call.method === 'GET' && call.cache === 'no-store' && call.redirect === 'manual'),
+    ).toBe(true);
     expect(timeouts.mock.calls).toHaveLength(calls.length);
     expect(timeouts.mock.calls.every(([milliseconds]) => milliseconds === 2_000)).toBe(true);
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
