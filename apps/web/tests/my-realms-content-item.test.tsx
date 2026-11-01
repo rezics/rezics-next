@@ -50,9 +50,7 @@ function primaryLink(row: string) {
 
 function cursorFromContinuation(markup: string, locale: Locale, cursor: string) {
   const label = m.realms_more({}, { locale });
-  const continuations = [...markup.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gu)].filter(
-    (match) => match[2] === label,
-  );
+  const continuations = [...markup.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gu)].filter((match) => match[2] === label);
   expect(continuations).toHaveLength(1);
   const encodedHref = continuations[0]?.[1]?.match(/\bhref="([^"]+)"/u)?.[1];
   expect(encodedHref).toBeTruthy();
