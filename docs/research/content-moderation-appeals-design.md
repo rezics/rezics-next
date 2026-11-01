@@ -72,6 +72,30 @@ owned by [Content][content] and its linked route modules. Keep current command a
    but [kernel/client.ts][client] falls back to a fake kernel in development without `KERNEL_ORIGIN`; stories are
    not served integration evidence.
 
+## Private Appeals reads and recovery
+
+The default board moderation route's Appeals tab reads one existing board or thread Appeals page through the
+generated KernelClient, with `limit=20` and the native opaque signed cursor unchanged. A post report scope is return
+context: the page explicitly names the containing thread scope when supplied, or the board scope otherwise. It never
+claims a post-only Appeals list, postfilters a page or calls a post Appeals endpoint. Returning to Reports preserves
+its scope and selection metadata. Ordinary target reads remain deduplicated and use the existing enrichment; withheld
+targets do not suppress independently authorized appeal and decision statements or grant content access.
+
+Every private response binds the prepared session's viewer, board/thread/post return context, cursor and a fresh read
+generation. Session preparation and credential reads remain private/no-store; a missing prepared viewer closes the
+read without anonymous fallback. The route also binds the response to the navigation that requested it and discards
+aborted loaders. The mounted page retires its private statements, target evidence and resolution forms immediately
+on viewer loss/change, unknown session after a known session, scope/cursor navigation or departure. Retirement is
+irreversible for that mounted generation, even if the same viewer or URL returns. Late retry responses cannot revive
+it. Fixtures without page identity remain compatible with presentation stories and never supply production authority.
+
+Loading, terminal empty, sparse empty with a native next cursor, recoverable unavailable, stale-cursor restart and
+closed access are distinct. Only an explicit retry repeats the current read; it clears old private content first and
+never replays a resolution or invalidates Reports. Invalid/expired native cursors offer an explicit first-page restart
+that removes only the Appeals cursor. Unknown and not-visible scopes share the same closed message. Native problem
+details never enter the UI. List `canResolve` remains the current native hint; commands still authorize independently,
+including the original-reviewer prohibition. Successful resolution confirmation stays visible until navigation.
+
 ## Amendments to adopt and product slices
 
 1. **A moderator can find and resolve a reader's post report. Content backend + Web.** Amend Content's board-list

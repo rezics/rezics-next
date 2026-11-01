@@ -1,3 +1,4 @@
+import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -7,6 +8,8 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import type { ResolvedReportTarget as ModerationTarget } from './reports-read';
 import { enrichModerationTargets } from './target-context';
+import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './appeals-read-model';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 
 export const MODERATION_APPEALS_PAGE_SIZE = 20;
 export type Appeal = {
@@ -37,11 +40,12 @@ export type AppealTargetReads = {
 };
 
 function parseAppealPage(value: unknown): AppealPage {
-  if (!value || typeof value !== 'object') throw notFound();
+  if (!value || typeof value !== 'object') throw new Error('Invalid appeals page');
   const page = value as Record<string, unknown>;
-  if (!Array.isArray(page.appeals) || (page.next !== null && typeof page.next !== 'string')) throw notFound();
+  if (!Array.isArray(page.appeals) || (page.next !== null && typeof page.next !== 'string'))
+    throw new Error('Invalid appeals page');
   const appeals = page.appeals.map((item): Appeal => {
-    if (!item || typeof item !== 'object') throw notFound();
+    if (!item || typeof item !== 'object') throw new Error('Invalid appeals page');
     const appeal = item as Record<string, unknown>;
     const decision =
       appeal.decision && typeof appeal.decision === 'object' ? (appeal.decision as Record<string, unknown>) : null;
@@ -57,9 +61,10 @@ function parseAppealPage(value: unknown): AppealPage {
       !decision.target ||
       typeof decision.target !== 'object'
     )
-      throw notFound();
+      throw new Error('Invalid appeals page');
     const target = decision.target as Record<string, unknown>;
-    if ((target.kind !== 'post' && target.kind !== 'thread') || typeof target.id !== 'string') throw notFound();
+    if ((target.kind !== 'post' && target.kind !== 'thread') || typeof target.id !== 'string')
+      throw new Error('Invalid appeals page');
     return {
       id: appeal.id,
       decisionId: appeal.decisionId,
@@ -110,17 +115,6 @@ export function appealTarget(appeal: Appeal): Appeal['decision']['target'] {
   );
 }
 
-type ReadResult = { data?: unknown; error?: unknown };
-type Client = {
-  boards: (params: { id: string }) => {
-    appeals: { get: (options: unknown) => Promise<ReadResult> };
-  };
-  threads: (params: { id: string }) => {
-    appeals: { get: (options: unknown) => Promise<ReadResult> };
-    get: (options?: unknown) => Promise<ReadResult>;
-  };
-  posts: (params: { id: string }) => { get: (options?: unknown) => Promise<ReadResult> };
-};
 const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
 
 export const loadModerationAppeals = createServerFn({ method: 'GET' })
@@ -130,43 +124,80 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
     if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
     if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
       throw notFound();
+    if (value.postId !== undefined && (typeof value.postId !== 'string' || value.postId.length > 128)) throw notFound();
     if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 4096))
       throw notFound();
     return {
       boardId: value.boardId,
       ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
+      ...(typeof value.postId === 'string' ? { postId: value.postId } : {}),
       ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
     };
   })
-  .handler(async ({ data }): Promise<AppealPage & { targets: ModerationTarget[] }> => {
+  .handler(async ({ data }): Promise<PrivateAppealPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
+    const identity = { readKey: appealReadKey(data), viewerId: null, generation: crypto.randomUUID() };
+    try {
+      await prepareSession(request, env as Partial<SessionEnv>);
+    } catch {
+      return { ...identity, appeals: [], targets: [], next: null, state: 'unavailable' };
+    }
     const authorization = viewerCredential(request);
-    if (!authorization) throw notFound();
-    const nativeClient = kernelClient();
-    const client = nativeClient as unknown as Client;
+    const viewerId = sessionSubject(request);
+    // Only the prepared session supplies the private page's viewer identity.
+    if (!authorization || !viewerId) return { ...identity, appeals: [], targets: [], next: null, state: 'closed' };
+    return readModerationAppealPage(kernelClient(), data, authorization, viewerId);
+  });
+
+class AppealReadFailure extends Error {
+  constructor(readonly state: 'closed' | 'unavailable' | 'stale') {
+    super(state);
+  }
+}
+function appealResult(result: { data?: unknown; error?: { status: number; value: unknown } | null }): AppealPage {
+  if (result.error) {
+    const { status, value } = result.error;
+    if (
+      value &&
+      typeof value === 'object' &&
+      'code' in value &&
+      ((status === 400 && value.code === 'invalid_cursor') || (status === 409 && value.code === 'stale_cursor'))
+    )
+      throw new AppealReadFailure('stale');
+    throw new AppealReadFailure([401, 403, 404].includes(status) ? 'closed' : 'unavailable');
+  }
+  return parseAppealPage(result.data);
+}
+
+/** The default route's one native page and deduplicated ordinary target reads. */
+export async function readModerationAppealPage(
+  client: KernelClient,
+  input: AppealReadInput,
+  authorization: string,
+  viewerId: string,
+): Promise<PrivateAppealPage> {
+  const identity = { readKey: appealReadKey(input), viewerId, generation: crypto.randomUUID() };
+  try {
     const headers = auth(authorization);
     const page = await readModerationAppeals(
       {
-        boardAppeals: async (id, cursor) => {
-          const result = await client.boards({ id }).appeals.get({
-            ...headers,
-            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-          });
-          if (result.error || !result.data) throw notFound();
-          return parseAppealPage(result.data);
-        },
-        threadAppeals: async (id, cursor) => {
-          const result = await client.threads({ id }).appeals.get({
-            ...headers,
-            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-          });
-          if (result.error || !result.data) throw notFound();
-          return parseAppealPage(result.data);
-        },
+        boardAppeals: async (id, cursor) =>
+          appealResult(
+            await client.boards({ id }).appeals.get({
+              ...headers,
+              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+            }),
+          ),
+        threadAppeals: async (id, cursor) =>
+          appealResult(
+            await client.threads({ id }).appeals.get({
+              ...headers,
+              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+            }),
+          ),
       },
-      data,
+      input,
     );
     const targets = await resolveAppealTargets(page.appeals, {
       post: async (id) => {
@@ -178,13 +209,15 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
         return result.error ? null : ((result.data as ModerationTarget['value'] | undefined) ?? null);
       },
     });
-    const enriched = await enrichModerationTargets(
-      nativeClient,
-      targets,
-      [],
-      [],
-      authorization,
-      sessionSubject(request) ?? '',
-    );
-    return { ...page, targets: enriched.targets };
-  });
+    const enriched = await enrichModerationTargets(client, targets, [], [], authorization, viewerId);
+    return { ...page, targets: enriched.targets, ...identity, state: 'ready' };
+  } catch (error) {
+    return {
+      ...identity,
+      appeals: [],
+      targets: [],
+      next: null,
+      state: error instanceof AppealReadFailure ? error.state : isPlatformClosedError(error) ? 'closed' : 'unavailable',
+    };
+  }
+}

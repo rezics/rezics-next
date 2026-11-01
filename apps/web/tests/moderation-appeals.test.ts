@@ -287,3 +287,226 @@ test('a forbidden resolution survives the server boundary as data, while other f
     }, input),
   ).rejects.toThrow('Unavailable');
 });
+
+// Authored UNRUN: controller integration owns execution of this default route/read/view regression.
+test('The default private Appeals route recovers bounded reads and retires private statements and late responses when its viewer or page identity changes, including withheld targets', async () => {
+  const { dirname } = await import('node:path');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const { act } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { createKernelClient } = await import('@rezics/client');
+  const { readModerationAppealPage } = await import('../src/moderation/appeals-read');
+  const { ModerationAppealsPage } = await import('../src/moderation/appeals-tab');
+  const { moderationAppealInput, appealPageIsCurrent, createAppealReadLifetime } =
+    await import('../src/moderation/appeals-read-model');
+  const { m } = await import('../src/paraglide/messages.js');
+  const route = await Bun.file(new URL('../src/routes/boards/$id_.moderation.tsx', import.meta.url)).text();
+  expect(route).toContain('<ModerationAppealsPage');
+  expect(route).toContain('moderationAppealInput(params.id, deps)');
+  expect(route).toContain('abortController.signal.throwIfAborted()');
+  expect(route).toContain('appealPage.navigationKey === appealNavigationKey');
+  expect(route).toContain("search: { ...selection, tab: 'appeals'");
+
+  const rows = [1, 2].map((n) => ({
+    ...appeal(n, id(50)),
+    decision: { statement: `PRIVATE decision ${n}`, target: { kind: 'post', id: id(50) } },
+    statement: `PRIVATE appeal ${n}`,
+    canResolve: n === 1,
+  }));
+  const calls: Request[] = [];
+  let mode: 'ready' | 'unavailable' | 'stale' | 'closed' | 'sparse' | 'empty' = 'ready';
+  let gate: Promise<void> | undefined;
+  let release!: () => void;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        calls.push(request);
+        const path = new URL(request.url).pathname;
+        expect(request.method).toBe('GET');
+        expect(request.headers.get('authorization')).toBe('Bearer reviewer');
+        expect(request.cache).toBe('no-store');
+        if (path === `/v1/posts/${id(50)}`)
+          return Response.json({ code: 'not_found', detail: 'NEVER DISCLOSE TARGET' }, { status: 404 });
+        expect([`/v1/boards/${id(1)}/appeals`, `/v1/threads/${id(2)}/appeals`]).toContain(path);
+        if (gate) await gate;
+        if (mode === 'unavailable')
+          return Response.json({ code: 'dependency_unavailable', detail: 'NEVER DISCLOSE' }, { status: 503 });
+        if (mode === 'stale') return Response.json({ code: 'stale_cursor', detail: 'NEVER DISCLOSE' }, { status: 409 });
+        if (mode === 'closed') return Response.json({ code: 'not_found', detail: 'NEVER DISCLOSE' }, { status: 404 });
+        return Response.json({
+          appeals: mode === 'ready' ? rows : [],
+          next: mode === 'empty' ? null : 'opaque+next/==',
+        });
+      },
+      { preconnect() {} },
+    ),
+  });
+  const first = moderationAppealInput(id(1), { thread: id(2), post: id(3) });
+  const later = { ...first, cursor: 'opaque+next/==' };
+  const read = (input: typeof first) => readModerationAppealPage(client, input, 'Bearer reviewer', id(900));
+  const ready = await read(first);
+  expect(ready.state).toBe('ready');
+  expect(ready.viewerId).toBe(id(900));
+  expect(ready.appeals.map((row) => row.canResolve)).toEqual([true, false]);
+  expect(calls.map((request) => new URL(request.url).pathname)).toEqual([
+    `/v1/threads/${id(2)}/appeals`,
+    `/v1/posts/${id(50)}`,
+  ]); // One native page and one point read for the repeated withheld target.
+  const initial = renderToStaticMarkup(createElement(ModerationAppealsPage, { page: ready, input: first }));
+  expect(initial).toContain('PRIVATE decision 1');
+  expect(initial).toContain('PRIVATE appeal 1');
+  expect(initial).toContain(m.moderation_target_unavailable());
+  expect(initial).toContain(m.moderation_appeals_read_post_thread_scope());
+  expect(initial.match(/>Uphold<\/button>/g)).toHaveLength(1);
+  expect(initial).not.toContain('NEVER DISCLOSE');
+
+  // The prepared viewer retires statements even without any readable target or evidence guard.
+  for (const session of [
+    { state: 'signed-out' },
+    { state: 'unavailable' },
+    { state: 'unknown' },
+    { state: 'signed-in', subject: id(901) },
+  ]) {
+    const lifetime = createAppealReadLifetime();
+    lifetime.observeViewer(ready.viewerId, { state: 'signed-in', subject: id(900) });
+    const token = lifetime.begin();
+    lifetime.observeViewer(ready.viewerId, session);
+    expect(lifetime.viewerRetired).toBe(true);
+    lifetime.observeViewer(ready.viewerId, { state: 'signed-in', subject: id(900) });
+    expect(lifetime.accepts(token, ready, first, id(900))).toBe(false);
+    const closed = renderToStaticMarkup(
+      createElement(ModerationAppealsView, {
+        ...ready,
+        targets: [],
+        state: lifetime.viewerRetired ? 'closed' : ready.state,
+      }),
+    );
+    expect(closed).toContain(m.moderation_appeals_read_closed());
+    expect(closed).not.toContain('PRIVATE');
+    expect(closed).not.toContain('<textarea');
+  }
+  for (const changed of [
+    { ...later },
+    { ...first, threadId: id(4) },
+    { ...first, postId: id(5) },
+    { ...first, boardId: id(6) },
+  ])
+    expect(appealPageIsCurrent(ready, changed)).toBe(false);
+
+  mode = 'unavailable';
+  const failed = await read(later);
+  expect(failed.appeals).toEqual([]);
+  expect(failed.targets).toEqual([]);
+  expect(failed.next).toBeNull();
+  const window = new Window({ url: 'https://site.test/en/boards/moderation?tab=appeals' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  type Props = Parameters<typeof ModerationAppealsPage>[0];
+  let props: Props = { page: failed, input: later, read };
+  let key = 'later';
+  const render = async (patch: Partial<Props> = {}) => {
+    props = { ...props, ...patch };
+    await act(async () => root.render(createElement(ModerationAppealsPage, { ...props, key })));
+  };
+  const click = async (name: string) => {
+    const button = [...host.querySelectorAll('button')].find((item) => item.textContent === name);
+    expect(button, name).toBeDefined();
+    await act(async () => button!.click());
+  };
+  try {
+    await render();
+    expect(host.textContent).toContain(m.moderation_appeals_read_unavailable());
+    expect(host.textContent).not.toContain('PRIVATE');
+    mode = 'ready';
+    gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const before = calls.length;
+    await click(m.moderation_appeals_read_retry());
+    expect(host.textContent).toContain(m.moderation_appeals_read_loading());
+    expect(calls).toHaveLength(before + 1);
+    expect(Object.fromEntries(new URL(calls.at(-1)!.url).searchParams)).toEqual({ limit: '20', cursor: later.cursor });
+    // Leaving a read retires it before a late native success arrives, including return to the same URL.
+    await render({ active: false });
+    await act(async () => {
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    gate = undefined;
+    await render({ active: true });
+    expect(host.textContent).not.toContain('PRIVATE');
+    expect(host.querySelector('textarea')).toBeNull();
+
+    key = 'retry-current-page';
+    await render({ page: failed });
+    await click(m.moderation_appeals_read_retry());
+    expect(host.textContent).toContain('PRIVATE appeal 1');
+    expect(host.querySelectorAll('textarea')).toHaveLength(1);
+    expect(new URL(calls.at(-2)!.url).searchParams.get('cursor')).toBe(later.cursor);
+
+    mode = 'stale';
+    const stale = await read(later);
+    key = 'restart-stale';
+    let resets = 0;
+    await render({
+      page: stale,
+      onRestart: () => {
+        resets++;
+      },
+    });
+    expect(host.textContent).toContain(m.moderation_appeals_read_stale());
+    await click(m.moderation_appeals_read_restart());
+    expect(resets).toBe(1);
+    mode = 'empty';
+    const reset = await read(first);
+    key = 'reset-first-page';
+    await render({ page: reset, input: first });
+    expect(new URL(calls.at(-1)!.url).searchParams.has('cursor')).toBe(false);
+    expect(host.textContent).toContain(m.moderation_appeals_empty());
+    expect(host.querySelector('button')).toBeNull();
+
+    for (const value of ['sparse', 'closed'] as const) {
+      mode = value;
+      const page = await read({ boardId: id(1), postId: id(3) });
+      key = value;
+      await render({ page, input: { boardId: id(1), postId: id(3) } });
+      expect(host.textContent).toContain(
+        value === 'sparse' ? m.moderation_appeals_read_sparse() : m.moderation_appeals_read_closed(),
+      );
+      expect(host.textContent).toContain(m.moderation_appeals_read_post_board_scope());
+      expect(host.textContent).not.toContain(m.moderation_appeals_empty());
+      expect(host.textContent).not.toContain('NEVER DISCLOSE');
+      expect(host.querySelector('textarea')).toBeNull();
+    }
+    expect(calls.every((request) => !new URL(request.url).pathname.includes('/posts/' + id(3) + '/appeals'))).toBe(
+      true,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    await window.happyDOM.close();
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    }
+  }
+});

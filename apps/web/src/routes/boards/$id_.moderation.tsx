@@ -5,7 +5,6 @@ import {
   useRouterState,
   type ErrorComponentProps,
 } from '@tanstack/react-router';
-import { PendingPage } from '../../shell/pending';
 import { ClosedErrorPage } from '../../shell/closed';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { requireSignedIn } from '../../session/guard';
@@ -21,7 +20,8 @@ import {
 } from '../../moderation/reports-read';
 import { ModerationReportsView } from '../../moderation/reports-page';
 import { loadModerationAppeals } from '../../moderation/appeals-read';
-import { ModerationAppealsView } from '../../moderation/appeals-tab';
+import { ModerationAppealsPage, ModerationAppealsView } from '../../moderation/appeals-tab';
+import { appealReadKey, moderationAppealInput } from '../../moderation/appeals-read-model';
 
 export const Route = createFileRoute('/boards/$id_/moderation')({
   beforeLoad: requireSignedIn,
@@ -37,15 +37,13 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
     ...(search.tab === 'appeals' ? { tab: 'appeals' as const } : {}),
   }),
   loaderDeps: ({ search }) => search,
-  loader: async ({ params, deps }) => {
-    const input = {
-      boardId: params.id,
-      ...(deps.cursor ? { cursor: deps.cursor } : {}),
-      ...(deps.thread ? { threadId: deps.thread } : {}),
-    };
-    return deps.tab === 'appeals'
-      ? loadModerationAppeals({ data: input })
-      : loadModerationReports({ data: moderationReportInput(params.id, deps) });
+  loader: async ({ params, deps, location, abortController }) => {
+    if (deps.tab === 'appeals') {
+      const page = await loadModerationAppeals({ data: moderationAppealInput(params.id, deps) });
+      abortController.signal.throwIfAborted();
+      return { ...page, navigationKey: location.state.__TSR_key ?? location.href };
+    }
+    return loadModerationReports({ data: moderationReportInput(params.id, deps) });
   },
   head: ({ match }) =>
     pageHead(
@@ -68,9 +66,12 @@ function ModerationReportsRoute() {
   const search = Route.useSearch();
   const { thread, post, tab } = search;
   const selection = reportSelection(search);
-  const latestSearch = useRouterState({ select: (state) => state.location.search });
+  const latestLocation = useRouterState({ select: (state) => state.location });
+  const latestSearch = latestLocation.search;
   const currentInput = moderationReportInput(id, latestSearch);
-  const appealPage = page as Awaited<ReturnType<typeof loadModerationAppeals>>;
+  const appealPage = page as Awaited<ReturnType<typeof loadModerationAppeals>> & { navigationKey: string };
+  const appealInput = moderationAppealInput(id, latestSearch);
+  const appealNavigationKey = latestLocation.state.__TSR_key ?? latestLocation.href;
   const reportPage = page as Awaited<ReturnType<typeof loadModerationReports>>;
   const onNext = (nextCursor: string) =>
     void navigate({
@@ -85,13 +86,20 @@ function ModerationReportsRoute() {
       },
     });
   return tab === 'appeals' ? (
-    <ModerationAppealsView
-      appeals={appealPage.appeals}
-      targets={appealPage.targets}
-      next={appealPage.next}
-      {...(thread ? { threadId: thread } : {})}
-      {...(post ? { postId: post } : {})}
+    <ModerationAppealsPage
+      key={`${appealPage.generation}:${appealPage.navigationKey}`}
+      page={appealPage}
+      input={appealInput}
+      active={latestSearch.tab === 'appeals' && appealPage.navigationKey === appealNavigationKey}
+      reportsSearch={`?${new URLSearchParams({ ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) })}`}
       onNext={onNext}
+      onRestart={() =>
+        void navigate({
+          to: '/boards/$id/moderation',
+          params: { id },
+          search: { ...selection, tab: 'appeals', ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
+        })
+      }
     />
   ) : (
     <ModerationReportsView
@@ -134,7 +142,10 @@ function ModerationReportsPending() {
   const { tab, thread, post } = search;
   const navigate = useNavigate();
   const selection = reportSelection(search);
-  if (tab === 'appeals') return <PendingPage />;
+  if (tab === 'appeals')
+    return (
+      <ModerationAppealsView appeals={[]} targets={[]} next={null} state="loading" threadId={thread} postId={post} />
+    );
   return (
     <ModerationReportsView
       boardId={id}
@@ -163,7 +174,25 @@ function ModerationReportsError({ reset, error }: ErrorComponentProps) {
   const { tab, thread, post } = search;
   const navigate = useNavigate();
   const selection = reportSelection(search);
-  if (tab === 'appeals' || isPlatformClosedError(error)) return <ClosedErrorPage error={error} />;
+  if (tab === 'appeals') {
+    const input = moderationAppealInput(id, search);
+    return (
+      <ModerationAppealsPage
+        page={{
+          appeals: [],
+          targets: [],
+          next: null,
+          viewerId: null,
+          readKey: appealReadKey(input),
+          generation: 'route-error',
+          state: isPlatformClosedError(error) ? 'closed' : 'unavailable',
+        }}
+        input={input}
+        reportsSearch={`?${new URLSearchParams({ ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) })}`}
+      />
+    );
+  }
+  if (isPlatformClosedError(error)) return <ClosedErrorPage error={error} />;
   return (
     <ModerationReportsView
       {...(thread ? { threadId: thread } : {})}

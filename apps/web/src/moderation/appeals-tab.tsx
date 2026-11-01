@@ -1,10 +1,97 @@
+import { useEffect, useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useSession } from '../session/query';
 import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { AppealResolution } from './appeal-resolution';
-import { appealTarget, type Appeal } from './appeals-read';
+import { appealTarget, loadModerationAppeals, type Appeal } from './appeals-read';
+import {
+  appealPageIsCurrent,
+  createAppealReadLifetime,
+  type AppealReadInput,
+  type AppealReadState,
+  type PrivateAppealPage,
+} from './appeals-read-model';
 import { moderationTargetContent, type ModerationTarget } from './target-content';
+
+/** Default route composition; retries replace only this private read, never replay a command. */
+export function ModerationAppealsPage({
+  page,
+  input,
+  active = true,
+  onNext,
+  onRestart,
+  reportsSearch,
+  read = (input) => loadModerationAppeals({ data: input }),
+}: {
+  page: PrivateAppealPage;
+  input: AppealReadInput;
+  active?: boolean;
+  onNext?: (cursor: string) => void;
+  onRestart?: () => void;
+  reportsSearch?: string;
+  read?: (input: AppealReadInput) => Promise<PrivateAppealPage>;
+}) {
+  const session = useSession();
+  const [data, setData] = useState(page);
+  const [lifetime] = useState(createAppealReadLifetime);
+  const expectedViewer = page.viewerId ?? (session.state === 'signed-in' ? (session.subject ?? null) : null);
+  lifetime.observeViewer(page.viewerId, session);
+  if (!active || !appealPageIsCurrent(page, input)) lifetime.retire();
+  const retrying = useRef(false);
+  // Invalidate outstanding callbacks on unmount, including Strict Mode effect replay.
+  useEffect(
+    () => () => {
+      lifetime.begin();
+    },
+    [lifetime],
+  );
+
+  async function retry() {
+    if (lifetime.retired || retrying.current || data.state !== 'unavailable') return;
+    retrying.current = true;
+    const token = lifetime.begin();
+    setData({ ...data, appeals: [], targets: [], next: null, state: 'loading' });
+    try {
+      const result = await read(input);
+      if (!lifetime.isCurrent(token)) return;
+      if (lifetime.accepts(token, result, input, expectedViewer)) setData(result);
+      else if (appealPageIsCurrent(result, input) && result.viewerId === null && result.state !== 'ready')
+        setData({ ...result, viewerId: expectedViewer });
+      else {
+        lifetime.retire();
+        setData({ ...data, appeals: [], targets: [], next: null, state: 'closed' });
+      }
+    } catch {
+      if (lifetime.accepts(token, data, input, expectedViewer))
+        setData({ ...data, appeals: [], targets: [], next: null, state: 'unavailable' });
+    } finally {
+      retrying.current = false;
+    }
+  }
+  const leave = (action: (() => void) | undefined) => {
+    lifetime.retire();
+    setData({ ...data, appeals: [], targets: [], next: null, state: 'loading' });
+    action?.();
+  };
+  return (
+    <ModerationAppealsView
+      key={data.generation}
+      appeals={data.appeals}
+      targets={data.targets}
+      next={data.next}
+      viewerId={data.viewerId ?? undefined}
+      state={lifetime.retired ? (lifetime.viewerRetired || data.state === 'closed' ? 'closed' : 'loading') : data.state}
+      threadId={input.threadId}
+      postId={input.postId}
+      reportsSearch={reportsSearch}
+      onRetry={expectedViewer !== null ? () => void retry() : undefined}
+      onNext={(cursor) => leave(() => onNext?.(cursor))}
+      onRestart={() => leave(onRestart)}
+    />
+  );
+}
 
 export function ModerationAppealsView({
   appeals,
@@ -15,7 +102,15 @@ export function ModerationAppealsView({
   onNext,
   viewerId,
   canResolve,
+  state = 'ready',
+  onRetry,
+  onRestart,
+  reportsSearch,
 }: {
+  state?: AppealReadState;
+  onRetry?: () => void;
+  onRestart?: () => void;
+  reportsSearch?: string;
   appeals: Appeal[];
   targets: ModerationTarget[];
   next: string | null;
@@ -29,16 +124,17 @@ export function ModerationAppealsView({
   const evidence = targets.map((target) => moderationEvidence(target.value));
   if (
     session.state !== 'unknown' &&
-    evidence.some((item) => item && (session.state !== 'signed-in' || session.subject !== item.viewerId))
+    ((viewerId !== undefined && (session.state !== 'signed-in' || session.subject !== viewerId)) ||
+      evidence.some((item) => item && (session.state !== 'signed-in' || session.subject !== item.viewerId)))
   )
-    return <p role="status">{m.moderation_target_unavailable()}</p>;
+    state = 'closed';
   const filters = [
     threadId ? `thread=${encodeURIComponent(threadId)}` : '',
     postId ? `post=${encodeURIComponent(postId)}` : '',
   ]
     .filter(Boolean)
     .join('&');
-  const reportsHref = filters ? `?${filters}` : '?';
+  const reportsHref = reportsSearch ?? (filters ? `?${filters}` : '?');
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
@@ -51,8 +147,38 @@ export function ModerationAppealsView({
           {m.moderation_appeals_tab()}
         </span>
       </nav>
-      {threadId ? <p className="text-sm text-muted-foreground">{m.moderation_thread_filter()}</p> : null}
-      {appeals.length ? (
+      <p className="text-sm text-muted-foreground">
+        {postId
+          ? threadId
+            ? m.moderation_appeals_read_post_thread_scope()
+            : m.moderation_appeals_read_post_board_scope()
+          : threadId
+            ? m.moderation_appeals_read_thread_scope()
+            : m.moderation_appeals_read_board_scope()}
+      </p>
+      {state !== 'ready' ? (
+        <section className="space-y-3" aria-live="polite" aria-busy={state === 'loading'}>
+          <p role="status">
+            {state === 'loading'
+              ? m.moderation_appeals_read_loading()
+              : state === 'unavailable'
+                ? m.moderation_appeals_read_unavailable()
+                : state === 'stale'
+                  ? m.moderation_appeals_read_stale()
+                  : m.moderation_appeals_read_closed()}
+          </p>
+          {state === 'unavailable' && onRetry ? (
+            <Button variant="outline" onClick={onRetry}>
+              {m.moderation_appeals_read_retry()}
+            </Button>
+          ) : null}
+          {state === 'stale' && onRestart ? (
+            <Button variant="outline" onClick={onRestart}>
+              {m.moderation_appeals_read_restart()}
+            </Button>
+          ) : null}
+        </section>
+      ) : appeals.length ? (
         <ol className="space-y-4">
           {appeals.map((appeal) => {
             const identity = appealTarget(appeal);
@@ -65,12 +191,14 @@ export function ModerationAppealsView({
           })}
         </ol>
       ) : (
-        <p className="text-muted-foreground">{m.moderation_appeals_empty()}</p>
+        <p role="status" className="text-muted-foreground">
+          {next ? m.moderation_appeals_read_sparse() : m.moderation_appeals_empty()}
+        </p>
       )}
-      {next ? (
-        <button type="button" className="rounded-md border px-4 py-2" onClick={() => onNext?.(next)}>
+      {state === 'ready' && next ? (
+        <Button variant="outline" onClick={() => onNext?.(next)}>
           {m.threads_next_page()}
-        </button>
+        </Button>
       ) : null}
     </article>
   );

@@ -41,7 +41,16 @@ const meta = {
       </PatternStory>
     ),
   ],
-  args: { next: null },
+  // Existing Pending/Empty IDs remain stable. Controls also expose recovery and sparse-page states.
+  argTypes: {
+    state: { control: 'select', options: ['ready', 'loading', 'unavailable', 'stale', 'closed'] },
+    next: { control: 'text', description: 'An opaque native continuation; Empty with next is a sparse page.' },
+    postId: {
+      control: 'text',
+      description: 'Return context only; Appeals still shows the containing thread or board.',
+    },
+  },
+  args: { next: null, onRetry: () => {}, onRestart: () => {} },
 } satisfies Meta<typeof ModerationAppealsView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
