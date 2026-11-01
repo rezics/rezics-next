@@ -182,26 +182,34 @@ test('A failed immutable revision history read can be explicitly retried through
         .getAttribute('href'),
     ).toContain(`/posts/${first.id}/revisions/${first.revisionId}`);
     expect(await page.getByRole('region', { name: m.thread_history_heading() }).textContent()).toContain(first.licence);
-    const readingHierarchy = await page.locator('section > ol > li').first().evaluate((entry, labels) => {
-      const documentBody = entry.querySelector('[data-slot="document-body"]');
-      const provenance = Array.from(entry.querySelectorAll('aside')).find(
-        (aside) => aside.getAttribute('aria-label') === labels.provenance,
+    const readingHierarchy = await page
+      .locator('section > ol > li')
+      .first()
+      .evaluate(
+        (entry, labels) => {
+          const documentBody = entry.querySelector('[data-slot="document-body"]');
+          const provenance = Array.from(entry.querySelectorAll('aside')).find(
+            (aside) => aside.getAttribute('aria-label') === labels.provenance,
+          );
+          const licence = provenance
+            ? Array.from(provenance.querySelectorAll('p')).find((paragraph) =>
+                paragraph.textContent?.includes(labels.licence),
+              )
+            : undefined;
+          const exactLink = entry.querySelector<HTMLAnchorElement>('h4 a');
+          return {
+            documentBeforeProvenance: Boolean(
+              documentBody &&
+              provenance &&
+              documentBody.compareDocumentPosition(provenance) & Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+            licenceVisible: Boolean(licence && licence.getClientRects().length > 0),
+            exactLink: exactLink?.getAttribute('href') ?? null,
+            exactLinkVisible: Boolean(exactLink && exactLink.getClientRects().length > 0),
+          };
+        },
+        { provenance: m.thread_provenance_heading(), licence: first.licence },
       );
-      const licence = provenance
-        ? Array.from(provenance.querySelectorAll('p')).find((paragraph) => paragraph.textContent?.includes(labels.licence))
-        : undefined;
-      const exactLink = entry.querySelector<HTMLAnchorElement>('h4 a');
-      return {
-        documentBeforeProvenance: Boolean(
-          documentBody &&
-            provenance &&
-            documentBody.compareDocumentPosition(provenance) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ),
-        licenceVisible: Boolean(licence && licence.getClientRects().length > 0),
-        exactLink: exactLink?.getAttribute('href') ?? null,
-        exactLinkVisible: Boolean(exactLink && exactLink.getClientRects().length > 0),
-      };
-    }, { provenance: m.thread_provenance_heading(), licence: first.licence });
     expect(readingHierarchy).toEqual({
       documentBeforeProvenance: true,
       licenceVisible: true,
