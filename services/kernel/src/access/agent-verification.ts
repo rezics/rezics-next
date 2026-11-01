@@ -1,4 +1,7 @@
-import { prepareAccountIdentityReversalSettlement, recordAccountIdentityReversalSettlement } from './agent-verification-identity-reversal.ts';
+import {
+  prepareAccountIdentityReversalSettlement,
+  recordAccountIdentityReversalSettlement,
+} from './agent-verification-identity-reversal.ts';
 import {
   recordAccountIdentitySource,
   probeAccountIdentityPublication,

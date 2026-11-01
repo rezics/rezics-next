@@ -153,8 +153,11 @@ export async function nativeStoreBlocker(
   if (store === 'agent_identity_reversal_settlement') {
     // A settlement transfers native inputs; it does not authorize deleting its
     // retained Account subject or replace independent source/copy/root custody.
-    const row = await tx.query(`SELECT 1 FROM access.agent_identity_reversal_settlement
-      WHERE route=$1 AND account_id=$2 AND reversal_receipt_id=$3`, [...key]);
+    const row = await tx.query(
+      `SELECT 1 FROM access.agent_identity_reversal_settlement
+      WHERE route=$1 AND account_id=$2 AND reversal_receipt_id=$3`,
+      [...key],
+    );
     return row.rowCount ? 'verification-source-custody' : null;
   }
   if (store === 'agent_identity_technical_source' || store === 'agent_identity_technical_role') {

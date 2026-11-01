@@ -2361,11 +2361,12 @@ test('Default History maintenance passes one genuinely funded Source native and 
   }
 });
 
-test('Original Account reversal writer publishes exact native reversal settlement and its same-home validator refuses stale or incomplete Account source obligations without claiming other owners\' closure', async () => {
+test("Original Account reversal writer publishes exact native reversal settlement and its same-home validator refuses stale or incomplete Account source obligations without claiming other owners' closure", async () => {
   const { readAccountIdentityReversalSettlement, verifyAccountIdentityReversalSettlement } =
     await import('../../src/access/agent-verification-identity.ts');
   const { readIdentitySourceConsumerCustody } = await import('../../src/semantic/identity-source-consumer-custody.ts');
-  const { withIdentitySourceConsumerMaintenance } = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const { withIdentitySourceConsumerMaintenance } =
+    await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { account, token } = await verified();
   const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
   expect(released.response.status).toBe(200);
@@ -2376,28 +2377,59 @@ test('Original Account reversal writer publishes exact native reversal settlemen
   const source = await loadAccountIdentitySource(pool, receipt);
   const job = await probeAccountIdentityPublication(pool, receipt);
   // A genuine lifecycle tombstone, rather than a fabricated barrier/terminal row.
-  await pool.query(`INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-    VALUES($1,$2,$2,'account:delete','(,)',$2)`, [accountRoute, account.id]);
-  const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 10_000 }, {
-    accountId: account.id, clientId: 'reversal-settlement', scopes: ['account:delete'],
-  });
-  await createLifecycleCommands({ pool, access, clock }).tombstone(
-    { actor, deadline: Date.now() + 10_000 }, { accountId: account.id, key: key() },
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES($1,$2,$2,'account:delete','(,)',$2)`,
+    [accountRoute, account.id],
   );
-  const erased = (await pool.query('SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2',
-    [accountRoute, account.id])).rows[0];
-  const reference: import('../../src/semantic/identity-source-consumer-custody.ts').IdentitySourceConsumerReference = { receipt, job, source: { partition: source.partition, epoch: source.epoch,
-    position: source.position, transactionId: source.transactionId }, sourceDigest: source.digest,
+  const actor = await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 10_000 },
+    {
+      accountId: account.id,
+      clientId: 'reversal-settlement',
+      scopes: ['account:delete'],
+    },
+  );
+  await createLifecycleCommands({ pool, access, clock }).tombstone(
+    { actor, deadline: Date.now() + 10_000 },
+    { accountId: account.id, key: key() },
+  );
+  const erased = (
+    await pool.query('SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2', [
+      accountRoute,
+      account.id,
+    ])
+  ).rows[0];
+  const reference: import('../../src/semantic/identity-source-consumer-custody.ts').IdentitySourceConsumerReference = {
+    receipt,
+    job,
+    source: {
+      partition: source.partition,
+      epoch: source.epoch,
+      position: source.position,
+      transactionId: source.transactionId,
+    },
+    sourceDigest: source.digest,
     barrier: { accountId: account.id, accountRoute, version: erased.version, at: erased.at },
-    erasedRole: 'subject' as const };
-  const frame = <T>(body: (context: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext) => Promise<T>) =>
+    erasedRole: 'subject' as const,
+  };
+  const frame = <T>(
+    body: (
+      context: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext,
+    ) => Promise<T>,
+  ) =>
     withIdentitySourceConsumerMaintenance({ pool, env: process.env, clock }, { deadline: Date.now() + 10_000 }, body);
   // Publication alone is insufficient, even though the real reverse job is published.
-  expect(await frame(context => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
+  expect(await frame((context) => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
   await finishAgentVerificationReversal(pool, decision, clock);
-  const persisted = (await pool.query(`SELECT * FROM access.agent_identity_reversal_settlement
+  const persisted = (
+    await pool.query(
+      `SELECT * FROM access.agent_identity_reversal_settlement
     WHERE route=$1 AND account_id=$2 AND reversal_receipt_id=$3`,
-    [accountRoute, account.id, decision.receiptId])).rows[0];
+      [accountRoute, account.id, decision.receiptId],
+    )
+  ).rows[0];
   expect(persisted).toBeDefined();
   expect(persisted.verified.receipt.receipt).toBe(decision.verificationReceiptId);
   expect(persisted.reversed.receipt).toEqual(receipt);
@@ -2407,39 +2439,67 @@ test('Original Account reversal writer publishes exact native reversal settlemen
     epoch: (source.input.intent as Extract<typeof source.input.intent, { kind: 'unmerge' }>).undoJob.epoch.toString(),
   });
   expect(persisted.reversed.binding.job).not.toEqual(persisted.verified.binding.job);
-  expect(persisted.reversed.source).toEqual({ partition: source.partition, epoch: source.epoch,
-    position: source.position.toString(), transactionId: source.transactionId });
+  expect(persisted.reversed.source).toEqual({
+    partition: source.partition,
+    epoch: source.epoch,
+    position: source.position.toString(),
+    transactionId: source.transactionId,
+  });
   expect((await accountState(account.id)).pending_agent_receipt_id).toBeNull();
   // Replaying the ordinary final writer retains its original settlement and event.
   await finishAgentVerificationReversal(pool, decision, clock);
-  expect((await pool.query(`SELECT * FROM access.agent_identity_reversal_settlement
+  expect(
+    (
+      await pool.query(
+        `SELECT * FROM access.agent_identity_reversal_settlement
     WHERE route=$1 AND account_id=$2 AND reversal_receipt_id=$3`,
-    [accountRoute, account.id, decision.receiptId])).rows[0]).toEqual(persisted);
+        [accountRoute, account.id, decision.receiptId],
+      )
+    ).rows[0],
+  ).toEqual(persisted);
   await expect(finishAgentVerificationReversal(pool, { ...decision, reason: 'substituted' }, clock)).rejects.toThrow();
-  expect((await pool.query('SELECT 1 FROM core.outbox WHERE type=$1 AND subject=$2',
-    ['com.rezics.access.agent-verification.reversed.v1', account.id])).rows).toHaveLength(1);
-  const terminal = (await pool.query(`SELECT * FROM core.receipt WHERE partition_no=$1 AND transaction_id=$2
-    AND command_kind='access.agent-verification.reversed'`, [source.partition, persisted.transaction_id])).rows[0];
+  expect(
+    (
+      await pool.query('SELECT 1 FROM core.outbox WHERE type=$1 AND subject=$2', [
+        'com.rezics.access.agent-verification.reversed.v1',
+        account.id,
+      ])
+    ).rows,
+  ).toHaveLength(1);
+  const terminal = (
+    await pool.query(
+      `SELECT * FROM core.receipt WHERE partition_no=$1 AND transaction_id=$2
+    AND command_kind='access.agent-verification.reversed'`,
+      [source.partition, persisted.transaction_id],
+    )
+  ).rows[0];
   expect(terminal.position.toString()).toBe(persisted.position.toString());
   expect(terminal.epoch).toBe(persisted.owner_epoch);
   expect(terminal.idempotency_key).toBe(persisted.native_receipt_key);
 
   // Stage the real original Source reference with its existing default producer.
   // This grants no permission to bypass Library, History/SDK or root proof.
-  await frame(context => readIdentitySourceConsumerCustody(pool, reference, context));
-  const independent = async () => (await pool.query(`SELECT r.*,p.* FROM semantic.identity_epoch_source_consumer_custody r
+  await frame((context) => readIdentitySourceConsumerCustody(pool, reference, context));
+  const independent = async () =>
+    (
+      await pool.query(
+        `SELECT r.*,p.* FROM semantic.identity_epoch_source_consumer_custody r
     LEFT JOIN semantic.identity_epoch_source_consumer_terminal p ON p.partition_no=r.partition_no AND p.custody_key=r.erasure_key
-    WHERE r.partition_no=$1 AND r.receipt_key=$2`, [source.partition,
-    JSON.stringify([receipt.kind, receipt.account, receipt.receipt])])).rows;
+    WHERE r.partition_no=$1 AND r.receipt_key=$2`,
+        [source.partition, JSON.stringify([receipt.kind, receipt.account, receipt.receipt])],
+      )
+    ).rows;
   const before = await independent();
   expect(before.length).toBeGreaterThan(0);
-  const proof = await frame(context => readAccountIdentityReversalSettlement(pool, reference, context));
+  const proof = await frame((context) => readAccountIdentityReversalSettlement(pool, reference, context));
   expect(proof).not.toBeNull();
   if (!proof) throw new Error('Expected the actual original Account settlement');
-  const verify = (candidate = reference, evidence = proof, home = source.partition) => frame(context =>
-    runCommand(pool, { partition: home, deadline: context.deadline }, async tx => noEffect(
-      await verifyAccountIdentityReversalSettlement(tx, candidate, evidence),
-    )).then(result => result.value));
+  const verify = (candidate = reference, evidence = proof, home = source.partition) =>
+    frame((context) =>
+      runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) =>
+        noEffect(await verifyAccountIdentityReversalSettlement(tx, candidate, evidence)),
+      ).then((result) => result.value),
+    );
   expect(await verify()).toBe(true);
   expect(await verify({ ...reference, job: { ...reference.job, epoch: reference.job.epoch + 1n } })).toBe(false);
   expect(await verify({ ...reference, sourceDigest: '0'.repeat(64) })).toBe(false);
@@ -2453,7 +2513,7 @@ test('Original Account reversal writer publishes exact native reversal settlemen
   await pool.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [source.partition]);
   try {
     expect(await verify()).toBe(false);
-    expect(await frame(context => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
+    expect(await frame((context) => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
   } finally {
     await pool.query('UPDATE core.partition SET epoch=epoch-1 WHERE partition_no=$1', [source.partition]);
   }
@@ -2463,10 +2523,16 @@ test('Original Account reversal writer publishes exact native reversal settlemen
   try {
     await loss.query('BEGIN');
     await loss.query("SET LOCAL session_replication_role='replica'");
-    await loss.query(`DELETE FROM access.agent_identity_technical_role WHERE route=$1 AND account_id=$2
-      AND direction=$3 AND receipt_id=$4`, [accountRoute, account.id, receipt.kind, receipt.receipt]);
-    await loss.query(`DELETE FROM access.agent_identity_technical_source WHERE route=$1 AND account_id=$2
-      AND direction=$3 AND receipt_id=$4`, [accountRoute, account.id, receipt.kind, receipt.receipt]);
+    await loss.query(
+      `DELETE FROM access.agent_identity_technical_role WHERE route=$1 AND account_id=$2
+      AND direction=$3 AND receipt_id=$4`,
+      [accountRoute, account.id, receipt.kind, receipt.receipt],
+    );
+    await loss.query(
+      `DELETE FROM access.agent_identity_technical_source WHERE route=$1 AND account_id=$2
+      AND direction=$3 AND receipt_id=$4`,
+      [accountRoute, account.id, receipt.kind, receipt.receipt],
+    );
     await loss.query('COMMIT');
   } catch (error) {
     await loss.query('ROLLBACK');
@@ -2475,6 +2541,6 @@ test('Original Account reversal writer publishes exact native reversal settlemen
     loss.release();
   }
   expect(await verify()).toBe(false);
-  expect(await frame(context => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
+  expect(await frame((context) => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
   expect(await independent()).toEqual(before);
 });

@@ -243,8 +243,13 @@ export const ERASURE_DISCOVERY_ROLES: readonly (readonly [string, string, Routin
     'route:int,account_id:uuid,direction:text,receipt_id:uuid,role_account_id:uuid',
     '',
   ],
-  ['agent_identity_reversal_settlement', 'account_id', 'owner',
-    'route:int,account_id:uuid,reversal_receipt_id:uuid', ''],
+  [
+    'agent_identity_reversal_settlement',
+    'account_id',
+    'owner',
+    'route:int,account_id:uuid,reversal_receipt_id:uuid',
+    '',
+  ],
 ];
 
 export type ErasureDiscoveryPage = {
