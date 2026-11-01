@@ -182,15 +182,15 @@ for (const counted of [true, false]) {
           settlements.push(bytes);
         },
       };
-      const input = {
+      const original = {
         ...definition(empty),
         sort: 'name' as SearchPlan['sort'],
         size: 4,
         generation: 1,
         after: ['', id(0)] as (string | number | null)[],
-        work,
       };
-      const admitted = structuredClone({ ...input, work: undefined });
+      const admitted = structuredClone(original);
+      const input = { ...original, work };
       const invoke = counted ? searchSubjects : searchSubjectHits;
       const healthy = await invoke(native, prefix, admitted);
       const first = heldNative();
@@ -198,7 +198,7 @@ for (const counted of [true, false]) {
       const a = invoke(first.client, prefix, input);
       const callA = await first.next();
       poison(callA.request);
-      expect({ ...input, work: undefined }).toEqual(admitted);
+      expect({ ...input, work: undefined }).toEqual({ ...admitted, work: undefined });
       const b = invoke(second.client, prefix, input);
       const callB = await second.next();
       expect(callB.sent).toEqual(callA.sent);
@@ -334,7 +334,10 @@ const ratingSurfaces = [
 for (const surface of ratingSurfaces) {
   for (const scenario of ['mixed', 'full', 'empty', 'null epoch', 'unscored after'] as const) {
     test(`query invocation custody: ${surface.name} ${scenario} pins alias epoch and both phase definitions`, async () => {
-      const input = {
+      const input: ReturnType<typeof definition> &
+        Omit<RatingQueryPlan, 'after'> & {
+          after: (string | number | null)[];
+        } = {
         ...definition(scenario === 'empty'),
         size: scenario === 'full' ? 1 : 4,
         rating: {
@@ -345,7 +348,6 @@ for (const surface of ratingSurfaces) {
         ratingPhase:
           scenario === 'null epoch' || scenario === 'unscored after' ? ('unscored' as const) : ('scored' as const),
         after: scenario === 'null epoch' || scenario === 'unscored after' ? ['', id(0)] : [9, '', id(0)],
-        generation: undefined as number | undefined,
       };
       const admitted = structuredClone(input);
       const healthy = await surface.invoke(native, admitted);
