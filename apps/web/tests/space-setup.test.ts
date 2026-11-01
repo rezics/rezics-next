@@ -201,9 +201,11 @@ test('uncertain retry and a head conflict retain identities and entered work; cu
   });
   const draft = { step: 'space' as const, title: 'My entered title', summary: 'Keep my work' };
   const original = setupAttempt(null, draft, key);
+  expect(Object.isFrozen(original)).toBe(true);
   expect(retainSetupAttempt(await commandSetup(client, 'Bearer creator', original))).toBe(true);
   const retry = setupAttempt(original, { ...draft, title: 'Other text' }, nextKey);
   expect(retry).toBe(original);
+  expect(retry).toEqual({ step: 'space', key, title: 'My entered title', summary: 'Keep my work' });
   status = 201;
   const state = applySetupResult(empty, await commandSetup(client, 'Bearer creator', retry));
   expect(seen[0]).toEqual(seen[1]);

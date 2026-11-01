@@ -84,20 +84,43 @@ export type BoardChoicePage = {
   choices: readonly SetupChoice[];
   next: string | null;
 } & Observation;
-type Scope = { source: BoardChoiceSource; kind: 'scheme' | 'concept'; schemeId: string; query: string };
+export type BoardChoiceScope = {
+  source: BoardChoiceSource;
+  kind: 'scheme' | 'concept';
+  schemeId: string;
+  query: string;
+};
+export type BoardChoiceExpectation = BoardChoiceScope & { version?: number };
 const loading: BoardChoicePage = { status: 'loading', choices: [], next: null };
 
 /** One bounded page per request. Cancellation hides late data even when the producer cannot abort its I/O. */
 export class BoardChoicePager {
-  private scope: Scope | null = null;
+  private scope: BoardChoiceScope | null = null;
   private abort: AbortController | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private page: BoardChoicePage = loading;
   private cursor: string | undefined;
   private loaded: BoardChoicePage | null = null;
+  private generation = 0;
   constructor(private publish: (page: BoardChoicePage) => void) {}
 
-  search(scope: Scope, debounceMs = 250) {
+  private matches(expected?: BoardChoiceExpectation) {
+    return (
+      !!this.scope &&
+      (!expected ||
+        (expected.source === this.scope.source &&
+          expected.kind === this.scope.kind &&
+          expected.schemeId === this.scope.schemeId &&
+          expected.query === this.scope.query &&
+          (expected.version === undefined || expected.version === this.generation)))
+    );
+  }
+
+  version() {
+    return this.generation;
+  }
+
+  search(scope: BoardChoiceScope, debounceMs = 250) {
     const previous = this.scope;
     if (
       scope.kind === 'concept' &&
@@ -108,6 +131,7 @@ export class BoardChoicePager {
       previous.schemeId === scope.schemeId &&
       this.loaded
     ) {
+      this.cancelWork();
       this.scope = scope;
       this.showLoaded();
       return;
@@ -117,26 +141,40 @@ export class BoardChoicePager {
     this.cursor = undefined;
     this.loaded = null;
     this.update(loading);
+    const generation = this.generation;
     this.timer = setTimeout(() => {
-      void this.load();
+      this.timer = undefined;
+      if (generation === this.generation) void this.load(generation);
     }, debounceMs);
   }
-  next() {
-    if (this.page.status !== 'ready' || this.page.next === null) return;
+  next(expected?: BoardChoiceExpectation) {
+    if (!this.matches(expected) || this.page.status !== 'ready' || this.page.next === null) return;
     this.cursor = this.page.next;
-    void this.load();
+    void this.load(this.generation);
   }
-  retry() {
-    if (this.page.status === 'ready' || this.page.status === 'loading') return;
+  retry(expected?: BoardChoiceExpectation) {
+    if (!this.matches(expected) || this.page.status === 'ready' || this.page.status === 'loading') return;
     if (this.page.status === 'stale') this.cursor = undefined;
-    void this.load();
+    void this.load(this.generation);
   }
-  choose(id: string): SetupChoice | null {
-    return this.page.status === 'ready' ? (this.page.choices.find((choice) => choice.id === id) ?? null) : null;
+  choose(id: string, expected?: BoardChoiceExpectation): SetupChoice | null {
+    return this.matches(expected) && this.page.status === 'ready'
+      ? (this.page.choices.find((choice) => choice.id === id) ?? null)
+      : null;
   }
   cancel() {
+    this.cancelWork();
+    this.scope = null;
+    this.cursor = undefined;
+    this.loaded = null;
+    this.page = loading;
+  }
+  private cancelWork() {
     clearTimeout(this.timer);
+    this.timer = undefined;
     this.abort?.abort();
+    this.abort = null;
+    this.generation++;
   }
   private update(page: BoardChoicePage) {
     this.page = page;
@@ -153,7 +191,8 @@ export class BoardChoicePager {
           : this.loaded.choices,
     });
   }
-  private async load() {
+  private async load(generation: number) {
+    if (generation !== this.generation) return;
     const scope = this.scope;
     if (!scope) return;
     this.abort?.abort();
@@ -167,7 +206,7 @@ export class BoardChoicePager {
         scope.kind === 'scheme'
           ? await scope.source.schemes(input)
           : await scope.source.concepts({ ...input, schemeId: scope.schemeId });
-      if (controller.signal.aborted) return;
+      if (generation !== this.generation || controller.signal.aborted || !this.matches(scope)) return;
       const choices = 'schemes' in result ? result.schemes : result.concepts;
       this.loaded = {
         status: 'ready',
@@ -178,7 +217,7 @@ export class BoardChoicePager {
       };
       this.showLoaded();
     } catch (error) {
-      if (!controller.signal.aborted)
+      if (generation === this.generation && !controller.signal.aborted && this.matches(scope))
         this.update({
           status: error instanceof BoardChoiceError ? error.reason : 'unavailable',
           choices: [],

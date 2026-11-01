@@ -175,6 +175,107 @@ test('search debounces, aborts and isolates old pages; Next requests exactly one
   }
 });
 
+test('disconnected and disposed Context callbacks cannot start fresh search, exact, current, retry or label work', async () => {
+  const late = deferred<{ id: string; label: string } | null>();
+  const calls: string[] = [];
+  const picker = createSetupContextPicker({
+    search: async ({ query }) => {
+      calls.push(`search:${query}`);
+      return { contexts: [{ id: contextId, label: 'Current search result' }], next: 'opaque-next' };
+    },
+    resolve: async (id) => {
+      calls.push(`resolve:${id}`);
+      return late.promise;
+    },
+  });
+  picker.search('reading');
+  await new Promise((resolve) => setTimeout(resolve, 270));
+  const oldResolution = picker.choose(contextId);
+  const disconnect = picker.connect();
+  disconnect();
+  picker.dispose();
+  const count = calls.length;
+  picker.search('hidden');
+  picker.next();
+  picker.retrySearch();
+  await picker.choose(contextId);
+  await picker.choosePage(contextId);
+  await picker.chooseCurrent(contextId);
+  await picker.retrySelected(contextId, 'unavailable');
+  await picker.current(contextId, 'new-head');
+  await picker.retryCurrent(contextId);
+  picker.reference(otherId);
+  picker.clear();
+  late.resolve({ id: contextId, label: 'Retired private label' });
+  await oldResolution;
+  expect(calls).toHaveLength(count);
+  expect(picker.getSnapshot().selected?.choice?.label).not.toBe('Retired private label');
+});
+
+test('StrictMode-style Context picker reconnect can run a fresh current read without reviving its old promise', async () => {
+  const reads: ReturnType<typeof deferred<{ id: string; label: string } | null>>[] = [];
+  const picker = createSetupContextPicker({
+    search: async () => ({ contexts: [], next: null }),
+    resolve: async () => {
+      const pending = deferred<{ id: string; label: string } | null>();
+      reads.push(pending);
+      return pending.promise;
+    },
+  });
+  const disconnect = picker.connect();
+  const oldCurrent = picker.current(contextId, 'head-one');
+  disconnect();
+  const replayCleanup = picker.connect();
+  const newCurrent = picker.current(contextId, 'head-one');
+  expect(reads).toHaveLength(2);
+  reads[0]!.resolve({ id: contextId, label: 'Old session label' });
+  await oldCurrent;
+  expect(picker.getSnapshot().current?.phase).toBe('loading');
+  reads[1]!.resolve({ id: contextId, label: 'Current session label' });
+  await newCurrent;
+  expect(picker.getSnapshot().current?.choice?.label).toBe('Current session label');
+  replayCleanup();
+  picker.dispose();
+});
+
+test('Context exact, current, and page callbacks expire when query or reference text leaves and returns', async () => {
+  let searches = 0;
+  let resolutions = 0;
+  const picker = createSetupContextPicker({
+    search: async () => {
+      searches++;
+      return { contexts: [{ id: contextId, label: 'Current search result' }], next: 'opaque-next' };
+    },
+    resolve: async (id) => {
+      resolutions++;
+      return { id, label: 'Current exact result' };
+    },
+  }, contextId);
+
+  picker.search('same');
+  await new Promise((resolve) => setTimeout(resolve, 270));
+  const priorPage = { query: 'same', cursor: undefined, version: picker.pageVersion() };
+  picker.search('other');
+  picker.search('same');
+  await new Promise((resolve) => setTimeout(resolve, 270));
+  await picker.choosePage(contextId, priorPage);
+  expect(searches).toBe(2);
+  expect(resolutions).toBe(0);
+
+  const priorReference = picker.referenceVersion();
+  picker.reference('other-reference');
+  picker.reference(contextId);
+  await picker.chooseReference(contextId, priorReference);
+  expect(resolutions).toBe(0);
+
+  await picker.current(contextId, 'head-one');
+  const priorCurrent = picker.currentVersion();
+  await picker.current(contextId, 'head-two');
+  await picker.chooseCurrent(contextId, priorCurrent);
+  expect(resolutions).toBe(2);
+  picker.dispose();
+});
+
 test('new selections and current pointer validity stay independent through denial, removal and recovery', async () => {
   const late = deferred<{ id: string; label: string } | null>();
   let available = false;

@@ -27,7 +27,8 @@ and uncertain retry states.
 An unconfirmed command locks editing and replays the exact body, key and expected head. A definite conflict or
 refusal requires an explicit current-state refresh before another write; entries remain available for review.
 A failed post-save refresh retains returned IDs and requires refresh rather than replaying a confirmed command.
-The addressed-home link uses the existing home, membership, lifecycle and removal regions.
+The addressed-home link uses the existing home, membership, lifecycle and removal regions. Caller admission and
+picker cancellation are scoped to the original session source and revision; see the [caller lifetime notes](../../../community/space-setup-lifetime.md).
 
 Use these same story IDs with phone390 and desktop1280, locale and theme globals. Native acceptance and Web
 visual review follow integration; component plays and local typing are not that proof.

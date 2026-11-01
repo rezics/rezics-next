@@ -137,6 +137,84 @@ test('search debounces, Next reads exactly one bounded page, and old query/sourc
   expect(page?.status).toBe('loading');
 });
 
+test('retired Board page callbacks cannot page, retry or choose after cancellation or a new scope', async () => {
+  const late = deferred<{ schemes: readonly { id: string; label: string }[]; next: string | null }>();
+  const calls: string[] = [];
+  const prior: BoardChoiceSource = {
+    ...source,
+    schemes: async () => {
+      calls.push('prior');
+      return late.promise;
+    },
+  };
+  const current: BoardChoiceSource = {
+    ...source,
+    schemes: async () => {
+      calls.push('current');
+      return { schemes: [scheme], next: 'current-next' };
+    },
+  };
+  const priorScope = { source: prior, kind: 'scheme' as const, schemeId: '', query: 'prior' };
+  const currentScope = { source: current, kind: 'scheme' as const, schemeId: '', query: 'current' };
+  let page: BoardChoicePage | undefined;
+  const pager = new BoardChoicePager((value) => {
+    page = value;
+  });
+  pager.search(priorScope, 0);
+  await turn();
+  expect(calls).toEqual(['prior']);
+  pager.search(currentScope, 0);
+  await turn();
+  expect(page?.choices).toEqual([scheme]);
+  expect(pager.choose(scheme.id, priorScope)).toBeNull();
+  expect(pager.choose(scheme.id, currentScope)).toEqual(scheme);
+  pager.cancel();
+  pager.next(currentScope);
+  pager.retry(currentScope);
+  expect(pager.choose(scheme.id, currentScope)).toBeNull();
+  late.resolve({ schemes: [{ id: concept.id, label: 'Retired scheme' }], next: 'prior-next' });
+  await turn();
+  expect(calls).toEqual(['prior', 'current']);
+  expect(page?.choices).toEqual([scheme]);
+  pager.next(priorScope);
+  pager.retry(priorScope);
+  expect(calls).toEqual(['prior', 'current']);
+});
+
+test('Board callbacks expire when source, scheme, or search text changes and later returns to the same values', async () => {
+  const calls: string[] = [];
+  const choices: BoardChoiceSource = {
+    schemes: async ({ query }) => {
+      calls.push(`scheme:${query}`);
+      return { schemes: [scheme], next: 'opaque-next' };
+    },
+    concepts: async ({ schemeId, query }) => {
+      calls.push(`concept:${schemeId}:${query}`);
+      return { concepts: [concept], next: null };
+    },
+  };
+  const pager = new BoardChoicePager(() => {});
+  const sameScope = { source: choices, kind: 'scheme' as const, schemeId: '', query: 'same' };
+  pager.search(sameScope, 0);
+  await turn();
+  const prior = { ...sameScope, version: pager.version() };
+
+  pager.search({ ...sameScope, query: 'other' }, 0);
+  await turn();
+  pager.search(sameScope, 0);
+  await turn();
+  expect(pager.choose(scheme.id, prior)).toBeNull();
+  pager.next(prior);
+  expect(calls).toEqual(['scheme:same', 'scheme:other', 'scheme:same']);
+
+  const current = { ...sameScope, version: pager.version() };
+  expect(pager.choose(scheme.id, current)).toEqual(scheme);
+  pager.search({ source: choices, kind: 'concept', schemeId: scheme.id, query: 'same' }, 0);
+  await turn();
+  expect(pager.choose(concept.id, current)).toBeNull();
+  pager.cancel();
+});
+
 test('a missing or failed current source is unavailable, distinct from a successful empty page', async () => {
   await expect(unavailableBoardChoiceSource.schemes({ query: '' })).rejects.toBeInstanceOf(BoardChoiceUnavailable);
   let page: BoardChoicePage | undefined;

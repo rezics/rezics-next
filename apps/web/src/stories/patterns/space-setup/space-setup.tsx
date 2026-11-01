@@ -1,4 +1,14 @@
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { Check, ArrowRight, ArrowLeft, MapPin, Users, LayoutList, MessageSquare } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -31,6 +41,13 @@ import {
   type SetupChoice,
   type SetupResult,
 } from '../../../community/space-setup';
+import {
+  SpaceSetupCallerLifetimeContext,
+  standaloneSpaceSetupLifetime,
+  type SpaceSetupCallerLifetime,
+} from '../../../community/space-setup-lifetime';
+
+const useCallerLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 export type SetupTransport = {
   contexts?: ContextChoiceSource;
@@ -127,9 +144,16 @@ function Choice({
   onReferenceChange(value: string): void;
 }) {
   const generation = useRef(0);
+  const mounted = useRef(false);
+  const intent = useRef({ transport, kind, text });
+  intent.current = { transport, kind, text };
   useEffect(
-    () => () => {
-      generation.current++;
+    () => {
+      mounted.current = true;
+      return () => {
+        mounted.current = false;
+        generation.current++;
+      };
     },
     [],
   );
@@ -137,18 +161,26 @@ function Choice({
   const [problem, setProblem] = useState<SetupFailure | null>(null);
   const id = useId();
   async function resolve() {
+    if (disabled || !mounted.current) return;
     const request = ++generation.current;
+    const requestIntent = { transport, kind, text };
+    const current = () =>
+      mounted.current &&
+      generation.current === request &&
+      intent.current.transport === requestIntent.transport &&
+      intent.current.kind === requestIntent.kind &&
+      intent.current.text === requestIntent.text;
     setBusy(true);
     setProblem(null);
     try {
       const result = await transport.choice(kind, text.trim());
-      if (request !== generation.current) return;
+      if (!current()) return;
       if ('kind' in result) setProblem(result);
       else onChange(result);
     } catch {
-      if (request === generation.current) setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
+      if (current()) setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
     } finally {
-      if (request === generation.current) setBusy(false);
+      if (current()) setBusy(false);
     }
   }
   return (
@@ -178,6 +210,8 @@ function Choice({
               className="min-w-0 flex-1 basis-48"
               disabled={disabled || busy}
               onChange={(e) => {
+                generation.current++;
+                setBusy(false);
                 setText(e.target.value);
                 onChange(null);
                 setProblem(null);
@@ -211,15 +245,40 @@ function Choice({
  * Composes shadcn controls into a setup journey, which has no shadcn equivalent.
  * One command at a time; draft values live independently of refreshed authoritative heads.
  */
-export function SpaceSetupForm({
-  initial,
-  transport,
-  boardChoices = unavailableBoardChoiceSource,
-}: {
+type SpaceSetupFormProps = {
   initial: SetupSnapshot | SetupFailure;
   transport: SetupTransport;
   boardChoices?: BoardChoiceSource;
-}) {
+};
+
+export function SpaceSetupForm({ initial, transport, boardChoices = unavailableBoardChoiceSource }: SpaceSetupFormProps) {
+  const inherited = useContext(SpaceSetupCallerLifetimeContext);
+  const initialIdentity = JSON.stringify(initial);
+  const standalone = useMemo(
+    () => standaloneSpaceSetupLifetime(),
+    [initialIdentity, transport, boardChoices],
+  );
+  const caller = inherited ?? standalone;
+  return (
+    <SpaceSetupFormVisit
+      key={caller.id}
+      initial={initial}
+      transport={transport}
+      boardChoices={boardChoices}
+      caller={caller}
+    />
+  );
+}
+
+function SpaceSetupFormVisit({
+  initial,
+  transport,
+  boardChoices,
+  caller,
+}: SpaceSetupFormProps & { caller: SpaceSetupCallerLifetime }) {
+  const callerRevision = useSyncExternalStore(caller.subscribe, caller.snapshot, caller.snapshot);
+  void callerRevision;
+  useCallerLayoutEffect(() => caller.connect(), [caller]);
   const [snapshot, setSnapshot] = useState(initial.kind === 'ready' ? initial : emptySetup);
   const [problem, setProblem] = useState<SetupFailure | null>(initial.kind === 'failure' ? initial : null);
   const [busy, setBusy] = useState(false);
@@ -229,6 +288,7 @@ export function SpaceSetupForm({
   const [step, setStep] = useState(0);
   const [paused, setPaused] = useState(false);
   const inFlight = useRef(false);
+  const operation = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const [boardId, setBoardId] = useState<string | null>(null);
   const [spaceTitle, setSpaceTitle] = useState(snapshot.space?.title ?? '');
@@ -251,40 +311,53 @@ export function SpaceSetupForm({
     contextPicker.getSnapshot,
   );
   const context = contextState.selected?.phase === 'ready' ? contextState.selected.choice : null;
-  useEffect(() => () => contextPicker.dispose(), [contextPicker]);
-  useEffect(() => {
+  useCallerLayoutEffect(() => contextPicker.connect(), [contextPicker]);
+  useCallerLayoutEffect(() => {
     void contextPicker.current(snapshot.realm?.contextId ?? null, snapshot.realm?.head);
   }, [contextPicker, snapshot.realm?.contextId, snapshot.realm?.head]);
-  const [scheme, setScheme] = useState<SetupChoice | null>(null);
-  const [conceptSelection, setConceptSelection] = useState<BoardConceptSelection | null>(null);
+  const [schemeSelection, setSchemeSelection] = useState<{
+    source: BoardChoiceSource;
+    choice: SetupChoice;
+  } | null>(null);
+  const scheme = schemeSelection?.source === boardChoices ? schemeSelection.choice : null;
+  const [conceptSelection, setConceptSelection] = useState<
+    (BoardConceptSelection & { source: BoardChoiceSource }) | null
+  >(null);
+  const currentConceptSelection = conceptSelection?.source === boardChoices ? conceptSelection : null;
   const [conceptCleared, setConceptCleared] = useState(false);
   const [boardTitle, setBoardTitle] = useState('');
   const [boardVisibility, setBoardVisibility] = useState<'published' | 'protected' | 'draft'>('published');
   const [purpose, setPurpose] = useState<'discussion' | 'reviews'>('discussion');
-  const locked = busy || pending !== null || needsRefresh;
+  const callerCurrent = caller.current();
+  const callerRetired = caller.isRetired();
+  const locked = busy || pending !== null || needsRefresh || !callerCurrent || !caller.binding.ready;
   const { space, realm, permitted } = snapshot;
-  const concept = currentBoardConcept(conceptSelection, realm?.schemeId ?? null)?.choice ?? null;
+  const concept = currentBoardConcept(currentConceptSelection, realm?.schemeId ?? null)?.choice ?? null;
   useEffect(() => {
-    if (conceptSelection && !currentBoardConcept(conceptSelection, realm?.schemeId ?? null)) {
+    if (conceptSelection?.source === boardChoices && !currentBoardConcept(conceptSelection, realm?.schemeId ?? null)) {
       setConceptSelection(null);
       setConceptCleared(true);
     }
-  }, [conceptSelection, realm?.schemeId]);
+  }, [conceptSelection, boardChoices, realm?.schemeId]);
   const previousBoardChoices = useRef(boardChoices);
   useEffect(() => {
     if (previousBoardChoices.current !== boardChoices) {
       previousBoardChoices.current = boardChoices;
-      setScheme(null);
+      setSchemeSelection(null);
       setConceptSelection(null);
+      setConceptCleared(false);
     }
   }, [boardChoices]);
 
   async function refresh(spaceId = space?.id) {
-    if (inFlight.current) return;
+    if (inFlight.current || !caller.binding.ready || !caller.current()) return;
+    const ticket = caller.ticket();
+    const request = ++operation.current;
     inFlight.current = true;
     setBusy(true);
     try {
       const current = await transport.read(spaceId);
+      if (!caller.owns(ticket) || operation.current !== request) return;
       if (current.kind === 'failure') setProblem(current);
       else {
         if (!loaded) {
@@ -302,14 +375,26 @@ export function SpaceSetupForm({
         setProblem(null);
       }
     } catch {
-      setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
+      if (caller.owns(ticket) && operation.current === request)
+        setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (operation.current === request) {
+        inFlight.current = false;
+        if (caller.owns(ticket)) setBusy(false);
+      }
     }
   }
   async function submit(draft: SetupDraftCommand) {
-    if (inFlight.current || !loaded || (needsRefresh && !pending)) return;
+    if (
+      inFlight.current ||
+      !loaded ||
+      (needsRefresh && !pending) ||
+      !caller.binding.ready ||
+      !caller.current()
+    )
+      return;
+    const ticket = caller.ticket();
+    const request = ++operation.current;
     inFlight.current = true;
     const command = setupAttempt(pending, draft, crypto.randomUUID());
     setPending(command);
@@ -317,6 +402,7 @@ export function SpaceSetupForm({
     setProblem(null);
     try {
       const result = await transport.command(command);
+      if (!caller.owns(ticket) || operation.current !== request) return;
       if (!retainSetupAttempt(result)) setPending(null);
       if (result.kind === 'failure') {
         setProblem(result);
@@ -333,6 +419,7 @@ export function SpaceSetupForm({
       // A failed refresh must never discard the command's returned identity.
       setNeedsRefresh(true);
       const current = await transport.read(spaceId);
+      if (!caller.owns(ticket) || operation.current !== request) return;
       if (current.kind === 'ready') {
         setSnapshot(current);
         setNeedsRefresh(false);
@@ -344,10 +431,13 @@ export function SpaceSetupForm({
         setNeedsRefresh(true);
       }
     } catch {
-      setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
+      if (caller.owns(ticket) && operation.current === request)
+        setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (operation.current === request) {
+        inFlight.current = false;
+        if (caller.owns(ticket)) setBusy(false);
+      }
     }
   }
   const steps = [m.space_setup_identity(), m.space_setup_realm(), m.space_setup_scheme(), m.space_setup_board()];
@@ -435,6 +525,12 @@ export function SpaceSetupForm({
     }
   }
   const choiceMissing = (step === 1 && !context) || (step === 2 && !scheme) || (step === 3 && !concept);
+  if (callerRetired)
+    return (
+      <div role="status" className="rounded-xl border border-border bg-muted p-4 text-sm text-muted-foreground">
+        {m.space_setup_unavailable()}
+      </div>
+    );
   return (
     <div className="space-y-6" aria-busy={busy}>
       <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">{m.space_setup_journey_intro()}</p>
@@ -490,11 +586,18 @@ export function SpaceSetupForm({
             <div className="mb-6 space-y-3 rounded-xl border border-border bg-muted p-4" role="alert">
               <p className="text-sm leading-relaxed">{problemText(problem)}</p>
               {pending ? (
-                <Button disabled={busy} onClick={() => void submit(pending)}>
+                <Button
+                  disabled={busy || !callerCurrent || !caller.binding.ready}
+                  onClick={() => void submit(pending)}
+                >
                   {m.space_setup_retry()}
                 </Button>
               ) : (
-                <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
+                <Button
+                  variant="outline"
+                  disabled={busy || !callerCurrent || !caller.binding.ready}
+                  onClick={() => void refresh()}
+                >
                   {m.space_setup_refresh()}
                 </Button>
               )}
@@ -595,8 +698,8 @@ export function SpaceSetupForm({
                     source={boardChoices}
                     value={scheme}
                     onChange={(choice) => {
-                      setScheme(choice);
-                      if (conceptSelection && choice?.id !== conceptSelection.schemeId) {
+                      setSchemeSelection(choice ? { source: boardChoices, choice } : null);
+                      if (currentConceptSelection && choice?.id !== currentConceptSelection.schemeId) {
                         setConceptSelection(null);
                         setConceptCleared(true);
                       }
@@ -617,7 +720,9 @@ export function SpaceSetupForm({
                       source={boardChoices}
                       value={concept}
                       onChange={(choice) => {
-                        setConceptSelection(choice && realm?.schemeId ? { schemeId: realm.schemeId, choice } : null);
+                        setConceptSelection(
+                          choice && realm?.schemeId ? { source: boardChoices, schemeId: realm.schemeId, choice } : null,
+                        );
                         setConceptCleared(false);
                       }}
                       disabled={locked}
@@ -650,7 +755,12 @@ export function SpaceSetupForm({
               {!canEdit && loaded && !problem ? (
                 <div className="space-y-3 rounded-xl bg-muted p-4 text-sm">
                   <p role="status">{m.space_setup_denied()}</p>
-                  <Button type="button" variant="outline" disabled={busy} onClick={() => void refresh()}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || !callerCurrent || !caller.binding.ready}
+                    onClick={() => void refresh()}
+                  >
                     {m.space_setup_refresh()}
                   </Button>
                 </div>

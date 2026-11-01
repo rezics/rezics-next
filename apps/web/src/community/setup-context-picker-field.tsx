@@ -29,6 +29,10 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
   const state = useSyncExternalStore(picker.subscribe, picker.getSnapshot, picker.getSnapshot);
   const id = useId();
   const { current, selected, page, reference } = state;
+  const currentVersion = picker.currentVersion();
+  const searchVersion = picker.searchVersion();
+  const selectionVersion = picker.selectionVersion();
+  const referenceVersion = picker.referenceVersion();
   return (
     <Field className="min-w-0">
       <div className="space-y-1">
@@ -43,12 +47,17 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
             type="button"
             variant="outline"
             disabled={disabled || current.phase === 'loading'}
-            onClick={() => void picker.retryCurrent()}
+            onClick={() => void picker.retryCurrent(current.id, currentVersion)}
           >
             {m.setup_context_check_current()}
           </Button>
           {current.phase === 'ready' ? (
-            <Button type="button" variant="ghost" disabled={disabled} onClick={() => void picker.choose(current.id)}>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => void picker.chooseCurrent(current.id, currentVersion)}
+            >
               {m.setup_context_use_current()}
             </Button>
           ) : null}
@@ -70,12 +79,17 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                 type="button"
                 variant="outline"
                 disabled={disabled}
-                onClick={() => void picker.choose(selected.id)}
+                onClick={() => void picker.retrySelected(selected.id, selected.phase, selectionVersion)}
               >
                 {m.space_setup_retry()}
               </Button>
             ) : null}
-            <Button type="button" variant="ghost" disabled={disabled} onClick={() => picker.clear()}>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => picker.clear(selected.id, selectionVersion)}
+            >
               {m.setup_context_clear()}
             </Button>
           </div>
@@ -96,9 +110,9 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           aria-describedby={`${id}-hint`}
           disabled={disabled}
           onFocus={() => {
-            if (page.phase === 'idle') picker.search(state.query);
+            if (page.phase === 'idle') picker.search(state.query, state.query, searchVersion);
           }}
-          onChange={(event) => picker.search(event.target.value)}
+          onChange={(event) => picker.search(event.target.value, state.query, searchVersion)}
         />
       </div>
       {page.phase === 'loading' ? (
@@ -123,7 +137,13 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                   <button
                     type="button"
                     disabled={disabled}
-                    onClick={() => void picker.choose(choice.id)}
+                    onClick={() =>
+                      void picker.choosePage(choice.id, {
+                        query: state.query,
+                        ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+                        version: searchVersion,
+                      })
+                    }
                     className="flex min-h-14 w-full flex-col gap-1 px-4 py-3 text-start hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
                   >
                     <span className="break-words text-sm font-medium">{choice.label}</span>
@@ -136,7 +156,19 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
             <p className="text-sm text-muted-foreground">{m.setup_context_empty()}</p>
           )}
           {page.next !== null ? (
-            <Button type="button" variant="outline" disabled={disabled} onClick={() => picker.next()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={() =>
+                picker.next({
+                  query: state.query,
+                  ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+                  next: page.next,
+                  version: searchVersion,
+                })
+              }
+            >
               {m.setup_context_next()}
             </Button>
           ) : null}
@@ -147,7 +179,18 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           <p role="alert" className="text-sm">
             {page.phase === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable()}
           </p>
-          <Button type="button" variant="outline" disabled={disabled} onClick={() => picker.retrySearch()}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            onClick={() =>
+              picker.retrySearch({
+                query: state.query,
+                ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+                version: searchVersion,
+              })
+            }
+          >
             {m.space_setup_retry()}
           </Button>
         </div>
@@ -167,7 +210,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
               disabled={disabled || selected?.phase === 'loading'}
               aria-describedby={`${id}-reference-hint`}
               className="min-w-0 flex-1 basis-48"
-              onChange={(event) => picker.reference(event.target.value)}
+              onChange={(event) => picker.reference(event.target.value, reference, referenceVersion)}
             />
             <Button
               type="button"
@@ -177,7 +220,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                 selected?.phase === 'loading' ||
                 !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference.trim())
               }
-              onClick={() => void picker.choose(reference.trim())}
+              onClick={() => void picker.chooseReference(reference.trim(), referenceVersion)}
             >
               {selected?.phase === 'loading' ? m.space_setup_loading() : m.space_setup_resolve()}
             </Button>

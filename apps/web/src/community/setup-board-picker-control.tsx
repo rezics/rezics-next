@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -6,7 +6,7 @@ import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { m } from '../paraglide/messages.js';
 import type { SetupChoice } from './space-setup';
-import { BoardChoicePager, type BoardChoicePage, type BoardChoiceSource } from './setup-board-picker';
+import { BoardChoicePager, type BoardChoicePage, type BoardChoiceScope, type BoardChoiceSource } from './setup-board-picker';
 
 export function SetupBoardPicker({
   kind,
@@ -27,6 +27,8 @@ export function SetupBoardPicker({
   const [query, setQuery] = useState('');
   const [page, setPage] = useState<BoardChoicePage>({ status: 'loading', choices: [], next: null });
   const pager = useMemo(() => new BoardChoicePager(setPage), []);
+  const scope: BoardChoiceScope = { source, query, schemeId, kind };
+  const expected = { ...scope, version: pager.version() };
   // Mask a previous source/query immediately, before the new effect has started.
   const [loadedScope, setLoadedScope] = useState<{
     source: BoardChoiceSource;
@@ -39,11 +41,12 @@ export function SetupBoardPicker({
     loadedScope.query === query &&
     loadedScope.schemeId === schemeId &&
     loadedScope.kind === kind;
-  useEffect(() => {
+  useLayoutEffect(() => {
     setLoadedScope({ source, query, schemeId, kind });
     if (!disabled) pager.search({ source, kind, schemeId, query });
-    return () => pager.cancel();
+    else pager.cancel();
   }, [pager, source, kind, schemeId, query, disabled]);
+  useLayoutEffect(() => () => pager.cancel(), [pager]);
   const shown: BoardChoicePage = current ? page : { status: 'loading', choices: [], next: null };
   const label = kind === 'scheme' ? m.space_setup_scheme_label() : m.space_setup_concept_label();
   return (
@@ -87,7 +90,7 @@ export function SetupBoardPicker({
               value={value?.id ?? ''}
               disabled={disabled}
               onValueChange={(id) => {
-                const choice = pager.choose(String(id));
+                const choice = pager.choose(String(id), expected);
                 if (choice) onChange(choice);
               }}
             >
@@ -120,7 +123,7 @@ export function SetupBoardPicker({
                     ? m.space_setup_invalid()
                     : m.space_setup_board_choice_unavailable()}
             </p>
-            <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.retry()}>
+            <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.retry(expected)}>
               {m.space_setup_retry()}
             </Button>
           </div>
@@ -130,7 +133,7 @@ export function SetupBoardPicker({
           </p>
         ) : null}
         {shown.next !== null ? (
-          <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.next()}>
+          <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.next(expected)}>
             {m.space_setup_board_choice_next()}
           </Button>
         ) : null}

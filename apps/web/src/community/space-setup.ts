@@ -140,7 +140,7 @@ function realmOf(realm: RealmWire): SetupRealm {
 
 /** Receipt retries keep the complete original command, including its expected head. */
 export function setupAttempt(previous: SetupCommand | null, draft: SetupDraftCommand, key: string): SetupCommand {
-  return previous ?? { ...draft, key };
+  return previous ?? Object.freeze({ ...draft, key });
 }
 /** A definite refusal permits editing; an ambiguous outcome must first replay the saved request. */
 export function retainSetupAttempt(result: SetupResult): boolean {

@@ -64,22 +64,33 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
   let searchGeneration = 0;
   let selectionGeneration = 0;
   let currentGeneration = 0;
+  let referenceGeneration = 0;
   let currentVersion: string | undefined;
+  let connected = true;
+  let disposed = false;
+  const active = () => connected && !disposed;
   function update(next: ContextPickerState) {
+    if (disposed) return;
     state = next;
     for (const listener of listeners) listener();
   }
   function cancelSearch() {
     clearTimeout(timer);
+    timer = undefined;
     searchRequest?.abort();
+    searchRequest = undefined;
     searchGeneration++;
   }
   function search(query: string, cursor?: string, delay = 0) {
+    if (!active()) return;
     cancelSearch();
+    if (state.selected?.phase === 'loading') selectionGeneration++;
     const generation = searchGeneration;
     const page = { phase: 'loading' as const, contexts: [], next: null, ...(cursor !== undefined ? { cursor } : {}) };
     update({ ...state, query, page });
     timer = setTimeout(async () => {
+      timer = undefined;
+      if (!active() || generation !== searchGeneration) return;
       const request = new AbortController();
       searchRequest = request;
       try {
@@ -88,10 +99,10 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
           ...(cursor !== undefined ? { cursor } : {}),
           signal: request.signal,
         });
-        if (generation !== searchGeneration || request.signal.aborted) return;
+        if (!active() || generation !== searchGeneration || request.signal.aborted) return;
         update({ ...state, page: { ...page, phase: 'ready', contexts: result.contexts, next: result.next } });
       } catch (error) {
-        if (generation !== searchGeneration || request.signal.aborted) return;
+        if (!active() || generation !== searchGeneration || request.signal.aborted) return;
         update({ ...state, page: { ...page, phase: failurePhase(error) } });
       }
     }, delay);
@@ -100,16 +111,20 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
     return error instanceof ContextChoiceError ? error.reason : 'unavailable';
   }
   async function resolve(id: string): Promise<ContextResolution> {
+    if (!active()) return { id, phase: 'unavailable', choice: null };
     try {
       const choice = await source.resolve(id);
+      if (!active()) return { id, phase: 'unavailable', choice: null };
       if (!choice) return { id, phase: 'denied', choice: null };
       if (choice.id !== id) throw new ContextChoiceError('unavailable');
       return { id, phase: 'ready', choice };
     } catch (error) {
+      if (!active()) return { id, phase: 'unavailable', choice: null };
       return { id, phase: failurePhase(error), choice: null };
     }
   }
   async function choose(id: string) {
+    if (!active()) return;
     cancelSearch();
     const generation = ++selectionGeneration;
     update({
@@ -118,9 +133,10 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
       selected: { id, phase: 'loading', choice: null },
     });
     const selected = await resolve(id);
-    if (generation === selectionGeneration) update({ ...state, selected });
+    if (active() && generation === selectionGeneration) update({ ...state, selected });
   }
   async function current(id: string | null, version?: string, retry = false) {
+    if (!active()) return;
     if (!retry && state.current?.id === id && currentVersion === version) return;
     currentVersion = version;
     const generation = ++currentGeneration;
@@ -128,7 +144,7 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
     update({ ...state, current: id ? { id, phase: 'loading', choice: null } : null });
     if (!id) return;
     const resolved = await resolve(id);
-    if (generation === currentGeneration)
+    if (active() && generation === currentGeneration)
       update({
         ...state,
         current: resolved,
@@ -146,34 +162,157 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
         listeners.delete(listener);
       };
     },
-    search(query: string) {
+    connect() {
+      if (disposed) return () => {};
+      connected = true;
+      return () => {
+        if (!connected) return;
+        connected = false;
+        cancelSearch();
+        selectionGeneration++;
+        currentGeneration++;
+        referenceGeneration++;
+        const current = state.current?.phase === 'loading' ? null : state.current;
+        const selected = state.selected?.phase === 'loading' ? null : state.selected;
+        update({
+          ...state,
+          page: { phase: 'idle', contexts: [], next: null },
+          current,
+          selected,
+        });
+        queueMicrotask(() => {
+          if (!connected) disposed = true;
+        });
+      };
+    },
+    search(query: string, expectedQuery?: string, expectedVersion?: number) {
+      if (expectedQuery !== undefined && state.query !== expectedQuery) return;
+      if (expectedVersion !== undefined && expectedVersion !== searchGeneration) return;
       search(query, undefined, 250);
     },
-    next() {
-      if (state.page.phase === 'ready' && state.page.next !== null) search(state.query, state.page.next);
+    searchVersion() {
+      return searchGeneration;
     },
-    retrySearch() {
-      search(state.query, state.page.cursor);
+    pageVersion() {
+      return searchGeneration;
+    },
+    next(expected?: { query: string; cursor?: string; next?: string | null; version?: number }) {
+      if (
+        active() &&
+        state.page.phase === 'ready' &&
+        state.page.next !== null &&
+        (!expected ||
+          (state.query === expected.query &&
+            state.page.cursor === expected.cursor &&
+            state.page.next === expected.next &&
+            (expected.version === undefined || expected.version === searchGeneration)))
+      )
+        search(state.query, state.page.next);
+    },
+    retrySearch(expected?: { query: string; cursor?: string; version?: number }) {
+      if (
+        active() &&
+        state.page.phase !== 'loading' &&
+        (!expected ||
+          (state.query === expected.query &&
+            state.page.cursor === expected.cursor &&
+            (expected.version === undefined || expected.version === searchGeneration)))
+      )
+        search(state.query, state.page.cursor);
     },
     choose,
-    current,
-    retryCurrent() {
-      return current(state.current?.id ?? null, currentVersion, true);
+    choosePage(id: string, expected?: { query: string; cursor?: string; version?: number }) {
+      if (
+        active() &&
+        state.page.phase === 'ready' &&
+        (!expected ||
+          (state.query === expected.query &&
+            state.page.cursor === expected.cursor &&
+            (expected.version === undefined || expected.version === searchGeneration))) &&
+        state.page.contexts.some((choice) => choice.id === id)
+      )
+        return choose(id);
+      return Promise.resolve();
     },
-    reference(value: string) {
+    chooseCurrent(expectedId?: string, expectedVersion?: string) {
+      const current = state.current;
+      if (
+        active() &&
+        current?.phase === 'ready' &&
+        (expectedId === undefined || current.id === expectedId) &&
+        (expectedVersion === undefined || JSON.stringify([currentGeneration, currentVersion]) === expectedVersion)
+      )
+        return choose(current.id);
+      return Promise.resolve();
+    },
+    retrySelected(expectedId?: string, expectedPhase?: ContextResolution['phase'], expectedVersion?: number) {
+      const selected = state.selected;
+      if (
+        active() &&
+        selected &&
+        (expectedId === undefined || selected.id === expectedId) &&
+        (expectedPhase === undefined || selected.phase === expectedPhase) &&
+        (expectedVersion === undefined || expectedVersion === selectionGeneration) &&
+        (selected.phase === 'denied' || selected.phase === 'unavailable')
+      )
+        return choose(selected.id);
+      return Promise.resolve();
+    },
+    chooseReference(value = state.reference, expectedVersion?: number) {
+      const id = value.trim();
+      if (
+        active() &&
+        id &&
+        id === state.reference.trim() &&
+        (expectedVersion === undefined || expectedVersion === referenceGeneration)
+      )
+        return choose(id);
+      return Promise.resolve();
+    },
+    current,
+    currentVersion() {
+      return JSON.stringify([currentGeneration, currentVersion]);
+    },
+    referenceVersion() {
+      return referenceGeneration;
+    },
+    selectionVersion() {
+      return selectionGeneration;
+    },
+    retryCurrent(expectedId?: string, expectedVersion?: string) {
+      return active() &&
+        state.current?.id &&
+        (expectedId === undefined || expectedId === state.current.id) &&
+        (expectedVersion === undefined || JSON.stringify([currentGeneration, currentVersion]) === expectedVersion)
+        ? current(state.current.id, currentVersion, true)
+        : Promise.resolve();
+    },
+    reference(value: string, expectedReference?: string, expectedVersion?: number) {
+      if (!active()) return;
+      if (expectedReference !== undefined && state.reference !== expectedReference) return;
+      if (expectedVersion !== undefined && expectedVersion !== referenceGeneration) return;
+      referenceGeneration++;
       cancelSearch();
       selectionGeneration++;
       update({ ...state, reference: value, selected: null, page: { phase: 'idle', contexts: [], next: null } });
     },
-    clear() {
+    clear(expectedId?: string, expectedVersion?: number) {
+      if (!active()) return;
+      if (expectedId !== undefined && state.selected?.id !== expectedId) return;
+      if (expectedVersion !== undefined && expectedVersion !== selectionGeneration) return;
       selectionGeneration++;
       update({ ...state, selected: null });
     },
     dispose() {
+      if (disposed) return;
+      connected = false;
+      disposed = true;
       cancelSearch();
       selectionGeneration++;
       currentGeneration++;
       currentVersion = undefined;
+      referenceGeneration++;
+      update({ ...state, page: { phase: 'idle', contexts: [], next: null } });
     },
   };
 }
