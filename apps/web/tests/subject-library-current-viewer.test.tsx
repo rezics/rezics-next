@@ -349,6 +349,13 @@ test('Actual same-read provenance, including empty results, is required by the m
   const { provenance: _missing, ...missing } = baseline();
   await paint(missing);
   noPrivate('A');
+  await paint({ ...baseline(), entryAvailable: false, entry: null });
+  expect(host.querySelector('[data-library-entry]')).toBeNull();
+  expect(host.textContent).toContain('A private label');
+  await paint({ ...baseline(), labels: null });
+  expect(host.querySelector('[data-subject-labels]')).toBeNull();
+  expect(host.querySelector('[data-library-entry]')).not.toBeNull();
+  expect(host.querySelector('[data-add-to-collection]')).not.toBeNull();
   await paint(baseline());
   await openLabels();
   await openCollections();
@@ -464,14 +471,12 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
   await openLabels();
   await labelName('New current label');
   await act(async () => {
-    prefixes
-      .at(-1)!
-      .resolve({
-        state: 'loaded',
-        labels: [],
-        next: null,
-        provenance: { viewer: 'A', csrfToken: 'rotated', query: 'New current label' },
-      });
+    prefixes.at(-1)!.resolve({
+      state: 'loaded',
+      labels: [],
+      next: null,
+      provenance: { viewer: 'A', csrfToken: 'rotated', query: 'New current label' },
+    });
   });
   await submit('[data-subject-label-picker]');
   expect(labels[2]!.data).toEqual({

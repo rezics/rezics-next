@@ -212,12 +212,12 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
   // Separate native operation admissions. Changing a label gate cannot retire a healthy entry or Collection read.
   const families = {
     entry: {
-      admitted: entryGet && (!browser || observation.value.entryAdmitted),
+      admitted: entryGet && data.entryAvailable && (!browser || observation.value.entryAdmitted),
       operations: [entryGet, entryPut, entryDelete, entryRestore],
       revision: observation.value.entry,
     },
     labels: {
-      admitted: assignments && (!browser || observation.value.labelsAdmitted),
+      admitted: assignments && data.labels !== null && (!browser || observation.value.labelsAdmitted),
       operations: [assignments, labelList, labelAssign, labelCreate, labelUnassign],
       revision: observation.value.labels,
     },
@@ -242,6 +242,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
     const signature = JSON.stringify([
       scope,
       families[family].operations,
+      families[family].admitted,
       browser ? revision : 0,
       actualIdentity && credentialMatches,
     ]);
