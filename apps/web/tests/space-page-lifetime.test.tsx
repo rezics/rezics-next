@@ -5,6 +5,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { Root } from 'react-dom/client';
 import * as start from '../.storybook/react-start';
 import type { RealmBoard, RealmHome, SpacePageData, ShelfPage, PublishedSubject } from '../src/community/space';
+import type { SpacePageAdmission, SpacePageTarget } from '../src/community/space-page-lifetime';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -170,8 +171,6 @@ const {
   getSpacePageAdmission,
   SpacePageLifetimeHost,
   useSpacePageLifetime,
-  type SpacePageAdmission,
-  type SpacePageTarget,
 } = await import('../src/community/space-page-lifetime');
 const { SpacePage } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
