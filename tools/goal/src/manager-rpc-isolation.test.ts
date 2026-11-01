@@ -51,8 +51,12 @@ async function stopHost(host: Hosted | undefined): Promise<void> {
 function hostFixture(extra: NodeJS.ProcessEnv = {}) {
   const temporary = temporaryDirectory();
   mkdirSync(temporary.path, { recursive: true });
+  const codexHome = join(temporary.path, 'codex');
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(join(codexHome, 'config.toml'), 'model = "gpt-6.1-terra"\nmodel_reasoning_effort = "low"\n');
   const env = {
     ...process.env,
+    CODEX_HOME: codexHome,
     FAKE_GOAL_STATE: short(temporary.path),
     FAKE_GOAL_MAIN: temporary.path,
     FAKE_RPC_TIMEOUT_MS: '5000',
@@ -132,6 +136,33 @@ function managerSpec(cwd: string, id: string): ManagerSpec {
     limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
   };
 }
+
+test('the manager host sends the pinned model and effort in supported provider requests', async () => {
+  const f = hostFixture();
+  let host: Hosted | undefined;
+  let started = false;
+  const spec = { ...managerSpec(f.path, 'model-pinned-manager'), effort: 'high' as const };
+  try {
+    expect(spec.pool.codexHome).toBe(f.env.CODEX_HOME);
+    expect(readFileSync(join(spec.pool.codexHome, 'config.toml'), 'utf8')).toContain('model = "gpt-6.1-terra"');
+    host = startHost(f.env);
+    await host.ready;
+    await hostRequest(short(join(f.path, 'manager.sock')), { command: 'start', spec }, 5_000, 10);
+    started = true;
+
+    const threadStart = f.rpc().find((request) => request.method === 'thread/start');
+    expect(threadStart.params).toMatchObject({
+      model: 'gpt-6.1-sol',
+      config: { model_reasoning_effort: 'high' },
+    });
+    const turnStart = f.rpc().find((request) => request.method === 'turn/start');
+    expect(turnStart.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+  } finally {
+    if (started) await hostRequest(short(join(f.path, 'manager.sock')), { command: 'stop', manager: spec.id }, 5_000, 10);
+    await stopHost(host);
+    f.close();
+  }
+}, 10_000);
 
 test('durable decisions and public inbox and dispatch commands bypass a stalled manager chain', async () => {
   const f = hostFixture();

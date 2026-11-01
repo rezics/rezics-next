@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { StdioAppServer, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
@@ -11,8 +11,12 @@ async function setup() {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
+  const codexHome = join(temporary.path, 'codex-home');
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(join(codexHome, 'config.toml'), 'model = "gpt-6.1-terra"\nmodel_reasoning_effort = "low"\n');
   const client = new StdioAppServer([process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')], {
     ...process.env,
+    CODEX_HOME: codexHome,
     FAKE_RPC_LOG: log,
   });
   await client.initialize();
@@ -50,7 +54,7 @@ async function setup() {
     brief: 'Manage this scope',
     cwd: temporary.path,
     engine: 'codex',
-    pool: { id: 'sol', codexHome: join(temporary.path, 'codex-home') },
+    pool: { id: 'sol', codexHome },
     budget: 40000,
     effort: 'high',
     supermanager: 'supervisor',
@@ -144,6 +148,14 @@ test('renewing a paused Codex manager starts a fresh thread under the same id an
       s.requests().some((request) => request.method === 'turn/interrupt' && request.params.threadId === first.threadId),
     ).toBe(true);
     expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(2);
+    const threadStarts = s.requests().filter((request) => request.method === 'thread/start');
+    expect(threadStarts.map((request) => request.params.model)).toEqual(['gpt-6.1-sol', 'gpt-6.1-sol']);
+    expect(threadStarts.map((request) => request.params.config.model_reasoning_effort)).toEqual(['high', 'high']);
+    const turnStarts = s.requests().filter((request) => request.method === 'turn/start');
+    expect(turnStarts).toHaveLength(2);
+    expect(turnStarts.every((request) => request.params.model === 'gpt-6.1-sol' && request.params.effort === 'high')).toBe(
+      true,
+    );
     expect(
       s
         .requests()
@@ -157,6 +169,47 @@ test('renewing a paused Codex manager starts a fresh thread under the same id an
     expect(s.inbox.pending(first.id).map((entry) => entry.event.summary)).toContain(
       'Keep this decision for the new session',
     );
+  } finally {
+    await s.close();
+  }
+});
+
+test('goal continuation renews with pinned model and effort and notifies the supermanager once', async () => {
+  const s = await setup();
+  try {
+    const first = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'thread/goal/updated',
+      params: {
+        threadId: first.threadId,
+        goal: { status: 'active', tokensUsed: 37000, timeUsedSeconds: 80, tokenBudget: s.spec.budget },
+      },
+    });
+    expect(s.managers.get(first.id)).toMatchObject({ continuationAsked: true, continuationRenewed: false });
+
+    const continuationPath = join(s.path, '.temp', 'goal', first.id, 'CONTINUATION.md');
+    mkdirSync(join(s.path, '.temp', 'goal', first.id), { recursive: true });
+    writeFileSync(continuationPath, 'Continue the approved work from the recorded task states.\n');
+    await s.managers.outgoingMessage(first.id, s.spec.supermanager, 'continuation written');
+    await s.managers.flush();
+
+    const renewed = s.managers.get(first.id);
+    expect(renewed).toMatchObject({ threadId: 'thread-2', continuationAsked: true, continuationRenewed: true });
+    const threadStarts = s.requests().filter((request) => request.method === 'thread/start');
+    expect(threadStarts).toHaveLength(2);
+    expect(threadStarts.every((request) => request.params.model === 'gpt-6.1-sol')).toBe(true);
+    expect(threadStarts.every((request) => request.params.config.model_reasoning_effort === 'high')).toBe(true);
+    const turnStarts = s.requests().filter((request) => request.method === 'turn/start');
+    expect(turnStarts).toHaveLength(2);
+    expect(turnStarts.every((request) => request.params.model === 'gpt-6.1-sol' && request.params.effort === 'high')).toBe(
+      true,
+    );
+    expect(turnStarts[1]!.params.input[0].text).toContain(continuationPath);
+    expect(s.inbox.pending(s.spec.supermanager).filter((entry) => entry.event.kind === 'environment')).toHaveLength(1);
+
+    await s.managers.outgoingMessage(first.id, s.spec.supermanager, 'continuation written');
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(2);
+    expect(s.inbox.pending(s.spec.supermanager).filter((entry) => entry.event.kind === 'environment')).toHaveLength(1);
   } finally {
     await s.close();
   }

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { StdioAppServer, type Notification } from './app-server.ts';
@@ -11,8 +11,11 @@ import { temporaryDirectory } from './test-support.ts';
 async function setup() {
   const temporary = temporaryDirectory(); const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
+  const codexHome = join(temporary.path, 'codex-home');
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(join(codexHome, 'config.toml'), 'model = "gpt-6.1-terra"\nmodel_reasoning_effort = "low"\n');
   const client = new StdioAppServer([process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')],
-    { ...process.env, FAKE_RPC_LOG: log });
+    { ...process.env, CODEX_HOME: codexHome, FAKE_RPC_LOG: log });
   await client.initialize();
   const inbox = new SqliteManagerInbox(db, temporary.path);
   const windows: { manager: string; argv: string[] }[] = [];
@@ -27,7 +30,7 @@ async function setup() {
   };
   const managers = new ManagerSessions(db, inbox, services);
   const spec: ManagerSpec = { id: 'manager', goal: 'refactor', objective: 'Finish the refactor', brief: 'Manage this scope', cwd: temporary.path,
-    engine: 'codex', pool: { id: 'sol', codexHome: join(temporary.path, 'codex-home') }, budget: 40000, effort: 'high', supermanager: 'supervisor',
+    engine: 'codex', pool: { id: 'sol', codexHome }, budget: 40000, effort: 'high', supermanager: 'supervisor',
     limits: { turns: 20, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
   const requests = () => readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
   const notify = async (notification: Notification) => { await client.request('test/notify', notification); await managers.flush(); };
@@ -36,14 +39,16 @@ async function setup() {
     async close() { await managers.close(); db.close(); temporary.close(); } };
 }
 
-test('manager startup follows installed protocol and two managers share one app-server per pool', async () => {
+test('manager startup pins model and effort against CODEX_HOME defaults and shares one app-server per pool', async () => {
   const s = await setup();
   try {
     const first = await s.managers.start(s.spec); await s.managers.flush();
     const requests = s.requests().filter(r => r.id && r.method !== 'initialize');
     expect(requests.slice(0, 3).map(r => r.method)).toEqual(['thread/start', 'thread/goal/set', 'turn/start']);
+    expect(readFileSync(join(s.spec.pool.codexHome, 'config.toml'), 'utf8')).toContain('model = "gpt-6.1-terra"');
     expect(requests[0].params).toEqual({ approvalPolicy: 'never', sandbox: 'danger-full-access', cwd: s.path, model: 'gpt-6.1-sol',
       config: { model_reasoning_effort: 'high', model_auto_compact_token_limit: 300000 } });
+    expect(requests[2].params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
     expect(requests[1].params.tokenBudget).toBe(40000); expect(requests[1].params.status).toBe('active');
     expect(first.threadId).toBe('thread-1'); expect(first.activeTurnId).toBe('turn-1');
     expect(s.managers.get(s.spec.id).turns).toBe(1);
@@ -70,16 +75,22 @@ test('delivery steers an active turn with expectedTurnId and starts an idle turn
   const s = await setup();
   try {
     const manager = await s.managers.start(s.spec); await s.managers.flush();
+    const openingTurn = s.requests().find(r => r.method === 'turn/start');
+    expect(openingTurn.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
     s.inbox.deliver({ managerId: s.spec.id, kind: 'instruction', summary: 'Resolve the conflict' });
     await s.managers.wake(s.spec.id);
     const steer = s.requests().find(r => r.method === 'turn/steer');
     expect(steer.params.expectedTurnId).toBe(manager.activeTurnId);
     expect(steer.params.input).toEqual([{ type: 'text', text: 'Resolve the conflict', text_elements: [] }]);
+    expect(steer.params).not.toHaveProperty('model');
+    expect(steer.params).not.toHaveProperty('effort');
     await s.notify({ method: 'turn/completed', params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } } });
     expect(s.managers.get(s.spec.id).activeTurnId).toBeNull();
     s.inbox.deliver({ managerId: s.spec.id, kind: 'spec-conflict', summary: 'Choose a contract' });
     await s.managers.wake(s.spec.id);
-    expect(s.requests().filter(r => r.method === 'turn/start')).toHaveLength(2);
+    const starts = s.requests().filter(r => r.method === 'turn/start');
+    expect(starts).toHaveLength(2);
+    expect(starts[1]!.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
     expect(s.managers.get(s.spec.id).activeTurnId).toBe('turn-2');
     expect(s.inbox.notifications(s.spec.id)).toHaveLength(0);
   } finally { await s.close(); }
@@ -95,6 +106,11 @@ test('a steer racing a completed turn rejoins and starts a turn without losing t
     s.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(JSON.stringify(manager), manager.id);
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake after the race' });
     await s.managers.wake(manager.id); await s.managers.flush();
+    const resumed = s.requests().find(r => r.method === 'thread/resume');
+    expect(resumed.params.model).toBe('gpt-6.1-sol');
+    expect(resumed.params.config.model_reasoning_effort).toBe('high');
+    const starts = s.requests().filter(r => r.method === 'turn/start');
+    expect(starts[1]!.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
     expect(s.inbox.notifications(manager.id)).toHaveLength(0);
     expect(s.managers.get(manager.id).activeTurnId).toBe('turn-2');
   } finally { await s.close(); }
