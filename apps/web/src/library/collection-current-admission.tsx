@@ -52,7 +52,7 @@ export function useCollectionCurrentAdmission(address: string, evidence = '', qu
       mount,
       episode: 0,
       active,
-      subject,
+      subject: subject as string | null,
       csrfToken: '',
       admitted: [] as readonly string[],
       observation: undefined as ViewerObservation | undefined,

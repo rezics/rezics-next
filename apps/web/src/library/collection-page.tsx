@@ -329,6 +329,7 @@ function CollectionPageLifetime({
   const [destination, setDestination] = useState<CollectionDestination | null>(null);
   const [destinationLoading, setDestinationLoading] = useState(false);
   const destinationVersion = useRef(0);
+  const destinationEpisode = destinationVersion.current;
   const [transfer, setTransfer] = useState<{ destination: CollectionDestination; memberIds: string[] } | null>(null);
   const [bulkUnavailable, setBulkUnavailable] = useState(false);
   const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
@@ -639,7 +640,7 @@ function CollectionPageLifetime({
   }
 
   function cancelEditing() {
-    if (!isCurrent() || pending || (draftFrozen && !conflict)) return;
+    if (!isCurrent() || pending || (saveIntent.current !== null && !conflict)) return;
     saveIntent.current = null;
     setBatchRemovalIds(new Set());
     setTransfer(null);
@@ -916,7 +917,7 @@ function CollectionPageLifetime({
   }
 
   function setMemberOrder(memberId: string, after: string | null) {
-    if (!isCurrent('collection_member.move') || inFlight.current || draftFrozen) return;
+    if (!isCurrent('collection_member.move') || inFlight.current || saveIntent.current !== null) return;
     setMembers((current) => reorderCollectionMembers(current, memberId, after, page.firstPage));
   }
 
@@ -1202,7 +1203,7 @@ function CollectionPageLifetime({
                     disabled={pending || draftFrozen}
                     className={fieldClass}
                     onChange={(event) => {
-                      if (isCurrent('collection.update') && !inFlight.current && !draftFrozen)
+                      if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
                         setTitle(event.target.value);
                     }}
                     required
@@ -1217,7 +1218,7 @@ function CollectionPageLifetime({
                     maxLength={20_000}
                     className={fieldClass}
                     onChange={(event) => {
-                      if (isCurrent('collection.update') && !inFlight.current && !draftFrozen)
+                      if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
                         setDescription(event.target.value);
                     }}
                     rows={4}
@@ -1228,18 +1229,21 @@ function CollectionPageLifetime({
                   types={page.presentationTypes}
                   kind={kind}
                   onKindChange={(value) => {
-                    if (isCurrent('collection.update') && !inFlight.current && !draftFrozen) setKind(value);
+                    if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                      setKind(value);
                   }}
                   coverMediaId={coverMediaId}
                   onCoverChange={(value) => {
-                    if (isCurrent('collection.update') && !inFlight.current && !draftFrozen) setCoverMediaId(value);
+                    if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                      setCoverMediaId(value);
                   }}
                   members={page.members}
                   disabled={pending || draftFrozen}
                 />
                 <VisibilityField
                   onChange={(value) => {
-                    if (isCurrent('collection.update') && !inFlight.current && !draftFrozen) setVisibility(value);
+                    if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                      setVisibility(value);
                   }}
                   value={visibility}
                   disabled={pending || draftFrozen}
@@ -1310,7 +1314,7 @@ function CollectionPageLifetime({
                 variant="outline"
                 disabled={pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0}
                 onClick={() => {
-                  if (!isCurrent('collection_member.delete') || inFlight.current || draftFrozen) return;
+                  if (!isCurrent('collection_member.delete') || inFlight.current || saveIntent.current !== null) return;
                   setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
                   setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
                   setSelectedIds(new Set());
@@ -1325,7 +1329,7 @@ function CollectionPageLifetime({
                   value={destinationId}
                   disabled={pending || draftFrozen || conflict || transfer !== null}
                   onChange={(event) => {
-                    if (!isCurrent('collection_member.move') || inFlight.current || draftFrozen) return;
+                    if (!isCurrent('collection_member.move') || inFlight.current || saveIntent.current !== null) return;
                     destinationVersion.current++;
                     setDestinationId(event.target.value);
                   }}
@@ -1352,7 +1356,12 @@ function CollectionPageLifetime({
                   transfer !== null
                 }
                 onClick={() => {
-                  if (!isCurrent('collection_member.transfer') || inFlight.current || draftFrozen || !destination)
+                  if (
+                    !isCurrent('collection_member.transfer') ||
+                    inFlight.current ||
+                    saveIntent.current !== null ||
+                    !destination
+                  )
                     return;
                   const memberIds = members.filter((member) => selectedIds.has(member.id)).map((member) => member.id);
                   setTransfer({ destination, memberIds });
@@ -1432,7 +1441,7 @@ function CollectionPageLifetime({
               busy={pending || draftFrozen}
               selectedIds={selectedIds}
               onSelectionChange={(memberId, selected) => {
-                if (!isCurrent() || inFlight.current || draftFrozen) return;
+                if (!isCurrent() || inFlight.current || saveIntent.current !== null) return;
                 setSelectedIds((current) => {
                   const next = new Set(current);
                   if (selected && next.size < 100 && members.some((member) => member.id === memberId))
@@ -1445,13 +1454,13 @@ function CollectionPageLifetime({
               onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
               boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
               onNoteChange={(memberId, note) => {
-                if (!isCurrent('collection_member.update') || inFlight.current || draftFrozen) return;
+                if (!isCurrent('collection_member.update') || inFlight.current || saveIntent.current !== null) return;
                 setMembers((current) =>
                   current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
                 );
               }}
               onRemove={(memberId) => {
-                if (!isCurrent('collection_member.delete') || inFlight.current || draftFrozen) return;
+                if (!isCurrent('collection_member.delete') || inFlight.current || saveIntent.current !== null) return;
                 setMembers((current) => current.filter((member) => member.id !== memberId));
                 setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
               }}
