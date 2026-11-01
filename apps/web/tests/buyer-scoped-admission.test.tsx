@@ -85,6 +85,7 @@ function history(subject = 'A', cursor: string | null = null): BuyerOrdersCurren
         {
           ...paid.order,
           title: `Purchase ${subject}`,
+          settlement: 'paid',
           offerRevision: 1,
           moneyUnit: null,
           taxBehavior: null,
@@ -354,6 +355,18 @@ test('Offer uncertainty retains exact consent through scoped refresh and rotatio
     expect(h.host.querySelector('article')!.dataset.idempotencyKey).toBe(offer.idempotencyKey);
     await settle(pending, Response.json({}, { status: 503 }));
     expect(calls).toHaveLength(1); // No automatic replay when the new exposure succeeds.
+    await act(async () => h.admit([]));
+    expect(action(h.host, m.offer_retry()).disabled).toBe(true);
+    expect(h.host.querySelector('article')!.dataset.idempotencyKey).toBe(offer.idempotencyKey);
+    await act(async () => h.admit());
+    // An equivalent successful authoritative refresh gets a new observation without new consent.
+    act(() => {
+      const updatedAt = h.client.getQueryState(['session'])!.dataUpdatedAt;
+      h.client.setQueryData(['session'], viewer('A', 'rotated-A'), { updatedAt: updatedAt + 1 });
+      h.admit();
+    });
+    h.show();
+    await tick();
     const oldRetry = action(h.host, m.offer_retry());
     act(() => {
       h.session('A', 'latest-A');
@@ -468,7 +481,7 @@ test('Receipt scoped episodes retain uncertain reconciliation and the fifteen re
     click(m.order_reconcile_retry());
     await tick();
     expect(sends).toHaveLength(2);
-    expect(sends[1]!.intent).toEqual(sends[0]!.intent);
+    expect(sends[1]!.intent).toBe(sends[0]!.intent);
     expect(sends[1]!.token).toBe('rotated');
     expect(h.host.textContent).toContain(m.order_reconcile_queued());
     expect(h.host.textContent).not.toContain(m.order_entitlement_refresh()); // Enqueue did not change settlement.
