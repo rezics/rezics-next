@@ -813,12 +813,11 @@ owner movement, stale original rows and uncertain results remain unavailable. A 
 verified original window chain and its terminal successor; reaching home 4096 or observing an empty page alone
 does not complete it.
 
-Migration `20261030231307_public_source_repair_custody.sql` stores each step's original input limit and receipt
-protocol and each Source advancement's same-command transaction ID/native transaction provenance. It freezes
-the step and advancement rows and enforces the original advancement event at commit. Migration
-`20261031060000_public_source_repair_custody.sql` stores the ordered SHA-256 locator digests in a bounded
-packed field. Existing rows without that original provenance or digest list remain unverifiable; no current
-transaction or equivalent page upgrades them.
+Migration `20261031235550_public_source_repair_custody.sql` stores each step's original input limit and receipt
+protocol, each Source advancement's same-command transaction ID/native transaction provenance, and the ordered
+SHA-256 locator digests in a bounded packed field. It freezes the step and advancement rows and enforces the
+original advancement event at commit. Existing rows without that original provenance or digest list remain
+unverifiable; no current transaction or equivalent page upgrades them.
 
 The ACK transaction locks the same registration and home summary as change apply, checks the exact native
 consumer and holds the original physical target/incarnation point through commit. Its complete original
