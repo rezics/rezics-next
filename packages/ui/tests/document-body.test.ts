@@ -38,6 +38,7 @@ test('document bodies render every profile node and mark, safe links, spoilers a
       .sort();
     expect(outcomes).toEqual([
       'Blocks Profile: passed',
+      'Disclosure Replacement: passed',
       'Inline Spoiler: passed',
       'Localized Label: passed',
       'Media Images: passed',

@@ -51,3 +51,7 @@ test('a concealed spoiler keeps its place in the line, hides its text from sight
 test("the reveal control's name comes from the page's locale", async () => {
   expect(await storyOutcomes('Localized Label')).toEqual(['Localized Label: passed']);
 }, 300_000);
+
+test('document replacement starts a fresh disclosure visit and retires its earlier interactions', async () => {
+  expect(await storyOutcomes('Disclosure Replacement')).toEqual(['Disclosure Replacement: passed']);
+}, 300_000);

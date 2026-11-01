@@ -1,6 +1,6 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
-import type { DocumentSnapshot } from '@rezics/document';
-import type { ReactNode } from 'react';
+import { serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { useState, type ReactNode } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
@@ -36,7 +36,15 @@ type Props = {
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
 export function DocumentBody({ document, className, labels, mentions, locale = 'en', renderImage }: Props) {
+  const semanticSnapshot = serializeDocument(document);
+  const [visit, setVisit] = useState(() => ({ semanticSnapshot, id: 0 }));
+  if (visit.semanticSnapshot !== semanticSnapshot) {
+    // Restart this render before its children commit so replacement text cannot paint revealed.
+    setVisit({ semanticSnapshot, id: visit.id + 1 });
+  }
+
   const resolved = { ...documentBodyLabels, ...labels };
+  let spoilerPosition = 0;
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
@@ -116,7 +124,11 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
             <>{children}</>
           );
         },
-        spoiler: ({ children }: any) => <DocumentSpoiler label={resolved.revealSpoiler}>{children}</DocumentSpoiler>,
+        spoiler: ({ children }: any) => (
+          <DocumentSpoiler key={`${visit.id}:${spoilerPosition++}`} label={resolved.revealSpoiler}>
+            {children}
+          </DocumentSpoiler>
+        ),
       },
     },
   });
