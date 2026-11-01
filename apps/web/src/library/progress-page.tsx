@@ -24,6 +24,8 @@ import {
   useProgressEpisode,
   type ProgressAuthority,
 } from './progress-index-origin';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
+import { useHistoryAddress } from './history-current-origin';
 import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -59,6 +61,13 @@ const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
 
 const subscribe = () => () => {};
+const progressOperations = [
+  'progress_session.list',
+  'progress_session.create',
+  'progress_session.read',
+  'progress_session.complete',
+  'progress_session.abandon',
+] as const;
 
 /** Mounted by the real route: loader provenance is authority only for SSR/initial hydration. */
 export function CurrentViewerProgressIndexPage({
@@ -71,6 +80,7 @@ export function CurrentViewerProgressIndexPage({
   const renderedSession = useSession();
   const client = useQueryClient();
   const instance = useId();
+  const { store, value: scoped } = useLibraryWorkspaceAdmission(progressOperations);
   const session = progressIndexSession(client, renderedSession);
   const admitted = useOperation('progress_session.list');
   const hydrated = useSyncExternalStore(
@@ -81,27 +91,31 @@ export function CurrentViewerProgressIndexPage({
   const locale = getLocale();
   const subjectId = requested.subjectId || '';
   const cursor = requested.cursor || null;
-  const viewer = hydrated ? (session.state === 'signed-in' ? (session.subject ?? null) : null) : loader.viewer;
+  const viewer = hydrated ? scoped.subject : loader.viewer;
   const allowed = hydrated
     ? !!session.csrfToken && progressIndexAdmission(client, 'progress_session.list', admitted)
     : loader.page.signedIn;
-  const scope = JSON.stringify([viewer, allowed, subjectId, cursor, locale]);
-  const origin = useProgressEpisode(scope, () => {
-    if (getLocale() !== locale) return false;
-    if (!hydrated) return !!viewer && allowed;
-    const now = progressIndexSession(client, renderedSession);
-    return (
-      !!viewer &&
-      allowed &&
-      now.state === 'signed-in' &&
-      now.subject === viewer &&
-      !!now.csrfToken &&
-      progressIndexAdmission(client, 'progress_session.list', admitted)
-    );
-  });
+  const address = useHistoryAddress('/library/progress', requested.cursor, locale);
+  const scope = JSON.stringify([viewer, scoped.viewer, subjectId, cursor, locale, address.key]);
+  const origin = useProgressEpisode(
+    scope,
+    () => {
+      if (getLocale() !== locale || !address.isCurrent()) return false;
+      if (!hydrated) return !!viewer && allowed;
+      const now = progressIndexSession(client, renderedSession);
+      return (
+        !!viewer &&
+        store.read().viewer === scoped.viewer &&
+        now.state === 'signed-in' &&
+        now.subject === viewer &&
+        !!now.csrfToken
+      );
+    },
+    () => store.read().subject !== viewer,
+    () => !hydrated || progressIndexAdmission(client, 'progress_session.list', admitted),
+  );
   const matches = (result: CurrentViewerProgressIndex | undefined) =>
     !!viewer &&
-    allowed &&
     result?.viewer === viewer &&
     result.locale === locale &&
     result.requested.subjectId === subjectId &&
@@ -117,7 +131,6 @@ export function CurrentViewerProgressIndexPage({
     'progress',
     'current-viewer',
     viewer,
-    allowed,
     subjectId,
     cursor,
     locale,
@@ -128,14 +141,17 @@ export function CurrentViewerProgressIndexPage({
     ...personalRead,
     queryKey,
     queryFn: async () => {
-      if (!origin.isCurrent()) throw new Error('Progress index read retired');
+      const admissionVersion = store.dispatchVersion('progress_session.list');
+      const currentRead = () =>
+        origin.isCurrent() && store.dispatchVersion('progress_session.list') === admissionVersion;
+      if (!currentRead()) throw new Error('Progress index read retired');
       const result = await readCurrentViewerProgressIndex({
         data: {
           ...(subjectId ? { subjectId } : {}),
           ...(cursor ? { cursor } : {}),
         },
       });
-      if (!origin.isCurrent()) throw new Error('Progress index read retired');
+      if (!currentRead()) throw new Error('Progress index read retired');
       return result;
     },
     enabled: personalRead.enabled && hydrated && !!viewer && allowed,
@@ -179,6 +195,9 @@ export function CurrentViewerProgressIndexPage({
     isCurrent: () => origin.isCurrent() && source.isCurrent(),
     permits: (operation, rendered) =>
       !source.retired && source.validate() && hydrated && progressIndexAdmission(client, operation, rendered),
+    episode: (operation) => store.dispatchVersion(operation),
+    retained: (operation) =>
+      scoped.granted[progressOperations.indexOf(operation as (typeof progressOperations)[number])] === true,
     rowCurrent: (context) => {
       const page = currentResult()?.page;
       if (rowSource.current.page !== page) {
@@ -212,7 +231,11 @@ export function CurrentViewerProgressIndexPage({
         ) : null}
       </article>
     );
-  return <ProgressIndexPage key={source.generation} page={result!.page} authority={authority} />;
+  return (
+    <div hidden={hydrated && !allowed}>
+      <ProgressIndexPage key={`${scope}:${source.generation}`} page={result!.page} authority={authority} />
+    </div>
+  );
 }
 
 export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; authority?: ProgressAuthority }) {
@@ -250,20 +273,25 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
 
   if (seenIdentity !== episode) {
     setSeenIdentity(episode);
-    intent.current = null;
-    setChoices(page.progressChoices);
-    setChoicesUnavailable(page.choicesUnavailable ?? false);
-    choiceRequest.current++;
-    setChoosing(false);
-    setVersion([]);
-    setTotal('');
-    setUnit('');
-    setMode(page.progressChoices?.[0]?.mode);
-    setKey(authority ? crypto.randomUUID() : page.idempotencyKey);
-    setAlert(null);
-    setPending(false);
-    const next = page.selectedSubject;
-    setChosen(next ? [pickerSubject(next)] : []);
+    if (!authority || (seenIdentity.identity !== episode.identity && seenIdentity.revoked)) intent.current = null;
+    if (intent.current) {
+      setAlert(m.library_progress_unavailable());
+      setPending(false);
+    } else {
+      setChoices(page.progressChoices);
+      setChoicesUnavailable(page.choicesUnavailable ?? false);
+      choiceRequest.current++;
+      setChoosing(false);
+      setVersion([]);
+      setTotal('');
+      setUnit('');
+      setMode(page.progressChoices?.[0]?.mode);
+      setKey(authority ? crypto.randomUUID() : page.idempotencyKey);
+      setAlert(null);
+      setPending(false);
+      const next = page.selectedSubject;
+      setChosen(next ? [pickerSubject(next)] : []);
+    }
   }
 
   const draftLocked = pending || (!!authority && intent.current !== null);
@@ -352,6 +380,9 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
               <Link
                 to="/library/progress"
                 search={{ subjectId: page.subjectId, cursor: page.next }}
+                onClick={(event) => {
+                  if (authority && !authority.isCurrent()) event.preventDefault();
+                }}
                 className={buttonClass}
               >
                 {m.library_progress_more()}

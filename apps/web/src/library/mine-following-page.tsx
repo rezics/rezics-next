@@ -17,6 +17,7 @@ import {
   assertHistoryCurrent,
   useHistoryAddress,
   useHistoryCurrentOrigin,
+  useHistoryReadOrigin,
   type HistoryOrigin,
 } from './history-current-origin';
 import { readMineFollowingForViewer, type MineFollowingRead } from './mine-following-actions';
@@ -47,6 +48,8 @@ export const mineFollowingQuery = (
       }
     },
     gcTime: 0,
+    staleTime: Infinity,
+    refetchOnMount: false,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -93,6 +96,12 @@ export function CurrentViewerMineFollowingPage({
     },
     origin.client,
   );
+  const readCurrent = useHistoryReadOrigin(
+    origin.client,
+    options.queryKey,
+    (value) =>
+      !!value && !!origin.subject && matches(value as MineFollowingRead, origin.subject, address.cursor, locale),
+  );
   const previousLoader = useRef(initial);
   useEffect(() => {
     if (previousLoader.current === initial) return;
@@ -103,14 +112,14 @@ export function CurrentViewerMineFollowingPage({
     !read.isError &&
     read.data &&
     origin.subject &&
-    origin.current(0, false) &&
+    origin.retained[0] === true &&
     address.isCurrent() &&
     matches(read.data, origin.subject, address.cursor, locale)
       ? read.data.page
       : retiredPage;
   const rowOrigin: HistoryOrigin = {
     lifetime: origin.boundary.lifetime,
-    isCurrent: current,
+    isCurrent: () => current() && readCurrent(),
   };
   const status =
     origin.subject && origin.allowed[0] === true && !page.signedIn
@@ -119,18 +128,20 @@ export function CurrentViewerMineFollowingPage({
         : 'preparing'
       : undefined;
   return (
-    <MineFollowingPageView
-      page={page}
-      origin={rowOrigin}
-      status={status}
-      onRetry={
-        status === 'unavailable'
-          ? () => {
-              if (current()) void read.refetch();
-            }
-          : undefined
-      }
-    />
+    <div hidden={origin.hydrated && !origin.allowed[0]}>
+      <MineFollowingPageView
+        page={page}
+        origin={rowOrigin}
+        status={status}
+        onRetry={
+          status === 'unavailable'
+            ? () => {
+                if (current()) void read.refetch();
+              }
+            : undefined
+        }
+      />
+    </div>
   );
 }
 
@@ -263,7 +274,7 @@ function MineFollowingPageState({
                           </div>
                         }
                         actions={
-                          canUnfollow ? (
+                          <span hidden={!canUnfollow}>
                             <FollowTargetControl
                               origin={origin}
                               targetId={follow.targetId}
@@ -276,7 +287,7 @@ function MineFollowingPageState({
                                 setRemoved(true);
                               }}
                             />
-                          ) : null
+                          </span>
                         }
                       />
                     );

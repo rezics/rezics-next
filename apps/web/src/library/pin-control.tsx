@@ -1,21 +1,23 @@
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { EllipsisIcon } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useContext, useLayoutEffect, useRef, useState } from 'react';
+import { QueryClientContext, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import * as exposure from '../kernel/exposure';
 import * as sessionCache from '../session/query';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import type { AcceptedPinsOrigin } from './pins-current';
 import { csrfHeaders } from '../threads/composer';
 import { pinCollection, unpinCollection } from './pins-actions';
 import type { LibraryPinsRead } from './pins-read';
 
-const cachedSession = (client: QueryClient) =>
-  sessionCache.sessionQuery ? client.getQueryData(sessionCache.sessionQuery.queryKey) : undefined;
-const cachedExposure = (client: QueryClient) =>
-  sessionCache.exposureQuery ? client.getQueryData(sessionCache.exposureQuery.queryKey) : undefined;
+const cachedSession = (client: QueryClient) => {
+  const state = client.getQueryState(sessionCache.sessionQuery.queryKey);
+  return state?.status === 'success' ? state.data : undefined;
+};
+const pinOperations = ['library_pin.put', 'library_pin.delete'] as const;
 
 export type PinControlMode = 'collection' | 'list' | 'navigation';
 
@@ -28,7 +30,7 @@ type PinControlInput = {
 };
 
 type PinAction = 'pin' | 'unpin' | 'up' | 'down';
-type WriteAdmission = { allowed: boolean; active: boolean };
+type WriteAdmission = { allowed: boolean; active: boolean; version: number | undefined };
 type PinAttempt = {
   admission: WriteAdmission;
   lifetime: symbol;
@@ -37,7 +39,13 @@ type PinAttempt = {
   pending: boolean;
 };
 
-function pinLifetime(key: string, origin: object | undefined, put: boolean, remove: boolean) {
+function pinLifetime(
+  key: string,
+  origin: object | undefined,
+  put: boolean,
+  remove: boolean,
+  versions: readonly number[],
+) {
   return {
     key,
     origin,
@@ -46,8 +54,8 @@ function pinLifetime(key: string, origin: object | undefined, put: boolean, remo
     pending: false,
     notice: '',
     action: null as PinAction | null,
-    put: { allowed: put, active: true },
-    remove: { allowed: remove, active: true },
+    put: { allowed: put, active: true, version: versions[0] },
+    remove: { allowed: remove, active: true, version: versions[1] },
   };
 }
 
@@ -59,27 +67,28 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
 } {
   const putAdmitted = exposure.useOperation('library_pin.put');
   const removeAdmitted = exposure.useOperation('library_pin.delete');
+  const supplied = useContext(QueryClientContext);
+  const { store, value: scoped } = useLibraryWorkspaceAdmission(pinOperations);
 
   const loadedPins = pins.state === 'loaded' ? pins : null;
   const observedSession = sessionCache.useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
   const actualSession = cachedSession(queryClient);
-  const { state: session, subject, csrfToken } = actualSession ?? observedSession;
-  const groups = cachedExposure(queryClient);
+  const {
+    state: session,
+    subject,
+    csrfToken,
+  } = supplied ? (actualSession ?? { state: 'unknown', subject: null, csrfToken: null }) : observedSession;
   const canPut =
-    (actualSession ? exposure.operationIsAdmitted('library_pin.put', groups) : putAdmitted) &&
-    pins.state === 'loaded' &&
-    pins.canUpdate === true;
+    (supplied ? scoped.granted[0] === true : putAdmitted) && pins.state === 'loaded' && pins.canUpdate === true;
   const canRemove =
-    (actualSession ? exposure.operationIsAdmitted('library_pin.delete', groups) : removeAdmitted) &&
-    pins.state === 'loaded' &&
-    pins.canRemove === true;
+    (supplied ? scoped.granted[1] === true : removeAdmitted) && pins.state === 'loaded' && pins.canRemove === true;
   const viewer = session === 'signed-in' && subject ? subject : null;
   const hasCsrf = Boolean(csrfToken);
   const agreed = !pins.origin || (pins.origin.credentialAgrees && pins.origin.sessionSubject === viewer);
-  const key = JSON.stringify([viewer, collectionId, hasCsrf, !!loadedPins && agreed]);
-  const [control, setControl] = useState(() => pinLifetime(key, origin?.lifetime, canPut, canRemove));
+  const key = JSON.stringify([viewer, scoped.viewer, collectionId, hasCsrf]);
+  const [control, setControl] = useState(() => pinLifetime(key, origin?.lifetime, canPut, canRemove, scoped.dispatch));
   const committed = useRef<symbol | null>(null);
   const attempt = useRef<PinAttempt | null>(null);
   const live = useRef({ viewer, collectionId, pins, origin, queryClient, router, csrfToken });
@@ -87,21 +96,24 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
   const { lifetime, pending, notice, action: retainedAction } = control;
   if (control.key !== key || control.origin !== origin?.lifetime || !control.guard.active) {
     control.guard.active = false;
-    setControl(pinLifetime(key, origin?.lifetime, canPut, canRemove));
+    setControl(pinLifetime(key, origin?.lifetime, canPut, canRemove, scoped.dispatch));
   }
   // PUT and DELETE retire independently. Losing target/PUT access must not cancel an admitted removal.
   for (const [name, allowed] of [
     ['put', canPut],
     ['remove', canRemove],
   ] as const) {
-    if (!control[name].active || control[name].allowed !== allowed) {
+    const version = scoped.dispatch[name === 'put' ? 0 : 1];
+    if (!control[name].active || control[name].allowed !== allowed || control[name].version !== version) {
       const previous = control[name];
       previous.active = false;
-      control[name] = { allowed, active: true };
+      control[name] = { allowed, active: true, version };
       if (attempt.current?.admission === previous) {
-        attempt.current = null;
+        attempt.current.pending = false;
         setControl((value) =>
-          value.lifetime === lifetime ? { ...value, pending: false, notice: '', action: null } : value,
+          value.lifetime === lifetime
+            ? { ...value, pending: false, notice: '', action: attempt.current?.action ?? null }
+            : value,
         );
       }
     }
@@ -117,8 +129,13 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     const now = live.current;
     const actual = cachedSession(now.queryClient);
     // Pure supplied fixtures keep their existing observed-session operand. Production always supplies an origin.
-    if (!actual && !now.origin && !now.pins.origin) return now.viewer === viewer && !!now.csrfToken;
-    return actual?.state === 'signed-in' && actual.subject === viewer && !!actual.csrfToken;
+    if (!supplied && !now.origin && !now.pins.origin) return now.viewer === viewer && !!now.csrfToken;
+    return (
+      actual?.state === 'signed-in' &&
+      actual.subject === viewer &&
+      !!actual.csrfToken &&
+      store.read().viewer === scoped.viewer
+    );
   };
   const isCurrent = () =>
     committed.current === lifetime &&
@@ -130,12 +147,9 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     (live.current.origin?.isCurrent() ?? true);
   const admissionCurrent = (value: WriteAdmission, action: PinAction) => {
     if (!isCurrent() || !value.active || !value.allowed) return false;
-    const client = live.current.queryClient;
-    if (!cachedSession(client) && !live.current.origin && !live.current.pins.origin) return true;
-    return exposure.operationIsAdmitted(
-      action === 'unpin' ? 'library_pin.delete' : 'library_pin.put',
-      cachedExposure(client),
-    );
+    if (!supplied && !live.current.origin && !live.current.pins.origin) return true;
+    const operation = action === 'unpin' ? 'library_pin.delete' : 'library_pin.put';
+    return store.allowed(operation) && value.version === store.dispatchVersion(operation);
   };
   const update = (change: Partial<typeof control>) =>
     setControl((current) =>
@@ -150,13 +164,12 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
         control.guard.active = false;
         retired = true;
       } else if (cachedSession(queryClient)) {
-        const groups = cachedExposure(queryClient);
         for (const [value, operation] of [
           [control.put, 'library_pin.put'],
           [control.remove, 'library_pin.delete'],
         ] as const) {
           // Capabilities from the accepted pins response remain an additional restriction.
-          if (value.active && value.allowed && !exposure.operationIsAdmitted(operation, groups)) {
+          if (value.active && value.version !== store.dispatchVersion(operation)) {
             value.active = false;
             retired = true;
           }
@@ -181,6 +194,10 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     let current = attempt.current;
     if (current) {
       if (current.lifetime !== lifetime || current.pending || current.action !== action) return;
+      // A retry owns a new completion fence while retaining the exact native request.
+      // Mutating the previous attempt would let its unresolved completion acquire this admission.
+      current = { ...current, admission, pending: false };
+      attempt.current = current;
     } else {
       if (live.current.pins !== loadedPins) return;
       if ((action === 'up' && index <= 0) || (action === 'down' && (index < 0 || index >= pinCount - 1))) return;
@@ -270,7 +287,11 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
       type: action === 'unpin' ? ('destructive' as const) : ('item' as const),
       label: labels[action],
       onSelect: () => void perform(action),
-      disabled: pending || !hasCsrf || (retainedAction !== null && retainedAction !== action),
+      disabled:
+        pending ||
+        !hasCsrf ||
+        (supplied && !store.allowed(action === 'unpin' ? 'library_pin.delete' : 'library_pin.put')) ||
+        (retainedAction !== null && retainedAction !== action),
     },
   ]);
 

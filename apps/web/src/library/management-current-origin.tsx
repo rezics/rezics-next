@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import { operationIsAdmitted, type GatedOperation } from '../kernel/exposure';
-import { exposureQuery, sessionQuery } from '../session/query';
+import type { GatedOperation } from '../kernel/exposure';
+import { sessionQuery } from '../session/query';
+import { useLibraryWorkspaceAdmission, type LibraryWorkspaceAdmission } from './library-workspace-admission';
 
 export type ManagementGuard = {
   isCurrent: (operation?: GatedOperation) => boolean;
@@ -23,7 +24,7 @@ class ManagementCurrentOrigin {
   private accepted = { retired: false };
   private rejectedAt = -1;
   private rejectedQuery: unknown;
-  private operations = new Map<GatedOperation, { retired: boolean }>();
+  private operations = new Map<GatedOperation, { retired: boolean; version: number | undefined }>();
   private captured: ManagementGuard | undefined;
   constructor(
     private client: QueryClient,
@@ -31,10 +32,11 @@ class ManagementCurrentOrigin {
     readonly address: string,
     private operation: GatedOperation,
     private browser: boolean,
+    private admission: LibraryWorkspaceAdmission,
+    readonly viewer: number,
   ) {}
   private admitted(operation: GatedOperation) {
-    const exposure = this.client.getQueryState(exposureQuery.queryKey);
-    return exposure?.status === 'success' && operationIsAdmitted(operation, exposure.data);
+    return this.admission.allowed(operation);
   }
   private credential() {
     const session = this.client.getQueryState(sessionQuery.queryKey);
@@ -67,12 +69,12 @@ class ManagementCurrentOrigin {
   };
   private observe = () => {
     if (this.retired || !this.browser) return;
-    if (!this.credential() || !this.admitted(this.operation)) {
+    if (!this.credential() || this.admission.read().viewer !== this.viewer) {
       this.retire();
       return;
     }
     for (const [operation, lease] of this.operations) {
-      if (!lease.retired && !this.admitted(operation)) {
+      if (!lease.retired && lease.version !== this.admission.version(operation)) {
         lease.retired = true;
         this.changed();
       }
@@ -85,7 +87,12 @@ class ManagementCurrentOrigin {
   hasAuthority = () => this.browser && !!this.credential() && this.admitted(this.operation);
   isCurrent = () => {
     this.observe();
-    return this.browser && !this.retired && (!this.mounted || this.users > 0);
+    return this.alive() && this.admitted(this.operation);
+  };
+  private alive = () => this.browser && !this.retired && (!this.mounted || this.users > 0);
+  capture = () => {
+    const version = this.admission.dispatchVersion(this.operation);
+    return () => this.isCurrent() && version === this.admission.dispatchVersion(this.operation);
   };
   isRetired = () => this.retired;
   snapshot = () => this.version;
@@ -97,7 +104,14 @@ class ManagementCurrentOrigin {
     this.mounted = true;
     this.users++;
     this.observe();
-    this.release ??= this.client.getQueryCache().subscribe(this.observe);
+    this.release ??= (() => {
+      const cache = this.client.getQueryCache().subscribe(this.observe);
+      const admission = this.admission.watch(this.observe);
+      return () => {
+        cache();
+        admission();
+      };
+    })();
     return () => {
       this.users--;
       // Cleanup closes callbacks immediately; StrictMode may reconnect this same live object.
@@ -113,7 +127,7 @@ class ManagementCurrentOrigin {
   accept(key: QueryKey, matches: (value: unknown) => boolean, operations: readonly GatedOperation[]) {
     this.read = { key, matches };
     this.observe();
-    if (!this.isCurrent()) return null;
+    if (!this.alive()) return null;
     const query = this.client.getQueryState(key);
     if (
       query?.status !== 'success' ||
@@ -125,8 +139,8 @@ class ManagementCurrentOrigin {
       return null;
     if (this.accepted.retired) this.accepted = { retired: false };
     for (const operation of operations) {
-      if (this.admitted(operation) && (!this.operations.has(operation) || this.operations.get(operation)!.retired)) {
-        this.operations.set(operation, { retired: false });
+      if (!this.operations.has(operation) || this.operations.get(operation)!.retired) {
+        this.operations.set(operation, { retired: false, version: this.admission.version(operation) });
         this.captured = undefined;
       }
     }
@@ -134,7 +148,11 @@ class ManagementCurrentOrigin {
       const accepted = this.accepted;
       const leases = new Map(this.operations);
       const isCurrent = (operation = this.operation) =>
-        this.isCurrent() && !accepted.retired && !!leases.get(operation) && !leases.get(operation)!.retired;
+        this.isCurrent() &&
+        this.admitted(operation) &&
+        !accepted.retired &&
+        !!leases.get(operation) &&
+        !leases.get(operation)!.retired;
       this.captured = {
         isCurrent,
         headers: (operation) => {
@@ -148,31 +166,46 @@ class ManagementCurrentOrigin {
   }
 }
 
+const managementOperations = [
+  'copy.list',
+  'copy.get',
+  'copy.create',
+  'copy.update',
+  'copy.delete',
+  'library_label.list',
+  'library_label.create',
+  'library_label.rename',
+  'library_label.delete',
+] as const;
+
 /** Address changes retire during render; authority changes also retire directly in the cache listener. */
 export function useManagementCurrentOrigin(
   subject: string | null,
   address: string,
   operation: GatedOperation,
   browser: boolean,
+  operations: readonly GatedOperation[] = managementOperations,
 ) {
   const client = useQueryClient();
+  const { store, value } = useLibraryWorkspaceAdmission(operations);
   const previous = useRef<ManagementCurrentOrigin | null>(null);
   let origin = previous.current;
   if (
     !origin ||
     origin.subject !== subject ||
     origin.address !== address ||
+    origin.viewer !== value.viewer ||
     (origin.isRetired() && origin.hasAuthority())
   ) {
     origin?.retire();
-    origin = new ManagementCurrentOrigin(client, subject, address, operation, browser);
+    origin = new ManagementCurrentOrigin(client, subject, address, operation, browser, store, value.viewer);
     previous.current = origin;
   }
   // Hydration replaces the non-authorizing server origin, even if its displayed subject agrees.
   const mode = useRef(browser);
   if (mode.current !== browser) {
     origin.retire();
-    origin = new ManagementCurrentOrigin(client, subject, address, operation, browser);
+    origin = new ManagementCurrentOrigin(client, subject, address, operation, browser, store, value.viewer);
     previous.current = origin;
     mode.current = browser;
   }

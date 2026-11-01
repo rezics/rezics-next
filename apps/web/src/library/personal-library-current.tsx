@@ -55,16 +55,20 @@ export function PersonalLibraryCurrent({
   const admitted = !search.label;
   const key = JSON.stringify([subject, value.scope, address]);
   const [scope, setScope] = useState({ key, generation: 0, seed: true, hydrated });
-  const origin = useRef<{ key: string; active: boolean; authority: ShelfOrigin } | null>(null);
+  const origin = useRef<{ key: string; active: boolean; mounted: boolean | undefined; authority: ShelfOrigin } | null>(
+    null,
+  );
   if (origin.current?.key !== key) {
     if (origin.current) origin.current.active = false;
     const lifetime = {
       key,
       active: true,
+      mounted: undefined,
       authority: null as unknown as ShelfOrigin,
     };
     const current = () =>
       lifetime.active &&
+      lifetime.mounted !== false &&
       (!browser.current ||
         (observation.read().scope === value.scope &&
           observation.read().subject === subject &&
@@ -89,6 +93,8 @@ export function PersonalLibraryCurrent({
         observation.read();
         return observation.version(...ops);
       },
+      epoch: observation.epoch,
+      retains: observation.retains,
       watch: observation.watch,
       headers: observation.headers,
     };
@@ -102,15 +108,16 @@ export function PersonalLibraryCurrent({
       hydrated,
     });
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
+  const mountedOrigin = origin.current;
   useLayoutEffect(() => {
-    origin.current!.active = true;
+    if (mountedOrigin.active) mountedOrigin.mounted = true;
     return () => {
-      origin.current!.active = false;
+      mountedOrigin.mounted = false;
     };
-  }, []);
+  }, [mountedOrigin]);
   const [lease, setLease] = useState(() => ({ key, value: shelfMutationLease() }));
   if (lease.key !== key) setLease({ key, value: shelfMutationLease() });
-  if (!subject || !admitted || (hydrated && !origin.current.authority.current()))
+  if (!subject || !admitted || (hydrated && !observation.at(address)))
     return (
       <p role="status">
         {search.label
@@ -179,7 +186,7 @@ function PersonalLibraryRead({
     entries: browser.current ? origin.version('library_entry.list', 'progress_session.list') : null,
     continue: browser.current ? origin.version('library_continue.list', 'progress_session.list') : null,
   });
-  const regionCurrent = (read: ReturnType<typeof envelope>, region: 'entries' | 'continue') => {
+  const regionCurrent = (read: ReturnType<typeof envelope>, region: 'entries' | 'continue', retained = false) => {
     if (!origin.current()) return false;
     if (!browser.current) return true;
     const ops = [
@@ -188,7 +195,10 @@ function PersonalLibraryRead({
     ] as const;
     const version = origin.version(...ops);
     seedVersions.current[region] ??= version;
-    return origin.capture(...ops)() && version === (read[region] ?? seedVersions.current[region]);
+    return (
+      (retained ? origin.retains?.(...ops) : origin.capture(...ops)()) &&
+      version === (read[region] ?? seedVersions.current[region])
+    );
   };
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? envelope(initial) : undefined));
   const enabled =
@@ -203,6 +213,8 @@ function PersonalLibraryRead({
     queryFn: async () => {
       if (!origin.current()) throw new Error('Obsolete personal Library read');
       const guards = envelope(initial);
+      const entriesCurrent = origin.capture('library_entry.list', 'progress_session.list');
+      const continueCurrent = origin.capture('library_continue.list', 'progress_session.list');
       if (!regionCurrent(guards, 'entries') && !regionCurrent(guards, 'continue'))
         throw new Error('Unadmitted personal Library read');
       const value = await readPersonalLibraryCurrent({ data: input });
@@ -211,22 +223,28 @@ function PersonalLibraryRead({
         ...guards,
         value: {
           ...value,
-          page: regionCurrent(guards, 'entries')
-            ? value.page
-            : {
-                signedIn: true,
-                entries: [],
-                next: null,
-                readState: 'denied',
-                sort: { orderBy: address.orderBy, direction: address.direction },
-                ...(address.type ? { type: address.type } : {}),
-                ...(address.state ? { state: address.state } : {}),
-              },
-          continueEntries: regionCurrent(guards, 'continue') ? value.continueEntries : { state: 'denied', status: 403 },
+          page:
+            entriesCurrent() && regionCurrent(guards, 'entries')
+              ? value.page
+              : {
+                  signedIn: true,
+                  entries: [],
+                  next: null,
+                  readState: 'denied',
+                  sort: { orderBy: address.orderBy, direction: address.direction },
+                  ...(address.type ? { type: address.type } : {}),
+                  ...(address.state ? { state: address.state } : {}),
+                },
+          continueEntries:
+            continueCurrent() && regionCurrent(guards, 'continue')
+              ? value.continueEntries
+              : { state: 'denied', status: 403 },
         } satisfies PersonalLibraryCurrentRead,
       };
     },
     initialData,
+    staleTime: Infinity,
+    refetchOnMount: false,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
@@ -353,37 +371,41 @@ function PersonalLibraryRead({
   if (!accepted)
     return <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>;
   return (
-    <PersonalShelfOrigin.Provider value={pageOrigin}>
-      <PersonalLibraryPage
-        key={`${readGeneration}:${origin.version('library_entry.list', 'progress_session.list')}`}
-        page={
-          regionCurrent(accepted, 'entries')
-            ? accepted.value.page
-            : {
-                signedIn: true,
-                entries: [],
-                next: null,
-                readState: 'denied',
-                sort: { orderBy: address.orderBy, direction: address.direction },
-                ...(address.type ? { type: address.type } : {}),
-                ...(address.state ? { state: address.state } : {}),
-              }
-        }
-        locale={address.locale}
-        display={display}
-        {...(address.cursor ? { cursor: address.cursor } : {})}
-        acceptedNavigation={{
-          pins: pinsAdmitted ? accepted.value.navigation.pins : { state: 'closed' },
-          collections: collectionsAdmitted ? accepted.value.navigation.collections : [],
-          collectionsState: collectionsAdmitted ? (accepted.value.navigation.collectionsState ?? 'loaded') : 'loaded',
-        }}
-        continueState={
-          regionCurrent(accepted, 'continue') ? accepted.value.continueEntries : { state: 'denied', status: 403 }
-        }
-        continueRead={readContinue}
-        isCurrent={isCurrent}
-        originatingLease={mutationLease}
-      />
-    </PersonalShelfOrigin.Provider>
+    <div hidden={hydrated && !regionCurrent(accepted, 'entries') && !regionCurrent(accepted, 'continue')}>
+      <PersonalShelfOrigin.Provider value={pageOrigin}>
+        <PersonalLibraryPage
+          key={readGeneration}
+          page={
+            regionCurrent(accepted, 'entries', true)
+              ? accepted.value.page
+              : {
+                  signedIn: true,
+                  entries: [],
+                  next: null,
+                  readState: 'denied',
+                  sort: { orderBy: address.orderBy, direction: address.direction },
+                  ...(address.type ? { type: address.type } : {}),
+                  ...(address.state ? { state: address.state } : {}),
+                }
+          }
+          locale={address.locale}
+          display={display}
+          {...(address.cursor ? { cursor: address.cursor } : {})}
+          acceptedNavigation={{
+            pins: pinsAdmitted ? accepted.value.navigation.pins : { state: 'closed' },
+            collections: collectionsAdmitted ? accepted.value.navigation.collections : [],
+            collectionsState: collectionsAdmitted ? (accepted.value.navigation.collectionsState ?? 'loaded') : 'loaded',
+          }}
+          continueState={
+            regionCurrent(accepted, 'continue', true)
+              ? accepted.value.continueEntries
+              : { state: 'denied', status: 403 }
+          }
+          continueRead={readContinue}
+          isCurrent={isCurrent}
+          originatingLease={mutationLease}
+        />
+      </PersonalShelfOrigin.Provider>
+    </div>
   );
 }

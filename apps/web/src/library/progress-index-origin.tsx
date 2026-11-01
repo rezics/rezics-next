@@ -1,31 +1,45 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { operationIsAdmitted, type GatedOperation } from '../kernel/exposure';
-import type { useSession } from '../session/query';
+import { sessionQuery, type useSession } from '../session/query';
+import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-exposure';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import type { ProgressIndex } from './progress-reads';
 
 type Session = ReturnType<typeof useSession>;
 type Operation = Extract<GatedOperation, `progress_session.${string}`>;
 
-// Observe the same existing queries as useSession/useOperation. This adds no read.
-const sessionKey = ['session'] as const;
-const exposureKey = ['exposure', 'viewer'] as const;
-const observedSession = new WeakSet<QueryClient>();
-const observedExposure = new WeakSet<QueryClient>();
+const progressOperations = [
+  'progress_session.list',
+  'progress_session.create',
+  'progress_session.read',
+  'progress_session.complete',
+  'progress_session.abandon',
+] as const;
 const unknownSession: Session = { state: 'unknown', csrfToken: null, subject: null };
 
-export function progressIndexSession(client: QueryClient, rendered: Session): Session {
-  const state = client.getQueryState<Session>(sessionKey);
-  if (!state) return observedSession.has(client) ? unknownSession : rendered;
-  observedSession.add(client);
-  return state.status === 'success' && state.data ? state.data : unknownSession;
+export function progressIndexSession(client: QueryClient, _rendered: Session): Session {
+  const state = client.getQueryState(sessionQuery.queryKey);
+  return state?.status === 'success' && state.data ? state.data : unknownSession;
 }
 
-export function progressIndexAdmission(client: QueryClient, operation: Operation, rendered: boolean): boolean {
-  const state = client.getQueryState<string[]>(exposureKey);
-  if (!state) return !observedExposure.has(client) && rendered;
-  observedExposure.add(client);
-  return state.status === 'success' && operationIsAdmitted(operation, state.data);
+export function progressIndexAdmission(client: QueryClient, operation: Operation, _rendered: boolean): boolean {
+  const session = progressIndexSession(client, unknownSession);
+  const enrolled = viewerExposureLifetime(client).getSnapshot();
+  if (
+    session.state !== 'signed-in' ||
+    !session.subject ||
+    !session.csrfToken ||
+    enrolled.state !== 'signed-in' ||
+    enrolled.observation.subject !== session.subject
+  )
+    return false;
+  const state = client.getQueryState(viewerExposureQuery(enrolled.observation).queryKey);
+  return (
+    state?.status === 'success' &&
+    state.data?.subject === enrolled.observation.subject &&
+    operationIsAdmitted(operation, state.data.admitted)
+  );
 }
 
 export type ProgressAuthority = {
@@ -34,6 +48,8 @@ export type ProgressAuthority = {
   permits: (operation: Operation, rendered: boolean) => boolean;
   headers: () => { 'x-csrf-token': string } | null;
   rowCurrent: (context: string) => boolean;
+  episode?: (operation: Operation) => number | undefined;
+  retained?: (operation: Operation) => boolean;
 };
 
 /** Stored native context, independently of current summary labels and covers. */
@@ -65,12 +81,19 @@ export type ProgressEpisode = {
   mounted: boolean;
   validate: () => boolean;
   admissionLost: () => boolean;
+  available: () => boolean;
   isCurrent: () => boolean;
 };
 
 /** Cache events retire monotonically, including away/back events before React commits. */
-export function useProgressEpisode(identity: unknown, validate: () => boolean, admissionLost = () => !validate()) {
+export function useProgressEpisode(
+  identity: unknown,
+  validate: () => boolean,
+  admissionLost = () => !validate(),
+  available = () => true,
+) {
   const client = useContext(QueryClientContext);
+  useLibraryWorkspaceAdmission(progressOperations);
   const latest = useRef<ProgressEpisode | null>(null);
   const [, render] = useState(0);
   if (!latest.current || latest.current.identity !== identity || (latest.current.retired && validate())) {
@@ -85,8 +108,9 @@ export function useProgressEpisode(identity: unknown, validate: () => boolean, a
       mounted: previous?.mounted ?? false,
       validate,
       admissionLost,
+      available,
       isCurrent: () => {
-        if (latest.current !== episode || episode.retired || !episode.mounted) return false;
+        if (latest.current !== episode || episode.retired || !episode.mounted || !episode.available()) return false;
         if (!episode.validate()) {
           episode.retired = true;
           episode.revoked ||= episode.admissionLost();
@@ -101,13 +125,14 @@ export function useProgressEpisode(identity: unknown, validate: () => boolean, a
   const episode = latest.current;
   episode.validate = validate;
   episode.admissionLost = admissionLost;
+  episode.available = available;
   if (!validate()) {
     episode.retired = true;
     episode.revoked ||= admissionLost();
   }
   useLayoutEffect(() => {
     // Strict effects can reattach a mounted operand, but never unretire it.
-    latest.current!.mounted = true;
+    if (!episode.retired) episode.mounted = true;
     const observe = () => {
       const current = latest.current!;
       current.revoked ||= current.admissionLost();
@@ -121,9 +146,9 @@ export function useProgressEpisode(identity: unknown, validate: () => boolean, a
     observe();
     return () => {
       unsubscribe?.();
-      latest.current!.mounted = false;
+      episode.mounted = false;
     };
-  }, [client]);
+  }, [client, episode]);
   return episode;
 }
 
@@ -135,12 +160,20 @@ export function useProgressAction(
   context: unknown,
   contextCurrent: () => boolean = () => true,
 ) {
-  const allowed = authority ? authority.permits(operation, admitted) : true;
-  const identity = useMemo(() => ({ parent: authority?.key, context, allowed }), [authority?.key, context, allowed]);
+  const allowed = authority ? (authority.retained?.(operation) ?? authority.permits(operation, admitted)) : true;
+  const version = authority?.episode?.(operation);
+  const identity = useMemo(
+    () => ({ parent: authority?.key, context, allowed, version }),
+    [authority?.key, context, allowed, version],
+  );
   const permits = () => (authority ? authority.permits(operation, admitted) : true);
   return useProgressEpisode(
     identity,
-    () => permits() && contextCurrent(),
-    () => !permits(),
+    () =>
+      (authority?.retained ? authority.retained(operation) : permits()) &&
+      authority?.episode?.(operation) === version &&
+      contextCurrent(),
+    () => !allowed,
+    permits,
   );
 }

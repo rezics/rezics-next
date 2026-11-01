@@ -1,52 +1,15 @@
-import { CancelledError, QueryClient, QueryClientContext } from '@tanstack/react-query';
+import { CancelledError, QueryClient, QueryClientContext, type QueryKey } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { operationIsAdmitted, type GatedOperation } from '../kernel/exposure';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { type GatedOperation } from '../kernel/exposure';
+import { sessionQuery, useSession } from '../session/query';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { getLocale } from '../paraglide/runtime.js';
 
 export type HistoryOrigin = { lifetime: object; isCurrent: () => boolean };
-type Snapshot = { subject: string | null; viewer: number; allowed: boolean[]; episodes: number[] };
+type Snapshot = { subject: string | null; viewer: number; allowed: boolean[]; episodes: number[]; dispatch: number[] };
 const emptySubscribe = () => () => {};
 const previewClient = new QueryClient();
-
-/** Observe every cache notification, including away/back transitions before React commits. */
-function observation(client: QueryClient | undefined, operations: readonly GatedOperation[]) {
-  let snapshot: Snapshot | undefined;
-  function read(): Snapshot {
-    const session = client?.getQueryState<ReturnType<typeof useSession>>(sessionQuery.queryKey);
-    const exposure = client?.getQueryState<readonly string[]>(exposureQuery.queryKey);
-    const viewer = session?.status === 'success' ? session.data : undefined;
-    const subject = viewer?.state === 'signed-in' ? viewer.subject || null : null;
-    const allowed = operations.map(
-      (operation) =>
-        exposure?.status === 'success' &&
-        operationIsAdmitted(operation, exposure.data) &&
-        (!['follow.put', 'follow.delete'].includes(operation) || !!viewer?.csrfToken),
-    );
-    if (!snapshot) snapshot = { subject, viewer: 0, allowed, episodes: allowed.map(() => 0) };
-    else if (snapshot.subject !== subject || allowed.some((value, i) => value !== snapshot!.allowed[i])) {
-      snapshot = {
-        subject,
-        viewer: snapshot.viewer + Number(snapshot.subject !== subject),
-        allowed,
-        episodes: allowed.map((value, i) => snapshot!.episodes[i]! + Number(value !== snapshot!.allowed[i])),
-      };
-    }
-    return snapshot;
-  }
-  return {
-    read,
-    subscribe: (notify: () => void) => {
-      const unsubscribe = client?.getQueryCache().subscribe(() => {
-        read();
-        notify();
-      });
-      read();
-      return () => unsubscribe?.();
-    },
-  };
-}
 
 type Boundary = {
   key: string;
@@ -74,17 +37,18 @@ export function useHistoryCurrentOrigin(
     () => true,
     () => false,
   );
-  const store = useMemo(() => observation(suppliedClient, operations), [suppliedClient, operations]);
+  const { store, value: scoped } = useLibraryWorkspaceAdmission(operations);
   const server = useMemo<Snapshot>(
     () => ({
       subject: serverSubject,
       viewer: 0,
       allowed: operations.map(() => true),
       episodes: operations.map(() => 0),
+      dispatch: operations.map(() => 0),
     }),
     [serverSubject, operations],
   );
-  const snapshot = useSyncExternalStore(store.subscribe, store.read, () => server);
+  const snapshot = hydrated ? scoped : server;
   const subject = hydrated
     ? !suppliedClient && previewAllowed && session.state === 'signed-in'
       ? (session.subject ?? null)
@@ -128,7 +92,7 @@ export function useHistoryCurrentOrigin(
       !!suppliedClient &&
       now.subject === subject &&
       now.viewer === snapshot.viewer &&
-      now.episodes[index] === snapshot.episodes[index] &&
+      now.dispatch[index] === snapshot.dispatch[index] &&
       now.allowed[index] === true
     );
   }
@@ -140,8 +104,10 @@ export function useHistoryCurrentOrigin(
     boundary,
     authoritative: !!suppliedClient,
     allowed: !suppliedClient && previewAllowed ? previewAllowed : snapshot.allowed,
+    retained: !suppliedClient && previewAllowed ? previewAllowed : hydrated ? scoped.granted : snapshot.allowed,
     seed: boundary.seed && snapshot.episodes.every((value) => value === 0),
     lifetime: (index: number) => JSON.stringify([boundary.id, snapshot.episodes[index]]),
+    epoch: (index: number) => snapshot.dispatch[index],
     current,
     credential: (index: number) => (current(index) ? client.getQueryData(sessionQuery.queryKey)?.csrfToken : null),
   };
@@ -196,4 +162,38 @@ export function useHistoryAddress(path: string | null, cursor: string | undefine
       return address.active && snapshot.active;
     },
   };
+}
+
+/** Retained child callbacks stay tied to this actual successful reader and address. */
+export function useHistoryReadOrigin(client: QueryClient, key: QueryKey, matches: (value: unknown) => boolean) {
+  const signature = JSON.stringify(key);
+  const predicate = useRef(matches);
+  predicate.current = matches;
+  const observation = useMemo(() => {
+    let snapshot = { valid: false, generation: 0 };
+    const read = () => {
+      const state = client.getQueryState(key);
+      const valid = state?.status === 'success' && predicate.current(state.data);
+      if (valid !== snapshot.valid)
+        snapshot = {
+          valid,
+          generation: snapshot.generation + Number(snapshot.valid && !valid),
+        };
+      return snapshot;
+    };
+    return {
+      read,
+      subscribe: (notify: () => void) => {
+        const stop = client.getQueryCache().subscribe(() => {
+          const before = snapshot;
+          read();
+          if (before !== snapshot) notify();
+        });
+        read();
+        return stop;
+      },
+    };
+  }, [client, signature]);
+  const snapshot = useSyncExternalStore(observation.subscribe, observation.read, observation.read);
+  return () => observation.read().valid && observation.read().generation === snapshot.generation;
 }

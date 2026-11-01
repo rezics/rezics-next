@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientContext, useQuery } from '@tanstack/react-query';
-import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { operationIsAdmitted, useOperation } from '../kernel/exposure';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { useContext, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
+import { useSession } from '../session/query';
+import { getLocale } from '../paraglide/runtime.js';
+import { useHistoryAddress, useHistoryReadOrigin } from './history-current-origin';
 import {
   libraryNavigationQuery,
   matchesPinsOrigin,
@@ -14,7 +16,13 @@ export type AcceptedPinsOrigin = {
   isCurrent: () => boolean;
   queryKey?: readonly unknown[];
 };
-type Admission = { id: string; allowed: boolean; active: boolean; data?: LibraryNavigationRead };
+type Admission = {
+  id: string;
+  allowed: boolean;
+  active: boolean;
+  data?: LibraryNavigationRead;
+  queryKey?: readonly unknown[];
+};
 const admission = (allowed: boolean): Admission => ({ id: crypto.randomUUID(), allowed, active: true });
 const subscribe = () => () => {};
 const previewClient = new QueryClient();
@@ -27,97 +35,75 @@ type Boundary = {
   collections: Admission;
 };
 
+const navigationOperations = ['library_pin.list', 'collection.list'] as const;
+
 /** Separate read admissions share a viewer/address, never each other's private authority. */
 export function useLibraryReadOrigin(address: string, initialSubject?: string | null) {
-  const client = useContext(QueryClientContext) ?? previewClient;
-  const session = useSession();
+  const supplied = useContext(QueryClientContext);
+  const client = supplied ?? previewClient;
+  useSession();
   const hydrated = useSyncExternalStore(
     subscribe,
     () => true,
     () => false,
   );
-  const listPins = useOperation('library_pin.list');
-  const listCollections = useOperation('collection.list');
-  const actual = hydrated ? client.getQueryData(sessionQuery.queryKey) : undefined;
-  const viewer = actual ?? session;
-  const groups = hydrated ? client.getQueryData(exposureQuery.queryKey) : undefined;
-  const pinsAllowed = !hydrated || (actual ? operationIsAdmitted('library_pin.list', groups) : listPins);
-  const collectionsAllowed = !hydrated || (actual ? operationIsAdmitted('collection.list', groups) : listCollections);
-  const subject = hydrated
-    ? viewer.state === 'signed-in'
-      ? (viewer.subject ?? null)
-      : null
-    : (initialSubject ?? null);
-  const key = JSON.stringify([subject, address]);
+  const { store, value } = useLibraryWorkspaceAdmission(navigationOperations);
+  const location = useHistoryAddress(null, undefined, getLocale());
+  const subject = hydrated ? value.subject : (initialSubject ?? null);
+  const key = JSON.stringify([subject, value.viewer, address, location.key]);
   const ref = useRef<Boundary | null>(null);
-  const [, rerender] = useState(0);
-  if (!ref.current?.active || ref.current.key !== key) {
+  if (!ref.current || ref.current.key !== key) {
     if (ref.current) ref.current.active = false;
     ref.current = {
       key,
       id: crypto.randomUUID(),
       active: true,
       mounted: false,
-      pins: admission(pinsAllowed),
-      collections: admission(collectionsAllowed),
+      pins: admission(!hydrated || value.granted[0] === true),
+      collections: admission(!hydrated || value.granted[1] === true),
     };
   }
   const boundary = ref.current;
-  for (const [name, allowed] of [
-    ['pins', pinsAllowed],
-    ['collections', collectionsAllowed],
+  const versions = value.episodes;
+  const seen = useRef({ boundary, versions });
+  for (const [name, index] of [
+    ['pins', 0],
+    ['collections', 1],
   ] as const) {
-    if (!boundary[name].active || boundary[name].allowed !== allowed) {
+    const allowed = !hydrated || value.granted[index] === true;
+    if (seen.current.boundary === boundary && seen.current.versions[index] !== versions[index]) {
       boundary[name].active = false;
       boundary[name] = admission(allowed);
-    }
+    } else boundary[name].allowed = allowed;
   }
+  seen.current = { boundary, versions };
   const pins = boundary.pins;
   const collections = boundary.collections;
   const viewerCurrent = () => {
-    if (!subject || !boundary.active || ref.current !== boundary) return false;
-    if (!hydrated) return true;
-    const actual = client.getQueryData(sessionQuery.queryKey);
-    return actual?.state === 'signed-in' && actual.subject === subject;
+    const now = store.read();
+    return (
+      !!subject &&
+      boundary.active &&
+      ref.current === boundary &&
+      location.isCurrent() &&
+      (!hydrated || (!!supplied && now.subject === subject && now.viewer === value.viewer))
+    );
   };
-  const admitted = (episode: Admission, operation: 'library_pin.list' | 'collection.list') =>
+  const current = (episode: Admission, index: number) =>
     viewerCurrent() &&
     episode.active &&
     episode.allowed &&
-    (!hydrated || operationIsAdmitted(operation, client.getQueryData(exposureQuery.queryKey)));
-  const pinsCurrent = () => admitted(pins, 'library_pin.list');
-  const collectionsCurrent = () => admitted(collections, 'collection.list');
-  const isCurrent = () => viewerCurrent() && pins.active && collections.active;
-
+    (!hydrated || (store.read().dispatch[index] === value.dispatch[index] && store.read().allowed[index] === true));
+  const pinsCurrent = () => current(pins, 0);
+  const collectionsCurrent = () => current(collections, 1);
+  const isCurrent = () =>
+    viewerCurrent() && (!pins.allowed || pinsCurrent()) && (!collections.allowed || collectionsCurrent());
   useLayoutEffect(() => {
-    boundary.mounted = true;
-    const observe = () => {
-      if (!hydrated || !boundary.active || !subject) return;
-      let retired = false;
-      if (!viewerCurrent()) {
-        boundary.active = false;
-        retired = true;
-      } else {
-        const groups = client.getQueryData(exposureQuery.queryKey);
-        for (const [episode, operation] of [
-          [pins, 'library_pin.list'],
-          [collections, 'collection.list'],
-        ] as const) {
-          if (episode.active && episode.allowed !== operationIsAdmitted(operation, groups)) {
-            episode.active = false;
-            retired = true;
-          }
-        }
-      }
-      if (retired) rerender((value) => value + 1);
-    };
-    const unsubscribe = client.getQueryCache().subscribe(observe);
-    observe();
+    if (boundary.active) boundary.mounted = true;
     return () => {
       boundary.mounted = false;
-      unsubscribe();
     };
-  }, [boundary, pins, collections, client, hydrated, subject]);
+  }, [boundary]);
   return {
     subject,
     hydrated,
@@ -146,9 +132,19 @@ export function useCurrentLibraryNavigation(locale: string, limit: 8 | 100 = 8, 
     {
       ...options,
       enabled: enabled && origin.hydrated && !!origin.subject && options.enabled === true,
+      staleTime: Infinity,
+      refetchOnMount: false,
     },
     origin.client,
   );
+  const readCurrent = useHistoryReadOrigin(origin.client, options.queryKey, (value) => {
+    const read = value as LibraryNavigationRead | undefined;
+    return (
+      !!origin.subject &&
+      matchesPinsOrigin(read?.origin, origin.subject, limit) &&
+      (!origin.pins.allowed || matchesPinsOrigin(read?.pins.origin, origin.subject, limit))
+    );
+  });
   const value =
     !query.isError &&
     origin.subject &&
@@ -161,7 +157,10 @@ export function useCurrentLibraryNavigation(locale: string, limit: 8 | 100 = 8, 
     delete origin.collections.data;
   }
   if (value) {
-    if (origin.pinsCurrent() && matchesPinsOrigin(value.pins.origin, origin.subject!, limit)) origin.pins.data = value;
+    if (origin.pinsCurrent() && matchesPinsOrigin(value.pins.origin, origin.subject!, limit)) {
+      origin.pins.data = value;
+      origin.pins.queryKey = options.queryKey;
+    }
     if (origin.collectionsCurrent()) origin.collections.data = value;
   }
   const pins: LibraryPinsRead = origin.pinsCurrent()
@@ -179,11 +178,14 @@ export function useCurrentLibraryNavigation(locale: string, limit: 8 | 100 = 8, 
     lifetime: origin.pins,
     isCurrent: () =>
       enabled &&
+      readCurrent() &&
       origin.pinsCurrent() &&
       !!origin.subject &&
       !!origin.pins.data &&
+      origin.client.getQueryState(origin.pins.queryKey ?? options.queryKey)?.status === 'success' &&
+      origin.client.getQueryData(origin.pins.queryKey ?? options.queryKey) === origin.pins.data &&
       matchesPinsOrigin(origin.pins.data.pins.origin, origin.subject, limit),
-    queryKey: options.queryKey,
+    queryKey: origin.pins.queryKey ?? options.queryKey,
   };
   return { data, pinsOrigin: acceptedPins, isError: query.isError };
 }

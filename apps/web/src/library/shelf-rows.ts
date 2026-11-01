@@ -1,4 +1,13 @@
-import { useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useContext,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { m } from '../paraglide/messages.js';
 import { useOperation } from '../kernel/exposure';
@@ -105,7 +114,11 @@ export function useShelfRows(
   const copies = useOperation('copy.list');
   const origin = useRef(originatingCurrent);
   origin.current = originatingCurrent;
-  const [rowCurrent] = useState(() => shelfOrigin?.capture('library_entry.list', 'progress_session.list'));
+  const epoch = shelfOrigin?.epoch?.('library_entry.list', 'progress_session.list');
+  const rowCurrent = useMemo(
+    () => shelfOrigin?.capture('library_entry.list', 'progress_session.list'),
+    [shelfOrigin, epoch],
+  );
   const isCurrent = useCallback(
     () =>
       (rowCurrent?.() ?? true) && mounted.current && (origin.current?.() ?? true) && (shelfOrigin?.current() ?? true),
@@ -134,17 +147,14 @@ export function useShelfRows(
   if (versions.some((version, i) => version !== previousVersions.current[i])) {
     const [state, label, remove] = versions.map((version, i) => version !== previousVersions.current[i]);
     previousVersions.current = versions;
-    // A retired command/key cannot be revived by an admission ABA. Independently readable rows stay visible.
+    // Fresh commands get new keys after retirement; uncertain native commands keep their exact input.
     const next = currentRows.current.map((row) => {
       const next = { ...row, entry: { ...row.entry } };
       if (state) {
-        delete next.unknownIntent;
-        next.entry.changeKey = crypto.randomUUID();
+        if (!next.unknownIntent) next.entry.changeKey = crypto.randomUUID();
       }
-      if (label) delete next.unknownLabelIntent;
       if (remove) {
-        delete next.unknownRemove;
-        next.entry.removeKey = crypto.randomUUID();
+        if (!next.unknownRemove) next.entry.removeKey = crypto.randomUUID();
       }
       return next;
     });
@@ -237,6 +247,7 @@ export function useShelfRows(
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.subjectId);
     if (!row || row.unknownRemove || row.unknownLabelIntent || !matchesShelfIntent(row.entry, intent))
       return { status: 'not-attempted' };
+    patch(intent.subjectId, (current) => ({ ...current, unknownIntent: intent }));
     try {
       const result = await savePersonalLibraryEntry({ data: intent, headers: headers() });
       if (!isCurrent() || !stateCurrent()) return { status: 'unknown', stop: true };
@@ -273,11 +284,16 @@ export function useShelfRows(
         return { status: 'failed' };
       }
       if (!result.ok && result.reason !== 'unavailable') {
-        patch(intent.subjectId, (current) => ({
-          entry: { ...current.entry, changeKey: crypto.randomUUID() },
-          conflict: false,
-          failure: failureOf(result.reason),
-        }));
+        patch(intent.subjectId, (current) => {
+          const next = { ...current };
+          delete next.unknownIntent;
+          return {
+            ...next,
+            entry: { ...current.entry, changeKey: crypto.randomUUID() },
+            conflict: false,
+            failure: failureOf(result.reason),
+          };
+        });
         return { status: 'failed', stop: ['closed', 'denied', 'signed-out'].includes(result.reason) };
       }
     } catch {
@@ -398,6 +414,7 @@ export function useShelfRows(
       !matchesShelfLabelIntent(row.entry, intent)
     )
       return { status: 'not-attempted' };
+    patch(intent.input.subjectId, (current) => ({ ...current, unknownLabelIntent: intent }));
     try {
       const result = await mutateSubjectLabelAction({ data: intent.input, headers: headers() });
       if (!isCurrent() || !labelCurrent()) return { status: 'unknown' };
@@ -420,6 +437,12 @@ export function useShelfRows(
         (result.reason === 'capacity' || result.reason === 'closed' || result.reason === 'signed-out')
       ) {
         // Refusing a recovery attempt does not prove what happened to the original command.
+        if (!row.unknownLabelIntent)
+          patch(intent.input.subjectId, (current) => {
+            const next = { ...current };
+            delete next.unknownLabelIntent;
+            return next;
+          });
         return { status: row.unknownLabelIntent ? 'unknown' : 'failed', reason: result.reason };
       }
     } catch {
@@ -505,6 +528,7 @@ export function useShelfRows(
     if (!release) return;
     try {
       const { entry } = row;
+      patch(subjectId, (current) => ({ ...current, unknownRemove: true }));
       const result = await deletePersonalLibraryEntry({
         data: {
           subjectId,

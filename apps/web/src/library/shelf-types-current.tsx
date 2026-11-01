@@ -1,32 +1,39 @@
 import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { operationIsAdmitted, useOperation } from '../kernel/exposure';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
+import { useSession } from '../session/query';
 import { shelfHref, type ShelfSearch } from './shelf-params';
 import { useHydrated } from './shelf-rows';
 
+const operations = ['library_shelf.types'] as const;
+
 /** Observe cache/navigation transitions synchronously, including ABA batched before React renders. */
 export function useShelfTypesLifetime(locale: string, view: ShelfSearch) {
-  const client = useQueryClient();
+  const { store, value } = useLibraryWorkspaceAdmission(operations);
   const router = useRouter({ warn: false });
-  const session = useSession();
-  const admitted = useOperation('library_shelf.types');
+  useSession();
+  const admitted = value.allowed[0] === true;
   const hydrated = useHydrated();
   const observation = useMemo(() => {
     let address = router?.state.location.href ?? null;
     let snapshot = { signature: '', generation: 0 };
     const read = () => {
-      const viewer = client.getQueryData(sessionQuery.queryKey);
-      const allowed = operationIsAdmitted('library_shelf.types', client.getQueryData(exposureQuery.queryKey));
-      const signature = JSON.stringify([viewer?.state ?? 'unknown', viewer?.subject ?? null, allowed, address]);
+      const scoped = store.read();
+      const signature = JSON.stringify([
+        scoped.subject,
+        scoped.viewer,
+        scoped.allowed[0],
+        scoped.episodes[0],
+        scoped.observation?.id,
+        address,
+      ]);
       if (signature !== snapshot.signature) snapshot = { signature, generation: snapshot.generation + 1 };
       return snapshot;
     };
     return {
       read,
       subscribe(notify: () => void) {
-        const cache = client.getQueryCache().subscribe(() => {
+        const cache = store.watch(() => {
           read();
           notify();
         });
@@ -41,10 +48,10 @@ export function useShelfTypesLifetime(locale: string, view: ShelfSearch) {
         };
       },
     };
-  }, [client, router]);
+  }, [store, router]);
   const observed = useSyncExternalStore(observation.subscribe, observation.read, observation.read);
-  const subject = session.state === 'signed-in' && session.subject?.trim() ? session.subject : null;
-  const signature = JSON.stringify([session.state, subject, admitted, hydrated, locale, shelfHref(locale, view)]);
+  const subject = value.subject;
+  const signature = JSON.stringify([subject, admitted, hydrated, locale, shelfHref(locale, view)]);
   const origin = useRef<{
     signature: string;
     observed: typeof observed;
@@ -59,21 +66,20 @@ export function useShelfTypesLifetime(locale: string, view: ShelfSearch) {
   }
   const lifetime = origin.current;
   useLayoutEffect(() => {
-    lifetime.mounted = true;
+    if (lifetime.active) lifetime.mounted = true;
     return () => {
       lifetime.mounted = false;
     };
   }, [lifetime]);
   const isCurrent = () => {
     if (!lifetime.active || !lifetime.mounted || origin.current !== lifetime) return false;
-    const viewer = client.getQueryData(sessionQuery.queryKey);
+    const viewer = store.read();
     if (
       !hydrated ||
       !subject ||
       !admitted ||
-      viewer?.state !== 'signed-in' ||
       viewer.subject !== subject ||
-      !operationIsAdmitted('library_shelf.types', client.getQueryData(exposureQuery.queryKey)) ||
+      !store.allowed('library_shelf.types') ||
       observation.read() !== observed
     ) {
       lifetime.active = false;

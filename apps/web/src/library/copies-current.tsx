@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '../session/query';
-import { useOperation } from '../kernel/exposure';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { CopiesPage, type CopiesOrigin } from './copies-page';
@@ -52,20 +52,18 @@ export function CopiesCurrent({
     () => false,
   );
   const session = useSession();
-  const admitted = useOperation('copy.list');
-  const subject = hydrated
-    ? session.state === 'signed-in' && session.csrfToken
-      ? (session.subject ?? null)
-      : null
-    : initial.sessionSubject;
-  const allowed = !hydrated || admitted;
+  const { value } = useLibraryWorkspaceAdmission(operations);
+  const subject = hydrated ? value.subject : initial.sessionSubject;
+  const allowed = !hydrated || value.allowed[0] === true;
   const address = copiesAddress(search, locale);
-  const origin = useManagementCurrentOrigin(subject, JSON.stringify(address), 'copy.list', hydrated);
+  const origin = useManagementCurrentOrigin(subject, JSON.stringify(address), 'copy.list', hydrated, operations);
   const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
   if (scope.id !== origin.id)
     setScope({ id: origin.id, seed: scope.seed && !scope.hydrated && !!subject && allowed, hydrated });
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
-  if (!subject || !allowed)
+  const shown = useRef<string | null>(null);
+  if (allowed) shown.current = origin.id;
+  if (!subject || (!allowed && shown.current !== origin.id))
     return (
       <p role="status">
         {session.state === 'signed-out'
@@ -76,16 +74,21 @@ export function CopiesCurrent({
       </p>
     );
   return (
-    <CurrentCopiesRead
-      key={origin.id}
-      subject={subject}
-      address={address}
-      initial={initial}
-      seed={scope.seed}
-      hydrated={hydrated}
-      origin={origin}
-      failure={failure}
-    />
+    <>
+      {!allowed ? <p role="status">{m.library_sort_preparing()}</p> : null}
+      <div hidden={!allowed}>
+        <CurrentCopiesRead
+          key={origin.id}
+          subject={subject}
+          address={address}
+          initial={initial}
+          seed={scope.seed}
+          hydrated={hydrated}
+          origin={origin}
+          failure={failure}
+        />
+      </div>
+    </>
   );
 }
 
@@ -115,13 +118,14 @@ function CurrentCopiesRead({
     queryKey,
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.isCurrent()) throw new Error('Obsolete Copies read');
+      const current = origin.capture();
+      if (!current()) throw new Error('Obsolete Copies read');
       try {
         const value = await readCopiesCurrent({ data: input });
-        if (!origin.isCurrent() || !matches(value, subject, address)) throw new Error('Unaccepted Copies read');
+        if (!current() || !matches(value, subject, address)) throw new Error('Unaccepted Copies read');
         return value;
       } catch (error) {
-        if (!origin.isCurrent()) throw new Error('Obsolete Copies read');
+        if (!current()) throw new Error('Obsolete Copies read');
         throw error;
       }
     },

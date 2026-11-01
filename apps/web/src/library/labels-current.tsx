@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { exposureQuery, useSession } from '../session/query';
-import { operationIsAdmitted } from '../kernel/exposure';
+import { useSession } from '../session/query';
+import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { LabelsPageView } from './labels-page';
@@ -52,19 +52,23 @@ export function LabelsCurrent({
     () => false,
   );
   const session = useSession();
-  const exposure = useQuery({ ...exposureQuery, enabled: hydrated && session.state === 'signed-in' });
-  const subject = hydrated
-    ? session.state === 'signed-in' && session.csrfToken
-      ? (session.subject ?? null)
-      : null
-    : initial.sessionSubject;
-  const admitted = hydrated && !exposure.isError ? exposure.data : !hydrated ? initial.page.operations : undefined;
-  const allowed = operationIsAdmitted('library_label.list', admitted);
+  const { value } = useLibraryWorkspaceAdmission(labelOperations);
+  const subject = hydrated ? value.subject : initial.sessionSubject;
+  const allowed = !hydrated || value.allowed[0] === true;
+  const admitted = hydrated ? value.observation : initial.page.operations;
   const address: LabelsAddress = { cursor: search.cursor ?? null, query: search.q ?? null, locale };
-  const origin = useManagementCurrentOrigin(subject, JSON.stringify(address), 'library_label.list', hydrated);
+  const origin = useManagementCurrentOrigin(
+    subject,
+    JSON.stringify(address),
+    'library_label.list',
+    hydrated,
+    labelOperations,
+  );
   const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
   if (scope.id !== origin.id) setScope({ id: origin.id, seed: scope.seed && !scope.hydrated && !!subject, hydrated });
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
+  const shown = useRef<string | null>(null);
+  if (allowed) shown.current = origin.id;
   if (!subject) {
     if (!hydrated)
       return (
@@ -76,18 +80,23 @@ export function LabelsCurrent({
     if (session.state === 'signed-out') return <LabelsPageView page={signedOutPage} locale={locale} />;
     return <p role="status">{m.library_labels_unavailable()}</p>;
   }
-  if (!allowed)
+  if (!allowed && shown.current !== origin.id)
     return <p role="status">{admitted ? m.library_subject_label_closed() : m.library_labels_unavailable()}</p>;
   return (
-    <LabelsRead
-      key={origin.id}
-      subject={subject}
-      address={address}
-      initial={initial}
-      seed={scope.seed}
-      hydrated={hydrated}
-      origin={origin}
-    />
+    <>
+      {!allowed ? <p role="status">{m.library_labels_unavailable()}</p> : null}
+      <div hidden={!allowed}>
+        <LabelsRead
+          key={origin.id}
+          subject={subject}
+          address={address}
+          initial={initial}
+          seed={scope.seed}
+          hydrated={hydrated}
+          origin={origin}
+        />
+      </div>
+    </>
   );
 }
 
@@ -114,15 +123,16 @@ function LabelsRead({
     queryKey,
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
-      if (!origin.isCurrent()) throw new Error('Obsolete Labels read');
+      const current = origin.capture();
+      if (!current()) throw new Error('Obsolete Labels read');
       try {
         const value = await readLabelsCurrent({
           data: { cursor: address.cursor ?? undefined, query: address.query ?? undefined },
         });
-        if (!origin.isCurrent() || !matches(value, subject, address)) throw new Error('Unaccepted Labels read');
+        if (!current() || !matches(value, subject, address)) throw new Error('Unaccepted Labels read');
         return value;
       } catch (error) {
-        if (!origin.isCurrent()) throw new Error('Obsolete Labels read');
+        if (!current()) throw new Error('Obsolete Labels read');
         throw error;
       }
     },

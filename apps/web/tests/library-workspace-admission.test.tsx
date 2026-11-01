@@ -1,0 +1,583 @@
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, StrictMode, type ComponentProps, type ReactNode } from 'react';
+import * as start from '../.storybook/react-start';
+import type { LabelsCurrentRead } from '../src/library/labels-read-route';
+import type { CopiesCurrentRead } from '../src/library/copies-actions';
+import type { LibraryNavigationRead } from '../src/library/pins-read';
+import type { PinMutation } from '../src/library/pins-actions';
+import type { PersonalLibraryCurrentRead } from '../src/library/personal-library-server';
+import type { LibraryMutationResult } from '../src/library/entries-read';
+import type { CurrentViewerProgressIndex } from '../src/library/progress-server';
+
+// UNRUN: composed actual scoped-observation regressions for the integration controller.
+// Only private read/write transports and presenter observation are substituted; session,
+// exposure enrollment, QueryClient notifications, native intent custody and guards are real.
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://site.test/en/library', width: 1280, height: 900 });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  HTMLFormElement: window.HTMLFormElement,
+  Element: window.Element,
+  Node: window.Node,
+  NodeFilter: window.NodeFilter,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  ShadowRoot: window.ShadowRoot,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  FormData: window.FormData,
+  Event: window.Event,
+  MouseEvent: window.MouseEvent,
+  PointerEvent: window.PointerEvent,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const descriptors = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { createRouter, createRootRoute, createMemoryHistory, RouterContextProvider } =
+  await import('@tanstack/react-router');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+const { setLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
+setLocale('en', { reload: false });
+afterAll(async () => {
+  mock.restore();
+  await window.happyDOM.close();
+  for (const [key, descriptor] of descriptors) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
+const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
+const groups = [
+  'personal_library',
+  'reading_progress',
+  'collections',
+  'library_label.list',
+  'library_label.create',
+  'library_label.rename',
+  'library_label.delete',
+  'library_label.assign',
+  'library_entry.restore',
+  'library_shelf.types',
+  'follow.list',
+  'follow.get',
+  'follow.put',
+  'follow.delete',
+  'published_log.list',
+];
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+function settle(client: InstanceType<typeof QueryClient>, subject: string, admitted: readonly string[] = groups) {
+  const enrolled = viewerExposureLifetime(client).getSnapshot();
+  expect(enrolled.state).toBe('signed-in');
+  if (enrolled.state !== 'signed-in') throw new Error('Viewer observation was not enrolled');
+  const key = viewerExposureQuery(enrolled.observation).queryKey;
+  client.setQueryData(key, { subject, admitted });
+  return key;
+}
+function session(client: InstanceType<typeof QueryClient>, subject: string, csrfToken = `csrf-${subject}`) {
+  client.setQueryData(['session'], { state: 'signed-in', subject, csrfToken });
+}
+function fixture(subject = 'A', admitted: readonly string[] = groups) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  session(client, subject);
+  client.setQueryData(['exposure', 'anonymous'], []);
+  const release = viewerExposureLifetime(client).subscribe(() => {});
+  settle(client, subject, admitted);
+  return { client, release };
+}
+const tick = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+function mounted(client: InstanceType<typeof QueryClient>, path = '/library') {
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  return {
+    host,
+    router,
+    show: async (node: ReactNode) => {
+      await act(async () =>
+        root.render(
+          <StrictMode>
+            <QueryClientProvider client={client}>
+              <RouterContextProvider router={router}>{node}</RouterContextProvider>
+            </QueryClientProvider>
+          </StrictMode>,
+        ),
+      );
+      await tick();
+    },
+    close: async () => {
+      await act(async () => root.unmount());
+      client.clear();
+      host.remove();
+    },
+  };
+}
+function handler<T>(node: Element, name: string): T {
+  const props = Object.entries(node).find(([key]) => key.startsWith('__reactProps$'))![1];
+  return (props as Record<string, T>)[name]!;
+}
+const labelResponse = (subject: string): LabelsCurrentRead => ({
+  sessionSubject: subject,
+  requested: { cursor: 'opaque+/==', query: 'Private', locale: 'en' },
+  page: {
+    signedIn: true,
+    state: 'loaded',
+    query: 'Private',
+    operations: groups,
+    csrfToken: `loader-${subject}`,
+    createKey: id(80),
+    undoKey: id(81),
+    next: 'next+/==',
+    labels: [{ id: `label-${subject}`, name: `Private ${subject}`, revision: 7, renameKey: id(82), deleteKey: id(83) }],
+  },
+});
+const copyResponse = (subject: string): CopiesCurrentRead => ({
+  sessionSubject: subject,
+  requested: { subjectId: null, cursor: 'opaque+/==', locale: 'en' },
+  page: { signedIn: true, subjectId: null, copies: [], next: null, addKey: id(84), csrfToken: `loader-${subject}` },
+});
+
+test('Healthy actual scoped admission enables management without a global key; foreign cache and pre-commit ABA cannot authorize retained guards', async () => {
+  const labels = await import('../src/library/labels-page');
+  const copies = await import('../src/library/copies-page');
+  const read = await import('../src/library/labels-read-route');
+  const { LabelsCurrent } = await import('../src/library/labels-current');
+  const { CopiesCurrent } = await import('../src/library/copies-current');
+  let label!: ComponentProps<typeof labels.LabelsPageView>;
+  let copy!: ComponentProps<typeof copies.CopiesPage>;
+  const lists: ReturnType<typeof deferred<LabelsCurrentRead>>[] = [];
+  const spies = [
+    spyOn(labels, 'LabelsPageView').mockImplementation((props) => {
+      label = props;
+      return <p>{props.page.labels[0]?.name}</p>;
+    }),
+    spyOn(copies, 'CopiesPage').mockImplementation((props) => {
+      copy = props;
+      return <p>Copies</p>;
+    }),
+    spyOn(read, 'readLabelsCurrent').mockImplementation(() => {
+      const work = deferred<LabelsCurrentRead>();
+      lists.push(work);
+      return work.promise;
+    }),
+  ];
+  const { client, release } = fixture();
+  settle(client, 'foreign');
+  client.setQueryData(['exposure', 'viewer'], groups);
+  const view = mounted(client);
+  const show = () =>
+    view.show(
+      <>
+        <LabelsCurrent initial={labelResponse('A')} search={{ cursor: 'opaque+/==', q: 'Private' }} locale="en" />
+        <CopiesCurrent initial={copyResponse('A')} search={{ cursor: 'opaque+/==' }} locale="en" />
+      </>,
+    );
+  try {
+    await show();
+    expect(label).toBeUndefined();
+    expect(copy).toBeUndefined();
+    expect(lists).toHaveLength(0);
+    await act(async () => {
+      client.removeQueries({ queryKey: ['exposure', 'viewer'], exact: true });
+      settle(client, 'A');
+    });
+    await tick();
+    release(); // The mounted owning observers, rather than fixture enrollment, now keep the lifetime alive.
+    expect(client.getQueryData(['exposure', 'viewer'])).toBeUndefined();
+    expect(label.originating!.isCurrent('library_label.rename')).toBe(true);
+    expect(new Headers(copy.originating!.headers('copy.create')!).get('x-csrf-token')).toBe('csrf-A');
+    const original = label.originating!;
+    await act(async () => {
+      client.setQueryData(['exposure', 'viewer'], groups);
+      settle(client, 'foreign');
+      expect(original.isCurrent('library_label.rename')).toBe(false);
+      settle(client, 'A');
+      expect(original.isCurrent('library_label.rename')).toBe(false);
+    });
+    await tick();
+    const independent = label.originating!;
+    expect(independent.isCurrent('library_label.rename')).toBe(true);
+    await act(async () => {
+      settle(
+        client,
+        'A',
+        groups.filter((operation) => operation !== 'library_label.create'),
+      );
+      expect(independent.isCurrent('library_label.create')).toBe(false);
+      expect(independent.isCurrent('library_label.rename')).toBe(true);
+      settle(client, 'A');
+      expect(independent.isCurrent('library_label.create')).toBe(false);
+    });
+    await tick();
+    const old = label.originating!;
+    await act(async () => {
+      session(client, 'B');
+      settle(client, 'B');
+      session(client, 'A');
+      settle(client, 'A');
+      expect(old.isCurrent('library_label.rename')).toBe(false);
+    });
+    await tick();
+    expect(lists).toHaveLength(1);
+    await act(async () => lists[0]!.resolve(labelResponse('B')));
+    await tick();
+    expect(view.host.textContent).not.toContain('Private B');
+    expect(old.headers('library_label.rename')).toBeNull();
+  } finally {
+    await view.close();
+    release();
+    spies.forEach((spy) => spy.mockRestore());
+  }
+});
+
+function navigationResponse(subject: string, limit: 8 | 100 = 100): LibraryNavigationRead {
+  const origin = { sessionSubject: subject, credentialAgrees: true, requestedLimit: limit };
+  return {
+    origin,
+    pins: {
+      state: 'loaded',
+      origin,
+      pins: ['one', 'two'].map((collectionId) => ({ collectionId, target: null })),
+      revision: 7,
+      next: null,
+      canUpdate: true,
+      canRemove: true,
+    },
+    collections: [{ id: `collection-${subject}`, title: `Private ${subject}`, curator: null }],
+    collectionsState: 'loaded',
+  };
+}
+test('Actual navigation and pin controls retain exact uncertain intent through healthy rotation and keep B usable while A is unresolved', async () => {
+  const reads = await import('../src/library/pins-read');
+  const actions = await import('../src/library/pins-actions');
+  const { useCurrentLibraryNavigation } = await import('../src/library/pins-current');
+  const { usePinControlActions } = await import('../src/library/pin-control');
+  const pendingReads: ReturnType<typeof deferred<LibraryNavigationRead>>[] = [];
+  const writes: {
+    input: Parameters<typeof actions.pinCollection>[0];
+    work: ReturnType<typeof deferred<PinMutation>>;
+  }[] = [];
+  const read = spyOn(reads, 'readLibraryNavigationPage').mockImplementation(() => {
+    const work = deferred<LibraryNavigationRead>();
+    pendingReads.push(work);
+    return work.promise;
+  });
+  const put = spyOn(actions, 'pinCollection').mockImplementation((input) => {
+    const work = deferred<PinMutation>();
+    writes.push({ input, work });
+    return work.promise;
+  });
+  const remove = spyOn(actions, 'unpinCollection').mockImplementation((input) => {
+    const work = deferred<PinMutation>();
+    writes.push({ input, work });
+    return work.promise;
+  });
+  const { client, release } = fixture();
+  const view = mounted(client);
+  const invalidate = spyOn(view.router, 'invalidate').mockResolvedValue(undefined);
+  let nav!: ReturnType<typeof useCurrentLibraryNavigation>;
+  let control!: ReturnType<typeof usePinControlActions>;
+  let removal!: ReturnType<typeof usePinControlActions>;
+  function Probe() {
+    nav = useCurrentLibraryNavigation('en', 100, 'pins');
+    control = usePinControlActions({ collectionId: 'one', pins: nav.data.pins, mode: 'list', origin: nav.pinsOrigin });
+    removal = usePinControlActions({ collectionId: 'two', pins: nav.data.pins, mode: 'list', origin: nav.pinsOrigin });
+    return <p>{nav.data.collections[0]?.title}</p>;
+  }
+  const select = (label: string, value = control) =>
+    value.entries.find((entry) => 'label' in entry && entry.label === label) as { onSelect: () => void };
+  try {
+    await view.show(<Probe />);
+    expect(pendingReads).toHaveLength(1);
+    await act(async () => pendingReads[0]!.resolve(navigationResponse('A')));
+    await tick();
+    const oldPin = select(m.library_pin_move_down()).onSelect;
+    await act(async () => oldPin());
+    expect(writes).toHaveLength(1);
+    const exact = structuredClone(writes[0]!.input.data);
+    await act(async () => {
+      session(client, 'A', 'rotated-A');
+      settle(client, 'A');
+    });
+    await tick();
+    expect(pendingReads).toHaveLength(1); // Rotation alone does not replay private reads or native commands.
+    await act(async () => oldPin());
+    expect(writes).toHaveLength(1);
+    await act(async () => select(m.library_pin_move_down()).onSelect());
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.input.data).toEqual(exact);
+    expect(new Headers(writes[1]!.input.headers).get('x-csrf-token')).toBe('rotated-A');
+    await act(async () => writes[0]!.work.resolve({ ok: true, revision: 8 }));
+    await tick();
+    expect(control.pending).toBe(true);
+    expect(invalidate).not.toHaveBeenCalled();
+    const retainedA = select(m.library_pin_move_down()).onSelect;
+    await act(async () => {
+      session(client, 'B');
+      settle(client, 'B');
+    });
+    await tick();
+    expect(pendingReads).toHaveLength(2);
+    await act(async () => pendingReads[1]!.resolve(navigationResponse('B')));
+    await tick();
+    expect(nav.pinsOrigin.isCurrent()).toBe(true);
+    expect(view.host.textContent).toBe('Private B');
+    await act(async () => retainedA());
+    expect(writes).toHaveLength(2);
+    await act(async () => select(m.library_pin_unpin(), removal).onSelect());
+    expect(writes).toHaveLength(3);
+    expect(new Headers(writes[2]!.input.headers).get('x-csrf-token')).toBe('csrf-B');
+    await act(async () => writes[1]!.work.resolve({ ok: true, revision: 8 }));
+    await tick();
+    expect(removal.pending).toBe(true);
+    expect(view.host.textContent).toBe('Private B');
+    expect(invalidate).not.toHaveBeenCalled();
+    await act(async () => writes[2]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    await tick();
+    const acceptedB = nav.pinsOrigin;
+    await act(async () => {
+      client.setQueryData(['exposure', 'viewer'], groups);
+      settle(client, 'foreign');
+      expect(acceptedB.isCurrent()).toBe(false);
+    });
+    expect(nav.data.pins.state).toBe('closed');
+  } finally {
+    await view.close();
+    release();
+    [read, put, remove, invalidate].forEach((spy) => spy.mockRestore());
+  }
+});
+
+function shelfResponse(subject: string): PersonalLibraryCurrentRead {
+  return {
+    sessionSubject: subject,
+    requested: { type: null, state: null, cursor: null, orderBy: 'lastActivity', direction: 'desc', locale: 'en' },
+    page: {
+      signedIn: true,
+      next: null,
+      entries: [
+        {
+          subjectId: id(1),
+          state: 'planned',
+          revision: 7,
+          incarnationId: id(90),
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+          changeKey: id(91),
+          removeKey: id(92),
+          stateOptions: ['planned', 'completed'].map((id) => ({ id, label: { text: id, lang: 'en' } })),
+          subject: { id: id(1), type: 'Book', types: ['Book'], label: `Private ${subject}`, cover: null },
+        },
+      ],
+    },
+    continueEntries: { state: 'unavailable' },
+    navigation: { pins: { state: 'closed' }, collections: [] },
+  };
+}
+test('The actual personal Shelf keeps uncertain entry intent while its scoped chooser and independent history operands retire before commit', async () => {
+  const rows = await import('../src/library/shelf-rows');
+  const actions = await import('../src/library/entries-actions');
+  const { PersonalLibraryCurrent } = await import('../src/library/personal-library-current');
+  const { useShelfTypesLifetime } = await import('../src/library/shelf-types-current');
+  const { useHistoryCurrentOrigin } = await import('../src/library/history-current-origin');
+  const historyOperations = ['follow.list', 'published_log.list'] as const;
+  let controls!: ReturnType<typeof rows.useShelfRows>;
+  let types!: ReturnType<typeof useShelfTypesLifetime>;
+  let history!: ReturnType<typeof useHistoryCurrentOrigin>;
+  const native: {
+    input: Parameters<typeof actions.savePersonalLibraryEntry>[0];
+    work: ReturnType<typeof deferred<LibraryMutationResult>>;
+  }[] = [];
+  const originalRows = rows.useShelfRows;
+  const spies = [
+    spyOn(rows, 'useShelfRows').mockImplementation((...args) => (controls = originalRows(...args))),
+    spyOn(actions, 'savePersonalLibraryEntry').mockImplementation((input) => {
+      const work = deferred<LibraryMutationResult>();
+      native.push({ input, work });
+      return work.promise;
+    }),
+  ];
+  const { client, release } = fixture();
+  const view = mounted(client);
+  function Siblings() {
+    types = useShelfTypesLifetime('en', {});
+    history = useHistoryCurrentOrigin('opaque+/==:en', historyOperations, 'A');
+    return (
+      <PersonalLibraryCurrent
+        initial={shelfResponse('A')}
+        search={{}}
+        display={{ layout: 'list', size: 'm' }}
+        locale="en"
+      />
+    );
+  }
+  try {
+    await view.show(<Siblings />);
+    expect(controls.writeAdmitted).toBe(true);
+    expect(types.isCurrent()).toBe(true);
+    expect(history.current(0)).toBe(true);
+    await act(async () => {
+      void controls.changeState(id(1), 'completed');
+    });
+    expect(native).toHaveLength(1);
+    await act(async () => native[0]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    await tick();
+    const exact = structuredClone(native[0]!.input.data);
+    const oldType = types.isCurrent;
+    const oldHistory = history.current;
+    await act(async () => {
+      session(client, 'A', 'new-A');
+      settle(client, 'A');
+    });
+    await tick();
+    expect(oldType()).toBe(false);
+    expect(oldHistory(0)).toBe(false);
+    expect(types.isCurrent()).toBe(true);
+    await act(async () => {
+      void controls.retryState(id(1));
+    });
+    expect(native).toHaveLength(2);
+    expect(native[1]!.input.data).toEqual(exact);
+    await act(async () => native[1]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    await tick();
+    const retained = history.current;
+    await act(async () => {
+      settle(
+        client,
+        'A',
+        groups.filter((operation) => operation !== 'personal_library'),
+      );
+      expect(retained(0)).toBe(false);
+      expect(retained(1)).toBe(true);
+      settle(client, 'A');
+      expect(retained(0)).toBe(false);
+    });
+    const before = native.length;
+    const stale = controls.retryState;
+    await act(async () => {
+      client.setQueryData(['session'], { state: 'signed-out', csrfToken: null, subject: null });
+      session(client, 'A');
+      settle(client, 'A');
+      void stale(id(1));
+    });
+    expect(native).toHaveLength(before);
+  } finally {
+    await view.close();
+    release();
+    spies.forEach((spy) => spy.mockRestore());
+  }
+});
+
+test('Actual Progress start preserves sparse choice input and key on healthy observation churn; wrong reader address closes retained actions', async () => {
+  const server = await import('../src/library/progress-server');
+  const pages = await import('../src/library/progress-page');
+  const subject = { id: id(1), type: 'Book', label: 'Private progress A', cover: null };
+  const loader: CurrentViewerProgressIndex = {
+    viewer: 'A',
+    locale: 'en',
+    requested: { subjectId: id(1), cursor: 'opaque+/==' },
+    page: {
+      signedIn: true,
+      subjectId: id(1),
+      sessions: [],
+      next: 'next+/==',
+      idempotencyKey: id(99),
+      selectedSubject: subject,
+      progressChoices: [
+        { mode: 'completed_units', units: [{ id: 'sparse.unit', label: 'parts', step: '1', total: 'forbidden' }] },
+      ],
+    },
+  };
+  const commands: {
+    input: Parameters<typeof server.startProgressSession>[0];
+    work: ReturnType<typeof deferred<Awaited<ReturnType<typeof server.startProgressSession>>>>;
+  }[] = [];
+  const write = spyOn(server, 'startProgressSession').mockImplementation((input) => {
+    const work = deferred<Awaited<ReturnType<typeof server.startProgressSession>>>();
+    commands.push({ input, work });
+    return work.promise;
+  });
+  const { client, release } = fixture();
+  const view = mounted(client, `/library/progress?subjectId=${id(1)}&cursor=opaque%2B%2F%3D%3D`);
+  const submit = () =>
+    handler<(event: { preventDefault: () => void }) => Promise<void>>(view.host.querySelector('form')!, 'onSubmit');
+  try {
+    await view.show(
+      <pages.CurrentViewerProgressIndexPage loader={loader} requested={{ subjectId: id(1), cursor: 'opaque+/==' }} />,
+    );
+    expect(client.getQueryData(['exposure', 'viewer'])).toBeUndefined();
+    expect(view.host.querySelector('form')).not.toBeNull();
+    const first = submit();
+    await act(async () => {
+      void first({ preventDefault() {} });
+    });
+    expect(commands).toHaveLength(1);
+    await act(async () => commands[0]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    await tick();
+    await act(async () => {
+      session(client, 'A', 'rotated');
+      settle(client, 'A');
+    });
+    await tick();
+    await act(async () => {
+      void first({ preventDefault() {} });
+    });
+    expect(commands).toHaveLength(1);
+    await act(async () => {
+      void submit()({ preventDefault() {} });
+    });
+    expect(commands).toHaveLength(2);
+    expect(commands[1]!.input.data).toEqual(commands[0]!.input.data);
+    expect(commands[1]!.input.data).toMatchObject({ subjectId: id(1), mode: 'completed_units', unit: 'sparse.unit' });
+    expect(new Headers(commands[1]!.input.headers).get('x-csrf-token')).toBe('rotated');
+    const retained = submit();
+    const key = client
+      .getQueryCache()
+      .getAll()
+      .find((query) => query.queryKey[0] === 'library' && query.queryKey[2] === 'current-viewer')!.queryKey;
+    await act(async () => {
+      client.setQueryData(key, { ...loader, requested: { ...loader.requested, cursor: 'foreign-address' } });
+      void retained({ preventDefault() {} });
+      client.setQueryData(key, loader);
+      void retained({ preventDefault() {} });
+    });
+    expect(commands).toHaveLength(2);
+    await act(async () => commands[1]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    await tick();
+    expect(view.host.textContent).toContain('Private progress A');
+  } finally {
+    await view.close();
+    release();
+    write.mockRestore();
+  }
+});

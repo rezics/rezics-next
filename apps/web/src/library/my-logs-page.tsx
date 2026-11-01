@@ -9,6 +9,7 @@ import {
   assertHistoryCurrent,
   useHistoryAddress,
   useHistoryCurrentOrigin,
+  useHistoryReadOrigin,
   type HistoryOrigin,
 } from './history-current-origin';
 import { getLocale } from '../paraglide/runtime.js';
@@ -47,18 +48,19 @@ export function MyLogsCurrentViewer({
     initial.page.state === 'loaded' ? initial.sessionSubject : null,
   );
   const current = () => address.isCurrent() && origin.current(0);
+  const queryKey = [
+    'my-logs-current-viewer',
+    origin.subject,
+    'published_log.list',
+    true,
+    address.cursor,
+    locale,
+    origin.lifetime(0),
+  ] as const;
   const query = useQuery(
     {
       ...personalRead,
-      queryKey: [
-        'my-logs-current-viewer',
-        origin.subject,
-        'published_log.list',
-        true,
-        address.cursor,
-        locale,
-        origin.lifetime(0),
-      ],
+      queryKey,
       enabled:
         personalRead.enabled &&
         origin.hydrated &&
@@ -80,11 +82,19 @@ export function MyLogsCurrentViewer({
         ? { initialData: initial }
         : {}),
       gcTime: 0,
+      staleTime: Infinity,
+      refetchOnMount: false,
       retry: false,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
     },
     origin.client,
+  );
+  const readCurrent = useHistoryReadOrigin(
+    origin.client,
+    queryKey,
+    (value) =>
+      !!value && !!origin.subject && matchesOwner(value as MyLogsViewerHistory, origin.subject, address.cursor, locale),
   );
   const previousLoader = useRef(initial);
   useEffect(() => {
@@ -118,7 +128,7 @@ export function MyLogsCurrentViewer({
         : { state: query.isError || read ? 'unavailable' : 'preparing' };
   return (
     <MyLogsPageView
-      origin={{ lifetime: origin.boundary.lifetime, isCurrent: current }}
+      origin={{ lifetime: origin.boundary.lifetime, isCurrent: () => current() && readCurrent() }}
       page={page}
       cursor={page.state === 'loaded' ? (address.cursor ?? undefined) : undefined}
       onRetry={
