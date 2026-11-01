@@ -137,10 +137,14 @@ async function harnessPage() {
       status: failed ? 404 : 200,
       contentType: 'image/svg+xml',
       headers: { 'cache-control': 'no-store' },
-      body: failed ? 'not an image' : '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="6"><rect width="4" height="6" fill="#456"/></svg>',
+      body: failed
+        ? 'not an image'
+        : '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="6"><rect width="4" height="6" fill="#456"/></svg>',
     });
   });
-  await page.setContent('<html><head><base href="https://media.test/"></head><body><main id="app"></main></body></html>');
+  await page.setContent(
+    '<html><head><base href="https://media.test/"></head><body><main id="app"></main></body></html>',
+  );
   await page.addScriptTag({ content: await bundleSubjectCover() });
   return { page, kernelRequests, mediaRequests };
 }
@@ -155,17 +159,23 @@ async function mountCover(kind: 'loaded' | 'missing' | 'failed' | 'withheld') {
 async function mountJourney(wrapper: 'subject' | 'overview', value: Record<string, unknown>) {
   const mounted = await harnessPage();
   const mount = wrapper === 'subject' ? 'mountSubjectJourney' : 'mountOverviewJourney';
-  await mounted.page.evaluate(({ method, state }) => {
-    (window as Window & { [key: string]: (value: unknown) => void })[method]!(state);
-  }, { method: mount, state: value });
+  await mounted.page.evaluate(
+    ({ method, state }) => {
+      (window as Window & { [key: string]: (value: unknown) => void })[method]!(state);
+    },
+    { method: mount, state: value },
+  );
   return mounted;
 }
 
 async function updateJourney(page: Page, wrapper: 'subject' | 'overview', value: Record<string, unknown>) {
   const update = wrapper === 'subject' ? 'updateSubjectJourney' : 'updateOverviewJourney';
-  await page.evaluate(({ method, state }) => {
-    (window as Window & { [key: string]: (value: unknown) => void })[method]!(state);
-  }, { method: update, state: value });
+  await page.evaluate(
+    ({ method, state }) => {
+      (window as Window & { [key: string]: (value: unknown) => void })[method]!(state);
+    },
+    { method: update, state: value },
+  );
 }
 
 async function closePage(page: Page) {

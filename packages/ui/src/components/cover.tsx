@@ -29,11 +29,7 @@ import {
 import { useIncarnationState } from './media-image-sources.ts';
 
 export { coverRatio, defaultCoverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
-export {
-  coverIncarnation,
-  resolveCoverVariants,
-  usableCoverVariants,
-} from './cover-model.ts';
+export { coverIncarnation, resolveCoverVariants, usableCoverVariants } from './cover-model.ts';
 export { useIncarnationState } from './media-image-sources.ts';
 export type { CoverRatio, CoverSize, CoverSubject, CoverSummary } from './cover-model.ts';
 export {
@@ -147,7 +143,10 @@ export function Cover({
     (element: HTMLImageElement | null) => {
       if (!element || !hasImage || !element.complete) return;
       const loaded = element.naturalWidth > 0;
-      lifetime.setValue({ outcome: loaded ? 'loaded' : 'failed', backdrop: loaded ? element.currentSrc || null : null });
+      lifetime.setValue({
+        outcome: loaded ? 'loaded' : 'failed',
+        backdrop: loaded ? element.currentSrc || null : null,
+      });
     },
     [hasImage, lifetime.setValue],
   );
@@ -228,8 +227,9 @@ export function Cover({
                     data-slot="cover-backdrop"
                     className="absolute inset-0 scale-110 bg-cover bg-center blur-xl brightness-50"
                     style={{
-                      backgroundImage:
-                        lifetime.value.backdrop ? `url(${JSON.stringify(lifetime.value.backdrop)})` : undefined,
+                      backgroundImage: lifetime.value.backdrop
+                        ? `url(${JSON.stringify(lifetime.value.backdrop)})`
+                        : undefined,
                     }}
                   />
                 )}

@@ -257,9 +257,7 @@ async function buildBrowserBundle() {
   return browserBundle;
 }
 
-async function imagePage(
-  outcomes: Map<string, ImageOutcome>,
-) {
+async function imagePage(outcomes: Map<string, ImageOutcome>) {
   browser ??= await chromium.launch();
   const page = await browser.newPage();
   const requests: string[] = [];
@@ -313,15 +311,18 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
     if (!request.url().startsWith('https://media.test/')) externalRequests.push(request.url());
   });
   try {
-    await page.evaluate((value) => {
-      (window as Window & { mountLifetime: (value: unknown) => void }).mountLifetime(value);
-    }, {
-      coverBase: 'failed-a',
-      mediaBase: 'failed-a',
-      coverMedia: 'same-media',
-      mediaMedia: 'same-media',
-      title: 'Original title',
-    } satisfies Scenario);
+    await page.evaluate(
+      (value) => {
+        (window as Window & { mountLifetime: (value: unknown) => void }).mountLifetime(value);
+      },
+      {
+        coverBase: 'failed-a',
+        mediaBase: 'failed-a',
+        coverMedia: 'same-media',
+        mediaMedia: 'same-media',
+        title: 'Original title',
+      } satisfies Scenario,
+    );
     await page.locator('[data-slot="cover"][data-state="placeholder"]').waitFor();
     await page.locator('[data-slot="media-image"][data-state="unavailable"]').waitFor();
     expect(await page.locator('[data-slot="cover"] img').count()).toBe(0);
@@ -336,7 +337,9 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
       mediaMedia: 'same-media',
       title: 'Original title',
     });
-    await page.waitForFunction(() => document.querySelector('[data-slot="cover"]')?.getAttribute('data-state') === 'loading');
+    await page.waitForFunction(
+      () => document.querySelector('[data-slot="cover"]')?.getAttribute('data-state') === 'loading',
+    );
     await page.locator('[data-slot="cover"][data-state="loaded"]').waitFor();
     await page.locator('[data-slot="media-image"] img').waitFor();
     expect(await page.locator('[data-slot="cover"] img').count()).toBe(1);
@@ -354,9 +357,7 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
       () => (window as Window & { lifetimeStats: { resolverCalls: number } }).lifetimeStats.resolverCalls,
     );
     await page.keyboard.press('Tab');
-    expect(
-      await dialog.evaluate((element) => element.contains(document.activeElement)),
-    ).toBe(true);
+    expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
 
     // Fresh summary objects, arrays and resolver functions with equivalent sorted sources preserve load and dialog.
     await update(page, {
@@ -442,7 +443,9 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
       mediaMedia: 'same-media',
       title: 'Loop A again',
     });
-    await page.waitForFunction(() => document.querySelector('[data-slot="cover"]')?.getAttribute('data-state') === 'loading');
+    await page.waitForFunction(
+      () => document.querySelector('[data-slot="cover"]')?.getAttribute('data-state') === 'loading',
+    );
     await page.locator('[data-slot="cover"][data-state="loaded"]').waitFor();
     await page.locator('[data-slot="media-image"][data-state="image"]').waitFor();
 
@@ -479,7 +482,9 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
     await page.locator('[data-slot="media-image"][data-state="image"]').waitFor();
 
     // Only finite, positive, distinct published widths are resolved or offered to the browser.
-    await page.evaluate(() => (window as Window & { recreateWithInvalidVariants: () => void }).recreateWithInvalidVariants());
+    await page.evaluate(() =>
+      (window as Window & { recreateWithInvalidVariants: () => void }).recreateWithInvalidVariants(),
+    );
     await page.locator('[data-slot="cover"][data-state="loaded"]').waitFor();
     const offered = await page.locator('[data-slot="cover"] img').getAttribute('srcset');
     expect(offered).toContain('240w');
@@ -533,7 +538,11 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
       coverMedia: 'viewer-media',
       mediaMedia: 'viewer-media',
       title: 'Viewer failure',
-      coverVariants: [{ format: 'webp', width: 240 }, { format: 'webp', width: 480 }, { format: 'webp', width: 640 }],
+      coverVariants: [
+        { format: 'webp', width: 240 },
+        { format: 'webp', width: 480 },
+        { format: 'webp', width: 640 },
+      ],
     });
     await page.getByRole('button', { name: 'Open cover' }).waitFor();
     const viewerRequest = page.waitForRequest((request) =>
@@ -551,7 +560,11 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
 
     // No kernel or session read is part of the shared image and viewer lifecycle.
     expect(externalRequests.filter((url) => /\/v\d+\/|session/i.test(url))).toEqual([]);
-    expect(await page.evaluate(() => (window as Window & { lifetimeStats: { activations: number } }).lifetimeStats.activations)).toBe(3);
+    expect(
+      await page.evaluate(
+        () => (window as Window & { lifetimeStats: { activations: number } }).lifetimeStats.activations,
+      ),
+    ).toBe(3);
   } finally {
     await page.close();
   }
@@ -568,17 +581,18 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
       ),
     );
     await cached.page.setContent(`<main id="app">${markup}</main>`);
-    await cached.page.waitForFunction(() =>
-      [...document.querySelectorAll('[data-cache-case] img')].length === 4 &&
-      [...document.querySelectorAll('[data-cache-case] img')].every((image) => (image as HTMLImageElement).complete),
+    await cached.page.waitForFunction(
+      () =>
+        [...document.querySelectorAll('[data-cache-case] img')].length === 4 &&
+        [...document.querySelectorAll('[data-cache-case] img')].every((image) => (image as HTMLImageElement).complete),
     );
     await cached.page.addScriptTag({ content: await buildBrowserBundle() });
     await cached.page.evaluate(() => (window as Window & { hydrateCachedCases: () => void }).hydrateCachedCases());
     await cached.page.locator('[data-cache-case="success"] [data-slot="cover"][data-state="loaded"]').waitFor();
     await cached.page.locator('[data-cache-case="failure"] [data-slot="cover"][data-state="placeholder"]').waitFor();
-    expect(await cached.page.locator('[data-cache-case="success"] [data-slot="media-image"]').getAttribute('data-state')).toBe(
-      'image',
-    );
+    expect(
+      await cached.page.locator('[data-cache-case="success"] [data-slot="media-image"]').getAttribute('data-state'),
+    ).toBe('image');
     expect(
       await cached.page.locator('[data-cache-case="failure"] [data-slot="media-image"]').getAttribute('data-state'),
     ).toBe('unavailable');

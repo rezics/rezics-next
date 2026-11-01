@@ -35,8 +35,8 @@ export function usableCoverVariants(variants: readonly CoverVariant[] | null | u
       continue;
     unique.set(`${variant.format}:${variant.width}`, { format: variant.format, width: variant.width });
   }
-  return [...unique.values()].toSorted(
-    (a, b) => (a.format === b.format ? a.width - b.width : a.format === 'avif' ? -1 : 1),
+  return [...unique.values()].toSorted((a, b) =>
+    a.format === b.format ? a.width - b.width : a.format === 'avif' ? -1 : 1,
   );
 }
 

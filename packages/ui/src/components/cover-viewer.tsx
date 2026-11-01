@@ -34,7 +34,8 @@ export function CoverViewer({
   const failed = useIncarnationState(incarnation, () => false);
   const image = useRef<HTMLImageElement>(null);
   const available = open && variant !== undefined && !failed.value;
-  const dimensions = Number.isFinite(cover.width) && cover.width > 0 && Number.isFinite(cover.height) && cover.height > 0;
+  const dimensions =
+    Number.isFinite(cover.width) && cover.width > 0 && Number.isFinite(cover.height) && cover.height > 0;
   const track = useCallback(
     (element: HTMLImageElement | null) => {
       image.current = element;
