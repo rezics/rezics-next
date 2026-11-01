@@ -114,6 +114,7 @@ export async function enrollAccountDiscoveryHome(
     requireAccessDeadline(context.deadline);
     await client.query('BEGIN');
     try {
+      await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(context.deadline - Date.now()))}ms'`);
       const owner = (await client.query<{ epoch: number; position: string; write_state: string }>(
         'SELECT epoch,position::text,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
         [input.partition],
@@ -173,7 +174,7 @@ export async function enrollAccountDiscoveryHome(
           low = middle + 1;
         else high = middle;
       }
-      const admitted = keys.slice(low, low + 990);
+      const admitted = keys.slice(low, low + 900);
       const complete = low + admitted.length === keys.length;
       const receipt = original.receipt ?? (complete ? createHash('sha256').update(JSON.stringify([
         input.partition,input.bootstrap,input.registration.partition,input.registration.id,input.readDefinition,

@@ -94,12 +94,37 @@ export async function beginPublicFilterCoverageBaseline(pool: Pool, binding: Bin
 export async function adoptPublicFilterCoverageBaseline(
   pool: Pool, binding: Binding, receipt: AccountDiscoveryEnrollment, deadline: number,
 ): Promise<Readonly<{ after: number; root: string; generation: bigint }>> {
-  if (!receipt.complete || receipt.receipt === null || receipt.receipt !== hash([
+  if (!Number.isInteger(receipt.partition) || receipt.partition < 0 || receipt.partition > 4095 ||
+    !receipt.complete || receipt.receipt === null || receipt.receipt !== hash([
     receipt.partition,binding.bootstrap,binding.registration.partition,binding.registration.id,binding.definition,
     receipt.epoch,String(receipt.sourcePosition),String(receipt.creationPosition),String(receipt.enqueueRevision),
     binding.accounts ? String(receipt.revision) : null,
     binding.accounts ? String(receipt.claimRevision) : null,receipt.keyDigest,
   ])) throw new CommandUnavailableError('contention',receipt.partition);
+  // A digest identifies the receipt; it is not evidence that the owner committed
+  // it. Resolve the exact immutable owner row before taking receiver custody.
+  // No native-home connection is held while applying the receiver phase.
+  await transaction(pool,deadline,async (client) => {
+    const owner = (await client.query<{ epoch: number; write_state: string }>(
+      'SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE', [receipt.partition],
+    )).rows[0];
+    if (!owner || owner.write_state !== 'active' || owner.epoch !== receipt.epoch)
+      throw new CommandUnavailableError('fenced',receipt.partition);
+    const original = (await client.query<{ receipt: string }>(
+      `SELECT receipt FROM semantic.public_filter_home_enrollment
+       WHERE (partition_no,bootstrap)=($1,$2) AND complete
+         AND registration_partition=$3 AND registration=$4 AND read_definition=$5
+         AND owner_epoch=$6 AND source_position=$7 AND creation_position=$8
+         AND native_enqueue_revision=$9 AND key_digest=$10 AND receipt=$11
+         AND native_revision IS NOT DISTINCT FROM $12::bigint
+         AND native_claim_revision IS NOT DISTINCT FROM $13::bigint FOR SHARE`,
+      [receipt.partition,binding.bootstrap,binding.registration.partition,binding.registration.id,
+        binding.definition,receipt.epoch,String(receipt.sourcePosition),String(receipt.creationPosition),
+        String(receipt.enqueueRevision),receipt.keyDigest,receipt.receipt,
+        binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null],
+    )).rows[0];
+    if (!original) throw new CommandUnavailableError('contention',receipt.partition);
+  });
   return transaction(pool,deadline,async (client) => {
     await lockRegistration(client,binding);
     const preparation = (await client.query<{
@@ -133,6 +158,43 @@ export async function adoptPublicFilterCoverageBaseline(
         String(receipt.enqueueRevision),binding.accounts ? String(receipt.revision) : null,
         binding.accounts ? String(receipt.claimRevision) : null,receipt.receipt,preparation.root,root],
     );
+    // Enrollment alone grants no repaired coverage, even for an empty home.
+    // Keep the native domains distinct and leave the same summary behind until
+    // genuine Source verification AND receiver settlement acknowledge it.
+    const current = (await client.query<{ source_epoch: number }>(
+      `SELECT source_epoch FROM search.public_filter_coverage_home
+       WHERE (partition_no,registration,source_home)=($1,$2,$3) FOR UPDATE`,
+      [binding.registration.partition,binding.registration.id,receipt.partition],
+    )).rows[0];
+    if (current && current.source_epoch !== receipt.epoch) {
+      const changed = (await client.query<{ generation: string }>(
+        `UPDATE search.public_filter_registration SET coverage_generation=coverage_generation+1
+         WHERE (partition_no,id)=($1,$2) RETURNING coverage_generation::text AS generation`,
+        [binding.registration.partition,binding.registration.id],
+      )).rows[0]!;
+      await client.query(
+        `UPDATE search.public_filter_coverage_home SET source_epoch=$4,relevant_position=$5,
+           native_enqueue_revision=$6,native_revision=$7,native_claim_revision=$8,
+           acknowledged_position=0,acknowledged_native_enqueue=0,
+           acknowledged_native_revision=NULL,acknowledged_native_claim_revision=NULL,
+           last_change_generation=$9,behind=true
+         WHERE (partition_no,registration,source_home)=($1,$2,$3)`,
+        [binding.registration.partition,binding.registration.id,receipt.partition,receipt.epoch,
+          String(receipt.sourcePosition),String(receipt.enqueueRevision),
+          binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null,
+          changed.generation],
+      );
+    } else if (!current) {
+      await client.query(
+        `INSERT INTO search.public_filter_coverage_home
+           (partition_no,registration,source_home,source_epoch,relevant_position,
+            native_enqueue_revision,native_revision,native_claim_revision,last_change_generation,behind)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,true)`,
+        [binding.registration.partition,binding.registration.id,receipt.partition,receipt.epoch,
+          String(receipt.sourcePosition),String(receipt.enqueueRevision),
+          binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null],
+      );
+    }
     await client.query(
       `UPDATE search.public_filter_coverage_preparation SET after_home=$4,root=$5
        WHERE (partition_no,registration,bootstrap)=($1,$2,$3) AND after_home=$6`,

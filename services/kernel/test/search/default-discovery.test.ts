@@ -339,6 +339,35 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(row.homes).toBe(4096);
         expect(row.complete).toBe(true);
       }
+      const baselines = await pool.query<{
+        homes: number; sealed: boolean; original: boolean; summaries: number;
+      }>(
+        `SELECT count(*)::integer AS homes,
+           bool_and(b.coverage_sealed AND b.coverage_after=4096 AND c.after_home=4096
+             AND b.coverage_generation=c.generation AND b.coverage_root=c.root) AS sealed,
+           bool_and(h.receipt IS NOT NULL AND h.receipt=n.receipt AND h.owner_epoch=n.source_epoch
+             AND h.source_position=n.source_position AND h.creation_position=n.creation_position
+             AND h.native_enqueue_revision=n.native_enqueue_revision
+             AND h.native_revision IS NOT DISTINCT FROM n.native_revision
+             AND h.native_claim_revision IS NOT DISTINCT FROM n.native_claim_revision) AS original,
+           count(s.source_home)::integer AS summaries
+         FROM semantic.public_filter_home_enrollment h
+         JOIN semantic.public_filter_bootstrap b ON b.partition_no=0 AND b.bootstrap=h.bootstrap
+         JOIN search.public_filter_coverage_preparation c
+           ON (c.partition_no,c.registration,c.bootstrap)=(0,h.registration,h.bootstrap)
+         JOIN search.public_filter_coverage_baseline n
+           ON (n.partition_no,n.registration,n.bootstrap,n.source_home)=(0,h.registration,h.bootstrap,h.partition_no)
+         LEFT JOIN search.public_filter_coverage_home s
+           ON (s.partition_no,s.registration,s.source_home)=(0,h.registration,h.partition_no)
+         WHERE b.state='adopted' AND b.consumer LIKE $1 GROUP BY h.bootstrap`, [`%${prefix}%`],
+      );
+      expect(baselines.rows).toHaveLength(enrolled.rows.length);
+      for (const row of baselines.rows) {
+        expect(row.homes).toBe(4096);
+        expect(row.summaries).toBe(4096);
+        expect(row.sealed).toBe(true);
+        expect(row.original).toBe(true);
+      }
       const route = routeOf(account.accountId)!;
       const accountHome = partitionOf(route);
       const head = async () => (await pool.query<{ revision: string; claim: string }>(
