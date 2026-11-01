@@ -259,7 +259,7 @@ test('invalid addresses issue no statements and a moved home cannot masquerade a
       original.moved_to,
     ]);
   }
-}, 600_000);
+});
 
 test('separate aggregate reads keep six point statements and at most sixteen components as unrelated populations and targets grow', async () => {
   const target = newId(targetRoute);
@@ -309,4 +309,4 @@ test('separate aggregate reads keep six point statements and at most sixteen com
     expect(componentCosts.reduce((sum, [, value]) => sum + value.rows, 0)).toBeLessThanOrEqual(16);
     for (const [, value] of componentCosts) expect(value.sequentialScans).toBe(0);
   }
-});
+}, 600_000);
