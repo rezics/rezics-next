@@ -98,7 +98,9 @@ test('Entitlement shared summaries preserve supplied identity and honest histori
     expect(rows[0]!.querySelector('[data-content-item-slot="metadata"]')?.textContent).toContain(m.benefit_heading());
     expect(rows[1]!.querySelector('[data-content-item-slot="metadata"]')?.textContent).toContain(m.benefit_heading());
     expect(rows[1]!.querySelector('[data-slot="cover"]')?.getAttribute('aria-hidden')).toBe('true');
-    expect(rows[2]!.querySelector('[data-content-item-slot="metadata"]')?.textContent).not.toContain(m.benefit_heading());
+    expect(rows[2]!.querySelector('[data-content-item-slot="metadata"]')?.textContent).not.toContain(
+      m.benefit_heading(),
+    );
     expect(rows[2]!.querySelector('[data-slot="cover"]')?.getAttribute('aria-hidden')).toBe('true');
     expect(rows[2]!.textContent).not.toContain(unknown.targetSubjectId);
     expect(host.querySelector('a[href*="/subjects/"], a[href*="/editions/"], a[download]')).toBeNull();
@@ -112,7 +114,9 @@ test('Entitlement shared summaries preserve supplied identity and honest histori
     });
     historicalLink.click();
     expect(destinations).toEqual([`/en/entitlements/${revoked.id}`]);
-    expect(host.querySelector('nav a')?.getAttribute('href')).toBe('/en/entitlements?cursor=signed%2B%2Fcursor%3D%252F');
+    expect(host.querySelector('nav a')?.getAttribute('href')).toBe(
+      '/en/entitlements?cursor=signed%2B%2Fcursor%3D%252F',
+    );
     expect(host.querySelector('[role="alert"], [data-slot="empty"]')).toBeNull();
 
     show({ kind: 'ready', data: { entitlements: [], next: null } });
@@ -124,7 +128,9 @@ test('Entitlement shared summaries preserve supplied identity and honest histori
     expect(host.textContent).not.toContain(m.entitlements_empty());
     show({ kind: 'ready', data: { entitlements: [], next: cursor } });
     expect(host.textContent).toContain(m.entitlements_page_empty());
-    expect(host.querySelector('nav a')?.getAttribute('href')).toBe('/en/entitlements?cursor=signed%2B%2Fcursor%3D%252F');
+    expect(host.querySelector('nav a')?.getAttribute('href')).toBe(
+      '/en/entitlements?cursor=signed%2B%2Fcursor%3D%252F',
+    );
 
     show({ kind: 'unavailable' });
     expect(host.querySelector('[role="alert"]')?.textContent).toContain(m.entitlements_unavailable());
