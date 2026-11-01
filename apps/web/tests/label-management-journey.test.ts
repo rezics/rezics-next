@@ -30,6 +30,27 @@ const env = {
 
 type Page = Awaited<ReturnType<typeof loadLabelsPage>>;
 const markup = (page: Page) => renderToStaticMarkup(createElement(LabelsPageView, { page }));
+function phoneActions(html: string) {
+  const controls = (html.match(/<(button|summary|a)\b[^>]*>[\s\S]*?<\/\1>/g) ?? []).filter(
+    (control) => !control.includes('data-library-label-link'),
+  );
+  expect(controls.length).toBeGreaterThan(0);
+  for (const control of controls) {
+    const classes = /class="([^"]*)"/.exec(control)?.[1].split(' ') ?? [];
+    for (const token of [
+      'h-auto',
+      'min-h-11',
+      'min-w-11',
+      'max-w-full',
+      'whitespace-normal',
+      '[overflow-wrap:anywhere]',
+      'focus-visible:outline-2',
+      'focus-visible:outline-offset-2',
+      'focus-visible:outline-ring',
+    ])
+      expect(classes).toContain(token);
+  }
+}
 function selectedForm(html: string, operation: string, id: string) {
   const form = (html.match(/<form\b[^>]*>[\s\S]*?<\/form>/g) ?? []).find(
     (part) => part.includes(`value="${operation}"`) && part.includes(`value="${id}"`),
@@ -46,7 +67,7 @@ function selectedForm(html: string, operation: string, id: string) {
 
 // The default page's real progressive forms feed the existing session/CSRF/client adapter.
 // This is a transport fixture, not evidence of native label authorization or storage.
-test('Manage private labels through focused rename and delete actions', async () => {
+test('Default private label management keeps filter rename delete undo and continuation usable on phones', async () => {
   const fake = createLibraryLabelsFake({
     labels: [
       { id: 'first', name: 'Winter reads', revision: 9 },
@@ -82,7 +103,23 @@ test('Manage private labels through focused rename and delete actions', async ()
   expect(initial).toContain('cursor=opaque%2Bnext%2Fcursor');
   expect(initial.match(/<details\b/g)).toHaveLength(4);
   expect(initial).not.toMatch(/<details\b[^>]*\sopen(?:=|>)/);
+  phoneActions(initial);
+  const filtered = markup({ ...page, query: 'Winter' });
+  phoneActions(filtered);
+  const filter = (filtered.match(/<form\b[^>]*>[\s\S]*?<\/form>/g) ?? []).find((form) =>
+    form.includes('method="get"'),
+  )!;
+  expect(filter).toContain('action="/en/library/labels"');
+  expect(filter).toContain('name="q"');
+  expect(filter).toContain('value="Winter"');
+  expect(filtered).toMatch(/<a\b[^>]*href="\/en\/library\/labels"[^>]*>Clear filter<\/a>/);
+  expect(filtered).toContain('q=Winter&amp;cursor=opaque%2Bnext%2Fcursor');
   const rename = selectedForm(initial, 'rename', 'first');
+  expect(rename.html).toContain('method="post"');
+  expect(rename.html).toContain('action="/en/library/labels"');
+  expect(rename.body.get('operation')).toBe('rename');
+  expect(rename.body.get('id')).toBe('first');
+  expect(rename.body.get('idempotencyKey')).toBeTruthy();
   expect(rename.html).toContain('required=""');
   expect(rename.html).toContain('maxLength="1000"');
   expect(rename.body.get('library_label_revision')).toBe('9');
@@ -106,6 +143,7 @@ test('Manage private labels through focused rename and delete actions', async ()
   stale.body.set('name', 'My unfinished name');
   page = await post(stale.body);
   const refused = markup(page);
+  phoneActions(refused);
   expect(page.labels[0]).toMatchObject({ name: 'Changed elsewhere', revision: 20 });
   expect(refused).toContain('This label changed elsewhere.');
   expect(refused.match(/<details\b[^>]*\bopen=""/g)).toHaveLength(1);
@@ -125,6 +163,7 @@ test('Manage private labels through focused rename and delete actions', async ()
   const deletion = selectedForm(refused, 'delete', 'second');
   expect(refused).toContain('Delete “Books to revisit”?');
   expect(deletion.body.get('library_label_revision')).toBe('3');
+  expect(deletion.body.get('csrf_token')).toBe(csrfToken);
   expect(fake.calls.filter((call) => call.method === 'DELETE')).toHaveLength(0);
   page = await post(deletion.body);
   expect(page.labels.map((label) => label.id)).toEqual(['first']);
@@ -139,4 +178,38 @@ test('Manage private labels through focused rename and delete actions', async ()
   const reads = fake.calls.filter((call) => call.path === '/v1/libraryLabels' && call.method === 'GET');
   expect(reads).toHaveLength(4);
   expect(reads.every((call) => call.query.limit === '100')).toBe(true);
+
+  const deleted = markup(page);
+  phoneActions(deleted);
+  const restore = selectedForm(deleted, 'restore', 'second');
+  expect(restore.body.get('library_label_revision')).toBe('73');
+  expect(restore.body.get('idempotencyKey')).toBe(page.feedback?.undoKey);
+  expect(restore.body.get('csrf_token')).toBe(csrfToken);
+  page = await post(restore.body);
+  expect(page.labels.find((label) => label.id === 'second')).toMatchObject({ name: 'Books to revisit', revision: 74 });
+  expect(page.feedback?.undo).toBeUndefined();
+  expect(fake.calls.filter((call) => call.path === '/v1/libraryLabels/second:restore')).toEqual([
+    expect.objectContaining({
+      method: 'POST',
+      body: { revision: 73 },
+      key: restore.body.get('idempotencyKey'),
+      authorization: 'Bearer owner-token',
+    }),
+  ]);
+
+  const continuation = /href="([^"]*cursor=[^"]*)"/.exec(filtered)![1].replaceAll('&amp;', '&');
+  const next = new URL(continuation, origin);
+  page = await loadLabelsPage(
+    client,
+    new Request(next, { headers: { cookie: sessionCookie } }),
+    env,
+    next.searchParams.get('cursor')!,
+    next.searchParams.get('q')!,
+  );
+  expect(fake.calls.filter((call) => call.path === '/v1/libraryLabels').at(-1)).toMatchObject({
+    method: 'GET', query: { q: 'Winter', cursor: 'opaque+next/cursor', limit: '100' },
+  });
+  expect(page.labels).toEqual([]);
+  expect(page.next).toBeNull();
+  expect(markup(page)).not.toContain('cursor=');
 });

@@ -73,10 +73,94 @@ export const Empty: Story = {
   },
 };
 export const NextPage: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="next" />,
   play: async (context) => {
     await pageReady(context);
-    await within(context.canvasElement).findByRole('link', { name: m.library_label_more() });
+    const view = within(context.canvasElement);
+    await view.findByRole('link', { name: m.library_label_more() });
+    async function target(element: HTMLElement) {
+      element.scrollIntoView({ block: 'nearest' });
+      const bounds = element.getBoundingClientRect();
+      await expect(bounds.height).toBeGreaterThanOrEqual(44);
+      await expect(bounds.width).toBeGreaterThanOrEqual(44);
+      await expect(bounds.left).toBeGreaterThanOrEqual(0);
+      await expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+      await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+      await expect(getComputedStyle(element).whiteSpace).toBe('normal');
+    }
+    async function focused(element: HTMLElement) {
+      await expect(element).toHaveFocus();
+      await expect(element.matches(':focus-visible')).toBe(true);
+      await expect(parseFloat(getComputedStyle(element).outlineWidth)).toBeGreaterThanOrEqual(2);
+      await expect(getComputedStyle(element).outlineStyle).not.toBe('none');
+    }
+    const prefix = view.getByRole('textbox', { name: m.library_labels_prefix() });
+    await userEvent.click(prefix);
+    await userEvent.type(prefix, 'Winter');
+    await userEvent.tab();
+    const filter = view.getByRole('button', { name: m.library_labels_filter() });
+    await focused(filter);
+    await target(filter);
+    await userEvent.keyboard('{Enter}');
+    const clear = await view.findByRole('link', { name: m.library_clear_state() });
+    await target(clear);
+    await expect(view.queryByRole('link', { name: '読み返したい本 · Books to revisit' })).toBeNull();
+    await expect(view.getByRole('link', { name: m.library_label_more() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('q=Winter&cursor='),
+    );
+    await userEvent.click(clear);
+    await view.findByRole('link', { name: '読み返したい本 · Books to revisit' });
+
+    const trigger = view.getByRole('button', { name: m.library_label_actions({ name: 'Winter reads' }) });
+    const rename = await openAction(context, 'rename');
+    const name = rename.getByRole('textbox', { name: m.library_label_name() });
+    await userEvent.click(name);
+    await userEvent.tab();
+    const cancel = rename.getByRole('button', { name: m.action_cancel() });
+    await focused(cancel);
+    await target(cancel);
+    await userEvent.tab();
+    const save = rename.getByRole('button', { name: m.library_label_rename() });
+    await focused(save);
+    await target(save);
+    await userEvent.click(cancel);
+    await waitFor(() => expect(trigger).toHaveFocus());
+
+    const edit = await openAction(context, 'rename');
+    const draft = edit.getByRole('textbox', { name: m.library_label_name() });
+    const longName = '読み返したい本'.repeat(12);
+    await userEvent.clear(draft);
+    await userEvent.type(draft, longName);
+    await userEvent.click(edit.getByRole('button', { name: m.library_label_rename() }));
+    await view.findByRole('link', { name: longName });
+    const confirmation = await openAction(context, 'delete', longName);
+    await expect(confirmation.getByText(m.library_label_delete_confirmation({ name: longName }))).toBeVisible();
+    const dialog = within(document.body).getByRole('dialog', { name: m.library_label_delete() });
+    await expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+    await expect(dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
+    await expect(dialog.clientHeight).toBeLessThanOrEqual(window.innerHeight - 32);
+    await expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+    await expect(getComputedStyle(dialog).overflowY).toBe('auto');
+    const remove = confirmation.getByRole('button', { name: m.library_label_delete() });
+    await target(remove);
+    await target(confirmation.getByRole('button', { name: m.action_cancel() }));
+    await userEvent.click(remove);
+    const status = await view.findByRole('status');
+    await expect(status).toHaveTextContent(m.library_label_deleted({ name: longName }));
+    const undo = within(status).getByRole('button', { name: m.library_label_undo() });
+    await target(undo);
+    await userEvent.click(undo);
+    await view.findByRole('link', { name: longName });
+    const article = context.canvasElement.querySelector('article')!;
+    await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
+    const more = view.getByRole('link', { name: m.library_label_more() });
+    await target(more);
+    await expect(more).toHaveAttribute('href', expect.stringContaining('cursor=next-label-page'));
+    await userEvent.click(more);
+    await view.findByText(m.library_labels_empty());
+    await expect(view.queryByRole('link', { name: m.library_label_more() })).toBeNull();
   },
 };
 export const RenameConflict: Story = {

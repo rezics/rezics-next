@@ -39,6 +39,8 @@ function LabelExposure({ page, operation, children }: { page: LabelsPage; operat
   return page.operations.includes(`library_label.${operation}`) ? children : null;
 }
 const fieldClass = 'h-11';
+const actionClass =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-3 py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 type LabelAction = {
   operation: 'rename' | 'delete';
   label: LabelsPage['labels'][number];
@@ -188,7 +190,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
   const fieldError = (operation: string, id?: string) =>
     feedback && !feedback.ok && feedback.operation === operation && feedback.id === id;
   const error = (id: string) => (
-    <p id={id} role="alert" className="text-sm text-destructive">
+    <p id={id} role="alert" className="break-words [overflow-wrap:anywhere] text-sm text-destructive">
       {labelError(feedback!)}
     </p>
   );
@@ -222,15 +224,26 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
         {invalid ? error(errorId) : null}
         <div className="flex flex-wrap justify-end gap-2">
           {fallback ? (
-            <a href={mutationPath} className={buttonVariants({ variant: 'outline' })}>
+            <a href={mutationPath} className={buttonVariants({ variant: 'outline', className: actionClass })}>
               {m.action_cancel()}
             </a>
           ) : (
-            <Button type="button" variant="outline" disabled={busy} onClick={() => setAction(null)}>
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClass}
+              disabled={busy}
+              onClick={() => setAction(null)}
+            >
               {m.action_cancel()}
             </Button>
           )}
-          <Button type="submit" variant={operation === 'rename' ? 'outline' : 'destructive'} disabled={busy}>
+          <Button
+            type="submit"
+            variant={operation === 'rename' ? 'outline' : 'destructive'}
+            className={actionClass}
+            disabled={busy}
+          >
             {operation === 'rename' ? m.library_label_rename() : m.library_label_delete()}
           </Button>
         </div>
@@ -248,8 +261,10 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
       >
         {hidden('restore', feedback.undoKey ?? page.undoKey, feedback.undo.id, feedback.undo.revision)}
         <input type="hidden" name="name" value={feedback.undo.name} />
-        <span className="min-w-0 break-words">{m.library_label_deleted({ name: feedback.undo.name })}</span>
-        <Button type="submit" variant="outline" disabled={busy}>
+        <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+          {m.library_label_deleted({ name: feedback.undo.name })}
+        </span>
+        <Button type="submit" variant="outline" className={actionClass} disabled={busy}>
           {m.library_label_undo()}
         </Button>
       </form>
@@ -270,7 +285,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
         </p>
         {feedback && !feedback.ok ? error('label-error') : null}
         {undoForm}
-        <a href={mutationPath} className={buttonVariants({ variant: 'outline' })}>
+        <a href={mutationPath} className={buttonVariants({ variant: 'outline', className: actionClass })}>
           {m.library_labels_heading()}
         </a>
       </article>
@@ -279,7 +294,10 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
     return (
       <article className="space-y-6">
         <PageHeading>{m.library_labels_heading()}</PageHeading>
-        <a href={`/auth/sign-in?return_to=${encodeURIComponent(path)}`} className={buttonVariants()}>
+        <a
+          href={`/auth/sign-in?return_to=${encodeURIComponent(path)}`}
+          className={buttonVariants({ className: actionClass })}
+        >
           {m.library_sign_in()}
         </a>
       </article>
@@ -307,13 +325,13 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
       <form method="get" action={path} className="flex flex-wrap items-end gap-2">
         <Field className="min-w-0 flex-1 basis-48">
           <FieldLabel htmlFor="label-prefix">{m.library_labels_prefix()}</FieldLabel>
-          <Input id="label-prefix" name="q" defaultValue={page.query ?? ''} />
+          <Input id="label-prefix" name="q" className={fieldClass} defaultValue={page.query ?? ''} />
         </Field>
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" className={actionClass}>
           {m.library_labels_filter()}
         </Button>
         {page.query ? (
-          <a href={path} className={buttonVariants({ variant: 'ghost' })}>
+          <a href={path} className={buttonVariants({ variant: 'ghost', className: actionClass })}>
             {m.library_clear_state()}
           </a>
         ) : null}
@@ -334,7 +352,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
                 aria-invalid={fieldError('create') || undefined}
                 aria-describedby={fieldError('create') ? 'create-error' : undefined}
               />
-              <Button type="submit" variant="default" size="lg" disabled={busy}>
+              <Button type="submit" variant="default" size="lg" className={actionClass} disabled={busy}>
                 {m.library_label_create()}
               </Button>
             </div>
@@ -388,15 +406,17 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
                   ) : null}
                 </div>
                 {!hydrated ? (
-                  <ListRowControl className="flex flex-wrap gap-2">
+                  <ListRowControl className="flex min-w-0 flex-wrap gap-2">
                     {(['rename', 'delete'] as const).map((operation) => (
                       <LabelExposure key={operation} page={page} operation={operation}>
                         <details
                           name="library-label-action"
-                          className="min-w-0 open:basis-full"
+                          className="min-w-0 max-w-full open:basis-full"
                           open={fieldError(operation, label.id) || undefined}
                         >
-                          <summary className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                          <summary
+                            className={buttonVariants({ variant: 'outline', className: `${actionClass} cursor-pointer` })}
+                          >
                             {operation === 'rename' ? m.library_label_rename() : m.library_label_delete()}
                           </summary>
                           <div className="space-y-3 py-3">
@@ -440,7 +460,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
             finalFocus={() => actionTriggers.current.get(action.label.id) ?? pageRef.current}
             className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto"
           >
-            <DialogTitle>
+            <DialogTitle className="break-words [overflow-wrap:anywhere]">
               {action.operation === 'rename' ? m.library_label_rename() : m.library_label_delete()}
             </DialogTitle>
             <DialogDescription className="break-words [overflow-wrap:anywhere]">
@@ -455,14 +475,18 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
       {page.next ? (
         <nav>
           <a
-            className={buttonVariants({ variant: 'outline' })}
+            className={buttonVariants({ variant: 'outline', className: actionClass })}
             href={`${path}?${new URLSearchParams({ ...(page.query ? { q: page.query } : {}), cursor: page.next })}`}
           >
             {m.library_label_more()}
           </a>
         </nav>
       ) : null}
-      {feedback?.reason === 'stale_cursor' ? <a href={path}>{m.library_labels_heading()}</a> : null}
+      {feedback?.reason === 'stale_cursor' ? (
+        <a href={path} className={buttonVariants({ variant: 'outline', className: actionClass })}>
+          {m.library_labels_heading()}
+        </a>
+      ) : null}
     </article>
   );
 }
