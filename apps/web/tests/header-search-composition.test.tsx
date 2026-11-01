@@ -272,11 +272,22 @@ async function keyboardJourney(page: Page, locale: string) {
     if (width === 390) {
       const trigger = owner.getByRole('button', { name: 'Keyboard draft Ctrl/⌘ K', exact: true });
       expect(await trigger.isVisible()).toBe(true);
+      expect(await trigger.getAttribute('aria-label')).toBe('Keyboard draft Ctrl/⌘ K');
       expect((await trigger.innerText()).replace(/\s+/gu, ' ').trim()).toBe('Keyboard draft Ctrl/⌘ K');
       expect(await trigger.locator('kbd').isVisible()).toBe(true);
       expect(await trigger.locator('kbd').innerText()).toBe('Ctrl/⌘ K');
       expect(await trigger.getAttribute('aria-keyshortcuts')).toBe('Control+k Meta+k');
       expect(await trigger.getAttribute('aria-describedby')).toBe(await input.getAttribute('aria-describedby'));
+
+      const quotedDraft = `Keyboard "draft" & reader's note`;
+      await trigger.click();
+      await input.fill(quotedDraft);
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('header-search-trigger'));
+      const quotedName = `${quotedDraft} Ctrl/⌘ K`;
+      const quotedTrigger = owner.getByRole('button', { name: quotedName, exact: true });
+      expect(await quotedTrigger.getAttribute('aria-label')).toBe(quotedName);
+      expect((await quotedTrigger.innerText()).replace(/\s+/gu, ' ').trim()).toBe(quotedName);
     }
   }
 

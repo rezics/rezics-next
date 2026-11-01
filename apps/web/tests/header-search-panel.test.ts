@@ -87,7 +87,10 @@ test('the phone trigger name keeps its exact visible localized brand, query or s
         expect(trigger).toBeDefined();
         expect(trigger).toContain('type="button"');
         const triggerName = keyboardShortcut ? `${label} Ctrl/⌘ K` : label;
-        expect(trigger).toContain(renderToStaticMarkup(createElement('button', { 'aria-label': triggerName })));
+        const expectedName = renderToStaticMarkup(createElement('button', { 'aria-label': triggerName }));
+        const attributeValue = (element: string, name: string) =>
+          element.match(new RegExp(`\\b${name}="([^"]*)"`, 'u'))?.[1];
+        expect(attributeValue(trigger, 'aria-label')).toBe(attributeValue(expectedName, 'aria-label'));
         expect(trigger).not.toContain('aria-labelledby=');
         expect(trigger).toContain(renderToStaticMarkup(createElement('span', { className: 'truncate' }, label)));
         const input = markup.match(/<input\b(?=[^>]*role="combobox")[^>]*>/)?.[0];
@@ -117,6 +120,10 @@ test('the phone trigger name keeps its exact visible localized brand, query or s
       state = reduceHeaderSearchState(state, { type: 'escape' });
       named('Prince & fox');
       named('Prince & fox', true);
+      const quotedQuery = `Prince "the fox" & reader's book`;
+      state = reduceHeaderSearchState(state, { type: 'query', query: quotedQuery });
+      named(quotedQuery);
+      named(quotedQuery, true);
       state = reduceHeaderSearchState(state, { type: 'query', query: '' });
       named(m.header_search_in_scope({ scope: scope.name }));
       named(m.header_search_in_scope({ scope: scope.name }), true);
