@@ -78,8 +78,7 @@ class SubjectReactionReaderRegistry {
         const next = this.readSessionIdentity();
         const changed = next !== this.sessionIdentity;
         this.sessionIdentity = next;
-        this.sessionHealthy =
-          event.type !== 'removed' && this.client.getQueryState(['session'])?.status === 'success';
+        this.sessionHealthy = event.type !== 'removed' && this.client.getQueryState(['session'])?.status === 'success';
         if (changed) {
           this.sessionAdmission++;
           this.notify();
@@ -177,19 +176,11 @@ class SubjectReactionReaderRegistry {
   }
 
   private isCurrent(scope: ReactionScopeState, isDesired: () => boolean) {
-    if (
-      !isDesired() ||
-      !this.hasDesiredOwner(scope) ||
-      scope.admission !== this.sessionAdmission
-    )
-      return false;
+    if (!isDesired() || !this.hasDesiredOwner(scope) || scope.admission !== this.sessionAdmission) return false;
     if (!this.sessionHealthy || this.client.getQueryState(['session'])?.status !== 'success') return false;
     if (scope.reader === null) return true;
     const cached = this.client.getQueryData<SessionAdmission>(['session']);
-    return (
-      cached?.state === 'signed-in' &&
-      cached.subject === scope.reader
-    );
+    return cached?.state === 'signed-in' && cached.subject === scope.reader;
   }
 
   isScopeCurrent(scope: ReactionScopeState, isDesired: () => boolean) {
@@ -245,7 +236,8 @@ function useSubjectReactionAdmission(input: {
   const routeRevision = routeState.current.revision;
   const base = JSON.stringify([registry.id, subjectId, locale, view, reader, admission, routeRevision]);
   const scope = routeEnabled ? registry.scope(base, admission, reader, view) : undefined;
-  const token = scope?.key ?? JSON.stringify([registry.id, subjectId, locale, view, admission, routeRevision, 'inactive']);
+  const token =
+    scope?.key ?? JSON.stringify([registry.id, subjectId, locale, view, admission, routeRevision, 'inactive']);
   const desired = useRef(token);
   desired.current = token;
   const [leaseState, setLeaseState] = useState<{
@@ -310,16 +302,10 @@ export function useSubjectReactionReader(input: {
   const query = useQuery({
     ...ownReactionQuery,
     enabled:
-      personalRead.enabled &&
-      admission.active &&
-      admission.reader !== null &&
-      admission.queryScope !== undefined,
+      personalRead.enabled && admission.active && admission.reader !== null && admission.queryScope !== undefined,
   });
   const privateRead =
-    admission.active &&
-    admission.reader !== null &&
-    query.isSuccess &&
-    query.data.reader === admission.reader;
+    admission.active && admission.reader !== null && query.isSuccess && query.data.reader === admission.reader;
   const ownReaction: SubjectOwnReaction | undefined = privateRead ? query.data : undefined;
   const applyMutation = useCallback(
     (value: SubjectReactionKind | null) => {

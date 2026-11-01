@@ -327,15 +327,14 @@ function ZoneSubjectPage({
   const tabLabels = viewTabLabels();
   const base = `/${encodeURIComponent(locale)}/zones/${encodeURIComponent(zone.id)}/subjects/${encodeURIComponent(subjectId)}`;
   const currentReactionTarget = JSON.stringify([subjectId, locale, view]);
-  const targetReactions =
-    personalReactionTarget === currentReactionTarget ? personal?.reactions ?? null : null;
+  const targetReactions = personalReactionTarget === currentReactionTarget ? (personal?.reactions ?? null) : null;
   const privateReactionReady = Boolean(
     view === 'overview' &&
-      reactionAdmission.reader &&
-      reactionAdmission.active &&
-      reactionAdmission.origin.isCurrent() &&
-      personalReactionScope === reactionAdmission.key &&
-      targetReactions?.reader === reactionAdmission.reader,
+    reactionAdmission.reader &&
+    reactionAdmission.active &&
+    reactionAdmission.origin.isCurrent() &&
+    personalReactionScope === reactionAdmission.key &&
+    targetReactions?.reader === reactionAdmission.reader,
   );
   const reactions = targetReactions
     ? { ...targetReactions, value: privateReactionReady ? targetReactions.value : null }

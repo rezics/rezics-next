@@ -350,9 +350,7 @@ function SubjectRoute() {
   });
   const reader = personal.reader;
   const ownRating = personal.ownRating;
-  const reactions = publicReactions
-    ? { ...publicReactions, value: subjectReaction.ownReaction?.value ?? null }
-    : null;
+  const reactions = publicReactions ? { ...publicReactions, value: subjectReaction.ownReaction?.value ?? null } : null;
   const ratings = publicRatings
     ? { ...publicRatings, own: session === 'signed-in' && ownRating?.kind === 'ready' ? ownRating.units : null }
     : null;

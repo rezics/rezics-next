@@ -81,7 +81,5 @@ export async function loadSubjectReactions(
     readReactionCounts(client, id),
     readOwnReaction(client, request, sessionEnv, id, expectedReader),
   ]);
-  return counts
-    ? { ...counts, value: own?.value ?? null, ...(own ? { reader: own.reader } : {}) }
-    : null;
+  return counts ? { ...counts, value: own?.value ?? null, ...(own ? { reader: own.reader } : {}) } : null;
 }

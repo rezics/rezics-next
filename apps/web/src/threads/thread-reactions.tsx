@@ -150,8 +150,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
   const session = observation.read();
   // Standalone prepared views keep their explicit admission; a real client must have a known browser session.
   const sessionReady =
-    !client ||
-    Boolean(observation.healthy() && session?.state === 'signed-in' && session.subject && session.csrfToken);
+    !client || Boolean(observation.healthy() && session?.state === 'signed-in' && session.subject && session.csrfToken);
   const expectedReader = client && session?.state === 'signed-in' && session.subject ? session.subject : null;
   const originCurrent = props.reactionOrigin
     ? props.reactionOrigin.isCurrent() && props.reactionOrigin.reader === expectedReader
@@ -174,12 +173,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
       key={key}
       {...props}
       admitted={admitted}
-      disabled={
-        !hydrated ||
-        !(props.personalReady ?? true) ||
-        !originCurrent ||
-        (props.signedIn && !sessionReady)
-      }
+      disabled={!hydrated || !(props.personalReady ?? true) || !originCurrent || (props.signedIn && !sessionReady)}
       observation={observation}
       revision={revision}
       csrfToken={client ? (session?.csrfToken ?? '') : null}

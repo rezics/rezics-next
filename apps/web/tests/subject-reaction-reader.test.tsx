@@ -41,7 +41,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-type Session = { state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable'; subject?: string | null; csrfToken: string | null };
+type Session = {
+  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  subject?: string | null;
+  csrfToken: string | null;
+};
 type ReadCall = {
   id: string;
   expectedReader: string;
@@ -93,10 +97,8 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, useQuery, useQueryClient } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
 const { subjectReactionsQuery } = await import('../src/features/pages/subject-queries');
-const {
-  useSubjectReactionAdmissionForZone,
-  useSubjectReactionReader,
-} = await import('../src/features/pages/subject-reaction-reader');
+const { useSubjectReactionAdmissionForZone, useSubjectReactionReader } =
+  await import('../src/features/pages/subject-reaction-reader');
 const { SubjectHeaderActions } = await import('../src/features/pages/subject-reactions-view');
 const { m } = await import('../src/paraglide/messages.js');
 
@@ -129,7 +131,13 @@ function SubjectOwner({
   const queryClient = useQueryClient();
   const session = currentSession(queryClient);
   const { data: counts } = useQuery(subjectReactionsQuery(id, 'en'));
-  const reader = useSubjectReactionReader({ subjectId: id, locale: 'en', view: 'overview', session, enabled: eligible });
+  const reader = useSubjectReactionReader({
+    subjectId: id,
+    locale: 'en',
+    view: 'overview',
+    session,
+    enabled: eligible,
+  });
   return (
     <SubjectHeaderActions
       id={id}
@@ -185,9 +193,7 @@ function ZoneOwner({ id, view }: { id: string; view: string }) {
   }, [id, view, admission.key, admission.active]);
   if (view !== 'overview') return null;
   const own =
-    loaded?.key === admission.key &&
-    loaded.reaction?.reader === admission.reader &&
-    admission.origin.isCurrent()
+    loaded?.key === admission.key && loaded.reaction?.reader === admission.reader && admission.origin.isCurrent()
       ? loaded.reaction
       : undefined;
   const reactions = { counts: { like: 2, love: 3, insightful: 4 }, value: own?.value ?? null };
@@ -271,12 +277,9 @@ async function clickKind(kind: SubjectReactionKind) {
       expect(trigger).toBeDefined();
       trigger!.click();
       const choice = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent?.trim() ===
-          (kind === 'love'
-            ? m.reaction_love()
-            : kind === 'laugh'
-              ? m.reaction_laugh()
-              : m.reaction_sad()),
+        (button) =>
+          button.textContent?.trim() ===
+          (kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad()),
       );
       expect(choice).toBeDefined();
       choice!.click();
@@ -502,7 +505,11 @@ test('multiple mounted observers and StrictMode share one healthy private observ
   });
   await until(() => privateReads.length === 1 && publicReads.length === 1);
   setPrivateRead(0, 'love');
-  await until(() => chips().some((button) => button.textContent?.startsWith(m.reaction_love()) && button.getAttribute('aria-pressed') === 'true'));
+  await until(() =>
+    chips().some(
+      (button) => button.textContent?.startsWith(m.reaction_love()) && button.getAttribute('aria-pressed') === 'true',
+    ),
+  );
   expect(privateReads).toHaveLength(1);
   expect(publicReads).toEqual(['subject-one']);
   await clickKind('like');
