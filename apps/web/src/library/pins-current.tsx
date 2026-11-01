@@ -131,7 +131,7 @@ export function useCurrentLibraryNavigation(
   }
   const query = useQuery({
     ...options,
-    enabled: enabled && origin.hydrated && !!origin.subject && options.enabled,
+    enabled: enabled && origin.hydrated && !!origin.subject && options.enabled === true,
   }, origin.client);
   const value = !query.isError && origin.subject && origin.isCurrent() &&
     matchesPinsOrigin(query.data?.origin, origin.subject, limit) ? query.data : undefined;

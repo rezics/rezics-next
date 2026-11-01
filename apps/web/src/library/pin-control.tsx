@@ -24,7 +24,7 @@ type PinControlInput = {
   collectionId: string;
   pins: LibraryPinsRead;
   mode: PinControlMode;
-  origin?: AcceptedPinsOrigin;
+  origin?: AcceptedPinsOrigin | undefined;
 };
 
 type PinAction = 'pin' | 'unpin' | 'up' | 'down';
