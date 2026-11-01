@@ -219,3 +219,111 @@ test('default Work composition enrolls the original Kind consumer through privat
   expect(observed.actual).toBeDefined();
   expect(observed.bound).toBeDefined();
 }, 60_000);
+
+test('maximum stored scopes fit canonical private transport actual with one-use invocation binding', async () => {
+  const maxClientId = 'kind-consent-maximum-scopes-client';
+  const maximumScopes = Array.from(
+    { length: 512 },
+    (_, index) => `${index.toString(16).padStart(3, '0')}${'x'.repeat(125)}`,
+  );
+  const escapedIdentifier = '\\'.repeat(1024);
+  await database.query('INSERT INTO auth_client (client_id,first_party,scopes) VALUES ($1,false,$2)', [
+    maxClientId,
+    maximumScopes,
+  ]);
+  await database.query('INSERT INTO auth_client_coverage (client_id,ready) VALUES ($1,true)', [maxClientId]);
+  await database.query('INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)', [
+    accountId,
+    maxClientId,
+    maximumScopes,
+  ]);
+
+  const deadline = Date.now() + 20_000;
+  const input = {
+    accountId,
+    clientId: maxClientId,
+    requestedScopes: maximumScopes,
+    consumer: {
+      route: escapedIdentifier,
+      ownerAccountId: escapedIdentifier,
+      collectionId: escapedIdentifier,
+      preparationId: escapedIdentifier,
+      originId: escapedIdentifier,
+    },
+  };
+  const program = `
+    import assert from 'node:assert/strict';
+    import pg from 'pg';
+    import { composeWork } from './src/work/registry.ts';
+
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    globalThis.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      headers.set('Cf-Access-Jwt-Assertion', process.env.TEST_ACCESS_TOKEN);
+      const target = new URL(String(input));
+      const proxied = await originalFetch(process.env.TEST_PRIVATE_ORIGIN + target.pathname, { ...init, headers });
+      return new Response(proxied.body, { status: proxied.status, headers: proxied.headers });
+    };
+    const pool = new pg.Pool({ connectionString: 'postgres://unused/work' });
+    let context;
+    await composeWork(
+      [{ name: 'kind-consent', register(value) { context = value; } }],
+      {
+        databaseUrl: 'postgres://unused/work',
+        pool,
+        client: { async registerQueue() {} },
+        env: {
+          KERNEL_AUTH_CONSENT_URL: 'https://private-auth.test/internal/v1/consents:read',
+          CF_ACCESS_CLIENT_ID: process.env.TEST_SERVICE_TOKEN_ID,
+          CF_ACCESS_CLIENT_SECRET: process.env.TEST_SERVICE_TOKEN_SECRET,
+        },
+      },
+    );
+    const input = JSON.parse(process.env.TEST_INPUT);
+    const participant = context.getKindConsentParticipant(Number(process.env.TEST_DEADLINE));
+    assert.ok(participant);
+    const bound = participant.enroll.bound(input);
+    assert.ok(bound);
+    const result = await participant.enroll(input);
+    assert.equal(result.status, 'enrolled');
+    assert.deepEqual(result.effectiveScopes, input.requestedScopes);
+    const lookalike = { ...input, requestedScopes: [...input.requestedScopes], consumer: { ...input.consumer } };
+    assert.equal(participant.enroll.actual(lookalike, result), undefined);
+    const actual = participant.enroll.actual(input, result);
+    assert.ok(actual);
+    for (const group of ['source', 'access']) {
+      assert.deepEqual(Object.keys(actual[group]).sort(), Object.keys(bound[group]).sort());
+      for (const [axis, value] of Object.entries(actual[group])) {
+        assert.ok(Number.isSafeInteger(value) && value >= 0 && value <= bound[group][axis], group + '.' + axis);
+      }
+    }
+    assert.equal(actual.source.nativeRows, 2);
+    assert.equal(actual.access.rows, 2);
+    assert.equal(participant.enroll.actual(input, result), undefined);
+    await pool.end();
+    process.stdout.write(JSON.stringify({ bound, actual }));
+  `;
+  const child = Bun.spawn([process.execPath, '-e', program], {
+    cwd: new URL('../..', import.meta.url).pathname,
+    env: {
+      ...process.env,
+      TEST_ACCESS_TOKEN: accessToken,
+      TEST_PRIVATE_ORIGIN: new URL(privateServer.url).origin,
+      TEST_SERVICE_TOKEN_ID: serviceTokenId,
+      TEST_SERVICE_TOKEN_SECRET: serviceTokenSecret,
+      TEST_DEADLINE: String(deadline),
+      TEST_INPUT: JSON.stringify(input),
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, output, errors] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(exitCode, errors).toBe(0);
+  const observed = JSON.parse(output) as { bound: { source: { bytes: number } }; actual: { source: { bytes: number } } };
+  expect(observed.actual.source.bytes).toBeLessThanOrEqual(observed.bound.source.bytes);
+  expect(observed.actual.source.bytes).toBeGreaterThan(67_073);
+}, 60_000);

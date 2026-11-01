@@ -216,7 +216,7 @@ transaction are cancelled at that cutoff; a raced promise alone is not used.
 The shared declaration is derived from the literal native query trace. Source is
 candidateKeys=1, nativeRows=2, identityMetadataRows=0, emptySeeks=3,
 nativePoints=4, witnessKeys=3 and statements=11. Access is keys=1, rows=2,
-emptySeeks=2, points=4 and witnesses=3. A new insert is 10 SQL statements;
+emptySeeks=3, points=4 and witnesses=3. A new insert is 10 SQL statements;
 duplicate enrollment is 9; a closed-frontier refusal is 7; a current-client
 refusal is 8. The full 11-statement ceiling includes attempted COMMIT and
 ROLLBACK after a late failure. It counts BEGIN, the one combined timeout
@@ -228,18 +228,29 @@ reservation.
 
 Let `I = 128 + UTF8(accountId, clientId, route, ownerAccountId, collectionId,
 preparationId, originId, requestedScopes)`. For one admitted input, the native
-byte ceiling is `I + max(2*JSON([])+currentRow+insertRow,
-3*JSON([])+currentRow, JSON([])+currentRow+existingRow,
-JSON([{ "?column?": 1 }]))`, where each row is
-the literal query projection serialized as JSON. The current row has three
-scope arrays; the existing-consumer row has both requested and effective scope
-arrays even when the new request is empty. Each stored array admits at most 512
-scopes of 128 ASCII bytes, so its maximum JSON size is 67,073 bytes. Visible
-identifier fields admit 1,024 bytes and are charged at their JSON-escaped
-maximum. This max selects mutually exclusive insert, duplicate/refusal and
-frontier paths instead of adding their rows together. A successful new insert
-has two empty results; a suppressed `INSERT RETURNING` has three and returns an
-unavailable result from the committed transaction.
+byte ceiling is `I + max(2*JSON([])+JSON([currentRow])+JSON([insertRow]),
+3*JSON([])+JSON([currentRow]),
+JSON([])+JSON([currentRow])+JSON([existingRow]),
+2*JSON([])+JSON([currentRefusalRow]), JSON([{ "?column?": 1 }]))`. Every
+nonempty query result is the JSON array actually measured by
+`JSON.stringify(rows)`; each empty query result is `JSON([])`. The current row
+maximum uses `first_party=false`, `ready=true`, `reducing=false`, three maximum
+stored scope arrays and the 19-digit signed-BIGINT revision ceiling. A current
+refusal uses `first_party=false`, `ready=false`, `reducing=false`. The existing
+consumer row maximum uses `active=false`, both requested and effective scope
+arrays and a 36-byte UUID text reference. The left-joined consent arrays and
+revision may be null; those shorter forms are included by the array and
+19-digit maxima. Each stored array admits at most 512 scopes of 128 ASCII
+bytes (67,073 JSON bytes). A 1,024-byte visible identifier
+can be 1,024 backslashes, which serializes as 2,050 JSON string bytes. Complete
+metadata-result path maxima are 203,482 bytes for a new insert, 203,427 for a
+suppressed insert, 352,144 for a duplicate/inactive/refused consumer, 203,426
+for a current refusal and 16 for a closed frontier. The native result maximum
+is 352,144 bytes before adding `I`; at maximum admitted identifier and scope
+lengths, `I` is 72,832 bytes. This max selects mutually exclusive paths without
+adding their rows together. A successful new insert has two empty results; a
+suppressed `INSERT RETURNING` has three and returns an unavailable result from
+the committed transaction.
 
 Auth's verified actual adds the exact Access JWT bytes, JWKS request bytes, JWKS
 response body bytes and Auth-side HTTP control bytes (incoming URL/method/headers

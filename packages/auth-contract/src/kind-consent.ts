@@ -132,18 +132,21 @@ const byteLength = (value: string): number => encoder.encode(value).byteLength;
 const jsonByteLength = (value: unknown): number => byteLength(JSON.stringify(value) ?? '');
 const maxScopeArray = Object.freeze(Array.from({ length: MAX_CONSENTED_SCOPES }, () => 'x'.repeat(128)));
 const maxIdentifier = '\\'.repeat(1024);
-const maxCurrentRowBytes = jsonByteLength({
+const maxReferenceId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+const maxCurrentRow = {
   client_id: maxIdentifier,
   client_scopes: maxScopeArray,
-  first_party: true,
+  first_party: false,
   ready: true,
-  reducing: true,
+  reducing: false,
   consent_scopes: maxScopeArray,
   pending_scopes: maxScopeArray,
-  revision: '9'.repeat(19),
-});
-const maxExistingRowBytes = jsonByteLength({
-  reference_id: 'f'.repeat(36),
+  revision: '9223372036854775807',
+};
+// The nullable left-join consent arrays and revision are smaller than their maximum admitted values above.
+const maxCurrentRefusalRow = { ...maxCurrentRow, ready: false };
+const maxExistingRow = {
+  reference_id: maxReferenceId,
   account_id: maxIdentifier,
   client_id: maxIdentifier,
   requested_scopes: maxScopeArray,
@@ -153,19 +156,25 @@ const maxExistingRowBytes = jsonByteLength({
   collection_id: maxIdentifier,
   preparation_id: maxIdentifier,
   origin_id: maxIdentifier,
-  active: true,
-});
-const maxInsertRowBytes = jsonByteLength({ reference_id: 'f'.repeat(36) });
+  active: false,
+};
 const emptyRowsBytes = jsonByteLength([]);
+const maxCurrentRowResultBytes = jsonByteLength([maxCurrentRow]);
+const maxCurrentRefusalRowResultBytes = jsonByteLength([maxCurrentRefusalRow]);
+const maxExistingRowResultBytes = jsonByteLength([maxExistingRow]);
+const maxInsertRowResultBytes = jsonByteLength([{ reference_id: maxReferenceId }]);
+const closedFrontierResultBytes = jsonByteLength([{ '?column?': 1 }]);
 const maxNativeReturnedBytes = Math.max(
-  // New insert: frontier and duplicate lookups are empty; current and insert return one row.
-  2 * emptyRowsBytes + maxCurrentRowBytes + maxInsertRowBytes,
-  // A suppressed INSERT RETURNING row adds one empty result to the same path.
-  3 * emptyRowsBytes + maxCurrentRowBytes,
-  // Duplicate, inactive or refused consumer: current and existing metadata return one row each.
-  emptyRowsBytes + maxCurrentRowBytes + maxExistingRowBytes,
-  // A closed frontier stops before client/consent metadata is read.
-  jsonByteLength([{ '?column?': 1 }]),
+  // New insert: empty frontier and existing lookups, followed by current and INSERT rows.
+  2 * emptyRowsBytes + maxCurrentRowResultBytes + maxInsertRowResultBytes,
+  // A suppressed INSERT RETURNING row adds a third empty result to the new path.
+  3 * emptyRowsBytes + maxCurrentRowResultBytes,
+  // Duplicate, inactive or refused consumer: current and existing metadata each return one row.
+  emptyRowsBytes + maxCurrentRowResultBytes + maxExistingRowResultBytes,
+  // A current-client refusal stops after its one returned current row.
+  2 * emptyRowsBytes + maxCurrentRefusalRowResultBytes,
+  // A closed frontier stops before current client/consent metadata is read.
+  closedFrontierResultBytes,
 );
 /** Canonical JSON bytes of the largest admitted metadata result path. */
 export const KIND_CONSENT_ENROLLMENT_NATIVE_RESULT_MAX_BYTES = maxNativeReturnedBytes;

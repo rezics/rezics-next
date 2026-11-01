@@ -1,12 +1,145 @@
 import { expect, test } from 'bun:test';
-import { Pool } from 'pg';
-import type {
-  KindConsentInvalidationInput,
-  KindConsentOperation,
-  KindConsentWorkDeclaration,
+import { Pool, type PoolClient } from 'pg';
+import {
+  KIND_CONSENT_ENROLLMENT_ACCESS_TOKEN_MAX_BYTES,
+  KIND_CONSENT_ENROLLMENT_HTTP_CONTROL_MAX_BYTES,
+  KIND_CONSENT_ENROLLMENT_JWKS_REQUEST_MAX_BYTES,
+  KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES,
+  KIND_CONSENT_ENROLLMENT_KERNEL_CONTROL_MAX_BYTES,
+  KIND_CONSENT_ENROLLMENT_NATIVE_RESULT_MAX_BYTES,
+  KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES,
+  KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES,
+  kindConsentEnrollmentVerifiedActual,
+  kindConsentEnrollmentVerifiedBound,
+  kindConsentOperationBound,
+  kindConsentTransportActual,
+  kindConsentTransportBound,
+  type KindConsentEnrollmentInput,
+  type KindConsentInvalidationInput,
+  type KindConsentOperation,
+  type KindConsentWorkDeclaration,
 } from '@rezics/auth-contract';
 import { testDatabase } from '../scripts/database.ts';
 import { createKindConsentParticipant, withKindConsentEnrollmentDeadline } from '../src/kind-consent.ts';
+
+test('canonical enrollment ceiling covers every admitted maximum JSON row-array path and native actual composition', async () => {
+  const scopes = Array.from(
+    { length: 512 },
+    (_, index) => `${index.toString(16).padStart(3, '0')}${'x'.repeat(125)}`,
+  );
+  const identifier = '\\'.repeat(1024);
+  const referenceId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+  const input: KindConsentEnrollmentInput = {
+    accountId: identifier,
+    clientId: identifier,
+    requestedScopes: scopes,
+    consumer: {
+      route: identifier,
+      ownerAccountId: identifier,
+      collectionId: identifier,
+      preparationId: identifier,
+      originId: identifier,
+    },
+  };
+  const currentRow = {
+    client_id: identifier,
+    client_scopes: scopes,
+    first_party: false,
+    ready: true,
+    reducing: false,
+    consent_scopes: scopes,
+    pending_scopes: scopes,
+    revision: '9223372036854775807',
+  };
+  const existingRow = {
+    reference_id: referenceId,
+    account_id: identifier,
+    client_id: identifier,
+    requested_scopes: scopes,
+    effective_scopes: scopes,
+    consumer_route: identifier,
+    owner_account_id: identifier,
+    collection_id: identifier,
+    preparation_id: identifier,
+    origin_id: identifier,
+    active: false,
+  };
+  const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value) ?? '');
+  const emptyRowsBytes = jsonBytes([]);
+  const noStoredConsentCurrentRow = {
+    ...currentRow,
+    consent_scopes: null,
+    pending_scopes: null,
+    revision: null,
+  };
+  const admittedPathBytes = [
+    2 * emptyRowsBytes + jsonBytes([currentRow]) + jsonBytes([{ reference_id: referenceId }]),
+    2 * emptyRowsBytes + jsonBytes([noStoredConsentCurrentRow]) + jsonBytes([{ reference_id: referenceId }]),
+    3 * emptyRowsBytes + jsonBytes([currentRow]),
+    emptyRowsBytes + jsonBytes([currentRow]) + jsonBytes([existingRow]),
+    2 * emptyRowsBytes + jsonBytes([{ ...currentRow, ready: false }]),
+    jsonBytes([{ '?column?': 1 }]),
+  ];
+  expect(KIND_CONSENT_ENROLLMENT_NATIVE_RESULT_MAX_BYTES).toBe(Math.max(...admittedPathBytes));
+
+  const inputBytes =
+    128 +
+    [
+      input.accountId,
+      input.clientId,
+      input.consumer.route,
+      input.consumer.ownerAccountId,
+      input.consumer.collectionId,
+      input.consumer.preparationId,
+      input.consumer.originId,
+      ...input.requestedScopes,
+    ].reduce((sum, value) => sum + Buffer.byteLength(value), 0);
+  const bound = kindConsentOperationBound(input);
+  expect(bound?.source.bytes).toBe(inputBytes + KIND_CONSENT_ENROLLMENT_NATIVE_RESULT_MAX_BYTES);
+
+  const connection = {
+    async query(sql: string) {
+      if (sql.startsWith('SELECT 1 FROM auth_kind_consent_transition')) return { rows: [] };
+      if (sql.startsWith('SELECT c.client_id')) return { rows: [currentRow] };
+      if (sql.startsWith('SELECT reference_id,account_id,client_id')) return { rows: [existingRow] };
+      return { rows: [] };
+    },
+    release() {},
+  } as unknown as PoolClient;
+  const database = { connect: async () => connection } as unknown as Pool;
+  const { participant } = createKindConsentParticipant({ database });
+  const result = await participant.enroll(input);
+  expect(result).toEqual({ status: 'unavailable' });
+
+  const lookalikeInput = {
+    ...input,
+    requestedScopes: [...input.requestedScopes],
+    consumer: { ...input.consumer },
+  };
+  expect(participant.enroll.actual(lookalikeInput, result)).toBeUndefined();
+  const nativeActual = participant.enroll.actual(input, result);
+  expect(nativeActual?.source.bytes).toBe(inputBytes + admittedPathBytes[2]!);
+  expect(nativeActual?.source.bytes).toBeLessThanOrEqual(bound!.source.bytes);
+  expect(participant.enroll.actual(input, result)).toBeUndefined();
+
+  const verifiedBound = kindConsentEnrollmentVerifiedBound(input)!;
+  const verifiedActual = kindConsentEnrollmentVerifiedActual(input, nativeActual, {
+    accessTokenBytes: KIND_CONSENT_ENROLLMENT_ACCESS_TOKEN_MAX_BYTES,
+    jwksRequestBytes: KIND_CONSENT_ENROLLMENT_JWKS_REQUEST_MAX_BYTES,
+    jwksResponseBytes: KIND_CONSENT_ENROLLMENT_JWKS_RESPONSE_MAX_BYTES,
+    httpControlBytes: KIND_CONSENT_ENROLLMENT_HTTP_CONTROL_MAX_BYTES,
+  })!;
+  expect(verifiedActual.source.bytes).toBe(verifiedBound.source.bytes);
+  const transportBound = kindConsentTransportBound(input)!;
+  const transportActual = kindConsentTransportActual(
+    input,
+    verifiedActual,
+    KIND_CONSENT_ENROLLMENT_REQUEST_MAX_BYTES,
+    KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES,
+    KIND_CONSENT_ENROLLMENT_KERNEL_CONTROL_MAX_BYTES,
+  )!;
+  expect(transportActual.source.bytes).toBe(transportBound.source.bytes);
+});
 
 test('a native enrolled Kind consumer is fenced before consent/client authority changes and concurrent or restored enrollment cannot escape', async () => {
   const fixture = testDatabase();

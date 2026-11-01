@@ -1813,7 +1813,7 @@ its existing fixed verification/body behavior and 16,384-byte body ceiling.
 
 The canonical native Source bound is candidateKeys=1, nativeRows=2,
 identityMetadataRows=0, emptySeeks=3, nativePoints=4, witnessKeys=3 and
-statements=11; Access is keys=1, rows=2, emptySeeks=2, points=4 and witnesses=3.
+statements=11; Access is keys=1, rows=2, emptySeeks=3, points=4 and witnesses=3.
 Literal successful new enrollment uses BEGIN + timeout configuration + three
 locks + frontier + current client/consent + existing consumer + INSERT + COMMIT
 (10 statements). Duplicate enrollment stops before INSERT (9); closed-frontier
@@ -1826,17 +1826,28 @@ the native actual is tied to the exact input/result and can be consumed once.
 
 For admitted input, `I = 128 + UTF8(accountId, clientId, route, ownerAccountId,
 collectionId, preparationId, originId, requestedScopes)`. The native byte
-ceiling is `I + max(2*JSON([])+currentRow+insertRow,
-3*JSON([])+currentRow, JSON([])+currentRow+existingRow,
-JSON([{ "?column?": 1 }]))`. Each row is its
-literal SQL projection serialized as JSON. The current query returns at most
-three stored scope arrays; duplicate/inactive lookup returns both requested and
-effective arrays even when the new requested scope list is empty. Each array is
-bounded at 512 scopes of 128 ASCII bytes (67,073 JSON bytes); visible
-identifiers are bounded at 1,024 bytes and charged at their JSON-escaped
-maximum. The `max` accounts for mutually exclusive new, duplicate/refused and
-closed-frontier paths without summing their rows. A suppressed `INSERT RETURNING`
-row is the three-empty-result new path and commits an unavailable result.
+ceiling is `I + max(2*JSON([])+JSON([currentRow])+JSON([insertRow]),
+3*JSON([])+JSON([currentRow]),
+JSON([])+JSON([currentRow])+JSON([existingRow]),
+2*JSON([])+JSON([currentRefusalRow]), JSON([{ "?column?": 1 }]))`. Every
+nonempty query result is the JSON array actually measured by `JSON.stringify(rows)`;
+each empty query result is `JSON([])`. The current row maximum uses
+`first_party=false`, `ready=true`, `reducing=false`, three maximum stored scope
+arrays and the 19-digit signed-BIGINT revision ceiling. A current refusal uses
+`first_party=false`, `ready=false`, `reducing=false`. The existing row maximum
+uses `active=false`, two maximum stored scope arrays and a 36-byte UUID text
+reference. The left-joined consent arrays and revision may be null; those
+shorter forms are included by the array and 19-digit maxima. Each scope array
+is bounded at 512 scopes of 128 ASCII bytes
+(67,073 JSON bytes). A 1,024-byte visible identifier can be 1,024 backslashes,
+which serializes as 2,050 JSON string bytes. The complete metadata-result path
+maxima are 203,482 bytes for a new insert, 203,427 for a suppressed insert,
+352,144 for a duplicate/inactive/refused consumer, 203,426 for a current
+refusal and 16 for a closed frontier. Thus the maximum native result is
+352,144 bytes before adding `I`; at maximum admitted identifier and scope
+lengths, `I` is 72,832 bytes. This `max` accounts for mutually exclusive paths
+without summing their rows. A suppressed `INSERT RETURNING` row is the
+three-empty-result new path and commits an unavailable result.
 
 Auth's verified actual adds the measured JWT, JWKS request/response and Auth
 control bytes to the traced native work. Kernel's actual adds the measured
