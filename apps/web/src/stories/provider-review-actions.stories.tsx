@@ -9,12 +9,24 @@ import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 
-function QueueStory({ scenario = 'ready' }: { scenario?: ProviderReviewScenario }) {
+function QueueStory({
+  scenario = 'ready',
+  refreshFailure = false,
+}: {
+  scenario?: ProviderReviewScenario;
+  refreshFailure?: boolean;
+}) {
   const locale = getLocale();
   const fixture = useMemo(() => providerReviewFixture(scenario, locale), [scenario, locale]);
   return (
     <PatternStory path="/imports/review" visitor="Signed In">
-      <StoryQueue key={`${scenario}:${locale}`} fixture={fixture} scenario={scenario} locale={locale} />
+      <StoryQueue
+        key={`${scenario}:${locale}:${refreshFailure}`}
+        fixture={fixture}
+        scenario={scenario}
+        locale={locale}
+        refreshFailure={refreshFailure}
+      />
     </PatternStory>
   );
 }
@@ -22,12 +34,23 @@ function StoryQueue({
   fixture,
   scenario,
   locale,
+  refreshFailure,
 }: {
   fixture: ReturnType<typeof providerReviewFixture>;
   scenario: ProviderReviewScenario;
   locale: string;
+  refreshFailure: boolean;
 }) {
   const [changed, setChanged] = useState<ProviderQueueRead>();
+  const transport = refreshFailure
+    ? {
+        ...fixture.transport,
+        refresh: async (batch: Parameters<typeof fixture.transport.refresh>[0]) => {
+          const result = await fixture.transport.refresh(batch);
+          return { ...result, queue: { ok: false as const, reason: 'unavailable' as const } };
+        },
+      }
+    : fixture.transport;
   return (
     <>
       {scenario === 'scope-change' && (
@@ -51,7 +74,7 @@ function StoryQueue({
       <ProviderQueueView
         result={changed ?? fixture.result}
         locale={locale}
-        transport={fixture.transport}
+        transport={transport}
         onRead={setChanged}
         onRetry={async () => ({ ok: true, page: fixture.page })}
       />
@@ -103,6 +126,21 @@ async function confirm(canvasElement: HTMLElement, reject = false) {
   return canvas;
 }
 export const Ready: Story = {};
+export const Evidence: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const row = await canvas.findByRole('heading', { level: 2, name: 'The Little Prince' });
+    const primary = canvas.getByRole('link', { name: 'The Little Prince' });
+    await expect(row).toBeVisible();
+    expect(primary.getAttribute('href')).toContain('/subjects/');
+    expect(primary.contains(canvas.getAllByRole('checkbox')[0]!)).toBe(false);
+    expect(canvas.getAllByRole('checkbox')[0]!.closest('a')).toBeNull();
+    const disclosure = canvas.getAllByText(`${m.context_selected_values()} · ${m.candidate_proposed()}`)[0]!;
+    await userEvent.click(disclosure);
+    expect(await canvas.findByRole('heading', { level: 3, name: m.context_selected_values() })).toBeVisible();
+    expect(await canvas.findByRole('heading', { level: 3, name: m.candidate_proposed() })).toBeVisible();
+  },
+};
 export const Selection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await select(canvasElement);
@@ -111,7 +149,19 @@ export const Selection: Story = {
 };
 export const Confirmation: Story = {
   play: async ({ canvasElement }) => {
-    await openConfirmation(canvasElement);
+    const { dialog } = await openConfirmation(canvasElement);
+    expect(dialog.querySelector('[data-slot="list-row-link"]')).toBeNull();
+  },
+};
+export const CancelConfirmation: Story = {
+  play: async ({ canvasElement }) => {
+    const { canvas, dialog } = await openConfirmation(canvasElement);
+    await userEvent.click(within(dialog).getByRole('button', { name: m.provider_cancel() }));
+    await waitFor(async () => {
+      await expect(dialog).not.toBeVisible();
+    });
+    expect(canvas.getByText(m.provider_selected_count({ count: 2 }))).toBeVisible();
+    for (const checkbox of canvas.getAllByRole('checkbox')) expect(checkbox).toBeChecked();
   },
 };
 export const PartialResults: Story = {
@@ -172,5 +222,14 @@ export const UnavailableRetry: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.provider_refresh() }));
     expect(await canvas.findAllByRole('checkbox')).toHaveLength(2);
+  },
+};
+export const RefreshFailure: Story = {
+  args: { refreshFailure: true },
+  play: async ({ canvasElement }) => {
+    const canvas = await confirm(canvasElement);
+    expect(await canvas.findByText(m.provider_refresh_failed())).toBeVisible();
+    expect(await canvas.findByText(m.provider_unavailable())).toBeVisible();
+    expect(await canvas.findAllByText(m.provider_accepted())).toHaveLength(2);
   },
 };

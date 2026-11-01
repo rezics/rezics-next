@@ -3,7 +3,7 @@ import type { SubjectRead } from '@rezics/client';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { ListRow, ListRowLink, ListRowControl } from '@rezics/ui/list-row';
+import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -151,8 +151,10 @@ function ProviderComparison({ row, locale }: { row: ProviderDecisionRow; locale:
     : [];
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <section className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3" aria-label={m.context_selected_values({}, o)}>
-        <h3 className="text-sm font-semibold">{m.context_selected_values({}, o)}</h3>
+      <section className="min-w-0 space-y-2" aria-label={m.context_selected_values({}, o)}>
+        <ContentItemHeading level={3} className="text-sm font-semibold">
+          {m.context_selected_values({}, o)}
+        </ContentItemHeading>
         {!reading?.ok ? (
           <p role="status">{m.prq_comparison_unavailable({}, o)}</p>
         ) : selected.length ? (
@@ -168,10 +170,12 @@ function ProviderComparison({ row, locale }: { row: ProviderDecisionRow; locale:
         )}
       </section>
       <section
-        className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3"
+        className="min-w-0 space-y-2"
         aria-label={m.candidate_proposed({}, o)}
       >
-        <h3 className="text-sm font-semibold">{m.candidate_proposed({}, o)}</h3>
+        <ContentItemHeading level={3} className="text-sm font-semibold">
+          {m.candidate_proposed({}, o)}
+        </ContentItemHeading>
         <ProviderProposal row={row} locale={locale} />
       </section>
     </div>
@@ -254,6 +258,12 @@ export function ProviderReviewActions({
   const failed = batch?.attempts.some((attempt) => !attempt.result?.ok);
   const locked = disabled || busy || !!batch || !!confirmation;
 
+  function destination(row: ProviderDecisionRow) {
+    return row.href.startsWith('/') && !row.href.startsWith('//') && !row.href.includes('\\')
+      ? row.href
+      : undefined;
+  }
+
   function review(operation: ProviderDecision['operation']) {
     if (!page || locked) return;
     const next = prepareProviderBatch(page.scope, visible, selected, operation, undefined, page.session);
@@ -299,13 +309,14 @@ export function ProviderReviewActions({
         <>
           {visible.some((row) => !concealed(row)) && (
             <>
-              <div
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3"
+              <ContentItemFrame
+                as="section"
+                className="flex flex-wrap items-center gap-2 p-3"
                 aria-label={m.provider_selection({}, o)}
               >
-                <p className="me-auto text-sm" role="status">
+                <ContentItemHeading level={2} className="me-auto text-sm" role="status">
                   {m.provider_selected_count({ count: selected.length }, o)}
-                </p>
+                </ContentItemHeading>
                 <Button
                   variant="outline"
                   className="min-h-11"
@@ -330,10 +341,11 @@ export function ProviderReviewActions({
                 >
                   {m.provider_clear({}, o)}
                 </Button>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {m.provider_visible_only({ limit: providerSelectionLimit }, o)}
-              </p>
+                <p className="w-full text-sm text-muted-foreground">
+                  {m.provider_visible_only({ limit: providerSelectionLimit }, o)}{' '}
+                  {m.prq_selection_help({}, o)}
+                </p>
+              </ContentItemFrame>
             </>
           )}
           <ul className="space-y-4">
@@ -341,15 +353,25 @@ export function ProviderReviewActions({
               const key = providerRowKey(row);
               const checked = selected.includes(key);
               if (concealed(row))
-                return (
-                  <li key={key} className="rounded-lg border border-border p-3" role="status">
-                    {m.provider_missing({}, o)}
-                  </li>
-                );
+                return <ContentItem key={key} title={m.provider_missing({}, o)} headingLevel={3} role="status" />;
               return (
-                <ListRow key={key} className="flex min-w-0 gap-3 p-2">
-                  <ListRowLink href={row.href}>{row.label}</ListRowLink>
-                  <ListRowControl>
+                <ContentItem
+                  key={key}
+                  title={row.label}
+                  href={destination(row)}
+                  context={row.propertyLabel}
+                  metadata={
+                    <>
+                      <details className="w-full min-w-0 text-sm">
+                        <summary className="cursor-pointer py-2 text-primary">
+                          {m.context_selected_values({}, o)} · {m.candidate_proposed({}, o)}
+                        </summary>
+                        <ProviderComparison row={row} locale={locale} />
+                      </details>
+                      {renderDetails?.(row)}
+                    </>
+                  }
+                  actions={
                     <Field className="w-auto shrink-0">
                       <FieldLabel className="min-h-11 min-w-11 justify-center">
                         <Checkbox
@@ -371,17 +393,8 @@ export function ProviderReviewActions({
                         </span>
                       </FieldLabel>
                     </Field>
-                  </ListRowControl>
-                  <div className="min-w-0 space-y-1 break-words">
-                    <p className="font-semibold">{row.label}</p>
-                    <p className="text-sm text-muted-foreground">{row.propertyLabel}</p>
-                    <ListRowControl>
-                      <ProviderComparison row={row} locale={locale} />
-                    </ListRowControl>
-                    {renderDetails?.(row)}
-                    <p className="text-sm text-muted-foreground">{m.prq_selection_help({}, o)}</p>
-                  </div>
-                </ListRow>
+                  }
+                />
               );
             })}
           </ul>
@@ -395,7 +408,12 @@ export function ProviderReviewActions({
       >
         <AlertDialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>{m.provider_confirm_title({}, o)}</AlertDialogTitle>
+            <AlertDialogTitle
+              render={<ContentItemHeading level={2} />}
+              className="text-lg font-medium"
+            >
+              {m.provider_confirm_title({}, o)}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {m.provider_confirm_description({ count: confirmation?.attempts.length ?? 0 }, o)}
             </AlertDialogDescription>
@@ -405,16 +423,18 @@ export function ProviderReviewActions({
           </p>
           <ul className="space-y-4">
             {confirmation?.attempts.map(({ row, command }) => (
-              <li key={command.key} className="space-y-2 rounded-lg border border-border p-3">
-                <p className="font-semibold">
-                  {row.label} · {row.propertyLabel}
-                </p>
-                <h3 className="text-sm font-medium">{m.candidate_proposed({}, o)}</h3>
-                <ProviderProposal row={row} locale={locale} />
+              <li key={command.key}>
+                <ContentItemFrame as="article" className="space-y-2 p-3">
+                  <ContentItemHeading level={3}>{row.label}</ContentItemHeading>
+                  <p className="text-sm text-muted-foreground">{row.propertyLabel}</p>
+                  <ContentItemHeading level={4} className="text-sm font-medium">
+                    {m.candidate_proposed({}, o)}
+                  </ContentItemHeading>
+                  <ProviderProposal row={row} locale={locale} />
+                </ContentItemFrame>
               </li>
             ))}
           </ul>
-          <p className="text-sm text-muted-foreground">{m.prq_selection_help({}, o)}</p>
           <AlertDialogFooter>
             <Button variant="outline" className="min-h-11" onClick={() => setConfirmation(undefined)}>
               {m.provider_cancel({}, o)}
@@ -434,12 +454,15 @@ export function ProviderReviewActions({
         </AlertDialogContent>
       </AlertDialog>
       {batch && (
-        <section
-          className="space-y-3 rounded-xl border border-border bg-card p-4"
+        <ContentItemFrame
+          as="section"
+          className="space-y-3 p-4"
           aria-label={m.provider_results({}, o)}
           aria-busy={busy}
         >
-          <h2 className="text-lg font-semibold">{m.provider_results({}, o)}</h2>
+          <ContentItemHeading level={2} className="text-lg font-semibold">
+            {m.provider_results({}, o)}
+          </ContentItemHeading>
           {!sameScope && <p>{m.provider_scope_changed({}, o)}</p>}
           {busy && <p role="status">{m.provider_working({}, o)}</p>}
           <ul className="space-y-3" aria-live="polite">
@@ -453,39 +476,43 @@ export function ProviderReviewActions({
                 (reading && !reading.ok && (reading.reason === 'denied' || reading.reason === 'missing'));
               const missingOutcome = attempt.result && !attempt.result.ok && attempt.result.reason === 'missing';
               return (
-                <li key={attempt.command.key} className="space-y-1 break-words">
-                  {rowConcealed && !missingOutcome && <p>{m.provider_missing({}, o)}</p>}
-                  {!rowConcealed && (
-                    <>
-                      <p className="font-medium">
-                        {attempt.row.label} · {attempt.row.propertyLabel}
-                      </p>
-                      <ProviderProposal row={attempt.row} locale={locale} />
-                    </>
-                  )}
-                  <p>{attempt.result ? providerOutcomeText(attempt.result, locale) : m.provider_working({}, o)}</p>
-                  {!rowConcealed &&
-                    reading &&
-                    (reading.ok ? (
-                      <a
-                        className="underline underline-offset-4"
-                        href={
-                          subjectHref(
-                            {
-                              id: reading.current.subject.id,
-                              label: pickText(reading.current.subject.labels, locale).text,
-                            },
-                            locale,
-                          ).href
-                        }
-                      >
-                        {m.provider_current_reading({}, o)}
-                      </a>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {m.provider_reading_failed({}, o)} {providerOutcomeText(reading, locale)}
-                      </p>
-                    ))}
+                <li key={attempt.command.key}>
+                  <ContentItemFrame as="article" className="space-y-2 p-3">
+                    <ContentItemHeading level={3} role={rowConcealed && missingOutcome ? 'status' : undefined}>
+                      {rowConcealed ? m.provider_missing({}, o) : attempt.row.label}
+                    </ContentItemHeading>
+                    {!rowConcealed && (
+                      <>
+                        <p className="text-sm text-muted-foreground">{attempt.row.propertyLabel}</p>
+                        <ProviderProposal row={attempt.row} locale={locale} />
+                      </>
+                    )}
+                    {!(rowConcealed && missingOutcome) && (
+                      <p>{attempt.result ? providerOutcomeText(attempt.result, locale) : m.provider_working({}, o)}</p>
+                    )}
+                    {!rowConcealed &&
+                      reading &&
+                      (reading.ok ? (
+                        <a
+                          className="underline underline-offset-4"
+                          href={
+                            subjectHref(
+                              {
+                                id: reading.current.subject.id,
+                                label: pickText(reading.current.subject.labels, locale).text,
+                              },
+                              locale,
+                            ).href
+                          }
+                        >
+                          {m.provider_current_reading({}, o)}
+                        </a>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {m.provider_reading_failed({}, o)} {providerOutcomeText(reading, locale)}
+                        </p>
+                      ))}
+                  </ContentItemFrame>
                 </li>
               );
             })}
@@ -526,7 +553,7 @@ export function ProviderReviewActions({
               </Button>
             )}
           </div>
-        </section>
+        </ContentItemFrame>
       )}
     </div>
   );

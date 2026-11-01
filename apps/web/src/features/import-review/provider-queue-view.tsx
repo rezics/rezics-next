@@ -6,6 +6,7 @@ import {
   type ProviderReviewTransport,
 } from './provider-review-actions-view';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -194,10 +195,17 @@ export function ProviderQueue({
       </form>
       <p className="text-sm text-muted-foreground">{m.prq_context_help()}</p>
       {page.state !== 'ready' ? (
-        <div className="space-y-3 rounded-xl border border-border p-5">
-          <p role={page.state === 'invalid' || page.state === 'unavailable' ? 'alert' : 'status'}>
+        <ContentItemFrame
+          as="section"
+          aria-busy={page.state === 'loading' || page.state === 'preparing'}
+          className="space-y-3 p-5"
+        >
+          <ContentItemHeading
+            level={2}
+            role={page.state === 'invalid' || page.state === 'unavailable' ? 'alert' : 'status'}
+          >
             {messages[page.state]()}
-          </p>
+          </ContentItemHeading>
           {page.state === 'unavailable' && (
             <Button type="button" disabled={locked || !canWrite} onClick={() => void prepare()}>
               {m.prq_prepare()}
@@ -218,7 +226,7 @@ export function ProviderQueue({
               {m.prq_refresh()}
             </Button>
           )}
-        </div>
+        </ContentItemFrame>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
@@ -236,9 +244,11 @@ export function ProviderQueue({
             )}
           </div>
           {page.page.candidates.length === 0 && (
-            <p role="status" className="rounded-xl border border-border p-5">
-              {m.prq_empty()}
-            </p>
+            <ContentItemFrame as="section" className="p-5">
+              <ContentItemHeading level={2} role="status">
+                {m.prq_empty()}
+              </ContentItemHeading>
+            </ContentItemFrame>
           )}
           {page.page.next && (
             <Button type="button" variant="outline" disabled={locked} onClick={() => void read(scope, page.page.next!)}>
@@ -345,17 +355,27 @@ export function ProviderQueueView({
           <p>
             {current.page.sourceLabel} · {current.page.contextLabel} · {current.page.statusLabel}
           </p>
-          {!current.page.rows.length && <p role="status">{m.provider_empty({}, o)}</p>}
+          {!current.page.rows.length && (
+            <ContentItemFrame as="section" className="p-4">
+              <ContentItemHeading level={2} role="status">
+                {m.provider_empty({}, o)}
+              </ContentItemHeading>
+            </ContentItemFrame>
+          )}
         </>
       ) : current.reason === 'loading' ? (
-        <p role="status">{m.candidate_loading({}, o)}</p>
+        <ContentItemFrame as="section" aria-busy className="p-4">
+          <ContentItemHeading level={2} role="status">
+            {m.candidate_loading({}, o)}
+          </ContentItemHeading>
+        </ContentItemFrame>
       ) : (
-        <div role="alert" className="space-y-3 rounded-xl border border-border p-4">
-          <p>{providerOutcomeText(current, locale)}</p>
+        <ContentItemFrame as="section" role="alert" className="space-y-3 p-4">
+          <ContentItemHeading level={2}>{providerOutcomeText(current, locale)}</ContentItemHeading>
           <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void retry()}>
             {m.provider_refresh({}, o)}
           </Button>
-        </div>
+        </ContentItemFrame>
       )}
       <ProviderReviewActions
         page={current.ok ? current.page : undefined}

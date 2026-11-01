@@ -26,6 +26,7 @@ test('preparation, bounded continuation, truthful empty and denial remain distin
       }),
     );
     expect(markup).toContain(text);
+    expect(markup).toMatch(/<h2\b[^>]*data-content-item-slot="title"[^>]*>/);
     expect(markup).not.toContain(fixture.native.candidate.id);
   }
   const fixture = providerQueueFixture('preparing');
@@ -88,6 +89,7 @@ test('A filtered queue with only deleted rows and a real next cursor shows prepa
     createElement(ProviderQueue, { transport: fixture.transport, initial: read, initialScope: fixture.scope }),
   );
   expect(html).toContain(m.prq_preparing());
+  expect(html).toMatch(/<h2\b[^>]*data-content-item-slot="title"[^>]*>/);
   expect(html).toContain(m.prq_continue());
   expect(html).not.toContain(m.prq_empty());
   expect(html).not.toContain(fixture.deleted.candidate.id);
