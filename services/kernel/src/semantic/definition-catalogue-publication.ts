@@ -54,9 +54,9 @@ type Task = {
   task_id: string;
   kind: 'node' | 'release' | 'declaration';
   digest: string;
-  entry_key: string | null;
-  first_key: string | null;
-  last_key: string | null;
+  entry_key: Buffer | null;
+  first_key: Buffer | null;
+  last_key: Buffer | null;
   next_node: string | null;
   offset_rows: number;
 };
@@ -208,13 +208,13 @@ export async function readCatalogueBuild(
 }
 async function identity(tx: CommandTransaction, root: string, name: string, body: unknown) {
   const digest = catalogueDigest(catalogueBytes(body));
-  const saved = await tx.query<{ identity: string; digest: string }>(
+  const saved = await tx.query<{ identity: Buffer; digest: string }>(
     `INSERT INTO semantic.definition_catalogue_identity(route,root_digest,identity_key,identity,digest)
      VALUES(0,$1,$2,$3,$4) ON CONFLICT(route,root_digest,identity_key) DO UPDATE
      SET digest=semantic.definition_catalogue_identity.digest RETURNING identity,digest`,
-    [root, catalogueKey(name), name, digest],
+    [root, catalogueKey(name), Buffer.from(name), digest],
   );
-  if (saved.rows[0]?.identity !== name || saved.rows[0].digest !== digest)
+  if (saved.rows[0]?.identity.toString('utf8') !== name || saved.rows[0].digest !== digest)
     catalogueFail('conflict', `Conflicting immutable identity ${name}`);
 }
 async function nodeStep(tx: CommandTransaction, root: string, task: Task): Promise<number> {
@@ -222,7 +222,10 @@ async function nodeStep(tx: CommandTransaction, root: string, task: Task): Promi
     await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, CATALOGUE_LIMITS.nodeBytes),
   );
   const range = catalogueNodeRange(node);
-  if (task.first_key !== null && (range.first !== task.first_key || range.last !== task.last_key))
+  if (
+    task.first_key !== null &&
+    (range.first !== task.first_key.toString('utf8') || range.last !== task.last_key?.toString('utf8'))
+  )
     catalogueFail('corrupt', 'Inexact child directory range');
   let next = task.next_node;
   if (node.node === 'branch') {
@@ -231,7 +234,7 @@ async function nodeStep(tx: CommandTransaction, root: string, task: Task): Promi
       const added = await tx.query<{ task_id: string }>(
         `INSERT INTO semantic.definition_catalogue_task(route,root_digest,kind,digest,first_key,last_key,next_node)
          VALUES(0,$1,'node',$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING task_id`,
-        [root, child.digest, child.first, child.last, next],
+        [root, child.digest, Buffer.from(child.first), Buffer.from(child.last), next],
       );
       if (!added.rowCount) catalogueFail('conflict', 'Repeated directory subtree or cycle');
       next = added.rows[0]!.task_id;
@@ -241,7 +244,7 @@ async function nodeStep(tx: CommandTransaction, root: string, task: Task): Promi
     for (const entry of node.entries)
       await tx.query(
         `INSERT INTO semantic.definition_catalogue_task(route,root_digest,kind,digest,entry_key) VALUES(0,$1,$2,$3,$4)`,
-        [root, entry.kind, entry.digest, entry.key],
+        [root, entry.kind, entry.digest, Buffer.from(entry.key)],
       );
   }
   await tx.query(
@@ -256,7 +259,7 @@ async function nodeStep(tx: CommandTransaction, root: string, task: Task): Promi
 }
 async function releaseStep(tx: CommandTransaction, root: string, task: Task): Promise<number> {
   const body = release(await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, RELEASE_LIMITS.bytes));
-  if (releaseDigest(body) !== task.digest || task.entry_key !== `release:${task.digest}`)
+  if (releaseDigest(body) !== task.digest || task.entry_key?.toString('utf8') !== `release:${task.digest}`)
     catalogueFail('corrupt', 'Release directory identity mismatch');
   if (task.offset_rows === 0)
     await identity(tx, root, `release:${JSON.stringify([body.catalogue.id, body.catalogue.version])}`, body);
@@ -269,10 +272,10 @@ async function releaseStep(tx: CommandTransaction, root: string, task: Task): Pr
   const page = members.slice(task.offset_rows, task.offset_rows + 64);
   for (const member of page) {
     await identity(tx, root, `${member.category}:${member.id}`, member.body);
-    const saved = await tx.query<{ id: string }>(
+    const saved = await tx.query<{ id: Buffer }>(
       `INSERT INTO semantic.definition_catalogue_member(route,root_digest,release_digest,category,id_key,id,body)
        VALUES(0,$1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id`,
-      [root, task.digest, member.category, catalogueKey(member.id), member.id, member.body],
+      [root, task.digest, member.category, catalogueKey(member.id), Buffer.from(member.id), member.body],
     );
     if (!saved.rowCount) catalogueFail('conflict', 'Repeated member or identity hash collision');
   }
@@ -290,21 +293,21 @@ async function releaseStep(tx: CommandTransaction, root: string, task: Task): Pr
 }
 async function typeClosure(tx: CommandTransaction, root: string, digest: string, id: string) {
   const member = (
-    await tx.query<{ id: string; body: TypeDefinition }>(
+    await tx.query<{ id: Buffer; body: TypeDefinition }>(
       `SELECT id,body FROM semantic.definition_catalogue_member WHERE route=0 AND root_digest=$1 AND release_digest=$2 AND category='type' AND id_key=$3`,
       [root, digest, catalogueKey(id)],
     )
   ).rows[0];
-  if (member?.id !== id) catalogueFail('missing', `Missing exact Type closure ${digest}/${id}`);
+  if (member?.id.toString('utf8') !== id) catalogueFail('missing', `Missing exact Type closure ${digest}/${id}`);
   if (member.body.library) {
     const profileId = member.body.library.profileId;
     const profile = (
-      await tx.query<{ id: string }>(
+      await tx.query<{ id: Buffer }>(
         `SELECT id FROM semantic.definition_catalogue_member WHERE route=0 AND root_digest=$1 AND release_digest=$2 AND category='profile' AND id_key=$3`,
         [root, digest, catalogueKey(profileId)],
       )
     ).rows[0];
-    if (profile?.id !== profileId) catalogueFail('missing', 'Missing exact presentation profile');
+    if (profile?.id.toString('utf8') !== profileId) catalogueFail('missing', 'Missing exact presentation profile');
   }
 }
 async function declarationStep(tx: CommandTransaction, root: string, task: Task): Promise<number> {
@@ -313,7 +316,8 @@ async function declarationStep(tx: CommandTransaction, root: string, task: Task)
   );
   requireConstructibleKind(body);
   if (body.condition.op !== 'exact-type') catalogueFail('unsupported', 'Unsupported native condition');
-  if (task.entry_key !== declarationKey(body.id)) catalogueFail('corrupt', 'Declaration key mismatch');
+  if (task.entry_key?.toString('utf8') !== declarationKey(body.id))
+    catalogueFail('corrupt', 'Declaration key mismatch');
   if (task.offset_rows === 0) {
     for (const pin of [body.condition.type, body.presentation.type])
       await typeClosure(tx, root, pin.releaseDigest, pin.typeId);
@@ -323,12 +327,12 @@ async function declarationStep(tx: CommandTransaction, root: string, task: Task)
       [
         root,
         catalogueKey(body.id),
-        body.id,
+        Buffer.from(body.id),
         task.task_id,
         task.digest,
         body,
         catalogueKey(body.condition.type.typeId),
-        body.condition.type.typeId,
+        Buffer.from(body.condition.type.typeId),
         body.auto.precedence,
         body.auto.eligible,
       ],
@@ -446,7 +450,12 @@ export async function advanceCatalogueBuild(
     await tx.query('RELEASE SAVEPOINT catalogue_step');
     await tx.query(
       "UPDATE semantic.definition_catalogue_build SET state='refused',error=$2,steps=steps+1,examined_bytes=examined_bytes+$3 WHERE route=0 AND root_digest=$1",
-      [root, `${error.code}: ${error.message}`.slice(0, 4096), examined],
+      // Code-point truncation keeps valid Unicode and at most 6 KiB of escaped JSON in the status projection.
+      [
+        root,
+        Array.from(`${error.code}: ${error.message}`.replaceAll('\0', '\\u0000')).slice(0, 1024).join(''),
+        examined,
+      ],
     );
   }
   return (await readCatalogueBuild(tx, pin))!;

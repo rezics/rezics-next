@@ -220,6 +220,12 @@ test('An authorized publisher uploads bounded catalogue artifacts spanning more 
             id: 'kind:Second',
             auto: { eligible: true, precedence: 7 },
           },
+          {
+            ...compatibilityKind(releases[2]!, releaseDigest(releases[2]!), 'scale:T1151'),
+            id: 'kind:Control\u0000exact',
+            labels: { en: 'Zero\u0000label' },
+            auto: { eligible: false, precedence: 0 },
+          },
         ],
       },
       store,
@@ -292,6 +298,12 @@ test('An authorized publisher uploads bounded catalogue artifacts spanning more 
       releaseDigest: releaseDigest(releases[2]!),
     });
     expect(exact.body[1].value).toBeNull();
+    const control = await call('POST', `/v1/definitions/catalogues/${pin.rootDigest}/kinds:resolve`, {
+      ids: ['kind:Control\u0000exact'],
+    });
+    expect(control.status).toBe(200);
+    expect(control.body[0].value.declaration.id).toBe('kind:Control\u0000exact');
+    expect(control.body[0].value.declaration.labels.en).toBe('Zero\u0000label');
     expect(Buffer.byteLength(JSON.stringify(first.body))).toBeLessThanOrEqual(1048576);
     const second = await call(
       'GET',

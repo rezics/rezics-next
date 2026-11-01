@@ -1948,6 +1948,12 @@ operation, query, language and actual sort; the payload is a bounded ordinal, ne
 an unsigned caller key. Keyset boundaries have their own indexed lookup. A key-only
 lookahead establishes continuation; a short byte-limited response does not imply EOF.
 
+Original identifiers and directory keys use UTF-8 byte storage; member/declaration
+bodies use PostgreSQL `json`. This preserves every admitted JSON string, including
+escaped null characters that PostgreSQL `text`/`jsonb` cannot represent. Hash keys
+and UTF-16 sort keys do not normalize those identities. Refusal diagnostics sanitize
+null characters and truncate by code point within the declared status byte budget.
+
 `GET .../:root/candidates?exact_type_id=...` plans only auto-eligible exact-Type
 candidates, precedence descending and exact stable Kind ID ascending. Two disjoint
 indexed ranges handle the same-precedence tail and remaining lower precedence without
@@ -1968,3 +1974,11 @@ Existing ordinary subject creation continues to use its original Release admissi
 - Touches: fixed Global native Access/time points, one root readiness point, at most 100 exact keys or 101 indexed metadata keys, a continuation boundary and admitted body points in one repeatable-read snapshot.
 - Bound: O(K log N) application keys and indexed rows. Label pages select a bounded range before same-partition body-size joins. Candidate pages use exact-Type postings; neither GET traverses directories, history or complete release registries. Size projections precede body transfer. Total serialized response is at most 1 MiB; excess exact output or a single oversized record is explicitly unavailable, never silently omitted. Byte-limited pages retain a signed continuation. Original engine visibility work is not custom-metered.
 - Growth check: the same authored journey covers noninitial exact Kind lookup, signed metadata/candidate continuation, denied writes, stale CAS, incomplete/corrupt closure, original historical Release meaning and immutable old pins. Native acceptance, operational consumer/default Search/subject integration, physical scale and main proof remain deferred and unclaimed.
+
+The read plans are in [definition-catalogue.ts](definition-catalogue.ts): exact IDs
+use the Kind primary key; label keysets use the label primary key and
+`definition_catalogue_label_boundary`; candidate tails use
+`definition_catalogue_candidates`. The [forward migration](../../db/semantic/migrations/20261101000800_definition_catalogue.sql)
+declares those partition/root-leading indexes. Build continuations in
+[definition-catalogue-publication.ts](definition-catalogue-publication.ts) use the
+retained DFS link and `definition_catalogue_pending`, never a complete-directory scan.

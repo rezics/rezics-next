@@ -291,16 +291,16 @@ export function createNativeDefinitionCatalogue({
           ordinal = '0';
         if (after) {
           const boundary = (
-            await query<{ precedence: number; exact_type_id: string; eligible: boolean }>(
+            await query<{ precedence: number; exact_type_id: Buffer; eligible: boolean }>(
               client,
               context,
               'SELECT precedence,exact_type_id,eligible FROM semantic.definition_catalogue_kind WHERE route=0 AND root_digest=$1 AND ordinal=$2',
               [pin.rootDigest, after],
               1,
-              131072,
+              4 * 65536 + 512,
             )
           )[0];
-          if (!boundary || !boundary.eligible || boundary.exact_type_id !== input.exactTypeId)
+          if (!boundary || !boundary.eligible || boundary.exact_type_id.toString('utf8') !== input.exactTypeId)
             catalogueFail('invalid', 'Missing candidate cursor boundary');
           precedence = boundary.precedence;
           ordinal = after;
