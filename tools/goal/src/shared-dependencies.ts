@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, type Hash } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -7,6 +7,7 @@ import {
   readFileSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -18,6 +19,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { BoundedProcessError, runBoundedInstallProcess, type ProcessLimits } from './install-process.ts';
+import { checkPinnedBunInstallation } from './check-compatibility.ts';
 
 const hour = 60 * 60 * 1000;
 function manifestPaths(root: string): string[] {
@@ -175,13 +177,129 @@ function copySkeleton(template: string, worktree: string): void {
   copyWorkspaceSkeletons(template, worktree);
   localWorkspaceLinks(worktree);
 }
+/** Only inspect direct manifest edges and workspace links, never walk the installed package graph. */
+function dependencyLinksMatch(worktree: string, template?: string, identity?: Hash): boolean {
+  const installed = (root: string, dir: string, name: string): { path: string; target: string } | undefined => {
+    let current = join(root, dir);
+    for (;;) {
+      const candidate = join(current, 'node_modules', name);
+      if (existsSync(candidate)) return { path: relative(root, candidate), target: realpathSync(candidate) };
+      if (current === root) return undefined;
+      current = dirname(current);
+    }
+  };
+  const remap = (path: string): string => {
+    if (!template || path.startsWith(join(template, 'node_modules', '.bun') + '/')) return path;
+    return path === template || path.startsWith(template + '/') ? resolve(worktree, relative(template, path)) : path;
+  };
+  for (const dir of ['', ...workspaceDirs(worktree)]) {
+    const manifest = JSON.parse(readFileSync(join(worktree, dir, 'package.json'), 'utf8')) as {
+      name?: string;
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+    };
+    if (dir && manifest.name && installed(worktree, '', manifest.name)?.target !== realpathSync(join(worktree, dir)))
+      return false;
+    const optional = manifest.optionalDependencies ?? {};
+    const names = new Set([
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.devDependencies ?? {}),
+      ...Object.keys(optional),
+    ]);
+    for (const name of names) {
+      const actual = installed(worktree, dir, name);
+      if (actual && !existsSync(join(actual.target, 'package.json'))) return false;
+      if (identity) {
+        identity.update(JSON.stringify([dir, name, actual ?? null]));
+        if (actual) {
+          const manifest = join(actual.target, 'package.json');
+          identity.update(readFileSync(manifest)).update('\0');
+        }
+      }
+      if (template) {
+        const expected = installed(template, dir, name);
+        if (
+          expected
+            ? actual?.path !== expected.path || actual.target !== remap(expected.target)
+            : !(name in optional) || actual !== undefined
+        )
+          return false;
+      } else if (!(name in optional) && !actual) return false;
+    }
+  }
+  return true;
+}
+
+function privateReceipt(worktree: string, key: string): string | null {
+  const identity = createHash('sha256');
+  return dependencyLinksMatch(worktree, undefined, identity)
+    ? JSON.stringify({ key, links: identity.digest('hex') })
+    : null;
+}
+
+/** Use the consumer's artifact/installed-layout contract; never infer a declared pin from the old executable. */
+function bunInstallationFailure(root: string): string | undefined {
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+    packageManager?: string;
+    devDependencies?: { bun?: string };
+  };
+  if (!manifest.packageManager?.startsWith('bun@') && manifest.devDependencies?.bun === undefined) return;
+  const failures = checkPinnedBunInstallation(root).filter((check) => check.status === 'incompatible');
+  if (failures.length)
+    return failures
+      .map((check) => `${check.field}: ${check.detail} ${JSON.stringify(check.evidence ?? {})}`)
+      .join('\n');
+}
+
+function requireUsableInstallation(root: string, step: string): void {
+  const failure = bunInstallationFailure(root);
+  if (failure || !dependencyLinksMatch(root))
+    throw new DependencyInstallError(root, step, failure ?? 'required direct dependency links are missing');
+}
+
+/** A receipt/key alone is insufficient: the consumer's direct dependency links must still be usable. */
+export function dependencyInstallationMatches(worktree: string): boolean {
+  if (!existsSync(join(worktree, 'package.json'))) return true;
+  const key = dependencyKey(worktree);
+  const prior = readlinkStore(worktree);
+  const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
+  if (bunInstallationFailure(worktree)) return false;
+  if (existsSync(marker)) {
+    const receipt = prior ? null : privateReceipt(worktree, key);
+    return receipt !== null && readFileSync(marker, 'utf8') === receipt;
+  }
+  if (!prior || basename(dirname(dirname(prior))) !== key || !existsSync(prior)) return false;
+  const template = dirname(dirname(prior));
+  return (
+    dependencyKey(template) === key &&
+    !bunInstallationFailure(template) &&
+    dependencyLinksMatch(template) &&
+    dependencyLinksMatch(worktree, template)
+  );
+}
+
+function removeWorkspaceSkeletons(worktree: string): void {
+  for (const dir of workspaceDirs(worktree))
+    rmSync(join(worktree, dir, 'node_modules'), { recursive: true, force: true });
+}
+
 export function installPrivate(worktree: string, limits?: Partial<ProcessLimits>): void {
   const nodeModules = join(worktree, 'node_modules');
   rmSync(nodeModules, { recursive: true, force: true });
+  removeWorkspaceSkeletons(worktree);
   runInstall(worktree, false, limits);
   localWorkspaceLinks(worktree);
   ignoreNodeModules(worktree);
-  writeFileSync(join(nodeModules, '.goal-private-dependencies'), dependencyKey(worktree));
+  requireUsableInstallation(worktree, 'validating installed dependency identity');
+  const receipt = privateReceipt(worktree, dependencyKey(worktree));
+  if (!receipt)
+    throw new DependencyInstallError(
+      worktree,
+      'validating installed dependency links',
+      'required direct dependency links are missing',
+    );
+  writeFileSync(join(nodeModules, '.goal-private-dependencies'), receipt);
 }
 /** Removes write permission below `path` and keeps each file's execute bits, so package binaries still run. */
 export function sealReadOnly(path: string): void {
@@ -193,17 +311,36 @@ export function sealReadOnly(path: string): void {
   chmodSync(path, 0o555);
 }
 
+/** Keep published skeleton links relocatable, including absolute workspace links emitted by an installer. */
+function relativizeSkeletons(root: string): void {
+  const walk = (dir: string) => {
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (path === join(root, 'node_modules', '.bun')) continue;
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) {
+        const target = resolve(dirname(path), readlinkSync(path));
+        if (target.startsWith(root + '/')) {
+          rmSync(path);
+          symlinkSync(relative(dirname(path), target), path, 'dir');
+        }
+      } else if (stat.isDirectory()) walk(path);
+    }
+  };
+  for (const dir of ['', ...workspaceDirs(root)]) walk(join(root, dir, 'node_modules'));
+}
+
 export function installShared(
   worktree: string,
   storeRoot = join(dirname(worktree), '..', 'dependency-stores'),
   processLimits?: Partial<ProcessLimits>,
 ): void {
-  if (!existsSync(join(worktree, 'package.json'))) return;
+  if (!existsSync(join(worktree, 'package.json')) || dependencyInstallationMatches(worktree)) return;
   const key = dependencyKey(worktree);
   const prior = readlinkStore(worktree);
   const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
   if (existsSync(marker)) {
-    if (readFileSync(marker, 'utf8') === key) return;
     installPrivate(worktree, processLimits);
     return;
   }
@@ -215,7 +352,12 @@ export function installShared(
   mkdirSync(storeRoot, { recursive: true });
   const lease = acquireDirectoryLeaseWaiting(join(storeRoot, '.leases', key), 15 * 60_000);
   try {
-    if (!existsSync(join(store, 'node_modules', '.bun'))) {
+    // Any published location belongs to its existing users, even when its skeleton is incomplete.
+    if (lstatSyncSafe(store) && !existsSync(join(store, 'node_modules', '.bun'))) {
+      installPrivate(worktree, processLimits);
+      return;
+    }
+    if (!lstatSyncSafe(store)) {
       if (prior) {
         installPrivate(worktree, processLimits);
         return;
@@ -239,20 +381,33 @@ export function installShared(
           installPrivate(worktree, processLimits);
           return;
         }
+        localWorkspaceLinks(temp);
+        relativizeSkeletons(temp);
+        requireUsableInstallation(temp, 'validating store dependency identity');
         sealReadOnly(join(temp, 'node_modules', '.bun'));
-        rmSync(store, { recursive: true, force: true });
         renameSync(temp, store);
       } catch (error) {
         removeBuild(temp);
         throw error;
       }
     }
-    const linkedStore = readlinkStore(worktree);
-    if (linkedStore !== resolve(store)) {
+    // An incomplete old store is never repaired in place while peers may be using its sealed packages.
+    if (dependencyKey(store) !== key || bunInstallationFailure(store) || !dependencyLinksMatch(store)) {
+      installPrivate(worktree, processLimits);
+      return;
+    }
+    if (!dependencyInstallationMatches(worktree)) {
       rmSync(join(worktree, 'node_modules'), { recursive: true, force: true });
+      removeWorkspaceSkeletons(worktree);
       copySkeleton(store, worktree);
     }
     ignoreNodeModules(worktree);
+    if (!dependencyInstallationMatches(worktree))
+      throw new DependencyInstallError(
+        worktree,
+        'validating installed dependency links',
+        'shared dependency links do not match final manifests',
+      );
   } finally {
     lease.release();
   }

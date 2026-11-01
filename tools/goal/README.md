@@ -636,7 +636,27 @@ the worker's checkout.
 Task worktrees with the same dependency key share one read-only Bun install under the configured dependency-store root
 (default `<worktree root>/../dependency-stores`). Each tree keeps its own small `node_modules` skeleton and workspace
 links; only `.bun` points at the shared store. The key covers the Bun version, root and workspace manifests, `bun.lock`
-and `bunfig.toml`. Store builds use `--backend=copyfile`; the `.bun` tree is made read-only before publication. Run
+and `bunfig.toml`.
+
+Before an ordinary worker launches or resumes, the controller checks the final resolved manifests' dependency key and
+the actual direct dependency and workspace links. Matching healthy installations are reused without installing. Private
+receipts also bind the installed direct links and package manifests; old key-only receipts are refreshed once. Changed
+manifests keep an existing private install private; stale shared workspace skeletons are replaced only in the owned
+worktree. An incomplete store falls back to a private install without repairing shared bytes in place. Lockfile
+regeneration is not an installation receipt. Unresolved rebase paths stay with the same worker for source resolution;
+preparation runs on the resolved source before its next ordinary launch. A shared module whose dependencies need
+refreshing cannot launch while a peer holds live process, pending attempt or check custody; the controller reports that
+custody error before starting the model.
+
+For source declaring Bun, preparation also uses the existing pinned artifact contract to validate the source/lock
+pin, selected store metadata, installed Bun and optional platform package, and actual `.bin/bun` bytes and runtime
+identity. The old installed executable never supplies the expected revision for a new pin. A stale or incorrect
+published store is preserved and repaired through the requesting worktree's bounded private install; healthy shared
+installs still reuse the immutable store. A failed install or identity validation prevents launch and retains its exact
+cause. Recovery uses the normal controller resume of the same current task/session after this preparation source is
+released; source validation alone does not repair or restart retained consumers or prove their compilers pass.
+
+Store builds use `--backend=copyfile`; the `.bun` tree is made read-only before publication. Run
 `bun tools/goal/src/cli.ts deps private` before changing a manifest or lockfile. A five-directory host-c comparison
 created 69,426 `node_modules` entries per private install (median 4.956 s) versus 27 per shared worktree (median
 0.016 s), after building one shared store.
