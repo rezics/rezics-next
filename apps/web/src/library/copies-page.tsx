@@ -322,6 +322,7 @@ export function CopyForm({
       });
       if (!current()) return;
       if (!result.ok) {
+        if (result.reason !== 'unavailable') intent.current = null;
         setFailure(
           result.reason === 'conflict'
             ? m.library_copy_conflict()
@@ -410,6 +411,7 @@ export function CopyForm({
       const result = await deleteCopy({ data: intent.current.data, headers: credentialHeaders });
       if (!current()) return;
       if (!result.ok) {
+        if (result.reason !== 'unavailable') intent.current = null;
         setFailure(result.reason === 'conflict' ? m.library_copy_conflict() : m.library_copy_failure());
         setConfirming(false);
         return;
@@ -611,7 +613,9 @@ export function CopyForm({
             type="button"
             className={quiet}
             disabled={pending || !editable}
-            onClick={() => current() && !intent.current && setConfirming(true)}
+            onClick={() =>
+              current() && (!intent.current || intent.current.operation === 'delete') && setConfirming(true)
+            }
           >
             {m.library_copy_delete()}
           </button>

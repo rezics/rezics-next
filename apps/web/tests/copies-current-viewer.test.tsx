@@ -452,14 +452,12 @@ test('The actual Copies route retires retained private rows and editor state on 
   const inspect = async (subject: string) => {
     await click(m.library_copy_edit());
     await act(async () =>
-      details
-        .at(-1)!
-        .resolve({
-          sessionSubject: subject,
-          requested: response(subject, search).requested,
-          id: id(1),
-          result: { ok: true, copy: copy(subject) },
-        }),
+      details.at(-1)!.resolve({
+        sessionSubject: subject,
+        requested: response(subject, search).requested,
+        id: id(1),
+        result: { ok: true, copy: copy(subject) },
+      }),
     );
   };
   const fillNote = async (value: string) => {
@@ -607,41 +605,35 @@ test('The actual Copies route retires retained private rows and editor state on 
     await acceptList('B');
     await click(m.library_copy_edit());
     await act(async () =>
-      details
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'A',
-          requested: response('B', search).requested,
-          id: id(1),
-          result: { ok: true, copy: copy('A') },
-        }),
+      details.at(-1)!.resolve({
+        sessionSubject: 'A',
+        requested: response('B', search).requested,
+        id: id(1),
+        result: { ok: true, copy: copy('A') },
+      }),
     );
     absent('A');
     expect(form().textContent).toContain(m.library_copy_detail_unavailable());
     await click(m.library_copy_cancel(), form());
     await click(m.library_copy_edit());
     await act(async () =>
-      details
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'B',
-          requested: { ...response('B', search).requested, cursor: 'wrong-address' },
-          id: id(1),
-          result: { ok: true, copy: { ...copy('A'), note: 'Wrong detail address' } },
-        }),
+      details.at(-1)!.resolve({
+        sessionSubject: 'B',
+        requested: { ...response('B', search).requested, cursor: 'wrong-address' },
+        id: id(1),
+        result: { ok: true, copy: { ...copy('A'), note: 'Wrong detail address' } },
+      }),
     );
     expect(host.textContent).not.toContain('Wrong detail address');
     await click(m.library_copy_cancel(), form());
     await click(m.library_copy_edit());
     await act(async () =>
-      details
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'B',
-          requested: response('B', search).requested,
-          id: id(1),
-          result: { ok: true, copy: { ...copy('A', 2), note: 'Wrong detail id' } },
-        }),
+      details.at(-1)!.resolve({
+        sessionSubject: 'B',
+        requested: response('B', search).requested,
+        id: id(1),
+        result: { ok: true, copy: { ...copy('A', 2), note: 'Wrong detail id' } },
+      }),
     );
     expect(host.textContent).not.toContain('Wrong detail id');
     await click(m.library_copy_cancel(), form());
@@ -687,38 +679,32 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(form().querySelector('button[type="submit"]')).toBeNull();
     const selectedSubject = { ...copy('B').subject!, id: id(11) };
     await act(async () =>
-      editions
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'B',
-          requested: { ...response('B', search).requested, locale: 'ja' },
-          id: id(11),
-          result: { state: 'ready', subject: selectedSubject, profile },
-        }),
+      editions.at(-1)!.resolve({
+        sessionSubject: 'B',
+        requested: { ...response('B', search).requested, locale: 'ja' },
+        id: id(11),
+        result: { state: 'ready', subject: selectedSubject, profile },
+      }),
     );
     expect(form().querySelector('button[type="submit"]')).toBeNull();
     await choose(id(11));
     await act(async () =>
-      editions
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'B',
-          requested: response('B', search).requested,
-          id: id(10),
-          result: { state: 'ready', subject: selectedSubject, profile },
-        }),
+      editions.at(-1)!.resolve({
+        sessionSubject: 'B',
+        requested: response('B', search).requested,
+        id: id(10),
+        result: { state: 'ready', subject: selectedSubject, profile },
+      }),
     );
     expect(form().querySelector('button[type="submit"]')).toBeNull();
     await choose(id(11));
     await act(async () =>
-      editions
-        .at(-1)!
-        .resolve({
-          sessionSubject: 'B',
-          requested: response('B', search).requested,
-          id: id(11),
-          result: { state: 'ready', subject: selectedSubject, profile },
-        }),
+      editions.at(-1)!.resolve({
+        sessionSubject: 'B',
+        requested: response('B', search).requested,
+        id: id(11),
+        result: { state: 'ready', subject: selectedSubject, profile },
+      }),
     );
     await submit(true);
     expect(writes.at(-1)!.input.data).toMatchObject({ subjectId: id(11), kind: 'print', status: 'shelf' });
@@ -733,6 +719,11 @@ test('The actual Copies route retires retained private rows and editor state on 
     await click(m.library_copy_delete(), form());
     await click(m.library_copy_delete_confirm(), form());
     expect(removals.at(-1)!.input.data).toEqual({ id: id(1), revision: 7, idempotencyKey: id(101) });
+    const uncertainRemoval = removals.at(-1)!;
+    await act(async () => uncertainRemoval.reject(new Error('Uncertain native deletion')));
+    await click(m.library_copy_delete(), form());
+    await click(m.library_copy_delete_confirm(), form());
+    expect(removals.at(-1)!.input.data).toEqual(uncertainRemoval.input.data);
     await act(async () => removals.at(-1)!.resolve({ ok: true, undo: { deletionId: id(80), revision: 8 } }));
     const oldUndo = retainedUndo!;
     await click(m.editor_undo());
