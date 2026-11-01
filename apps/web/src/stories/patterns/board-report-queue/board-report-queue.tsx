@@ -16,6 +16,7 @@ import { ReportReviewCard } from '../../../moderation/reports-view-card';
 
 export type { ReportQueueAction } from '../../../moderation/reports-view-action';
 export type ReportQueueProps = {
+  isCurrent?: () => boolean;
   queueIdentity?: string;
   bulkEnabled?: boolean;
   reports: Report[];
@@ -43,6 +44,9 @@ export function BoardReportQueue(props: ReportQueueProps) {
   if (
     !previous ||
     previous.props.reports !== props.reports ||
+    previous.props.targets !== props.targets ||
+    previous.props.revisions !== props.revisions ||
+    previous.props.isCurrent !== props.isCurrent ||
     previous.props.queueIdentity !== props.queueIdentity ||
     previous.props.bulkEnabled !== props.bulkEnabled ||
     previous.props.state !== props.state ||
@@ -59,13 +63,13 @@ export function BoardReportQueue(props: ReportQueueProps) {
     generation.current = {
       receipt,
       props,
-      controller: createReportsBulkAction(props.bulkEnabled === false ? [] : props.reports),
+      controller: createReportsBulkAction(props.bulkEnabled === false ? [] : props.reports, props.isCurrent),
     };
   }
   const current = generation.current!;
   useLayoutEffect(() => {
     current.controller.attach();
-    return () => current.controller.retire();
+    return () => current.controller.detach();
   }, [current]);
   return (
     <>
@@ -178,13 +182,14 @@ function QueueGeneration({
           </p>
         </div>
       )}
-      {next ? (
+      {next && !snapshot.retired ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{m.moderation_queue_next_hint()}</p>
           <Button
             variant="outline"
             className="min-h-11"
             onClick={() => {
+              if (!controller.isCurrent()) return;
               controller.leave();
               onNext?.(next);
             }}

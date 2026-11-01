@@ -58,9 +58,14 @@ export function ReportReviewCard({
 }) {
   const id = useId();
   const [reason, setReason] = useState('');
-  const [reviewAction] = useState(createReportReviewAction);
   const currentOwner = useRef(intentOwner);
   currentOwner.current = intentOwner;
+  const [reviewAction] = useState(() =>
+    createReportReviewAction(
+      () => currentOwner.current?.isCurrent() ?? true,
+      () => currentOwner.current?.generation(),
+    ),
+  );
   useLayoutEffect(() => {
     // A page-data refresh retires bulk state without discarding an individual draft or uncertain intent.
     if (reviewAction.input) intentOwner?.claimIndividual(report.id);

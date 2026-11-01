@@ -11,12 +11,17 @@ type Intent = ReportActionInput extends infer Input
   : never;
 
 /** A definitive refusal requires a fresh read; only a lost response can replay the exact command. */
-export function createReportReviewAction() {
+export function createReportReviewAction(
+  isCurrent: () => boolean = () => true,
+  generation: () => unknown = () => undefined,
+) {
   const identity = createModerationIntent();
   let last: ReportActionInput | undefined;
   let result: ReportReviewResult | undefined;
   let pending = false;
-  async function send(input: ReportActionInput, action: ReportQueueAction): Promise<ReportReviewResult> {
+  async function send(input: ReportActionInput, action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
+    if (!isCurrent()) return;
+    const expected = generation();
     pending = true;
     last = input;
     try {
@@ -29,23 +34,27 @@ export function createReportReviewAction() {
     } finally {
       pending = false;
     }
-    return result;
+    return isCurrent() && generation() === expected ? result : undefined;
   }
   return {
     changed: identity.changed,
     async submit(intent: Intent, action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
+      if (!isCurrent()) return;
       if (pending || result) return result;
       return send({ ...intent, idempotencyKey: identity.keyFor(intent) }, action);
     },
     async retry(action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
+      if (!isCurrent()) return;
       if (pending || !last || !result || result.ok || result.state !== 'uncertain') return result;
       return send(last, action);
     },
     async refresh(read: () => Promise<void>): Promise<void> {
-      if (pending) return;
+      if (!isCurrent() || pending) return;
+      const expected = generation();
       pending = true;
       try {
         await read();
+        if (!isCurrent() || generation() !== expected) return;
         identity.changed();
         last = undefined;
         result = undefined;

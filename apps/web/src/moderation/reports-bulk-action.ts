@@ -15,7 +15,7 @@ export type BulkSnapshot = {
 };
 
 /** One rendered native page, with no discovery, persistence or batch transport. */
-export function createReportsBulkAction(reports: readonly Report[]) {
+export function createReportsBulkAction(reports: readonly Report[], originalIsCurrent: () => boolean = () => true) {
   const loaded = reports.slice(0, 20);
   const eligible = new Set(loaded.filter((report) => !report.outcome).map((report) => report.id));
   const bulkOwned = new Set<string>();
@@ -23,6 +23,9 @@ export function createReportsBulkAction(reports: readonly Report[]) {
   const intents = new Map<string, ReturnType<typeof createReportReviewAction>>();
   const listeners = new Set<() => void>();
   let alive = true;
+  let retired = false;
+  let connection = {};
+  const current = () => alive && !retired && originalIsCurrent();
   let active = true;
   let busy = false;
   let operation = 0;
@@ -44,31 +47,34 @@ export function createReportsBulkAction(reports: readonly Report[]) {
     update({ items: snapshot.items.map((item) => (item.reportId === reportId ? { ...item, state } : item)) });
   }
   function canSelect() {
-    return active && snapshot.phase === 'selecting';
+    return current() && active && snapshot.phase === 'selecting';
   }
   async function send(reportId: string, action: ReportQueueAction, retry: boolean, expected: number) {
+    if (!current() || !active || operation !== expected) return false;
     const intent = intents.get(reportId)!;
     itemState(reportId, 'pending');
     const result = retry ? await intent.retry(action) : await intent.submit({ action: 'dismiss', reportId }, action);
     // The private native intent may settle, but an obsolete page cannot publish or continue it.
-    if (!active || !alive || operation !== expected) return false;
+    if (!active || !current() || operation !== expected) return false;
     itemState(reportId, result?.ok ? 'dismissed' : (result?.state ?? 'error'));
     return result?.ok === true;
   }
   async function refresh(read?: () => Promise<void>) {
-    if (!alive || busy || snapshot.refreshing || !read) return;
+    if (!current() || busy || snapshot.refreshing || !read) return;
     active = false;
     operation++;
     update({ hideCards: true, selected: [], retired: true, refreshing: true, stale: false });
     try {
       await read();
     } catch {
-      update({ stale: true });
+      if (current()) update({ stale: true });
     } finally {
-      update({ refreshing: false });
+      if (current()) update({ refreshing: false });
     }
   }
   return {
+    isCurrent: () => current() && active,
+    generation: () => connection,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -97,10 +103,10 @@ export function createReportsBulkAction(reports: readonly Report[]) {
       if (canSelect() && snapshot.selected.length) update({ phase: 'review' });
     },
     cancel() {
-      if (active && snapshot.phase === 'review') update({ phase: 'selecting' });
+      if (current() && active && snapshot.phase === 'review') update({ phase: 'selecting' });
     },
     async confirm(action: ReportQueueAction, read?: () => Promise<void>) {
-      if (!active || busy || snapshot.phase !== 'review') return;
+      if (!current() || !active || busy || snapshot.phase !== 'review') return;
       busy = true;
       const expected = operation;
       const items = loaded.flatMap((report, index): BulkItem[] =>
@@ -109,18 +115,24 @@ export function createReportsBulkAction(reports: readonly Report[]) {
           : [],
       );
       for (const item of items) {
-        intents.set(item.reportId, createReportReviewAction());
+        intents.set(
+          item.reportId,
+          createReportReviewAction(
+            () => current() && active,
+            () => connection,
+          ),
+        );
         bulkOwned.add(item.reportId);
       }
       update({ phase: 'running', items });
       try {
         for (const item of items) {
-          if (!active || !alive || !(await send(item.reportId, action, false, expected))) break;
+          if (!active || !current() || !(await send(item.reportId, action, false, expected))) break;
         }
       } finally {
         busy = false;
       }
-      if (!active || !alive || operation !== expected) return;
+      if (!active || !current() || operation !== expected) return;
       update({ phase: 'complete' });
       // Preserve a lost command for explicit exact retry before refreshing its generation away.
       if (
@@ -131,6 +143,7 @@ export function createReportsBulkAction(reports: readonly Report[]) {
     },
     async retry(reportId: string, action: ReportQueueAction, read?: () => Promise<void>) {
       if (
+        !current() ||
         !active ||
         busy ||
         snapshot.phase !== 'complete' ||
@@ -145,7 +158,7 @@ export function createReportsBulkAction(reports: readonly Report[]) {
       } finally {
         busy = false;
       }
-      if (!active || !alive || operation !== expected) return;
+      if (!active || !current() || operation !== expected) return;
       update({ phase: 'complete' });
       // Retrying never schedules unattempted items, even after a confirmed success.
       if (
@@ -156,17 +169,25 @@ export function createReportsBulkAction(reports: readonly Report[]) {
     },
     refresh,
     async read(read: () => Promise<void>) {
+      if (!current()) return;
+      const expected = operation + 1;
       active = false;
       operation++;
       update({ selected: [], items: [], phase: 'selecting', retired: true });
       await read();
-      if (alive) {
+      if (current() && operation === expected) {
         active = true;
         update({ retired: false });
       }
     },
     claimIndividual(reportId: string) {
-      if (!active || snapshot.selected.includes(reportId) || bulkOwned.has(reportId) || individual.has(reportId))
+      if (
+        !current() ||
+        !active ||
+        snapshot.selected.includes(reportId) ||
+        bulkOwned.has(reportId) ||
+        individual.has(reportId)
+      )
         return false;
       individual.add(reportId);
       update({});
@@ -177,7 +198,7 @@ export function createReportsBulkAction(reports: readonly Report[]) {
       update({});
     },
     individualBlocked(reportId: string) {
-      return !active || snapshot.selected.includes(reportId) || bulkOwned.has(reportId);
+      return !current() || !active || snapshot.selected.includes(reportId) || bulkOwned.has(reportId);
     },
     leave() {
       active = false;
@@ -185,10 +206,19 @@ export function createReportsBulkAction(reports: readonly Report[]) {
       update({ selected: [], items: [], retired: true, hideCards: true });
     },
     attach() {
+      if (retired) return;
       alive = true;
       active = !snapshot.retired;
     },
+    detach() {
+      connection = {};
+      active = false;
+      alive = false;
+      operation++;
+    },
     retire() {
+      connection = {};
+      retired = true;
       active = false;
       alive = false;
       operation++;

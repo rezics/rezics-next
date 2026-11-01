@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   createFileRoute,
   useNavigate,
@@ -14,11 +15,11 @@ import { m } from '../../paraglide/messages.js';
 import {
   loadModerationReports,
   moderationReportInput,
-  reportPageIsCurrent,
+  prepareModerationReportRead,
   reportSelection,
   type ReportSelection,
 } from '../../moderation/reports-read';
-import { ModerationReportsView } from '../../moderation/reports-page';
+import { ModerationReportsPage, ModerationReportsView } from '../../moderation/reports-page';
 import { loadModerationAppeals } from '../../moderation/appeals-read';
 import { ModerationAppealsPage, ModerationAppealsView } from '../../moderation/appeals-tab';
 import { appealReadKey, moderationAppealInput } from '../../moderation/appeals-read-model';
@@ -37,13 +38,19 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
     ...(search.tab === 'appeals' ? { tab: 'appeals' as const } : {}),
   }),
   loaderDeps: ({ search }) => search,
-  loader: async ({ params, deps, location, abortController }) => {
+  loader: async ({ params, deps, location, abortController, context }) => {
     if (deps.tab === 'appeals') {
       const page = await loadModerationAppeals({ data: moderationAppealInput(params.id, deps) });
       abortController.signal.throwIfAborted();
       return { ...page, navigationKey: location.state.__TSR_key ?? location.href };
     }
-    return loadModerationReports({ data: moderationReportInput(params.id, deps) });
+    const page = await prepareModerationReportRead(
+      context.queryClient,
+      moderationReportInput(params.id, deps),
+      (data) => loadModerationReports({ data }),
+      abortController.signal,
+    );
+    return { ...page, navigationKey: location.state.__TSR_key ?? location.href };
   },
   head: ({ match }) =>
     pageHead(
@@ -72,7 +79,24 @@ function ModerationReportsRoute() {
   const appealPage = page as Awaited<ReturnType<typeof loadModerationAppeals>> & { navigationKey: string };
   const appealInput = moderationAppealInput(id, latestSearch);
   const appealNavigationKey = latestLocation.state.__TSR_key ?? latestLocation.href;
-  const reportPage = page as Awaited<ReturnType<typeof loadModerationReports>>;
+  const reportPage = page as Awaited<ReturnType<typeof prepareModerationReportRead>> & { navigationKey: string };
+  const reportNavigation = useMemo(
+    () => ({
+      isCurrent: () =>
+        (router.state.location.state.__TSR_key ?? router.state.location.href) === reportPage.navigationKey,
+      subscribe: (retire: () => void) => {
+        const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+          if ((toLocation.state.__TSR_key ?? toLocation.href) !== reportPage.navigationKey) retire();
+        });
+        const reload = router.subscribe('onBeforeLoad', retire);
+        return () => {
+          leave();
+          reload();
+        };
+      },
+    }),
+    [router, reportPage.generation, reportPage.navigationKey],
+  );
   const onNext = (nextCursor: string) =>
     void navigate({
       to: '/boards/$id/moderation',
@@ -102,13 +126,11 @@ function ModerationReportsRoute() {
       }
     />
   ) : (
-    <ModerationReportsView
-      key={`${reportPage.readKey}:${reportPage.viewerId}`}
-      boardId={id}
-      reports={reportPage.reports}
-      selection={selection}
-      viewerId={reportPage.viewerId}
-      state={reportPageIsCurrent(reportPage, currentInput) ? reportPage.state : 'loading'}
+    <ModerationReportsPage
+      page={reportPage}
+      input={currentInput}
+      active={latestSearch.tab !== 'appeals' && reportPage.navigationKey === appealNavigationKey}
+      navigation={reportNavigation}
       onSelection={(value) =>
         navigate({
           to: '/boards/$id/moderation',
@@ -123,12 +145,6 @@ function ModerationReportsRoute() {
           search: { ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
         })
       }
-      revisions={reportPage.revisions}
-      targets={reportPage.targets}
-      next={reportPage.next}
-      tab="reports"
-      {...(thread ? { threadId: thread } : {})}
-      {...(post ? { postId: post } : {})}
       onNext={onNext}
       onRetry={() => void router.invalidate({ sync: true })}
       onRefresh={() => router.invalidate({ sync: true })}

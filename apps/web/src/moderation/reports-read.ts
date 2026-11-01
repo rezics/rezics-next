@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import type { KernelClient } from '@rezics/client';
 import type { DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
@@ -217,7 +218,12 @@ export async function readModerationReportPage(
   viewerId: string,
 ) {
   const client = nativeClient;
-  const identity = { readKey: reportReadKey(data), viewerId };
+  const identity = {
+    readKey: reportReadKey(data),
+    viewerId,
+    generation: crypto.randomUUID(),
+    input: { ...data, ...reportSelection(data) },
+  };
   try {
     const headers = auth(authorization);
     const page = await readModerationReports(
@@ -283,4 +289,68 @@ export async function readModerationReportPage(
       state: error instanceof ReportReadFailure ? error.state : ('error' as const),
     };
   }
+}
+
+export type PrivateReportPage = Awaited<ReturnType<typeof readModerationReportPage>> & {
+  browserRevision?: number;
+};
+type ReportSession = { state: string; subject?: string | null; csrfToken?: string | null };
+
+/** One cache observation shared by loader and mounted caller, including their handoff gap. */
+const reportSessionSources = new WeakMap<QueryClient, ReturnType<typeof observeReportSession>>();
+function observeReportSession(client: QueryClient) {
+  const read = () => client.getQueryData<ReportSession>(['session']);
+  const key = () => {
+    const session = read();
+    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
+  };
+  let previous = key();
+  let revision = 0;
+  const listeners = new Set<() => void>();
+  client.getQueryCache().subscribe(({ query }) => {
+    if (query.queryKey.length !== 1 || query.queryKey[0] !== 'session') return;
+    const next = key();
+    if (next === previous) return;
+    previous = next;
+    revision++;
+    for (const listener of listeners) listener();
+  });
+  return {
+    read,
+    snapshot: () => revision,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+export function reportSessionSource(client: QueryClient) {
+  let source = reportSessionSources.get(client);
+  if (!source) {
+    source = observeReportSession(client);
+    reportSessionSources.set(client, source);
+  }
+  return source;
+}
+export function reportViewerIsReady(session: ReportSession | undefined, viewerId: string): boolean {
+  return !!viewerId && session?.state === 'signed-in' && session.subject === viewerId && !!session.csrfToken;
+}
+
+/** Browser preparation preserves the original session across the native read and route admission. */
+export async function prepareModerationReportRead(
+  client: QueryClient,
+  input: ReportReadInput,
+  read: (input: ReportReadInput) => Promise<PrivateReportPage>,
+  signal: AbortSignal,
+): Promise<PrivateReportPage> {
+  const source = reportSessionSource(client);
+  const revision = source.snapshot();
+  const page = await read(input);
+  signal.throwIfAborted();
+  if (typeof window === 'undefined') return page;
+  if (source.snapshot() !== revision || !reportViewerIsReady(source.read(), page.viewerId))
+    return { ...page, reports: [], targets: [], revisions: [], next: null, state: 'denied', browserRevision: revision };
+  return { ...page, browserRevision: revision };
 }

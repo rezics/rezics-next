@@ -1,7 +1,18 @@
-import { useId, useState } from 'react';
+import { useContext, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { DEFAULT_REPORT_SELECTION, type ReportSelection, type ReportReadState } from './reports-read';
+import {
+  DEFAULT_REPORT_SELECTION,
+  reportPageIsCurrent,
+  reportSessionSource,
+  reportViewerIsReady,
+  reportSelection,
+  type PrivateReportPage,
+  type ReportReadInput,
+  type ReportSelection,
+  type ReportReadState,
+} from './reports-read';
 import { useSession } from '../session/query';
 import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
@@ -18,6 +29,148 @@ export type ModerationTarget = ResolvedReportTarget;
 const submitReportAction: ReportQueueAction = async (data) => {
   return actionOnReport({ data, headers: csrfHeaders() });
 };
+
+export type ReportNavigation = { isCurrent: () => boolean; subscribe: (retire: () => void) => () => void };
+// Each native read allocates its own original input object. Shallow loader copies retain this
+// read token; weak retention cannot accumulate a history of private pages.
+const retiredReads = new WeakSet<ReportReadInput>();
+const serverReady = () => false;
+
+/** Default route binding. Only a fresh native read can replace a retired private visit. */
+export function ModerationReportsPage(props: {
+  page: PrivateReportPage;
+  input: ReportReadInput;
+  active?: boolean;
+  navigation?: ReportNavigation;
+  onAction?: ReportQueueAction;
+  onNext?: (cursor: string) => void;
+  onSelection?: (selection: ReportSelection) => void | Promise<void>;
+  onRestart?: () => void;
+  onRetry?: () => void;
+  onRefresh?: () => Promise<void>;
+}) {
+  const client = useContext(QueryClientContext);
+  const source = client && typeof window !== 'undefined' ? reportSessionSource(client) : undefined;
+  const visit = useRef<ReturnType<typeof createVisit> | null>(null);
+  function createVisit() {
+    const original = props;
+    const page = original.page;
+    const revision = page.browserRevision ?? source?.snapshot();
+    let retired = retiredReads.has(page.input);
+    let connected = true;
+    let serial = 0;
+    const listeners = new Set<() => void>();
+    const retire = () => {
+      if (retired) return;
+      retired = true;
+      serial++;
+      retiredReads.add(page.input);
+      for (const listener of listeners) listener();
+    };
+    const observe = () => {
+      if (source && (source.snapshot() !== revision || !reportViewerIsReady(source.read(), page.viewerId))) retire();
+      if (original.navigation?.isCurrent() === false) retire();
+      return retired;
+    };
+    const isCurrent = () => connected && !observe();
+    const leave = (callback: (() => void) | undefined) => {
+      if (!isCurrent()) return;
+      retire();
+      callback?.();
+    };
+    return {
+      page,
+      source,
+      action: original.onAction,
+      navigation: original.navigation,
+      retire,
+      observe,
+      isCurrent,
+      subscribe(listener: () => void) {
+        connected = true;
+        listeners.add(listener);
+        const disconnectSession = source?.subscribe(() => {
+          observe();
+        });
+        const disconnectNavigation = original.navigation?.subscribe(retire);
+        observe();
+        return () => {
+          connected = false;
+          serial++;
+          listeners.delete(listener);
+          disconnectSession?.();
+          disconnectNavigation?.();
+          // Strict Mode may reconnect synchronously; disconnected settlements are already fenced.
+          queueMicrotask(() => {
+            if (!connected) retire();
+          });
+        };
+      },
+      next: (cursor: string) => leave(() => original.onNext?.(cursor)),
+      select: (selection: ReportSelection) =>
+        leave(() => {
+          void original.onSelection?.(selection);
+        }),
+      restart: () => leave(original.onRestart),
+      retry: () => leave(original.onRetry),
+      async refresh() {
+        if (!isCurrent()) return;
+        const attempt = serial;
+        await original.onRefresh?.();
+        if (!isCurrent() || attempt !== serial) return;
+      },
+      async submit(input: Parameters<ReportQueueAction>[0]) {
+        // Keep the original transport and exact intent. A retired caller never starts it.
+        if (!isCurrent()) return;
+        return (original.onAction ?? submitReportAction)(input);
+      },
+    };
+  }
+  const previous = visit.current;
+  if (!previous || previous.page.generation !== props.page.generation) {
+    previous?.retire();
+    visit.current = createVisit();
+  }
+  const current = visit.current!;
+  if (
+    current.page !== props.page ||
+    current.source !== source ||
+    current.action !== props.onAction ||
+    current.navigation !== props.navigation ||
+    props.active === false ||
+    !reportPageIsCurrent(props.page, props.input)
+  )
+    current.retire();
+  const retired = useSyncExternalStore(current.subscribe, current.observe, serverReady);
+  // The browser cache is authoritative even before a session hook has hydrated. Standalone SSR
+  // fixtures have no browser source; they retain only their explicit prepared native admission.
+  if (retired || current.observe()) return <p role="status">{m.moderation_target_unavailable()}</p>;
+  const { page } = current;
+  const input = page.input;
+  return (
+    <ModerationReportsView
+      key={page.generation}
+      boardId={input.boardId}
+      {...(input.threadId ? { threadId: input.threadId } : {})}
+      {...(input.postId ? { postId: input.postId } : {})}
+      selection={reportSelection(input)}
+      viewerId={page.viewerId}
+      reports={page.reports}
+      targets={page.targets}
+      revisions={page.revisions}
+      next={page.next}
+      state={page.state}
+      queueIdentity={page.generation}
+      isCurrent={current.isCurrent}
+      onAction={current.submit}
+      {...(props.onNext ? { onNext: current.next } : {})}
+      {...(props.onSelection ? { onSelection: current.select } : {})}
+      {...(props.onRestart ? { onRestart: current.restart } : {})}
+      {...(props.onRetry ? { onRetry: current.retry } : {})}
+      {...(props.onRefresh ? { onRefresh: current.refresh } : {})}
+    />
+  );
+}
 
 export function ModerationReportsView({
   reports,
@@ -37,7 +190,11 @@ export function ModerationReportsView({
   onSelection,
   onRestart,
   viewerId,
+  queueIdentity,
+  isCurrent,
 }: {
+  queueIdentity?: string;
+  isCurrent?: () => boolean;
   boardId?: string;
   state?: ReportReadState;
   selection?: ReportSelection;
@@ -57,6 +214,7 @@ export function ModerationReportsView({
   onAction?: ReportQueueAction;
 }) {
   const session = useSession();
+  const browserClient = useContext(QueryClientContext);
   const controlsId = useId();
   const [retired, setRetired] = useState(false);
   const select = (value: ReportSelection) => {
@@ -65,7 +223,7 @@ export function ModerationReportsView({
   };
   const evidence = [...targets, ...revisions].map((target) => moderationEvidence(target.value));
   if (
-    session.state !== 'unknown' &&
+    ((browserClient !== undefined && typeof window !== 'undefined') || session.state !== 'unknown') &&
     ((viewerId !== undefined && (session.state !== 'signed-in' || session.subject !== viewerId)) ||
       evidence.some((item) => item && (session.state !== 'signed-in' || session.subject !== item.viewerId)))
   )
@@ -160,20 +318,24 @@ export function ModerationReportsView({
         </Button>
       </fieldset>
       <BoardReportQueue
+        {...(isCurrent ? { isCurrent } : {})}
         bulkEnabled={tab === 'reports'}
-        queueIdentity={JSON.stringify([
-          boardId,
-          threadId,
-          postId,
-          tab,
-          selection.status,
-          selection.targetKind,
-          selection.order,
-          viewerId,
-          session.state,
-          session.subject,
-          session.csrfToken,
-        ])}
+        queueIdentity={
+          queueIdentity ??
+          JSON.stringify([
+            boardId,
+            threadId,
+            postId,
+            tab,
+            selection.status,
+            selection.targetKind,
+            selection.order,
+            viewerId,
+            session.state,
+            session.subject,
+            session.csrfToken,
+          ])
+        }
         reports={reports}
         targets={targets}
         revisions={revisions}
