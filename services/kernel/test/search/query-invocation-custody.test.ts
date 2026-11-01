@@ -14,7 +14,6 @@ import {
   searchSubjects,
   SUGGEST_TEMPLATE,
   suggestSubjects,
-  type HitResult,
   type SearchPlan,
 } from '../../src/search/query.ts';
 import { searchRatingSubjectHits, searchRatingSubjects, type RatingQueryPlan } from '../../src/search/rating-query.ts';
@@ -158,7 +157,7 @@ for (const counted of [true, false]) {
     test(`query invocation custody: ordinary counted=${counted} empty=${empty} concurrent requests and owned results`, async () => {
       const settlements: number[] = [];
       const work = { bytes: 4 * 1024 * 1024, deadline: Date.now() + 120_000, settle: (bytes: number) => { settlements.push(bytes); } };
-      const input = { ...definition(empty), sort: 'name' as SearchPlan['sort'], size: 4, generation: 1, after: ['', id(0)], work };
+      const input = { ...definition(empty), sort: 'name' as SearchPlan['sort'], size: 4, generation: 1, after: ['', id(0)] as (string | number | null)[], work };
       const admitted = structuredClone({ ...input, work: undefined });
       const invoke = counted ? searchSubjects : searchSubjectHits;
       const healthy = await invoke(native, prefix, admitted);
@@ -172,7 +171,7 @@ for (const counted of [true, false]) {
       const callB = await second.next();
       expect(callB.sent).toEqual(callA.sent);
       mutateDefinition(input);
-      input.after.splice(0, 2, null as never, id(4));
+      input.after.splice(0, 2, null, id(4));
       input.generation = 2;
       input.size = 1;
       input.sort = 'id';
@@ -307,12 +306,13 @@ for (const surface of ratingSurfaces) {
       const phaseA = await observer.next();
       const otherA = concurrent ? await concurrent.next() : undefined;
       const aParams = params(phaseA);
+      const firstCountOnly = surface.counted && admitted.ratingPhase === 'unscored' && admitted.rating.priorEpoch !== null;
       expect(aParams.query).toEqual(admitted.query);
-      expect(aParams.after).toEqual(admitted.after);
+      expect(aParams.after).toEqual(firstCountOnly ? undefined : admitted.after);
       expect(aParams.boost).toBe(JSON.stringify(admitted.boost));
       expect(aParams.overflow_properties).toEqual([property]);
-      expect(aParams.size).toBe(admitted.size);
-      expect(JSON.stringify(aParams.filter)).toContain('schema:Book' === admitted.filter.bool.filter[0]!.terms.type[0] ? 'schema:Book' : 'schema:Recipe');
+      expect(aParams.size).toBe(firstCountOnly ? 0 : admitted.size);
+      expect(JSON.stringify(aParams.filter)).toContain(admitted.filter.bool.filter[0]!.terms.type[0]!);
       if (admitted.rating.priorEpoch !== null) expect(JSON.stringify(aParams.filter)).toContain('"rating_prior_epoch":7');
       if (otherA) expect(otherA.sent).toEqual(phaseA.sent);
       poison(phaseA.request);
@@ -322,7 +322,7 @@ for (const surface of ratingSurfaces) {
       input.overflowProperties.length = 0;
       phaseA.release();
       otherA?.release();
-      const hasSecond = admitted.rating.priorEpoch !== null && (surface.counted || scenario !== 'full');
+      const hasSecond = admitted.rating.priorEpoch !== null && (surface.counted || (admitted.ratingPhase === 'scored' && scenario !== 'full'));
       if (hasSecond) {
         const phaseB = await observer.next();
         const otherB = concurrent ? await concurrent.next() : undefined;
@@ -361,7 +361,7 @@ for (const surface of ratingSurfaces) {
         for (const call of recording.calls.slice(1)) {
           expect(call.path).toBe(`/${index}/_search/template`);
           expect((call.sent as { id: string }).id).toBe(`${prefix}${surface.counted ? SEARCH_TEMPLATE : HIT_TEMPLATE}`);
-          if (!surface.counted && call !== phaseA && call !== otherA) expect(call.reply.hits).not.toHaveProperty('total');
+          if (!surface.counted) expect(call.reply.hits).not.toHaveProperty('total');
           poison(call.reply);
         }
       }
