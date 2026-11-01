@@ -3,6 +3,10 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { PlusIcon } from 'lucide-react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { personalRead } from '../kernel/query';
+import { useSession } from '../session/query';
 import { browseCollectionTitle } from './collection-browser';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -12,11 +16,136 @@ import { PinControl } from './pin-control';
 import type { LibraryPinsRead } from './pins-read';
 import type { MineCollection, MineCollectionsPage } from './mine-collections';
 import {
+  readMineCollectionsViewerPage,
+  type MineCollectionsAddress,
+  type MineCollectionsViewerPage,
+} from './mine-collections-route';
+import {
   CollectionBrowseList,
   CollectionBrowseToolbar,
   type CollectionBrowseLayout,
   type CollectionBrowseRecord,
 } from './collection-browser';
+
+const subscribe = () => () => {};
+function matchesViewer(page: MineCollectionsViewerPage | undefined, subject: string, address: MineCollectionsAddress) {
+  return (
+    page?.sessionSubject === subject &&
+    page.page.signedIn &&
+    page.requested.cursor === address.cursor &&
+    page.requested.layout === address.layout
+  );
+}
+
+/** The default private route observes the browser viewer independently of retained loader data. */
+export function MineCollectionsCurrentViewer({
+  initial,
+  layout = 'rows',
+  cursor,
+}: {
+  initial: MineCollectionsViewerPage;
+  layout?: CollectionBrowseLayout;
+  cursor?: string;
+}) {
+  const hydrated = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
+  const session = useSession();
+  const canList = useOperation('collection.list');
+  const canListPins = useOperation('library_pin.list');
+  const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
+  const admitted = !hydrated || canList;
+  const pinsAdmitted = !hydrated || canListPins;
+  const address: MineCollectionsAddress = { cursor: cursor || null, layout };
+  const locale = getLocale();
+  const key = JSON.stringify([subject, admitted, pinsAdmitted, address.cursor, layout, locale]);
+  const [lifetime, setLifetime] = useState({ key, generation: 0, seed: true });
+  if (lifetime.key !== key) setLifetime({ key, generation: lifetime.generation + 1, seed: false });
+
+  if (!subject || !admitted) {
+    const page: MineCollectionsPage = {
+      signedIn: hydrated ? session.state !== 'signed-out' : initial.page.signedIn,
+      state: session.state === 'unknown' ? 'preparing' : subject && !admitted ? 'denied' : 'unavailable',
+      collections: [],
+      next: null,
+    };
+    return (
+      <MineCollectionsPageView page={page} pins={{ state: 'closed' }} layout={layout} {...(cursor ? { cursor } : {})} />
+    );
+  }
+  return (
+    <MineCollectionsViewerRead
+      key={lifetime.generation}
+      subject={subject}
+      address={address}
+      locale={locale}
+      hydrated={hydrated}
+      pinsAdmitted={pinsAdmitted}
+      initial={initial}
+      seed={lifetime.seed}
+    />
+  );
+}
+
+function MineCollectionsViewerRead({
+  subject,
+  address,
+  locale,
+  hydrated,
+  pinsAdmitted,
+  initial,
+  seed,
+}: {
+  subject: string;
+  address: MineCollectionsAddress;
+  locale: string;
+  hydrated: boolean;
+  pinsAdmitted: boolean;
+  initial: MineCollectionsViewerPage;
+  seed: boolean;
+}) {
+  // A retired admission/address cannot reuse a previous lifetime's private cache, including ABA returns.
+  const [lifetime] = useState(() => crypto.randomUUID());
+  const queryKey = ['mine-collections-current-viewer', subject, locale, address.cursor, address.layout, lifetime];
+  const query = useQuery({
+    ...personalRead,
+    queryKey,
+    enabled: hydrated && personalRead.enabled,
+    queryFn: () =>
+      readMineCollectionsViewerPage({ data: { cursor: address.cursor ?? undefined, layout: address.layout } }),
+    initialData: seed && matchesViewer(initial, subject, address) ? initial : undefined,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  // Router invalidation (including a completed pin command) refreshes this lifetime's
+  // actual read. A retained loader response never becomes a fallback for a replacement.
+  const previousLoader = useRef(initial);
+  useEffect(() => {
+    if (previousLoader.current === initial) return;
+    previousLoader.current = initial;
+    void query.refetch();
+  }, [initial, query.refetch]);
+  const accepted = !query.isError && matchesViewer(query.data, subject, address) ? query.data : undefined;
+  return (
+    <MineCollectionsPageView
+      page={
+        accepted?.page ?? {
+          signedIn: true,
+          state: query.isError || query.data ? 'unavailable' : 'preparing',
+          collections: [],
+          next: null,
+        }
+      }
+      pins={accepted && pinsAdmitted ? accepted.pins : { state: 'closed' }}
+      layout={address.layout}
+      {...(address.cursor ? { cursor: address.cursor } : {})}
+    />
+  );
+}
 
 function browseRecords(collections: readonly MineCollection[]): CollectionBrowseRecord[] {
   return collections.map((collection) => ({ ...collection, preview: collection.preview ?? { state: 'unavailable' } }));
