@@ -21,7 +21,6 @@ import {
 } from './agent-identity-retirement.ts';
 import {
   historyDeadline,
-  lockHistoryBarrier,
   readHistoryReceivingReceipt,
   type HistoryReceivingContext,
   type HistoryReceivingDependencies,
@@ -408,7 +407,8 @@ export async function verifyAgentIdentityInventory(
   // cross-home barrier courier here; do not read that foreign Account home while held.
   if (partitionOf(barrier.accountRoute) !== current.proof.original.partition)
     return pending('agent-identity-source-barrier-home-unavailable');
-  if (!(await lockHistoryBarrier(tx, barrier))) return pending('agent-identity-barrier-changed');
+  // Receiving rows bind the exact barrier below. Current native barrier revalidation
+  // belongs to the optional Source owner stage and its existing funding reservation.
   for (const artifact of current.proof.artifacts) {
     const locator = artifact.locator;
     const encoded = Buffer.from(encodeLocator(locator));
