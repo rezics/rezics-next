@@ -140,13 +140,14 @@ function DecisionBoundPage(props: DecisionPageProps) {
   if (client !== originalClient || props.navigation !== original.navigation || props.onRefresh !== original.onRefresh ||
     props.onAppeal !== original.onAppeal || !sameDecision(props.page.decision, original.page.decision)) owner?.retire();
   useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
+  if (typeof window !== 'undefined' && !client) return <DecisionReadStatus state="closed" />;
   if (owner && (!owner.healthy() || !owner.available())) {
     return <DecisionFreshRecovery
       key={page.readGeneration ?? page.decision.id}
       state={owner.healthy() ? 'unavailable' : 'closed'}
       original={page}
       read={original.onRefresh ?? refreshDecision}
-      allowed={() => client === originalClient && original.navigation?.isCurrent() !== false}
+      allowed={() => client === originalClient && owner.canRecover()}
       prepare={(id, read) => prepareDecisionRead(client!, id, read)}
       onAdmit={(next) => {
         owner.retire();

@@ -108,6 +108,7 @@ let next: string | null;
 let listFailure: number | undefined;
 let targetAvailability: 'available' | 'withheld' | 'erased';
 let readGate: ReturnType<typeof deferred<Response>> | undefined;
+let listStarted: ReturnType<typeof deferred<void>> | undefined;
 const reads: Request[] = [];
 const sends: (ReturnType<typeof deferred<Response>> & { request: Request })[] = [];
 const inputs: ReportActionInput[] = [];
@@ -126,6 +127,7 @@ const native = createKernelClient('https://kernel.test', {
     }
     reads.push(request);
     if (path.endsWith('/reports')) {
+      listStarted?.resolve();
       expect(request.cache).toBe('no-store');
       expect(new URL(request.url).searchParams.get('limit')).toBe('20');
       if (readGate) {
@@ -164,7 +166,7 @@ const { createRoot } = await import('react-dom/client');
 const { flushSync } = await import('react-dom');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
-const { readModerationReportPage, prepareModerationReportRead } = await import('../src/moderation/reports-read');
+const { loadModerationReportsRequest, prepareModerationReportRead } = await import('../src/moderation/reports-read');
 const { ModerationReportsPage } = await import('../src/moderation/reports-page');
 const { m } = await import('../src/paraglide/messages.js');
 type Props = ComponentProps<typeof ModerationReportsPage>;
@@ -189,13 +191,20 @@ const navigation = {
   },
 };
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-const fresh = (scope = input) =>
-  prepareModerationReportRead(
-    client,
-    scope,
-    (data) => readModerationReportPage(native, data, 'Bearer original-reader', viewer().subject),
-    new AbortController().signal,
-  );
+// Accepted 924 provenance replaces the former subject-only fixture admission. The only
+// deferred authentication surface is the platform credential transport on this same Request.
+const environment = {
+  AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
+  SESSIONS: { idFromName: (name: string) => name, get: () => ({ credential: async () => ({
+    status: 'active', subject: viewer().subject, accessToken: 'original-reader', csrfToken: viewer().csrfToken,
+  }) }) },
+} as unknown as import('../src/session/client').SessionEnv;
+const actualRead = (data: ReportReadInput) => loadModerationReportsRequest(
+  new Request('https://site.test/boards/moderation', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } }),
+  environment, data, () => native,
+);
+const fresh = (scope = input) => prepareModerationReportRead(client, scope, actualRead, new AbortController().signal);
 async function paint(patch: Partial<Props> = {}) {
   props = { ...props, ...patch };
   await act(async () =>
@@ -435,7 +444,10 @@ test('loader read keeps original scope, selection, post precedence and session t
   const scope = { ...input, threadId: id(30), postId: post.id, cursor: 'original-cursor' };
   const gate = deferred<Response>();
   readGate = gate;
+  listStarted = deferred<void>();
   const pending = fresh(scope);
+  await listStarted.promise;
+  listStarted = undefined;
   const list = new URL(reads.at(-1)!.url);
   expect(list.pathname).toBe(`/v1/posts/${post.id}/reports`);
   expect(Object.fromEntries(list.searchParams)).toEqual({
@@ -459,7 +471,7 @@ test('loader read keeps original scope, selection, post precedence and session t
   const aborted = prepareModerationReportRead(
     client,
     input,
-    (data) => readModerationReportPage(native, data, 'Bearer reader', viewer().subject),
+    actualRead,
     abort.signal,
   );
   abort.abort();

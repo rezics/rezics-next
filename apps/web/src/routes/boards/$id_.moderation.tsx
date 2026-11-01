@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   createFileRoute,
   useNavigate,
@@ -22,7 +22,7 @@ import {
 import { ModerationReportsPage, ModerationReportsView } from '../../moderation/reports-page';
 import { loadModerationAppeals } from '../../moderation/appeals-read';
 import { ModerationAppealsPage, ModerationAppealsView } from '../../moderation/appeals-tab';
-import { appealReadKey, moderationAppealInput, prepareModerationAppealRead } from '../../moderation/appeals-read-model';
+import { moderationAppealInput, prepareModerationAppealRead } from '../../moderation/appeals-read-model';
 
 export const Route = createFileRoute('/boards/$id_/moderation')({
   beforeLoad: requireSignedIn,
@@ -200,34 +200,46 @@ function ModerationReportsError({ reset, error }: ErrorComponentProps) {
   const { tab, thread, post } = search;
   const navigate = useNavigate();
   const selection = reportSelection(search);
+  const original = useRef({ location: router.state.location, active: true });
+  const pending = useRef(false);
+  useEffect(() => {
+    original.current.active = true;
+    return () => { original.current.active = false; };
+  }, []);
+  const current = () => original.current.active && router.state.location === original.current.location;
+  const retry = () => {
+    if (!current() || pending.current) return;
+    pending.current = true;
+    void router.invalidate({ sync: true }).then(() => {
+      if (current()) reset();
+    }).catch(() => { /* The loader owns the current safe error result. */ }).finally(() => { if (current()) pending.current = false; });
+  };
   if (tab === 'appeals') {
-    const input = moderationAppealInput(id, search);
     return (
-      <ModerationAppealsPage
-        page={{
-          appeals: [],
-          targets: [],
-          next: null,
-          viewerId: null,
-          readKey: appealReadKey(input),
-          generation: 'route-error',
-          state: isPlatformClosedError(error) ? 'closed' : 'unavailable',
-        }}
-        input={input}
-        onNext={(cursor) =>
+      <ModerationAppealsView
+        appeals={[]}
+        targets={[]}
+        next={null}
+        state={isPlatformClosedError(error) ? 'closed' : 'unavailable'}
+        {...(thread ? { threadId: thread } : {})}
+        {...(post ? { postId: post } : {})}
+        onRetry={retry}
+        onNext={(cursor) => {
+          if (!current()) return;
           void navigate({
             to: '/boards/$id/moderation',
             params: { id },
             search: { ...selection, tab: 'appeals', ...(thread ? { thread } : {}), ...(post ? { post } : {}), cursor },
-          })
-        }
-        onRestart={() =>
+          });
+        }}
+        onRestart={() => {
+          if (!current()) return;
           void navigate({
             to: '/boards/$id/moderation',
             params: { id },
             search: { ...selection, tab: 'appeals', ...(thread ? { thread } : {}), ...(post ? { post } : {}) },
-          })
-        }
+          });
+        }}
         reportsSearch={`?${new URLSearchParams({ ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) })}`}
       />
     );
@@ -250,9 +262,7 @@ function ModerationReportsError({ reset, error }: ErrorComponentProps) {
       targets={[]}
       next={null}
       state="error"
-      onRetry={() => {
-        void router.invalidate().then(reset);
-      }}
+      onRetry={retry}
     />
   );
 }

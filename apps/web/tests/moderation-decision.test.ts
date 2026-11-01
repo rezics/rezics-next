@@ -371,6 +371,8 @@ test('The default private Decision page retires statements, appeal drafts and la
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
   const { readDecisionPage } = await import('../src/moderation/decision-read');
+  const { prepareDecisionRead } = await import('../src/moderation/decision-read-model');
+  const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
   const { m } = await import('../src/paraglide/messages.js');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
@@ -472,6 +474,7 @@ test('The default private Decision page retires statements, appeal drafts and la
   );
   type Page = Awaited<ReturnType<typeof readDecisionPage>>;
   let page: Page;
+  const load = (id: string) => prepareDecisionRead(cache, id, (id) => readDecisionPage({ data: { id } }));
   async function render(next = page) {
     page = next;
     await act(async () =>
@@ -508,8 +511,12 @@ test('The default private Decision page retires statements, appeal drafts and la
   };
   try {
     await session('author-1', 'AAAAAAAAAAAAAAAAAAAAAA');
-    page = await readDecisionPage({ data: { id: decision.id } });
-    expect(page).toMatchObject({ target: null, viewerId: 'author-1', sessionEpoch: 'AAAAAAAAAAAAAAAAAAAAAA' });
+    page = await load(decision.id);
+    // Accepted non-secret prepared provenance replaces the old raw-CSRF serialization oracle.
+    expect(page).toMatchObject({ target: null, viewerId: 'author-1', readerOrigin: {
+      subject: 'author-1', csrfFingerprint: await privateReaderFingerprint('AAAAAAAAAAAAAAAAAAAAAA'),
+    } });
+    expect(JSON.stringify(page)).not.toContain('AAAAAAAAAAAAAAAAAAAAAA');
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
     expect(calls.map((request) => new URL(request.url).pathname)).toEqual([
       '/v1/moderation-decisions/decision-1',
@@ -595,13 +602,13 @@ test('The default private Decision page retires statements, appeal drafts and la
     expect(calls).toHaveLength(beforeDenial + 1);
 
     mode = 'ready';
-    const second = await readDecisionPage({ data: { id: 'decision-2' } });
+    const second = await load('decision-2');
     await render(second);
     gateRead = new Promise((resolve) => {
       releaseRead = resolve;
     });
     await click(m.decision_refresh());
-    const third = await readDecisionPage({ data: { id: 'decision-3' } });
+    const third = await load('decision-3');
     await render(third);
     await act(async () => {
       releaseRead();
@@ -620,7 +627,7 @@ test('The default private Decision page retires statements, appeal drafts and la
     expect(host.textContent).toContain(m.moderation_decision_read_platform_closed());
     expect(host.querySelector('button')).toBeNull();
     mode = 'ready';
-    await render(await readDecisionPage({ data: { id: 'decision-3' } }));
+    await render(await load('decision-3'));
     gateRead = new Promise((resolve) => {
       releaseRead = resolve;
     });

@@ -262,13 +262,17 @@ test('reported post documents are extracted from the block profile read shape', 
   expect(markup).toContain('Reported block post text');
 });
 
-test('the reports route is signed-in, noindex, private, and maps a refused read to not found', async () => {
+test('the reports route is signed-in, noindex, private, and conceals refused reads', async () => {
   const route = await Bun.file(new URL('../src/routes/boards/$id_.moderation.tsx', import.meta.url)).text();
   const read = await Bun.file(new URL('../src/moderation/reports-read.ts', import.meta.url)).text();
   expect(route).toContain('beforeLoad: requireSignedIn');
   expect(route).toContain("robots: 'noindex, nofollow'");
   expect(read).toContain("setResponseHeader('cache-control', 'private, no-store')");
-  expect(read).toContain('if (result.error || !result.data) throw notFound()');
+  // The accepted reader contract replaces the old single throw/source-string oracle with
+  // unavailable/denied page states. Native refusal still conceals all private evidence;
+  // the connected campaign exercises those outcomes through the actual loader.
+  expect(read).toContain('if (!authorization || !readerOrigin) throw notFound()');
+  expect(read).toContain("[401, 403, 404].includes(status) ? 'denied' : 'error'");
 });
 
 test('the board actions menu exposes moderation only to signed-in viewers', async () => {

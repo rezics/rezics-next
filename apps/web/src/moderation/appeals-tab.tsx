@@ -52,7 +52,7 @@ function AppealsVisit(props: AppealsPageProps) {
     props.navigation !== original.navigation || props.read !== original.read ||
     !appealPageIsCurrent(props.page, props.input) || appealReadKey(props.input) !== appealReadKey(original.input)) owner?.retire();
   useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
-  const current = () => !owner || owner.isCurrent();
+  const current = () => owner ? owner.isCurrent() : typeof window === 'undefined';
   async function retry() {
     if (!current() || retrying.current || data.state !== 'unavailable') return;
     retrying.current = true;
@@ -82,7 +82,7 @@ function AppealsVisit(props: AppealsPageProps) {
     action?.();
   };
   const commandCurrent = owner?.canCommand;
-  const state = owner && !owner.healthy() ? 'closed' : owner && !owner.available() && data.state === 'ready'
+  const state = (typeof window !== 'undefined' && !owner) || (owner && !owner.healthy()) ? 'closed' : owner && !owner.available() && data.state === 'ready'
     ? 'unavailable' : data.state;
   return (
     <div onClickCapture={(event) => {
@@ -211,7 +211,7 @@ export function ModerationAppealsView({
               (appeal.canResolve === true || (appeal.canResolve === undefined && canResolve?.(appeal) === true)) &&
               (!viewerId || viewerId !== appeal.decision.deciderId) &&
               (canResolve?.(appeal) ?? true);
-            return <AppealCard key={appeal.id} appeal={appeal} target={target} mayResolve={mayResolve} />;
+            return <AppealCard key={appeal.id} appeal={appeal} target={target} mayResolve={mayResolve} {...(isCurrent ? { isCurrent } : {})} />;
           })}
         </ol>
       ) : (

@@ -297,15 +297,19 @@ test('The default private Appeals route recovers bounded reads and retires priva
   const { act } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { createKernelClient } = await import('@rezics/client');
-  const { readModerationAppealPage } = await import('../src/moderation/appeals-read');
+  const { loadModerationAppealsRequest } = await import('../src/moderation/appeals-read');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { ModerationAppealsPage } = await import('../src/moderation/appeals-tab');
-  const { moderationAppealInput, appealPageIsCurrent, createAppealReadLifetime } =
+  const { moderationAppealInput, appealPageIsCurrent, createAppealReadLifetime, prepareModerationAppealRead } =
     await import('../src/moderation/appeals-read-model');
   const { m } = await import('../src/paraglide/messages.js');
   const route = await Bun.file(new URL('../src/routes/boards/$id_.moderation.tsx', import.meta.url)).text();
   expect(route).toContain('<ModerationAppealsPage');
   expect(route).toContain('moderationAppealInput(params.id, deps)');
-  expect(route).toContain('abortController.signal.throwIfAborted()');
+  // Abort admission moved to the shared original-observation preparation, before and after read.
+  expect(route).toContain('abortController.signal');
+  const preparation = await Bun.file(new URL('../src/moderation/private-reader-lifetime.ts', import.meta.url)).text();
+  expect(preparation).toContain('signal?.throwIfAborted()');
   expect(route).toContain('appealPage.navigationKey === appealNavigationKey');
   expect(route).toContain("search: { ...selection, tab: 'appeals'");
 
@@ -346,8 +350,22 @@ test('The default private Appeals route recovers bounded reads and retires priva
   });
   const first = moderationAppealInput(id(1), { thread: id(2), post: id(3) });
   const later = { ...first, cursor: 'opaque+next/==' };
-  const read = (input: typeof first) => readModerationAppealPage(client, input, 'Bearer reviewer', id(900));
-  const ready = await read(first);
+  // Actual same-prepared provenance replaces subject-only default fixture admission.
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  cache.setQueryData(['session'], { state: 'signed-in', subject: id(900), csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' });
+  const environment = {
+    AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
+    SESSIONS: { idFromName: (name: string) => name, get: () => ({ credential: async () => ({
+      status: 'active', subject: id(900), accessToken: 'reviewer', csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+    }) }) },
+  } as unknown as import('../src/session/client').SessionEnv;
+  const read = (input: typeof first) => loadModerationAppealsRequest(
+    new Request('https://site.test/boards/moderation', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } }),
+    environment, input, () => client,
+  );
+  const preparedRead = (input: typeof first) => prepareModerationAppealRead(cache, input, read);
+  const ready = await preparedRead(first);
   expect(ready.state).toBe('ready');
   expect(ready.viewerId).toBe(id(900));
   expect(ready.appeals.map((row) => row.canResolve)).toEqual([true, false]);
@@ -403,7 +421,7 @@ test('The default private Appeals route recovers bounded reads and retires priva
     expect(appealPageIsCurrent(ready, changed)).toBe(false);
 
   mode = 'unavailable';
-  const failed = await read(later);
+  const failed = await preparedRead(later);
   expect(failed.appeals).toEqual([]);
   expect(failed.targets).toEqual([]);
   expect(failed.next).toBeNull();
@@ -432,7 +450,7 @@ test('The default private Appeals route recovers bounded reads and retires priva
   let key = 'later';
   const render = async (patch: Partial<Props> = {}) => {
     props = { ...props, ...patch };
-    await act(async () => root.render(createElement(ModerationAppealsPage, { ...props, key })));
+    await act(async () => root.render(createElement(QueryClientProvider, { client: cache }, createElement(ModerationAppealsPage, { ...props, key }))));
   };
   const click = async (name: string) => {
     const button = [...host.querySelectorAll('button')].find((item) => item.textContent === name);
@@ -464,14 +482,17 @@ test('The default private Appeals route recovers bounded reads and retires priva
     expect(host.querySelector('textarea')).toBeNull();
 
     key = 'retry-current-page';
-    await render({ page: failed });
+    mode = 'unavailable';
+    const newFailure = await preparedRead(later);
+    mode = 'ready';
+    await render({ page: newFailure });
     await click(m.moderation_appeals_read_retry());
     expect(host.textContent).toContain('PRIVATE appeal 1');
     expect(host.querySelectorAll('textarea')).toHaveLength(1);
     expect(new URL(calls.at(-2)!.url).searchParams.get('cursor')).toBe(later.cursor);
 
     mode = 'stale';
-    const stale = await read(later);
+    const stale = await preparedRead(later);
     key = 'restart-stale';
     let resets = 0;
     await render({
@@ -484,7 +505,7 @@ test('The default private Appeals route recovers bounded reads and retires priva
     await click(m.moderation_appeals_read_restart());
     expect(resets).toBe(1);
     mode = 'empty';
-    const reset = await read(first);
+    const reset = await preparedRead(first);
     key = 'reset-first-page';
     await render({ page: reset, input: first });
     expect(new URL(calls.at(-1)!.url).searchParams.has('cursor')).toBe(false);
@@ -493,7 +514,7 @@ test('The default private Appeals route recovers bounded reads and retires priva
 
     for (const value of ['sparse', 'closed'] as const) {
       mode = value;
-      const page = await read({ boardId: id(1), postId: id(3) });
+      const page = await preparedRead({ boardId: id(1), postId: id(3) });
       key = value;
       await render({ page, input: { boardId: id(1), postId: id(3) } });
       expect(host.textContent).toContain(
@@ -509,6 +530,7 @@ test('The default private Appeals route recovers bounded reads and retires priva
     );
   } finally {
     await act(async () => root.unmount());
+    cache.clear();
     await window.happyDOM.close();
     for (const [name, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);

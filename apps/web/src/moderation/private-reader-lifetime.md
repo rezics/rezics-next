@@ -21,6 +21,9 @@ authority. A same-cache handoff retains its original capture and abort signal. A
 captures its own known browser observation before comparing both the original expected fingerprint and actual origin.
 This cannot establish unobserved credential history between separate caches. A browser-produced read cannot move to
 another provider and borrow its observation. An old mounted owner cannot adopt a successor's provider or cleanup.
+The local handoff registry correlates the immutable receipt through default cache structural sharing. Its entry holds
+the original observation and signal, is claimed by one mounted owner, and is released on abort or retirement. Neither
+its correlation ID nor a copied response object authorizes a read without the actual-origin comparison.
 
 Each mounted owner checks its original input, provider, navigation, abort and connection. Retirement is monotonic and
 hides obsolete evidence; pending effects and late success, failure and finally callbacks cannot change a successor.

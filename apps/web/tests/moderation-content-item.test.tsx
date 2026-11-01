@@ -4,14 +4,14 @@ import { act, createElement, type ReactNode } from 'react';
 import type { Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Appeal } from '../src/moderation/appeals-read';
-import type { Report, PrivateReportPage } from '../src/moderation/reports-read';
+import type { Report } from '../src/moderation/reports-read';
 import type { ReportQueueAction } from '../src/moderation/reports-view-action';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const { reportReadKey, reportSessionSource } = await import('../src/moderation/reports-read');
+const { loadModerationReportsRequest, prepareModerationReportRead } = await import('../src/moderation/reports-read');
 
 const reportId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const longEvidence = `Full submitted evidence starts here.\n${'The evidence remains complete across its original paragraph. '.repeat(80)}End of submitted evidence.`;
@@ -529,25 +529,33 @@ test('the default Reports visit hides its private case when the same account rec
       targetKind: 'post' as const,
       order: 'newest' as const,
     };
-    const source = reportSessionSource(cache);
-    const page: PrivateReportPage = {
-      state: 'ready',
-      reports: [{ ...reportRows[0]!, evidence: 'PRIVATE_SESSION_EVIDENCE' }],
-      targets: [
-        {
-          key: `post:${reportRows[0]!.target.id}`,
-          kind: 'post',
-          value: { post: { id: reportRows[0]!.target.id, body: 'PRIVATE_SESSION_TARGET' } },
-        },
-      ],
-      revisions: [],
-      next: 'opaque/private/session-cursor==',
-      readKey: reportReadKey(input),
-      viewerId: 'moderator',
-      generation: 'generation-one',
-      input,
-      browserRevision: source.snapshot(),
+    // The prior hand-authored browserRevision DTO is replaced by actual Request preparation.
+    const { createKernelClient } = await import('@rezics/client');
+    const { fromPlainText } = await import('@rezics/document');
+    const row = { ...reportRows[0]!, evidence: 'PRIVATE_SESSION_EVIDENCE' };
+    const post = {
+      id: row.target.id, threadId: reportId(700), revisionId: row.revisionId ?? reportId(701),
+      authorId: reportId(702), availability: 'available', createdAt: row.createdAt, revisedAt: null,
+      licence: 'CC-BY-SA-4.0', sha256: 'a'.repeat(64), mediaIds: [],
+      body: fromPlainText('PRIVATE_SESSION_TARGET', 'blocks'),
     };
+    const native = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
+      const path = new URL(new Request(input, init).url).pathname;
+      if (path.endsWith('/reports')) return Response.json({ reports: [row], next: 'opaque/private/session-cursor==' });
+      if (path.startsWith(`/v1/posts/${post.id}`)) return Response.json({ post });
+      return Response.json({ code: 'not_found' }, { status: 404 });
+    } });
+    const environment = {
+      AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
+      WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
+      SESSIONS: { idFromName: (name: string) => name, get: () => ({ credential: async () => ({
+        status: 'active', subject: currentSession.subject, accessToken: 'moderator', csrfToken: currentSession.csrfToken,
+      }) }) },
+    } as unknown as import('../src/session/client').SessionEnv;
+    const page = await prepareModerationReportRead(cache, input, (data) => loadModerationReportsRequest(
+      new Request('https://site.test/boards/moderation', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } }),
+      environment, data, () => native,
+    ), new AbortController().signal);
     await render(createElement(ModerationReportsPage, { page, input }));
     expect(host.textContent).toContain('PRIVATE_SESSION_EVIDENCE');
     expect(host.textContent).toContain('PRIVATE_SESSION_TARGET');

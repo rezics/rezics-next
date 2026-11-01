@@ -95,6 +95,7 @@ test('The integrated private Appeals page retires its old statements and pending
   }));
   const { ModerationAppealsPage } = await import('../src/moderation/appeals-tab');
   const { loadModerationAppeals } = await import('../src/moderation/appeals-read');
+  const { prepareModerationAppealRead } = await import('../src/moderation/appeals-read-model');
   const { sessionQuery, useSession } = await import('../src/session/query');
   const { m } = await import('../src/paraglide/messages.js');
   const browserSession: ReturnType<typeof useSession> = originalSession;
@@ -178,6 +179,9 @@ test('The integrated private Appeals page retires its old statements and pending
     // Exercise visible private rows and both settlements of a pending default-reader retry.
     for (const scenario of ['ready', 'pending-success', 'pending-failure'] as const) {
       cache.setQueryData(sessionQuery.queryKey, browserSession);
+      // The original browser observation must precede the actual prepared read, even for an outage.
+      mode = scenario === 'ready' ? 'ready' : 'unavailable';
+      const prepared = await prepareModerationAppealRead(cache, input, (data) => loadModerationAppeals({ data }));
       await act(async () =>
         root.render(
           createElement(
@@ -185,7 +189,7 @@ test('The integrated private Appeals page retires its old statements and pending
             { client: cache },
             createElement(ModerationAppealsPage, {
               key: scenario,
-              page: scenario === 'ready' ? ready : unavailable,
+              page: prepared,
               input,
             }),
           ),

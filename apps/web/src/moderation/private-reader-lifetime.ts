@@ -4,6 +4,7 @@ import { privateReaderFingerprint, samePrivateReader, type PrivateReaderOrigin }
 type Session = { state: string; subject?: string | null; csrfToken?: string | null };
 export type PrivateReaderNavigation = { isCurrent: () => boolean; subscribe: (retire: () => void) => () => void };
 export type PrivateReaderBinding = {
+  id: string;
   source: string;
   revision: number;
   key: string;
@@ -14,7 +15,10 @@ export type PrivateReaderBinding = {
 export type PrivateReaderRead = { readerOrigin?: PrivateReaderOrigin | null; readerBinding?: PrivateReaderBinding };
 
 const sources = new WeakMap<QueryClient, ReturnType<typeof observeSession>>();
-const localBindings = new WeakMap<PrivateReaderBinding, { capture: Capture; signal?: AbortSignal }>();
+// The cache may structurally copy a receipt. Correlation retains the original observation and
+// abort signal; it never replaces the actual-origin comparison. Entries live only for a read owner.
+type Prepared = { capture: Capture; signal?: AbortSignal; owner?: symbol; release: () => void };
+const preparations = new WeakMap<QueryClient, Map<string, Prepared>>();
 const consumed = new WeakSet<PrivateReaderBinding>();
 const tuple = (session: Session | undefined) =>
   JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
@@ -85,17 +89,28 @@ export async function preparePrivateReaderRead<T extends PrivateReaderRead>(
   read: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T & { readerBinding: PrivateReaderBinding }> {
+  signal?.throwIfAborted();
   const capture = captureSession(client);
   const response = await read();
   signal?.throwIfAborted();
   const expected = await capture.expected;
   signal?.throwIfAborted();
   const readerBinding: PrivateReaderBinding = {
+    id: crypto.randomUUID(),
     source: capture.source.id, revision: capture.revision, key,
     placement: typeof window === 'undefined' ? 'server' : 'browser',
     expected, retired: !capture.current() || (!!response.readerOrigin && !samePrivateReader(expected, response.readerOrigin)),
   };
-  localBindings.set(readerBinding, { capture, ...(signal ? { signal } : {}) });
+  let records = preparations.get(client);
+  if (!records) { records = new Map(); preparations.set(client, records); }
+  const release = () => {
+    records.delete(readerBinding.id);
+    signal?.removeEventListener('abort', release);
+  };
+  if (!readerBinding.retired) {
+    records.set(readerBinding.id, { capture, ...(signal ? { signal } : {}), release });
+    signal?.addEventListener('abort', release, { once: true });
+  }
   return { ...response, readerBinding };
 }
 
@@ -107,13 +122,17 @@ export function createPrivateReaderLifetime(
   navigation?: PrivateReaderNavigation,
 ) {
   const binding = read.readerBinding;
-  const local = binding && localBindings.get(binding);
+  const local = binding && preparations.get(client)?.get(binding.id);
+  const identity = Symbol();
   const capture = local?.capture ?? captureSession(client);
   const source = privateReaderSessionSource(client);
   let retired = !binding || binding.retired || binding.key !== key || consumed.has(binding) ||
-    capture.client !== client || (binding.placement === 'browser' && binding.source !== source.id) ||
+    capture.client !== client || (binding.placement === 'browser' && (!local || binding.source !== source.id)) ||
+    !!local?.owner ||
     (binding.source === source.id && binding.revision !== source.snapshot());
   let verified = !!local && samePrivateReader(binding?.expected, read.readerOrigin);
+  const release = () => { if (!local?.owner || local.owner === identity) local?.release(); };
+  if (retired) release();
   let connected = false;
   let serial = 0;
   let version = 0;
@@ -124,6 +143,7 @@ export function createPrivateReaderLifetime(
     retired = true;
     serial++;
     if (binding) consumed.add(binding);
+    release();
     publish();
   };
   const observe = () => {
@@ -146,6 +166,7 @@ export function createPrivateReaderLifetime(
     available: () => observe() && verified,
     healthy: observe,
     isCurrent: () => connected && observe(),
+    canRecover: () => connected && !local?.signal?.aborted && navigation?.isCurrent() !== false,
     canCommand: () => connected && observe() && verified && capture.canCommand(),
     ticket: () => serial,
     owns: (ticket: number) => connected && observe() && ticket === serial,
@@ -157,6 +178,8 @@ export function createPrivateReaderLifetime(
       return verified;
     },
     subscribe(listener: () => void) {
+      if (local?.owner && local.owner !== identity) retire();
+      if (local && !local.owner) local.owner = identity;
       connected = true;
       listeners.add(listener);
       const stopSession = source.subscribe(observe);

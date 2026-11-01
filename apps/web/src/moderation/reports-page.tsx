@@ -35,7 +35,6 @@ export type ReportNavigation = { isCurrent: () => boolean; subscribe: (retire: (
 // Each native read allocates its own original input object. Shallow loader copies retain this
 // read token; weak retention cannot accumulate a history of private pages.
 const retiredReads = new WeakSet<ReportReadInput>();
-const serverReady = () => false;
 
 /** Default route binding. Only a fresh native read can replace a retired private visit. */
 export function ModerationReportsPage(props: {
@@ -97,7 +96,7 @@ export function ModerationReportsPage(props: {
           observe();
           for (const listener of listeners) listener();
         });
-        const disconnectNavigation = original.navigation?.subscribe(retire);
+        const disconnectNavigation = !owner ? original.navigation?.subscribe(retire) : undefined;
         observe();
         return () => {
           connected = false;
@@ -129,7 +128,8 @@ export function ModerationReportsPage(props: {
       },
       async submit(input: Parameters<ReportQueueAction>[0]) {
         // Keep the original transport and exact intent. A retired caller never starts it.
-        if (!isCurrent() || (owner && !owner.canCommand())) return;
+        if (!isCurrent()) return;
+        if (owner && !owner.canCommand()) return { ok: false as const, state: 'forbidden' as const };
         return (original.onAction ?? submitReportAction)(input);
       },
     };
@@ -154,12 +154,15 @@ export function ModerationReportsPage(props: {
   const retired = current.observe();
   // The browser cache is authoritative even before a session hook has hydrated. Standalone SSR
   // fixtures have no browser source; they retain only their explicit prepared native admission.
-  if (retired || current.observe() || (current.owner && !current.owner.available()))
+  if (retired || (typeof window !== 'undefined' && !browserClient) || (current.owner && !current.owner.available()))
     return (
       <ContentItemFrame as="div" role="status" className="p-4 sm:p-6">
         <ContentItemHeading level={2} className="text-base font-semibold">
           {m.moderation_target_unavailable()}
         </ContentItemHeading>
+        {!retired && current.owner?.healthy() && props.onRetry ? (
+          <Button onClick={current.retry}>{m.moderation_queue_retry()}</Button>
+        ) : null}
       </ContentItemFrame>
     );
   const { page } = current;
