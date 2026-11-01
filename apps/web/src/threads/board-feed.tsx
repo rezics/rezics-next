@@ -44,7 +44,9 @@ function ThreadCard({
         {preview ? (
           <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:text-base">{preview}</p>
         ) : null}
-        {openingUnavailable ? <p className="text-sm text-muted-foreground">{m.board_feed_opening_unavailable()}</p> : null}
+        {openingUnavailable ? (
+          <p className="text-sm text-muted-foreground">{m.board_feed_opening_unavailable()}</p>
+        ) : null}
       </>
     ) : null;
   const { replyCount, lastActivityAt } = threadActivity(thread);
@@ -68,7 +70,9 @@ function ThreadCard({
       headingLevel={3}
       titleDataSlot="board-feed-card"
       metadata={
-        available ? <Byline author={authors?.[thread.authorId]} createdAt={thread.createdAt} now={now} size="sm" /> : null
+        available ? (
+          <Byline author={authors?.[thread.authorId]} createdAt={thread.createdAt} now={now} size="sm" />
+        ) : null
       }
       preview={previewContent}
       actions={
@@ -99,7 +103,9 @@ function ThreadCard({
             className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-muted px-3 text-foreground hover:bg-accent"
           >
             <MessageSquareIcon aria-hidden="true" className="size-4" />
-            {available && replyCount !== null ? m.board_feed_replies({ count: replyCount }) : m.board_feed_open_thread()}
+            {available && replyCount !== null
+              ? m.board_feed_replies({ count: replyCount })
+              : m.board_feed_open_thread()}
           </a>
           {available && lastActivityAt ? (
             <time dateTime={lastActivityAt} title={fullDateTime(lastActivityAt, locale)} className="text-xs">
