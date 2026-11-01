@@ -6,8 +6,9 @@ import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
-import { CopiesPage } from '../../library/copies-page';
-import { readCopiesPage } from '../../library/copies-actions';
+import { CopiesCurrent } from '../../library/copies-current';
+import { getLocale } from '../../paraglide/runtime.js';
+import { readCopiesCurrent } from '../../library/copies-actions';
 import { copiesSubjectId } from '../../library/copies-query';
 import { m } from '../../paraglide/messages.js';
 
@@ -38,7 +39,7 @@ export const Route = createFileRoute('/library/copies')({
     };
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => readCopiesPage({ data: deps }),
+  loader: ({ deps }) => readCopiesCurrent({ data: deps }),
   staleTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.library_copy_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
@@ -46,5 +47,8 @@ export const Route = createFileRoute('/library/copies')({
 });
 
 function CopiesRoute() {
-  return <CopiesPage page={Route.useLoaderData()} failure={Route.useSearch().copyFailure} />;
+  const search = Route.useSearch();
+  return (
+    <CopiesCurrent initial={Route.useLoaderData()} search={search} locale={getLocale()} failure={search.copyFailure} />
+  );
 }

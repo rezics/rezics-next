@@ -6,7 +6,8 @@ import { resolveCopyProfile, type CopySubjectResult } from './copies-profiles';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { readSessionIdentity } from '../session/state';
 import { getLocale } from '../paraglide/runtime.js';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, viewerCredential, sessionSubject, requestCsrfToken } from '../session/request';
+import type { KernelClient } from '@rezics/client';
 import { copiesSubjectId } from './copies-query';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
@@ -40,39 +41,159 @@ function validateQuery(input: unknown): { subjectId?: string; cursor?: string } 
   };
 }
 
+export type CopiesAddress = { subjectId: string | null; cursor: string | null; locale: string };
+export function copiesAddress(input: unknown, locale: string): CopiesAddress {
+  const query = validateQuery(input);
+  return { subjectId: copiesSubjectId(query.subjectId) ?? null, cursor: query.cursor ?? null, locale };
+}
+export function sameCopiesAddress(a: CopiesAddress, b: CopiesAddress): boolean {
+  return a.subjectId === b.subjectId && a.cursor === b.cursor && a.locale === b.locale;
+}
+export type CopiesCurrentRead = { sessionSubject: string | null; requested: CopiesAddress; page: CopiesPageData };
+export type CopyDetailCurrentRead = {
+  sessionSubject: string | null;
+  requested: CopiesAddress;
+  id: string | null;
+  result: Awaited<ReturnType<typeof loadCopyDetail>>;
+};
+export type CopySubjectCurrentRead = {
+  sessionSubject: string | null;
+  requested: CopiesAddress;
+  id: string;
+  result: CopySubjectResult;
+};
+type Preparation = { subject: string | null; authorization: string; csrfToken: string | null };
+function prepared(request: Request, authorization: string | null): Preparation | undefined {
+  if (!authorization || authorization !== viewerCredential(request)) return undefined;
+  // Explicit-header API callers remain supported, but cannot certify a browser session.
+  return {
+    subject: request.headers.has('authorization') ? null : (sessionSubject(request) ?? null),
+    authorization,
+    csrfToken: requestCsrfToken(request),
+  };
+}
+
+/** Observe only the native reader's dispatch, immediately after its successful preparation.
+ * A fresh Request prevents retained WeakMap credentials from becoming provenance after refusal.
+ * The credential stays in this server closure and is never part of a returned envelope.
+ */
+function observeCopiesRead(client: KernelClient, observe: (authorization: string | null) => void): KernelClient {
+  const point = (target: object) =>
+    new Proxy(target, {
+      get(target, key) {
+        const value = Reflect.get(target, key);
+        if (key !== 'get') return value;
+        return (options: { headers?: HeadersInit }) => {
+          observe(new Headers(options.headers).get('authorization'));
+          return value(options);
+        };
+      },
+    });
+  const copies = new Proxy(client.copies, {
+    get(target, key) {
+      return Reflect.get(point(target), key);
+    },
+    apply(target, _receiver, args) {
+      return point(Reflect.apply(target, undefined, args));
+    },
+  });
+  return new Proxy(client, {
+    get(target, key) {
+      return key === 'copies' ? copies : Reflect.get(target, key);
+    },
+  });
+}
+
+async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesCurrentRead> {
+  const request = current ? new Request(getRequest()) : getRequest();
+  const requested = copiesAddress(input, getLocale());
+  let origin: Preparation | undefined;
+  let dispatched = false;
+  const client = observeCopiesRead(kernelClient(), (authorization) => {
+    const actual = prepared(request, authorization);
+    // The single invalid-cursor recovery must retain the original association too.
+    if (!dispatched) origin = actual;
+    else if (origin?.subject !== actual?.subject || origin?.authorization !== actual?.authorization) origin = undefined;
+    dispatched = true;
+  });
+  const page = await loadCopiesPage(client, request, env as Partial<SessionEnv>, validateQuery(input));
+  if (current && !origin?.subject) {
+    return {
+      sessionSubject: null,
+      requested,
+      page: {
+        signedIn: false,
+        subjectId: requested.subjectId,
+        copies: [],
+        next: null,
+        addKey: page.addKey,
+      },
+    };
+  }
+  if (page.signedIn) {
+    await nameSubjectTypes(page.copies.map((copy) => copy.subject));
+    const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
+    const pageSubject = page.subjectId
+      ? (page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject ??
+        (await readCopySubjectSummary(page.subjectId, origin?.authorization ?? null)))
+      : null;
+    if (pageSubject) await nameSubjectTypes([pageSubject]);
+    for (const copy of page.copies) {
+      if (!copy.subject && pageSubject) copy.subject = pageSubject;
+    }
+    if (page.subjectId)
+      page.profile = pageSubject ? resolveCopyProfile(release, pageSubject.type, requested.locale) : { kinds: [] };
+    if (current) page.csrfToken = origin?.csrfToken ?? null;
+    else {
+      const identity = await readSessionIdentity(request, env as Partial<SessionEnv>);
+      page.csrfToken = origin?.subject && identity.subject === origin.subject ? identity.csrfToken : null;
+    }
+  }
+  return { sessionSubject: origin?.subject ?? null, requested, page };
+}
 export const readCopiesPage = createServerFn({ method: 'GET' })
   .validator(validateQuery)
   .handler(async ({ data }): Promise<CopiesPageData> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    const page = await loadCopiesPage(kernelClient(), request, env as Partial<SessionEnv>, data);
-    if (!page.signedIn) return page;
-    // The list and its summary share the one successful preparation for this request.
-    const authorization = viewerCredential(request);
-    await nameSubjectTypes(page.copies.map((copy) => copy.subject));
-    const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
-    const locale = getLocale();
-    const pageSubject = page.subjectId
-      ? (page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject ??
-        (await readCopySubjectSummary(page.subjectId, authorization)))
-      : null;
-    if (pageSubject) await nameSubjectTypes([pageSubject]);
-    for (const copy of page.copies) {
-      // Reuse the filtered subject's bounded summary, preserving real covers from the list.
-      if (!copy.subject && pageSubject) copy.subject = pageSubject;
-    }
-    if (page.subjectId) {
-      page.profile = pageSubject ? resolveCopyProfile(release, pageSubject.type, locale) : { kinds: [] };
-    }
-    page.csrfToken = (await readSessionIdentity(request, env as Partial<SessionEnv>)).csrfToken;
-    return page;
+    return (await copiesPageBody(data, false)).page;
+  });
+export const readCopiesCurrent = createServerFn({ method: 'GET' })
+  .validator(validateQuery)
+  .handler(async ({ data }): Promise<CopiesCurrentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return copiesPageBody(data, true);
   });
 
+async function copyDetailBody(input: unknown, current: boolean): Promise<CopyDetailCurrentRead> {
+  const request = current ? new Request(getRequest()) : getRequest();
+  const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  const requested = copiesAddress(record, getLocale());
+  let origin: Preparation | undefined;
+  const client = observeCopiesRead(kernelClient(), (authorization) => {
+    origin = prepared(request, authorization);
+  });
+  const result = await loadCopyDetail(client, request, env as Partial<SessionEnv>, input);
+  return {
+    sessionSubject: origin?.subject ?? null,
+    requested,
+    id: typeof record.id === 'string' ? record.id : null,
+    result,
+  };
+}
 export const readCopyDetail = createServerFn({ method: 'GET' })
   .validator((input: unknown) => input)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadCopyDetail(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return (await copyDetailBody(data, false)).result;
+  });
+export const readCopyDetailCurrent = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => input)
+  .handler(async ({ data }): Promise<CopyDetailCurrentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const value = await copyDetailBody(data, true);
+    return value.sessionSubject || !value.result.ok
+      ? value
+      : { ...value, result: { ok: false, reason: 'unavailable' } };
   });
 
 export const createCopy = createServerFn({ method: 'POST' })
@@ -122,13 +243,18 @@ async function readCopySubjectSummary(id: string, authorization: string | null):
   });
 }
 
-async function resolveSubject(id: string): Promise<CopySubjectResult> {
+async function resolveSubject(
+  id: string,
+  capture: (origin: Preparation | undefined) => void,
+  current = false,
+): Promise<CopySubjectResult> {
   if (!copiesSubjectId(id)) return { state: 'unavailable' };
   try {
-    const request = getRequest();
+    const request = current ? new Request(getRequest()) : getRequest();
     if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'forbidden' };
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'forbidden' };
+    capture(prepared(request, authorization));
     const result = await kernelClient()
       .subjects({ id })
       .get({
@@ -161,5 +287,29 @@ export const readCopySubject = createServerFn({ method: 'GET' })
   .validator((input: unknown) => (typeof input === 'string' ? input : ''))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return resolveSubject(data);
+    return resolveSubject(data, () => {});
+  });
+
+export const readCopySubjectCurrent = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+    return { ...validateQuery(record), id: typeof record.id === 'string' ? record.id : '' };
+  })
+  .handler(async ({ data }): Promise<CopySubjectCurrentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const requested = copiesAddress(data, getLocale());
+    let origin: Preparation | undefined;
+    const result = await resolveSubject(
+      data.id,
+      (actual) => {
+        origin = actual;
+      },
+      true,
+    );
+    return {
+      sessionSubject: origin?.subject ?? null,
+      requested,
+      id: data.id,
+      result: !origin?.subject && result.state === 'ready' ? { state: 'unavailable' } : result,
+    };
   });
