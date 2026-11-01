@@ -1,11 +1,14 @@
 import { Link } from '@tanstack/react-router';
-import { ListRow } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import type { MyRealmsPage } from './space';
 
 /** The signed-in person's Realms, one page at a time, each linked to its home. */
 export function MyRealmsPageView({ page }: { page: MyRealmsPage }) {
+  const locale = getLocale();
+
   return (
     <article className="max-w-3xl space-y-8 text-foreground">
       <header>
@@ -14,24 +17,18 @@ export function MyRealmsPageView({ page }: { page: MyRealmsPage }) {
       {page.realms.length ? (
         <ul className="space-y-1">
           {page.realms.map((realm) => (
-            <ListRow key={realm.realmId} className="flex items-start gap-4 rounded-xl px-4 py-3">
-              <Link
-                to="/realms/$id"
-                params={{ id: realm.realmId }}
-                data-slot="list-row-link"
-                className="absolute inset-1 z-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                <span className="sr-only">{realm.name}</span>
-              </Link>
-              <div className="min-w-0 flex-1 space-y-1">
-                <h2 aria-hidden="true" className="font-semibold">
-                  {realm.name}
-                </h2>
-                {realm.description ? (
+            <ContentItem
+              key={realm.realmId}
+              title={realm.name}
+              headingLevel={2}
+              href={`/${locale}/realms/${encodeURIComponent(realm.realmId)}`}
+              className="flex items-start gap-4 rounded-xl px-4 py-3"
+              preview={
+                realm.description ? (
                   <p className="text-sm leading-relaxed text-muted-foreground">{realm.description}</p>
-                ) : null}
-              </div>
-            </ListRow>
+                ) : undefined
+              }
+            />
           ))}
         </ul>
       ) : (

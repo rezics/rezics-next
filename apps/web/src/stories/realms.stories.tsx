@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import myRealmsRecording from '../kernel/recorded/my-realms.json';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pageReady } from './page';
 
 const meta = { title: 'Pages/Community/Realms', parameters: { layout: 'fullscreen' } } satisfies Meta;
@@ -15,12 +16,25 @@ async function mainView(context: { canvasElement: HTMLElement }) {
   return view;
 }
 
+type MainView = Awaited<ReturnType<typeof mainView>>;
+
+async function firstRealmLink(view: MainView) {
+  const realm = myRealmsRecording.items[0];
+  if (!realm) throw new Error('The recorded Realms page has no Realm.');
+  const heading = await view.findByRole('heading', { level: 2, name: realm.name, exact: true });
+  await expect(heading).toBeVisible();
+  const links = await view.findAllByRole('link', { name: realm.name, exact: true });
+  await expect(links).toHaveLength(1);
+  const link = links[0];
+  if (!link) throw new Error('The recorded Realm should have one primary link.');
+  await expect(link).toHaveAttribute('href', `/${getLocale()}/realms/${encodeURIComponent(realm.realmId)}`);
+  return link;
+}
+
 /** The signed-in person's first Realm is listed with a link. */
 async function listed(context: { canvasElement: HTMLElement }) {
   const view = await mainView(context);
-  const name = myRealmsRecording.items[0]?.name;
-  if (!name) throw new Error('The recorded Realms page has no Realm.');
-  const link = await view.findByRole('link', { name });
+  const link = await firstRealmLink(view);
   await userEvent.hover(link);
   link.closest('[data-slot="list-row"]')?.setAttribute('data-overlay', 'visible');
 }
@@ -50,9 +64,7 @@ export const AccountMenuNavigation: Story = {
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(menu).not.toBeVisible());
     await waitFor(() => expect(canvas.getByRole('heading', { level: 1, name: m.realms_heading() })).toBeVisible());
-    const name = myRealmsRecording.items[0]?.name;
-    if (!name) throw new Error('The recorded Realms page has no Realm.');
-    await canvas.findByRole('link', { name });
+    await firstRealmLink(within(await canvas.findByRole('main')));
   },
   render: () => <PageStory visitor="Signed In" path="/" />,
 };
