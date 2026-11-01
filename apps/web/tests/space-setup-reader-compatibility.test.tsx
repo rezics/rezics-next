@@ -31,7 +31,9 @@ const globals = {
   matchMedia: window.matchMedia.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -76,11 +78,21 @@ function deferred<T>() {
 const sessionStore = {
   async credential() {
     sessionPreparations++;
-    return { status: 'active', accessToken: session.accessToken, subject: session.subject, csrfToken: session.csrfToken };
+    return {
+      status: 'active',
+      accessToken: session.accessToken,
+      subject: session.subject,
+      csrfToken: session.csrfToken,
+    };
   },
   async credentialIfFresh() {
     sessionPreparations++;
-    return { status: 'active', accessToken: session.accessToken, subject: session.subject, csrfToken: session.csrfToken };
+    return {
+      status: 'active',
+      accessToken: session.accessToken,
+      subject: session.subject,
+      csrfToken: session.csrfToken,
+    };
   },
   async signedIn() {
     return { signedIn: true, csrfToken: session.csrfToken };
@@ -210,7 +222,10 @@ function makeKernelClient() {
     (input: { id: string }) => ({
       get: async (options: { headers: { authorization: string } }) => {
         preparedAuthorizations.push(options.headers.authorization);
-        return response({ subject: { id: input.id, type: 'skos:Concept', labels: { en: 'Exact Concept' } }, summary: null });
+        return response({
+          subject: { id: input.id, type: 'skos:Concept', labels: { en: 'Exact Concept' } },
+          summary: null,
+        });
       },
       links: {
         get: async (options: { query: Record<string, unknown>; headers: { authorization: string } }) => {
@@ -365,7 +380,10 @@ async function tick(milliseconds = 0) {
 async function mountApp(client: InstanceType<typeof QueryClient>, content: ReactNode, strict = true) {
   browserClient = client;
   const route = createRootRoute({ component: () => content });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en/realms/new'] }) });
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: ['/en/realms/new'] }),
+  });
   await router.load();
   root = createRoot(host);
   await act(async () => {
@@ -532,7 +550,10 @@ test('actual-reader mismatch and explicit credentials stay unbound through the p
   expect(mismatched.initial.reader).toEqual({ kind: 'session', subject: replacementSubject });
   expect(mismatched.admission.subject).toBe(subject);
   expect(JSON.stringify(mismatched)).not.toContain('different-server-bearer');
-  await mountApp(expectedClient, <SpaceSetupPage initial={mismatched.initial} admission={mismatched.admission} spaceId={spaceId} />);
+  await mountApp(
+    expectedClient,
+    <SpaceSetupPage initial={mismatched.initial} admission={mismatched.admission} spaceId={spaceId} />,
+  );
   expect(host.textContent).not.toContain('Different reader Space');
   await unmountApp();
 
@@ -542,7 +563,10 @@ test('actual-reader mismatch and explicit credentials stay unbound through the p
   if (matching.initial.kind !== 'ready') throw new Error('Expected the matching Space read');
   const missingOrigin = { ...matching.initial };
   delete missingOrigin.reader;
-  await mountApp(matchingClient, <SpaceSetupPage initial={missingOrigin} admission={matching.admission} spaceId={spaceId} />);
+  await mountApp(
+    matchingClient,
+    <SpaceSetupPage initial={missingOrigin} admission={matching.admission} spaceId={spaceId} />,
+  );
   expect(host.textContent).not.toContain('Saved Space');
   await unmountApp();
 
@@ -561,7 +585,9 @@ test('actual-reader mismatch and explicit credentials stay unbound through the p
   const directory = await actions.searchSpaceSetupContexts({ data: { query: '', cursor: 'context-next' } });
   expect(directory.reader).toEqual({ kind: 'session', subject: replacementSubject });
   expect(contextDirectoryReads.at(-1)?.query.cursor).toBe('context-next');
-  const board = await actions.readSpaceSetupBoardChoices({ data: { kind: 'concept', query: '', schemeId, cursor: 'concept-next', locale: 'en' } });
+  const board = await actions.readSpaceSetupBoardChoices({
+    data: { kind: 'concept', query: '', schemeId, cursor: 'concept-next', locale: 'en' },
+  });
   expect(board.reader).toEqual({ kind: 'session', subject: replacementSubject });
   expect(conceptReads.at(-1)?.query.cursor).toBe('concept-next');
 });
@@ -620,7 +646,12 @@ test('session observation retires pending Context work on equal replacement, err
   expect(host.textContent).not.toContain('Retired Context result');
   expect(contextDirectoryReads).toHaveLength(1);
 
-  query.setState({ status: 'error', error: new Error('retained session read failed'), errorUpdatedAt: Date.now(), errorUpdateCount: 1 });
+  query.setState({
+    status: 'error',
+    error: new Error('retained session read failed'),
+    errorUpdatedAt: Date.now(),
+    errorUpdateCount: 1,
+  });
   const errorRevision = source.snapshot();
   expect(errorRevision).toBeGreaterThan(replacedRevision);
   expect(source.observation().status).toBe('error');
@@ -686,7 +717,10 @@ test('a queued Context read and a late response cannot publish after caller reti
   hydrate(browser, JSON.parse(JSON.stringify(dehydrate(serverClient))));
   const pending = deferred<unknown>();
   contextDirectoryDeferred = pending;
-  await mountApp(browser, <SpaceSetupPage initial={transferred.initial} admission={transferred.admission} spaceId={spaceId} />);
+  await mountApp(
+    browser,
+    <SpaceSetupPage initial={transferred.initial} admission={transferred.admission} spaceId={spaceId} />,
+  );
   await click(m.space_setup_realm());
   const search = host.querySelector<HTMLInputElement>('input[type="search"]');
   expect(search).not.toBeNull();
@@ -707,7 +741,11 @@ test('a queued Context read and a late response cannot publish after caller reti
   hydrate(anotherBrowser, JSON.parse(JSON.stringify(dehydrate(anotherServerClient))));
   await mountApp(
     anotherBrowser,
-    <SpaceSetupPage initial={JSON.parse(JSON.stringify(anotherLoader.initial))} admission={JSON.parse(JSON.stringify(anotherLoader.admission))} spaceId={spaceId} />,
+    <SpaceSetupPage
+      initial={JSON.parse(JSON.stringify(anotherLoader.initial))}
+      admission={JSON.parse(JSON.stringify(anotherLoader.admission))}
+      spaceId={spaceId}
+    />,
   );
   await click(m.space_setup_realm());
   const secondSearch = host.querySelector<HTMLInputElement>('input[type="search"]');
@@ -736,6 +774,3 @@ test('a queued Context read and a late response cannot publish after caller reti
   await tick();
   expect(host.textContent).not.toContain('Unmounted Context result');
 });
-
-
-

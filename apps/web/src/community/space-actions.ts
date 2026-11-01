@@ -246,7 +246,10 @@ async function setupReadPreparation() {
   return { authorization, reader, request };
 }
 
-function withSetupReader<T extends object>(result: T, reader: SetupReaderProvenance): T & { reader: SetupReaderProvenance } {
+function withSetupReader<T extends object>(
+  result: T,
+  reader: SetupReaderProvenance,
+): T & { reader: SetupReaderProvenance } {
   return { ...result, reader };
 }
 

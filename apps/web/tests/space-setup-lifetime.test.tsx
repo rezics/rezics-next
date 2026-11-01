@@ -228,8 +228,12 @@ async function mount(
       : undefined);
   if (initial) {
     const actualSubject =
-      session && typeof session === 'object' && 'state' in session && session.state === 'signed-in' &&
-      'subject' in session && typeof session.subject === 'string'
+      session &&
+      typeof session === 'object' &&
+      'state' in session &&
+      session.state === 'signed-in' &&
+      'subject' in session &&
+      typeof session.subject === 'string'
         ? session.subject
         : undefined;
     if (actualSubject) initial.reader = { kind: 'session', subject: actualSubject };
@@ -423,11 +427,8 @@ test('StrictMode page retires current, search and exact Context resolutions on s
 
   await setSession(viewer('csrf-two'));
   expect(searches[0]!.signal?.aborted).toBe(true);
-  for (const choice of choices)
-    await settle(choice.pending, authenticated({ id: contextId, label: retiredLabel }));
-  searches[0]!.pending.resolve(
-    authenticated({ contexts: [{ id: contextId, label: retiredLabel }], next: null }),
-  );
+  for (const choice of choices) await settle(choice.pending, authenticated({ id: contextId, label: retiredLabel }));
+  searches[0]!.pending.resolve(authenticated({ contexts: [{ id: contextId, label: retiredLabel }], next: null }));
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });

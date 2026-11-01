@@ -6,7 +6,12 @@ type ChoiceInput = { query: string; cursor?: string | undefined };
 export type BoardChoiceRead = ChoiceInput & ({ kind: 'scheme' } | { kind: 'concept'; schemeId: string });
 export type BoardChoiceFailure = 'denied' | 'stale' | 'invalid' | 'unavailable';
 export type BoardChoiceResult =
-  | ({ kind: 'ready'; choices: readonly SetupChoice[]; next: string | null; reader?: SetupReaderProvenance } & Observation)
+  | ({
+      kind: 'ready';
+      choices: readonly SetupChoice[];
+      next: string | null;
+      reader?: SetupReaderProvenance;
+    } & Observation)
   | { kind: 'failure'; reason: BoardChoiceFailure; status: number; reader?: SetupReaderProvenance };
 
 /** Display data only. Native commands remain the authority for lifecycle and membership. */

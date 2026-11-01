@@ -84,12 +84,12 @@ export function spaceSetupInitialAdmissionMatchesReader(
 ) {
   return Boolean(
     admission &&
-      admission.observationScope === 'query-client-local' &&
-      admission.queryStatus === 'success' &&
-      admission.state === 'signed-in' &&
-      admission.subject &&
-      snapshot.reader?.kind === 'session' &&
-      snapshot.reader.subject === admission.subject,
+    admission.observationScope === 'query-client-local' &&
+    admission.queryStatus === 'success' &&
+    admission.state === 'signed-in' &&
+    admission.subject &&
+    snapshot.reader?.kind === 'session' &&
+    snapshot.reader.subject === admission.subject,
   );
 }
 

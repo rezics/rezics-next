@@ -206,7 +206,9 @@ export function SpaceSetupPage({
           const ticket = caller.ticket();
           if (!readable()) return currentFailure();
           const result = await resolveSpaceSetupChoice({ data: { kind: 'context', id } });
-          return caller.owns(ticket) && setupReaderMatches(result.reader, caller.binding.subject) ? result : unavailable;
+          return caller.owns(ticket) && setupReaderMatches(result.reader, caller.binding.subject)
+            ? result
+            : unavailable;
         },
         locale,
       ),
@@ -269,8 +271,7 @@ export function SpaceSetupPage({
     if (hydrated) claimSpaceSetupInitialSnapshot(initial);
   }, [initial, hydrated]);
   let formInitial: SetupSnapshot | SetupFailure;
-  if (!hydrated)
-    formInitial = initialLoaderMatches && initialSessionMatches && !targetMismatch ? initial : unavailable;
+  if (!hydrated) formInitial = initialLoaderMatches && initialSessionMatches && !targetMismatch ? initial : unavailable;
   else if (
     readReady &&
     initialLoaderMatches &&
