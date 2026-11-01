@@ -98,6 +98,10 @@ const sessionSources = new WeakMap<QueryClient, SessionSource>();
 const clientVisits = new WeakMap<QueryClient, Map<string, BoardPageCaller>>();
 const errorOwners = new WeakMap<object, BoardPageCaller>();
 const boardReadOwners = new WeakMap<object, BoardPageCaller>();
+const acceptedBoardReads = new WeakMap<
+  object,
+  { caller: BoardPageCaller; query: object; expectedReader: BoardExpectedReader | null }
+>();
 const retiredResults = new WeakSet<BoardPageLoadResult>();
 const consumedResultTransfers = new WeakSet<BoardPageLoadResult>();
 let nextSourceId = 0;
@@ -240,6 +244,7 @@ export class BoardPageCaller {
   private queryDataUpdateCount: number | undefined;
   private stopQueryWatching: (() => void) | undefined;
   private result?: BoardPageLoadResult;
+  private pendingRead?: BoardPageRead;
   private retired = false;
   private connected = false;
   private connection = 0;
@@ -253,7 +258,7 @@ export class BoardPageCaller {
   private readonly createdOnServer: boolean;
   private readonly transferReceipt: BoardPageCallerReceipt | undefined;
   private transferVerified: boolean;
-  private transferVerificationStarted = false;
+  private transferVerificationAttempt = 0;
   private registryKey: string;
 
   constructor(
@@ -266,7 +271,8 @@ export class BoardPageCaller {
     this.id = `${++nextVisitId}`;
     this.registryKey = this.id;
     this.source = sessionSource(client);
-    this.expectedSession = this.source.read();
+    const expectedSession = this.source.read();
+    this.expectedSession = expectedSession ? { ...expectedSession } : undefined;
     this.sourceCapture = this.source.capture();
     this.input = input;
     this.signal = signal;
@@ -343,13 +349,20 @@ export class BoardPageCaller {
     this.stopQueryWatching = undefined;
     this.stopNavigation = undefined;
     this.stopLoad = undefined;
+    this.pendingRead = undefined;
     this.signal?.removeEventListener('abort', this.abortListener);
     if (this.result) retiredResults.add(this.result);
     const visits = visitsFor(this.client);
     if (visits.get(this.registryKey) === this) visits.delete(this.registryKey);
-    if (this.input.credentialMode === 'session' && this.queryKey) {
-      void this.client.cancelQueries({ queryKey: this.queryKey, exact: true });
-      this.client.removeQueries({ queryKey: this.queryKey, exact: true });
+    if (this.input.credentialMode === 'session' && this.queryKey && this.pageQuery) {
+      const owned = this.pageQuery;
+      const exactOwner = {
+        queryKey: this.queryKey,
+        exact: true,
+        predicate: (query: unknown) => query === owned,
+      };
+      void this.client.cancelQueries(exactOwner as never);
+      this.client.removeQueries(exactOwner as never);
     }
     this.publish();
   }
@@ -359,6 +372,20 @@ export class BoardPageCaller {
   }
 
   queryOptions<T extends { queryKey: readonly unknown[]; queryFn?: unknown }>(options: T): T {
+    const baseQueryKey = [
+      'board-page',
+      this.input.id,
+      this.input.cursor ?? null,
+      this.input.sort ?? null,
+      this.input.credentialMode,
+    ];
+    if (
+      options.queryKey.length !== baseQueryKey.length ||
+      options.queryKey.some((part, index) => part !== baseQueryKey[index])
+    ) {
+      this.retire('input');
+      throw new Error('Board page query did not match its caller inputs');
+    }
     const queryKey =
       this.input.credentialMode === 'session' ? [...options.queryKey, 'board-page-caller', this.id] : options.queryKey;
     this.queryKey = queryKey;
@@ -370,11 +397,13 @@ export class BoardPageCaller {
     const queryFn = async (context: unknown) => {
       this.assertLoadCurrent();
       try {
+        this.assertQueryOwner();
         const read = await original(context);
-        this.assertLoadCurrent();
-        if (read && typeof read === 'object') boardReadOwners.set(read, this);
+        await this.validateOriginalRead(read, true);
+        this.pendingRead = read;
         return read;
       } catch (error) {
+        this.pendingRead = undefined;
         this.assertLoadCurrent();
         throw error;
       }
@@ -383,35 +412,20 @@ export class BoardPageCaller {
   }
 
   async resultFor(read: BoardPageRead, indexable: boolean): Promise<BoardPageLoadResult> {
+    const expectedReader = await this.validateOriginalRead(read, false);
     this.assertLoadCurrent();
-    let expectedReader: BoardExpectedReader | null = null;
-    if (this.input.credentialMode === 'session') {
-      const expected = this.expectedSession;
-      if (expected?.state !== 'signed-in' || typeof expected.subject !== 'string' || !expected.subject) {
-        this.retire('session');
-        throw new Error('Board page caller has no expected signed-in reader');
-      }
-      expectedReader = {
-        state: expected.state,
-        subject: expected.subject,
-        ready: true,
-        csrfFingerprint: await csrfFingerprint(expected.csrfToken),
-      };
-      this.assertLoadCurrent();
-      if (!sameReader(read.readerOrigin, expectedReader)) {
-        this.retire('session');
-        throw new Error('Board page reader did not match its expected session');
-      }
-    } else if (read.readerOrigin.kind !== 'anonymous') {
-      this.retire('session');
-      throw new Error('Anonymous Board page read did not use an anonymous reader');
-    }
     const page = read.page;
-    const query = this.client.getQueryCache().find({ queryKey: this.queryKey ?? [], exact: true });
-    const queryState = query ? this.client.getQueryState<BoardPageRead>(this.queryKey ?? []) : undefined;
-    if (queryState?.data === read) {
-      this.queryDataUpdateCount ??= queryState.dataUpdateCount;
+    this.assertQueryOwner(read);
+    const queryState = this.client.getQueryState<BoardPageRead>(this.queryKey!);
+    if (this.queryDataUpdateCount !== undefined && queryState?.dataUpdateCount !== this.queryDataUpdateCount) {
+      this.retire('cache');
+      throw new Error('Board page query revision changed before result publication');
     }
+    if (this.input.credentialMode === 'session' && boardReadOwners.get(read) !== this) {
+      this.retire('cache');
+      throw new Error('Board page result was not produced by its caller');
+    }
+    this.queryDataUpdateCount ??= queryState?.dataUpdateCount;
     const receipt: BoardPageCallerReceipt = {
       id: this.id,
       credentialMode: this.input.credentialMode,
@@ -539,37 +553,133 @@ export class BoardPageCaller {
   }
 
   private async verifyTransferredResult(): Promise<void> {
-    if (this.transferVerificationStarted || this.retired || !this.transferReceipt) return;
-    this.transferVerificationStarted = true;
+    const ticket = this.connection;
+    if (!this.connected || this.retired || !this.transferReceipt) return;
+    const attempt = ++this.transferVerificationAttempt;
+    const result = this.result;
+    const receipt = this.transferReceipt;
+    const queryKey = this.queryKey ? [...this.queryKey] : undefined;
+    const queryAtStart = queryKey ? this.client.getQueryCache().find({ queryKey, exact: true }) : undefined;
+    const currentAttempt = () =>
+      attempt === this.transferVerificationAttempt &&
+      ticket === this.connection &&
+      this.connected &&
+      !this.retired &&
+      this.result === result &&
+      this.transferReceipt === receipt &&
+      sameInput(this.binding().input, this.input) &&
+      this.binding().client === this.client &&
+      getLocale() === this.input.locale &&
+      this.pageQuery === (queryAtStart ?? this.pageQuery) &&
+      (!queryKey || this.client.getQueryCache().find({ queryKey, exact: true }) === queryAtStart);
     try {
-      const expected = this.transferReceipt.expectedReader;
-      const origin = this.transferReceipt.readerOrigin;
+      const expected = receipt.expectedReader;
+      const origin = receipt.readerOrigin;
       const current = this.source.read();
       if (
+        !currentAttempt() ||
         !expected ||
         origin.kind !== 'session' ||
         !sameReader(origin, expected) ||
         current?.state !== 'signed-in' ||
         !current.subject
       ) {
-        this.retire('session');
+        if (currentAttempt()) this.retire('session');
         return;
       }
       const fingerprint = await csrfFingerprint(current.csrfToken);
+      if (!currentAttempt()) return;
       if (
         !this.sessionMatches() ||
         current.subject !== origin.subject ||
         fingerprint !== origin.csrfFingerprint ||
         !this.check('input')
       ) {
-        this.retire('session');
+        if (currentAttempt()) this.retire('session');
         return;
       }
       this.transferVerified = true;
       this.publish();
     } catch {
-      this.retire('session');
+      if (currentAttempt()) this.retire('session');
     }
+  }
+
+  private assertQueryOwner(read?: BoardPageRead): object {
+    const queryKey = this.queryKey;
+    if (!queryKey) {
+      this.retire('cache');
+      throw new Error('Board page query owner is unavailable');
+    }
+    const query = this.client.getQueryCache().find({ queryKey, exact: true });
+    if (!query || (this.pageQuery && query !== this.pageQuery)) {
+      this.retire('cache');
+      throw new Error('Board page query owner changed');
+    }
+    if (!this.pageQuery) this.pageQuery = query;
+    if (read !== undefined && this.client.getQueryState<BoardPageRead>(queryKey)?.data !== read) {
+      this.retire('cache');
+      throw new Error('Board page query result changed');
+    }
+    return query;
+  }
+
+  private async validateOriginalRead(read: BoardPageRead, beforeCachePublication: boolean) {
+    this.assertLoadCurrent();
+    if (!read || typeof read !== 'object') {
+      this.retire('cache');
+      throw new Error('Board page reader returned no result envelope');
+    }
+    const query = this.assertQueryOwner();
+    const beforeState = this.client.getQueryState<BoardPageRead>(this.queryKey!);
+    const beforeData = beforeState?.data;
+    const beforeDataUpdateCount = beforeState?.dataUpdateCount;
+    const accepted = acceptedBoardReads.get(read);
+    if (accepted?.caller === this && accepted.query === query) {
+      if (!beforeCachePublication) this.assertQueryOwner(read);
+      return accepted.expectedReader;
+    }
+    if (!beforeCachePublication && this.input.credentialMode === 'session' && boardReadOwners.get(read) !== this) {
+      this.retire('cache');
+      throw new Error('Board page result was not produced by its caller');
+    }
+
+    let expectedReader: BoardExpectedReader | null = null;
+    if (this.input.credentialMode === 'session') {
+      const expected = this.expectedSession;
+      if (expected?.state !== 'signed-in' || typeof expected.subject !== 'string' || !expected.subject) {
+        this.retire('session');
+        throw new Error('Board page caller has no expected signed-in reader');
+      }
+      const fingerprint = await csrfFingerprint(expected.csrfToken);
+      this.assertLoadCurrent();
+      if (this.assertQueryOwner() !== query) throw new Error('Board page query owner changed');
+      const currentState = this.client.getQueryState<BoardPageRead>(this.queryKey!);
+      if (currentState?.data !== beforeData || currentState?.dataUpdateCount !== beforeDataUpdateCount) {
+        this.retire('cache');
+        throw new Error('Board page query changed during reader verification');
+      }
+      expectedReader = {
+        state: expected.state,
+        subject: expected.subject,
+        ready: true,
+        csrfFingerprint: fingerprint,
+      };
+      if (!sameReader(read.readerOrigin, expectedReader)) {
+        this.retire('session');
+        throw new Error('Board page reader did not match its expected session');
+      }
+    } else if (read.readerOrigin.kind !== 'anonymous') {
+      this.retire('session');
+      throw new Error('Anonymous Board page read did not use an anonymous reader');
+    }
+
+    this.assertLoadCurrent();
+    if (this.assertQueryOwner() !== query) throw new Error('Board page query owner changed');
+    if (!beforeCachePublication) this.assertQueryOwner(read);
+    boardReadOwners.set(read, this);
+    acceptedBoardReads.set(read, { caller: this, query, expectedReader });
+    return expectedReader;
   }
 
   private watchQueryUpdates(queryKey: readonly unknown[], acceptFirstRead: boolean): void {
@@ -581,7 +691,8 @@ export class BoardPageCaller {
       )
         return;
       if (event.type === 'added') {
-        if (!this.pageQuery) this.pageQuery = event.query;
+        if (!this.pageQuery && !this.transferReceipt) this.pageQuery = event.query;
+        else if (!this.pageQuery && this.transferReceipt) this.retire('cache');
         return;
       }
       if (this.pageQuery && event.query !== this.pageQuery) return;
@@ -592,16 +703,20 @@ export class BoardPageCaller {
       if (event.type !== 'updated') return;
       if (event.action.type === 'success') {
         const data = event.query.state.data;
+        const previousUpdateCount = this.queryDataUpdateCount ?? 0;
         if (
           acceptFirstRead &&
           !this.result &&
-          this.queryDataUpdateCount === undefined &&
+          data === this.pendingRead &&
+          event.query.state.fetchStatus === 'idle' &&
+          event.query.state.dataUpdateCount > previousUpdateCount &&
           data &&
           typeof data === 'object' &&
           boardReadOwners.get(data) === this
         ) {
           this.pageQuery = event.query;
           this.queryDataUpdateCount = event.query.state.dataUpdateCount;
+          this.pendingRead = undefined;
           return;
         }
         this.retire('cache');

@@ -604,6 +604,36 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   await refresh;
   expect(isBoardPageResultCurrent(observerClient, observerBoard, observerInput)).toBe(false);
 
+  // Session error, removal and an observed away/back update retire the Board visit and its private page query.
+  reader = { subject: 'reader-a', accessToken: 'access-a', csrfToken: 'csrf-a' };
+  for (const transition of ['error', 'removal', 'aba'] as const) {
+    const transitionClient = clientFor();
+    requestFor('boards/board-a');
+    const transitionResult = await loadBoard(transitionClient, 'session');
+    if (transition === 'error') {
+      await transitionClient
+        .fetchQuery({
+          ...sessionQuery,
+          staleTime: 0,
+          queryFn: async () => {
+            throw new Error('session refresh failed');
+          },
+        })
+        .catch(() => undefined);
+    } else if (transition === 'removal') {
+      transitionClient.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+    } else {
+      notifyManager.batch(() => {
+        transitionClient.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+        transitionClient.setQueryData(sessionQuery.queryKey, sessionValue());
+      });
+    }
+    expect(isBoardPageResultCurrent(transitionClient, transitionResult, inputForBoard('session'))).toBe(false);
+    expect(transitionClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toEqual(
+      [],
+    );
+  }
+
   const observerRealmsClient = clientFor();
   requestFor('realms');
   const observerRealmsResult = await loadMyRealms(observerRealmsClient);
@@ -760,6 +790,250 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
   await expect(loadMyRealms(queuedClient)).rejects.toThrow();
   expect(nativeCalls.filter((call) => call.path === '/v1/me/realms')).toHaveLength(callsBeforeQueue);
   expect(queuedClient.getQueryData(['my-realms', ''])).toBeUndefined();
+
+  // Result-origin rejection precedes both the private cache success and canonical thread-slug effects.
+  const { forgetThreadSlug, rememberedThreadSlug } = await import('../src/threads/thread-href');
+  const originalThreadIds = threadsRecording.threads.map((thread) => thread.id);
+  for (const actualReader of [
+    { subject: 'reader-b', accessToken: 'access-b', csrfToken: 'csrf-b' },
+    { subject: '', accessToken: 'access-a', csrfToken: 'csrf-a' },
+  ]) {
+    reader = actualReader;
+    requestFor('boards/board-a');
+    const rejectedBoardClient = clientFor({ subject: 'reader-a', accessToken: 'unused-a', csrfToken: 'csrf-a' });
+    for (const id of originalThreadIds) forgetThreadSlug(id);
+    await expect(loadBoard(rejectedBoardClient, 'session')).rejects.toThrow();
+    expect(rejectedBoardClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toEqual(
+      [],
+    );
+    for (const id of originalThreadIds) expect(rememberedThreadSlug(id)).toBeUndefined();
+  }
+  reader = { subject: 'reader-a', accessToken: 'access-a', csrfToken: 'csrf-a' };
+
+  // Retiring the original caller while its expected-reader fingerprint is pending cannot publish its read or slugs.
+  const pendingValidationClient = clientFor();
+  requestFor('boards/board-a');
+  for (const id of originalThreadIds) forgetThreadSlug(id);
+  const subtle = crypto.subtle;
+  const digestDescriptor = Object.getOwnPropertyDescriptor(subtle, 'digest');
+  const nativeDigest = subtle.digest.bind(subtle);
+  const validationEntered = deferred<void>();
+  const validationReleased = deferred<ArrayBuffer>();
+  let csrfDigestCount = 0;
+  Object.defineProperty(subtle, 'digest', {
+    configurable: true,
+    writable: true,
+    value: ((algorithm: AlgorithmIdentifier, data: BufferSource) => {
+      if (new TextDecoder().decode(data) === 'token\u0000csrf-a' && ++csrfDigestCount === 2) {
+        validationEntered.resolve();
+        return validationReleased.promise;
+      }
+      return nativeDigest(algorithm, data);
+    }) as typeof subtle.digest,
+  });
+  const expectedDigest = await nativeDigest('SHA-256', new TextEncoder().encode('token\u0000csrf-a'));
+  try {
+    const pendingValidation = loadBoard(pendingValidationClient, 'session');
+    void pendingValidation.catch(() => undefined);
+    await validationEntered.promise;
+    const pendingBoardQuery = pendingValidationClient
+      .getQueryCache()
+      .findAll({ queryKey: ['board-page', boardRecording.board.id] })[0];
+    expect(pendingBoardQuery?.state.data).toBeUndefined();
+    for (const id of originalThreadIds) expect(rememberedThreadSlug(id)).toBeUndefined();
+    pendingValidationClient.setQueryData(sessionQuery.queryKey, sessionValue());
+    validationReleased.resolve(expectedDigest);
+    await expect(pendingValidation).rejects.toThrow();
+    expect(pendingValidationClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toEqual(
+      [],
+    );
+    for (const id of originalThreadIds) expect(rememberedThreadSlug(id)).toBeUndefined();
+  } finally {
+    validationReleased.resolve(expectedDigest);
+    if (digestDescriptor) Object.defineProperty(subtle, 'digest', digestDescriptor);
+    else Reflect.deleteProperty(subtle, 'digest');
+  }
+
+  // A completion from a removed Board query cannot delete a new exact-key query installed by its replacement.
+  const replacedBoardClient = clientFor();
+  requestFor('boards/board-a');
+  const replacedBoardPause = {
+    path: `/v1/boards/${boardRecording.board.id}`,
+    entered: deferred<void>(),
+    release: deferred<void>(),
+  };
+  nativePause = replacedBoardPause;
+  const replacedBoardLoad = loadBoard(replacedBoardClient, 'session');
+  void replacedBoardLoad.catch(() => undefined);
+  await replacedBoardPause.entered.promise;
+  try {
+    const oldBoardQuery = replacedBoardClient
+      .getQueryCache()
+      .findAll({ queryKey: ['board-page', boardRecording.board.id] })[0]!;
+    replacedBoardClient.removeQueries({ queryKey: oldBoardQuery.queryKey, exact: true });
+    const replacementBoardData = { owner: 'fresh-board-query' };
+    replacedBoardClient.setQueryData(oldBoardQuery.queryKey, replacementBoardData as never);
+    const freshBoardQuery = replacedBoardClient.getQueryCache().find({ queryKey: oldBoardQuery.queryKey, exact: true });
+    replacedBoardPause.release.resolve();
+    await expect(replacedBoardLoad).rejects.toThrow();
+    expect(replacedBoardClient.getQueryCache().find({ queryKey: oldBoardQuery.queryKey, exact: true })).toBe(
+      freshBoardQuery,
+    );
+    expect(replacedBoardClient.getQueryData(oldBoardQuery.queryKey)).toBe(replacementBoardData);
+  } finally {
+    replacedBoardPause.release.resolve();
+    await replacedBoardLoad.catch(() => undefined);
+  }
+
+  // A newer MyRealms route capture owns the source generation even when an older fingerprint completes later.
+  const captureClient = clientFor();
+  const captureSubtle = crypto.subtle;
+  const captureDigestDescriptor = Object.getOwnPropertyDescriptor(captureSubtle, 'digest');
+  const captureNativeDigest = captureSubtle.digest.bind(captureSubtle);
+  const firstCaptureEntered = deferred<void>();
+  const firstCaptureReleased = deferred<ArrayBuffer>();
+  const secondCaptureEntered = deferred<void>();
+  const secondCaptureReleased = deferred<ArrayBuffer>();
+  const thirdCaptureEntered = deferred<void>();
+  const thirdCaptureReleased = deferred<ArrayBuffer>();
+  let captureDigestCount = 0;
+  Object.defineProperty(captureSubtle, 'digest', {
+    configurable: true,
+    writable: true,
+    value: ((algorithm: AlgorithmIdentifier, data: BufferSource) => {
+      if (new TextDecoder().decode(data) === 'token\u0000csrf-a') {
+        captureDigestCount++;
+        if (captureDigestCount === 1) {
+          firstCaptureEntered.resolve();
+          return firstCaptureReleased.promise;
+        }
+        if (captureDigestCount === 2) {
+          secondCaptureEntered.resolve();
+          return secondCaptureReleased.promise;
+        }
+        if (captureDigestCount === 3) {
+          thirdCaptureEntered.resolve();
+          return thirdCaptureReleased.promise;
+        }
+      }
+      return captureNativeDigest(algorithm, data);
+    }) as typeof captureSubtle.digest,
+  });
+  const captureDigest = await captureNativeDigest('SHA-256', new TextEncoder().encode('token\u0000csrf-a'));
+  try {
+    requestFor('realms');
+    const previousRealmCalls = nativeCalls.filter((call) => call.path === '/v1/me/realms').length;
+    const staleCapture = loadMyRealms(captureClient);
+    void staleCapture.catch(() => undefined);
+    await firstCaptureEntered.promise;
+    const freshCapture = loadMyRealms(captureClient, 'fresh-cursor');
+    void freshCapture.catch(() => undefined);
+    await secondCaptureEntered.promise;
+    requestFor('realms?cursor=fresh-cursor');
+    secondCaptureReleased.resolve(captureDigest);
+    const freshCaptureResult = await freshCapture;
+    expect(freshCaptureResult.page.realms[0]?.name).toBe('Reader A realm');
+    expect(nativeCalls.filter((call) => call.path === '/v1/me/realms')).toHaveLength(previousRealmCalls + 1);
+    expect(nativeCalls.filter((call) => call.path === '/v1/me/realms').at(-1)?.cursor).toBe('fresh-cursor');
+    firstCaptureReleased.resolve(captureDigest);
+    await expect(staleCapture).rejects.toThrow();
+
+    // A query installed while the caller fingerprint is pending cannot become that capture's owner.
+    const queryReplacementClient = clientFor();
+    requestFor('realms');
+    const realmCallsBeforeReplacement = nativeCalls.filter((call) => call.path === '/v1/me/realms').length;
+    const queryReplacementCapture = loadMyRealms(queryReplacementClient);
+    void queryReplacementCapture.catch(() => undefined);
+    await thirdCaptureEntered.promise;
+    const replacementPage = { owner: 'fresh-realms-query' };
+    queryReplacementClient.setQueryData(['my-realms', ''], replacementPage as never);
+    const replacementQuery = queryReplacementClient.getQueryCache().find({ queryKey: ['my-realms', ''], exact: true });
+    thirdCaptureReleased.resolve(captureDigest);
+    await expect(queryReplacementCapture).rejects.toThrow();
+    expect(queryReplacementClient.getQueryCache().find({ queryKey: ['my-realms', ''], exact: true })).toBe(
+      replacementQuery,
+    );
+    expect(queryReplacementClient.getQueryData(['my-realms', ''])).toBe(replacementPage);
+    expect(nativeCalls.filter((call) => call.path === '/v1/me/realms')).toHaveLength(realmCallsBeforeReplacement);
+  } finally {
+    firstCaptureReleased.resolve(captureDigest);
+    secondCaptureReleased.resolve(captureDigest);
+    thirdCaptureReleased.resolve(captureDigest);
+    await settle();
+    if (captureDigestDescriptor) Object.defineProperty(captureSubtle, 'digest', captureDigestDescriptor);
+    else Reflect.deleteProperty(captureSubtle, 'digest');
+  }
+
+  // Cancellation can reenter with a replacement exact-key query; old retirement removes only its query object.
+  const cleanupClient = clientFor();
+  requestFor('realms');
+  const cleanupResult = await loadMyRealms(cleanupClient);
+  const cleanupCaller = myRealmsCallerForVisit(cleanupClient, cleanupResult.visit);
+  const cleanupKey = ['my-realms', ''] as const;
+  const oldRealmsQuery = cleanupClient.getQueryCache().find({ queryKey: cleanupKey, exact: true });
+  const freshPage = { ...cleanupResult.page, realms: [] };
+  const originalCancelQueries = cleanupClient.cancelQueries.bind(cleanupClient);
+  let replaceDuringCancellation = true;
+  cleanupClient.cancelQueries = ((filters?: never) => {
+    const cancellation = originalCancelQueries(filters as never);
+    if (replaceDuringCancellation) {
+      replaceDuringCancellation = false;
+      cleanupClient.removeQueries({ queryKey: cleanupKey, exact: true });
+      cleanupClient.setQueryData(cleanupKey, freshPage);
+    }
+    return cancellation;
+  }) as typeof cleanupClient.cancelQueries;
+  cleanupClient.setQueryData(sessionQuery.queryKey, sessionValue());
+  const freshRealmsQuery = cleanupClient.getQueryCache().find({ queryKey: cleanupKey, exact: true });
+  expect(cleanupCaller.isCurrent()).toBe(false);
+  expect(freshRealmsQuery).not.toBe(oldRealmsQuery);
+  expect(cleanupClient.getQueryData(cleanupKey)).toBe(freshPage);
+
+  // Hydration verification belongs to a connected attempt. StrictMode reconnect starts a fresh validation; its
+  // late prior completion cannot unlock the current connection.
+  const pendingVerifyClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  hydrate(pendingVerifyClient, realmsWire.queries);
+  pendingVerifyClient.setQueryData(sessionQuery.queryKey, sessionValue());
+  const pendingVerifyCaller = myRealmsCallerForVisit(pendingVerifyClient, realmsWire.result.visit);
+  const verifySubtle = crypto.subtle;
+  const verifyDigestDescriptor = Object.getOwnPropertyDescriptor(verifySubtle, 'digest');
+  const verifyNativeDigest = verifySubtle.digest.bind(verifySubtle);
+  const firstVerificationReleased = deferred<ArrayBuffer>();
+  const secondVerificationReleased = deferred<ArrayBuffer>();
+  let verificationDigestCount = 0;
+  Object.defineProperty(verifySubtle, 'digest', {
+    configurable: true,
+    writable: true,
+    value: ((algorithm: AlgorithmIdentifier, data: BufferSource) => {
+      if (new TextDecoder().decode(data) === 'token\u0000csrf-a') {
+        verificationDigestCount++;
+        if (verificationDigestCount === 1) return firstVerificationReleased.promise;
+        if (verificationDigestCount === 2) return secondVerificationReleased.promise;
+      }
+      return verifyNativeDigest(algorithm, data);
+    }) as typeof verifySubtle.digest,
+  });
+  const verifyDigest = await verifyNativeDigest('SHA-256', new TextEncoder().encode('token\u0000csrf-a'));
+  const disconnectFirst = pendingVerifyCaller.connect();
+  pendingVerifyCaller.verifyHydration();
+  disconnectFirst();
+  const disconnectSecond = pendingVerifyCaller.connect();
+  pendingVerifyCaller.verifyHydration();
+  try {
+    expect(verificationDigestCount).toBe(2);
+    firstVerificationReleased.resolve(verifyDigest);
+    await settle();
+    expect(pendingVerifyCaller.isCurrent()).toBe(false);
+    secondVerificationReleased.resolve(verifyDigest);
+    await settle();
+    expect(pendingVerifyCaller.isCurrent()).toBe(true);
+  } finally {
+    disconnectSecond();
+    firstVerificationReleased.resolve(verifyDigest);
+    secondVerificationReleased.resolve(verifyDigest);
+    if (verifyDigestDescriptor) Object.defineProperty(verifySubtle, 'digest', verifyDigestDescriptor);
+    else Reflect.deleteProperty(verifySubtle, 'digest');
+  }
 
   // Effect replay keeps the original caller; a final cleanup retires it. Both caller APIs are the ones connected by
   // the production hosts, so no duplicate mount or hidden transport is introduced here.

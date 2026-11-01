@@ -51,12 +51,14 @@ export const Route = createFileRoute('/boards/$id')({
         caller.queryOptions(boardPageQuery(params.id, deps.cursor, deps.sort, context.credentialMode)),
       );
       caller.assertLoadCurrent();
+      const result = await caller.resultFor(read, deps.cursor === undefined && read.page.threads.threads.length > 0);
+      caller.assertLoadCurrent();
       for (const thread of read.page.threads.threads) {
         caller.assertLoadCurrent();
         rememberThreadSlug(thread.id, threadTitle(thread));
       }
       caller.assertLoadCurrent();
-      return await caller.resultFor(read, deps.cursor === undefined && read.page.threads.threads.length > 0);
+      return result;
     } catch (error) {
       caller.captureError(error);
       throw error;

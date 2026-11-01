@@ -1,42 +1,32 @@
 # My Realms caller lifetime
 
-The private My Realms route captures one visit from the route QueryClient before it starts the existing collection
-read. The visit binds the route target, native cursor, locale, session credential mode, expected signed-in subject,
-CSRF fingerprint, session readiness, original QueryClient session revision and the prior `['my-realms', cursor]` cache
-revision. Those revision values describe that source only; they are not compared with counters in a separately hydrated
-browser QueryClient. The query key remains exactly `['my-realms', cursor ?? '']`.
+Each My Realms read captures one QueryClient, route cursor and locale, credential mode, session tuple and cache
+revision, source revision, and actual reader origin. A per-QueryClient visit generation is reserved before the caller's
+asynchronous CSRF fingerprint. A newer route capture supersedes an older pending capture even when the session values
+are equal. The old capture cannot activate after the new one or borrow its query/result owner.
 
-The existing query function checks that visit before and after the deferred `space-actions` import, before and after
-the BFF read, and before returning the result to React Query. The server reader records the subject and CSRF fingerprint
-from the same prepared request and credential used for the native read. Session-cache success, error and removal events
-advance a monotonic source revision; ordinary fetch-state and observer events do not. A successful replacement retires
-the visit even when its data is equal, and a batched away/back sequence advances once for each observed replacement.
-The caller also owns the exact page-query object: its first tagged success is accepted, while a later success, error or
-removal retires the ready result. Retirement cancels the exact query and removes its owned cache entry. The loader
-accepts a result only after the same caller, query object and newer local cache revision are observed. The route host
-accepts either that caller-tagged query result or the exact serialized loader envelope that completed the read. A
-retained loader fallback cannot restore a retired visit.
+The existing query function checks the caller and exact Query object before the native read, after its asynchronous
+action import, and after the response. `publishResponse` admits only the original page whose actual session origin
+matches the captured reader, and tags that page with the same caller and query object before TanStack Query can publish
+success. Query data is usable only while the exact query, page object, update revision, route, locale, credential mode
+and session source still belong to that visit. Successful equal-data session replacement, error/removal, observed ABA,
+route changes, abort, a replaced query or final unmount retire the visit. Fetch and observer activity alone do not.
 
-The route abort signal, route address, cursor, locale, session readiness, QueryClient and mounted connection all fence
-the caller. A disconnected component invalidates its callbacks immediately; final cancellation is deferred to a
-microtask so React StrictMode's synchronous effect replay remains one mounted connection. A later navigation creates
-a new caller and can read the current signed-in visitor's list. The route continues to use `requireSignedIn`, its
-existing unavailable error page, noindex metadata, search validation, native next cursor and `MyRealmsPageView`.
-`realm-membership-queries.ts` changes only the My Realms query/import region; RealmMembership and its refresh cycle
-retain their existing cache keys, signatures and behavior.
+Retirement removes only the exact owned query object. Its cancellation and removal filters include that object identity,
+so a replacement query sharing the cursor key survives reentrant cleanup. A late read, query error, `finally` callback
+or verification from a retired visit cannot publish or clear a newer query. StrictMode's synchronous effect replay
+reconnects the current caller; an asynchronous hydration verification is scoped to its own connection attempt, and an
+older completion cannot unlock the replayed connection.
 
-## Hydration boundary
+The current route still returns its accepted loader page for server rendering and adopts it in the browser. The existing
+`acceptsHydrationSeed` branch can render private data before post-mount verification; that branch is an explicit
+reserved contract and is not proven safe by this lifetime or by matching receipt fields. This work does not change
+private SSR or first-render output, claim `renderToString`/`hydrateRoot` first-paint proof, or add a trusted synchronous
+shared hydration/session producer. Independent QueryClients still cannot reveal an unobserved away-and-back session
+transition; the known independent-cache/ABA limit remains.
 
-The server loader and browser may use separate QueryClient objects. The serialized page therefore carries two distinct
-facts: the expected session and source observation captured before the read, and the actual reader origin captured from
-the same prepared request and credential as the native read. It also carries a caller/route binding. The envelope has no
-bearer, token, raw CSRF or authentication seal. The browser validates that the actual origin matches the server's
-expected reader, then compares its current signed-in subject and SHA-256 CSRF fingerprint with that origin. Once
-adopted, it observes the browser QueryClient's own monotonic source generation and page-query object.
-
-The server's revision and the browser's revision belong to independent QueryClients and are never compared. A matching
-current subject/fingerprint establishes which reader produced the serialized result and that the current reader has the
-same identity; it does not claim to reconstruct an unobserved account or credential history between caches. Changes
-observed after browser adoption, including same-account credential replacement and observed batched away/back changes,
-retire the page monotonically. If the actual origin or current identity is missing or mismatched, the browser withholds
-the serialized private list and requires a fresh route read.
+The source boundary is the existing My Realms caller's capture, admission, verification, query ownership and
+post-verification effects; its route host; this document; and the three connected regression files. The route loader,
+membership query, page reader, session producer, native query, and renderer remain unchanged. The existing first-page
+request, cursor recovery and continuation, order, private disclosure and null-CSRF read-only behavior are preserved.
+No extra session read, authentication preflight, polling, per-row hydration or native request is added.
