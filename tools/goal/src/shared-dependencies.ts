@@ -279,6 +279,21 @@ export function dependencyInstallationMatches(worktree: string): boolean {
   );
 }
 
+/** Validate a published immutable dependency store itself, without accepting a consumer's receipt as proof. */
+export function dependencyStoreMatches(store: string, expectedKey: string): boolean {
+  try {
+    return (
+      basename(resolve(store)) === expectedKey &&
+      existsSync(join(store, 'package.json')) &&
+      dependencyKey(store) === expectedKey &&
+      !bunInstallationFailure(store) &&
+      dependencyLinksMatch(store)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function removeWorkspaceSkeletons(worktree: string): void {
   for (const dir of workspaceDirs(worktree))
     rmSync(join(worktree, dir, 'node_modules'), { recursive: true, force: true });

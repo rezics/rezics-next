@@ -958,6 +958,98 @@ migration where those values were already present, but their missing arrival tim
 filters and age thresholds cannot classify a row whose creation time is unknown, and missing Goal/document metadata
 stays unknown rather than being inferred from summary text, read time or row id.
 
+#### Native Storybook publication
+
+`goal publication` is the single supported native ingress for the ordinary hourly Storybook publication. It is available
+only to the currently authenticated manager configured as `integration.operationsManager`; `GOAL_MANAGER` alone,
+worker sessions, a copied approval file, and direct deploy scripts do not authorize it. Configure
+`integration.operationsManager` and the `dev` integration branch in the ignored local Goal settings before runtime
+release. All command state, bootstrap input, logs and immutable receipts live below the ignored Goal state directory.
+
+The Web owner first sends its retained conditional decision from its authenticated provider session. The inbox event
+stores the sender session provenance with the decision and its single canonical owner document:
+
+```sh
+bun tools/goal/src/cli.ts inbox send control-plane decision "Retained conditional Storybook authority" \
+  --document .temp/goal/web/resume-20261101/publication-0100-owner-decision.json
+bun tools/goal/src/cli.ts inbox log --to control-plane --grep "Retained conditional Storybook authority" --json
+```
+
+The operations manager reads the message ID from that inbox page, supplies the host census at
+`.temp/goal/publication/bootstrap.json`, then receives and runs only the returned authority identity:
+
+```sh
+bun tools/goal/src/cli.ts publication bootstrap
+bun tools/goal/src/cli.ts publication receive <owner-inbox-message-id>
+bun tools/goal/src/cli.ts publication status <authority-id>
+bun tools/goal/src/cli.ts publication start <authority-id>
+bun tools/goal/src/cli.ts publication status <authority-id>
+bun tools/goal/src/cli.ts publication recover <invocation-id>
+```
+
+The bootstrap document is ignored runtime evidence, not an approval document. It has `version: 1`,
+`visibility: "complete-native-publisher-capture-host-inventory"`, a current UTC `observedAt`,
+`noUnregisteredPublisherOrCaptureGroups: true`, a nonempty `records` array, and `historyEvidencePaths`. The census must
+come from the actual native host, include every retained publisher and capture handle, and be no older than five
+minutes. Each record is `{ "kind": "publisher" | "capture", "path": "<state-relative retained JSON>" }`; old receipts
+whose identity is in a companion record also use `identityEvidencePath` and `identityField`. For example, the retained
+1940 publisher identity is `firstPublisher` in `control-plane/storybook-duplicate-cancellation.json`, while the
+cancelled duplicate identity is `observed` in that same evidence. Those are the only supported companion identity
+bindings: the 1940 terminal receipt's `workflowPid` must match `firstPublisher.pid`; the cancellation evidence must
+bind `expected` and `observed` to the same PID/start/boot, retain the documented process-group transition and exact
+owned-PID signal, and show its target absent after cancellation. The controller checks both recorded process groups
+for complete visibility and refuses while either has members. Arbitrary companion-field pointers and mismatched
+workflow PIDs fail closed. The record list must include those historical handles, the 2100, 2200 and 2300 publisher
+receipts, and every other legacy publisher/capture still in the host census. Terminal publisher records need their
+original log inside the Goal state directory. The bootstrap preserves the original bytes and hashes; it never rewrites
+the legacy receipt.
+
+The history list must retain these state-relative records: `control-plane/storybook-publication-20261031-2100.json`,
+`control-plane/storybook-publication-20261031-2200.json`,
+`control-plane/storybook-publication-20261031-2300.json`,
+`control-plane/storybook-duplicate-cancellation.json`,
+`control-plane/publication-0100-0500-disposition.json`,
+`web/resume-20261101/publication-0100-owner-decision.json`, and
+`web/resume-20261101/publication-1940.json`. Missing files, malformed identities, unreadable logs, reused PIDs,
+surviving group members, unknown group visibility, or an asserted empty registry fail closed. The bootstrap does not
+kill processes or infer absence. Capture custody is registered or retired only after an actual process exists or has
+ended; registration does not start a capture:
+
+```sh
+bun tools/goal/src/cli.ts publication capture-register <pid> <retained-registration-evidence-path>
+bun tools/goal/src/cli.ts publication capture-retire <custody-id> <terminal-evidence-path>
+```
+
+Receiving the same durable inbox message returns its original authority ID; another message for its slot is refused.
+The start path atomically claims that authority under a cross-process directory lease, stores one invocation ID, and
+keeps exclusive publisher/capture custody through the workflow. Unknown or active custody, stale inventory, a wrong
+UTC slot, unelapsed hourly cadence, moved or stale dev ancestry, missing required integrated commits, modified
+workflow blobs, unclean source, or an unavailable/mismatched pinned dependency store refuses execution. Preparation
+uses an isolated detached Git worktree at the source commit and the existing exact shared dependency store. It never
+resets an existing tree, runs an unmanaged install or falls back to system Bun.
+
+The invocation uses the normal `storybook:deploy` workflow once with
+`timeout --signal=TERM --kill-after=30s 1800s <worktree>/node_modules/.bin/bun run storybook:deploy --force` from
+`<worktree>/apps/web`. The pinned workflow runs build plus all six unchanged smokes: signed-out account shell menu,
+signed-in account shell menu, composed UI Cover Card, Japanese locale with dark theme, Subject Member, and Library
+Copies Owner with its recorded cover media. The deploy script verifies the deployed live commit before it exits; the
+controller also requires readable live build metadata naming the immutable source commit. A 403, missing commit,
+mismatch, timeout, nonzero exit, lost process visibility, or interrupted spawn remains unavailable or non-green and
+never authorizes a repeat. The log retains the original process output and the receipt records argv, cwd, deadline,
+source and dependency identities, original PID/start/boot/group, exit/signal and live comparison.
+
+`status` reports authority, original process handle, receipt and delivery state. `recover` observes that same process
+identity and may redeliver its already durable terminal receipt; it never launches a replacement or signals an unknown
+or reused identity. Durable delivery is tracked once per Web and operations inbox. Authority receipt, workflow
+execution, terminal outcome, live equality and inbox delivery are separate evidence states. Exit zero without live
+commit equality is not success, and a saved terminal result remains visible when delivery needs recovery.
+
+The source change does not release this route for operations. The retained 01 UTC Web decision remains unconsumed,
+and the current disposition has no actual 01 UTC process handle or fresh native publisher/capture host census. Runtime
+bootstrap still needs that complete current census plus the exact retained evidence and logs above; source presence,
+configuration defaults and this documentation are not a release or permission to invoke publication. The full native
+controller lifecycle and compatibility checks remain deferred to the operations release.
+
 #### Width governor
 
 The independent manager-host sweep checks worker width every minute and delivers at most one wakeable width event per

@@ -239,6 +239,8 @@ export type ManagerEvent = {
   managerId: string;
   kind: ManagerEventKind;
   from?: string;
+  /** Provider session captured by the authenticated manager inbox sender; used for durable authority provenance. */
+  senderSessionId?: string;
   /** Persisted source fence when a worker sends through the manager inbox CLI. */
   senderProvenance?: { kind: 'worker'; taskId: string; attempt: number; ownerManager: string };
   taskId?: string;
