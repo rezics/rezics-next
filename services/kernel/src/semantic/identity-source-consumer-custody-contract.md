@@ -334,11 +334,10 @@ physical absence or receiving-copy closure.
 `IdentitySourceHistoryAuthority` is a persistable **address**, not a certificate.
 It includes the original custody key and terminal sequence, exact reference, actual
 replay/undo/restore generations, disposition, original terminal native commit and
-technical receiving commit, if any. Bigint fields are decimal strings. History's
+technical receiving commit, if any. Bigint fields are decimal strings. The
 address is reconstructed from native columns and the actual claim receipt; extra
 caller JSON is not copied into it. Barrier time uses the native timestamp text.
-History's
-future native guard must resolve this address with `expected` on every transition;
+History's future native guard must resolve this address with `expected` on every transition;
 an equal JSON value, a released successful call or a copied terminal is insufficient.
 It must independently revalidate its own association, receiving identity and physical
 roles, current erasure barrier, native Source/Account prerequisites and actual SDK
