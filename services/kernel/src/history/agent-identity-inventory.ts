@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
+import type { WorkClient } from '../work/client.ts';
 import { currentCommand, currentCommandReceipt, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf } from '../route/route.ts';
@@ -14,11 +15,13 @@ import { commandHistoryKind, COMMAND_HISTORY_KINDS } from './record.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 import {
   readAgentIdentitySDKRetirementGap,
+  IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
   verifyAgentIdentityRetirementStage,
   type AgentIdentityRetirementStage,
 } from './agent-identity-retirement.ts';
 import {
   historyDeadline,
+  lockHistoryBarrier,
   readHistoryReceivingReceipt,
   type HistoryReceivingContext,
   type HistoryReceivingDependencies,
@@ -348,13 +351,14 @@ export async function readAgentIdentityNativeInventory(
 /** Every foreign receiving probe runs AFTER releasing the read home. A missing receipt is
  * precise pending. Native seal never asserts SDK enrollment, Account root or Semantic custody. */
 export async function readAgentIdentityInventory(
-  deps: HistoryReceivingDependencies,
+  deps: HistoryReceivingDependencies & Readonly<{ client?: WorkClient }>,
   barrier: HistoryBarrier,
   key: AgentIdentitySourceKey,
   context: HistoryReceivingContext,
 ) {
   const fixedBarrier = Object.freeze({ ...barrier });
-  const inventory = await readAgentIdentityNativeInventory(deps.pool, key, context);
+  const fixedKey = structuredClone(key);
+  const inventory = await readAgentIdentityNativeInventory(deps.pool, fixedKey, context);
   if (inventory.state !== 'sealed') return inventory;
   for (const artifact of inventory.proof.artifacts) {
     if (!(await readHistoryReceivingReceipt(deps, fixedBarrier, artifact, context)))
@@ -367,9 +371,12 @@ export async function readAgentIdentityInventory(
   }
   const gap = await readAgentIdentitySDKRetirementGap(
     deps.pool,
-    { kind: key.direction, account: key.accountId, receipt: key.receiptId },
+    { kind: fixedKey.direction, account: fixedKey.accountId, receipt: fixedKey.receiptId },
     context,
+    deps.client ? { client: deps.client, original: inventory.proof.original, barrier: fixedBarrier } : undefined,
   );
+  // A released observation never grants later source-home cleanup authority.
+  if (gap === null) return { ...inventory, state: 'received' as const, native: 'verified' as const, gap: null };
   return { ...inventory, state: 'pending' as const, native: 'sealed' as const, gap };
 }
 
@@ -397,6 +404,11 @@ export async function verifyAgentIdentityInventory(
     cutDigest(proof.original, proof.artifacts) !== proof.cutDigest
   )
     return pending('agent-identity-native-cut-stale');
+  // The caller's source may belong to another retained role. There is no native
+  // cross-home barrier courier here; do not read that foreign Account home while held.
+  if (partitionOf(barrier.accountRoute) !== current.proof.original.partition)
+    return pending('agent-identity-source-barrier-home-unavailable');
+  if (!(await lockHistoryBarrier(tx, barrier))) return pending('agent-identity-barrier-changed');
   for (const artifact of current.proof.artifacts) {
     const locator = artifact.locator;
     const encoded = Buffer.from(encodeLocator(locator));
@@ -472,6 +484,10 @@ export async function verifyAgentIdentityInventory(
       reference.receipt.account !== key.accountId ||
       reference.receipt.receipt !== key.receiptId ||
       reference.sourceDigest !== current.proof.original.digest ||
+      reference.source.partition !== current.proof.original.partition ||
+      reference.source.epoch !== current.proof.original.epoch ||
+      reference.source.position !== current.proof.original.position ||
+      reference.source.transactionId !== current.proof.original.transactionId ||
       reference.barrier.accountId !== barrier.accountId ||
       reference.barrier.accountRoute !== barrier.accountRoute ||
       reference.barrier.version !== barrier.version ||
@@ -480,8 +496,10 @@ export async function verifyAgentIdentityInventory(
       return pending('agent-identity-sdk-retirement-reference-mismatch');
     const verified = await verifyAgentIdentityRetirementStage(tx, sdkStage);
     if (verified.state === 'pending') return { state: 'pending', native: 'verified', gap: verified.gap };
-    // A source verifier alone cannot close the inventory. Independent current SDK native
-    // receipt, physical receiving closure and durable source transfer remain mandatory.
+    // The SDK current-lock port is installed, but the Source verifier supplies no
+    // durable native History handoff. Neither its released result nor a generation-2
+    // SDK receipt authorizes the separate readiness and receiving-copy transitions.
+    return { state: 'pending', native: 'verified', gap: IDENTITY_HISTORY_HANDOFF_UNAVAILABLE };
   }
   // A discovery/absence/status flag cannot establish native SDK or source transfer custody.
   return { state: 'pending', native: 'verified', gap: sdkGap };

@@ -1,10 +1,27 @@
 import canonicalize from 'canonicalize';
-import { existsSync } from 'node:fs';
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  currentCommandResources,
+  noEffect,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
-import { settleHistoryWork } from '../work/history-enqueue.ts';
+import {
+  lockSdkWorkflowWriterState,
+  readSdkWorkflowWriterState,
+  readSdkWorkflowRetirement,
+  type SdkRetirementFence as WorkflowWriterFence,
+  type SdkRetirementClient,
+  SDK_TRANSACTION_FENCE_COST,
+  type SdkWriterState,
+} from '../work/sdk-retirement-fence.ts';
+import {
+  currentIdentitySourceConsumerMaintenance,
+  reserveIdentitySourceConsumerNativeWork,
+} from '../semantic/identity-source-consumer-maintenance.ts';
 import type { AgentIdentityWorkSource } from './agent-identity-source.ts';
 import type { AgentIdentityRetirementStage } from './agent-identity-retirement.ts';
 import { encodeLocator } from './locator.ts';
@@ -37,6 +54,76 @@ export type AgentIdentitySDKReceivingObservation =
 
 const pending = (gap: string): Pending => ({ state: 'pending', gap });
 const same = (a: unknown, b: unknown) => canonicalize(a) === canonicalize(b);
+
+/** The current Source verifier has no native durable History handoff interface. A released
+ * true result cannot authorize either readiness or final receiving closure. */
+export const IDENTITY_HISTORY_HANDOFF_UNAVAILABLE = 'identity-source-history-durable-handoff-unavailable';
+
+export const AGENT_IDENTITY_SDK_OBSERVATION_COST = Object.freeze({
+  rows: 3,
+  points: 2,
+  statements: 1,
+  bytes: 8192,
+  engineRequests: 0,
+});
+export type AgentIdentitySDKWriterObservation = Pending | Readonly<{ state: 'observed'; writer: SdkWriterState }>;
+
+/** Released observation, independently funded in the SAME live Source frame. This never
+ * creates a workflow identity and is not authority for a later command. */
+export async function readAgentIdentitySDKWriterState(
+  pool: Pool,
+  client: WorkClient,
+  workflowId: string,
+  context: HistoryReceivingContext,
+): Promise<AgentIdentitySDKWriterObservation> {
+  historyDeadline(context, 0);
+  if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
+  const work = currentIdentitySourceConsumerMaintenance(pool, context.deadline);
+  if (!work || !reserveIdentitySourceConsumerNativeWork(pool, work, AGENT_IDENTITY_SDK_OBSERVATION_COST))
+    return pending('identity-sdk-current-fence-funding-unavailable');
+  const writer = await readSdkWorkflowWriterState(workflowId, client);
+  historyDeadline(context, 0);
+  return writer ? { state: 'observed', writer } : pending('identity-sdk-original-writer-unavailable');
+}
+
+/** Technical current-state check only. The SDK derives physical placement from the actual
+ * command pool, and owns both native locks until this command commits. Generation 1 may
+ * serialize readiness; only the exact generation-2 tuple may serialize closure. A database
+ * error propagates: its transaction must roll back, never continue after a stale check. */
+export async function lockAgentIdentitySDKWriterState(
+  tx: CommandTransaction,
+  client: WorkClient,
+  workflowId: string,
+  expected: SdkWriterState,
+  phase: 'readiness' | 'closure',
+): Promise<AgentIdentitySDKWriterObservation> {
+  const resources = currentCommandResources(tx);
+  if (currentCommand(tx).basis !== null) throw new TypeError('Identity SDK fence requires a current native command');
+  historyDeadline(resources, currentCommand(tx).partition);
+  if (expected.workflowID !== workflowId) return pending('identity-sdk-original-writer-changed');
+  if (phase === 'closure' && expected.generation !== '2') return pending('identity-sdk-permanent-closure-pending');
+  if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
+  const work = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
+  if (
+    !work ||
+    !reserveIdentitySourceConsumerNativeWork(resources.pool, work, {
+      rows: SDK_TRANSACTION_FENCE_COST.rows,
+      points: SDK_TRANSACTION_FENCE_COST.points,
+      statements: SDK_TRANSACTION_FENCE_COST.statements,
+      bytes: SDK_TRANSACTION_FENCE_COST.bytes,
+      engineRequests: SDK_TRANSACTION_FENCE_COST.engineWork,
+    })
+  )
+    return pending('identity-sdk-current-fence-funding-unavailable');
+  try {
+    return { state: 'observed', writer: await lockSdkWorkflowWriterState(tx, expected, client) };
+  } catch (error) {
+    // This is the SDK's specific pre-IO placement refusal, not a SQL error or retry.
+    if (error instanceof Error && error.message === 'DBOS writer fence requires the same native transaction pool')
+      return pending('identity-sdk-source-pool-mismatch');
+    throw error;
+  }
+}
 
 /** Receiver-local locks only. The caller releases its source checkout before entering.
  * Native UUID mapping, original SDK creation, restore/writer generation, physical roles
@@ -107,24 +194,6 @@ export async function readAgentIdentitySDKReceivingBinding(
   };
 }
 
-/** Type-only adapter for the original producer module while producer-first integration is
- * pending. These are exactly its published types, not another SDK extension or runtime shim.
- * Once integrated, the original wrapper is loaded and receives this actual WorkClient. */
-type WorkflowWriterFence = Readonly<{
-  workflowID: string;
-  generation: string;
-  closureID: string;
-  closedAt: number;
-}>;
-type SdkRetirementClient = {
-  retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
-  getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
-};
-type SdkRetirementModule = {
-  retireSdkWorkflowWriters(id: string, sdk: SdkRetirementClient): Promise<WorkflowWriterFence>;
-  readSdkWorkflowRetirement(id: string, sdk: SdkRetirementClient): Promise<WorkflowWriterFence | null>;
-};
-
 /** First supported consumer receipt binding for Source and original-row minimization.
  * `fence` is the UNMODIFIED SDK receipt. The surrounding binding is Kernel metadata;
  * it supplies no Semantic terminal/undo locator and confers no cleanup authority. */
@@ -146,17 +215,6 @@ function nativeClient(client: WorkClient): client is WorkClient & SdkRetirementC
     'getWorkflowWriterFence' in client &&
     typeof client.getWorkflowWriterFence === 'function'
   );
-}
-
-async function nativeModule(): Promise<SdkRetirementModule | null> {
-  // Resolve only the original producer path. Do not recreate its wrappers when absent, and
-  // do not catch a broken installed module as if it were an unsupported SDK.
-  const path = new URL('../work/sdk-retirement-fence.ts', import.meta.url);
-  if (!existsSync(path)) return null;
-  const module: SdkRetirementModule = await import(path.href);
-  return typeof module.retireSdkWorkflowWriters === 'function' && typeof module.readSdkWorkflowRetirement === 'function'
-    ? module
-    : null;
 }
 
 function validFence(fence: WorkflowWriterFence | null, workflowId: string): fence is WorkflowWriterFence {
@@ -208,13 +266,11 @@ export async function readAgentIdentitySDKFence(
   if (fixed.sourceGeneration !== fixed.binding.receiver.generation)
     return pending('identity-sdk-retirement-source-fence-changed');
   if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
-  const sdk = await nativeModule();
-  if (!sdk) return pending('identity-sdk-native-wrapper-unavailable');
   const before = await receivingBinding(pool, fixed.binding, context);
   if (before.state === 'pending') return before;
   if (!same(before.binding, fixed.binding)) return pending('identity-sdk-retirement-receiving-binding-changed');
   historyDeadline(context, 0);
-  const fence = await sdk.readSdkWorkflowRetirement(fixed.binding.workflowId, client);
+  const fence = await readSdkWorkflowRetirement(fixed.binding.workflowId, client);
   if (!validFence(fence, fixed.binding.workflowId) || !same(fence, fixed.fence))
     return pending('identity-sdk-native-receipt-changed');
   const after = await receivingBinding(pool, fixed.binding, context);
@@ -223,9 +279,9 @@ export async function readAgentIdentitySDKFence(
   return { state: 'observed', receipt: { ...fixed, fence } };
 }
 
-/** Source verification releases its home before receiver admission or SDK retirement.
- * The durable terminal/technical-source receipt must verify first. Neither the public
- * boolean, an SDK receipt nor this entry point bypasses that source-local check. */
+/** Stage the actual original owners for readiness, without retiring a live obligation.
+ * Current Source custody and the SDK fence serialize in the same Source command. The
+ * absent native durable handoff remains pending before any readiness/retirement write. */
 export async function retireAgentIdentitySDKWork(
   pool: Pool,
   client: WorkClient,
@@ -272,61 +328,31 @@ export async function retireAgentIdentitySDKWork(
     receiver.binding.receiver.generation !== fixed.handoff.generation
   )
     return pending('identity-sdk-retirement-source-fence-changed');
-  if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
-  const sdk = await nativeModule();
-  if (!sdk) return pending('identity-sdk-native-wrapper-unavailable');
-  historyDeadline(context, 0);
-  const fence = await sdk.retireSdkWorkflowWriters(receiver.binding.workflowId, client);
-  if (!validFence(fence, receiver.binding.workflowId)) return pending('identity-sdk-native-receipt-invalid');
-  const receipt = {
-    binding: receiver.binding,
-    sourceGeneration: fixed.handoff.generation,
-    fence,
-  };
-  const observed = await readAgentIdentitySDKFence(pool, client, receipt, context);
+  const observed = await readAgentIdentitySDKWriterState(pool, client, receiver.binding.workflowId, context);
   if (observed.state === 'pending') return observed;
-  // Recheck the source on a released checkout. The receiving transaction below binds this
-  // durable SDK evidence to the exact owner handoff only after the source terminal fence holds.
-  const currentSource = await sourceCheck();
-  if (currentSource.state === 'pending') return currentSource;
-  if (!same(currentSource, source)) return pending('identity-sdk-retirement-source-fence-changed');
+  // Re-enter the actual Source command. Source and SDK current locks now survive the
+  // SAME commit; no released verifier result or independently checked-out SDK supplies it.
+  historyDeadline(context, fixed.reference.source.partition);
   return (
     await runCommand<AgentIdentitySDKFenceObservation>(
       pool,
-      { partition: 0, deadline: context.deadline },
+      { partition: fixed.reference.source.partition, deadline: context.deadline },
       async (tx) => {
-        const current = await readAgentIdentitySDKReceivingBinding(
-          tx,
-          {
-            partition: 0,
-            locator: { artifactType: 'durable-work/v1', workId: receipt.binding.custodyId },
-            accounts: receipt.binding.source.accounts,
-          },
-          receipt.binding.barrier,
-        );
+        const current = await verifyAgentIdentityRetirementStage(tx, fixed);
         if (current.state === 'pending') return noEffect(current);
-        if (!same(current.binding, receipt.binding))
-          return noEffect(pending('identity-sdk-retirement-receiving-binding-changed'));
-        const row = (
-          await tx.query<{ sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null }>(
-            'SELECT sdk_retirement_receipt FROM core.agent_identity_work WHERE custody_id=$1 FOR UPDATE',
-            [receipt.binding.custodyId],
-          )
-        ).rows[0];
-        if (!row || (row.sdk_retirement_receipt && !same(row.sdk_retirement_receipt, receipt)))
-          return noEffect(pending('identity-sdk-native-receipt-changed'));
-        if (!row.sdk_retirement_receipt)
-          await tx.query('UPDATE core.agent_identity_work SET sdk_retirement_receipt=$2 WHERE custody_id=$1', [
-            receipt.binding.custodyId,
-            receipt,
-          ]);
-        await settleHistoryWork(tx, {
-          partition: 0,
-          workId: receipt.binding.custodyId,
-          digest: Buffer.from(receipt.binding.requestDigest, 'hex'),
-          owner: 'access.agent-identity',
-        });
-        return noEffect(observed);
+        if (!same(current, source)) return noEffect(pending('identity-sdk-retirement-source-fence-changed'));
+        const writer = await lockAgentIdentitySDKWriterState(
+          tx,
+          client,
+          current.workflowId,
+          observed.writer,
+          'readiness',
+        );
+        if (writer.state === 'pending') return noEffect(writer);
+        // The original History database guard has no supported Source-owner native
+        // handoff to consume. Do not retire the SDK while its live obligation is still
+        // pending, persist a copied terminal receipt, or manufacture owner_ready.
+        return noEffect(pending(IDENTITY_HISTORY_HANDOFF_UNAVAILABLE));
       },
     )
   ).value;

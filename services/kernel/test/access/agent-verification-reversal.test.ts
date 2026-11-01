@@ -2544,3 +2544,372 @@ test("Original Account reversal writer publishes exact native reversal settlemen
   expect(await frame((context) => readAccountIdentityReversalSettlement(pool, reference, context))).toBeNull();
   expect(await independent()).toEqual(before);
 });
+
+test('original identity SDK receiving observation rejects wrong sources and a native fence without Source transfer', async () => {
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
+  const { readAgentIdentityNativeInventory } = await import('../../src/history/agent-identity-inventory.ts');
+  const { readAgentIdentitySDKRetirement, readAgentIdentitySDKRetirementGap, AGENT_IDENTITY_SDK_RETIREMENT } =
+    await import('../../src/history/agent-identity-retirement.ts');
+  const { retireSdkWorkflowWriters, readSdkWorkflowRetirement } =
+    await import('../../src/work/sdk-retirement-fence.ts');
+  const { account, token } = await verified();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const decision = released.body.reversal as AgentVerificationReversal;
+  await finish(decision);
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: decision.receiptId };
+  const key = { route: accountRoute, accountId: account.id, direction: receipt.kind, receiptId: receipt.receipt };
+  const context = () => ({ deadline: Date.now() + 10_000 });
+  const cut = await readAgentIdentityNativeInventory(pool, key, context());
+  if (cut.state !== 'sealed') throw new Error('Expected actual original native inventory');
+  const original = cut.proof.original;
+  const client = await createWorkClient(databaseUrl, pool);
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('admitted');
+    const native = (
+      await pool.query('SELECT custody_id,workflow_id FROM core.agent_identity_work WHERE source_key=$1', [
+        JSON.stringify([receipt.kind, receipt.account, receipt.receipt]),
+      ])
+    ).rows[0];
+    const inputs = (
+      await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [native.workflow_id])
+    ).rows[0].inputs;
+    const erased = (
+      await pool.query(
+        'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+        [accountRoute, account.id],
+      )
+    ).rows[0];
+    const barrier = { accountId: account.id, accountRoute, version: erased.version, at: erased.at };
+    for (const changed of [
+      { ...original, digest: '0'.repeat(64) },
+      { ...original, epoch: original.epoch + 1 },
+      { ...original, position: original.position + 1n },
+      { ...original, transactionId: randomUUID() },
+      { ...original, partition: original.partition + 1 },
+    ]) {
+      expect(await readAgentIdentitySDKRetirement(pool, client, changed, barrier, context())).toEqual({
+        state: 'pending',
+        gap: 'identity-sdk-source-native-binding-changed',
+      });
+    }
+    expect(
+      await readAgentIdentitySDKRetirement(
+        pool,
+        client,
+        { ...original, key: { ...key, receiptId: randomUUID() } },
+        barrier,
+        context(),
+      ),
+    ).toEqual({ state: 'pending', gap: 'agent-identity-sdk-recording-port-unavailable' });
+    expect(
+      await readAgentIdentitySDKRetirementGap(pool, { ...receipt, receipt: randomUUID() }, context(), {
+        client,
+        original,
+        barrier,
+      }),
+    ).toBe('identity-sdk-source-native-binding-changed');
+    // This is the actual SDK owner API and its unmodified durable receipt, not a fixture
+    // retirement flag. A permanent writer fence alone must retain Source and SDK payloads.
+    const fence = await retireSdkWorkflowWriters(native.workflow_id, client);
+    expect(await readSdkWorkflowRetirement(native.workflow_id, client)).toEqual(fence);
+    expect(await readAgentIdentitySDKRetirement(pool, client, original, barrier, context())).toEqual({
+      state: 'pending',
+      gap: AGENT_IDENTITY_SDK_RETIREMENT.gap,
+    });
+    expect(await readAgentIdentitySDKRetirementGap(pool, receipt, context(), { client, original, barrier })).toBe(
+      AGENT_IDENTITY_SDK_RETIREMENT.gap,
+    );
+    expect(
+      (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [native.workflow_id])).rows[0]
+        .inputs,
+    ).toBe(inputs);
+    expect(
+      (
+        await pool.query(
+          `SELECT w.owner_ready,w.state,w.absence_verified,m.sdk_retirement_receipt
+         FROM core.history_work w JOIN core.agent_identity_work m ON m.custody_id=w.work_id
+         WHERE w.partition_no=0 AND w.work_id=$1`,
+          [native.custody_id],
+        )
+      ).rows[0],
+    ).toEqual({ owner_ready: false, state: 'pending', absence_verified: false, sdk_retirement_receipt: null });
+  } finally {
+    await client.close();
+  }
+}, 60_000);
+
+test('Genuine current source and SDK fences guard distinct History readiness and exact receiving closure', async () => {
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
+  const {
+    readAgentIdentitySDKWriterState,
+    lockAgentIdentitySDKWriterState,
+    readAgentIdentitySDKReceivingBinding,
+    IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
+  } = await import('../../src/history/agent-identity-sdk-fence.ts');
+  const { withIdentitySourceConsumerMaintenance, identitySourceConsumerNativeWork } =
+    await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const { readAgentIdentityRetirementStage, agentIdentityRetirementReadiness } =
+    await import('../../src/history/agent-identity-retirement.ts');
+  const { readSdkWorkflowWriterState, retireSdkWorkflowWriters } =
+    await import('../../src/work/sdk-retirement-fence.ts');
+  const { account, token } = await verified();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const decision = released.body.reversal as AgentVerificationReversal;
+  await finish(decision);
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: decision.receiptId };
+  const source = await loadAccountIdentitySource(pool, receipt);
+  const job = await probeAccountIdentityPublication(pool, receipt);
+  const client = await createWorkClient(databaseUrl, pool);
+  const independent = await createWorkClient(databaseUrl);
+  const contender = await pool.connect();
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('admitted');
+    const native = (
+      await pool.query('SELECT custody_id,accounts FROM core.agent_identity_work WHERE workflow_id=$1', [
+        source.workflowId,
+      ])
+    ).rows[0];
+    const erased = (
+      await pool.query(
+        'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+        [accountRoute, account.id],
+      )
+    ).rows[0];
+    const barrier = { accountId: account.id, accountRoute, version: erased.version, at: erased.at };
+    const reference = {
+      receipt,
+      job,
+      barrier,
+      erasedRole: 'subject' as const,
+      source: {
+        partition: source.partition,
+        epoch: source.epoch,
+        position: source.position,
+        transactionId: source.transactionId,
+      },
+      sourceDigest: source.digest,
+    };
+    const deadline = Date.now() + 10_000;
+    const live = await readSdkWorkflowWriterState(source.workflowId, client);
+    if (!live) throw new Error('Expected original native writer state');
+    expect(live.generation).toBe('1');
+    // No caller allowance, deadline or copied state creates a live funding frame.
+    expect(await readAgentIdentitySDKWriterState(pool, client, source.workflowId, { deadline })).toEqual({
+      state: 'pending',
+      gap: 'identity-sdk-current-fence-funding-unavailable',
+    });
+    await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (context) => {
+      const balance = () => identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)!;
+      const before = balance();
+      expect(await readAgentIdentitySDKWriterState(pool, client, source.workflowId, context)).toEqual({
+        state: 'observed',
+        writer: live,
+      });
+      expect(balance()).toEqual({
+        rows: before.rows - 3,
+        points: before.points - 2,
+        statements: before.statements - 1,
+        bytes: before.bytes - 8192,
+        engineRequests: 0,
+      });
+      const check = (expected = live, phase: 'readiness' | 'closure' = 'readiness', sdk = client) =>
+        runCommand(pool, { partition: source.partition, deadline }, async (tx) =>
+          noEffect(await lockAgentIdentitySDKWriterState(tx, sdk, source.workflowId, expected, phase)),
+        ).then((result) => result.value);
+      const spent = balance();
+      await runCommand(pool, { partition: source.partition, deadline }, async (tx) => {
+        expect(await lockAgentIdentitySDKWriterState(tx, client, source.workflowId, live, 'readiness')).toEqual({
+          state: 'observed',
+          writer: live,
+        });
+        // The helper has returned, but the SDK's actual row is still locked through Source COMMIT.
+        await contender.query('BEGIN');
+        await expect(
+          contender.query('SELECT 1 FROM dbos.workflow_writer_fences WHERE workflow_uuid=$1 FOR UPDATE NOWAIT', [
+            source.workflowId,
+          ]),
+        ).rejects.toMatchObject({ code: '55P03' });
+        await contender.query('ROLLBACK');
+        return noEffect(null);
+      });
+      expect(balance()).toEqual({
+        rows: spent.rows - 4,
+        points: spent.points - 2,
+        statements: spent.statements - 4,
+        bytes: spent.bytes - 8192,
+        engineRequests: 0,
+      });
+      await contender.query('BEGIN');
+      await contender.query('SELECT 1 FROM dbos.workflow_writer_fences WHERE workflow_uuid=$1 FOR UPDATE NOWAIT', [
+        source.workflowId,
+      ]);
+      await contender.query('ROLLBACK');
+      expect(await check(live, 'closure')).toEqual({ state: 'pending', gap: 'identity-sdk-permanent-closure-pending' });
+      const beforeMismatch = balance();
+      expect(await check(live, 'readiness', independent)).toEqual({
+        state: 'pending',
+        gap: 'identity-sdk-source-pool-mismatch',
+      });
+      expect(balance()).toEqual({
+        rows: beforeMismatch.rows - 4,
+        points: beforeMismatch.points - 2,
+        statements: beforeMismatch.statements - 4,
+        bytes: beforeMismatch.bytes - 8192,
+        engineRequests: 0,
+      });
+      for (const changed of [
+        { ...live, restoreGeneration: randomUUID() },
+        { ...live, workflowID: `missing:${randomUUID()}` },
+      ]) {
+        const beforeFailure = balance();
+        if (changed.workflowID !== source.workflowId) {
+          expect(await check(changed)).toEqual({ state: 'pending', gap: 'identity-sdk-original-writer-changed' });
+          expect(balance()).toEqual(beforeFailure);
+        } else {
+          await expect(check(changed)).rejects.toThrow('writer restore generation changed');
+          expect(balance()).toEqual({
+            rows: beforeFailure.rows - 4,
+            points: beforeFailure.points - 2,
+            statements: beforeFailure.statements - 4,
+            bytes: beforeFailure.bytes - 8192,
+            engineRequests: 0,
+          });
+        }
+      }
+    });
+    // Native technical closure is real; it cannot create missing History/Source authority.
+    const fence = await retireSdkWorkflowWriters(source.workflowId, client);
+    const closed = await readSdkWorkflowWriterState(source.workflowId, client);
+    if (!closed) throw new Error('Expected permanent native writer closure');
+    expect(closed).toEqual({ ...fence, restoreGeneration: live.restoreGeneration });
+    await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async () => {
+      const check = (expected = closed) =>
+        runCommand(pool, { partition: source.partition, deadline }, async (tx) =>
+          noEffect(await lockAgentIdentitySDKWriterState(tx, client, source.workflowId, expected, 'closure')),
+        ).then((result) => result.value);
+      expect(await check()).toEqual({ state: 'observed', writer: closed });
+      for (const changed of [
+        { ...closed, closureID: randomUUID() },
+        { ...closed, closedAt: closed.closedAt! + 1 },
+        { ...closed, restoreGeneration: randomUUID() },
+      ])
+        await expect(check(changed)).rejects.toThrow(/writer (state|restore generation) changed/);
+    });
+    await withIdentitySourceConsumerMaintenance(
+      {
+        pool,
+        env: {
+          KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_BYTES: '8192',
+        },
+      },
+      { deadline },
+      async (context) => {
+        expect((await readAgentIdentitySDKWriterState(pool, client, source.workflowId, context)).state).toBe(
+          'observed',
+        );
+        const exhausted = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+        expect(exhausted?.bytes).toBe(0);
+        expect(await readAgentIdentitySDKWriterState(pool, client, source.workflowId, context)).toEqual({
+          state: 'pending',
+          gap: 'identity-sdk-current-fence-funding-unavailable',
+        });
+        expect(
+          (
+            await runCommand(pool, { partition: source.partition, deadline }, async (tx) =>
+              noEffect(await lockAgentIdentitySDKWriterState(tx, client, source.workflowId, closed, 'closure')),
+            )
+          ).value,
+        ).toEqual({ state: 'pending', gap: 'identity-sdk-current-fence-funding-unavailable' });
+        expect(identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(exhausted);
+      },
+    );
+    const artifact = {
+      partition: 0,
+      locator: { artifactType: 'durable-work/v1' as const, workId: native.custody_id },
+      accounts: native.accounts,
+    };
+    const binding = (
+      await runCommand(pool, { partition: 0, deadline }, async (tx) =>
+        noEffect(await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier)),
+      )
+    ).value;
+    if (binding.state !== 'observed') throw new Error('Expected current original receiving binding');
+    // Genuine SDK evidence may be retained as metadata. Even this exact receipt is not
+    // the missing original-owner durable readiness or receiving-copy authority.
+    await pool.query('UPDATE core.agent_identity_work SET sdk_retirement_receipt=$2 WHERE custody_id=$1', [
+      native.custody_id,
+      { binding: binding.binding, sourceGeneration: binding.binding.receiver.generation, fence },
+    ]);
+    expect(
+      (
+        await runCommand(pool, { partition: 0, deadline }, async (tx) =>
+          noEffect(await agentIdentityRetirementReadiness(tx, artifact, barrier)),
+        )
+      ).value,
+    ).toEqual({ ready: false, gap: IDENTITY_HISTORY_HANDOFF_UNAVAILABLE });
+    const stage = await readAgentIdentityRetirementStage(pool, reference, { deadline });
+    if (!stage) throw new Error('Expected genuine native original Source stage');
+    const { retireAgentIdentitySDKWork } = await import('../../src/history/agent-identity-sdk-fence.ts');
+    expect(await retireAgentIdentitySDKWork(pool, client, stage, { deadline })).toEqual({
+      state: 'pending',
+      gap: 'identity-source-consumer-custody-pending',
+    });
+    expect(
+      (
+        await runCommand(pool, { partition: 0, deadline }, async (tx) =>
+          noEffect(
+            await agentIdentityRetirementReadiness(
+              tx,
+              {
+                partition: 0,
+                locator: { artifactType: 'durable-work/v1', workId: native.custody_id },
+                accounts: native.accounts,
+              },
+              barrier,
+            ),
+          ),
+        )
+      ).value.ready,
+    ).toBe(false);
+    await expect(
+      pool.query("UPDATE core.history_work SET owner_ready=true,state='ready' WHERE partition_no=0 AND work_id=$1", [
+        native.custody_id,
+      ]),
+    ).rejects.toThrow('requires durable source transfer');
+    expect(
+      (
+        await pool.query(
+          'SELECT state,owner_ready,absence_verified FROM core.history_work WHERE partition_no=0 AND work_id=$1',
+          [native.custody_id],
+        )
+      ).rows[0],
+    ).toEqual({ state: 'pending', owner_ready: false, absence_verified: false });
+    expect(
+      (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [source.workflowId])).rows,
+    ).toHaveLength(1);
+    await contender.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+    await expect(
+      client.enqueueInTransaction(
+        contender,
+        {
+          workflowID: source.workflowId,
+          workflowName: 'accounts.agent-verification-reversal',
+          queueName: 'workflows',
+        },
+        decision,
+      ),
+    ).rejects.toThrow('permanently retired');
+    await contender.query('ROLLBACK');
+  } finally {
+    await contender.query('ROLLBACK');
+    contender.release();
+    await independent.close();
+    await client.close();
+  }
+}, 60_000);

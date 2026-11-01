@@ -18,16 +18,26 @@ import {
 import { withConnection } from '../database/pool.ts';
 import {
   agentIdentityWorkSourceKey,
+  agentIdentitySourceKey,
   type AgentIdentityReceipt,
   type AgentIdentityWorkSource,
 } from './agent-identity-source.ts';
 import {
   AGENT_IDENTITY_SDK_FENCE_CONSUMER,
+  IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
+  readAgentIdentitySDKFence,
   readAgentIdentitySDKReceivingBinding,
   type AgentIdentitySDKRetirementReceipt,
 } from './agent-identity-sdk-fence.ts';
-import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
+import {
+  historyDeadline,
+  lockHistoryBarrier,
+  readHistoryReceivingReceipt,
+  type HistoryReceivingContext,
+} from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './registry.ts';
+import type { AgentIdentityOriginal } from './agent-identity-inventory.ts';
+import { partitionOf } from '../route/route.ts';
 import sourceSelect from './agent-identity-retirement-source.sql';
 
 // Reuse the integrated producer's opaque work identity across the receiving boundary.
@@ -55,12 +65,12 @@ export type AgentIdentityRetirementResult =
 /** Semantic terminal custody and the SDK writer fence are separate prerequisites to
  * retiring the retained receiving work. */
 export const AGENT_IDENTITY_SDK_RETIREMENT = Object.freeze({
-  sdkVersion: '5.4.6-preview',
+  sdkVersion: '5.5.3-preview',
   futureWriters: 'native-sdk-fence-requires-source-transfer',
   gap: AGENT_IDENTITY_SDK_FENCE_CONSUMER.gap,
 } as const);
 
-const pending = (gap: string): AgentIdentityRetirementResult => ({ state: 'pending', gap });
+const pending = (gap: string) => ({ state: 'pending', gap }) as const;
 const same = (a: unknown, b: unknown): boolean => canonicalize(a) === canonicalize(b);
 // Only contexts delivered to the actual producer callback may dispatch this caller's
 // Source staging. This tracks the call site, not funding validity or Source authority;
@@ -68,6 +78,7 @@ const same = (a: unknown, b: unknown): boolean => canonicalize(a) === canonicali
 const maintenanceCallbacks = new WeakSet<HistoryReceivingContext>();
 
 export const IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE = 'identity-source-maintenance-funding-unavailable';
+export { IDENTITY_HISTORY_HANDOFF_UNAVAILABLE } from './agent-identity-sdk-fence.ts';
 
 /** Decode only the original native association's closed key. No workflow-name parsing,
  * source reconstruction or new admission is permitted at this boundary. */
@@ -280,6 +291,8 @@ export async function verifyAgentIdentityRetirementStage(
   if (currentCommand(tx).partition !== stage.reference.source.partition || currentCommand(tx).basis !== null)
     throw new TypeError('Identity retirement requires its SAME native source home');
   historyDeadline(currentCommandResources(tx), stage.reference.source.partition);
+  if (partitionOf(stage.reference.barrier.accountRoute) !== stage.reference.source.partition)
+    return pending('agent-identity-source-barrier-home-unavailable');
   if (!(await lockHistoryBarrier(tx, stage.reference.barrier)))
     return pending('identity-sdk-retirement-barrier-changed');
   const handoff = await sourceHandoff(tx, stage.reference);
@@ -315,11 +328,16 @@ export async function agentIdentityRetirementReadiness(
     )
   ).rows[0];
   const receipt = row?.sdk_retirement_receipt;
-  return receipt &&
-    receipt.sourceGeneration === receiving.binding.receiver.generation &&
-    same(receipt.binding, receiving.binding)
-    ? { ready: true }
-    : { ready: false, gap: AGENT_IDENTITY_SDK_RETIREMENT.gap };
+  if (
+    !receipt ||
+    receipt.sourceGeneration !== receiving.binding.receiver.generation ||
+    !same(receipt.binding, receiving.binding)
+  )
+    return { ready: false, gap: AGENT_IDENTITY_SDK_RETIREMENT.gap };
+  // A copied SDK receipt never establishes the distinct pre-retirement transition.
+  // Keep the native guard closed until the Source owner can authorize that transition
+  // on original History ownership. Generation 2 and physical receiving closure follow it.
+  return { ready: false, gap: IDENTITY_HISTORY_HANDOFF_UNAVAILABLE };
 }
 
 /** Released SDK receiving observation for inventory presentation. It cannot be used in the
@@ -328,8 +346,25 @@ export async function readAgentIdentitySDKRetirementGap(
   pool: Pool,
   receipt: IdentitySourceConsumerReference['receipt'],
   context: HistoryReceivingContext,
-): Promise<string> {
+  receiving?: Readonly<{ client: WorkClient; original: AgentIdentityOriginal; barrier: HistoryBarrier }>,
+): Promise<string | null> {
   historyDeadline(context, 0);
+  if (receiving) {
+    if (
+      receipt.kind !== receiving.original.key.direction ||
+      receipt.account !== receiving.original.key.accountId ||
+      receipt.receipt !== receiving.original.key.receiptId
+    )
+      return 'identity-sdk-source-native-binding-changed';
+    const result = await readAgentIdentitySDKRetirement(
+      pool,
+      receiving.client,
+      receiving.original,
+      receiving.barrier,
+      context,
+    );
+    return result.state === 'pending' ? result.gap : null;
+  }
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -353,4 +388,101 @@ export async function readAgentIdentitySDKRetirementGap(
       throw error;
     }
   });
+}
+
+export type AgentIdentitySDKRetirementObservation =
+  | Readonly<{ state: 'pending'; gap: string }>
+  | Readonly<{ state: 'received'; gap: null; receipt: AgentIdentitySDKRetirementReceipt }>;
+
+/** Exact released observation of ONE original SDK receiving copy. The native SDK is
+ * independently re-read before and after the ordinary physical receiving proof. This is
+ * not a certificate for a later source command, a Source disposition or an Account root. */
+export async function readAgentIdentitySDKRetirement(
+  pool: Pool,
+  client: WorkClient,
+  original: AgentIdentityOriginal,
+  barrier: HistoryBarrier,
+  context: HistoryReceivingContext,
+): Promise<AgentIdentitySDKRetirementObservation> {
+  const fixed = structuredClone(original);
+  const fixedBarrier = structuredClone(barrier);
+  agentIdentitySourceKey(fixed.key);
+  if (fixed.partition !== partitionOf(fixed.key.route)) return pending('identity-sdk-source-native-binding-changed');
+  const receipt = { kind: fixed.key.direction, account: fixed.key.accountId, receipt: fixed.key.receiptId };
+  const sourceKey = agentIdentityWorkSourceKey(receipt);
+  historyDeadline(context, 0);
+  const saved = await withConnection(pool, async (tx) => {
+    await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    try {
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [
+        `${Math.max(1, context.deadline - Date.now())}ms`,
+      ]);
+      const row = (
+        await tx.query<{
+          custody_id: string;
+          request_digest: Buffer | null;
+          sdk_retirement_receipt: AgentIdentitySDKRetirementReceipt | null;
+          state: string | null;
+          owner_ready: boolean | null;
+          absence_verified: boolean | null;
+          payload_cleared: boolean;
+        }>(
+          `SELECT m.custody_id,m.request_digest,m.sdk_retirement_receipt,
+             w.state,w.owner_ready,w.absence_verified,(w.request IS NULL AND w.scope IS NULL) AS payload_cleared
+           FROM core.agent_identity_work m LEFT JOIN core.history_work w
+             ON w.partition_no=0 AND w.work_id=m.custody_id
+               AND w.owner='access.agent-identity' AND w.request_digest=m.request_digest
+           WHERE m.source_key=$1`,
+          [sourceKey],
+        )
+      ).rows[0];
+      const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
+      const mapping = row ? await resolveAgentIdentitySDKWork(tx, row.custody_id) : null;
+      historyDeadline(context, 0);
+      await tx.query('COMMIT');
+      return { row, mapping };
+    } catch (error) {
+      await tx.query('ROLLBACK');
+      throw error;
+    }
+  });
+  const { row, mapping } = saved;
+  if (!row || !mapping) return pending('agent-identity-sdk-recording-port-unavailable');
+  if (mapping.gap) return pending(mapping.gap);
+  const source = mapping.source;
+  if (
+    !source ||
+    source.key !== sourceKey ||
+    source.partition !== fixed.partition ||
+    source.epoch !== fixed.epoch ||
+    source.position !== fixed.position.toString() ||
+    source.transactionId !== fixed.transactionId ||
+    source.digest !== fixed.digest
+  )
+    return pending('identity-sdk-source-native-binding-changed');
+  const bound = row.sdk_retirement_receipt;
+  if (!bound) return pending(AGENT_IDENTITY_SDK_RETIREMENT.gap);
+  if (
+    bound.binding.custodyId !== row.custody_id ||
+    bound.binding.workflowId !== mapping.workflowId ||
+    bound.binding.requestDigest !== row.request_digest?.toString('hex') ||
+    !same(bound.binding.source, source) ||
+    !same(bound.binding.barrier, fixedBarrier)
+  )
+    return pending('identity-sdk-retirement-receiving-binding-changed');
+  const before = await readAgentIdentitySDKFence(pool, client, bound, context);
+  if (before.state === 'pending') return before;
+  if (row.state !== 'retired' || !row.owner_ready || !row.absence_verified || !row.payload_cleared)
+    return pending('identity-sdk-physical-receiving-pending');
+  const artifact: HistoryArtifact = {
+    partition: 0,
+    locator: { artifactType: 'durable-work/v1', workId: row.custody_id },
+    accounts: source.accounts,
+  };
+  if (!(await readHistoryReceivingReceipt({ pool }, fixedBarrier, artifact, context)))
+    return pending('identity-sdk-physical-receiving-pending');
+  const after = await readAgentIdentitySDKFence(pool, client, bound, context);
+  if (after.state === 'pending') return after;
+  historyDeadline(context, 0);
+  return { state: 'received', gap: null, receipt: after.receipt };
 }

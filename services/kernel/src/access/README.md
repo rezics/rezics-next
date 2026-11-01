@@ -3720,6 +3720,70 @@ Native physical minimizers may act on a sealed native association subject to the
 source, technical linkage, SDK obligation, Account-root and Semantic consumer custody remain mandatory. This module
 does not minimize original source rows, issue an account erasure ACK or claim full native acceptance.
 
+The optional real `client` on `readAgentIdentityInventory` enables an independent SDK receiving observation.
+`readAgentIdentitySDKRetirement(pool, client, original, barrier, context)` releases its receiver snapshot before
+calling the original SDK wrapper. It checks the complete original key/partition/epoch/position/transaction/digest,
+immutable native mapping, request digest, full retained roles and exact barrier. A stored retirement receipt alone
+does not suffice: native SDK fence reads bracket the ordinary durable receiving proof, whose physical work must
+already be retired with verified absence and cleared request/scope. A successful observation has state `received`;
+the corresponding optional receiving input to `readAgentIdentitySDKRetirementGap` can return `null`. Neither result
+is a current source-home cleanup certificate. The pool-only diagnostic overload retains the legacy/mapping gap.
+
+The installed Work producer now supplies `readSdkWorkflowWriterState` and
+`lockSdkWorkflowWriterState(tx, expected, sdk)`. History consumes these in
+`readAgentIdentitySDKWriterState` and `lockAgentIdentitySDKWriterState`. The latter derives its pool from the actual
+live command and leaves the SDK domain and exact workflow locks held through that command's commit. Generation 1
+can serialize a pre-retirement readiness candidate; it does not close writers. The separate closure phase requires
+generation 2 and the exact closure UUID, timestamp and SDK restore generation. A wrong pool stays
+`identity-sdk-source-pool-mismatch`; matching URLs never establish physical placement. A moved cross-database Source
+has no supported native bridge. These technical checks establish neither legal readiness nor History copy closure.
+
+`retireAgentIdentitySDKWork` first verifies the actual Source, then releases that command and checks the original
+receiver binding. It releases that receiver before observing the SDK, and finally revalidates Source and locks the
+observed SDK tuple in the same Source command. It stops at
+`identity-source-history-durable-handoff-unavailable`: the current
+`semantic/identity-source-consumer-custody.ts:verifyIdentitySourceConsumerCustody` returns a current boolean under
+its native claim/role/barrier/source/restore locks, but supplies no native durable handoff interface that the
+original History guard can consume. No SDK retirement, receipt write, owner readiness, work retirement, physical
+delete or receiving absence write follows that refusal. `agentIdentityRetirementReadiness` likewise refuses a
+copied receipt. `core.guard_agent_identity_sdk_retirement` remains closed; a permissive migration cannot supply the
+missing Source authority. Distinct durable readiness, final current Source and exact SDK closure, supported deletion
+and complete receiving-copy probes all remain required before eligible closure. No positive History eligibility is
+implemented for this absent owner boundary.
+
+Source stages match every field of the original native tuple, job, erased role and exact barrier. A foreign
+erased-role barrier remains `agent-identity-source-barrier-home-unavailable` before any foreign Account read in the
+Source command. Commerce's `library/identity-scope-effects.ts:readLibraryScopeEffectsPage` remains unavailable and
+`verifyLibraryScopeEffectsSeal` remains false. Library, Account root, Source discharge, unknown legacy SDK creation
+and missing foreign receiving custody stay independent. Original payloads and existing database guards remain intact.
+
+#### Cost: current SDK state in original History maintenance
+
+- Touches: the existing live Source maintenance frame and the original SDK producer's keyed domain and workflow
+  fence. History executes no SDK SQL of its own. Released observation dispatches the owner's one keyed fence/domain
+  SELECT. The current port dispatches the owner's `check_workflow_writer_state` SELECT, its keyed domain `FOR SHARE`,
+  keyed workflow `FOR UPDATE`, and locked-value return SELECT. No nested History, Source, retirement or physical
+  probes occur inside either SDK port.
+- Bound: reserve released observation as **3 rows / 2 points / 1 statement / 8192 bytes / 0 engine requests**, and
+  each current check as **4 / 2 / 4 / 8192 / 0**, before entering the owner port in the existing frame. A missing,
+  foreign, ended or exhausted frame refuses before dispatch. Failed and repeated checks spend the complete allowance;
+  nothing is refunded. Wrong-pool refusal still spends its pre-reservation despite dispatching no SQL. SQL stale,
+  serialization and deadlock errors propagate for whole-command rollback; there is no statement retry or savepoint.
+  Each subsequent command attempt reserves again. For one released observation and N dispatched current checks,
+  including command retries, the additive bound is **(3+4N) / (2+2N) / (1+4N) / (8192+8192N) / 0**. Each repeated
+  Source verification also spends its own original owner reservation. The SDK allowance includes every nested
+  lookup and result row.
+  The installed maintenance body reaches at most one released observation and one current check after its two
+  existing Source checks and released receiving check: its additive allowance is **7 / 4 / 5 / 16384 / 0** per
+  attempt. Relative to the previous **577 / 577 / 173 / 630784 / 0**, simple addition gives
+  **584 / 581 / 178 / 647168 / 0**, solely for this stopped sequence, not a final aggregate or an authorized budget.
+  History changes no Source footprint, default, ceiling, directory child cap or ABI. Semantic must derive and approve
+  the full composition before implementing any later readiness/closure writes. Those writes, final closure checks,
+  retirement and physical probes have no claimed funding here; the sequence stops before dispatching them.
+- Growth check: deferred native existing-fixture cases in `agent-verification-reversal.test.ts` cover actual owner
+  state, distinct live/closed phases, locks through commit, exact stale/wrong identity/closure/restore rejection,
+  pool rejection and repeated/failing pre-reservations. Typing establishes no native or growth proof.
+
 ## Selected automated creation operator
 
 `automated-operator-source.ts` declares
