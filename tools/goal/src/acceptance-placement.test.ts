@@ -171,6 +171,149 @@ test('registered local placement survives dispatch, retry, held reshape, and tas
   }
 });
 
+test('the audited timeout, focused-runner, and environment forms survive public brief flows without widening local routes', async () => {
+  const h = harness();
+  try {
+    mkdirSync(join(h.root, 'scripts'), { recursive: true });
+    writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
+    git(h.root, ['add', 'scripts/worker-check.ts']);
+    git(h.root, ['commit', '-m', 'Seed wrapper for audited local placement']);
+
+    const prompts: string[] = [];
+    const tasks = new WorkerTasks(
+      h.settings,
+      h.store,
+      (pool) => reading(pool),
+      async (_store, _task, attempt, _pool, prompt) => {
+        prompts.push(prompt);
+        return { exited: Promise.resolve({ code: 0, signal: null }), attempt };
+      },
+    );
+    const shellCommand = 'bun run --cwd apps/web typecheck && bun test apps/web/tests/subject-story-fake.test.ts';
+    const freshCommand = ['timeout', '590', 'sh', '-c', shellCommand];
+    const freshPath = join(h.settings.stateDirectory, 'audited-timeout.md');
+    writeFileSync(freshPath, briefText(freshCommand));
+    const task = tasks.dispatch(freshPath);
+    expect(task.brief.acceptance).toMatchObject({ placement: 'local', command: freshCommand });
+
+    const first = await tasks.retry(task.id);
+    await first.exited;
+    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+    const expected = (command: string[]) => `bun scripts/worker-check.ts --local -- ${command.map(quote).join(' ')}`;
+    expect(prompts[0]!).toContain(expected(freshCommand));
+    expect(prompts[0]!.match(/bun scripts\/worker-check\.ts --local --/g)).toHaveLength(1);
+
+    const selector =
+      'every non-English page story contains no untranslated message or type-name text|localized page choices|a subject page renders the subject in the page language on the server|labels fall back to English and keep their own language';
+    const focusedCommand = [
+      'env',
+      '-u',
+      'KERNEL_ORIGIN',
+      'PUBLIC_ORIGIN=http://127.0.0.1:3000',
+      'bun',
+      'apps/web/scripts/focused.ts',
+      '--private-network',
+      '--',
+      'bun',
+      'test',
+      'tests/page-stories.test.ts',
+      'tests/localized-page-choices.test.ts',
+      'tests/subject.test.ts',
+      '-t',
+      selector,
+    ];
+    const retryPath = join(h.settings.stateDirectory, 'audited-focused-retry.md');
+    writeFileSync(retryPath, briefText(focusedCommand));
+    const second = await tasks.retry(task.id, { brief: retryPath });
+    await second.exited;
+    expect(h.store.task(task.id).brief.acceptance).toMatchObject({
+      placement: 'local',
+      command: focusedCommand,
+    });
+    expect(prompts[1]!).toContain(expected(focusedCommand));
+    expect(prompts[1]!.match(/bun scripts\/worker-check\.ts --local --/g)).toHaveLength(1);
+
+    const dependency = tasks.dispatch(h.briefFile);
+    h.store.updateTask(second.attempt, (current) => {
+      current.state = 'stopped';
+    });
+    h.store.updateAttempt(second.attempt, (attempt) => {
+      attempt.state = 'stopped';
+    });
+    const heldCommand = [
+      'sh',
+      '-c',
+      `bun run --cwd apps/web typecheck && env -u KERNEL_ORIGIN PUBLIC_ORIGIN=http://127.0.0.1:3000 bun apps/web/scripts/focused.ts --private-network -- bun test tests/page-stories.test.ts -t "${selector}"`,
+    ];
+    const heldPath = join(h.settings.stateDirectory, 'audited-focused-held.md');
+    writeFileSync(heldPath, briefText(heldCommand, { after: [dependency.id] }));
+    tasks.queueRetry(task.id, { brief: heldPath });
+    expect(h.store.task(task.id)).toMatchObject({
+      state: 'held',
+      brief: { acceptance: { placement: 'local', command: heldCommand } },
+    });
+    expect(h.store.retryIntent(second.attempt)?.status).toBe('pending');
+
+    const unsafeCommands = [
+      ['timeout', '600', 'sh', '-c', shellCommand],
+      [
+        'env',
+        '-u',
+        'PATH',
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/subject.test.ts',
+      ],
+      [
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/../native/kernel.test.ts',
+      ],
+      ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/subject.browser.test.ts'],
+      [
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/subject.test.ts',
+        '--preload',
+        './setup.ts',
+      ],
+      ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/sql-compiler.test.ts'],
+      ['bun', 'apps/kernel/tests/subject.test.ts'],
+      ['bun', 'apps/auth/tests/subject.test.ts'],
+      [
+        'bun',
+        'apps/web/scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        'tests/database/subject.test.ts',
+      ],
+      ['sh', '-c', 'bun test apps/web/tests/subject.test.ts; bun run build'],
+      ['sh', '-c', 'bun test apps/web/tests/subject.test.ts && bun test $(printf extra)'],
+    ];
+    for (const [index, command] of unsafeCommands.entries()) {
+      const path = join(h.settings.stateDirectory, `audited-unsafe-${index}.md`);
+      writeFileSync(path, briefText(command));
+      expect(() => tasks.dispatch(path)).toThrow();
+    }
+  } finally {
+    h.dispose();
+  }
+});
+
 test('the real worker-check local route runs a pure command once and does not enter remote placement', () => {
   const temporary = mkdtempSync(join(repositoryRoot, '.temp/acceptance-placement-local-'));
   let checkId: string | undefined;

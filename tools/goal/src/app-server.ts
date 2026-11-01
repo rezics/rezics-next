@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { cleanManagedProviderEnvironment } from './agents.ts';
 import { processIdentity as readProcessIdentity, type ProcessIdentity } from './process.ts';
 
 export type Notification = { method: string; params: any };
@@ -222,13 +223,21 @@ export class WebSocketAppServer implements AppServer {
   }
 }
 
+export function connectPool(
+  pool: CodexPool,
+  onStart?: (identity: ProcessIdentity) => void,
+  parentEnvironment?: NodeJS.ProcessEnv,
+): Promise<WebSocketAppServer>;
+
 /** Starts one loopback app-server owned by this process and connects its JSON-RPC WebSocket. */
 export async function connectPool(
   pool: CodexPool,
   onStart?: (identity: ProcessIdentity) => void,
 ): Promise<WebSocketAppServer> {
   const executable = pool.executable ?? 'codex';
-  const env = { ...process.env, CODEX_HOME: pool.codexHome };
+  // The overload exposes an isolated environment while keeping the transport entry signature stable.
+  const parentEnvironment: NodeJS.ProcessEnv = arguments[2] === undefined ? process.env : arguments[2];
+  const env = { ...cleanManagedProviderEnvironment(parentEnvironment), CODEX_HOME: pool.codexHome };
   const child = spawn(executable, ['app-server', '--listen', 'ws://127.0.0.1:0'], { env, stdio: 'pipe' });
   if (onStart) {
     const identity = child.pid ? readProcessIdentity(child.pid) : null;

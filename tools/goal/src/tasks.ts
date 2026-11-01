@@ -8,12 +8,13 @@ import {
   preflightProof,
   productionProofProducer,
   type ProofProducer,
+  nativeCheckId,
 } from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
 import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -32,6 +33,7 @@ import type { WorkerStore } from './store.ts';
 import type { Attempt, Brief, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
+import { captureLaunchContext } from './launch-context.ts';
 import { installShared } from './shared-dependencies.ts';
 import {
   authenticatedManager,
@@ -66,6 +68,22 @@ function priorRebaseConflict(store: WorkerStore, taskId: string, attempt: number
 
 function sameBriefText(left: string, right: string): boolean {
   return normalizedBriefText(left) === normalizedBriefText(right);
+}
+
+function applyRetryPriorityTransition(
+  db: WorkerStore['db'],
+  task: Task,
+  previousCritical: boolean,
+  nextCritical: boolean,
+  actor: AuthenticatedManager | null | undefined,
+): boolean {
+  // A corrective retry is still a manager action. A no-op priority restatement keeps the audit and grant untouched,
+  // but it must be authenticated as the task owner just like a real transition. Internal non-priority reshapes may
+  // omit actor; a CLI passes null when caller authentication fails and cannot use this internal seam.
+  if (actor === null || (!actor && (previousCritical || nextCritical)))
+    throw new Error('priority changes require an authenticated manager session');
+  applyPriorityTransition(db, task, previousCritical, nextCritical, actor);
+  return previousCritical !== nextCritical;
 }
 
 export class BriefContractUnchangedError extends Error {
@@ -510,6 +528,235 @@ export class WorkerTasks {
     if (!worker) throw new TaskHeldForDependenciesError();
     return worker;
   }
+  /** A stopped zero counter alone cannot establish that its source has never been used. */
+  private assertStoppedPrelaunchEvidenceAbsent(task: Task): void {
+    const refuse = (evidence: unknown): never => {
+      throw new Error(
+        `prelaunch amendment refuses prior or unknown execution evidence: ${JSON.stringify({
+          taskId: task.id,
+          attempt: task.currentAttempt,
+          state: task.state,
+          evidence,
+        })}`,
+      );
+    };
+    const metadata = (path: string): Record<string, unknown> => {
+      try {
+        if (!lstatSync(path).isFile()) return refuse(path);
+        const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return refuse(path);
+        return value as Record<string, unknown>;
+      } catch (error) {
+        return refuse({ path, cause: String(error) });
+      }
+    };
+    for (const table of ['worker_integration_plans', 'worker_worktree_cleanup'])
+      if (this.store.db.query(`SELECT 1 FROM ${table} WHERE task_id=? LIMIT 1`).get(task.id)) refuse(table);
+    if (
+      this.store.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='landing_queue'").get() &&
+      this.store.db.query('SELECT 1 FROM landing_queue WHERE task=? LIMIT 1').get(task.id)
+    )
+      refuse('landing_queue');
+    const event = this.store
+      .events(task.id)
+      .find(
+        (entry) =>
+          entry.attempt !== 0 ||
+          ![
+            'start-requested',
+            'held-task-released',
+            'prelaunch-contract-amended',
+            'stopped',
+            'cancelled-dependency-reported',
+            'cancelled-dependency-notice',
+          ].includes(entry.kind),
+      );
+    if (event) refuse(event);
+    if (
+      this.store.db
+        .query(`SELECT 1 FROM flow_events WHERE task_id=? AND
+      (attempt<>0 OR stage NOT IN ('dispatch','start') OR action NOT IN ('dispatched','requested','closed')) LIMIT 1`)
+        .get(task.id)
+    )
+      refuse('execution flow history');
+    if (
+      this.store.db
+        .query(`SELECT 1 FROM worker_retry_intents WHERE task_id=? AND
+      (attempt<>0 OR json_extract(body,'$.status') IS NOT 'pending' OR json_extract(body,'$.nextAttempt') IS NOT NULL) LIMIT 1`)
+        .get(task.id)
+    )
+      refuse('advanced start intent');
+    try {
+      if (!lstatSync(task.worktree).isDirectory()) refuse(task.worktree);
+    } catch (error) {
+      refuse({ path: task.worktree, cause: String(error) });
+    }
+    for (const directory of ['runs', 'evidence']) {
+      const path = join(this.settings.stateDirectory, directory, task.id);
+      try {
+        lstatSync(path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        refuse({ path, cause: String(error) });
+      }
+      refuse(path);
+    }
+    // Read retained metadata only. No producer import, process probe, cleanup or custody reclassification.
+    const checks = join(task.worktree, '.temp/goal/checks');
+    const registry = join(this.settings.stateDirectory, 'check-registry');
+    for (const directory of [
+      join(checks, 'runs'),
+      join(checks, 'results'),
+      join(checks, 'custody/proofs'),
+      join(checks, 'custody/history'),
+      join(checks, 'custody/receipts'),
+      join(checks, 'custody/stopping'),
+      join(checks, 'custody/cancelled'),
+      join(checks, 'custody/remote'),
+      join(checks, 'custody/ready'),
+      registry,
+      join(registry, 'proof-reservations'),
+      join(registry, 'proof-claims'),
+    ]) {
+      let names: string[];
+      try {
+        if (!lstatSync(directory).isDirectory()) refuse(directory);
+        names = readdirSync(directory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        refuse({ path: directory, cause: String(error) });
+      }
+      for (const name of names!) {
+        if (!name.endsWith('.json')) continue;
+        const path = join(directory, name);
+        let value = metadata(path);
+        // A check claim aliases its token claim. Resolve that one explicit relation for owner attribution only.
+        if (directory === join(registry, 'proof-claims') && name.startsWith('check-')) {
+          if (typeof value.token !== 'string' || !nativeCheckId.test(value.token)) refuse(path);
+          const claim = metadata(join(directory, `${(value.token as string).toLowerCase()}.json`));
+          if (claim.token !== value.token || claim.checkId !== name.slice(6, -5)) refuse(path);
+          value = claim;
+        }
+        const ownership = value.ownership as Record<string, unknown> | undefined;
+        const binding = value.binding as Record<string, unknown> | undefined;
+        const owners = [value.taskId, ownership?.taskId, binding?.taskId].filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        );
+        // Even terminal custody is historical use; unowned or unreadable metadata stays unknown.
+        if (!owners.length || owners.includes(task.id)) refuse(path);
+      }
+    }
+  }
+  /** Replace ordinary input before its first start, without scheduling or touching its capacity ticket. */
+  amend(
+    taskId: string,
+    options: { expectedAttempt: number; brief: string },
+    actor?: AuthenticatedManager | null,
+  ): { taskId: string; attempt: 0; status: 'amended' | 'unchanged'; contractSha256: string } {
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    let briefPath: string | undefined;
+    try {
+      return this.store.write({ taskId, attempt: options.expectedAttempt }, () => {
+        const task = this.store.task(taskId);
+        const attempts = this.store.attempts(taskId);
+        if (
+          options.expectedAttempt !== 0 ||
+          task.currentAttempt !== 0 ||
+          !['ready', 'held', 'stopped'].includes(task.state) ||
+          attempts.length ||
+          task.integratedCommit ||
+          task.mergedCommit ||
+          task.integratedBase ||
+          task.integratedCommits?.length ||
+          task.proofAuthorization ||
+          task.proofRun ||
+          (task.state === 'held' && !task.brief.after.length) ||
+          task.brief.kind === 'verification' ||
+          this.store.db.query('SELECT 1 FROM worker_proof_reservations WHERE task_id=? LIMIT 1').get(taskId) ||
+          this.store.db.query('SELECT 1 FROM worker_records WHERE task_id=? LIMIT 1').get(taskId)
+        ) {
+          const current = attempts.at(-1);
+          throw new Error(
+            `prelaunch amendment requires an ordinary never-started ready/held/stopped task: ${JSON.stringify({
+              taskId,
+              attempt: task.currentAttempt,
+              state: task.state,
+              attemptState: current?.state,
+              process: current?.process,
+              logPath: current?.logPath,
+            })}`,
+          );
+        }
+        const owner = actor === undefined ? authenticatedManager(this.store.db) : actor;
+        if (!owner || ![task.brief.manager, this.settings.integration.operationsManager].includes(owner.id))
+          throw new Error('prelaunch amendment requires the authenticated owning or operations manager');
+        // Resolve against persisted sessions again under the write lock, including ambiguity and stale-session fences.
+        const authenticated = authenticatedManager(this.store.db, {
+          CODEX_THREAD_ID: owner.sessionId,
+          GOAL_MANAGER: owner.id,
+        });
+        if (!authenticated || authenticated.id !== owner.id || authenticated.sessionId !== owner.sessionId)
+          throw new Error('prelaunch amendment requires a live unambiguous authenticated manager session');
+        if (task.state === 'stopped') this.assertStoppedPrelaunchEvidenceAbsent(task);
+        const submitted = this.validateBrief(options.brief, taskId, owner);
+        if (submitted.brief.kind === 'verification')
+          throw new Error('use proof registration for verification contracts');
+        if (submitted.brief.goal !== task.brief.goal || submitted.brief.manager !== task.brief.manager)
+          throw new Error('an amended brief must keep the same goal and manager');
+        if (task.workspace && webModule(submitted.brief, this.settings) !== task.workspace.module)
+          throw new Error('amendment outside a shared module requires a new isolated task');
+        if (criticalPriority(task.brief, task.taskClass) || criticalPriority(submitted.brief, submitted.taskClass))
+          throw new Error('prelaunch amendment preserves ordinary priority only');
+        const previousFrozen = parseFrozenFiles(task.brief.markdown, task.brief.paths);
+        const nextFrozen = parseFrozenFiles(submitted.brief.markdown, submitted.brief.paths);
+        if (
+          previousFrozen.length !== nextFrozen.length ||
+          previousFrozen.some((file) => !nextFrozen.some((next) => next.path === file.path && next.hash === file.hash))
+        )
+          throw new Error('prelaunch amendment must preserve frozen acceptance files');
+        const contractSha256 = briefHash(submitted.brief.markdown);
+        if (sameBriefText(task.brief.markdown, submitted.brief.markdown))
+          return { taskId, attempt: 0, status: 'unchanged', contractSha256 };
+        briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-amended-${crypto.randomUUID()}.md`);
+        mkdirSync(dirname(briefPath), { recursive: true });
+        writeFileSync(briefPath, submitted.brief.markdown, { flag: 'wx' });
+        const acceptedPath = briefPath;
+        this.store.updateTask({ taskId, attempt: 0 }, (current) => {
+          current.brief = submitted.brief;
+          current.briefPath = acceptedPath;
+          current.taskClass = submitted.taskClass;
+          current.state = this.dependenciesMet(current) ? 'ready' : 'held';
+        });
+        this.store.event({ taskId, attempt: 0 }, 'prelaunch-contract-amended', {
+          actor: owner,
+          ...(task.state === 'stopped' ? { previousState: task.state } : {}),
+          previous: { path: task.briefPath, sha256: briefHash(task.brief.markdown), markdown: task.brief.markdown },
+          current: { path: acceptedPath, sha256: contractSha256, markdown: submitted.brief.markdown },
+        });
+        return { taskId, attempt: 0, status: 'amended', contractSha256 };
+      });
+    } catch (error) {
+      if (briefPath) rmSync(briefPath, { force: true });
+      if (error instanceof StaleAttemptError) {
+        const current = this.store.task(taskId);
+        const attempt = this.store.attempts(taskId).at(-1);
+        throw new Error(
+          `prelaunch amendment refused stale/current generation: ${JSON.stringify({
+            taskId,
+            expectedAttempt: options.expectedAttempt,
+            attempt: current.currentAttempt,
+            state: current.state,
+            attemptState: attempt?.state,
+            process: attempt?.process,
+            logPath: attempt?.logPath,
+          })}`,
+        );
+      }
+      throw error;
+    } finally {
+      lease.release();
+    }
+  }
   /** Authenticated reconciliation; preserves every native identity and raw historical fact. */
   releaseProof(
     taskId: string,
@@ -674,6 +921,7 @@ export class WorkerTasks {
       const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`);
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
+      let priorityChanged = false;
       try {
         this.store.updateHeldRetryTask(
           ref,
@@ -686,7 +934,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath;
             current.taskClass = reshaped.taskClass;
-            this.applyRetryPriority(current, previousCritical, actor, authorization);
+            priorityChanged = this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.state = 'held';
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
@@ -715,7 +963,7 @@ export class WorkerTasks {
         rmSync(briefPath, { force: true });
         throw error;
       }
-      if (nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
+      if (priorityChanged && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
       return;
     }
     const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
@@ -733,6 +981,7 @@ export class WorkerTasks {
     const retryOptions = { ...options };
     delete retryOptions.brief;
     delete retryOptions.expectedAttempt;
+    let priorityChanged = false;
     try {
       this.store.recordExplicitRetry(
         ref,
@@ -748,7 +997,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath!;
             current.taskClass = reshaped.taskClass;
-            this.applyRetryPriority(current, previousCritical, actor, authorization);
+            priorityChanged = this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
               newBriefHash: briefHash(reshaped.brief.markdown),
@@ -763,7 +1012,7 @@ export class WorkerTasks {
       if (briefPath) rmSync(briefPath, { force: true });
       throw error;
     }
-    if (reshaped && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
+    if (priorityChanged && nextBrief.kind !== 'verification') this.writeTaskPriority(this.store.task(taskId));
   }
   /** A real proof permit also authorizes its required ordinary priority, including an operations conversion. */
   private applyRetryPriority(
@@ -771,19 +1020,18 @@ export class WorkerTasks {
     previousCritical: boolean,
     actor: AuthenticatedManager | null | undefined,
     authorization?: ProofAuthorization,
-  ): void {
+  ): boolean {
     if (!authorization) {
-      applyPriorityTransition(
+      return applyRetryPriorityTransition(
         this.store.db,
         task,
         previousCritical,
         criticalPriority(task.brief, task.taskClass),
         actor,
       );
-      return;
     }
     if (criticalPriority(task.brief, task.taskClass)) throw new Error('proof tasks are ordinary priority only');
-    if (!previousCritical) return;
+    if (!previousCritical) return false;
     task.priorityHistory ??= [];
     task.priorityHistory.push({
       value: 'normal',
@@ -792,6 +1040,7 @@ export class WorkerTasks {
       at: new Date().toISOString(),
       provenance: { kind: 'manager-session', sessionId: authorization.sessionId },
     });
+    return true;
   }
   setPriority(
     taskId: string,
@@ -860,6 +1109,12 @@ export class WorkerTasks {
   }
   private async startReleasedTask(taskId: string): Promise<RunningWorker> {
     let task = this.store.task(taskId);
+    // A generation-zero owner may remove the last dependency while this first start waits for capacity.
+    if (task.state === 'ready' && !task.currentAttempt && !task.brief.after.length) {
+      const worker = await this.retryTask(taskId, {}, true);
+      if (!worker) throw new Error('released task was unexpectedly held again');
+      return worker;
+    }
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
     if (task.workspace || task.brief.kind === 'verification') {
       const worker = await this.retryTask(taskId, {}, true);
@@ -1132,14 +1387,11 @@ export class WorkerTasks {
         return null;
       }
       if (heldAmendment) {
-        task = this.store.updateHeldRetryTask(
-          { taskId, attempt: task.currentAttempt },
-          (current) => {
-            current.state = 'ready';
-          },
-          { abandonPending: true },
-        );
-        // Persist the amendment before waiting for capacity, and let a newer amendment or stop take the lease.
+        const releaseRef = { taskId, attempt: task.currentAttempt };
+        task = this.store.releaseHeldRetryTask(releaseRef, (current) => {
+          current.state = 'ready';
+        });
+        // Leave the amended task available to stop or reshape while it waits for capacity.
         lease?.release();
         lease = undefined;
         const startOptions = { ...options };
@@ -1153,6 +1405,22 @@ export class WorkerTasks {
         options.escalation === 'rebase-conflict' && old
           ? priorRebaseConflict(this.store, taskId, old.attempt)
           : undefined;
+      const heldRelease = this.store.events(taskId, task.currentAttempt).some((event) => {
+        if (event.kind !== 'held-task-released') return false;
+        try {
+          return (JSON.parse(event.body) as { releasedAttempt?: unknown }).releasedAttempt === task.currentAttempt + 1;
+        } catch {
+          return false;
+        }
+      });
+      const boundary = heldRelease
+        ? 'held-release'
+        : old?.escalation === 'import'
+          ? 'adopted-legacy'
+          : old
+            ? 'retry'
+            : 'fresh';
+      const origin = old?.escalation === 'import' ? 'adopted-legacy' : 'managed';
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
@@ -1226,8 +1494,12 @@ export class WorkerTasks {
             },
       );
       const oldSession = old ? attemptSession(old) : null;
+      // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
+      // different: release stops its waiting attempt, but its saved checks still need their original session.
+      // Terminal records take precedence over checks retained from an earlier waiting turn.
+      const continuingCheckWait = old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
       const resumeSession =
-        !briefChange &&
+        !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&
         agentAdapter(profile.cli).canResume &&
         old!.pool === pool.name &&
@@ -1338,13 +1610,22 @@ export class WorkerTasks {
             argv: task.brief.acceptance.command,
             cwd: task.worktree,
           });
+          const context = captureLaunchContext(this.store, next, boundary, origin);
           retryPrepared = true;
           return await this.launcher(
             this.store,
             task,
             next,
             pool,
-            workerPrompt(task, options.evidence, undefined, [], this.settings.mainCheckout),
+            workerPrompt(
+              task,
+              options.evidence,
+              undefined,
+              [],
+              this.settings.mainCheckout,
+              context,
+              this.settings.stateDirectory,
+            ),
             this.settings.codex,
             resumeSession,
           );
@@ -1356,23 +1637,19 @@ export class WorkerTasks {
           return await controller.withLaunch(task.workspace.module, async () => {
             controller.syncIdle(task.workspace!.module, task.id);
             this.prepareSharedFrozen(task);
+            task = this.store.task(taskId);
+            const context = captureLaunchContext(this.store, next, boundary, origin);
             const prompt = workerPrompt(
-              this.store.task(taskId),
+              task,
               options.evidence,
               options.consultation,
               [],
               this.settings.mainCheckout,
+              context,
+              this.settings.stateDirectory,
             );
             retryPrepared = true;
-            return await this.launcher(
-              this.store,
-              this.store.task(taskId),
-              next,
-              pool,
-              prompt,
-              this.settings.codex,
-              resumeSession,
-            );
+            return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
           });
         }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
@@ -1436,7 +1713,16 @@ export class WorkerTasks {
           existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]))),
         );
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
-        const prompt = workerPrompt(task, options.evidence, options.consultation, files, this.settings.mainCheckout);
+        const context = captureLaunchContext(this.store, next, boundary, origin);
+        const prompt = workerPrompt(
+          task,
+          options.evidence,
+          options.consultation,
+          files,
+          this.settings.mainCheckout,
+          context,
+          this.settings.stateDirectory,
+        );
         retryPrepared = true;
         return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
       } catch (error) {

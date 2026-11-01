@@ -29,6 +29,7 @@ import type { WorkerStore } from './store.ts';
 import { recordFlow } from './flow.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
 import { agentAdapter, cleanAgentEnvironment } from './agents.ts';
+import { renderLaunchContext, type LaunchContext } from './launch-context.ts';
 
 export type LaunchOptions = {
   profile: Profile;
@@ -94,8 +95,7 @@ function namedWorkerCheck(contractText: string): string | undefined {
   return path.startsWith('/') && path.endsWith('/scripts/worker-check.ts') ? path : undefined;
 }
 type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'> & Partial<Brief>;
-/** Current acceptance-check and controller wake instructions, repeated at every prompt boundary. */
-/** Whether `<state>/verification-mode` asks for minimal verification: workers type-check and land, checks run later. */
+/** Whether `<state>/verification-mode` asks for source completion and typing, with original acceptance deferred. */
 export function minimalVerification(stateDirectory: string | undefined): boolean {
   if (!stateDirectory) return false;
   try {
@@ -104,6 +104,7 @@ export function minimalVerification(stateDirectory: string | undefined): boolean
     return false;
   }
 }
+/** Current execution and result policy, repeated at every prompt boundary. */
 export function workerCheckProtocol(
   worktree: string,
   briefOrContract: CheckProtocolBrief | string = '',
@@ -212,8 +213,22 @@ export function workerPrompt(
   consultation: string | undefined,
   resolutionFiles: readonly string[],
   mainCheckout: string,
+  launchContext?: LaunchContext,
+  stateDirectory = join(mainCheckout, '.temp', 'goal'),
 ): string {
   const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map((file) => file.path);
+  const contractMarkdown = launchContext
+    ? task.brief.markdown
+        .split(/(\n\s*\n)/)
+        .map((section) =>
+          /\b(?:saved|historical|previous|older)\b/i.test(section) &&
+          /\b(?:prompt|instructions?|manifest|session)\b/i.test(section) &&
+          /(?:worker-check|--wait)/i.test(section)
+            ? '[Superseded historical check instructions are omitted; follow the current acceptance placement below.]'
+            : section,
+        )
+        .join('')
+    : task.brief.markdown;
   const evidenceText = evidence
     ? (() => {
         const failurePath = join(evidence, 'failure.json');
@@ -231,11 +246,12 @@ export function workerPrompt(
       `Work only in ${task.worktree}, at captured commit ${task.brief.proof?.sourceCommit}. The applicable AGENTS.md is already loaded.`,
       `The main checkout ${mainCheckout} is read-only.`,
       task.brief.markdown,
+      ...(launchContext ? [renderLaunchContext(launchContext)] : []),
       'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
       workerCheckProtocol(
         task.worktree,
         task.brief,
-        join(mainCheckout, '.temp', 'goal'),
+        stateDirectory,
         task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
         task.proofAuthorization,
       ),
@@ -245,6 +261,9 @@ export function workerPrompt(
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit your changes on this branch before you start a check and again after each fix: a commit does not claim that checks pass, and an attempt that ends without a commit counts as stalled.',
     'Do not rebase or merge. Write every acceptance test the contract names that does not exist yet; never weaken or edit an existing acceptance test or a frozen file. A check that waits for a test slot is queued, not stuck: let it run.',
+    launchContext
+      ? 'The full canonical contract below, including its current acceptance command, execution policy, and supported placement, is authoritative at this launch boundary. It supersedes conflicting saved-session instructions before you choose another command.'
+      : '',
     task.workspace
       ? `Peers edit this tree at the same time. There are no path reservations or holds. Commit your own work often with git add <your paths> (never -A or .). Use path-limited commits (git commit --only -- <your paths>) so a peer's staged files stay theirs. Every commit must have the subject '${task.workspace.taskName}: <message>' and a 'Goal-Task: ${task.id}' trailer. Task name is the brief's file name without .md: ${task.workspace.taskName}. Never reset, checkout, stash, clean or rebase. A failure in files you did not touch is a peer's work in progress: rerun later or check only your own tests.`
       : '',
@@ -266,7 +285,7 @@ export function workerPrompt(
       ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.'
       : '',
     'The task contract follows:',
-    task.brief.markdown,
+    contractMarkdown,
     'A failure that also occurs on your base commit is not your blocker: when your acceptance command passes, report success and name it in your summary. A test that passes on your base and fails after your change is yours: fix it, wherever the fix belongs.',
     "Never stop or remove containers, databases or processes you did not start in this attempt, and never prune Docker: other workers' checks run beside yours.",
     'Never write under node_modules: bun install hardlinks package files from a shared cache, so an edit there changes the package for every worktree and check host. To instrument a dependency, copy it under .temp and load the copy through a preload or a patchedDependencies entry.',
@@ -275,11 +294,12 @@ export function workerPrompt(
     evidenceText
       ? 'The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command before reporting any blocker about that failure.'
       : '',
+    renderLaunchContext(launchContext),
     consultation ? `Read-only consultation:\n${consultation}` : '',
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
       : '',
-    workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal')),
+    workerCheckProtocol(task.worktree, task.brief, stateDirectory),
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -315,6 +335,46 @@ export function checkWaitMs(logPath: string): number {
   } catch {
     return 0;
   }
+}
+/** Reconstruct the current prompt's clock, including on adoption; earlier turns cannot buy this turn silence. */
+export function workerActivityBaseline(store: WorkerStore, ref: Attempt, now = Date.now()) {
+  const event = store.events(ref.taskId, ref.attempt).findLast((event) => event.kind === 'worker-run-started');
+  let metadata: { logStartOffset?: unknown; checkWaitBaseline?: unknown } = {};
+  try {
+    metadata = event ? JSON.parse(event.body) : {};
+    if (!metadata || typeof metadata !== 'object') metadata = {};
+  } catch {
+    // Imported attempts may have no prompt-boundary metadata.
+  }
+  const nonnegative = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const logStartOffset = nonnegative(metadata.logStartOffset) ? (metadata.logStartOffset as number) : 0;
+  const checkWaitBaseline =
+    typeof metadata.checkWaitBaseline === 'number' &&
+    Number.isFinite(metadata.checkWaitBaseline) &&
+    metadata.checkWaitBaseline >= 0
+      ? metadata.checkWaitBaseline
+      : 0;
+  const recordedStart = event ? Date.parse(event.at) : NaN;
+  const startedAt = Number.isFinite(recordedStart)
+    ? Math.max(Date.parse(ref.startedAt), Math.min(now, recordedStart))
+    : Date.parse(ref.startedAt);
+  const stat = statSync(ref.logPath, { throwIfNoEntry: false });
+  const lastLogSize = stat?.size ?? 0;
+  const lastLogMtime = stat?.mtimeMs ?? 0;
+  const lastLogActivityAt =
+    lastLogSize > logStartOffset ? Math.max(startedAt, Math.min(now, lastLogMtime || now)) : startedAt;
+  const totalWait = checkWaitMs(ref.logPath);
+  // Preserve waits already recorded during the silent interval, capped to that interval and this prompt's waits.
+  const creditedWait = Math.min(Math.max(0, totalWait - checkWaitBaseline), Math.max(0, now - lastLogActivityAt));
+  return {
+    startedAt,
+    logStartOffset,
+    checkWaitBaseline,
+    lastLogSize,
+    lastLogMtime,
+    lastLogActivityAt,
+    checkWaitAtLastLogActivity: totalWait - creditedWait,
+  };
 }
 export type RunningWorker = {
   child?: ChildProcess;
@@ -636,7 +696,11 @@ export async function launch(
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {
-      store.event(attempt, 'worker-run-started', { logStartOffset, resuming });
+      store.event(attempt, 'worker-run-started', {
+        logStartOffset,
+        resuming,
+        checkWaitBaseline: checkWaitMs(attempt.logPath),
+      });
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
       // The wrapper cannot report a missing program to the launcher, so refuse it here.

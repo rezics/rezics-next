@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
+import { cleanManagedProviderEnvironment } from './agents.ts';
 
 export type HostLivenessConfig = {
   stateDirectory: string;
@@ -100,7 +101,7 @@ export async function ensureHostRunning(config: HostLivenessConfig): Promise<voi
     try {
       child = spawn(config.command[0]!, [...config.command.slice(1), '_manager-host'], {
         cwd: config.launchDirectory ?? process.cwd(),
-        env: process.env,
+        env: cleanManagedProviderEnvironment(process.env),
         detached: true,
         stdio: ['ignore', 'pipe', log],
       });
@@ -232,7 +233,12 @@ export async function startHostSupervisor(config: HostLivenessConfig): Promise<v
           launchDirectory: resolve(config.launchDirectory ?? process.cwd()),
         }),
       ],
-      { cwd: config.launchDirectory ?? process.cwd(), env: process.env, detached: true, stdio: ['ignore', log, log] },
+      {
+        cwd: config.launchDirectory ?? process.cwd(),
+        env: cleanManagedProviderEnvironment(process.env),
+        detached: true,
+        stdio: ['ignore', log, log],
+      },
     );
     await new Promise<void>((resolve, reject) => {
       child.once('error', reject);
@@ -249,7 +255,7 @@ if (import.meta.main) {
   if (process.argv[2] === '--detach') {
     // Reparent the supervisor before host readiness: it must survive its host and not join provider child ownership.
     const child = spawn(process.execPath, [import.meta.filename, process.argv[3]!], {
-      env: process.env,
+      env: cleanManagedProviderEnvironment(process.env),
       detached: true,
       stdio: ['ignore', 'pipe', 'inherit'],
     });

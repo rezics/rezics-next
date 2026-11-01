@@ -2,8 +2,11 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { workerPrompt } from './launch.ts';
+import { launchCommand, workerCheckProtocol, workerPrompt } from './launch.ts';
 import type { Task } from './types.ts';
+import type { LaunchContext } from './launch-context.ts';
+import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
+import type { ProofReservation } from './verification.ts';
 
 test('the worker prompt names the main checkout as read-only and asks for paths inside the worktree', () => {
   const task = {
@@ -142,6 +145,24 @@ test('a worker writes acceptance tests the contract names and waits for queued c
   expect(prompt).toContain('Write every acceptance test the contract names that does not exist yet');
   expect(prompt).toContain('never weaken or edit an existing acceptance test');
   expect(prompt).toContain('queued, not stuck');
+});
+
+test('a prompt without a runtime receipt keeps task readiness and installed dependency code unknown', () => {
+  const task = {
+    worktree: '/work/trees/t1',
+    branch: 'worker/t1',
+    brief: {
+      markdown: 'Do the thing.',
+      after: ['dependency-task'],
+      kind: 'implementation',
+      paths: ['src/a.ts'],
+      acceptance: { command: ['bun', 'test'], tests: ['x'] },
+    },
+  } as unknown as Task;
+  const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+  expect(prompt).toContain('No current controller receipt was supplied');
+  expect(prompt).toContain('Current task, attempt, contract, dependency readiness and installed code are unknown');
+  expect(prompt).not.toContain('"sourcePresence": "present"');
 });
 
 test('a resumed prompt supersedes a saved legacy check wait and states the bare UUID handoff', async () => {
@@ -335,10 +356,6 @@ test('a worker is told where reference projects are and to read the ones its con
   expect(prompt).toContain('read that source for the surface you build before you design it');
 });
 
-import { workerCheckProtocol, launchCommand } from './launch.ts';
-import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
-import type { ProofReservation } from './verification.ts';
-
 test('minimal product policy preserves supported compiler placement and foreground custody at final input', () => {
   const directory = temporaryDirectory();
   try {
@@ -526,6 +543,118 @@ test('ordinary registered proof prompt bypasses minimal only with authentic save
     expect(product).toContain('never return waiting with an empty checks array or manufacture UUIDs');
     expect(product).not.toContain('Run exactly one ordinary worker-check invocation');
     expect(product).not.toContain('REZICS_CHECK_LOCAL_ONLY');
+  } finally {
+    directory.close();
+  }
+});
+
+test('minimal source completion and incomplete product results use the current policy at every context boundary', () => {
+  const directory = temporaryDirectory();
+  try {
+    const state = join(directory.path, 'configured-state');
+    mkdirSync(state);
+    writeFileSync(join(state, 'verification-mode'), 'minimal\n');
+    const task = {
+      id: 'source-worker',
+      worktree: join(directory.path, 'worktree'),
+      branch: 'worker/source',
+      brief: {
+        markdown: 'Implement the current product behavior. Original native acceptance remains in this contract.',
+        kind: 'implementation',
+        acceptance: { command: ['bun', 'scripts/native-check.ts'], tests: ['product behavior'] },
+      },
+    } as unknown as Task;
+    for (const boundary of ['fresh', 'retry', 'held-release', 'wake', 'adopted-legacy'] as const) {
+      const context: LaunchContext = {
+        version: 1,
+        boundary,
+        origin: boundary === 'adopted-legacy' ? 'adopted-legacy' : 'managed',
+        task: {
+          id: task.id,
+          attempt: 1,
+          state: 'running',
+          branch: task.branch,
+          worktree: task.worktree,
+          contractPath: null,
+          contractSha256: null,
+          contractProof: 'unknown',
+          base: null,
+          sourceHead: null,
+          sourceBranch: null,
+          sourceProof: 'unknown',
+        },
+        dependencies: { required: 0, included: 0, omitted: 0, completeness: 'complete', receipts: [] },
+      };
+      const prompt = workerPrompt(task, undefined, undefined, [], directory.path, context, state);
+      expect(prompt).toContain(task.brief.markdown);
+      expect(prompt).toContain(`"boundary": "${boundary}"`);
+      expect(prompt).toContain(
+        'entire own current implementation contract and required permitted workspace typing are complete',
+      );
+      expect(prompt).toContain('return normal status success, blocker:null, checks:[]');
+      expect(prompt).toContain('naming the actual code completed and deferred original acceptance/native obligations');
+      expect(prompt).toContain('This source result is NOT whole-feature/native/Goal completion');
+      expect(prompt).toContain('Typing alone cannot establish your own product completion');
+      expect(prompt).toContain(
+        'Unfinished own implementation or genuine absent authority must report status blocked with the exact blocker',
+      );
+      expect(prompt).toContain('deferred acceptance alone is neither blocked nor waiting');
+      expect(prompt).toContain('genuinely still-running registered bare UUID check ids owned by this task/attempt');
+      expect(prompt).toContain(
+        'Completed command prose, checks:[], a real product blocker, or deferred acceptance cannot justify waiting',
+      );
+      expect(prompt).not.toContain('Run the acceptance command once');
+    }
+  } finally {
+    directory.close();
+  }
+});
+
+test('the configured minimal policy permits compiler placement and awaits the existing foreground handle even for report-only retries', () => {
+  const directory = temporaryDirectory();
+  try {
+    const state = join(directory.path, 'configured-state');
+    const evidence = join(directory.path, 'evidence');
+    mkdirSync(state);
+    mkdirSync(evidence);
+    writeFileSync(join(state, 'verification-mode'), 'minimal\n');
+    writeFileSync(
+      join(evidence, 'failure.json'),
+      JSON.stringify({
+        manifest:
+          'Historical report-only instruction: return waiting with checks:[] until original native acceptance runs.',
+      }),
+    );
+    const task = {
+      worktree: directory.path,
+      branch: 'worker/source',
+      brief: {
+        markdown: 'Complete the current implementation, then report its actual source status.',
+        kind: 'implementation',
+      },
+    } as unknown as Task;
+    const prompt = workerPrompt(task, evidence, undefined, [], directory.path, undefined, state);
+    const policy = prompt.slice(prompt.lastIndexOf('Verification is minimal'));
+    expect(policy).toContain('services/kernel or services/auth TYPECHECK ONLY');
+    expect(policy).toContain('actual compiler database or check host is permitted');
+    expect(policy).toContain('existing supported compiler command and placement');
+    expect(policy).toContain('preserving its real leases, results and exact terminal status');
+    expect(policy).toContain('Do not force `env -u KERNEL_CHECK_REMOTE` or local-only placement');
+    expect(policy).toContain('no acceptance/native/browser/root/worker-check permission');
+    expect(policy).toContain('await its EXISTING tool command/session result');
+    expect(policy).toContain('never return waiting with an empty checks array or manufacture UUIDs');
+    expect(policy).toContain(
+      'Do not use ps/pgrep/awk/help/status loops, start duplicate commands, or interrupt a live compiler',
+    );
+    expect(policy).toContain('Waiting on the actual already-open command/session handle is allowed');
+    expect(policy).toContain(
+      'supersedes conflicting acceptance, report-only, saved-session and retry-manifest instructions',
+    );
+    expect(policy).toContain('Use already-recorded failure evidence; do not start another check to recover it');
+    writeFileSync(join(state, 'verification-mode'), 'full\n');
+    const normal = workerPrompt(task, undefined, undefined, [], directory.path, undefined, state);
+    expect(normal).not.toContain('Verification is minimal');
+    expect(normal).toContain('run your acceptance command once');
   } finally {
     directory.close();
   }

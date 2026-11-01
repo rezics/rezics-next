@@ -93,10 +93,69 @@ function localTestFile(path: string): boolean {
   return (
     /^apps\/web\/tests\/[A-Za-z0-9._/-]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path) &&
     !path.split('/').some((part) => part === '.' || part === '..') &&
-    !/(?:^|[/.])(?:native|e2e|integration|host|database|db)(?:[/.]|$)/i.test(path)
+    !/(?:^|[/.])(?:native|e2e|integration|host|database|db|browser|playwright|stack)(?:[/.]|$)/i.test(path) &&
+    !/(?:^|[/.])sql[-_.]?compiler(?:[/.]|$)/i.test(path)
   );
 }
-function localBunCommand(argv: readonly string[]): boolean {
+function localBunTests(argv: readonly string[], appRelative: boolean): boolean {
+  if (argv[0] !== 'bun' || argv[1] !== 'test') return false;
+  let files = 0;
+  for (let index = 2; index < argv.length; index += 1) {
+    const value = argv[index]!;
+    if (value === '-t' || value === '--test-name-pattern') {
+      if (!argv[index + 1] || argv[index + 1]!.startsWith('-')) return false;
+      index += 1;
+      continue;
+    }
+    if (appRelative) {
+      if (!value.startsWith('tests/') || !localTestFile(`apps/web/${value}`)) return false;
+    } else if (!localTestFile(value)) return false;
+    files += 1;
+  }
+  return files > 0;
+}
+function focusedWebCommand(argv: readonly string[]): boolean {
+  return (
+    argv.length >= 7 &&
+    argv[0] === 'bun' &&
+    argv[1] === 'apps/web/scripts/focused.ts' &&
+    argv[2] === '--private-network' &&
+    argv[3] === '--' &&
+    localBunTests(argv.slice(4), true)
+  );
+}
+/** Only the two audited Web environment changes may prefix the focused runner. */
+function localEnvironmentCommand(argv: readonly string[]): readonly string[] | undefined {
+  if (argv[0] !== 'env') return argv;
+  let index = 1;
+  let changed = false;
+  const seen = new Set<string>();
+  while (index < argv.length) {
+    if (argv[index] === '-u') {
+      const name = argv[index + 1];
+      if (name !== 'KERNEL_ORIGIN' || seen.has('KERNEL_ORIGIN')) return undefined;
+      seen.add('KERNEL_ORIGIN');
+      changed = true;
+      index += 2;
+      continue;
+    }
+    if (argv[index] === 'PUBLIC_ORIGIN=http://127.0.0.1:3000') {
+      if (seen.has('PUBLIC_ORIGIN')) return undefined;
+      seen.add('PUBLIC_ORIGIN');
+      changed = true;
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  return changed && index < argv.length ? argv.slice(index) : undefined;
+}
+function localBunCommand(rawArgv: readonly string[]): boolean {
+  if (rawArgv[0] === 'env') {
+    const argv = localEnvironmentCommand(rawArgv);
+    return argv !== undefined && focusedWebCommand(argv);
+  }
+  const argv = rawArgv;
   if (
     (argv.length === 5 &&
       argv[0] === 'bun' &&
@@ -111,19 +170,8 @@ function localBunCommand(argv: readonly string[]): boolean {
       argv[3] === 'typecheck')
   )
     return true;
-  if (argv[0] !== 'bun' || argv[1] !== 'test') return false;
-  let files = 0;
-  for (let index = 2; index < argv.length; index += 1) {
-    const value = argv[index]!;
-    if (value === '-t' || value === '--test-name-pattern') {
-      if (!argv[index + 1] || argv[index + 1]!.startsWith('-')) return false;
-      index += 1;
-      continue;
-    }
-    if (!localTestFile(value)) return false;
-    files += 1;
-  }
-  return files > 0;
+  if (focusedWebCommand(argv)) return true;
+  return localBunTests(argv, false);
 }
 /** Split only the audited `sh -c 'bun ... && bun ...'` form; shell expansion and other operators stay unsupported. */
 function localShellCommands(script: string): string[][] | undefined {
@@ -177,10 +225,13 @@ function localShellCommands(script: string): string[][] | undefined {
 }
 /** Local checks are Web typechecking or explicitly named Web unit/component test files. */
 export function validateLocalAcceptanceCommand(command: readonly string[]): void {
+  let outer = Array.from(command);
+  if (outer[0] === 'timeout') {
+    if (outer.length !== 5 || outer[1] !== '590' || outer[2] !== 'sh' || outer[3] !== '-c') outer = [];
+    else outer = outer.slice(2);
+  }
   const commands =
-    command.length === 3 && command[0] === 'sh' && command[1] === '-c'
-      ? localShellCommands(command[2]!)
-      : [Array.from(command)];
+    outer.length === 3 && outer[0] === 'sh' && outer[1] === '-c' ? localShellCommands(outer[2]!) : [outer];
   if (commands?.length && commands.every(localBunCommand)) return;
   const text = command.join(' ');
   if (
@@ -190,7 +241,7 @@ export function validateLocalAcceptanceCommand(command: readonly string[]): void
   )
     throw new Error('acceptance.placement local rejects native, database, host, and broad-suite check routes');
   throw new Error(
-    'acceptance.placement local supports only `bun run --cwd apps/web typecheck` and explicit unit/component test files under `apps/web/tests/`',
+    'acceptance.placement local supports only Web typechecking, explicit unit/component tests, or the audited focused Web runner with its supported environment prefix',
   );
 }
 /** Point an existing brief at the stabilize branch without changing its other front matter. */
