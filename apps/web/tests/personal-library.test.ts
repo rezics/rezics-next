@@ -162,9 +162,14 @@ test('personal chronological reads send native sort and preserve the historical 
   expect(calls[0]).toEqual({
     query: { view: 'FULL', limit: 20, cursor: 'signed:next', state: 'reading.arc-1', ...sort },
     headers: { authorization: 'Bearer owner' },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   await readEntryPage(client, 'Bearer owner', undefined, undefined);
-  expect(calls[1]).toEqual({ query: libraryListQuery(), headers: { authorization: 'Bearer owner' } });
+  expect(calls[1]).toEqual({
+    query: libraryListQuery(),
+    headers: { authorization: 'Bearer owner' },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
   expect(libraryListQuery()).toEqual({ view: 'FULL', limit: 100 });
   response = { status: 400, error: { value: { code: 'invalid_cursor' } } };
   await expect(readEntryPage(client, 'Bearer owner', 'old', undefined, 20, sort)).rejects.toBeInstanceOf(

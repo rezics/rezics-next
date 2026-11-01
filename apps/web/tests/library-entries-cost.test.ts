@@ -44,8 +44,8 @@ test('personal library view and state change stay within their bounds as entries
           expect(url.searchParams.get('cursor')).toBeNull();
           const state = url.searchParams.get('state');
           expect(state).toBe(tab ? 'planned' : null);
-          expect(url.searchParams.get('limit')).toBe('100');
-          const limit = 100;
+          expect(url.searchParams.get('limit')).toBe('20');
+          const limit = 20;
           return Response.json({
             libraryEntries: Array.from({ length: Math.min(size, limit) }, (_, index) => ({
               subjectId: `subject-${index}`,
@@ -141,7 +141,7 @@ test('personal library view and state change stay within their bounds as entries
     expect(unrelated).toHaveLength(scale);
     if (!view.signedIn) throw new Error('expected a signed-in library');
     if (view.state !== undefined) throw new Error('expected all tracked entries');
-    expect(view.entries).toHaveLength(Math.min(scale, 100));
+    expect(view.entries).toHaveLength(Math.min(scale, 20));
     expect(paths.map((path) => path.split('?')[0])).toEqual(['GET /v1/libraryEntries']);
     expect(paths.some((path) => path.includes('/subjects/') || unrelated.some((id) => path.includes(id)))).toBe(false);
     expect(counts).toEqual(overviewBound);
@@ -162,7 +162,7 @@ test('personal library view and state change stay within their bounds as entries
     );
     tab = false;
     if (!planned.signedIn || planned.state !== 'planned') throw new Error('expected the planned filter');
-    expect(planned.entries).toHaveLength(Math.min(scale, 100));
+    expect(planned.entries).toHaveLength(Math.min(scale, 20));
     expect(paths.map((path) => path.split('?')[0])).toEqual(['GET /v1/libraryEntries']);
     expect(counts).toEqual(bound);
 

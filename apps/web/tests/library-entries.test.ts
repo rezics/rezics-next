@@ -557,7 +557,7 @@ test(
         method: 'GET',
         path: '/v1/libraryEntries',
         view: 'FULL',
-        limit: '100',
+        limit: '20',
         cursor: null,
         authorization: `Bearer ${aliceAccess}`,
       });
@@ -573,7 +573,7 @@ test(
     expect(libraryReads().filter((read) => read.state === 'completed')).toHaveLength(1);
     expect(libraryReads().find((read) => read.state === 'completed')).toMatchObject({
       view: 'FULL',
-      limit: '100',
+      limit: '20',
       cursor: null,
       state: 'completed',
       authorization: `Bearer ${aliceAccess}`,
@@ -605,11 +605,13 @@ test(
     const first = await readPage('/en/library?state=planned', cookie);
     expect(first.status).toBe(200);
     const firstMain = main(first.html);
+    for (let number = 1; number <= 20; number++)
+      expect(firstMain).toContain(`Entry ${String(number).padStart(3, '0')}`);
     expect(firstMain.indexOf('Entry 001')).toBeLessThan(firstMain.indexOf('Entry 002'));
-    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 100'));
-    expect(firstMain).not.toContain('Entry 101');
+    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 020'));
+    expect(firstMain).not.toContain('Entry 021');
     const firstRead = libraryReads().find((read) => read.state === 'planned');
-    expect(firstRead).toMatchObject({ view: 'FULL', limit: '100', cursor: null, state: 'planned' });
+    expect(firstRead).toMatchObject({ view: 'FULL', limit: '20', cursor: null, state: 'planned' });
     const more = links(first.html).find((link) => link.text === 'Next page');
     expect(more?.href).toContain('/en/library?');
     expect(new URL(more!.href, 'http://site.test').searchParams.get('state')).toBe('planned');
@@ -620,11 +622,11 @@ test(
     const second = await readPage(more!.href, cookie);
     expect(second.status).toBe(200);
     const secondMain = main(second.html);
-    expect(secondMain).toContain('Entry 101');
+    expect(secondMain).toContain('Entry 021');
     expect(secondMain).not.toContain('Entry 001');
     expect(libraryReads().find((read) => read.state === 'planned')).toMatchObject({
       view: 'FULL',
-      limit: '100',
+      limit: '20',
       cursor,
       state: 'planned',
     });
