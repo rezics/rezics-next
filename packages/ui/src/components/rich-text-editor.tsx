@@ -10,7 +10,7 @@ import {
 } from '@rezics/document';
 import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import { history } from '@tiptap/pm/history';
-import { NodeSelection, Plugin } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, type Transaction } from '@tiptap/pm/state';
 import { useEditor } from '@tiptap/react';
 import { ImageIcon } from 'lucide-react';
 import {
@@ -30,10 +30,10 @@ import { assertSnapshotSize, editorSnapshot } from './rich-text-editor-snapshot.
 import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels.ts';
 import { SelectionMenu } from './editor-selection-menu.tsx';
 import { EditorTouchBar } from './editor-touch-bar.tsx';
-import { LinkMenu, type LinkRange } from './editor-link.tsx';
+import { isLinkRangeValid, LinkMenu, linkHref, type LinkRange, type LinkVisitRange } from './editor-link.tsx';
 import { ImageInsert, withImageView } from './editor-image.tsx';
 import { editorUploads, type ImageUploader, type UploadEntry, type UploadState } from './editor-uploads.ts';
-import { availableCommands, imageCommand } from './editor-commands.ts';
+import { availableCommands, imageCommand, runEditorCommand } from './editor-commands.ts';
 import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
 
 import {
@@ -42,6 +42,7 @@ import {
   MentionMenu,
   withMentionView,
   type MentionSource,
+  type MentionRetirement,
 } from './editor-mention.tsx';
 
 export type { ImageUploader, UploadedImage, UploadState } from './editor-uploads.ts';
@@ -182,6 +183,27 @@ function snapshotKey(snapshot: DocumentSnapshot): string {
   return JSON.stringify(snapshot);
 }
 
+/** Keep a saved inline target attached to the same content through same-document transactions. */
+function mapSavedLinkRange(
+  editor: TiptapEditor,
+  range: LinkVisitRange,
+  transaction: Transaction,
+): LinkVisitRange | null {
+  if (!transaction.docChanged) return range;
+  if (range.from === range.to) {
+    const before = transaction.mapping.map(range.from, -1);
+    const after = transaction.mapping.map(range.to, 1);
+    if (before !== after) return null;
+    const mapped = { ...range, from: before, to: after };
+    return isLinkRangeValid(editor, mapped) ? mapped : null;
+  }
+  const from = transaction.mapping.map(range.from, 1);
+  const to = transaction.mapping.map(range.to, -1);
+  if (from >= to) return null;
+  const mapped = { ...range, from, to };
+  return isLinkRangeValid(editor, mapped) ? mapped : null;
+}
+
 /** Controlled editor for snapshots in the text and blocks document profiles. */
 export function RichTextEditor({
   value,
@@ -225,18 +247,37 @@ export function RichTextEditor({
   const publishRef = useRef<(editor: TiptapEditor, epoch: number) => void>(() => undefined);
   const documentEpoch = useRef(0);
   const [documentRevision, setDocumentRevision] = useState(0);
+  const [visit, setVisit] = useState(0);
+  const visitRef = useRef(0);
   const mounted = useRef(false);
   const editableRef = useRef(editable);
   editableRef.current = editable;
   const lastEditable = useRef(editable);
   const lastUploadEnabled = useRef(!!upload);
+  const lastMentionEnabled = useRef(!!lookupMention);
   const currentEditor = useRef<TiptapEditor | null>(null);
+  const renderedEditor = useRef<TiptapEditor | null>(null);
   const syncedEditor = useRef<TiptapEditor | null>(null);
+  const renderedProfile = useRef(value.profile);
+  renderedProfile.current = value.profile;
+  const mentionSourceState = useRef({ enabled: !!lookupMention, generation: 0 });
+  if (mentionSourceState.current.enabled !== !!lookupMention) {
+    mentionSourceState.current = {
+      enabled: !!lookupMention,
+      generation: mentionSourceState.current.generation + 1,
+    };
+  }
+  const committedMentionGeneration = useRef(mentionSourceState.current.generation);
+  const mentionRetirement = useRef<MentionRetirement | null>(null);
   const [snapshotError, setSnapshotError] = useState(false);
   const hasUpload = !!upload;
+  const hasMention = !!lookupMention;
   const menuContainer = useRef<HTMLDivElement>(null);
-  const [linkRange, setLinkRange] = useState<LinkRange | null>(null);
+  const [linkRange, setLinkRange] = useState<LinkVisitRange | null>(null);
+  const linkRangeRef = useRef<LinkVisitRange | null>(null);
+  const nextLinkId = useRef(0);
   const [imagePosition, setImagePosition] = useState<number | null>(null);
+  const imagePositionRef = useRef<number | null>(null);
   const [uploadEntries, setUploadEntries] = useState<UploadEntry[]>([]);
   const uploadEntriesRef = useRef<UploadEntry[]>([]);
   const uploadStatus = useRef<{ state: UploadState; count: number }>({ state: 'ready', count: 0 });
@@ -250,9 +291,10 @@ export function RichTextEditor({
   labelsRef.current = resolvedLabels;
   const slashHandlers = useRef(idleSlashHandlers);
   const mentionHandlers = useRef(idleMentionHandlers);
-  const mentionEnabled = useRef(!!lookupMention);
-  mentionEnabled.current = !!lookupMention;
+  const mentionEnabled = useRef(hasMention);
+  mentionEnabled.current = hasMention;
   const mentionHandles = useRef(new Map<string, string>());
+  const mentionHandleUsage = useRef(new Map<string, number>());
   const pendingMovedUnit = useRef<PendingMovedUnit | null>(null);
 
   const publish = useCallback(
@@ -322,6 +364,7 @@ export function RichTextEditor({
             () => labelsRef.current,
           ),
           mentionHandles,
+          mentionHandleUsage,
         ),
         RetainMovedUnitIdentity.configure({ pendingMove: pendingMovedUnit }),
         slashExtension(slashHandlers),
@@ -414,13 +457,109 @@ export function RichTextEditor({
       },
       onUpdate: ({ editor: current }) => scheduleRef.current(current),
       onBlur: ({ editor: current }) => {
+        if (!mounted.current || renderedEditor.current !== current || current.isDestroyed) return;
         flushRef.current(current);
         latest.current.onBlur?.();
       },
-      onFocus: () => latest.current.onFocus?.(),
+      onFocus: ({ editor: current }) => {
+        if (mounted.current && renderedEditor.current === current && !current.isDestroyed)
+          latest.current.onFocus?.();
+      },
     },
     [value.profile, placeholder, maxLength],
   );
+  renderedEditor.current = editor;
+
+  const schemaMatchesProfile =
+    editor !== null && Boolean(editor.schema.nodes.image) === (value.profile === 'blocks');
+  const previousControlled = controlled.current;
+  const renderedProfileChanged = previousControlled.profile !== value.profile;
+  const renderedIncomingChanged = previousControlled.key !== controlledKey || renderedProfileChanged;
+  const renderedEcho = !renderedProfileChanged && emittedKey.current === controlledKey;
+  let renderedSameAsEditor = false;
+  if (renderedIncomingChanged && !renderedProfileChanged && schemaMatchesProfile && editor) {
+    try {
+      renderedSameAsEditor = snapshotKey(editorSnapshot(editor.state.doc, value.profile)) === controlledKey;
+    } catch {
+      renderedSameAsEditor = false;
+    }
+  }
+  const renderedExternalReplacement =
+    renderedIncomingChanged && (renderedProfileChanged || (!renderedEcho && !renderedSameAsEditor));
+  const renderedEditorReplacement = syncedEditor.current !== null && syncedEditor.current !== editor;
+  const currentMentionGeneration = mentionSourceState.current.generation;
+
+  const ownsVisit = useCallback(
+    (owner: number, ownerProfile: DocumentSnapshot['profile'], ownerMentionGeneration: number, target: TiptapEditor | null) =>
+      mounted.current &&
+      !renderedExternalReplacement &&
+      !renderedEditorReplacement &&
+      owner === visitRef.current &&
+      ownerProfile === renderedProfile.current &&
+      ownerMentionGeneration === mentionSourceState.current.generation &&
+      ownerMentionGeneration === committedMentionGeneration.current &&
+      target !== null &&
+      target === renderedEditor.current &&
+      editableRef.current &&
+      schemaMatchesProfile &&
+      !target.isDestroyed &&
+      target.isEditable,
+    [renderedEditorReplacement, renderedExternalReplacement, schemaMatchesProfile],
+  );
+  const isCurrent = useCallback(
+    () => ownsVisit(visit, value.profile, currentMentionGeneration, editor),
+    [currentMentionGeneration, editor, ownsVisit, value.profile, visit],
+  );
+  const isCurrentLinkRange = useCallback(
+    (range: LinkVisitRange) => {
+      const current = linkRangeRef.current;
+      return Boolean(
+        isCurrent() &&
+          current &&
+          current.id === range.id &&
+          current.visit === range.visit &&
+          current.from === range.from &&
+          current.to === range.to &&
+          current.url === range.url,
+      );
+    },
+    [isCurrent],
+  );
+  const registerMentionRetirement = useCallback((retirement: MentionRetirement) => {
+    mentionRetirement.current = retirement;
+    return () => {
+      if (mentionRetirement.current === retirement) mentionRetirement.current = null;
+    };
+  }, []);
+  const setOwnedLinkRange = useCallback((range: LinkVisitRange | null) => {
+    linkRangeRef.current = range;
+    setLinkRange(range);
+  }, []);
+  const updateLinkUrl = useCallback(
+    (range: LinkVisitRange, url: string) => {
+      if (!isCurrentLinkRange(range)) return;
+      setOwnedLinkRange({ ...range, url });
+    },
+    [isCurrentLinkRange, setOwnedLinkRange],
+  );
+  const setOwnedImagePosition = useCallback((position: number | null) => {
+    imagePositionRef.current = position;
+    setImagePosition(position);
+  }, []);
+  const retireInlineWork = useCallback(() => {
+    const previousVisit = visitRef.current;
+    visitRef.current = previousVisit + 1;
+    const retirement = mentionRetirement.current;
+    mentionRetirement.current = null;
+    if (retirement?.visit === previousVisit) retirement.retire();
+    mentionHandles.current.clear();
+    mentionHandlers.current = idleMentionHandlers;
+    slashHandlers.current = idleSlashHandlers;
+    setOwnedLinkRange(null);
+    setOwnedImagePosition(null);
+    setTouchSheetOpen(false);
+    setVisit(visitRef.current);
+  }, [setOwnedImagePosition, setOwnedLinkRange]);
 
   const resetUploadState = useCallback((notify: boolean) => {
     const hadState =
@@ -449,6 +588,14 @@ export function RichTextEditor({
     mounted.current = true;
     return () => {
       mounted.current = false;
+      mentionRetirement.current?.retire();
+      mentionRetirement.current = null;
+      mentionHandlers.current = idleMentionHandlers;
+      slashHandlers.current = idleSlashHandlers;
+      mentionHandles.current.clear();
+      mentionHandleUsage.current.clear();
+      linkRangeRef.current = null;
+      imagePositionRef.current = null;
       if (timer.current !== null) {
         clearTimeout(timer.current);
         timer.current = null;
@@ -464,7 +611,6 @@ export function RichTextEditor({
   }, [editor]);
 
   useLayoutEffect(() => {
-    const schemaMatchesProfile = editor !== null && Boolean(editor.schema.nodes.image) === (value.profile === 'blocks');
     const previous = controlled.current;
     const profileChanged = previous.profile !== value.profile;
     const incomingChanged = previous.key !== controlledKey || profileChanged;
@@ -472,8 +618,10 @@ export function RichTextEditor({
     syncedEditor.current = editor;
     const wasEditable = lastEditable.current;
     const wasUploadEnabled = lastUploadEnabled.current;
+    const wasMentionEnabled = lastMentionEnabled.current;
     lastEditable.current = editable;
     lastUploadEnabled.current = hasUpload;
+    lastMentionEnabled.current = hasMention;
 
     if (editor) {
       editor.setEditable(editable, false);
@@ -509,7 +657,19 @@ export function RichTextEditor({
     }
 
     const lostEditability = wasEditable && !editable;
+    const gainedEditability = !wasEditable && editable;
     const lostUploader = wasUploadEnabled && !hasUpload;
+    const mentionAvailabilityChanged = wasMentionEnabled !== hasMention;
+    if (
+      externalReplacement ||
+      editorChanged ||
+      lostEditability ||
+      gainedEditability ||
+      lostUploader ||
+      mentionAvailabilityChanged
+    )
+      retireInlineWork();
+    committedMentionGeneration.current = mentionSourceState.current.generation;
     if (externalReplacement || editorChanged || lostEditability || lostUploader) {
       if (externalReplacement) {
         emittedKey.current = null;
@@ -524,9 +684,7 @@ export function RichTextEditor({
         }
       }
       retireUploads(true, externalReplacement && !editorChanged);
-      setImagePosition(null);
-      setLinkRange(null);
-      setTouchSheetOpen(false);
+      if (lostUploader && !externalReplacement && !editorChanged && !lostEditability) setOwnedImagePosition(null);
       if (externalReplacement) {
         setSnapshotError(false);
         if (schemaMatchesProfile && editor) {
@@ -551,7 +709,48 @@ export function RichTextEditor({
       lastPublishedDoc.current = editor.state.doc;
       publishedEditor.current = editor;
     }
-  }, [editor, editable, hasUpload, label, lang, dir, disabled, readOnly, controlledKey, value.profile, retireUploads]);
+  }, [
+    editor,
+    editable,
+    hasUpload,
+    hasMention,
+    label,
+    lang,
+    dir,
+    disabled,
+    readOnly,
+    controlledKey,
+    value.profile,
+    retireInlineWork,
+    retireUploads,
+    setOwnedImagePosition,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!editor) return;
+    const mapRange = ({ transaction }: { transaction: Transaction }) => {
+      const range = linkRangeRef.current;
+      if (
+        renderedEditor.current !== editor ||
+        !editableRef.current ||
+        editor.isDestroyed
+      )
+        return;
+      if (range && range.visit === visitRef.current) {
+        const mapped = mapSavedLinkRange(editor, range, transaction);
+        if (mapped) setOwnedLinkRange(mapped);
+        else setOwnedLinkRange(null);
+      }
+      const imagePosition = imagePositionRef.current;
+      if (transaction.docChanged && imagePosition !== null) {
+        const before = transaction.mapping.map(imagePosition, -1);
+        const after = transaction.mapping.map(imagePosition, 1);
+        setOwnedImagePosition(before === after ? before : null);
+      }
+    };
+    editor.on('transaction', mapRange);
+    return () => editor.off('transaction', mapRange);
+  }, [editor, setOwnedImagePosition, setOwnedLinkRange]);
 
   useLayoutEffect(() => {
     if (!editor || !editable || !hasUpload || Boolean(editor.schema.nodes.image) !== (value.profile === 'blocks'))
@@ -600,25 +799,56 @@ export function RichTextEditor({
     };
   }, [editor, editable, hasUpload, value.profile, documentRevision, resetUploadState]);
 
+  const focusEditor = useCallback(() => {
+    if (isCurrent() && editor && !editor.isDestroyed && editor.isEditable) editor.view.focus();
+  }, [editor, isCurrent]);
   const openLink = useCallback(() => {
-    if (!editor?.isEditable || !editor.schema.marks.link) return;
-    const { from, to } = editor.state.selection;
-    setLinkRange({ from, to });
-  }, [editor]);
-  const closeLink = useCallback(() => setLinkRange(null), []);
-
-  useEffect(() => {
-    if (!editor) return;
-    const close = () => setLinkRange(null);
-    editor.on('selectionUpdate', close);
-    return () => {
-      editor.off('selectionUpdate', close);
-    };
-  }, [editor]);
+    if (!isCurrent() || !editor?.schema.marks.link) return;
+    const selection = editor.state.selection;
+    if (!selection.$from.parent.inlineContent || !selection.$to.parent.inlineContent) return;
+    setOwnedLinkRange({
+      from: selection.from,
+      to: selection.to,
+      id: ++nextLinkId.current,
+      visit,
+      url: linkHref(editor, selection),
+    });
+  }, [editor, isCurrent, setOwnedLinkRange, visit]);
+  const openLinkForRange = useCallback(
+    (range: LinkRange) => {
+      if (
+        !isCurrent() ||
+        !editor ||
+        editor.state.selection.from !== range.from ||
+        editor.state.selection.to !== range.to
+      )
+        return;
+      openLink();
+    },
+    [editor, isCurrent, openLink],
+  );
+  const closeLink = useCallback(
+    (id: number) => {
+      if (!isCurrent()) return;
+      const current = linkRangeRef.current;
+      if (current?.id !== id) return;
+      setOwnedLinkRange(null);
+    },
+    [isCurrent, setOwnedLinkRange],
+  );
+  const isCurrentImagePosition = useCallback(
+    (position: number) => isCurrent() && imagePositionRef.current === position,
+    [isCurrent],
+  );
+  const openImage = useCallback(() => {
+    if (isCurrent() && editor && !editor.isDestroyed && editor.isEditable)
+      setOwnedImagePosition(editor.state.selection.from);
+  }, [editor, isCurrent, setOwnedImagePosition]);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+      if (!isCurrent()) return;
       latest.current.onKeyDown?.(event);
       if (event.defaultPrevented) return;
 
@@ -640,16 +870,16 @@ export function RichTextEditor({
         latest.current.onSave();
       }
     },
-    [editor, editable, openLink],
+    [editor, editable, isCurrent, openLink],
   );
 
   const handleCompositionEnd = useCallback(() => {
     const current = editor;
-    if (!current) return;
+    if (!current || !isCurrent()) return;
     requestAnimationFrame(() => {
-      if (!current.isDestroyed && !current.view.composing) scheduleRef.current(current);
+      if (isCurrent() && !current.isDestroyed && !current.view.composing) scheduleRef.current(current);
     });
-  }, [editor]);
+  }, [editor, isCurrent]);
 
   const coarsePointer = useCoarsePointer();
   const editorFocused = useEditorFocus(editor);
@@ -661,7 +891,7 @@ export function RichTextEditor({
         type="button"
         variant="outline"
         className="shrink-0 max-md:px-2.5"
-        onClick={() => imageCommand.run(editor, openLink, () => setImagePosition(editor.state.selection.from))}
+        onClick={() => runEditorCommand(imageCommand, editor, openLink, openImage, isCurrent)}
       >
         <ImageIcon aria-hidden="true" />
         <span className="max-md:sr-only">{resolvedLabels.image}</span>
@@ -688,59 +918,90 @@ export function RichTextEditor({
       ) : null}
       {editor && editable ? (
         <>
-          {upload && editor.schema.nodes.image && imagePosition !== null ? (
+          {isCurrent() && upload && editor.schema.nodes.image && imagePosition !== null ? (
             <ImageInsert
+              key={visit}
               editor={editor}
               position={imagePosition}
               labels={resolvedLabels}
-              onInsert={(files, position, alt) => uploads.current?.add(files, position, alt)}
-              onClose={() => setImagePosition(null)}
+              onInsert={(files, position, alt) => {
+                if (isCurrentImagePosition(position)) uploads.current?.add(files, position, alt);
+              }}
+              onClose={() => {
+                if (imagePosition !== null && isCurrentImagePosition(imagePosition)) setOwnedImagePosition(null);
+              }}
             />
           ) : null}
-          {lookupMention ? (
+          {lookupMention && isCurrent() ? (
             <MentionMenu
+              key={visit}
               editor={editor}
               source={lookupMention}
               handlers={mentionHandlers}
               handles={mentionHandles}
               labels={resolvedLabels}
+              visit={visit}
+              isCurrent={isCurrent}
+              registerRetirement={registerMentionRetirement}
             />
           ) : null}
           <SlashMenu
+            key={`slash-${visit}`}
             editor={editor}
             labels={resolvedLabels}
             upload={hasUpload}
             handlers={slashHandlers}
             onLink={openLink}
-            onImage={() => setImagePosition(editor.state.selection.from)}
+            onImage={openImage}
+            visit={visit}
+            isCurrent={isCurrent}
           />
           {toolbar !== 'never' ? (
             <EditorTouchBar
+              key={`touch-${visit}`}
               editor={editor}
               labels={resolvedLabels}
               onLink={openLink}
-              onImage={() => setImagePosition(editor.state.selection.from)}
+              onImage={openImage}
               upload={hasUpload}
               visible={touchBarVisible}
-              onSheetOpenChange={setTouchSheetOpen}
+              onSheetOpenChange={(open) => {
+                if (isCurrent()) setTouchSheetOpen(open);
+              }}
+              isCurrent={isCurrent}
             />
           ) : null}
           <SelectionMenu
+            key={`selection-${visit}`}
             editor={editor}
             labels={resolvedLabels}
             linkRange={linkRange}
             onLink={openLink}
-            onLinkClose={closeLink}
+            onLinkClose={() => {
+              if (linkRange) closeLink(linkRange.id);
+            }}
             container={menuContainer}
             visible={!touchBarVisible}
+            isCurrent={isCurrent}
+            isRangeCurrent={isCurrentLinkRange}
+            onLinkUrlChange={updateLinkUrl}
+            focusEditor={focusEditor}
           />
           <LinkMenu
+            key={`link-${visit}`}
             editor={editor}
             labels={resolvedLabels}
             range={linkRange}
-            onEdit={openLink}
-            onClose={closeLink}
+            onEdit={openLinkForRange}
+            onClose={() => {
+              if (linkRange) closeLink(linkRange.id);
+            }}
             container={menuContainer}
+            isCurrent={isCurrent}
+            isRangeCurrent={isCurrentLinkRange}
+            onUrlChange={updateLinkUrl}
+            focusEditor={focusEditor}
+            rangeVisible={touchBarVisible}
           />
         </>
       ) : null}

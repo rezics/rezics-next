@@ -105,6 +105,7 @@ export function EditorTouchBar({
   upload,
   visible,
   onSheetOpenChange,
+  isCurrent,
 }: {
   editor: Editor;
   labels: RichTextEditorLabels;
@@ -113,6 +114,7 @@ export function EditorTouchBar({
   upload: boolean;
   visible: boolean;
   onSheetOpenChange: (open: boolean) => void;
+  isCurrent: () => boolean;
 }) {
   const state = useCommandState(editor);
   const [blocksOpen, setBlocksOpen] = useState(false);
@@ -120,33 +122,46 @@ export function EditorTouchBar({
   const bar = useRef<HTMLDivElement>(null);
   const inset = useKeyboardInset(visible);
   const blockCommands = useMemo(() => availableInsertCommands(editor, upload), [editor, upload]);
+  const selectionRevision = useRef(0);
+  const [renderedSelectionRevision, setRenderedSelectionRevision] = useState(0);
+  const menuIsCurrent = () => isCurrent() && selectionRevision.current === renderedSelectionRevision;
 
   const scrollCaret = useCallback(() => {
-    if (!visible) return;
-    requestAnimationFrame(() => scrollSelectionAboveBar(editor, bar.current));
-  }, [editor, visible]);
+    if (!visible || !isCurrent()) return;
+    requestAnimationFrame(() => {
+      if (isCurrent()) scrollSelectionAboveBar(editor, bar.current);
+    });
+  }, [editor, isCurrent, visible]);
 
   useLayoutEffect(scrollCaret, [scrollCaret, inset]);
 
   useEffect(() => {
-    if (!visible) return;
     const update = () => scrollCaret();
+    const selectionUpdate = () => {
+      if (!isCurrent()) return;
+      selectionRevision.current += 1;
+      setRenderedSelectionRevision(selectionRevision.current);
+      update();
+    };
     editor.on('focus', update);
-    editor.on('selectionUpdate', update);
+    editor.on('selectionUpdate', selectionUpdate);
     editor.on('transaction', update);
     const viewport = window.visualViewport;
-    viewport?.addEventListener('resize', update);
-    viewport?.addEventListener('scroll', update);
+    if (visible) {
+      viewport?.addEventListener('resize', update);
+      viewport?.addEventListener('scroll', update);
+    }
     return () => {
       editor.off('focus', update);
-      editor.off('selectionUpdate', update);
+      editor.off('selectionUpdate', selectionUpdate);
       editor.off('transaction', update);
       viewport?.removeEventListener('resize', update);
       viewport?.removeEventListener('scroll', update);
     };
-  }, [editor, scrollCaret, visible]);
+  }, [editor, isCurrent, scrollCaret, visible]);
 
   function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
+    if (!menuIsCurrent()) return;
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
     if (!step && event.key !== 'Home' && event.key !== 'End') return;
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')];
@@ -182,7 +197,9 @@ export function EditorTouchBar({
       'aria-label': labels[command.label],
       disabled,
       tabIndex: tabStop === command.id ? 0 : -1,
-      onFocus: () => setTabStop(command.id),
+      onFocus: () => {
+        if (isCurrent()) setTabStop(command.id);
+      },
       ...focusPreservingPointer,
     };
     const icon = Icon ? <Icon aria-hidden="true" /> : null;
@@ -190,24 +207,34 @@ export function EditorTouchBar({
       command.id,
       labels[command.label],
       command.active ? (
-        <Toggle pressed={active} onPressedChange={() => command.run(editor, onLink, onImage)} {...common}>
+        <Toggle pressed={active} onPressedChange={() => runCommand(command)} {...common}>
           {icon}
         </Toggle>
       ) : (
-        <Button variant="ghost" onClick={() => command.run(editor, onLink, onImage)} {...common}>
+        <Button variant="ghost" onClick={() => runCommand(command)} {...common}>
           {icon}
         </Button>
       ),
     );
   }
 
-  function chooseBlock(command: EditorCommand) {
+  function runCommand(command: EditorCommand) {
+    if (!menuIsCurrent() || editor.isDestroyed || !editor.isEditable) return;
     command.run(editor, onLink, onImage);
+    if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
+  }
+
+  function chooseBlock(command: EditorCommand) {
+    if (!menuIsCurrent()) return;
+    runCommand(command);
+    if (!isCurrent()) return;
     setBlocksOpen(false);
     onSheetOpenChange(false);
   }
 
-  const sheetFocus = returnFocus(editor);
+  const sheetFocus = returnFocus(editor, isCurrent);
+
+  if (!isCurrent()) return null;
 
   return (
     <TooltipProvider delay={600}>
@@ -240,9 +267,12 @@ export function EditorTouchBar({
                 aria-haspopup="dialog"
                 aria-expanded={blocksOpen}
                 tabIndex={tabStop === 'blocks' ? 0 : -1}
-                onFocus={() => setTabStop('blocks')}
+                onFocus={() => {
+                  if (isCurrent()) setTabStop('blocks');
+                }}
                 {...focusPreservingPointer}
                 onClick={() => {
+                  if (!menuIsCurrent()) return;
                   setBlocksOpen(true);
                   onSheetOpenChange(true);
                 }}
@@ -262,9 +292,13 @@ export function EditorTouchBar({
               className={barButton}
               aria-label={labels.hideKeyboard}
               tabIndex={tabStop === 'hideKeyboard' ? 0 : -1}
-              onFocus={() => setTabStop('hideKeyboard')}
+              onFocus={() => {
+                if (isCurrent()) setTabStop('hideKeyboard');
+              }}
               {...focusPreservingPointer}
-              onClick={() => editor.commands.blur()}
+              onClick={() => {
+                if (menuIsCurrent() && isCurrent() && !editor.isDestroyed) editor.commands.blur();
+              }}
             >
               <ChevronDown aria-hidden="true" />
             </Button>,
@@ -274,6 +308,7 @@ export function EditorTouchBar({
       <Sheet
         open={blocksOpen}
         onOpenChange={(open) => {
+          if (!isCurrent()) return;
           setBlocksOpen(open);
           onSheetOpenChange(open);
         }}
