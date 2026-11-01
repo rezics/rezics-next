@@ -421,6 +421,23 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
           [originalChain.bootstrap,originalChain.execution],
         )).rejects.toMatchObject({ code: '23514' });
         await immutable.query('ROLLBACK');
+        // Native delivery cannot advance or remove the original pin after the
+        // Source verifier has adopted its window. Failed writes remain rolled back.
+        await immutable.query('BEGIN');
+        await expect(immutable.query(
+          `DELETE FROM core.consumer_checkpoint
+           WHERE (partition_no,consumer)=(0,'public_filter_' || replace($1::text,'-',''))`,
+          [originalChain.bootstrap],
+        )).rejects.toMatchObject({ code: '23514' });
+        await immutable.query('ROLLBACK');
+        await immutable.query('BEGIN');
+        await expect(immutable.query(
+          `UPDATE core.consumer_checkpoint SET position=position+1,
+             epoch=(SELECT epoch FROM core.partition WHERE partition_no=0)
+           WHERE (partition_no,consumer)=(0,'public_filter_' || replace($1::text,'-',''))`,
+          [originalChain.bootstrap],
+        )).rejects.toMatchObject({ code: '23514' });
+        await immutable.query('ROLLBACK');
       } finally { immutable.release(); }
       // The default repair job must retain the native Account input alongside
       // actual writer effects. Neither a Subject projection nor an intent tick

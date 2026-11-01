@@ -781,3 +781,10 @@ it does not call the served-population reader. This closes captured page replay,
 not current population eligibility or genuine receiver settlement. Native contiguous
 ACK, all-domain current window closure, population observations and response-root
 integration still require their actual maintained bodies before serving is ready.
+
+The native checkpoint row for an enrolled original window cannot be advanced,
+renamed or deleted by ordinary checkpoint delivery while its enrollment retains
+it. Verification does not release that retention obligation. Native retirement
+still has to drain its actual users, writers, copies and captured obligations
+before releasing enrollment and pins; the checkpoint guard grants no retirement
+or repaired coverage.
