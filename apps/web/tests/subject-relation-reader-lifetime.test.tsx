@@ -531,7 +531,9 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       expect(clientB.getQueryCache().find({ queryKey: originalKey, exact: true })).toBeUndefined();
       expect(clientB.getQueryCache().find({ queryKey: freshKey, exact: true })).toBeDefined();
       expect(window.document.activeElement).toBe(freshAction);
-      freshRequest.response.resolve(continuation(freshRequest.request, 'Fresh continuation after old cleanup', 'fresh-next'));
+      freshRequest.response.resolve(
+        continuation(freshRequest.request, 'Fresh continuation after old cleanup', 'fresh-next'),
+      );
       await settle();
       expect(stream('side-stories').textContent).toContain('Fresh continuation after old cleanup');
       expect(clientB.getQueryCache().find({ queryKey: freshKey, exact: true })).toBeUndefined();
@@ -600,9 +602,7 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       const copiedAfterError = makeReading({ ...baseSpec, label: 'Copied rows after retained error' }, h);
       const afterAbaLinks = afterUnobservedAba.section.ok ? afterUnobservedAba.section.body.links : undefined;
       const copiedAfterErrorSection: Section =
-        afterUnobservedAba.section.ok &&
-        copiedAfterError.section.ok &&
-        Array.isArray(afterAbaLinks)
+        afterUnobservedAba.section.ok && copiedAfterError.section.ok && Array.isArray(afterAbaLinks)
           ? {
               ...copiedAfterError.section,
               body: {
