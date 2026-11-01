@@ -114,11 +114,11 @@ New writer-state ports refuse empty IDs and IDs over 1024 UTF-8 bytes before SQL
 execution limits remain unchanged. The domain has one primary key and the fence lookup uses the exact existing
 primary key. The current check has no scan, payload read, write, descendant walk or alternate ledger.
 
-| Operation | SQL dispatched, including nested SQL | Rows | Points | Statements | Bytes | Engine work |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Released observation | `SELECT f.*,d.restore_generation FROM dbos.workflow_writer_fences f CROSS JOIN dbos.workflow_writer_fence_domain d WHERE f.workflow_uuid=$1 AND d.singleton` | 3 | 2 | 1 | 8192 | 0 |
-| Current command check | `SELECT * FROM dbos.check_workflow_writer_state($1,$2,$3,$4,$5)`; domain keyed `SELECT ... FOR SHARE`; fence keyed `SELECT ... FOR UPDATE`; `RETURN QUERY SELECT` of the locked values | 4 | 2 | 4 | 8192 | 0 |
-| Offline restore rotation | `UPDATE dbos.workflow_writer_fence_domain SET revision=revision+1,restore_generation=gen_random_uuid() WHERE singleton RETURNING restore_generation` | 2 | 1 | 1 | 1024 | 0 |
+| Operation                | SQL dispatched, including nested SQL                                                                                                                                                   | Rows | Points | Statements | Bytes | Engine work |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---: | -----: | ---------: | ----: | ----------: |
+| Released observation     | `SELECT f.*,d.restore_generation FROM dbos.workflow_writer_fences f CROSS JOIN dbos.workflow_writer_fence_domain d WHERE f.workflow_uuid=$1 AND d.singleton`                           |    3 |      2 |          1 |  8192 |           0 |
+| Current command check    | `SELECT * FROM dbos.check_workflow_writer_state($1,$2,$3,$4,$5)`; domain keyed `SELECT ... FOR SHARE`; fence keyed `SELECT ... FOR UPDATE`; `RETURN QUERY SELECT` of the locked values |    4 |      2 |          4 |  8192 |           0 |
+| Offline restore rotation | `UPDATE dbos.workflow_writer_fence_domain SET revision=revision+1,restore_generation=gen_random_uuid() WHERE singleton RETURNING restore_generation`                                   |    2 |      1 |          1 |  1024 |           0 |
 
 Rows conservatively include the two keyed inputs and repeated result production; rotation counts both the old and
 new row. Bytes include bounded ID/receipt tuples, bindings and repeated results, with no workflow payload. Points

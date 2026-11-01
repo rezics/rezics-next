@@ -16,10 +16,7 @@ export const SDK_TRANSACTION_FENCE_COST = Object.freeze({
 });
 
 /** Released observation only. Missing original identity is not manufactured by this read. */
-export function readSdkWorkflowWriterState(
-  actualWorkflowId: string,
-  sdk: DBOSClient,
-): Promise<SdkWriterState | null> {
+export function readSdkWorkflowWriterState(actualWorkflowId: string, sdk: DBOSClient): Promise<SdkWriterState | null> {
   if (!(sdk instanceof DBOSClient)) throw new TypeError('An actual SDK owner client is required');
   return sdk.getWorkflowWriterState(actualWorkflowId);
 }
