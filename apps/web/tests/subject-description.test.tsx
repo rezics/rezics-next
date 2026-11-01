@@ -95,7 +95,7 @@ test('short descriptions stay inline through the 420-character/two-paragraph bou
   }
 });
 
-test('long fallback uses closed native disclosure, one exact full body, language and unchanged About ordering', () => {
+test('Long fallback Subject descriptions remain bounded before explicit expansion while complete text language and spoiler controls stay accessible', () => {
   const text = `  ${'Une histoire de voyage. '.repeat(28)}\n\nLa suite.\nUne autre ligne.  `;
   const body = render(reading(text, 'fr'));
   const details = body.querySelector('details')!;
