@@ -245,8 +245,7 @@ export const Unavailable: Story = {
           canvas.getByRole('button', { name: m.correction_submit() }),
         ])
           await target(control);
-        for (const label of article.querySelectorAll<HTMLElement>('label[for^="authored-"]'))
-          await contained(label);
+        for (const label of article.querySelectorAll<HTMLElement>('label[for^="authored-"]')) await contained(label);
         const originalLabel = article.querySelector<HTMLElement>('label[for="authored-original"]')!;
         await target(originalLabel);
         if (getLocale() === 'en') {
