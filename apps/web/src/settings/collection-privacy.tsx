@@ -23,7 +23,12 @@ import {
   type CollectionPrivacyPageRead,
 } from './collection-privacy-recovery';
 
-import { SettingsSessionOwner, useSettingsSessionOwner, useSettingsDisposal } from './settings-session-owner';
+import {
+  SettingsSessionOwner,
+  useSettingsSessionOwner,
+  useSettingsLiveness,
+  useSettingsDisposal,
+} from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 

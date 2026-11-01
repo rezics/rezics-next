@@ -37,7 +37,12 @@ import {
 } from './verification-recovery';
 import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
 
-import { SettingsSessionOwner, useSettingsSessionOwner, useSettingsDisposal } from './settings-session-owner';
+import {
+  SettingsSessionOwner,
+  useSettingsSessionOwner,
+  useSettingsLiveness,
+  useSettingsDisposal,
+} from './settings-session-owner';
 
 const verificationActionClassName =
   'h-auto min-h-11 min-w-11 w-full max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] sm:w-auto';
