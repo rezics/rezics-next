@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import recording from '../kernel/recorded/library-collection.json';
 import { m } from '../paraglide/messages.js';
-import { CollectionPrivacyView } from '../settings/collection-privacy';
+import { CollectionPrivacyView, CollectionRow } from '../settings/collection-privacy';
 import type {
   CollectionPrivacyIO,
   CollectionPrivacyPageRead,
@@ -548,5 +549,61 @@ export const RestartProtectedWhileRowUnresolved: Story = {
     await expect(view.getByRole('combobox')).toBe(select);
     await expect(select).toHaveValue('unlisted');
     await expect(view.queryByText(m.settings_privacy_refresh_blocked())).toBeNull();
+  },
+};
+/** No QueryClient: explicit illustrative IO exercises the installed standalone row and its exact retry. */
+function StandaloneRowExample() {
+  const [sends, setSends] = useState(0);
+  const [reads, setReads] = useState(0);
+  const [transport] = useState(() => {
+    let original: VisibilityAttempt | null = null;
+    let current = { ...initial, visibility: 'private' as const } as OwnedCollection;
+    const io: CollectionPrivacyIO = {
+      save: async (input) => {
+        setSends((count) => count + 1);
+        if (!original) {
+          original = input;
+          throw new Error('Illustrative response loss');
+        }
+        if (input !== original) throw new Error('Retry replaced the original command');
+        current = { ...current, visibility: input.visibility, revision: input.revision + 1 };
+        return { ok: true, collection: current };
+      },
+      read: async () => {
+        setReads((count) => count + 1);
+        return { ok: true, value: current };
+      },
+    };
+    return io;
+  });
+  return (
+    <QueryClientContext.Provider value={undefined}>
+      <StrictMode>
+        <output aria-label="Standalone row writes">{sends}</output>
+        <output aria-label="Standalone row reads">{reads}</output>
+        <ul>
+          <CollectionRow collection={{ ...initial, visibility: 'private' }} io={transport} />
+        </ul>
+      </StrictMode>
+    </QueryClientContext.Provider>
+  );
+}
+
+export const StandaloneInjectedOriginalRetry: Story = {
+  render: () => <StandaloneRowExample />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const select = await view.findByRole('combobox');
+    await expect(select).toBeEnabled();
+    await userEvent.selectOptions(select, 'public');
+    await view.findByText(m.settings_privacy_uncertain_title());
+    await userEvent.selectOptions(select, 'unlisted');
+    await expect(view.getByLabelText('Standalone row writes')).toHaveTextContent('1');
+    await userEvent.click(view.getByRole('button', { name: m.settings_privacy_retry_original() }));
+    await view.findByText(m.settings_privacy_review_title());
+    await expect(select).toHaveValue('unlisted');
+    await expect(view.getByLabelText('Standalone row writes')).toHaveTextContent('2');
+    await expect(view.getByLabelText('Standalone row reads')).toHaveTextContent('1');
   },
 };

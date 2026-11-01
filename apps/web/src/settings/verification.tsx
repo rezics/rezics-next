@@ -18,7 +18,7 @@ import {
   type VerificationInput,
 } from './verification-core';
 import { usePreferenceRetry } from './preference-failure-retry';
-import { useSettingsNavigationCurrent, useSettingsNavigationDraft } from './reading-navigation';
+import { useSettingsNavigationDraft } from './reading-navigation';
 import { verificationNeedsNavigationDecision } from './settings-draft-state';
 import { VerificationSubjectChooser } from './verification-subject-chooser';
 import { VerificationLinks, verificationIssueMessage, type VerificationLinkRow } from './verification-links';
@@ -40,6 +40,7 @@ import { readVerificationState, requestVerificationAction, withdrawVerificationA
 import {
   SettingsSessionOwner,
   useSettingsSessionOwner,
+  useSettingsReadCurrent,
   useSettingsLiveness,
   useSettingsDisposal,
 } from './settings-session-owner';
@@ -133,7 +134,7 @@ export function verificationRecoveryIO(
     withdraw: (accountId: string, input: { idempotencyKey: string }, token: string) =>
       withdrawVerificationAction({ data: { ...input, accountId }, headers: { 'X-CSRF-Token': token } }),
   },
-  isCurrent: () => boolean = owner.isCurrent,
+  isCurrent: () => boolean = owner.readCurrent,
 ): VerificationRecoveryIO {
   const guard = async <T,>(dispatch: (token: string) => Promise<T>): Promise<T> => {
     if (!isCurrent()) throw new Error('Settings viewer unavailable');
@@ -141,23 +142,29 @@ export function verificationRecoveryIO(
     if (!isCurrent()) throw new Error('Settings viewer changed');
     return result;
   };
+  const readGuard = async <T,>(dispatch: () => Promise<T>): Promise<T> => {
+    if (!isCurrent()) throw new Error('Settings viewer unavailable');
+    const result = await owner.guardRead(dispatch);
+    if (!isCurrent()) throw new Error('Settings viewer changed');
+    return result;
+  };
   const key = verificationQueryKey(owner.subject);
   // This subscription owns only the original query, and runs synchronously on retirement.
   const release = owner.subscribe(() => {
-    if (owner.isCurrent()) return;
+    if (owner.readCurrent()) return;
     release();
     void client.cancelQueries({ queryKey: key, exact: true });
     client.removeQueries({ queryKey: key, exact: true });
   });
   return {
     read: (accountId) =>
-      guard(async () => {
+      readGuard(async () => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
         return client.fetchQuery({
           ...personalRead,
           queryKey: key,
           queryFn: () =>
-            guard(async () => {
+            readGuard(async () => {
               const result = await transport.read(accountId);
               if (
                 result.accountId !== owner.subject ||
@@ -186,10 +193,15 @@ export function verificationRecoveryIO(
 function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfToken: string | null }) {
   const queryClient = useQueryClient();
   const owner = useSettingsSessionOwner(csrfToken, accountId)!;
-  const isCurrent = useSettingsLiveness(owner.isCurrent);
+  const isCurrent = useSettingsLiveness(owner.readCurrent);
   const [controller] = useState(
     () =>
-      new VerificationRecovery(accountId, verificationRecoveryIO(owner, queryClient, undefined, isCurrent), isCurrent),
+      new VerificationRecovery(
+        accountId,
+        verificationRecoveryIO(owner, queryClient, undefined, isCurrent),
+        isCurrent,
+        () => isCurrent() && owner.isCurrent(),
+      ),
   );
   const dispose = useCallback(() => controller.deactivate(), [controller]);
   useSettingsDisposal(dispose);
@@ -228,7 +240,7 @@ export function VerificationCard({
   // Capture the genuine label in the action handler, before a send clears current status or the draft changes.
   const [action, setAction] = useState<{ kind: 'request' | 'withdraw'; subject: string } | null>(null);
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
-  const isCurrent = useSettingsNavigationCurrent(csrfToken);
+  const isCurrent = useSettingsReadCurrent(csrfToken, true);
   const pending = state.phase === 'sending' || state.phase === 'reading';
   const waiting = usePreferenceRetry(state.failure, state.retryAt);
   const verification = state.current?.verificationRequest ?? null;

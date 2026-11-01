@@ -1,3 +1,4 @@
+import { QueryClientContext } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -43,7 +44,7 @@ export function collectionPrivacyIO(
 ): CollectionPrivacyIO {
   return {
     save: (data) => owner.guard((token) => transport.save(data, token)),
-    read: (id) => owner.guard(() => transport.read(id)),
+    read: (id) => owner.guardRead(() => transport.read(id)),
   };
 }
 const nativePageRead: CollectionPrivacyPageRead = (data) => readOwnedCollectionsPage({ data });
@@ -73,14 +74,52 @@ function failureText(failure: CollectionPrivacyFailure | 'invalid' | undefined |
         : m.settings_privacy_unavailable();
 }
 
-export function CollectionRow({ collection, io }: { collection: OwnedCollection; io?: CollectionPrivacyIO }) {
-  const owner = useSettingsSessionOwner(undefined, undefined, !!io);
-  const csrfToken = owner?.credential() ?? null;
+type CollectionRowProps = { collection: OwnedCollection; io?: CollectionPrivacyIO };
+type OwnedRowProps = CollectionRowProps & { owner: SettingsSessionOwner | null };
+
+export function CollectionRow(props: CollectionRowProps) {
+  const client = useContext(QueryClientContext);
+  const owner = useSettingsSessionOwner(undefined, undefined, !!props.io);
+  // Explicit isolated IO has no session or exposure producer. An installed owner still takes precedence.
+  if (!client)
+    return (
+      <CollectionRowView {...props} owner={owner} canSave={!!props.io && !owner} canRead={!!props.io && !owner} />
+    );
+  return <AdmittedCollectionRow {...props} owner={owner} />;
+}
+
+function AdmittedCollectionRow(props: OwnedRowProps) {
   const canSave = useOperation('collection.update');
   const canRead = useOperation('collection.get');
-  const isCurrent = useSettingsLiveness(owner?.isCurrent ?? (() => !!io));
+  return <CollectionRowView {...props} canSave={canSave} canRead={canRead} />;
+}
+
+function CollectionRowView({
+  collection,
+  io,
+  owner,
+  canSave,
+  canRead,
+}: OwnedRowProps & { canSave: boolean; canRead: boolean }) {
+  const mayWrite = () => (owner ? owner.isCurrent() : !!io);
+  const isCurrent = useSettingsLiveness(owner?.readCurrent ?? (() => !!io));
   const [editor] = useState(
-    () => new CollectionPrivacyEditor(collection, io ?? collectionPrivacyIO(owner!), isCurrent),
+    () =>
+      new CollectionPrivacyEditor(
+        collection,
+        owner
+          ? collectionPrivacyIO(owner, io ? { save: (data) => io.save(data), read: (id) => io.read(id) } : undefined)
+          : io ?? {
+              save: async () => {
+                throw new Error('Settings viewer unavailable');
+              },
+              read: async () => {
+                throw new Error('Settings viewer unavailable');
+              },
+            },
+        isCurrent,
+        () => isCurrent() && mayWrite(),
+      ),
   );
   useSettingsDisposal(editor.dispose);
   const pager = useContext(ListRestartContext);
@@ -115,7 +154,7 @@ export function CollectionRow({ collection, io }: { collection: OwnedCollection;
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
-                disabled={!canRead || busy || waiting || restarting}
+                disabled={!isCurrent() || !canRead || busy || waiting || restarting}
                 onClick={() => {
                   if (!pager?.snapshot().restarting) void editor.reload();
                 }}
@@ -157,7 +196,7 @@ export function CollectionRow({ collection, io }: { collection: OwnedCollection;
             disabled={
               !isCurrent() ||
               restarting ||
-              !csrfToken ||
+              !mayWrite() ||
               !canSave ||
               (waiting && (phase === 'idle' || phase === 'saved'))
             }
@@ -216,7 +255,7 @@ export function CollectionRow({ collection, io }: { collection: OwnedCollection;
                       className={preferenceActionClassName}
                       type="button"
                       variant="outline"
-                      disabled={!csrfToken || !canSave || busy || waiting || restarting}
+                      disabled={!mayWrite() || !canSave || busy || waiting || restarting}
                       onClick={() => {
                         if (!pager?.snapshot().restarting) void editor.retry();
                       }}
@@ -228,7 +267,7 @@ export function CollectionRow({ collection, io }: { collection: OwnedCollection;
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={!csrfToken || !canSave || busy || waiting || restarting}
+                      disabled={!mayWrite() || !canSave || busy || waiting || restarting}
                       onClick={() => {
                         if (!pager?.snapshot().restarting) void editor.submit();
                       }}
@@ -240,7 +279,7 @@ export function CollectionRow({ collection, io }: { collection: OwnedCollection;
                     className={preferenceActionClassName}
                     type="button"
                     variant="outline"
-                    disabled={!canRead || busy || waiting || restarting}
+                    disabled={!isCurrent() || !canRead || busy || waiting || restarting}
                     onClick={() => {
                       if (!pager?.snapshot().restarting) void editor.reload();
                     }}
@@ -275,9 +314,9 @@ export function CollectionPrivacyView({
   io?: CollectionPrivacyIO;
 }) {
   const owner = useSettingsSessionOwner(undefined, undefined, !!io || read !== nativePageRead);
-  const isCurrent = useSettingsLiveness(owner?.isCurrent ?? (() => read !== nativePageRead));
+  const isCurrent = useSettingsLiveness(owner?.readCurrent ?? (() => read !== nativePageRead));
   const [pager] = useState(
-    () => new CollectionPrivacyPager((cursor) => (owner ? owner.guard(() => read(cursor)) : read(cursor)), isCurrent),
+    () => new CollectionPrivacyPager((cursor) => (owner ? owner.guardRead(() => read(cursor)) : read(cursor)), isCurrent),
   );
   useSettingsDisposal(pager.dispose);
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);

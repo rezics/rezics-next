@@ -468,3 +468,22 @@ test('a settled signed-out request ignores cached identity and private loader da
     client.clear();
   }
 });
+
+test('a successful original subject with null CSRF renders the actual read-only Reading panel rather than session recovery', async () => {
+  const client = new QueryClient();
+  const before = requests;
+  const session = { state: 'signed-in' as const, subject: 'current-viewer', csrfToken: null };
+  client.setQueryData(sessionQuery.queryKey, session);
+  try {
+    const html = await pageMarkup(client, session, '/fr/settings#reading');
+    expect(html).toContain('data-settings-panel="reading"');
+    expect(html).toContain('id="settings-reading-heading"');
+    expect(html).toContain(m.settings_reading_text());
+    expect(html).not.toContain(m.settings_session_unavailable());
+    expect(html).not.toContain('old-loader-token');
+    expect(html).not.toContain('ignored-prop');
+    expect(html).toContain('disabled=""');
+    expect(requests).toBe(before);
+    expect(client.isFetching()).toBe(0);
+  } finally { client.clear(); }
+});

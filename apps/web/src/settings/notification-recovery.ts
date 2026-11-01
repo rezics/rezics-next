@@ -51,6 +51,7 @@ export class NotificationEditor {
     initialFailed = false,
     private sharedVersion: () => number = () => initial.version,
     private isCurrent: () => boolean = () => true,
+    private canWrite: () => boolean = isCurrent,
   ) {
     this.state = {
       known: { ...initial, notifications: { ...initial.notifications } },
@@ -90,7 +91,7 @@ export class NotificationEditor {
     if (this.live()) this.io.confirmed?.(known.version);
   }
   async edit(kind: string, enabled: boolean, version: number) {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     this.minimumVersion(version);
     const local =
       this.state.pending ||
@@ -102,7 +103,7 @@ export class NotificationEditor {
     await this.start({ [kind]: enabled }, version);
   }
   async restore(version: number) {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     this.minimumVersion(version);
     if (
       this.state.pending ||
@@ -114,13 +115,13 @@ export class NotificationEditor {
     await this.start(null, version);
   }
   async submit(version: number) {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     this.minimumVersion(version);
     if (this.state.pending || this.state.phase !== 'review') return;
     await this.start({ ...this.state.draft }, version);
   }
   private async start(notifications: NotificationPatch, version: number) {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
     // Reading's version is a floor for a new read, never a baseline for these retained values.
     if (this.minimumVersion(version) > this.state.known.version) {
@@ -136,20 +137,20 @@ export class NotificationEditor {
     await this.send(false);
   }
   async retry() {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     if (this.waiting() || !this.state.pending || this.state.phase === 'saving' || this.state.phase === 'reloading')
       return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     const attempt = this.state.pending;
     if (!attempt) return;
     this.update({ phase: 'saving', readOrigin: null, reason: undefined, failure: undefined });
     let result: NotificationWriteResult;
     try {
       result = await this.io.save(attempt.input);
-      if (!this.live()) return;
+      if (!this.live() || !this.canWrite()) return;
     } catch {
       this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;

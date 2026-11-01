@@ -66,6 +66,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     current: OwnedCollection,
     private io: CollectionPrivacyIO,
     isCurrent: () => boolean = () => true,
+    private canWrite: () => boolean = isCurrent,
   ) {
     super({ current, desired: current.visibility, attempt: null, readRefusal: null, phase: 'idle' }, isCurrent);
   }
@@ -89,14 +90,14 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     this.update({ current, desired: current.visibility, phase: 'idle' });
   }
   async edit(desired: CollectionVisibility) {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     if (this.state.readRefusal) return;
     this.edits++;
     this.update({ desired });
     if (this.state.phase === 'idle' || this.state.phase === 'saved') await this.submit();
   }
   async submit() {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     if (this.state.readRefusal || this.state.attempt || !['idle', 'saved', 'review'].includes(this.state.phase)) return;
     if (this.state.desired === this.state.current.visibility) return;
     const attempt = Object.freeze({
@@ -109,18 +110,18 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     await this.send(false);
   }
   async retry() {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     if (!this.state.readRefusal && this.state.attempt && this.state.phase === 'uncertain') await this.send(true);
   }
   private async send(recovering: boolean) {
-    if (!this.live()) return;
+    if (!this.live() || !this.canWrite()) return;
     const attempt = this.state.attempt;
     if (!attempt) return;
     const generation = this.generation;
     this.update({ phase: 'saving', failure: undefined, nativeFailure: undefined });
     try {
       const answer = await this.io.save(attempt);
-      if (!this.live() || generation !== this.generation) return;
+      if (!this.live() || !this.canWrite() || generation !== this.generation) return;
       if (!answer.ok) {
         this.update(
           answer.reason === 'unavailable' || (recovering && answer.reason !== 'conflict')

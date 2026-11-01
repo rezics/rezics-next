@@ -2,7 +2,7 @@ import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useCallback, createContext, useContext, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { sessionQuery } from '../session/query';
 
-/** A credential belongs to one successful installed observation, never to retained query data alone. */
+/** Read custody and write credentials belong to one successful installed observation, never to retained query data alone. */
 export class SettingsSessionOwner {
   private retired = false;
   private users = 0;
@@ -27,15 +27,17 @@ export class SettingsSessionOwner {
       query?.status === 'success' &&
       query.data?.state === 'signed-in' &&
       !!this.subject &&
-      !!this.token &&
       query.data.subject === this.subject &&
       query.data.csrfToken === this.token
     );
   }
-  isCurrent = () => {
+  /** Successful identity permits reads even when this observation has no write credential. */
+  readCurrent = () => {
     if (!this.retired && !this.matches()) this.retire();
     return !this.retired && (!this.mounted || this.users > 0);
   };
+  /** Preserve the token-requiring writer contract for existing callers. */
+  isCurrent = () => this.readCurrent() && !!this.token;
   credential = () => (this.isCurrent() ? this.token : null);
   snapshot = () => this.retired;
   subscribe = (listener: () => void) => {
@@ -55,9 +57,11 @@ export class SettingsSessionOwner {
   mount = () => {
     this.users++;
     this.mounted = true;
-    if (this.isCurrent() && !this.release) {
-      this.release = this.client.getQueryCache().subscribe(({ query }) => {
-        if (query.queryKey.length === 1 && query.queryKey[0] === sessionQuery.queryKey[0]) this.isCurrent();
+    if (this.readCurrent() && !this.release) {
+      this.release = this.client.getQueryCache().subscribe(({ query, type }) => {
+        if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        if (type === 'removed') this.retire();
+        else this.readCurrent();
       });
     }
     let released = false;
@@ -70,11 +74,17 @@ export class SettingsSessionOwner {
       });
     };
   };
+  async guardRead<T>(dispatch: () => Promise<T>): Promise<T> {
+    if (!this.readCurrent()) throw new Error('Settings viewer unavailable');
+    const result = await dispatch();
+    if (!this.readCurrent()) throw new Error('Settings viewer changed');
+    return result;
+  }
   async guard<T>(dispatch: (token: string) => Promise<T>): Promise<T> {
     const token = this.credential();
     if (!token) throw new Error('Settings viewer unavailable');
     const result = await dispatch(token);
-    if (!this.isCurrent()) throw new Error('Settings viewer changed');
+    if (this.credential() !== token) throw new Error('Settings viewer changed');
     return result;
   }
 }
@@ -83,12 +93,12 @@ export const SettingsSessionContext = createContext<SettingsSessionOwner | null>
 const standaloneCurrent = () => true;
 const unavailable = () => false;
 
-/** Does not read the session transport. Standalone injected examples can omit a QueryClient entirely. */
-export function useSettingsSessionOwner(token: string | null | undefined, subject?: string | null, standalone = false) {
+/** Does not read the session transport. A present QueryClient always requires an installed observation. */
+export function useSettingsSessionOwner(token: string | null | undefined, subject?: string | null, _standalone = false) {
   const client = useContext(QueryClientContext);
   const inherited = useContext(SettingsSessionContext);
   const [local] = useState(() =>
-    !inherited && client && (!standalone || client.getQueryState(sessionQuery.queryKey))
+    !inherited && client
       ? new SettingsSessionOwner(
           client,
           token === undefined ? (client.getQueryData(sessionQuery.queryKey)?.csrfToken ?? null) : token,
@@ -104,7 +114,17 @@ export function useSettingsSessionOwner(token: string | null | undefined, subjec
 
 export function useSettingsCurrent(token: string | null, standalone = false) {
   const owner = useSettingsSessionOwner(token, undefined, standalone);
-  return useSettingsLiveness(owner?.isCurrent ?? (standalone ? standaloneCurrent : unavailable));
+  return useSettingsLiveness(
+    owner ? () => owner.token === token && owner.isCurrent() : standalone ? standaloneCurrent : unavailable,
+  );
+}
+
+/** Read-only custody never supplies mutation authority to existing writer callers. */
+export function useSettingsReadCurrent(token: string | null, standalone = false) {
+  const owner = useSettingsSessionOwner(token, undefined, standalone);
+  return useSettingsLiveness(
+    owner ? () => owner.token === token && owner.readCurrent() : standalone ? standaloneCurrent : unavailable,
+  );
 }
 
 /** Close an individual editor immediately during cleanup, and permanently after a real unmount. */

@@ -15,7 +15,7 @@ import type { NotificationPreferences } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { useSettingsNavigationDraft } from './reading-navigation';
 
-import { useSettingsCurrent, useSettingsDisposal } from './settings-session-owner';
+import { useSettingsCurrent, useSettingsReadCurrent, useSettingsDisposal } from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 
@@ -50,7 +50,8 @@ export function NotificationsCard({
   const [hydrated, setHydrated] = useState(false);
   const sharedVersion = useRef(version);
   sharedVersion.current = Math.max(sharedVersion.current, version);
-  const isCurrent = useSettingsCurrent(csrfToken, !!io);
+  const writeCurrent = useSettingsCurrent(csrfToken, !!io);
+  const isCurrent = useSettingsReadCurrent(csrfToken, !!io);
   const [editor] = useState(
     () =>
       new NotificationEditor(
@@ -63,6 +64,7 @@ export function NotificationsCard({
         initialFailed,
         () => sharedVersion.current,
         isCurrent,
+        () => !!csrfToken && writeCurrent(),
       ),
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
@@ -76,7 +78,7 @@ export function NotificationsCard({
   const waiting = usePreferenceRetry(state.failure, state.retryAt);
   useLayoutEffect(() => setHydrated(true), []);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
-  const disabled = busy || !csrfToken || !isCurrent();
+  const disabled = busy || !csrfToken || !writeCurrent();
   const uncertain = state.phase === 'uncertain' || (state.pending !== null && state.phase === 'reloading');
   const readFailed = state.readOrigin !== null && (state.phase === 'failed' || state.phase === 'uncertain');
   const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');

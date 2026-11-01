@@ -27,7 +27,7 @@ import {
   type ReadingIO,
   type ReadingValues,
 } from './reading-preferences';
-import { useSettingsCurrent } from './settings-session-owner';
+import { useSettingsCurrent, useSettingsReadCurrent } from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 
@@ -73,6 +73,7 @@ export function ReadingCard({
   }));
   const current = useRef(state);
   const isCurrent = useSettingsCurrent(csrfToken, !!io);
+  const readCurrent = useSettingsReadCurrent(csrfToken, !!io);
   const lifetime = useRef({ active: false, retired: false });
   const mounted = () => lifetime.current.active && !lifetime.current.retired;
   useLayoutEffect(() => {
@@ -100,15 +101,15 @@ export function ReadingCard({
   // sendReading can perform a second recovery GET internally; guard that boundary as well.
   const transport: ReadingIO = {
     save: async (input) => {
-      if (!isCurrent()) throw new Error('Settings viewer unavailable');
+      if (!csrfToken || !isCurrent()) throw new Error('Settings viewer unavailable');
       const result = await source.save(input);
       if (!isCurrent()) throw new Error('Settings viewer changed');
       return result;
     },
     read: async () => {
-      if (!isCurrent()) throw new Error('Settings viewer unavailable');
+      if (!readCurrent()) throw new Error('Settings viewer unavailable');
       const result = await source.read();
-      if (!isCurrent()) throw new Error('Settings viewer changed');
+      if (!readCurrent()) throw new Error('Settings viewer changed');
       return result;
     },
   };
@@ -183,7 +184,7 @@ export function ReadingCard({
   async function reload(keepDraft = false) {
     if (
       !mounted() ||
-      !isCurrent() ||
+      !readCurrent() ||
       waiting ||
       current.current.phase === 'saving' ||
       current.current.phase === 'reloading'
@@ -198,7 +199,7 @@ export function ReadingCard({
       failureOrigin: undefined,
     });
     const result = await readReading(transport, () => Math.max(current.current.known.version, sharedVersion.current));
-    if (!mounted() || !isCurrent()) return;
+    if (!mounted() || !readCurrent()) return;
     if (!result.ok) {
       update({
         phase: current.current.pending ? 'uncertain' : 'failed',

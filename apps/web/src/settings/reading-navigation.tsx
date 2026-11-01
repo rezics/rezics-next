@@ -134,7 +134,7 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
   useLayoutEffect(
     () =>
       sessionOwner?.subscribe(() => {
-        if (!sessionOwner.isCurrent()) navigation.deactivate();
+        if (!sessionOwner.readCurrent()) navigation.deactivate();
       }),
     [navigation, sessionOwner],
   );
@@ -240,7 +240,7 @@ export function useReadingNavigationCurrent() {
 export function ReadingNavigation({ csrfToken, children }: { csrfToken: string | null; children: ReactNode }) {
   const owner = useSettingsSessionOwner(csrfToken);
   const isCurrent = owner?.isCurrent ?? alwaysCurrent;
-  return owner && !owner.isCurrent() ? (
+  return owner && !owner.readCurrent() ? (
     <div className="min-w-0 max-w-full space-y-3">
       <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
       <p role="status">{m.settings_reading_session_changed()}</p>

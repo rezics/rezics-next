@@ -230,3 +230,21 @@ test('empty and failed reads never settle an unknown original command, and retir
   expect(controller.snapshot()).toBe(retired);
   expect(reads).toBe(4);
 });
+
+test('read-only Verification recovery cannot mint request or withdrawal attempts', async () => {
+  let reads = 0;
+  const controller = new VerificationRecovery('alice', {
+    read: async () => { reads++; return empty; },
+    request: noCommand,
+    withdraw: noCommand,
+  }, () => true, () => false);
+  await controller.reload();
+  const before = controller.snapshot();
+  await controller.submit({ subject: 'agent', statement: 'Evidence', links: [] });
+  await controller.withdraw(true);
+  await controller.retry();
+  expect(controller.snapshot()).toBe(before);
+  expect(controller.snapshot().current).toEqual(empty);
+  expect(controller.snapshot().attempt).toBeNull();
+  expect(reads).toBe(1);
+});

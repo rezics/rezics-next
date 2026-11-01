@@ -157,6 +157,8 @@ function ActualSessionPage() {
   const original = useRef(session);
   const [fixture] = useState(() => readingFixture('lost'));
   const [sends, setSends] = useState(0);
+  const [reads, setReads] = useState(0);
+  const [lastToken, setLastToken] = useState('');
   const [generation, setGeneration] = useState(0);
   if (session.state !== 'signed-in' || !session.subject) return <p role="status">{m.settings_sections_loading()}</p>;
   original.current = session;
@@ -191,7 +193,18 @@ function ActualSessionPage() {
         <button type="button" onClick={() => setGeneration((current) => current + 1)}>
           Mount fresh Settings owner
         </button>
+        <button type="button" onClick={() => client.setQueryData(sessionQuery.queryKey, { ...session, csrfToken: null })}>
+          Use read-only session
+        </button>
+        <button
+          type="button"
+          onClick={() => client.setQueryData(sessionQuery.queryKey, { ...session, csrfToken: 'fresh-story-token' })}
+        >
+          Install fresh explicit token
+        </button>
         <output aria-label="Preference dispatches">{sends}</output>
+        <output aria-label="Preference reads">{reads}</output>
+        <output aria-label="Last explicit token">{lastToken}</output>
       </div>
       <AppShell>
         <SettingsPageView
@@ -199,12 +212,17 @@ function ActualSessionPage() {
           page={page}
           csrfToken={session.csrfToken}
           preferenceIO={{
-            read: async () => ({ ...page, ...(await fixture.io.read()), accountId: original.current.subject ?? null }),
-            saveReading: async (input) => {
+            read: async () => {
+              setReads((current) => current + 1);
+              return { ...page, ...(await fixture.io.read()), accountId: original.current.subject ?? null };
+            },
+            saveReading: async (input, token) => {
+              setLastToken(token);
               setSends((current) => current + 1);
               return fixture.io.save(input);
             },
-            saveNotifications: async (): Promise<NotificationWriteResult> => {
+            saveNotifications: async (_, token): Promise<NotificationWriteResult> => {
+              setLastToken(token);
               setSends((current) => current + 1);
               return { ok: false, reason: 'unavailable' };
             },
@@ -240,5 +258,35 @@ export const RetainedSessionCannotReviveEditors: Story = {
     await userEvent.click(await main.findByRole('switch', { name: m.settings_notification_reply() }));
     await expect(canvas.getByLabelText('Preference dispatches')).toHaveTextContent('2');
     await expect(main.queryByText(m.settings_session_unavailable())).toBeNull();
+  },
+};
+/** Illustrative transport, actual page ownership and category retention; authored for later integration. */
+export const ReadWithoutWriteCredential: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/settings#notifications">
+      <StrictMode>
+        <ActualSessionPage />
+      </StrictMode>
+    </PatternStory>
+  ),
+  globals: { viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const main = within(await canvas.findByRole('main'));
+    await main.findByRole('switch', { name: m.settings_notification_reply() });
+    await userEvent.click(canvas.getByRole('button', { name: 'Use read-only session' }));
+    await expect(await main.findByRole('switch', { name: m.settings_notification_reply() })).toBeDisabled();
+    await expect(main.queryByText(m.settings_session_unavailable())).toBeNull();
+    await userEvent.click(main.getByRole('button', { name: m.settings_reload() }));
+    await expect(canvas.getByLabelText('Preference reads')).toHaveTextContent('1');
+    await expect(canvas.getByLabelText('Preference dispatches')).toHaveTextContent('0');
+    await userEvent.click(main.getByRole('link', { name: m.settings_reading_heading() }));
+    await expect(await main.findByRole('radiogroup')).toBeVisible();
+    for (const radio of main.getAllByRole('radio')) await expect(radio).toBeDisabled();
+    await expect(canvas.getByLabelText('Preference reads')).toHaveTextContent('1');
+    await userEvent.click(canvas.getByRole('button', { name: 'Install fresh explicit token' }));
+    await userEvent.click(main.getByRole('radio', { name: new RegExp(m.settings_spoiler_1_title()) }));
+    await expect(canvas.getByLabelText('Preference dispatches')).toHaveTextContent('1');
+    await expect(canvas.getByLabelText('Last explicit token')).toHaveTextContent('fresh-story-token');
   },
 };

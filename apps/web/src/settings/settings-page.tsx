@@ -51,15 +51,16 @@ export function accountPreferenceIO(
   credential: () => string | null,
   confirmed: (version: number) => void,
   transport: PreferenceIO = nativePreferences,
+  readCurrent: () => boolean = () => !!credential(),
 ): { reading: ReadingIO; notifications: NotificationEditorIO & { confirmed: (version: number) => void } } {
   const read = async () => {
-    if (!credential()) throw new Error('Settings viewer unavailable');
+    if (!readCurrent()) throw new Error('Settings viewer unavailable');
     const page = await transport.read();
-    if (!credential() || (page.signedIn && page.accountId !== accountId)) throw new Error('Settings viewer changed');
+    if (!readCurrent() || (page.signedIn && page.accountId !== accountId)) throw new Error('Settings viewer changed');
     return page;
   };
   const notify = (version: number) => {
-    if (credential()) confirmed(version);
+    if (readCurrent()) confirmed(version);
   };
   return {
     reading: {
@@ -68,7 +69,7 @@ export function accountPreferenceIO(
         const token = credential();
         if (!token) return { ok: false, reason: 'forbidden' };
         const result = await transport.saveReading(input, token);
-        if (!credential()) throw new Error('Settings viewer changed');
+        if (credential() !== token) throw new Error('Settings viewer changed');
         return result;
       },
     },
@@ -79,7 +80,7 @@ export function accountPreferenceIO(
         const token = credential();
         if (!token) return { ok: false, reason: 'forbidden' };
         const result = await transport.saveNotifications(input, token);
-        if (!credential()) throw new Error('Settings viewer changed');
+        if (credential() !== token) throw new Error('Settings viewer changed');
         return result;
       },
     },
@@ -212,12 +213,13 @@ function SettingsSections({
       owner.credential,
       (next) => setVersion((current) => Math.max(current, next)),
       preferenceIO,
+      owner.readCurrent,
     );
   });
   const notificationError = new URL(location.publicHref, 'https://rezics.local').searchParams.has('notificationError');
   const managedTarget = managedAccountTarget(location.publicHref);
   useEffect(() => {
-    if (owner.isCurrent() && 'preferences' in page)
+    if (owner.readCurrent() && 'preferences' in page)
       setVersion((current) => Math.max(current, page.preferences.version));
   }, [page, owner]);
   const sections = settingsSections({
@@ -442,7 +444,7 @@ function OwnedSettingsPage({
   onRetry: () => void;
 }) {
   const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
-  if (!owner.isCurrent()) return <SettingsSessionRecovery state="unavailable" onRetry={onRetry} />;
+  if (!owner.readCurrent()) return <SettingsSessionRecovery state="unavailable" onRetry={onRetry} />;
   return (
     <SettingsSessionContext.Provider value={owner}>
       <SettingsNavigationProvider>

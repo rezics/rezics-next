@@ -311,3 +311,21 @@ test('a late first-page restart cannot populate a replacement actor or cause ano
   expect(reads).toBe(2);
   expect(current.snapshot()).toMatchObject({ collections: [], loaded: true, next: null });
 });
+
+test('separate privacy write custody permits current row reads without creating a command or reserving a draft', async () => {
+  let saves = 0;
+  let reads = 0;
+  const editor = new CollectionPrivacyEditor(initial, {
+    read: async () => { reads++; return { ok: true, value: initial }; },
+    save: async () => { saves++; return { ok: true, collection: receipt }; },
+  }, () => true, () => false);
+  await editor.reload();
+  const before = editor.snapshot();
+  await editor.edit('public');
+  await editor.submit();
+  await editor.retry();
+  expect(editor.snapshot()).toBe(before);
+  expect(editor.needsListRestartProtection()).toBe(false);
+  expect(reads).toBe(1);
+  expect(saves).toBe(0);
+});

@@ -85,6 +85,7 @@ export class VerificationRecovery {
     readonly accountId: string,
     private io: VerificationRecoveryIO,
     private isCurrent: () => boolean = () => true,
+    private canWrite: () => boolean = isCurrent,
   ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -121,6 +122,7 @@ export class VerificationRecovery {
     if (
       !this.active ||
       !this.isCurrent() ||
+      !this.canWrite() ||
       this.busy() ||
       this.state.attempt ||
       !canRequestVerification(this.state.current)
@@ -139,6 +141,7 @@ export class VerificationRecovery {
       !confirmed ||
       !this.active ||
       !this.isCurrent() ||
+      !this.canWrite() ||
       this.busy() ||
       this.state.attempt ||
       !canWithdrawVerification(this.state.current)
@@ -155,12 +158,13 @@ export class VerificationRecovery {
     await this.send(false);
   }
   async retry() {
-    if (!this.active || !this.isCurrent() || !this.state.attempt || this.busy() || this.waiting()) return;
+    if (!this.active || !this.isCurrent() || !this.canWrite() || !this.state.attempt || this.busy() || this.waiting())
+      return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
     const attempt = this.state.attempt;
-    if (!attempt || !this.active || !this.isCurrent()) return;
+    if (!attempt || !this.active || !this.isCurrent() || !this.canWrite()) return;
     const epoch = this.epoch;
     this.update({ phase: 'sending', readStatus: 'idle', current: null, failure: undefined, retryAt: 0 });
     let result: VerificationCommandResult;
@@ -173,7 +177,7 @@ export class VerificationRecovery {
       if (this.live(epoch)) this.update({ phase: 'uncertain' });
       return;
     }
-    if (!this.live(epoch)) return;
+    if (!this.live(epoch) || !this.canWrite()) return;
     if (!result.ok) {
       const { ok: _ok, outcome: _outcome, ...failure } = result;
       // A later refusal cannot prove that an earlier lost response did not commit.
