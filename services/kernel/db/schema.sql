@@ -94,170 +94,6 @@ END; $$;
 -- Name: agent_identity_inventory_copy_guard(); Type: FUNCTION; Schema: core; Owner: -
 --
 
-CREATE FUNCTION core.agent_identity_recovery_inventory_guard() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE a access.agent_identity_recovery; r core.receipt; declared_xmin text;
-BEGIN
- IF TG_OP='DELETE' THEN
-   RAISE EXCEPTION 'Recovery identity inventory is permanent' USING ERRCODE='23514'; END IF;
- IF TG_OP='INSERT' THEN
-   IF NEW.state<>'declared' OR NEW.generation<>1 OR NEW.native_writer_state<>'open' OR NEW.expected_locators IS NOT NULL OR
-      NEW.expected_event_types IS NOT NULL THEN
-     RAISE EXCEPTION 'Recovery identity inventory requires its declaration phase' USING ERRCODE='23514'; END IF;
-   SELECT * INTO a FROM access.agent_identity_recovery WHERE route=NEW.source_route
-     AND account_id=NEW.source_account_id AND direction=NEW.source_direction AND receipt_id=NEW.source_receipt_id
-     AND source_partition=NEW.partition_no AND intent_digest=NEW.source_digest
-     AND recovery_epoch=NEW.recovery_epoch AND recovery_position=NEW.recovery_position
-     AND recovery_transaction_id=NEW.recovery_transaction_id AND xmin::text=pg_current_xact_id()::text FOR SHARE;
-   IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity inventory requires its actual Access writer' USING ERRCODE='23514'; END IF;
-   SELECT * INTO r FROM core.receipt WHERE partition_no=NEW.partition_no AND principal_kind=NEW.native_principal_kind
-     AND principal_id=NEW.native_principal_id AND command_kind=NEW.native_command_kind
-     AND idempotency_key=NEW.native_receipt_key AND transaction_id=NEW.recovery_transaction_id
-     AND epoch=NEW.recovery_epoch AND position=NEW.recovery_position AND payload_state='present'
-     AND request_digest=NEW.native_request_digest AND xmin::text=pg_current_xact_id()::text FOR SHARE;
-   IF NOT FOUND OR NEW.native_receipt_key<>a.recovery_receipt_key OR NEW.native_principal_id<>a.requested_by OR
-      (a.recovery_digest IS NOT NULL AND encode(NEW.native_request_digest,'hex')<>a.recovery_digest) THEN
-     RAISE EXCEPTION 'Recovery identity inventory requires its actual command receipt' USING ERRCODE='23514'; END IF;
-   PERFORM 1 FROM core.partition p JOIN core.history_family_domain d ON d.singleton
-     WHERE p.partition_no=NEW.partition_no AND p.write_state='active' AND p.epoch=NEW.recovery_epoch
-       AND p.position=NEW.recovery_position-1 AND d.generation=NEW.domain_generation FOR SHARE OF p,d;
-   IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity inventory home unavailable' USING ERRCODE='23514'; END IF;
-   RETURN NEW;
- END IF;
- SELECT xmin::text INTO declared_xmin FROM core.agent_identity_recovery_inventory
-   WHERE partition_no=OLD.partition_no AND source_route=OLD.source_route
-     AND source_account_id=OLD.source_account_id AND source_direction=OLD.source_direction
-     AND source_receipt_id=OLD.source_receipt_id AND state='declared';
- IF declared_xmin IS DISTINCT FROM pg_current_xact_id()::text OR OLD.state<>'declared' OR NEW.state<>'sealed' OR
-    NEW.native_writer_state<>'closed' OR
-    (to_jsonb(NEW)-ARRAY['expected_locators','expected_event_types','native_writer_state','state']) IS DISTINCT FROM
-    (to_jsonb(OLD)-ARRAY['expected_locators','expected_event_types','native_writer_state','state']) OR
-    NEW.generation<>1 OR NEW.expected_locators IS NULL OR cardinality(NEW.expected_locators)<>2 OR
-    NEW.expected_event_types IS NULL OR
-    NEW.expected_event_types IS DISTINCT FROM ARRAY['com.rezics.access.account-updated.v1'] THEN
-   RAISE EXCEPTION 'Recovery identity inventory permits only one exact seal' USING ERRCODE='23514'; END IF;
- PERFORM 1 FROM core.partition p JOIN core.history_family_domain d ON d.singleton
-   WHERE p.partition_no=NEW.partition_no AND p.write_state='active' AND p.epoch=NEW.recovery_epoch
-     AND p.position=NEW.recovery_position AND d.generation=NEW.domain_generation FOR SHARE OF p,d;
- IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity serializer fence changed' USING ERRCODE='23514'; END IF;
- RETURN NEW;
-END $$;
-
-
-CREATE FUNCTION core.agent_identity_recovery_copy_guard() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE a access.agent_identity_recovery; i core.agent_identity_recovery_inventory; expected bytea;
- actual_accounts jsonb; role_count integer;
-BEGIN
- SELECT * INTO a FROM access.agent_identity_recovery WHERE route=NEW.source_route
-   AND account_id=NEW.source_account_id AND direction=NEW.source_direction AND receipt_id=NEW.source_receipt_id
-   AND xmin::text=pg_current_xact_id()::text FOR SHARE;
- IF NOT FOUND THEN RETURN NEW; END IF;
- IF (a.source_partition,a.intent_digest,a.recovery_epoch,a.recovery_position,a.recovery_transaction_id)
-    IS DISTINCT FROM (NEW.partition_no,NEW.source_digest,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id) THEN
-   RAISE EXCEPTION 'Recovery identity copy has a foreign recovery tuple' USING ERRCODE='23514'; END IF;
- SELECT * INTO i FROM core.agent_identity_recovery_inventory WHERE partition_no=NEW.partition_no
-   AND source_route=NEW.source_route AND source_account_id=NEW.source_account_id
-   AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id
-   AND recovery_epoch=NEW.source_epoch AND recovery_position=NEW.source_position
-   AND recovery_transaction_id=NEW.source_transaction_id AND state='declared'
-   AND native_writer_state='open' AND xmin::text=pg_current_xact_id()::text FOR SHARE;
- IF NOT FOUND OR i.source_digest<>NEW.source_digest OR i.receiver_epoch<>NEW.receiver_epoch OR
-    i.domain_generation<>NEW.domain_generation OR i.native_command_kind<>'access.agent-identity.recover' OR
-    i.native_principal_id<>a.requested_by OR i.native_receipt_key<>a.recovery_receipt_key THEN
-   RAISE EXCEPTION 'Recovery identity copy requires its exact native cut declaration' USING ERRCODE='23514'; END IF;
- IF NEW.artifact_type='command-receipt/v1' THEN
-   expected:=decode('0101','hex')||substring(int4send(i.partition_no) from 3 for 2)||decode('01','hex')||
-     uuid_send(i.native_principal_id)||int4send(7)||
-     substring(int4send(split_part(i.native_receipt_key,'.',2)::integer) from 3 for 2)||
-     decode(translate(split_part(i.native_receipt_key,'.',3),'-_','+/')||'=','base64');
- ELSIF NEW.artifact_type='outbox-event/v1' THEN
-   expected:=decode('0102','hex')||substring(int4send(i.partition_no) from 3 for 2)||
-     int8send(i.recovery_position)||decode('0000','hex');
- ELSE
-   RAISE EXCEPTION 'Recovery identity copy artifact type unavailable' USING ERRCODE='23514';
- END IF;
- IF NEW.locator IS DISTINCT FROM expected THEN
-   RAISE EXCEPTION 'Recovery identity copy locator differs from its actual serializer' USING ERRCODE='23514'; END IF;
- SELECT jsonb_agg(jsonb_build_array(account_route,account_id::text,roles) ORDER BY account_route,account_id),count(*)
-   INTO actual_accounts,role_count FROM (
-     SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
-     WHERE partition_no=NEW.partition_no AND artifact_type=NEW.artifact_type AND locator=NEW.locator
-     ORDER BY account_route,account_id LIMIT 65 FOR SHARE
-   ) scope;
- IF role_count NOT BETWEEN 1 AND 64 OR actual_accounts IS DISTINCT FROM i.expected_accounts OR
-    EXISTS (SELECT 1 FROM core.history_locator WHERE partition_no=NEW.partition_no
-      AND artifact_type=NEW.artifact_type AND locator=NEW.locator AND minimizer_version<>1) THEN
-   RAISE EXCEPTION 'Recovery identity copy role manifest differs from its serializer scope' USING ERRCODE='23514'; END IF;
- RETURN NEW;
-END $$;
-
-
-CREATE FUNCTION core.validate_agent_identity_recovery_inventory() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE i core.agent_identity_recovery_inventory; a access.agent_identity_recovery; r core.receipt;
- expected_receipt bytea; expected_event bytea; c core.agent_identity_history_copy; n integer:=0;
- actual_accounts jsonb; role_count integer; event_count integer;
-BEGIN
- SELECT * INTO STRICT i FROM core.agent_identity_recovery_inventory WHERE partition_no=NEW.partition_no
-   AND source_route=NEW.source_route AND source_account_id=NEW.source_account_id
-   AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id;
- SELECT * INTO STRICT a FROM access.agent_identity_recovery WHERE route=i.source_route
-   AND account_id=i.source_account_id AND direction=i.source_direction AND receipt_id=i.source_receipt_id;
- IF i.state<>'sealed' OR i.native_writer_state<>'closed' OR i.producer_version<>1 OR
-    i.conversion_coverage<>'native-receipt-outbox/v1' OR cardinality(i.expected_locators)<>2 OR
-    i.expected_event_types IS DISTINCT FROM ARRAY['com.rezics.access.account-updated.v1'] OR
-    (a.source_partition,a.intent_digest,a.recovery_epoch,a.recovery_position,a.recovery_transaction_id)
-      IS DISTINCT FROM (i.partition_no,i.source_digest,i.recovery_epoch,i.recovery_position,i.recovery_transaction_id) THEN
-   RAISE EXCEPTION 'Recovery identity serializer inventory incomplete' USING ERRCODE='23514'; END IF;
- PERFORM 1 FROM core.partition p JOIN core.history_family_domain d ON d.singleton
-   WHERE p.partition_no=i.partition_no AND p.write_state='active' AND p.epoch=i.recovery_epoch
-     AND p.epoch=i.receiver_epoch AND p.position=i.recovery_position AND d.generation=i.domain_generation FOR SHARE OF p,d;
- IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity native fence changed' USING ERRCODE='23514'; END IF;
- SELECT * INTO STRICT r FROM core.receipt WHERE partition_no=i.partition_no AND principal_kind=i.native_principal_kind
-   AND principal_id=i.native_principal_id AND command_kind=i.native_command_kind
-   AND idempotency_key=i.native_receipt_key AND transaction_id=i.recovery_transaction_id
-   AND epoch=i.recovery_epoch AND position=i.recovery_position AND request_digest=i.native_request_digest
-   AND payload_state='present' AND response='null'::jsonb AND xmin::text=pg_current_xact_id()::text;
- expected_receipt:=decode('0101','hex')||substring(int4send(i.partition_no) from 3 for 2)||decode('01','hex')||
-   uuid_send(i.native_principal_id)||int4send(7)||
-   substring(int4send(split_part(i.native_receipt_key,'.',2)::integer) from 3 for 2)||
-   decode(translate(split_part(i.native_receipt_key,'.',3),'-_','+/')||'=','base64');
- expected_event:=decode('0102','hex')||substring(int4send(i.partition_no) from 3 for 2)||
-   int8send(i.recovery_position)||decode('0000','hex');
- IF i.expected_locators[1] IS DISTINCT FROM expected_receipt OR i.expected_locators[2] IS DISTINCT FROM expected_event THEN
-   RAISE EXCEPTION 'Recovery identity serializer locator cut changed' USING ERRCODE='23514'; END IF;
- PERFORM 1 FROM core.outbox WHERE partition_no=i.partition_no AND epoch=i.recovery_epoch
-   AND position=i.recovery_position AND event_seq=0 AND event_count=1
-   AND type='com.rezics.access.account-updated.v1' AND subject=i.source_account_id::text
-   AND data=jsonb_build_object('accountId',i.source_account_id::text) AND payload_state='present'
-   AND xmin::text=pg_current_xact_id()::text;
- IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity event is not its actual account wakeup' USING ERRCODE='23514'; END IF;
- FOR c IN SELECT * FROM core.agent_identity_history_copy WHERE partition_no=i.partition_no
-   AND source_route=i.source_route AND source_account_id=i.source_account_id AND source_direction=i.source_direction
-   AND source_receipt_id=i.source_receipt_id AND source_digest=i.source_digest AND source_epoch=i.recovery_epoch
-   AND source_position=i.recovery_position AND source_transaction_id=i.recovery_transaction_id
-   ORDER BY artifact_type,locator LIMIT 3 FOR SHARE
- LOOP
-   n:=n+1;
-   IF n>2 OR c.receiver_epoch<>i.receiver_epoch OR c.domain_generation<>i.domain_generation OR
-      NOT c.locator=ANY(i.expected_locators) THEN
-     RAISE EXCEPTION 'Recovery identity physical copy cut changed' USING ERRCODE='23514'; END IF;
-   SELECT jsonb_agg(jsonb_build_array(account_route,account_id::text,roles) ORDER BY account_route,account_id),count(*)
-     INTO actual_accounts,role_count FROM (
-       SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
-       WHERE partition_no=i.partition_no AND artifact_type=c.artifact_type AND locator=c.locator
-       ORDER BY account_route,account_id LIMIT 65 FOR SHARE
-     ) scope;
-   IF role_count NOT BETWEEN 1 AND 64 OR actual_accounts IS DISTINCT FROM i.expected_accounts OR
-      EXISTS (SELECT 1 FROM core.history_locator WHERE partition_no=i.partition_no
-        AND artifact_type=c.artifact_type AND locator=c.locator AND minimizer_version<>1) THEN
-     RAISE EXCEPTION 'Recovery identity all-role scope changed' USING ERRCODE='23514'; END IF;
- END LOOP;
- IF n<>2 THEN RAISE EXCEPTION 'Recovery identity requires exactly two actual serializers' USING ERRCODE='23514'; END IF;
- RETURN NEW;
-END $$;
-
 CREATE FUNCTION core.agent_identity_inventory_copy_guard() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -385,6 +221,115 @@ END; $$;
 
 
 --
+-- Name: agent_identity_recovery_copy_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_recovery_copy_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE a access.agent_identity_recovery; i core.agent_identity_recovery_inventory; expected bytea;
+ actual_accounts jsonb; role_count integer;
+BEGIN
+ SELECT * INTO a FROM access.agent_identity_recovery WHERE route=NEW.source_route
+   AND account_id=NEW.source_account_id AND direction=NEW.source_direction AND receipt_id=NEW.source_receipt_id
+   AND xmin::text=pg_current_xact_id()::text FOR SHARE;
+ IF NOT FOUND THEN RETURN NEW; END IF;
+ IF (a.source_partition,a.intent_digest,a.recovery_epoch,a.recovery_position,a.recovery_transaction_id)
+    IS DISTINCT FROM (NEW.partition_no,NEW.source_digest,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id) THEN
+   RAISE EXCEPTION 'Recovery identity copy has a foreign recovery tuple' USING ERRCODE='23514'; END IF;
+ SELECT * INTO i FROM core.agent_identity_recovery_inventory WHERE partition_no=NEW.partition_no
+   AND source_route=NEW.source_route AND source_account_id=NEW.source_account_id
+   AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id
+   AND recovery_epoch=NEW.source_epoch AND recovery_position=NEW.source_position
+   AND recovery_transaction_id=NEW.source_transaction_id AND state='declared'
+   AND native_writer_state='open' AND xmin::text=pg_current_xact_id()::text FOR SHARE;
+ IF NOT FOUND OR i.source_digest<>NEW.source_digest OR i.receiver_epoch<>NEW.receiver_epoch OR
+    i.domain_generation<>NEW.domain_generation OR i.native_command_kind<>'access.agent-identity.recover' OR
+    i.native_principal_id<>a.requested_by OR i.native_receipt_key<>a.recovery_receipt_key THEN
+   RAISE EXCEPTION 'Recovery identity copy requires its exact native cut declaration' USING ERRCODE='23514'; END IF;
+ IF NEW.artifact_type='command-receipt/v1' THEN
+   expected:=decode('0101','hex')||substring(int4send(i.partition_no) from 3 for 2)||decode('01','hex')||
+     uuid_send(i.native_principal_id)||int4send(7)||
+     substring(int4send(split_part(i.native_receipt_key,'.',2)::integer) from 3 for 2)||
+     decode(translate(split_part(i.native_receipt_key,'.',3),'-_','+/')||'=','base64');
+ ELSIF NEW.artifact_type='outbox-event/v1' THEN
+   expected:=decode('0102','hex')||substring(int4send(i.partition_no) from 3 for 2)||
+     int8send(i.recovery_position)||decode('0000','hex');
+ ELSE
+   RAISE EXCEPTION 'Recovery identity copy artifact type unavailable' USING ERRCODE='23514';
+ END IF;
+ IF NEW.locator IS DISTINCT FROM expected THEN
+   RAISE EXCEPTION 'Recovery identity copy locator differs from its actual serializer' USING ERRCODE='23514'; END IF;
+ SELECT jsonb_agg(jsonb_build_array(account_route,account_id::text,roles) ORDER BY account_route,account_id),count(*)
+   INTO actual_accounts,role_count FROM (
+     SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
+     WHERE partition_no=NEW.partition_no AND artifact_type=NEW.artifact_type AND locator=NEW.locator
+     ORDER BY account_route,account_id LIMIT 65 FOR SHARE
+   ) scope;
+ IF role_count NOT BETWEEN 1 AND 64 OR actual_accounts IS DISTINCT FROM i.expected_accounts OR
+    EXISTS (SELECT 1 FROM core.history_locator WHERE partition_no=NEW.partition_no
+      AND artifact_type=NEW.artifact_type AND locator=NEW.locator AND minimizer_version<>1) THEN
+   RAISE EXCEPTION 'Recovery identity copy role manifest differs from its serializer scope' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: agent_identity_recovery_inventory_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_recovery_inventory_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE a access.agent_identity_recovery; r core.receipt; declared_xmin text;
+BEGIN
+ IF TG_OP='DELETE' THEN
+   RAISE EXCEPTION 'Recovery identity inventory is permanent' USING ERRCODE='23514'; END IF;
+ IF TG_OP='INSERT' THEN
+   IF NEW.state<>'declared' OR NEW.generation<>1 OR NEW.native_writer_state<>'open' OR NEW.expected_locators IS NOT NULL OR
+      NEW.expected_event_types IS NOT NULL THEN
+     RAISE EXCEPTION 'Recovery identity inventory requires its declaration phase' USING ERRCODE='23514'; END IF;
+   SELECT * INTO a FROM access.agent_identity_recovery WHERE route=NEW.source_route
+     AND account_id=NEW.source_account_id AND direction=NEW.source_direction AND receipt_id=NEW.source_receipt_id
+     AND source_partition=NEW.partition_no AND intent_digest=NEW.source_digest
+     AND recovery_epoch=NEW.recovery_epoch AND recovery_position=NEW.recovery_position
+     AND recovery_transaction_id=NEW.recovery_transaction_id AND xmin::text=pg_current_xact_id()::text FOR SHARE;
+   IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity inventory requires its actual Access writer' USING ERRCODE='23514'; END IF;
+   SELECT * INTO r FROM core.receipt WHERE partition_no=NEW.partition_no AND principal_kind=NEW.native_principal_kind
+     AND principal_id=NEW.native_principal_id AND command_kind=NEW.native_command_kind
+     AND idempotency_key=NEW.native_receipt_key AND transaction_id=NEW.recovery_transaction_id
+     AND epoch=NEW.recovery_epoch AND position=NEW.recovery_position AND payload_state='present'
+     AND request_digest=NEW.native_request_digest AND xmin::text=pg_current_xact_id()::text FOR SHARE;
+   IF NOT FOUND OR NEW.native_receipt_key<>a.recovery_receipt_key OR NEW.native_principal_id<>a.requested_by OR
+      (a.recovery_digest IS NOT NULL AND encode(NEW.native_request_digest,'hex')<>a.recovery_digest) THEN
+     RAISE EXCEPTION 'Recovery identity inventory requires its actual command receipt' USING ERRCODE='23514'; END IF;
+   PERFORM 1 FROM core.partition p JOIN core.history_family_domain d ON d.singleton
+     WHERE p.partition_no=NEW.partition_no AND p.write_state='active' AND p.epoch=NEW.recovery_epoch
+       AND p.position=NEW.recovery_position-1 AND d.generation=NEW.domain_generation FOR SHARE OF p,d;
+   IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity inventory home unavailable' USING ERRCODE='23514'; END IF;
+   RETURN NEW;
+ END IF;
+ SELECT xmin::text INTO declared_xmin FROM core.agent_identity_recovery_inventory
+   WHERE partition_no=OLD.partition_no AND source_route=OLD.source_route
+     AND source_account_id=OLD.source_account_id AND source_direction=OLD.source_direction
+     AND source_receipt_id=OLD.source_receipt_id AND state='declared';
+ IF declared_xmin IS DISTINCT FROM pg_current_xact_id()::text OR OLD.state<>'declared' OR NEW.state<>'sealed' OR
+    NEW.native_writer_state<>'closed' OR
+    (to_jsonb(NEW)-ARRAY['expected_locators','expected_event_types','native_writer_state','state']) IS DISTINCT FROM
+    (to_jsonb(OLD)-ARRAY['expected_locators','expected_event_types','native_writer_state','state']) OR
+    NEW.generation<>1 OR NEW.expected_locators IS NULL OR cardinality(NEW.expected_locators)<>2 OR
+    NEW.expected_event_types IS NULL OR
+    NEW.expected_event_types IS DISTINCT FROM ARRAY['com.rezics.access.account-updated.v1'] THEN
+   RAISE EXCEPTION 'Recovery identity inventory permits only one exact seal' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.partition p JOIN core.history_family_domain d ON d.singleton
+   WHERE p.partition_no=NEW.partition_no AND p.write_state='active' AND p.epoch=NEW.recovery_epoch
+     AND p.position=NEW.recovery_position AND d.generation=NEW.domain_generation FOR SHARE OF p,d;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity serializer fence changed' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
 -- Name: agent_identity_sdk_obligation_guard(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -426,7 +371,7 @@ END; $$;
 -- Name: agent_identity_touch_receiving(integer, text, bytea); Type: FUNCTION; Schema: core; Owner: -
 --
 
-CREATE OR REPLACE FUNCTION core.agent_identity_touch_receiving(p_partition integer, p_type text, p_locator bytea) RETURNS void
+CREATE FUNCTION core.agent_identity_touch_receiving(p_partition integer, p_type text, p_locator bytea) RETURNS void
     LANGUAGE plpgsql
     AS $$
 DECLARE r record; n integer:=0;
@@ -451,7 +396,8 @@ BEGIN
      AND source_route=r.source_route AND source_account_id=r.source_account_id
      AND source_direction=r.source_direction AND source_receipt_id=r.source_receipt_id;
  END LOOP;
-END; $$;
+END $$;
+
 
 --
 -- Name: check_agent_identity_history(uuid, jsonb, jsonb, jsonb, text); Type: FUNCTION; Schema: core; Owner: -
@@ -1180,6 +1126,77 @@ END; $$;
 
 
 --
+-- Name: validate_agent_identity_recovery_inventory(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.validate_agent_identity_recovery_inventory() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE i core.agent_identity_recovery_inventory; a access.agent_identity_recovery; r core.receipt;
+ expected_receipt bytea; expected_event bytea; c core.agent_identity_history_copy; n integer:=0;
+ actual_accounts jsonb; role_count integer; event_count integer;
+BEGIN
+ SELECT * INTO STRICT i FROM core.agent_identity_recovery_inventory WHERE partition_no=NEW.partition_no
+   AND source_route=NEW.source_route AND source_account_id=NEW.source_account_id
+   AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id;
+ SELECT * INTO STRICT a FROM access.agent_identity_recovery WHERE route=i.source_route
+   AND account_id=i.source_account_id AND direction=i.source_direction AND receipt_id=i.source_receipt_id;
+ IF i.state<>'sealed' OR i.native_writer_state<>'closed' OR i.producer_version<>1 OR
+    i.conversion_coverage<>'native-receipt-outbox/v1' OR cardinality(i.expected_locators)<>2 OR
+    i.expected_event_types IS DISTINCT FROM ARRAY['com.rezics.access.account-updated.v1'] OR
+    (a.source_partition,a.intent_digest,a.recovery_epoch,a.recovery_position,a.recovery_transaction_id)
+      IS DISTINCT FROM (i.partition_no,i.source_digest,i.recovery_epoch,i.recovery_position,i.recovery_transaction_id) THEN
+   RAISE EXCEPTION 'Recovery identity serializer inventory incomplete' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.partition p JOIN core.history_family_domain d ON d.singleton
+   WHERE p.partition_no=i.partition_no AND p.write_state='active' AND p.epoch=i.recovery_epoch
+     AND p.epoch=i.receiver_epoch AND p.position=i.recovery_position AND d.generation=i.domain_generation FOR SHARE OF p,d;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity native fence changed' USING ERRCODE='23514'; END IF;
+ SELECT * INTO STRICT r FROM core.receipt WHERE partition_no=i.partition_no AND principal_kind=i.native_principal_kind
+   AND principal_id=i.native_principal_id AND command_kind=i.native_command_kind
+   AND idempotency_key=i.native_receipt_key AND transaction_id=i.recovery_transaction_id
+   AND epoch=i.recovery_epoch AND position=i.recovery_position AND request_digest=i.native_request_digest
+   AND payload_state='present' AND response='null'::jsonb AND xmin::text=pg_current_xact_id()::text;
+ expected_receipt:=decode('0101','hex')||substring(int4send(i.partition_no) from 3 for 2)||decode('01','hex')||
+   uuid_send(i.native_principal_id)||int4send(7)||
+   substring(int4send(split_part(i.native_receipt_key,'.',2)::integer) from 3 for 2)||
+   decode(translate(split_part(i.native_receipt_key,'.',3),'-_','+/')||'=','base64');
+ expected_event:=decode('0102','hex')||substring(int4send(i.partition_no) from 3 for 2)||
+   int8send(i.recovery_position)||decode('0000','hex');
+ IF i.expected_locators[1] IS DISTINCT FROM expected_receipt OR i.expected_locators[2] IS DISTINCT FROM expected_event THEN
+   RAISE EXCEPTION 'Recovery identity serializer locator cut changed' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.outbox WHERE partition_no=i.partition_no AND epoch=i.recovery_epoch
+   AND position=i.recovery_position AND event_seq=0 AND event_count=1
+   AND type='com.rezics.access.account-updated.v1' AND subject=i.source_account_id::text
+   AND data=jsonb_build_object('accountId',i.source_account_id::text) AND payload_state='present'
+   AND xmin::text=pg_current_xact_id()::text;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Recovery identity event is not its actual account wakeup' USING ERRCODE='23514'; END IF;
+ FOR c IN SELECT * FROM core.agent_identity_history_copy WHERE partition_no=i.partition_no
+   AND source_route=i.source_route AND source_account_id=i.source_account_id AND source_direction=i.source_direction
+   AND source_receipt_id=i.source_receipt_id AND source_digest=i.source_digest AND source_epoch=i.recovery_epoch
+   AND source_position=i.recovery_position AND source_transaction_id=i.recovery_transaction_id
+   ORDER BY artifact_type,locator LIMIT 3 FOR SHARE
+ LOOP
+   n:=n+1;
+   IF n>2 OR c.receiver_epoch<>i.receiver_epoch OR c.domain_generation<>i.domain_generation OR
+      NOT c.locator=ANY(i.expected_locators) THEN
+     RAISE EXCEPTION 'Recovery identity physical copy cut changed' USING ERRCODE='23514'; END IF;
+   SELECT jsonb_agg(jsonb_build_array(account_route,account_id::text,roles) ORDER BY account_route,account_id),count(*)
+     INTO actual_accounts,role_count FROM (
+       SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
+       WHERE partition_no=i.partition_no AND artifact_type=c.artifact_type AND locator=c.locator
+       ORDER BY account_route,account_id LIMIT 65 FOR SHARE
+     ) scope;
+   IF role_count NOT BETWEEN 1 AND 64 OR actual_accounts IS DISTINCT FROM i.expected_accounts OR
+      EXISTS (SELECT 1 FROM core.history_locator WHERE partition_no=i.partition_no
+        AND artifact_type=c.artifact_type AND locator=c.locator AND minimizer_version<>1) THEN
+     RAISE EXCEPTION 'Recovery identity all-role scope changed' USING ERRCODE='23514'; END IF;
+ END LOOP;
+ IF n<>2 THEN RAISE EXCEPTION 'Recovery identity requires exactly two actual serializers' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
 -- Name: validate_agent_identity_work_source(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -1289,65 +1306,54 @@ CREATE TABLE core.agent_identity_inventory (
 
 
 --
--- Name: agent_identity_sdk_obligation; Type: TABLE; Schema: core; Owner: -
+-- Name: agent_identity_recovery_inventory; Type: TABLE; Schema: core; Owner: -
 --
 
 CREATE TABLE core.agent_identity_recovery_inventory (
-  partition_no integer NOT NULL,
-  source_route integer NOT NULL,
-  source_account_id uuid NOT NULL,
-  source_direction text NOT NULL,
-  source_receipt_id uuid NOT NULL,
-  source_digest text NOT NULL,
-  recovery_epoch integer NOT NULL,
-  recovery_position bigint NOT NULL,
-  recovery_transaction_id uuid NOT NULL,
-  receiver_epoch integer NOT NULL,
-  domain_generation bigint NOT NULL,
-  generation bigint NOT NULL DEFAULT 1,
-  producer_version integer NOT NULL DEFAULT 1,
-  conversion_coverage text NOT NULL DEFAULT 'native-receipt-outbox/v1',
-  native_writer_state text NOT NULL DEFAULT 'open',
-  native_command_kind text NOT NULL,
-  native_principal_kind text NOT NULL,
-  native_principal_id uuid NOT NULL,
-  native_receipt_key text NOT NULL,
-  native_request_digest bytea NOT NULL,
-  expected_accounts jsonb NOT NULL,
-  expected_locators bytea[],
-  expected_event_types text[],
-  state text NOT NULL DEFAULT 'declared',
-  CONSTRAINT agent_identity_recovery_inventory_pkey PRIMARY KEY
-    (partition_no,source_route,source_account_id,source_direction,source_receipt_id),
-  CONSTRAINT agent_identity_recovery_inventory_source_fkey FOREIGN KEY
-    (source_route,source_account_id,source_direction,source_receipt_id)
-    REFERENCES access.agent_identity_recovery(route,account_id,direction,receipt_id),
-  CONSTRAINT agent_identity_recovery_inventory_route_check CHECK
-    (source_route=get_byte(uuid_send(source_account_id),10)*256+get_byte(uuid_send(source_account_id),11)),
-  CONSTRAINT agent_identity_recovery_inventory_partition_check CHECK (partition_no=source_route/16),
-  CONSTRAINT agent_identity_recovery_inventory_key_check CHECK
-    (source_direction IN ('account-agent.verify','account-agent.unverify')),
-  CONSTRAINT agent_identity_recovery_inventory_digest_check CHECK (source_digest ~ '^[0-9a-f]{64}$'),
-  CONSTRAINT agent_identity_recovery_inventory_position_check CHECK (recovery_position>0),
-  CONSTRAINT agent_identity_recovery_inventory_epoch_check CHECK
-    (recovery_epoch>0 AND receiver_epoch>0 AND recovery_epoch=receiver_epoch),
-  CONSTRAINT agent_identity_recovery_inventory_domain_check CHECK (domain_generation>0 AND generation=1),
-  CONSTRAINT agent_identity_recovery_inventory_producer_check CHECK
-    (producer_version=1 AND conversion_coverage='native-receipt-outbox/v1'),
-  CONSTRAINT agent_identity_recovery_inventory_writer_check CHECK (native_writer_state IN ('open','closed')),
-  CONSTRAINT agent_identity_recovery_inventory_command_check CHECK
-    (native_command_kind='access.agent-identity.recover' AND native_principal_kind='account'),
-  CONSTRAINT agent_identity_recovery_inventory_request_check CHECK (octet_length(native_request_digest)=32),
-  CONSTRAINT agent_identity_recovery_inventory_accounts_check CHECK
-    (jsonb_typeof(expected_accounts)='array' AND jsonb_array_length(expected_accounts) BETWEEN 1 AND 64),
-  CONSTRAINT agent_identity_recovery_inventory_cut_check CHECK
-    ((state='declared' AND expected_locators IS NULL AND expected_event_types IS NULL AND native_writer_state='open') OR
-     (state='sealed' AND expected_locators IS NOT NULL AND cardinality(expected_locators)=2
-       AND expected_event_types IS NOT NULL AND expected_event_types=ARRAY['com.rezics.access.account-updated.v1']
-       AND native_writer_state='closed')),
-  CONSTRAINT agent_identity_recovery_inventory_state_check CHECK (state IN ('declared','sealed'))
+    partition_no integer NOT NULL,
+    source_route integer NOT NULL,
+    source_account_id uuid NOT NULL,
+    source_direction text NOT NULL,
+    source_receipt_id uuid NOT NULL,
+    source_digest text NOT NULL,
+    recovery_epoch integer NOT NULL,
+    recovery_position bigint NOT NULL,
+    recovery_transaction_id uuid NOT NULL,
+    receiver_epoch integer NOT NULL,
+    domain_generation bigint NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    producer_version integer DEFAULT 1 NOT NULL,
+    conversion_coverage text DEFAULT 'native-receipt-outbox/v1'::text NOT NULL,
+    native_writer_state text DEFAULT 'open'::text NOT NULL,
+    native_command_kind text NOT NULL,
+    native_principal_kind text NOT NULL,
+    native_principal_id uuid NOT NULL,
+    native_receipt_key text NOT NULL,
+    native_request_digest bytea NOT NULL,
+    expected_accounts jsonb NOT NULL,
+    expected_locators bytea[],
+    expected_event_types text[],
+    state text DEFAULT 'declared'::text NOT NULL,
+    CONSTRAINT agent_identity_recovery_inventory_accounts_check CHECK (((jsonb_typeof(expected_accounts) = 'array'::text) AND ((jsonb_array_length(expected_accounts) >= 1) AND (jsonb_array_length(expected_accounts) <= 64)))),
+    CONSTRAINT agent_identity_recovery_inventory_command_check CHECK (((native_command_kind = 'access.agent-identity.recover'::text) AND (native_principal_kind = 'account'::text))),
+    CONSTRAINT agent_identity_recovery_inventory_cut_check CHECK ((((state = 'declared'::text) AND (expected_locators IS NULL) AND (expected_event_types IS NULL) AND (native_writer_state = 'open'::text)) OR ((state = 'sealed'::text) AND (expected_locators IS NOT NULL) AND (cardinality(expected_locators) = 2) AND (expected_event_types IS NOT NULL) AND (expected_event_types = ARRAY['com.rezics.access.account-updated.v1'::text]) AND (native_writer_state = 'closed'::text)))),
+    CONSTRAINT agent_identity_recovery_inventory_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT agent_identity_recovery_inventory_domain_check CHECK (((domain_generation > 0) AND (generation = 1))),
+    CONSTRAINT agent_identity_recovery_inventory_epoch_check CHECK (((recovery_epoch > 0) AND (receiver_epoch > 0) AND (recovery_epoch = receiver_epoch))),
+    CONSTRAINT agent_identity_recovery_inventory_key_check CHECK ((source_direction = ANY (ARRAY['account-agent.verify'::text, 'account-agent.unverify'::text]))),
+    CONSTRAINT agent_identity_recovery_inventory_partition_check CHECK ((partition_no = (source_route / 16))),
+    CONSTRAINT agent_identity_recovery_inventory_position_check CHECK ((recovery_position > 0)),
+    CONSTRAINT agent_identity_recovery_inventory_producer_check CHECK (((producer_version = 1) AND (conversion_coverage = 'native-receipt-outbox/v1'::text))),
+    CONSTRAINT agent_identity_recovery_inventory_request_check CHECK ((octet_length(native_request_digest) = 32)),
+    CONSTRAINT agent_identity_recovery_inventory_route_check CHECK ((source_route = ((get_byte(uuid_send(source_account_id), 10) * 256) + get_byte(uuid_send(source_account_id), 11)))),
+    CONSTRAINT agent_identity_recovery_inventory_state_check CHECK ((state = ANY (ARRAY['declared'::text, 'sealed'::text]))),
+    CONSTRAINT agent_identity_recovery_inventory_writer_check CHECK ((native_writer_state = ANY (ARRAY['open'::text, 'closed'::text])))
 );
 
+
+--
+-- Name: agent_identity_sdk_obligation; Type: TABLE; Schema: core; Owner: -
+--
 
 CREATE TABLE core.agent_identity_sdk_obligation (
     partition_no integer NOT NULL,
@@ -2033,6 +2039,14 @@ ALTER TABLE ONLY core.agent_identity_inventory
 
 
 --
+-- Name: agent_identity_recovery_inventory agent_identity_recovery_inventory_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_recovery_inventory
+    ADD CONSTRAINT agent_identity_recovery_inventory_pkey PRIMARY KEY (partition_no, source_route, source_account_id, source_direction, source_receipt_id);
+
+
+--
 -- Name: agent_identity_sdk_obligation agent_identity_sdk_obligation_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -2531,23 +2545,6 @@ ALTER TABLE core.agent_identity_work ENABLE ALWAYS TRIGGER agent_identity_histor
 
 CREATE TRIGGER agent_identity_inventory_copy_guard BEFORE INSERT ON core.agent_identity_history_copy FOR EACH ROW EXECUTE FUNCTION core.agent_identity_inventory_copy_guard();
 
--- Name: agent_identity_recovery_inventory agent_identity_recovery_inventory_guard; Type: TRIGGER; Schema: core; Owner: -
---
-
-CREATE TRIGGER agent_identity_recovery_inventory_guard BEFORE INSERT OR UPDATE OR DELETE ON core.agent_identity_recovery_inventory FOR EACH ROW EXECUTE FUNCTION core.agent_identity_recovery_inventory_guard();
-ALTER TABLE core.agent_identity_recovery_inventory ENABLE ALWAYS TRIGGER agent_identity_recovery_inventory_guard;
-
--- Name: agent_identity_recovery_inventory agent_identity_recovery_inventory_native_commit; Type: TRIGGER; Schema: core; Owner: -
---
-
-CREATE CONSTRAINT TRIGGER agent_identity_recovery_inventory_native_commit AFTER INSERT OR UPDATE ON core.agent_identity_recovery_inventory DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.validate_agent_identity_recovery_inventory();
-
--- Name: agent_identity_history_copy agent_identity_recovery_copy_guard; Type: TRIGGER; Schema: core; Owner: -
---
-
-CREATE TRIGGER agent_identity_recovery_copy_guard BEFORE INSERT ON core.agent_identity_history_copy FOR EACH ROW EXECUTE FUNCTION core.agent_identity_recovery_copy_guard();
-ALTER TABLE core.agent_identity_history_copy ENABLE ALWAYS TRIGGER agent_identity_recovery_copy_guard;
-
 
 --
 -- Name: agent_identity_inventory agent_identity_inventory_guard; Type: TRIGGER; Schema: core; Owner: -
@@ -2561,6 +2558,31 @@ CREATE TRIGGER agent_identity_inventory_guard BEFORE INSERT OR DELETE OR UPDATE 
 --
 
 CREATE CONSTRAINT TRIGGER agent_identity_inventory_native_commit AFTER INSERT OR UPDATE ON core.agent_identity_inventory DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.validate_agent_identity_inventory();
+
+
+--
+-- Name: agent_identity_history_copy agent_identity_recovery_copy_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_recovery_copy_guard BEFORE INSERT ON core.agent_identity_history_copy FOR EACH ROW EXECUTE FUNCTION core.agent_identity_recovery_copy_guard();
+
+ALTER TABLE core.agent_identity_history_copy ENABLE ALWAYS TRIGGER agent_identity_recovery_copy_guard;
+
+
+--
+-- Name: agent_identity_recovery_inventory agent_identity_recovery_inventory_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_recovery_inventory_guard BEFORE INSERT OR DELETE OR UPDATE ON core.agent_identity_recovery_inventory FOR EACH ROW EXECUTE FUNCTION core.agent_identity_recovery_inventory_guard();
+
+ALTER TABLE core.agent_identity_recovery_inventory ENABLE ALWAYS TRIGGER agent_identity_recovery_inventory_guard;
+
+
+--
+-- Name: agent_identity_recovery_inventory agent_identity_recovery_inventory_native_commit; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER agent_identity_recovery_inventory_native_commit AFTER INSERT OR UPDATE ON core.agent_identity_recovery_inventory DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.validate_agent_identity_recovery_inventory();
 
 
 --
@@ -2883,6 +2905,14 @@ ALTER TABLE ONLY core.agent_identity_inventory
 
 ALTER TABLE ONLY core.agent_identity_inventory
     ADD CONSTRAINT agent_identity_inventory_source_route_source_account_id_so_fkey FOREIGN KEY (source_route, source_account_id, source_direction, source_receipt_id) REFERENCES access.agent_identity_intent(route, account_id, direction, receipt_id);
+
+
+--
+-- Name: agent_identity_recovery_inventory agent_identity_recovery_inventory_source_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_recovery_inventory
+    ADD CONSTRAINT agent_identity_recovery_inventory_source_fkey FOREIGN KEY (source_route, source_account_id, source_direction, source_receipt_id) REFERENCES access.agent_identity_recovery(route, account_id, direction, receipt_id);
 
 
 --

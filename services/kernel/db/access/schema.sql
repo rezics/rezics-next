@@ -291,6 +291,23 @@ CREATE FUNCTION access.agent_identity_original_source_valid(home integer, s json
 $$;
 
 
+--
+-- Name: agent_identity_recovery_skeleton(jsonb); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.agent_identity_recovery_skeleton(s jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+ SELECT jsonb_build_object(
+   'digest',s->'digest',
+   'native',jsonb_build_object('partition',s->'native'->'partition','epoch',s->'native'->'epoch',
+     'position',s->'native'->'position','transactionId',s->'native'->'transactionId'),
+   'job',jsonb_build_object('jobId',s->'job'->'jobId','epoch',s->'job'->'epoch'),
+   'claim',jsonb_build_object('partition',s->'claim'->'partition','generation',s->'claim'->'generation',
+     'transactionId',s->'claim'->'transactionId','home',s->'claim'->'home','scope',s->'claim'->'scope'));
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -741,36 +758,16 @@ END; $$;
 
 
 --
--- Name: check_agent_identity_retention(access.agent_identity_intent, text); Type: FUNCTION; Schema: access; Owner: -
+-- Name: check_agent_identity_recovery_retention(access.agent_identity_intent, text, jsonb, uuid); Type: FUNCTION; Schema: access; Owner: -
 --
 
-CREATE FUNCTION access.agent_identity_recovery_skeleton(s jsonb) RETURNS jsonb
-LANGUAGE sql IMMUTABLE STRICT AS $$
- SELECT jsonb_build_object(
-   'digest',s->'digest',
-   'native',jsonb_build_object('partition',s->'native'->'partition','epoch',s->'native'->'epoch',
-     'position',s->'native'->'position','transactionId',s->'native'->'transactionId'),
-   'job',jsonb_build_object('jobId',s->'job'->'jobId','epoch',s->'job'->'epoch'),
-   'claim',jsonb_build_object('partition',s->'claim'->'partition','generation',s->'claim'->'generation',
-     'transactionId',s->'claim'->'transactionId','home',s->'claim'->'home','scope',s->'claim'->'scope'));
-$$;
-
-CREATE FUNCTION access.guard_agent_identity_recovery_insert() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
- IF NEW.original_source_minimized THEN
-   RAISE EXCEPTION 'New recovery source cannot claim prior minimization' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END $$;
-
-CREATE FUNCTION access.check_agent_identity_recovery_retention(
-  i access.agent_identity_intent,p_role text,b jsonb,erased uuid
-) RETURNS void LANGUAGE plpgsql AS $$
+CREATE FUNCTION access.check_agent_identity_recovery_retention(i access.agent_identity_intent, p_role text, b jsonb, erased uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
 DECLARE a record; c core.agent_identity_recovery_inventory;
  h core.agent_identity_history_copy; role_hash bytea; actual_accounts jsonb; role_count integer;
  supported_roles boolean; n integer:=0; receiver record; receiver_count integer:=0;
- effects_position bigint; checkpoint bigint; expected_workflow text;
+ effects_position bigint; expected_workflow text;
 BEGIN
  SELECT recovery_epoch,recovery_position,recovery_transaction_id,recovery_receipt_key,intent_digest,
    source_partition,source_epoch,source_position,source_transaction_id,requested_by,decided_by,
@@ -869,8 +866,14 @@ BEGIN
  RAISE EXCEPTION 'identity retention recovery discovery owner unavailable' USING ERRCODE='23514';
 END $$;
 
-CREATE OR REPLACE FUNCTION access.check_agent_identity_retention(i access.agent_identity_intent,p_role text)
-RETURNS void LANGUAGE plpgsql AS $$
+
+--
+-- Name: check_agent_identity_retention(access.agent_identity_intent, text); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.check_agent_identity_retention(i access.agent_identity_intent, p_role text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
 DECLARE m core.agent_identity_work; inv core.agent_identity_inventory;
  o core.agent_identity_sdk_obligation; b jsonb; ref jsonb; erased uuid; c record;
  l record; role_hash bytea; supported_roles boolean; n integer:=0; k integer; r record;
@@ -1188,7 +1191,9 @@ $$;
 -- Name: guard_agent_identity_intent(); Type: FUNCTION; Schema: access; Owner: -
 --
 
-CREATE OR REPLACE FUNCTION access.guard_agent_identity_intent() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION access.guard_agent_identity_intent() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 DECLARE role text; erased uuid; i access.agent_identity_intent; a access.agent_identity_recovery;
 BEGIN
  IF TG_OP<>'UPDATE' THEN RAISE EXCEPTION 'Account identity source requires receiving erasure custody' USING ERRCODE='23514'; END IF;
@@ -1230,6 +1235,21 @@ BEGIN
     NEW.minimized IS DISTINCT FROM (OLD.minimized OR role='subject') OR
     NEW.intent IS DISTINCT FROM (CASE WHEN role='subject' THEN '{}'::jsonb ELSE OLD.intent END) THEN
    RAISE EXCEPTION 'identity retention may minimize only the erased personal role' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: guard_agent_identity_recovery_insert(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_agent_identity_recovery_insert() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.original_source_minimized THEN
+   RAISE EXCEPTION 'New recovery source cannot claim prior minimization' USING ERRCODE='23514';
+ END IF;
  RETURN NEW;
 END $$;
 
@@ -2285,8 +2305,8 @@ CREATE TABLE access.agent_identity_recovery (
     recovery_position bigint NOT NULL,
     recovery_receipt_key text NOT NULL,
     original_source jsonb,
-    original_source_minimized boolean DEFAULT false NOT NULL,
     recovery_digest text,
+    original_source_minimized boolean DEFAULT false NOT NULL,
     CONSTRAINT agent_identity_recovery_check CHECK ((source_partition = (route / 16))),
     CONSTRAINT agent_identity_recovery_check1 CHECK (((direction <> 'account-agent.unverify'::text) OR (source_transaction_id = receipt_id))),
     CONSTRAINT agent_identity_recovery_check2 CHECK ((recovery_transaction_id <> source_transaction_id)),
@@ -5242,18 +5262,21 @@ CREATE CONSTRAINT TRIGGER agent_identity_intent_native_commit AFTER INSERT ON ac
 
 
 --
--- Name: agent_identity_recovery agent_identity_recovery_insert_guard; Type: TRIGGER; Schema: access; Owner: -
---
-
-CREATE TRIGGER agent_identity_recovery_insert_guard BEFORE INSERT ON access.agent_identity_recovery FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_recovery_insert();
-ALTER TABLE access.agent_identity_recovery ENABLE ALWAYS TRIGGER agent_identity_recovery_insert_guard;
-
 -- Name: agent_identity_recovery agent_identity_recovery_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
 CREATE TRIGGER agent_identity_recovery_immutable BEFORE DELETE OR UPDATE ON access.agent_identity_recovery FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_intent();
 
 ALTER TABLE access.agent_identity_recovery ENABLE ALWAYS TRIGGER agent_identity_recovery_immutable;
+
+
+--
+-- Name: agent_identity_recovery agent_identity_recovery_insert_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER agent_identity_recovery_insert_guard BEFORE INSERT ON access.agent_identity_recovery FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_recovery_insert();
+
+ALTER TABLE access.agent_identity_recovery ENABLE ALWAYS TRIGGER agent_identity_recovery_insert_guard;
 
 
 --
