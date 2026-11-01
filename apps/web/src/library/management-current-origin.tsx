@@ -16,14 +16,14 @@ class ManagementCurrentOrigin {
   private retired = false;
   private users = 0;
   private mounted = false;
-  private release?: () => void;
+  private release: (() => void) | undefined;
   private version = 0;
   private listeners = new Set<() => void>();
   private read?: { key: QueryKey; matches: (value: unknown) => boolean };
   private accepted = { retired: false };
   private rejectedAt = -1;
   private operations = new Map<GatedOperation, { retired: boolean }>();
-  private captured?: ManagementGuard;
+  private captured: ManagementGuard | undefined;
   constructor(
     private client: QueryClient,
     readonly subject: string | null,
@@ -38,7 +38,7 @@ class ManagementCurrentOrigin {
   private credential() {
     const session = this.client.getQueryState(sessionQuery.queryKey);
     return session?.status === 'success' &&
-      session.data.state === 'signed-in' &&
+      session.data?.state === 'signed-in' &&
       !!this.subject &&
       session.data.subject === this.subject &&
       !!session.data.csrfToken
