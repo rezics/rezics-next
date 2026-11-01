@@ -269,8 +269,12 @@ test('byte bounds reject malformed and non-representable measurements while pres
   expect(growthByteViolations(samples([0, 0, 0]), { requestBytes: 'constant' })).toEqual([]);
   expect(growthByteViolations(samples([0.5, 0.5, 0.5]), { requestBytes: 'constant' })).toEqual([]);
   expect(() =>
-    growthByteViolations(samples([0, Number.MAX_VALUE, Number.MAX_VALUE]), { requestBytes: 'linear' }, {
-      requestBytes: { absolute: 0, relative: 0 },
-    }),
+    growthByteViolations(
+      samples([0, Number.MAX_VALUE, Number.MAX_VALUE]),
+      { requestBytes: 'linear' },
+      {
+        requestBytes: { absolute: 0, relative: 0 },
+      },
+    ),
   ).toThrow(/requestBytes growth allowance/);
 });

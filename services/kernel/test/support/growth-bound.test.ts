@@ -121,9 +121,13 @@ test('growth-bound arithmetic refuses overflow in scale ratios, slack and derive
     ),
   ).toThrow(TypeError);
   expect(() =>
-    growthViolations(series([1, 8, 64], [Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE]), allBounds('constant'), {
-      rows: { absolute: 0, relative: 2 },
-    }),
+    growthViolations(
+      series([1, 8, 64], [Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE]),
+      allBounds('constant'),
+      {
+        rows: { absolute: 0, relative: 2 },
+      },
+    ),
   ).toThrow(/Relative rows growth slack/);
   expect(() =>
     growthViolations(series([1, 8, 64], [0, Number.MAX_VALUE, Number.MAX_VALUE]), allBounds('linear'), {

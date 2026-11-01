@@ -142,20 +142,22 @@ test('counted comparisons require configured medians and coherent scale repetiti
   });
   const valid = [makeSample(1, [1, 2]), makeSample(8, [1, 2]), makeSample(64, [1, 2])];
   expect(countedViolations(check, valid)).toEqual([]);
-  expect(() => countedViolations(check, valid.map(({ scale }) => ({ scale, counted: {} })))).toThrow(/missing/);
+  expect(() =>
+    countedViolations(
+      check,
+      valid.map(({ scale }) => ({ scale, counted: {} })),
+    ),
+  ).toThrow(/missing/);
   expect(() =>
     countedViolations(check, [valid[0]!, valid[1]!, { scale: 64, counted: countedSample([{ examined: 1 }]) }]),
   ).toThrow(/incoherent/);
   expect(() => countedViolations(check, [valid[0]!, valid[1]!, { ...valid[2]!, scale: Number.NaN }])).toThrow(/scale/);
   expect(() =>
-    countedViolations(
-      { ...check, slack: { examined: { absolute: 0, relative: Number.MAX_VALUE } } },
-      [
-        makeSample(1, [Number.MAX_SAFE_INTEGER]),
-        makeSample(8, [Number.MAX_SAFE_INTEGER]),
-        makeSample(64, [Number.MAX_SAFE_INTEGER]),
-      ],
-    ),
+    countedViolations({ ...check, slack: { examined: { absolute: 0, relative: Number.MAX_VALUE } } }, [
+      makeSample(1, [Number.MAX_SAFE_INTEGER]),
+      makeSample(8, [Number.MAX_SAFE_INTEGER]),
+      makeSample(64, [Number.MAX_SAFE_INTEGER]),
+    ]),
   ).toThrow(/growth slack/);
   expect(countedViolations({ read: () => ({}) }, [])).toEqual([]);
 });

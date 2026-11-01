@@ -468,9 +468,9 @@ test('plan extraction refuses overflow in row, block, relation and CTE accumulat
   expect(() =>
     costOf({ statements: [], plans: [{ Plan: seqPlan(Number.MAX_VALUE, 0, { 'Actual Loops': 2 }) }] }),
   ).toThrow(/Rows examined/);
-  expect(() => costOf({ statements: [], plans: [{ Plan: seqPlan(Number.MAX_VALUE) }, { Plan: seqPlan(Number.MAX_VALUE) }] })).toThrow(
-    /Total examined rows|Rows for relation/,
-  );
+  expect(() =>
+    costOf({ statements: [], plans: [{ Plan: seqPlan(Number.MAX_VALUE) }, { Plan: seqPlan(Number.MAX_VALUE) }] }),
+  ).toThrow(/Total examined rows|Rows for relation/);
   expect(() =>
     costOf({ statements: [], plans: [{ Plan: seqPlan(0, Number.MAX_VALUE) }, { Plan: seqPlan(0, Number.MAX_VALUE) }] }),
   ).toThrow(/Blocks for relation|Total shared hit blocks/);
@@ -478,20 +478,14 @@ test('plan extraction refuses overflow in row, block, relation and CTE accumulat
     costOf({
       statements: [],
       plans: [],
-      backgroundPlans: [
-        { Plan: seqPlan(Number.MAX_VALUE) },
-        { Plan: seqPlan(Number.MAX_VALUE) },
-      ],
+      backgroundPlans: [{ Plan: seqPlan(Number.MAX_VALUE) }, { Plan: seqPlan(Number.MAX_VALUE) }],
     }),
   ).toThrow(/Total background examined rows/);
   expect(() =>
     costOf({
       statements: [],
       plans: [],
-      backgroundPlans: [
-        { Plan: seqPlan(0, Number.MAX_VALUE) },
-        { Plan: seqPlan(0, Number.MAX_VALUE) },
-      ],
+      backgroundPlans: [{ Plan: seqPlan(0, Number.MAX_VALUE) }, { Plan: seqPlan(0, Number.MAX_VALUE) }],
     }),
   ).toThrow(/Total background blocks/);
   const producer = (child?: Record<string, unknown>) => ({
@@ -591,11 +585,9 @@ test('median cost validates supplied core, relation and background evidence befo
     ]),
   ).toThrow(/relation app.items rows/);
   expect(() =>
-    medianCost([
-      { ...valid, backgroundCosts: { vacuum: { rows: 0, blocks: -1, bounded: true } } },
-      valid,
-      valid,
-    ]),
+    medianCost([{ ...valid, backgroundCosts: { vacuum: { rows: 0, blocks: -1, bounded: true } } }, valid, valid]),
   ).toThrow(/Background blocks/);
-  expect(() => medianCost([{ ...valid, requestBytes: Number.POSITIVE_INFINITY }, valid, valid])).toThrow(/requestBytes/);
+  expect(() => medianCost([{ ...valid, requestBytes: Number.POSITIVE_INFINITY }, valid, valid])).toThrow(
+    /requestBytes/,
+  );
 });

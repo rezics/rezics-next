@@ -414,10 +414,7 @@ function costNode(
       return costNode(child, false, relations, ctes);
     }) ?? [];
 
-  const childHit = children.reduce(
-    (sum, child) => checkedAdd(sum, child.inclusiveHit, 'Child shared hit blocks'),
-    0,
-  );
+  const childHit = children.reduce((sum, child) => checkedAdd(sum, child.inclusiveHit, 'Child shared hit blocks'), 0);
   const childRead = children.reduce(
     (sum, child) => checkedAdd(sum, child.inclusiveRead, 'Child shared read blocks'),
     0,
@@ -459,7 +456,12 @@ function costNode(
   } else if (nodeType === 'Bitmap Index Scan') {
     const indexName = node['Index Name'];
     if (typeof indexName === 'string')
-      addRelation(relations, `index:${indexName}`, 0, checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'));
+      addRelation(
+        relations,
+        `index:${indexName}`,
+        0,
+        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'),
+      );
   }
 
   return {
@@ -480,7 +482,11 @@ function addRelation(
   relation.rows = checkedAdd(relation.rows, rows, `Rows for relation ${key}`);
   relation.blocks = checkedAdd(relation.blocks, blocks, `Blocks for relation ${key}`);
   relation.nodes++;
-  relation.sequentialScans = checkedAdd(relation.sequentialScans, sequentialScans, `Sequential scans for relation ${key}`);
+  relation.sequentialScans = checkedAdd(
+    relation.sequentialScans,
+    sequentialScans,
+    `Sequential scans for relation ${key}`,
+  );
   relations.set(key, relation);
 }
 
@@ -528,7 +534,8 @@ export function costOf(capture: Capture): Cost {
           owner >= 0 &&
           owner < capture.statements.length &&
           nativeCatalogIndexes?.has(owner) === true
-        ) included = false;
+        )
+          included = false;
       } else {
         if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) included = false;
         if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) included = false;
@@ -614,7 +621,8 @@ export function costOf(capture: Capture): Cost {
     sharedRead,
     relations: Object.fromEntries(relations),
   };
-  const requestBytes = capture.requestBytes === undefined ? undefined : sumFinite(capture.requestBytes, 'Request bytes');
+  const requestBytes =
+    capture.requestBytes === undefined ? undefined : sumFinite(capture.requestBytes, 'Request bytes');
   const responseBytes =
     capture.responseBytes === undefined ? undefined : sumFinite(capture.responseBytes, 'Response bytes');
   const hasBackgroundWork =
@@ -681,8 +689,7 @@ function validateCostEvidence(cost: Cost, index: number): void {
     'backgroundBlocks',
   ] as const;
   for (const field of optionalFields)
-    if (cost[field] !== undefined)
-      requireNonNegativeFiniteNumber(cost[field], `Cost ${field} at repetition ${index}`);
+    if (cost[field] !== undefined) requireNonNegativeFiniteNumber(cost[field], `Cost ${field} at repetition ${index}`);
 
   if (!isRecord(cost.relations)) throw new TypeError(`Cost relations at repetition ${index} must be an object`);
   for (const [name, relation] of Object.entries(cost.relations)) {

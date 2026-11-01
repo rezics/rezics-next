@@ -150,10 +150,7 @@ test('series classification refuses overflowed intervals, coordinates and regres
     /Linear scale (ratio|coordinate)/,
   );
   expect(() =>
-    classifySeries(
-      series([1, 1 + Number.EPSILON, 1 + Number.EPSILON * 2], [0, maximum, maximum]),
-      'linear',
-    ),
+    classifySeries(series([1, 1 + Number.EPSILON, 1 + Number.EPSILON * 2], [0, maximum, maximum]), 'linear'),
   ).toThrow(/Regression slope/);
   const sparseRepetitions = [1, , 1] as number[];
   expect(() =>

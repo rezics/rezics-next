@@ -1,7 +1,6 @@
 /** Shared validation and checked arithmetic for numerical growth evidence. */
 export function requireFiniteNumber(value: unknown, label: string): asserts value is number {
-  if (typeof value !== 'number' || !Number.isFinite(value))
-    throw new TypeError(`${label} must be a finite number`);
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new TypeError(`${label} must be a finite number`);
 }
 
 export function requireNonNegativeFiniteNumber(value: unknown, label: string): asserts value is number {
@@ -43,8 +42,7 @@ export function checkedMultiply(left: number, right: number, label: string): num
 export function checkedDivide(numerator: number, denominator: number, label: string): number {
   if (denominator === 0) throw new TypeError(`${label} cannot divide by zero`);
   const result = finiteResult(numerator / denominator, label);
-  if (numerator !== 0 && result === 0)
-    throw new TypeError(`${label} is too small to represent without underflow`);
+  if (numerator !== 0 && result === 0) throw new TypeError(`${label} is too small to represent without underflow`);
   return result;
 }
 
@@ -85,7 +83,7 @@ export function checkedMultiplyDivide(a: number, b: number, c: number, label: st
   if (exponent < -1074) throw new TypeError(`${label} is too small to represent without underflow`);
   const result = finiteResult(mantissa * 2 ** exponent, label);
   if (result === 0) throw new TypeError(`${label} is too small to represent without underflow`);
-  const isNegative = ((a < 0) !== (b < 0)) !== (c < 0);
+  const isNegative = (a < 0 !== b < 0) !== c < 0;
   return isNegative ? -result : result;
 }
 

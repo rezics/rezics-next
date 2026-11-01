@@ -61,8 +61,7 @@ function validatePoints(points: readonly SeriesPoint[], bound: GrowthModelBound)
 
   let previousScale = 0;
   for (const [index, point] of points.entries()) {
-    if (typeof point !== 'object' || point === null)
-      throw new TypeError(`Growth point ${index + 1} must be an object`);
+    if (typeof point !== 'object' || point === null) throw new TypeError(`Growth point ${index + 1} must be an object`);
     if (!Number.isFinite(point.scale) || point.scale <= previousScale)
       throw new TypeError('Growth scales must be finite, positive and strictly increasing');
     previousScale = point.scale;
@@ -89,9 +88,10 @@ function familyCoordinates(points: readonly SeriesPoint[], family: GrowthFamily)
       coordinates = points.map(({ scale }) => {
         const difference = scale - firstScale;
         const relativeDifference = difference / firstScale;
-        const coordinate = Number.isFinite(relativeDifference) && (relativeDifference !== 0 || difference === 0)
-          ? Math.log1p(relativeDifference)
-          : checkedSubtract(Math.log(scale), Math.log(firstScale), 'Logarithmic scale coordinate');
+        const coordinate =
+          Number.isFinite(relativeDifference) && (relativeDifference !== 0 || difference === 0)
+            ? Math.log1p(relativeDifference)
+            : checkedSubtract(Math.log(scale), Math.log(firstScale), 'Logarithmic scale coordinate');
         if (!Number.isFinite(coordinate)) throw new TypeError('Logarithmic scale coordinate is not finite');
         return coordinate;
       });
@@ -106,7 +106,10 @@ function familyCoordinates(points: readonly SeriesPoint[], family: GrowthFamily)
       });
       break;
   }
-  if (family !== 'constant' && coordinates.some((coordinate, index) => index > 0 && coordinate <= coordinates[index - 1]!))
+  if (
+    family !== 'constant' &&
+    coordinates.some((coordinate, index) => index > 0 && coordinate <= coordinates[index - 1]!)
+  )
     throw new TypeError(`${family} scale coordinates are not representable as strictly increasing values`);
   return coordinates;
 }
@@ -120,7 +123,9 @@ function roundingTolerance(left: number, right: number): number {
 }
 
 function noGreaterThan(left: number, right: number): boolean {
-  return left <= right || checkedSubtract(left, right, 'Feasibility comparison difference') <= roundingTolerance(left, right);
+  return (
+    left <= right || checkedSubtract(left, right, 'Feasibility comparison difference') <= roundingTolerance(left, right)
+  );
 }
 
 /**
@@ -163,7 +168,11 @@ function isFeasible(
         }
       } else {
         const limit = available / coefficient;
-        if (limit === Number.POSITIVE_INFINITY || (!Number.isFinite(limit) && limit !== Number.NEGATIVE_INFINITY) || (available !== 0 && limit === 0))
+        if (
+          limit === Number.POSITIVE_INFINITY ||
+          (!Number.isFinite(limit) && limit !== Number.NEGATIVE_INFINITY) ||
+          (available !== 0 && limit === 0)
+        )
           throw new TypeError('Feasibility minimum slope is not representable');
         if (limit !== Number.NEGATIVE_INFINITY) minimumB = Math.max(minimumB, limit);
       }
@@ -256,7 +265,11 @@ function uncertaintyFactor(
   }
 
   while (high - low > 1e-9) {
-    const middle = checkedAdd(low, checkedSubtract(high, low, 'Uncertainty factor search width') / 2, 'Uncertainty factor midpoint');
+    const middle = checkedAdd(
+      low,
+      checkedSubtract(high, low, 'Uncertainty factor search width') / 2,
+      'Uncertainty factor midpoint',
+    );
     if (middle === low || middle === high) break;
     if (fitsAt(middle)) high = middle;
     else low = middle;
@@ -307,7 +320,11 @@ function leastSquaresFit(
   for (let index = 0; index < count; index += 1) {
     const x = checkedDivide(xDifferences[index]!, xScale, 'Normalized regression coordinate');
     const y = yScale === 0 ? 0 : checkedDivide(yDifferences[index]!, yScale, 'Normalized regression median');
-    variance = checkedAdd(variance, checkedMultiply(x, x, 'Normalized regression variance term'), 'Regression variance');
+    variance = checkedAdd(
+      variance,
+      checkedMultiply(x, x, 'Normalized regression variance term'),
+      'Regression variance',
+    );
     covariance = checkedAdd(
       covariance,
       checkedMultiply(x, y, 'Normalized regression covariance term'),
@@ -447,18 +464,30 @@ function staircaseFit(
         (sum, value, index) =>
           index === variable
             ? sum
-            : checkedAdd(sum, checkedMultiply(value, solution[index]!, 'Staircase constraint term'), 'Staircase constraint sum'),
+            : checkedAdd(
+                sum,
+                checkedMultiply(value, solution[index]!, 'Staircase constraint term'),
+                'Staircase constraint sum',
+              ),
         0,
       );
       if (coefficient > 0)
         upper = Math.min(
           upper,
-          checkedDivide(checkedSubtract(inequality.limit, rest, 'Staircase upper bound numerator'), coefficient, 'Staircase upper bound'),
+          checkedDivide(
+            checkedSubtract(inequality.limit, rest, 'Staircase upper bound numerator'),
+            coefficient,
+            'Staircase upper bound',
+          ),
         );
       else if (coefficient < 0)
         lower = Math.max(
           lower,
-          checkedDivide(checkedSubtract(inequality.limit, rest, 'Staircase lower bound numerator'), coefficient, 'Staircase lower bound'),
+          checkedDivide(
+            checkedSubtract(inequality.limit, rest, 'Staircase lower bound numerator'),
+            coefficient,
+            'Staircase lower bound',
+          ),
         );
       else if (rest > inequality.limit && checkedSubtract(rest, inequality.limit, 'Staircase feasibility gap') > 1e-8)
         return undefined;

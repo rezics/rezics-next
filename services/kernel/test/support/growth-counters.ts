@@ -104,10 +104,18 @@ export function medianCounted(repetitions: readonly CountedValues[]): CountedVal
       throw new TypeError(`Counted repetition ${index + 1} has missing or mismatched unit names`);
     for (const [name, value] of Object.entries(run))
       if (!name || typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
-        throw new TypeError(`Counted unit ${name || '<empty>'} at repetition ${index + 1} must be a non-negative safe integer`);
+        throw new TypeError(
+          `Counted unit ${name || '<empty>'} at repetition ${index + 1} must be a non-negative safe integer`,
+        );
   }
   return Object.fromEntries(
-    names.map((name) => [name, rawMedian(repetitions.map((run) => run[name]!), name)]),
+    names.map((name) => [
+      name,
+      rawMedian(
+        repetitions.map((run) => run[name]!),
+        name,
+      ),
+    ]),
   );
 }
 
@@ -122,11 +130,11 @@ export function countedSample(repetitions: readonly CountedValues[]): CountedSam
 }
 
 function validateCountedScaleSeries(scales: readonly number[]): void {
-  if (scales.length < 3 || scales.length > 5)
-    throw new TypeError('Counted growth checks require three to five scales');
+  if (scales.length < 3 || scales.length > 5) throw new TypeError('Counted growth checks require three to five scales');
   if (
-    scales.some((scale, index) =>
-      !Number.isFinite(scale) || scale <= 0 || scale > 4096 || (index > 0 && scale <= scales[index - 1]!),
+    scales.some(
+      (scale, index) =>
+        !Number.isFinite(scale) || scale <= 0 || scale > 4096 || (index > 0 && scale <= scales[index - 1]!),
     )
   )
     throw new TypeError('Counted scales must be finite, positive, increasing and no greater than 4096');
@@ -158,7 +166,8 @@ export function countedViolations(
       if (!Object.hasOwn(sample.counted, name))
         throw new TypeError(`Counted unit ${name} is missing at scale ${sample.scale}`);
     for (const [name, entry] of Object.entries(sample.counted)) {
-      if (!name || !isRecord(entry)) throw new TypeError(`Counted unit ${name || '<empty>'} at scale ${sample.scale} is malformed`);
+      if (!name || !isRecord(entry))
+        throw new TypeError(`Counted unit ${name || '<empty>'} at scale ${sample.scale} is malformed`);
       requireNonNegativeFiniteNumber(entry.value, `Counted unit ${name} median at scale ${sample.scale}`);
       if (!Array.isArray(entry.repetitions) || entry.repetitions.length === 0)
         throw new TypeError(`Counted unit ${name} at scale ${sample.scale} requires repetitions`);
@@ -167,7 +176,9 @@ export function countedViolations(
         throw new TypeError(`Counted repetitions are incoherent at scale ${sample.scale}`);
       for (const [index, value] of entry.repetitions.entries())
         if (!Number.isSafeInteger(value) || value < 0)
-          throw new TypeError(`Counted unit ${name} repetition ${index + 1} at scale ${sample.scale} must be a non-negative safe integer`);
+          throw new TypeError(
+            `Counted unit ${name} repetition ${index + 1} at scale ${sample.scale} must be a non-negative safe integer`,
+          );
       const median = rawMedian(entry.repetitions, name);
       if (entry.value !== median)
         throw new TypeError(`Counted unit ${name} median at scale ${sample.scale} does not match its repetitions`);
