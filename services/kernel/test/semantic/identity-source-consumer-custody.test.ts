@@ -500,3 +500,163 @@ test('both original work readers reject absent copied foreign ended or exhausted
   expect(await readIdentityScopeConsumerWork(pool, ticket, ended!)).toBeNull();
   expect(checkouts).toBe(0);
 });
+
+test('The original Source owner durably guards exact History readiness and closure handoff under current same-home source and SDK fences with bounded single-frame accounting', async () => {
+  const { newId } = await import('../../src/route/route.ts');
+  const { createRealAccess } = await import('./real-access.ts');
+  const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../src/access/bootstrap-governance.ts');
+  const {
+    createAgentVerificationCommands,
+    readAgentVerificationWorkflowRequest,
+    recordPendingAgentVerification,
+  } = await import('../../src/access/agent-verification.ts');
+  const {
+    lockIdentitySourceHistoryAuthority,
+    lockIdentitySourceHistoryHandoff,
+    IDENTITY_SOURCE_HISTORY_GUARD_COST,
+  } = await import('../../src/semantic/identity-source-consumer-custody.ts');
+  const { readAgentIdentityRetirementStage } = await import('../../src/history/agent-identity-retirement.ts');
+  const { readAgentIdentitySDKReceivingBinding } = await import('../../src/history/agent-identity-sdk-fence.ts');
+  const { enqueueAgentIdentityVerification } = await import('../../src/history/agent-identity-work.ts');
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { readSdkWorkflowWriterState } = await import('../../src/work/sdk-retirement-fence.ts');
+  // Genuine co-home Accounts source, native decision, accepted job and original SDK
+  // association. No Source terminal, Account settlement or Library seal is fabricated.
+  const accounts = { person: newId(1), staff: newId(2) };
+  const actions = ['account:update', 'account:verify_agent'];
+  const real = await createRealAccess(f.admin, accounts, actions);
+  const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+  await bootstrapGovernance(f.pool, accounts.staff);
+  await real.grant({ route: 1, id: accounts.person }, 'person', 'account:update');
+  await real.grant(PLATFORM_RESOURCE, 'staff', 'account:verify_agent');
+  const context = async (persona: 'person' | 'staff') => ({
+    pool: f.pool,
+    deadline: Date.now() + 5000,
+    actor: await access.authenticate(real.bearer(persona), { pool: f.pool, deadline: Date.now() + 5000 }),
+  });
+  const commands = createAgentVerificationCommands({ pool: f.pool, access, clock: () => new Date() });
+  const catalogue = (await f.create('History Source native guard')).subject.id;
+  const requested = await commands.request(await context('person'), {
+    accountId: accounts.person,
+    subject: catalogue,
+    statement: 'This is my catalogue identity',
+    links: [],
+    key: randomUUID(),
+  });
+  const decided = await commands.approve(await context('staff'), { requestId: requested.value.id, key: randomUUID() });
+  const saved = await readAgentVerificationWorkflowRequest(f.pool, requested.value.id);
+  if (!saved?.decisionReceiptId) throw new Error('Expected actual original decision');
+  expect(saved.decisionReceiptId).toBe(decided.value.decisionReceiptId);
+  const workflow = { ...saved, receiptId: saved.decisionReceiptId };
+  await recordPendingAgentVerification(f.pool, workflow, () => new Date());
+  await ensureAccountAgent(f.pool, { account: accounts.person, kind: 'person', name: null });
+  await mergeVerifiedAgent(f.pool, workflow);
+  const receipt = { kind: 'account-agent.verify' as const, account: accounts.person, receipt: workflow.receiptId };
+  const accepted = await readAccountIdentityUndo(f.pool, receipt);
+  const erased = (
+    await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES(1,$1,1,now()) RETURNING at::text', [
+      accounts.person,
+    ])
+  ).rows[0];
+  const original: IdentitySourceConsumerReference = {
+    receipt,
+    job: accepted.job,
+    source: {
+      partition: accepted.source.partition,
+      epoch: accepted.source.epoch,
+      position: accepted.source.position,
+      transactionId: accepted.source.transactionId,
+    },
+    sourceDigest: accepted.source.digest,
+    erasedRole: 'subject',
+    barrier: { accountId: accounts.person, accountRoute: 1, version: 1, at: erased.at },
+  };
+  expect(original.source.partition).toBe(0);
+  const deadline = Date.now() + 20_000;
+  const native = (ref = original, expected = null) =>
+    runCommand(f.pool, { partition: 0, deadline }, async (tx) =>
+      noEffect(await lockIdentitySourceHistoryAuthority(tx, ref, expected)),
+    ).then((result) => result.value);
+  expect(await native()).toBeNull(); // no live frame
+  await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+    // Real default Source preparation retains the obligation. Publication and a
+    // receiver association do not invent the missing real consumer discharge.
+    expect(await readIdentitySourceConsumerCustody(f.pool, original, funded)).toBeNull();
+  });
+  // A separate invocation tests repeated guarded reads. It does not replenish the
+  // preparation invocation or fund any continuation of that earlier operation.
+  await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+    const balance = () => identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline)!;
+    for (const ref of [
+      original,
+      { ...original, sourceDigest: '0'.repeat(64) },
+      { ...original, source: { ...original.source, position: original.source.position + 1n } },
+      { ...original, source: { ...original.source, epoch: original.source.epoch + 1 } },
+      { ...original, job: { ...original.job, epoch: original.job.epoch + 1n } },
+      { ...original, barrier: { ...original.barrier, version: 2 } },
+      { ...original, erasedRole: 'decider' as const },
+    ]) {
+      const before = balance();
+      expect(await native(ref)).toBeNull();
+      // Each missing/stale native lookup is charged before dispatch; repeated
+      // failures receive neither refunds nor a cached verdict.
+      expect(balance()).toEqual({
+        rows: before.rows - IDENTITY_SOURCE_HISTORY_GUARD_COST.rows,
+        points: before.points - IDENTITY_SOURCE_HISTORY_GUARD_COST.points,
+        statements: before.statements - IDENTITY_SOURCE_HISTORY_GUARD_COST.statements,
+        bytes: before.bytes - IDENTITY_SOURCE_HISTORY_GUARD_COST.bytes,
+        engineRequests: 0,
+      });
+    }
+  });
+  await withIdentitySourceConsumerMaintenance(
+    { pool: f.pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '1' } },
+    { deadline },
+    async (funded) => {
+      const before = identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline);
+      expect(await native()).toBeNull();
+      expect(identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline)).toEqual(before);
+    },
+  );
+  const client = await createWorkClient(f.pool.options.connectionString!, f.pool);
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityVerification(f.pool, client, requested.value.id, workflow.receiptId)).toBe('admitted');
+    const stage = await readAgentIdentityRetirementStage(f.pool, original, { deadline });
+    if (!stage) throw new Error('Expected genuine original source association');
+    const receiving = (
+      await runCommand(f.pool, { partition: 0, deadline }, async (tx) =>
+        noEffect(await readAgentIdentitySDKReceivingBinding(tx, {
+          partition: 0,
+          locator: { artifactType: 'durable-work/v1', workId: stage.handoff.custodyId },
+          accounts: stage.handoff.source.accounts,
+        }, original.barrier)),
+      )
+    ).value;
+    if (receiving.state !== 'observed') throw new Error('Expected genuine original receiver');
+    const writer = await readSdkWorkflowWriterState(stage.handoff.source.workflowId, client);
+    if (!writer) throw new Error('Expected original SDK writer state');
+    await withIdentitySourceConsumerMaintenance({ pool: f.pool, env: {} }, { deadline }, async (funded) => {
+      const call = (binding = receiving.binding, expectedWriter = writer, phase: 'readiness' | 'closure' = 'readiness') =>
+        runCommand(f.pool, { partition: 0, deadline }, async (tx) =>
+          noEffect(await lockIdentitySourceHistoryHandoff(tx, stage, binding, expectedWriter, phase, client)),
+        ).then((result) => result.value);
+      expect(await call()).toEqual({ state: 'pending', gap: 'identity-source-consumer-custody-pending' });
+      const before = identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline);
+      for (const binding of [
+        { ...receiving.binding, custodyId: randomUUID() },
+        { ...receiving.binding, barrier: { ...original.barrier, version: 2 } },
+        { ...receiving.binding, receiver: { ...receiving.binding.receiver, generation: randomUUID() } },
+      ]) expect((await call(binding)).state).toBe('pending');
+      expect((await call(receiving.binding, { ...writer, workflowID: randomUUID() })).state).toBe('pending');
+      expect((await call(receiving.binding, writer, 'closure')).state).toBe('pending');
+      expect(identitySourceConsumerNativeWork(f.pool, funded.identityConsumerWork, deadline)).toEqual(before);
+    });
+    expect((await client.getWorkflowWriterState(writer.workflowID))?.generation).toBe('1');
+    expect((await f.admin.query('SELECT owner_ready,absence_verified,state FROM core.history_work WHERE work_id=$1', [
+      stage.handoff.custodyId,
+    ])).rows).toEqual([{ owner_ready: false, absence_verified: false, state: 'pending' }]);
+  } finally {
+    await client.close();
+  }
+}, 60_000);

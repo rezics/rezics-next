@@ -10,9 +10,11 @@ export type IdentitySourceMaintenanceConfig = Readonly<{
 
 const prefix = 'KERNEL_IDENTITY_SOURCE_MAINTENANCE_';
 
-// One invocation also funds the original Account settlement and two complete History
-// Source checks around SDK retirement and fence observation. Directory planning remains
-// independently capped below so this larger parent cannot expand its two existing children.
+// Baseline invocation: original Account settlement and two History Source checks.
+// This is NOT the allocation for the still-incomplete guarded History handoff.
+// Its final native transitions/receiving costs must be delivered before deriving a
+// replacement fixed aggregate. New Source locks refuse an insufficient live balance.
+// Directory planning stays independently capped below.
 // No PostgreSQL engine request is dispatched.
 const nativeDefaults = {
   ROWS: 577,

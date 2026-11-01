@@ -49,6 +49,15 @@ import insert from './identity-source-consumer-custody-insert.sql';
 import select from './identity-source-consumer-custody-select.sql';
 import progressSQL from './identity-source-consumer-custody-progress.sql';
 import appendSQL from './identity-source-consumer-custody-append.sql';
+import historySQL from './identity-source-consumer-custody-history.sql';
+import type { DBOSClient } from '@dbos-inc/dbos-sdk';
+import type { AgentIdentityRetirementStage } from '../history/agent-identity-retirement.ts';
+import type { AgentIdentitySDKReceivingBinding } from '../history/agent-identity-sdk-fence.ts';
+import {
+  lockSdkWorkflowWriterState,
+  SDK_TRANSACTION_FENCE_COST,
+  type SdkWriterState,
+} from '../work/sdk-retirement-fence.ts';
 import type { IdentitySourceConsumerMaintenanceWork } from './identity-source-consumer-maintenance.ts';
 import { identitySourceConsumerDirectoryPlan } from './identity-source-maintenance-config.ts';
 import {
@@ -1157,4 +1166,203 @@ export async function verifyIdentitySourceConsumerCustody(
     transactionId: row.receiving_transaction_id,
   };
   return (await ports.technical.verifyAccountIdentityTechnicalSource?.(tx, reference, receiving)) === true;
+}
+
+type HistoryNativeLocator = Omit<IdentityNativeReceipt, 'position'> & Readonly<{ position: string }>;
+export type IdentitySourceHistoryReference = Omit<IdentitySourceConsumerReference, 'source' | 'job'> &
+  Readonly<{
+    source: HistoryNativeLocator;
+    job: Readonly<{ jobId: string; epoch: string }>;
+  }>;
+
+/** Persistable address of original Source authority, never a portable certificate.
+ * The native consumer must resolve this SAME original row through the Source function
+ * on every guarded transition, including the later receiving commit. */
+export type IdentitySourceHistoryAuthority = Readonly<{
+  kind: 'identity-source-history-guard/v1';
+  custody: string;
+  sequence: string;
+  reference: IdentitySourceHistoryReference;
+  generation: IdentitySourceConsumerGeneration;
+  disposition: IdentitySourceConsumerDisposition;
+  terminal: HistoryNativeLocator;
+  receiving: HistoryNativeLocator | null;
+}>;
+
+/** Outer SELECT, fifteen exact native keyed inputs, and the returned native tuple.
+ * There are two SQL statements: the outer SELECT and the function's joined SELECT.
+ * PL/pgSQL comparisons/RETURN dispatch no SQL and this read fires no row triggers. */
+export const IDENTITY_SOURCE_HISTORY_GUARD_COST: NativeStepWork = Object.freeze({
+  rows: 17,
+  points: 15,
+  statements: 2,
+  bytes: 32768,
+  engineRequests: 0,
+});
+
+// Additional fixed calls in the supported composition below. Source and Account
+// verifiers still pre-reserve their OWN work; these allowances never replace it.
+export const IDENTITY_SOURCE_HISTORY_RECHECK_COST: NativeStepWork = Object.freeze({
+  rows: 32,
+  points: 32,
+  statements: 8,
+  bytes: 131072,
+  engineRequests: 0,
+});
+export const IDENTITY_SOURCE_HISTORY_RECEIVER_COST: NativeStepWork = Object.freeze({
+  rows: 160,
+  points: 80,
+  statements: 6,
+  bytes: 131072,
+  engineRequests: 0,
+});
+
+export type IdentitySourceHistoryHandoff = Readonly<{
+  phase: 'readiness' | 'closure';
+  sourceAuthority: IdentitySourceHistoryAuthority;
+  binding: AgentIdentitySDKReceivingBinding;
+  writer: SdkWriterState;
+}>;
+export type IdentitySourceHistoryHandoffResult =
+  | Readonly<{ state: 'pending'; gap: string }>
+  | Readonly<{ state: 'guarded'; handoff: IdentitySourceHistoryHandoff }>;
+
+function reserveHistoryWork(tx: CommandTransaction, cost: NativeStepWork): boolean {
+  const resources = currentCommandResources(tx);
+  const frame = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
+  return !!frame && reserveIdentitySourceConsumerNativeWork(resources.pool, frame, cost);
+}
+
+/** Resolve durable ORIGINAL Source state, not a copied terminal receipt. This same
+ * function is the supported native Source half of History's future row guard:
+ * semantic.lock_identity_source_history_handoff(reference, expectedAuthority).
+ * It locks original custody, current binding/generations and native enrollment until
+ * COMMIT. It does not supply Account verification, SDK closure or History readiness. */
+export async function lockIdentitySourceHistoryAuthority(
+  tx: CommandTransaction,
+  reference: IdentitySourceConsumerReference,
+  expected: IdentitySourceHistoryAuthority | null = null,
+): Promise<IdentitySourceHistoryAuthority | null> {
+  const serialized = json(reference);
+  const expectedJSON = expected === null ? null : json(expected);
+  if (
+    !valid(reference) ||
+    Buffer.byteLength(serialized) > 2048 ||
+    (expectedJSON !== null && Buffer.byteLength(expectedJSON) > 4096) ||
+    reference.source.partition !== 0 ||
+    partitionOf(reference.barrier.accountRoute) !== 0 ||
+    currentCommand(tx).partition !== 0 ||
+    currentCommand(tx).basis !== null ||
+    !reserveHistoryWork(tx, IDENTITY_SOURCE_HISTORY_GUARD_COST)
+  )
+    return null;
+  return (
+    await tx.query<{ authority: IdentitySourceHistoryAuthority | null }>(historySQL.sql, [
+      serialized,
+      expectedJSON,
+    ])
+  ).rows[0]?.authority ?? null;
+}
+
+/** Default owner composition on the genuine original Source command. Both phases
+ * re-run native History/Source/Account verification and exact receiving admission,
+ * then lock the actual SDK state on this SAME command. No foreign SQL, callbacks,
+ * fresh frame, SDK retirement or History state mutation is substituted here.
+ *
+ * History owns persisting distinct guarded readiness/closure transitions. Its native
+ * row guard must consume the Source function with the stored exact authority AND
+ * its own current association, barrier, receiver and SDK prerequisites. Returning
+ * this locator cannot authorize a later write by itself. */
+export async function lockIdentitySourceHistoryHandoff(
+  tx: CommandTransaction,
+  stage: AgentIdentityRetirementStage,
+  binding: AgentIdentitySDKReceivingBinding,
+  expectedWriter: SdkWriterState,
+  phase: 'readiness' | 'closure',
+  sdk: DBOSClient,
+): Promise<IdentitySourceHistoryHandoffResult> {
+  const pending = (gap: string): IdentitySourceHistoryHandoffResult => ({ state: 'pending', gap });
+  const reference = stage.reference;
+  if (!valid(reference) || currentCommand(tx).basis !== null)
+    return pending('identity-source-history-reference-changed');
+  // No receiving-home read may be smuggled into a different Source command. Shared
+  // PostgreSQL placement alone does not establish single-partition atomicity.
+  if (
+    reference.source.partition !== 0 ||
+    currentCommand(tx).partition !== 0 ||
+    partitionOf(reference.barrier.accountRoute) !== 0
+  )
+    return pending('identity-source-history-shared-home-unavailable');
+  if (
+    (phase !== 'readiness' && phase !== 'closure') ||
+    expectedWriter.workflowID !== binding.workflowId ||
+    expectedWriter.workflowID !== stage.handoff.source.workflowId ||
+    (phase === 'readiness'
+      ? expectedWriter.generation !== '1' || expectedWriter.closureID !== null || expectedWriter.closedAt !== null
+      : expectedWriter.generation !== '2' ||
+        !expectedWriter.closureID ||
+        !Number.isSafeInteger(expectedWriter.closedAt) ||
+        expectedWriter.closedAt! <= 0) ||
+    !sameHistoryBinding(stage, binding)
+  )
+    return pending('identity-source-history-binding-or-writer-changed');
+  // Clone data across the awaited owner calls; preserve only the actual Source proof.
+  stage = { reference: structuredClone(reference), handoff: structuredClone(stage.handoff), consumer: stage.consumer };
+  binding = structuredClone(binding);
+  expectedWriter = structuredClone(expectedWriter);
+  if (!reserveHistoryWork(tx, IDENTITY_SOURCE_HISTORY_RECHECK_COST))
+    return pending('identity-source-history-funding-unavailable');
+  const { verifyAgentIdentityRetirementStage } = await import('../history/agent-identity-retirement.ts');
+  const source = await verifyAgentIdentityRetirementStage(tx, stage);
+  if (source.state === 'pending') return source;
+  if (source.custodyId !== binding.custodyId || source.workflowId !== binding.workflowId)
+    return pending('identity-source-history-association-changed');
+  if (!reserveHistoryWork(tx, IDENTITY_SOURCE_HISTORY_RECEIVER_COST))
+    return pending('identity-source-history-funding-unavailable');
+  const { readAgentIdentitySDKReceivingBinding } = await import('../history/agent-identity-sdk-fence.ts');
+  const receiver = await readAgentIdentitySDKReceivingBinding(
+    tx,
+    {
+      partition: 0,
+      locator: { artifactType: 'durable-work/v1', workId: binding.custodyId },
+      accounts: binding.source.accounts,
+    },
+    stage.reference.barrier,
+  );
+  if (receiver.state === 'pending') return receiver;
+  if (json(receiver.binding) !== json(binding)) return pending('identity-source-history-receiver-changed');
+  const sourceAuthority = await lockIdentitySourceHistoryAuthority(tx, stage.reference);
+  if (!sourceAuthority) return pending('identity-source-history-native-custody-pending');
+  // SDK owner cost, including its nested domain/fence locks and return SELECT.
+  // Stale, pool, serialization and deadlock failures propagate: roll back the whole
+  // command. Every repeated entry pre-reserves again in the SAME live frame.
+  if (!reserveHistoryWork(tx, {
+    rows: SDK_TRANSACTION_FENCE_COST.rows,
+    points: SDK_TRANSACTION_FENCE_COST.points,
+    statements: SDK_TRANSACTION_FENCE_COST.statements,
+    bytes: SDK_TRANSACTION_FENCE_COST.bytes,
+    engineRequests: SDK_TRANSACTION_FENCE_COST.engineWork,
+  }))
+    return pending('identity-source-history-funding-unavailable');
+  let writer: SdkWriterState;
+  try {
+    writer = await lockSdkWorkflowWriterState(tx, expectedWriter, sdk);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'DBOS writer fence requires the same native transaction pool')
+      return pending('identity-source-history-sdk-pool-mismatch');
+    throw error;
+  }
+  return { state: 'guarded', handoff: { phase, sourceAuthority, binding: receiver.binding, writer } };
+}
+
+function sameHistoryBinding(stage: AgentIdentityRetirementStage, binding: AgentIdentitySDKReceivingBinding): boolean {
+  return (
+    binding.custodyId === stage.handoff.custodyId &&
+    binding.workflowId === stage.handoff.source.workflowId &&
+    binding.receiver.partition === 0 &&
+    binding.receiver.writerVersion === 1 &&
+    binding.receiver.generation === stage.handoff.generation &&
+    json(binding.source) === json(stage.handoff.source) &&
+    json(binding.barrier) === json(stage.reference.barrier)
+  );
 }
