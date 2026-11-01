@@ -15,6 +15,13 @@ import {
   type EditorialTransport,
 } from './editorial-context';
 
+const actionControlClass =
+  'h-auto min-h-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] py-1 max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
+const formControlClass =
+  'h-auto min-h-8 min-w-0 max-w-full max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+const languageControlClass =
+  'max-w-full max-md:w-full pointer-coarse:w-full md:pointer-fine:w-fit max-md:[&_select]:h-11 max-md:[&_select]:min-h-11 max-md:[&_select]:min-w-11 pointer-coarse:[&_select]:h-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_select]:min-w-11 md:pointer-fine:[&_select]:h-8 md:pointer-fine:[&_select]:min-h-8';
+
 /** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
 export function EditorialContextWorkspace({
   id,
@@ -144,7 +151,12 @@ export function EditorialContextWorkspace({
   const action = knownDeleted ? 'restore' : 'delete';
   const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
   return (
-    <section aria-label={m.editorial_title({}, o)} aria-busy={busy} className="min-w-0 space-y-6">
+    <section
+      aria-label={m.editorial_title({}, o)}
+      aria-busy={busy}
+      className="min-w-0 space-y-6"
+      data-editorial-workspace
+    >
       <header className="space-y-2">
         <h2 className="text-2xl font-semibold">
           {active ? pickText(active.labels, locale).text || m.context_unnamed({}, o) : m.editorial_title({}, o)}
@@ -171,6 +183,7 @@ export function EditorialContextWorkspace({
       {!currentId && (
         <form
           className="max-w-xl space-y-4"
+          data-editorial-form
           onSubmit={(event) => {
             event.preventDefault();
             void submit('create');
@@ -181,6 +194,8 @@ export function EditorialContextWorkspace({
             <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
             <NativeSelect
               id={`${fieldId}-language`}
+              className={languageControlClass}
+              data-editorial-control
               value={language}
               disabled={busy || !!pending}
               onChange={(event) => setLanguage(event.target.value)}
@@ -196,6 +211,8 @@ export function EditorialContextWorkspace({
             <FieldLabel htmlFor={`${fieldId}-name`}>{m.catalogue_create_label({}, o)}</FieldLabel>
             <Input
               id={`${fieldId}-name`}
+              className={formControlClass}
+              data-editorial-control
               value={name}
               maxLength={250}
               required
@@ -207,7 +224,12 @@ export function EditorialContextWorkspace({
             />
           </Field>
           {!pending && (
-            <Button type="submit" disabled={busy || !name.trim()}>
+            <Button
+              type="submit"
+              className={actionControlClass}
+              data-editorial-control
+              disabled={busy || !name.trim()}
+            >
               {m.editorial_create({}, o)}
             </Button>
           )}
@@ -215,14 +237,19 @@ export function EditorialContextWorkspace({
       )}
       {active?.kind === 'global' && <p>{m.editorial_global({}, o)}</p>}
       {active && (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3" data-editorial-action-row>
           {reviewHref && (
-            <a className={buttonVariants({ variant: 'outline' })} href={reviewHref(active.id)}>
+            <a
+              className={buttonVariants({ variant: 'outline', className: actionControlClass })}
+              data-editorial-control
+              href={reviewHref(active.id)}
+            >
               {m.editorial_review({}, o)}
             </a>
           )}
           <a
-            className={buttonVariants({ variant: 'outline' })}
+            className={buttonVariants({ variant: 'outline', className: actionControlClass })}
+            data-editorial-control
             href={`/${locale}/contexts/${encodeURIComponent(active.id)}${createHref?.includes('?') ? createHref.slice(createHref.indexOf('?')) : ''}`}
           >
             {m.editorial_open({}, o)}
@@ -230,7 +257,11 @@ export function EditorialContextWorkspace({
         </div>
       )}
       {currentId && !pending && (
-        <a className={buttonVariants({ variant: 'outline' })} href={createHref ?? `/${locale}/contexts/new`}>
+        <a
+          className={buttonVariants({ variant: 'outline', className: actionControlClass })}
+          data-editorial-control
+          href={createHref ?? `/${locale}/contexts/new`}
+        >
           {m.editorial_create({}, o)}
         </a>
       )}
@@ -240,17 +271,24 @@ export function EditorialContextWorkspace({
           {confirmation && (
             <p>{confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}</p>
           )}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3" data-editorial-action-row>
             {pending ? (
               <>
                 {!restoreBlocked && (
-                  <Button disabled={busy} onClick={() => void submit(pending.operation)}>
+                  <Button
+                    className={actionControlClass}
+                    data-editorial-control
+                    disabled={busy}
+                    onClick={() => void submit(pending.operation)}
+                  >
                     {m.editorial_retry({}, o)}
                   </Button>
                 )}
                 {!uncertain && (
                   <Button
                     variant="outline"
+                    className={actionControlClass}
+                    data-editorial-control
                     disabled={busy}
                     onClick={() => {
                       setPending(undefined);
@@ -267,6 +305,8 @@ export function EditorialContextWorkspace({
                 <>
                   <Button
                     variant={action === 'delete' ? 'destructive' : 'default'}
+                    className={actionControlClass}
+                    data-editorial-control
                     disabled={busy}
                     onClick={() => (confirmation ? void submit(action) : setConfirmation(action))}
                   >
@@ -277,7 +317,12 @@ export function EditorialContextWorkspace({
                         : m.editorial_restore({}, o)}
                   </Button>
                   {confirmation && (
-                    <Button variant="outline" onClick={() => setConfirmation(undefined)}>
+                    <Button
+                      variant="outline"
+                      className={actionControlClass}
+                      data-editorial-control
+                      onClick={() => setConfirmation(undefined)}
+                    >
                       {m.candidate_cancel({}, o)}
                     </Button>
                   )}
@@ -285,7 +330,13 @@ export function EditorialContextWorkspace({
               )
             )}
             {currentId && !pending && (
-              <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
+              <Button
+                variant="outline"
+                className={actionControlClass}
+                data-editorial-control
+                disabled={busy}
+                onClick={() => void refresh()}
+              >
                 {m.candidate_reload({}, o)}
               </Button>
             )}

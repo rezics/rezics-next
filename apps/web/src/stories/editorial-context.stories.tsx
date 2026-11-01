@@ -31,6 +31,29 @@ async function create(canvasElement: HTMLElement) {
   await userEvent.click(canvas.getByRole('button', { name: m.editorial_create() }));
   return canvas;
 }
+async function expectPhoneControls(canvasElement: HTMLElement) {
+  const workspace = canvasElement.querySelector<HTMLElement>('[data-editorial-workspace]');
+  if (!workspace) throw new Error('Editorial Context workspace was not rendered');
+  const bounds = workspace.getBoundingClientRect();
+  await expect(bounds.width).toBeLessThanOrEqual(390);
+  const form = workspace.querySelector<HTMLElement>('[data-editorial-form]');
+  if (form) await expect(form.scrollWidth).toBeLessThanOrEqual(form.clientWidth + 1);
+  for (const row of workspace.querySelectorAll<HTMLElement>('[data-editorial-action-row]')) {
+    await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+  }
+  const controls = workspace.querySelectorAll<HTMLElement>('[data-editorial-control]');
+  await expect(controls.length).toBeGreaterThan(0);
+  for (const control of controls) {
+    const rect = control.getBoundingClientRect();
+    await expect(control).toBeVisible();
+    await expect(rect.width).toBeGreaterThanOrEqual(44);
+    await expect(rect.height).toBeGreaterThanOrEqual(44);
+    await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+    await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+    await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+    await expect(control.scrollHeight).toBeLessThanOrEqual(control.clientHeight + 1);
+  }
+}
 async function remove(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: m.editorial_delete() }));
@@ -48,32 +71,59 @@ export const Ready: Story = {
 export const Empty: Story = { args: { scenario: 'create' } };
 export const Created: Story = {
   args: { scenario: 'create' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
+    await within(canvasElement).findByRole('textbox', { name: m.catalogue_create_label() });
+    await expectPhoneControls(canvasElement);
     const canvas = await create(canvasElement);
     await canvas.findByText(m.editorial_created());
     expect(await canvas.findByRole('link', { name: m.editorial_review() })).toHaveAttribute(
       'href',
       expect.stringContaining('/context-review?context='),
     );
+    await expectPhoneControls(canvasElement);
   },
 };
 export const Deleted: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
-    const canvas = await remove(canvasElement);
+    const canvas = within(canvasElement);
+    const deleteButton = await canvas.findByRole('button', { name: m.editorial_delete() });
+    await expectPhoneControls(canvasElement);
+    await userEvent.click(deleteButton);
+    await canvas.findByText(m.editorial_confirm_delete());
+    await expectPhoneControls(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_cancel() }));
+    await expect(canvas.queryByText(m.editorial_confirm_delete())).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.editorial_delete() }));
+    await canvas.findByText(m.editorial_confirm_delete());
+    const confirmButton = canvas.getByRole('button', { name: m.contribution_confirm() });
+    const cancelButton = canvas.getByRole('button', { name: m.candidate_cancel() });
+    await expectPhoneControls(canvasElement);
+    await userEvent.tab();
+    await expect(cancelButton).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    await expect(confirmButton).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
     await canvas.findByText(m.editorial_deleted());
     expect(canvas.queryByRole('button', { name: m.candidate_entry() })).toBeNull();
     expect(canvas.queryByRole('link', { name: m.editorial_review() })).toBeNull();
     await canvas.findByRole('button', { name: m.editorial_restore() });
+    await expectPhoneControls(canvasElement);
   },
 };
 export const Restored: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = await remove(canvasElement);
+    await expectPhoneControls(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.editorial_restore() }));
     await canvas.findByText(m.editorial_confirm_restore());
+    await expectPhoneControls(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.contribution_confirm() }));
     await canvas.findByText(m.editorial_restored());
     await canvas.findByRole('link', { name: m.editorial_review() });
+    await expectPhoneControls(canvasElement);
   },
 };
 export const Global: Story = {
@@ -102,9 +152,14 @@ export const Invalid: Story = {
 };
 export const Conflict: Story = {
   args: { scenario: 'conflict' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.editorial_conflict());
+    await expectPhoneControls(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.editorial_revise() }));
+    await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Readers’ choices');
+    await expectPhoneControls(canvasElement);
   },
 };
 export const Expired: Story = {
@@ -127,22 +182,28 @@ export const Concealed: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'unavailable' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.editorial_unavailable());
+    await expectPhoneControls(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
     await canvas.findByRole('button', { name: m.editorial_delete() });
+    await expectPhoneControls(canvasElement);
   },
 };
 export const RetrySameCreation: Story = {
   args: { scenario: 'uncertain' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.editorial_unavailable());
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
     expect(canvas.queryByRole('button', { name: m.editorial_revise() })).toBeNull();
+    await expectPhoneControls(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.editorial_retry() }));
     await canvas.findByText(m.editorial_created());
+    await expectPhoneControls(canvasElement);
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };
