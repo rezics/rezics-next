@@ -52,7 +52,18 @@ acceptance is deferred, and scripts/typecheck.test.ts still includes the existin
 acceptance. That assertion has not been weakened, removed or relabeled as mocked proof. Only explicitly bounded
 database-free unit invocations and the required foreground workspace typing are eligible during this attempt.
 
-Receipts will be recorded here after the committed implementation is checked. Authored acceptance does not establish
+The one bounded unit invocation, `bun test scripts/root-typecheck-placement.test.ts scripts/typecheck-placement.test.ts`,
+ran at implementation commit 30d0d76ae5: exit 1, 41 passed, 2 failed, 457 expectations, 5.08 seconds. All 26 direct
+wrapper tests passed. The new root diagnostic test incorrectly required stdout/stderr adjacency despite native Bun
+script-launcher lines; it now asserts the complete original block including those lines. The new root/direct
+composition fixture returned 1: its package launcher could prepend real ancestor executable directories ahead of the
+fixture PATH. The receiving fixture now confines both process and child executable lookup to its inert bin directory.
+That first fixture did not establish exclusively fake compiler execution; it must not be reported as a pure compiler
+or physical proof. Database preparation was injected throughout. No database or remote transport was intentionally
+started by these units. The corrections were committed; the bounded invocation was not repeated. The final root
+fixture corrections and the untouched live relation acceptance remain unverified by execution.
+
+Required foreground workspace typing receipts are recorded separately below. Authored acceptance does not establish
 successful physical receiving recognition, real compiler/SQL correctness, migration correctness, or retained-output
 transport. Original acceptance/native/browser verification, stopped consumer retries and Goal closure remain deferred.
 

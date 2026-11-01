@@ -300,8 +300,11 @@ test('root failures retain exact compiler diagnostics in their workspace block a
       },
     }),
   ).toBe(1);
-  expect(output).toContain('Workspace auth finished');
-  expect(output).toContain(`${stdout}\n${stderr}\n\n`);
+  expect(output.replace(/finished in \d+\.\d{2}s/, 'finished in <duration>')).toBe(
+    `Checking 1 of 4 workspaces the change can affect.\nWorkspace auth finished in <duration>\n` +
+      `$ bun run typecheck  (services/auth)\n${stdout}\n$ bun consumer.ts\n${stderr}\n` +
+      'error: script "typecheck" exited with code 23\n\n',
+  );
   expect(f.events).toEqual(['database', 'cleanup']);
 });
 
@@ -336,6 +339,8 @@ appendFileSync(${JSON.stringify(join(f.root, 'commands'))}, ${JSON.stringify(exe
       join(workspaceDirectory, 'consumer.ts'),
       `
 import { run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck } from ${JSON.stringify(join(repository, `services/${workspace}/scripts/typecheck.ts`))};
+// Bun's package-script launcher prepends ancestor node_modules bins. Confine both lookup paths to inert executables.
+process.env.PATH = ${JSON.stringify(bin)};
 process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(admitted())}),
   place: async () => { throw new Error('nested placement'); },
