@@ -929,7 +929,7 @@ test('production Zone keeps exact independent loads across private refusal, reta
   await flush(() => client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true }));
   independentZonePayload(1, 1);
   noSelection();
-  expect(chips().every((button) => button.disabled)).toBe(true);
+  expect(host.querySelectorAll('button[data-slot="reaction-chip"]:not(:disabled)')).toHaveLength(0);
   expect(ownReads).toHaveLength(1);
   expect(nativeWrites).toHaveLength(0);
   queueNativeRead({ status: 200, data: { kind: null } });
@@ -1022,3 +1022,38 @@ for (const boundary of ['target', 'provider', 'unmount', 'observed ABA'] as cons
       method: 'put', kind: 'like', authorization: 'Bearer token-reader-one',
     });
   });
+
+
+test('ordinary Subject does not start a later count refresh if an equal session success retires its current mutation cache update', async () => {
+  client.setQueryData(sessionQuery.queryKey, sessionData());
+  queueNativeRead({ status: 200, data: { kind: null } });
+  await paintOrdinary();
+  await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+  const oldOwnQuery = client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] })
+    .find((query) => query.state.status === 'success')!;
+  const write = deferred<NativeWriteResult>();
+  nativeWriteQueue.push(() => write.promise);
+  const freshOwn = deferred<NativeReactionRead>();
+  queueNativeRead(freshOwn);
+  await clickKind('like');
+  await clickKind('insightful');
+  let replacements = 0;
+  const unsubscribe = client.getQueryCache().subscribe((event) => {
+    if (event.query !== oldOwnQuery || event.type !== 'updated' || event.action.type !== 'success') return;
+    replacements++;
+    client.setQueryData(sessionQuery.queryKey, { ...sessionData() });
+  });
+  await flush(() => write.resolve({ status: 200 }));
+  unsubscribe();
+  await until(() => ownReads.length === 2);
+  expect(replacements).toBe(1);
+  expect(nativeWrites).toHaveLength(1); // The accepted write remains accepted; the queued choice is retired.
+  expect(countReads).toHaveLength(1);
+  noSelection();
+  expect(chips().every((button) => button.disabled)).toBe(true);
+  await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
+  await until(() => chips().some((button) => !button.disabled));
+  await clickKind('like');
+  await until(() => nativeWrites.length === 2 && countReads.length === 2);
+  expect(ownReads).toHaveLength(2);
+});

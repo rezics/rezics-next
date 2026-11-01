@@ -403,7 +403,9 @@ export function SubjectOverview({
               personalReady={session !== 'signed-in' || subjectReaction.ready}
               reactionOrigin={subjectReaction.origin}
               onPersonalChange={async (kind) => {
+                if (!subjectReaction.origin.isCurrent()) return;
                 subjectReaction.applyMutation(kind);
+                if (!subjectReaction.origin.isCurrent()) return;
                 await queryClient.invalidateQueries({ queryKey: ['subject-reactions', id, locale] });
               }}
               returnTo={returnTo}
