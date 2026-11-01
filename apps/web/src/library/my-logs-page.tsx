@@ -28,7 +28,13 @@ function matchesOwner(read: MyLogsViewerHistory, subject: string, cursor: string
 }
 
 /** Retained loader data is usable only with its actual owner and requested address. */
-export function MyLogsCurrentViewer({ initial, cursor }: { initial: MyLogsViewerHistory; cursor?: string | undefined }) {
+export function MyLogsCurrentViewer({
+  initial,
+  cursor,
+}: {
+  initial: MyLogsViewerHistory;
+  cursor?: string | undefined;
+}) {
   const hydrated = useSyncExternalStore(subscribe, hydratedSnapshot, serverSnapshot);
   const session = useSession();
   const canList = useOperation('published_log.list');

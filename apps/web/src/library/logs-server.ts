@@ -128,19 +128,22 @@ export const readMyPublishedLogHistoryForViewer = createServerFn({ method: 'GET'
   .handler(async ({ data }): Promise<MyLogsViewerHistory> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
+    let preparedSubject: string | null = null;
     const page = await myLogsResult(async () => {
       // GET preparation cannot associate an explicit bearer with a session subject. In
       // particular, a subject left by an earlier preparation is not that bearer's owner.
       if (request.headers.has('authorization')) throw new PublishedLogListError('denied');
       const loaded = await loadMyPublishedLogs(kernelClient(), request, env as Partial<SessionEnv>, data);
-      if (loaded.signedIn && (!sessionSubject(request) || !viewerCredential(request)))
-        throw new PublishedLogListError('unavailable');
+      if (!loaded.signedIn) return loaded;
+      const subject = sessionSubject(request);
+      if (!subject || !viewerCredential(request)) throw new PublishedLogListError('unavailable');
+      preparedSubject = subject;
       await nameSubjectTypes(loaded.logs.map((log) => log.subject));
       return loaded;
     });
     // Refusal can leave old Request WeakMap entries behind. Only the actual successful
     // owner reader permits an asserted viewer; failure states carry no owner payload.
-    const subject = page.state === 'loaded' ? (sessionSubject(request) ?? null) : null;
+    const subject = page.state === 'loaded' ? preparedSubject : null;
     return { sessionSubject: subject, cursor: data.cursor ?? null, locale: requestLocale(request) ?? 'en', page };
   });
 
