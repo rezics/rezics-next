@@ -207,6 +207,88 @@ test('linked notices announce their resolved content, actor, kind, current read 
   }
 });
 
+test('InboxRows preserves complete localized information and announces the exact date once for linked plain and unavailable notices', async () => {
+  const previousLocale = getLocale();
+  const linkedWithActor: Item = { ...linked, actorName: '桃子' };
+  const privateUnavailable: Item = {
+    ...unavailable,
+    unread: true,
+    actorId: 'stale-private-actor',
+    actorName: 'Stale private name',
+    href: '/threads/stale-private-target',
+    text: 'Stale private text',
+  };
+  const items: Item[] = [linkedWithActor, plain, privateUnavailable];
+  browser ??= await chromium.launch();
+  const page = await browser.newPage();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const catalog = JSON.parse(await readFile(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'));
+      const date = new Intl.DateTimeFormat(locale, {
+        dateStyle: 'full',
+        timeStyle: 'long',
+        timeZone: 'UTC',
+      }).format(new Date(timestamp));
+
+      for (const ordered of [items, items.toReversed()]) {
+        const html = markup(ordered);
+        expect(html).not.toContain('stale-private');
+        expect(html).not.toContain('Stale private');
+        await page.setContent(`<html lang="${locale}"><body>${html}</body></html>`);
+
+        const rows = page.getByRole('listitem');
+        expect(await rows.count()).toBe(ordered.length);
+        expect(await page.getByRole('link').count()).toBe(1);
+
+        for (const [index, item] of ordered.entries()) {
+          const row = rows.nth(index);
+          const title = item.unavailable ? catalog.inbox_unavailable_item : item.text;
+          const actor = item.unavailable
+            ? catalog.inbox_actor_unknown
+            : item.actorName || (item.actorId ? catalog.inbox_actor_unknown : catalog.inbox_actor_moderation);
+          const kind = item.reportId || item.kind === 'moderation_decision'
+            ? catalog.inbox_kind_moderation
+            : item.kind === 'mention'
+              ? catalog.inbox_kind_mention
+              : catalog.inbox_kind_reply;
+          const readState = item.unread ? catalog.inbox_notice_unread : catalog.inbox_notice_read;
+          const relativeTime = row.locator('span[aria-hidden="true"] time');
+
+          expect(await row.getByRole('heading', { level: 2, name: title, exact: true }).count()).toBe(1);
+          expect(await relativeTime.count()).toBe(1);
+          expect(await relativeTime.isVisible()).toBe(true);
+          const relativeLabel = (await relativeTime.innerText()).trim();
+          expect(relativeLabel).not.toBe('');
+          expect(await relativeTime.evaluate((element) => element.parentElement?.getAttribute('aria-hidden'))).toBe(
+            'true',
+          );
+          const snapshot = await row.ariaSnapshot();
+          expect(snapshot).not.toContain(relativeLabel);
+
+          if (item.href && !item.unavailable) {
+            const announcement = [title, actor, kind, readState, date].join('. ');
+            const link = row.getByRole('link', { name: announcement, exact: true });
+            expect(await link.count()).toBe(1);
+            expect(await link.getAttribute('aria-label')).toBe(announcement);
+            expect(await link.getAttribute('aria-labelledby')).toBeNull();
+            expect(announcement.split(date)).toHaveLength(2);
+          } else {
+            expect(await row.getByRole('link').count()).toBe(0);
+            expect(snapshot).toContain(actor);
+            expect(snapshot).toContain(kind);
+            expect(snapshot).toContain(readState);
+            expect(snapshot.split(date)).toHaveLength(2);
+          }
+        }
+      }
+    }
+  } finally {
+    await page.close();
+    setLocale(previousLocale, { reload: false });
+  }
+});
+
 test('plain and unavailable notices retain localized announcements without restoring stale destination, text or identity', () => {
   const previousLocale = getLocale();
   const hidden: Item = {

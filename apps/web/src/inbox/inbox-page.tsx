@@ -111,7 +111,7 @@ export function InboxRows({
                     {kind}
                   </span>
                   <span aria-hidden="true"> · </span>
-                  <span aria-hidden={href ? true : undefined}>
+                  <span aria-hidden="true">
                     <RelativeTime value={item.createdAt} locale={locale} timeZone="UTC" />
                   </span>
                   {!href ? (
