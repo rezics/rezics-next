@@ -145,6 +145,28 @@ export const SelectionCancelled: Story = {
   },
 };
 
+export const SelectionReopened: Story = {
+  args: Manage.args,
+  render,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const open = view.getByRole('button', { name: m.realm_appearance_select_rules() });
+    await userEvent.click(open);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
+    await view.findByText('A thoughtful reading room');
+    await userEvent.click(view.getByRole('button', { name: m.editor_cancel() }));
+    await userEvent.click(open);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
+    await view.findByText('A thoughtful reading room');
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_use_selection() }));
+    await expect(view.getByRole('button', { name: m.realm_appearance_save() })).toBeEnabled();
+  },
+};
+
 export const NativeSource: Story = {
   args: Available.args,
   loaders: [async () => ({ initial: await readFixtureAppearance() })],

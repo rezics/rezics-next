@@ -14,6 +14,7 @@ import {
   type RealmPresentationImage,
   type RealmPresentationOptional,
 } from './realm-presentation';
+import type { RealmAppearanceCallerLifetime } from './realm-appearance-caller-lifetime';
 
 function ImagePreview({
   image,
@@ -69,6 +70,11 @@ function ImagePreview({
 }
 
 type Selection = {
+  generation: number;
+  owner: object;
+  callerId: number;
+  callerTicket: number;
+  head: string | null;
   slot: RealmImageSlot | 'rules';
   first: string;
   second: string;
@@ -82,36 +88,99 @@ export function RealmAppearanceSettings({
   realmId,
   initial,
   adapter,
+  lifetime,
 }: {
   realmId: string;
   initial: RealmAppearanceRead;
   adapter: RealmAppearanceAdapter;
+  lifetime?: RealmAppearanceCallerLifetime;
 }) {
-  const adapterRef = useRef(adapter);
-  adapterRef.current = adapter;
   const control = useMemo(
-    () =>
-      createRealmAppearance(realmId, initial, {
-        read: (...args) => adapterRef.current.read(...args),
-        change: (...args) => adapterRef.current.change(...args),
-        select: (...args) => adapterRef.current.select(...args),
-        upload: (...args) => adapterRef.current.upload(...args),
-        resume: (...args) => adapterRef.current.resume(...args),
-      }),
-    [realmId],
+    () => createRealmAppearance(realmId, initial, adapter, undefined, lifetime),
+    [realmId, adapter, lifetime],
   );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [clear, setClear] = useState<RealmImageSlot | 'rules' | null>(null);
+  const [selectionState, setSelectionState] = useState<Selection | null>(null);
+  const selectionRef = useRef<Selection | null>(null);
+  const [clearState, setClearState] = useState<{ slot: RealmImageSlot | 'rules'; owner: object; callerId: number } | null>(
+    null,
+  );
   const ids = useId();
+  const callerId = lifetime?.id ?? 0;
   const incoming = useRef(initial);
+  const previousOwner = useRef(control);
+  const previousCaller = useRef(callerId);
   const read = initial !== incoming.current ? initial : state.read;
+  const visibleSelection =
+    selectionState?.owner === control &&
+    selectionState.callerId === callerId &&
+    read.kind === 'ready' &&
+    selectionState.head === read.snapshot.head
+      ? selectionState
+      : null;
+  const clear = clearState?.owner === control && clearState.callerId === callerId ? clearState.slot : null;
+  const selectionGeneration = useRef(0);
+  function setSelection(value: Selection | null) {
+    if (value === null) selectionGeneration.current++;
+    selectionRef.current = value;
+    setSelectionState(value);
+  }
+  function setClear(value: RealmImageSlot | 'rules' | null) {
+    setClearState(value === null ? null : { slot: value, owner: control, callerId });
+  }
+  function currentSelection(selected: Selection) {
+    const current = selectionRef.current;
+    const snapshot = control.getSnapshot();
+    return (
+      current?.generation === selected.generation &&
+      current.owner === control &&
+      current.callerId === callerId &&
+      current.callerTicket === selected.callerTicket &&
+      current.head === selected.head &&
+      current.slot === selected.slot &&
+      current.first === selected.first &&
+      current.second === selected.second &&
+      (!lifetime || (lifetime.current() && lifetime.owns(selected.callerTicket))) &&
+      snapshot.read.kind === 'ready' &&
+      snapshot.read.snapshot.head === selected.head
+    );
+  }
+  function openSelection(slot: RealmImageSlot | 'rules') {
+    const snapshot = control.getSnapshot();
+    const head = snapshot.read.kind === 'ready' ? snapshot.read.snapshot.head : null;
+    const next: Selection = {
+      generation: ++selectionGeneration.current,
+      owner: control,
+      callerId,
+      callerTicket: lifetime?.ticket() ?? 0,
+      head,
+      slot,
+      first: '',
+      second: '',
+      candidate: null,
+      busy: false,
+      unavailable: false,
+    };
+    setSelection(next);
+  }
   useLayoutEffect(() => {
+    const previousRead = incoming.current;
+    const ownerChanged = previousOwner.current !== control;
+    const callerChanged = previousCaller.current !== callerId;
+    const previousHead = previousRead.kind === 'ready' ? previousRead.snapshot.head : null;
+    const currentHead = initial.kind === 'ready' ? initial.snapshot.head : null;
     incoming.current = initial;
+    previousOwner.current = control;
+    previousCaller.current = callerId;
     control.observe(initial);
-    setSelection(null);
-  }, [control, initial]);
+    if (ownerChanged || callerChanged || previousHead !== currentHead) {
+      setSelection(null);
+      setClear(null);
+    }
+  }, [control, initial, callerId]);
+  useLayoutEffect(() => control.connect(), [control]);
   useEffect(() => () => control.cancelUpload(), [control]);
+  useEffect(() => () => control.disconnect(), [control]);
   if (
     read.kind === 'hidden' ||
     (read.kind === 'ready' && (read.snapshot.state !== 'active' || read.snapshot.realmId !== realmId))
@@ -147,6 +216,7 @@ export function RealmAppearanceSettings({
         ? snapshot.rules
         : retained.rules,
   };
+  const selection = visibleSelection;
   const editable = control.editable() && !selection;
   const label = (slot: RealmImageSlot | 'rules') =>
     slot === 'avatar'
@@ -157,22 +227,20 @@ export function RealmAppearanceSettings({
   async function resolve() {
     if (!selection || selection.busy) return;
     const selected = selection;
-    setSelection({ ...selected, busy: true, unavailable: false });
-    let candidate: RealmAppearanceSelection;
-    try {
-      candidate = await adapter.select(
-        selected.slot === 'rules'
-          ? { kind: 'rules', realmId, postId: selected.first, revisionId: selected.second }
-          : {
-              kind: 'image',
-              realmId,
-              mediaId: selected.first,
-              purpose: selected.slot === 'avatar' ? 'realm-icon' : 'realm-banner',
-            },
-      );
-    } catch {
-      candidate = { kind: 'unavailable' };
-    }
+    const resolving = { ...selected, busy: true, unavailable: false };
+    setSelection(resolving);
+    const candidate = await control.resolveSelection(
+      selected.slot === 'rules'
+        ? { kind: 'rules', realmId, postId: selected.first, revisionId: selected.second }
+        : {
+            kind: 'image',
+            realmId,
+            mediaId: selected.first,
+            purpose: selected.slot === 'avatar' ? 'realm-icon' : 'realm-banner',
+          },
+      () => currentSelection(resolving),
+    );
+    if (candidate === null || !currentSelection(resolving)) return;
     const valid =
       selected.slot === 'rules'
         ? candidate.kind === 'rules' &&
@@ -186,9 +254,7 @@ export function RealmAppearanceSettings({
             candidate.mediaId === selected.first &&
             candidate.realmId === realmId &&
             candidate.purpose === (selected.slot === 'avatar' ? 'realm-icon' : 'realm-banner'));
-    setSelection((current) =>
-      current === null ? null : { ...selected, busy: false, candidate: valid ? candidate : null, unavailable: !valid },
-    );
+    setSelection({ ...resolving, busy: false, candidate: valid ? candidate : null, unavailable: !valid });
   }
   const rules = draft.rules.state === 'available' ? draft.rules.value : null;
   return (
@@ -217,9 +283,7 @@ export function RealmAppearanceSettings({
                 <Button
                   variant="outline"
                   disabled={!editable}
-                  onClick={() =>
-                    setSelection({ slot, first: '', second: '', candidate: null, busy: false, unavailable: false })
-                  }
+                  onClick={() => openSelection(slot)}
                 >
                   {m.realm_appearance_choose()}
                 </Button>
@@ -285,16 +349,7 @@ export function RealmAppearanceSettings({
               <Button
                 variant="outline"
                 disabled={!editable}
-                onClick={() =>
-                  setSelection({
-                    slot: 'rules',
-                    first: '',
-                    second: '',
-                    candidate: null,
-                    busy: false,
-                    unavailable: false,
-                  })
-                }
+                onClick={() => openSelection('rules')}
               >
                 {m.realm_appearance_select_rules()}
               </Button>
@@ -310,7 +365,7 @@ export function RealmAppearanceSettings({
         ) : null}
       </div>
       {selection ? (
-        <fieldset className="space-y-4 rounded-xl border p-4" disabled={selection.busy}>
+        <fieldset className="space-y-4 rounded-xl border p-4" aria-busy={selection.busy}>
           <legend className="px-2 font-medium">{label(selection.slot)}</legend>
           <Field>
             <FieldLabel htmlFor={`${ids}-reference`}>
@@ -320,7 +375,16 @@ export function RealmAppearanceSettings({
               id={`${ids}-reference`}
               value={selection.first}
               maxLength={36}
-              onChange={(event) => setSelection({ ...selection, first: event.target.value, candidate: null })}
+              onChange={(event) =>
+                setSelection({
+                  ...selection,
+                  generation: ++selectionGeneration.current,
+                  first: event.target.value,
+                  candidate: null,
+                  busy: false,
+                  unavailable: false,
+                })
+              }
             />
           </Field>
           {selection.slot === 'rules' ? (
@@ -330,7 +394,16 @@ export function RealmAppearanceSettings({
                 id={`${ids}-revision`}
                 value={selection.second}
                 maxLength={36}
-                onChange={(event) => setSelection({ ...selection, second: event.target.value, candidate: null })}
+                onChange={(event) =>
+                  setSelection({
+                    ...selection,
+                    generation: ++selectionGeneration.current,
+                    second: event.target.value,
+                    candidate: null,
+                    busy: false,
+                    unavailable: false,
+                  })
+                }
               />
             </Field>
           ) : null}
@@ -356,7 +429,7 @@ export function RealmAppearanceSettings({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              disabled={!selection.first || (selection.slot === 'rules' && !selection.second)}
+              disabled={selection.busy || !selection.first || (selection.slot === 'rules' && !selection.second)}
               onClick={() => void resolve()}
             >
               {m.realm_appearance_preview()}
@@ -364,7 +437,7 @@ export function RealmAppearanceSettings({
             <Button
               disabled={!selection.candidate}
               onClick={() => {
-                if (selection.candidate) control.choose(selection.slot, selection.candidate);
+                if (selection.candidate && currentSelection(selection)) control.choose(selection.slot, selection.candidate);
                 setSelection(null);
               }}
             >

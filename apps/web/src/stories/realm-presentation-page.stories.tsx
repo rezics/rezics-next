@@ -50,3 +50,12 @@ export const ManagementInteractions: Story = {
     await expect(await page.findByRole('region', { name: m.realm_appearance_heading() })).toBeVisible();
   },
 };
+
+/** The default Panel waits for a ready signed-in session and keeps private management controls hidden otherwise. */
+export const SignedOutManagement: Story = {
+  render: () => <PageStory visitor="Signed Out" path={appearancePath} />,
+  play: async ({ canvasElement }) => {
+    const main = await within(canvasElement).findByRole('main');
+    await expect(within(main).queryByRole('region', { name: m.realm_appearance_heading() })).toBeNull();
+  },
+};

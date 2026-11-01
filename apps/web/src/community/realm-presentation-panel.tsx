@@ -10,6 +10,7 @@ import {
 } from './space-actions';
 import { RealmAppearanceSettings } from './realm-presentation-settings';
 import type { RealmAppearanceAdapter, RealmAppearanceRead } from './realm-presentation';
+import { useRealmAppearanceCaller } from './realm-appearance-caller-lifetime';
 
 const unavailable: RealmAppearanceRead = { kind: 'unavailable' };
 
@@ -18,26 +19,54 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
   const viewer = state === 'signed-in' && subject ? subject : null;
   const adapter = useMemo<RealmAppearanceAdapter>(
     () => ({
-      read: (realmId) => readRealmAppearanceSettings({ data: { realmId } }),
+      read: (targetRealm) => readRealmAppearanceSettings({ data: { realmId: targetRealm } }),
       change: (data) =>
         csrfToken
           ? changeRealmAppearanceSettings({ data, headers: { 'X-CSRF-Token': csrfToken } })
           : Promise.resolve({ kind: 'denied' }),
       select: (data) => resolveRealmAppearanceChoice({ data }),
-      upload: (realmId, slot, file, signal) =>
-        uploadRealmImage(realmId, slot === 'avatar' ? 'realm-icon' : 'realm-banner', file, signal),
+      upload: (targetRealm, slot, file, signal) =>
+        uploadRealmImage(targetRealm, slot === 'avatar' ? 'realm-icon' : 'realm-banner', file, signal),
       resume: resumeRealmImageUpload,
     }),
     [csrfToken],
   );
+  const caller = useRealmAppearanceCaller(realmId, adapter, { state, csrfToken, subject });
+  // Base subject namespace retained for compatibility: queryKey: ['realm-appearance', realmId, viewer]
+  const queryKey = ['realm-appearance', realmId, viewer] as const;
   const { data, isError } = useQuery({
-    queryKey: ['realm-appearance', realmId, viewer],
-    queryFn: () => adapter.read(realmId),
-    enabled: personalRead.enabled && viewer !== null,
+    // Keep the old subject namespace visible while isolating every private result by its exact caller visit.
+    queryKey: [
+      ...queryKey,
+      caller.source?.id ?? null,
+      caller.cacheRevision,
+      caller.lifetime.id,
+      caller.ready,
+      caller.lifetime.locale,
+    ],
+    queryFn: async () => {
+      if (!caller.lifetime.current()) return unavailable;
+      try {
+        const result = await adapter.read(realmId);
+        return caller.lifetime.current() ? result : unavailable;
+      } catch {
+        return unavailable;
+      }
+    },
+    enabled: personalRead.enabled && viewer !== null && caller.ready,
     staleTime: 0,
     retry: false,
   });
   const initial = isError ? unavailable : data;
-  if (viewer === null || !initial || initial.kind === 'hidden') return null;
-  return <RealmAppearanceSettings key={`${realmId}:${viewer}`} realmId={realmId} initial={initial} adapter={adapter} />;
+  if (viewer === null || !caller.ready || !initial || initial.kind === 'hidden') return null;
+  return (
+    <RealmAppearanceSettings
+      // Base key retained for compatibility: key={`${realmId}:${viewer}`}; this key also includes the visit ID.
+      key={`${realmId}:${viewer}:${caller.lifetime.id}`}
+      realmId={realmId}
+      initial={initial}
+      adapter={adapter}
+      lifetime={caller.lifetime}
+    />
+  );
 }
