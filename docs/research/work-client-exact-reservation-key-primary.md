@@ -340,6 +340,12 @@ High entropy makes `a` close to `q`; a long common prefix makes `q` large even w
 Deleting the last reference makes `z` large. Repeated equal inserts still traverse `q` transitions.
 No digest-shaped adversary changes correctness, but it also cannot remove those charges.
 
+Here `N` counts logical indexed records. Rows, point probes, SQL statements, returned/retained value bytes,
+and index traversal/copy work are distinct measures. Ordinary index splits, WAL and fixed tuple changes are
+engine work attached to the charged operations; repeated explicitly designed branch searches and suffix copies
+are not covered by the architecture's exclusion. Only invisible MVCC visibility/version skipping and engine
+vacuum maintenance are excluded. An `engineRequests` allowance of zero does not mean zero PostgreSQL work.
+
 For `d` changes, write `B=sum(old/new changed native input bytes)` and retain the actual extracted lengths
 separately as `E`. Even assuming extraction and buffer processing linear in `B+E`, the bound is
 `O(d log N + E log N + B)`, not the requested uniform `O(d log N + B)`.
@@ -419,11 +425,14 @@ recompress it. That last copy can involve surviving key bytes, so “delete only
 assumed from a radix-tree name. Rax supplies no PostgreSQL WAL, MVCC, rollback, source-half triggers or
 cross-process lock protocol. Embedding the unchanged in-memory structure in a function is not persistence.
 
-The String B-tree paper gives a positive external-memory string-dictionary route: dynamic string operations
-combine string-length block work with logarithmic index navigation using prefix information and Patricia
-structure. Its dictionary problem must be distinguished from the paper's suffix/substring update problem.
-Those results do not describe PostgreSQL's existing B-tree tuple format or an available SQL extension.
-They refute a universal impossibility claim; they do not install a storage engine here.
+The String B-tree paper gives a positive external-memory string-dictionary route. Its Problem 1, pp. 239–240
+and section 2.1, inserts/deletes an `m`-character string in `O(m/b + log_b k)` worst-case disk accesses,
+where `b` is the block capacity and `k` the number of strings. Prefix search costs
+`O((pattern_length + output_count)/b + log_b k)`. Index space is `Theta(k/b)` blocks, in addition to string
+storage. Prefix information and Patricia structures prevent repeatedly rescanning whole strings at each level.
+These are the relevant dictionary bounds, not the different suffix/substring update bound in Problem 2.
+They do not describe PostgreSQL's existing B-tree tuple format or an available SQL extension. They refute a
+universal impossibility claim; they do not install a storage engine here.
 
 A serious native producer would need all of the following as inspectable code and literal prices:
 
@@ -498,6 +507,15 @@ Repair is an explicitly owned bounded write operation using the same current-row
 successor polling. A schema/coverage mismatch refuses admission. Initial backfill necessarily visits retained
 input once; this is total job work `O(total inputs)`, not a constant installer transaction or a lookup cost.
 GC uses local references and the released old path, not a later scan of all prefixes or account associations.
+
+Copy custody must explicitly inventory the native status and input, minimized source-state and orphan input
+associations, parent/child candidates, group records, eligible records, account-to-native locators, dictionary
+bytes/nodes and backfill progress. Each account association must be reachable from its authoritative locator
+through bounded keys. Deletion removes its source references and candidate/eligible copies in the original
+native deletion transaction. Shared dictionary prefixes survive only while another live source reference needs
+them; their last release reclaims the path. Progress retains cursors/version metadata, not another payload
+archive. Free interval records contain storage numbers only and disappear with an empty allocation range.
+This inventory is a producer requirement, not permission to infer physical absence from projection emptiness.
 
 Native `advanceWorkflowWriterRestoreGeneration` rotates its own writer-domain singleton, after preserving
 permanent closure fences. It does not rebuild this projection. Restore must additionally invalidate the Work
