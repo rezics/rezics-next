@@ -214,11 +214,10 @@ type ThreadSubmissionContext =
 
 function cloneSubmissionContext(context: ThreadSubmissionContext | undefined): ThreadSubmissionContext | undefined {
   if (!context) return undefined;
-  return 'kind' in context && context.kind === 'review'
-    ? {
-        kind: 'review',
-        subjectId: context.subjectId,
-        ...(context.voteCitation ? { voteCitation: { ...context.voteCitation } } : {}),
-      }
-    : { subjectIds: [...context.subjectIds] };
+  if ('subjectIds' in context) return { subjectIds: [...context.subjectIds] };
+  return {
+    kind: 'review',
+    subjectId: context.subjectId,
+    ...(context.voteCitation ? { voteCitation: { ...context.voteCitation } } : {}),
+  };
 }
