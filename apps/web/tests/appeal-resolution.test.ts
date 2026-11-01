@@ -27,7 +27,8 @@ mock.module('@tanstack/react-start', () => ({
           headers.set('cookie', `__Host-rezics_session=${'a'.repeat(43)}`);
           headers.set('origin', 'https://site.test');
           actionRequest = new Request('https://site.test/en/boards/moderation', {
-            method: input?.data ? 'POST' : 'GET', headers,
+            method: input?.data ? 'POST' : 'GET',
+            headers,
           });
           return invoke(input as never);
         };
@@ -39,7 +40,10 @@ mock.module('@tanstack/react-start', () => ({
     let server: (...args: never[]) => unknown;
     let client: (...args: never[]) => unknown;
     const chain = {
-      server(handler: typeof server) { server = handler; return chain; },
+      server(handler: typeof server) {
+        server = handler;
+        return chain;
+      },
       client(handler: typeof client) {
         client = handler;
         return (...args: never[]) => (typeof window === 'undefined' ? server : client)(...args);
@@ -170,13 +174,21 @@ test('reviewers see the confirmed upheld or reversed statement and authority fai
 // Authored for integration; intentionally UNRUN in the implementation worker's typing-only attempt.
 test('The actual AppealResolution form freezes an uncertain command and explicitly retries its exact payload and key without permitting a contradictory new resolution or crossing viewer retirement', async () => {
   const { dirname } = await import('node:path');
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/boards/moderation' });
   const globals = {
-    window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, HTMLTextAreaElement: window.HTMLTextAreaElement,
-    Element: window.Element, Node: window.Node, MutationObserver: window.MutationObserver,
-    getComputedStyle: window.getComputedStyle.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -197,14 +209,25 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
   const originalSession = { state: 'signed-in' as const, subject: 'reviewer', csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' };
   let authorizations = 0;
   Object.assign(environment, {
-    KERNEL_ORIGIN: 'https://kernel.test', AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test',
-    WEBSITE_SCOPES: 'openid', WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
+    KERNEL_ORIGIN: 'https://kernel.test',
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: '{}',
     SESSIONS: {
       idFromName: (name: string) => name,
-      get: () => ({ credential: async () => {
-        authorizations++;
-        return { status: 'active', subject: 'reviewer', accessToken: 'reviewer', csrfToken: originalSession.csrfToken };
-      } }),
+      get: () => ({
+        credential: async () => {
+          authorizations++;
+          return {
+            status: 'active',
+            subject: 'reviewer',
+            accessToken: 'reviewer',
+            csrfToken: originalSession.csrfToken,
+          };
+        },
+      }),
     },
   });
   const recorded = createStoryRecordedKernelFetch();
@@ -215,48 +238,83 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
   let lose = true;
   let release!: () => void;
   let gate: Promise<void> | null = null;
-  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
-    if (request.method !== 'POST') return recorded(request);
-    const call = {
-      path: new URL(request.url).pathname, body: await request.text(),
-      key: request.headers.get('idempotency-key'), authorization: request.headers.get('authorization'),
-    };
-    expect(call.path).toMatch(/^\/v1\/moderation-appeals\/[0-9a-f-]+:resolve$/u);
-    expect(call.authorization).toBe('Bearer reviewer');
-    validateModerationKey(JSON.parse(call.key!));
-    calls.push(call);
-    const payload = call.path + call.body;
-    if (!receipts.has(call.key!)) { receipts.set(call.key!, payload); effects++; }
-    else expect(receipts.get(call.key!)).toBe(payload);
-    if (gate) await gate;
-    if (lose) { lose = false; throw new TypeError('Response lost after commit'); }
-    return Response.json({ id: call.path.split('/').at(-1)!.replace(':resolve', '') });
-  }, { preconnect() {} }) as typeof fetch;
+  globalThis.fetch = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (request.method !== 'POST') return recorded(request);
+      const call = {
+        path: new URL(request.url).pathname,
+        body: await request.text(),
+        key: request.headers.get('idempotency-key'),
+        authorization: request.headers.get('authorization'),
+      };
+      expect(call.path).toMatch(/^\/v1\/moderation-appeals\/[0-9a-f-]+:resolve$/u);
+      expect(call.authorization).toBe('Bearer reviewer');
+      validateModerationKey(JSON.parse(call.key!));
+      calls.push(call);
+      const payload = call.path + call.body;
+      if (!receipts.has(call.key!)) {
+        receipts.set(call.key!, payload);
+        effects++;
+      } else expect(receipts.get(call.key!)).toBe(payload);
+      if (gate) await gate;
+      if (lose) {
+        lose = false;
+        throw new TypeError('Response lost after commit');
+      }
+      return Response.json({ id: call.path.split('/').at(-1)!.replace(':resolve', '') });
+    },
+    { preconnect() {} },
+  ) as typeof fetch;
   const id = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
   let generation = 0;
   let props = { appealId: id, mayResolve: true };
-  const flush = () => act(async () => { await new Promise((done) => setTimeout(done, 0)); });
+  const flush = () =>
+    act(async () => {
+      await new Promise((done) => setTimeout(done, 0));
+    });
   const render = async () => {
-    await act(async () => root.render(createElement(QueryClientProvider, { client: cache },
-      createElement(AppealResolution, { ...props, key: generation }))));
+    await act(async () =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: cache },
+          createElement(AppealResolution, { ...props, key: generation }),
+        ),
+      ),
+    );
     await flush();
   };
   const button = (name: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === name)!;
-  const click = async (name: string) => { await act(async () => button(name).click()); await flush(); };
-  const type = async () => { await act(async () => user.type(host.querySelector('textarea')!, '  Private independent review.  ')); };
-  const hold = () => { gate = new Promise<void>((done) => { release = done; }); };
+  const click = async (name: string) => {
+    await act(async () => button(name).click());
+    await flush();
+  };
+  const type = async () => {
+    await act(async () => user.type(host.querySelector('textarea')!, '  Private independent review.  '));
+  };
+  const hold = () => {
+    gate = new Promise<void>((done) => {
+      release = done;
+    });
+  };
   try {
     cache.setQueryData(sessionQuery.queryKey, originalSession);
     hold();
     await render();
     await type();
     const reverse = button(m.moderation_appeal_reverse_action());
-    await act(async () => { reverse.click(); reverse.click(); button(m.moderation_appeal_uphold_action()).click(); });
+    await act(async () => {
+      reverse.click();
+      reverse.click();
+      button(m.moderation_appeal_uphold_action()).click();
+    });
     await flush();
     expect(calls).toHaveLength(1);
     expect(host.querySelector('textarea')!.disabled).toBe(true);
-    await act(async () => { release(); });
+    await act(async () => {
+      release();
+    });
     gate = null;
     await flush();
     expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.moderation_appeal_intent_uncertain());
@@ -291,15 +349,20 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
       await click(m.moderation_appeal_reverse_action());
       const before = calls.length;
       await act(async () => {
-        if (retirement === 'viewer') cache.setQueryData(sessionQuery.queryKey, { ...originalSession, subject: 'another-reviewer' });
-        if (retirement === 'session') cache.setQueryData(sessionQuery.queryKey, { ...originalSession, csrfToken: 'BBBBBBBBBBBBBBBBBBBBBA' });
-        if (retirement === 'signed-out') cache.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null, subject: null });
+        if (retirement === 'viewer')
+          cache.setQueryData(sessionQuery.queryKey, { ...originalSession, subject: 'another-reviewer' });
+        if (retirement === 'session')
+          cache.setQueryData(sessionQuery.queryKey, { ...originalSession, csrfToken: 'BBBBBBBBBBBBBBBBBBBBBA' });
+        if (retirement === 'signed-out')
+          cache.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null, subject: null });
       });
       if (retirement === 'admission') props = { ...props, mayResolve: false };
       if (retirement === 'appeal') props = { ...props, appealId: id.replace(/1$/, '2') };
       if (retirement === 'unmount') await act(async () => root.render(null));
       else await render();
-      await act(async () => { release(); });
+      await act(async () => {
+        release();
+      });
       gate = null;
       await flush();
       expect(host.textContent).not.toContain('Private independent review.');

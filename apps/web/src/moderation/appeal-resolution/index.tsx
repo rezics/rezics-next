@@ -36,7 +36,8 @@ export function AppealResolution({
   const [, redraw] = useReducer((version: number) => version + 1, 0);
   const mounted = useRef(true);
   const session = useSession();
-  const viewer = session.state === 'unknown' ? null : JSON.stringify([session.state, session.subject, session.csrfToken]);
+  const viewer =
+    session.state === 'unknown' ? null : JSON.stringify([session.state, session.subject, session.csrfToken]);
   intent.synchronize(appealId, viewer, mayResolve);
   useEffect(() => {
     mounted.current = true;
@@ -44,15 +45,18 @@ export function AppealResolution({
       mounted.current = false;
     };
   }, []);
-  const admitted = mayResolve &&
-    ((session.state === 'signed-in' && Boolean(session.subject)) || (session.state === 'unknown' && onResolve !== resolveAppeal));
+  const admitted =
+    mayResolve &&
+    ((session.state === 'signed-in' && Boolean(session.subject)) ||
+      (session.state === 'unknown' && onResolve !== resolveAppeal));
   const pending = intent.phase === 'pending';
   const uncertain = intent.phase === 'uncertain';
   const terminal = intent.phase === 'settled';
   const response = intent.result;
-  const result: Resolution | null | undefined = response?.state === 'resolved'
-    ? { outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed', statement: response.statement }
-    : resolution;
+  const result: Resolution | null | undefined =
+    response?.state === 'resolved'
+      ? { outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed', statement: response.statement }
+      : resolution;
   const count = Array.from(statement.trim()).length;
   const message = uncertain
     ? m.moderation_appeal_intent_uncertain()
