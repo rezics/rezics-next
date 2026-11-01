@@ -31,7 +31,7 @@ export async function loadShelfTypes(
 ): Promise<ShelfTypesView> {
   const { cursor } = validateTypesRead(input);
   try {
-    await prepareSession(request, sessionEnv);
+    if (await prepareSession(request, sessionEnv)) return { state: 'signed-out' };
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'signed-out' };
     const result = await client.libraryShelfTypes.get({

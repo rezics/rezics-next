@@ -55,7 +55,7 @@ export async function libraryEntryFormResponse(
   try {
     if (request.method !== 'POST')
       return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'POST' });
-    await prepareSession(request, sessionEnv);
+    if (await prepareSession(request, sessionEnv)) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
     const authorization = viewerCredential(request);
     if (!authorization) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
     const form = await boundedForm(request);
@@ -80,7 +80,10 @@ export async function libraryEntryFormResponse(
     )
       return problemResponse(problem(400, 'invalid_request', 'Invalid Request'));
     // Old kernels advertise the group alone; only this explicit operation enables the new form path.
-    const exposure = await client.platform.exposure.get({ headers: { authorization } });
+    const exposure = await client.platform.exposure.get({
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
     if (exposure.error || !exposure.data?.admitted.includes('library_entry.restore' as never))
       return problemResponse(problem(403, 'platform_closed', 'Platform Closed'));
     const locale = locales.find((value) => value === single('locale')) ?? 'en';

@@ -152,7 +152,7 @@ function writeHeaders(authorization: string, idempotencyKey: string) {
 }
 
 async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promise<string | null> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return null;
   return viewerCredential(request);
 }
 
@@ -175,6 +175,7 @@ export async function readEntryPage(
   const result = await client.libraryEntries.get({
     query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort, ...(type ? { type } : {}) },
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   if (sort) {
     const status = statusOf(result);
@@ -237,7 +238,7 @@ export async function loadPersonalLibrary(
     direction?: ShelfSort['direction'];
   },
 ): Promise<PersonalLibraryView> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { signedIn: false };
   const authorization = viewerCredential(request);
   if (!authorization) return { signedIn: false };
   const state = libraryEntryStateWrite(input.state);
@@ -252,11 +253,11 @@ export async function loadPersonalLibrary(
   let page: Awaited<ReturnType<typeof readEntryPage>>;
   try {
     try {
-      page = await readEntryPage(client, authorization, input.cursor, state, undefined, sort, type);
+      page = await readEntryPage(client, authorization, input.cursor, state, 20, sort, type);
     } catch (error) {
       if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
       cursorReset = true;
-      page = await readEntryPage(client, authorization, undefined, state, undefined, sort, type);
+      page = await readEntryPage(client, authorization, undefined, state, 20, sort, type);
     }
   } catch (error) {
     const readState = isPlatformClosedError(error)
@@ -299,6 +300,7 @@ async function reloadEntry(
   const result = await client.libraryEntries({ subjectId }).get({
     query: libraryFullQuery(),
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
   if (result.error || result.data == null) {
     const status = statusOf(result);
