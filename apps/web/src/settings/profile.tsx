@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useLocation } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -130,10 +131,17 @@ export function ProfileFeedback({
 }
 
 export function ProfileSection() {
+  const location = useLocation();
   const { editor, writable, isCurrent } = useProfileEditor();
+  const previewActive = new URL(location.publicHref, 'https://rezics.local').hash === '#profile';
   return (
     <ProfileNavigation editor={editor} writable={writable} isCurrent={isCurrent}>
-      <ProfileCard key={writable ? 'signed-in' : 'unavailable'} editor={editor} writable={writable} />
+      <ProfileCard
+        key={writable ? 'signed-in' : 'unavailable'}
+        editor={editor}
+        writable={writable}
+        previewActive={previewActive}
+      />
     </ProfileNavigation>
   );
 }
@@ -141,11 +149,13 @@ export function ProfileSection() {
 export function ProfileCard({
   editor,
   writable = true,
+  previewActive = false,
   avatarUpload,
   avatarResume,
 }: {
   editor: ProfileEditor;
   writable?: boolean;
+  previewActive?: boolean;
   avatarUpload?: AvatarUpload;
   avatarResume?: AvatarResume;
 }) {
@@ -334,7 +344,7 @@ export function ProfileCard({
                 fieldError={fieldError}
               />
             </div>
-            {profile && !closed ? (
+            {previewActive && profile && !closed ? (
               <ProfilePreview
                 displayName={profile.displayName}
                 biography={profile.biography}
