@@ -244,7 +244,7 @@ export class BoardPageCaller {
   private queryDataUpdateCount: number | undefined;
   private stopQueryWatching: (() => void) | undefined;
   private result?: BoardPageLoadResult;
-  private pendingRead?: BoardPageRead;
+  private pendingRead: BoardPageRead | undefined;
   private retired = false;
   private connected = false;
   private connection = 0;

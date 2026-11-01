@@ -211,7 +211,7 @@ class MyRealmsSessionSource {
   }
 
   ownsVisitGeneration(caller: MyRealmsCaller) {
-    return this.visitGeneration === caller.localVisitGeneration();
+    return this.visitGeneration === caller.capturedVisitGeneration();
   }
 
   current(caller: MyRealmsCaller) {
@@ -449,7 +449,7 @@ export class MyRealmsCaller {
     return this.localSourceRevision;
   }
 
-  localVisitGeneration() {
+  capturedVisitGeneration() {
     return this.localVisitGeneration;
   }
 
