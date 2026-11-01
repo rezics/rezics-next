@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
-import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { useCallback, useRef, useState } from 'react';
+import { expect, fireEvent, fn, userEvent, waitFor, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
 import { metaText } from './meta-line.tsx';
 import {
@@ -423,5 +423,441 @@ export const Unrated: Story = {
     await expect(canvas.getByRole('slider', { name: 'Your rating Not rated' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Clear rating' })).toBeDisabled();
     await expect(canvas.queryByText('Your rating could not be saved.')).not.toBeInTheDocument();
+  },
+};
+
+interface DeferredRatingSave {
+  id: number;
+  callback: string;
+  units: number | null;
+  status: 'pending' | 'resolved' | 'rejected';
+  resolve: () => void;
+  reject: () => void;
+}
+
+interface RatingSaveRow {
+  id: number;
+  callback: string;
+  units: number | null;
+  status: DeferredRatingSave['status'];
+}
+
+function ConnectedRatingInputJourney() {
+  const [value, setValue] = useState<number | null>(null);
+  const [disabled, setDisabled] = useState(false);
+  const [mounted, setMounted] = useState(true);
+  const [callbackVersion, setCallbackVersion] = useState(0);
+  const [scaleVersion, setScaleVersion] = useState<'A' | 'B'>('A');
+  const [equalScaleRevision, setEqualScaleRevision] = useState(0);
+  const [localized, setLocalized] = useState(false);
+  const [rows, setRows] = useState<RatingSaveRow[]>([]);
+  const pending = useRef<DeferredRatingSave[]>([]);
+  const nextSaveId = useRef(0);
+  const scale: RatingScale =
+    scaleVersion === 'A'
+      ? { minimum: 0, maximum: 20, unitsPerPoint: 2 }
+      : { minimum: 0, maximum: 24, unitsPerPoint: 2 };
+  const labels = localized
+    ? {
+        label: 'Votre évaluation',
+        outOf: 'sur {max}',
+        unrated: 'Non noté',
+        clear: 'Effacer',
+        failed: 'Échec de l’enregistrement.',
+      }
+    : undefined;
+  const locale = localized ? 'fr-FR' : 'en';
+
+  const save = useCallback(
+    (units: number | null) =>
+      new Promise<void>((resolve, reject) => {
+        const entry: DeferredRatingSave = {
+          id: ++nextSaveId.current,
+          callback: `callback-${callbackVersion}`,
+          units,
+          status: 'pending',
+          resolve,
+          reject: () => reject(new Error('offline')),
+        };
+        pending.current.push(entry);
+        setRows(pending.current.map(({ id, callback, units: savedUnits, status }) => ({
+          id,
+          callback,
+          units: savedUnits,
+          status,
+        })));
+      }),
+    [callbackVersion],
+  );
+
+  const settle = (id: number, outcome: 'resolved' | 'rejected') => {
+    const entry = pending.current.find((call) => call.id === id);
+    if (entry === undefined || entry.status !== 'pending') return;
+    entry.status = outcome;
+    setRows(pending.current.map(({ id: saveId, callback, units, status }) => ({ id: saveId, callback, units, status })));
+    if (outcome === 'resolved') entry.resolve();
+    else entry.reject();
+  };
+
+  return (
+    <div className="grid max-w-xl gap-4" data-slot="rating-input-lifetime-journey">
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => setCallbackVersion((version) => version + 1)} type="button">
+          Replace callback
+        </button>
+        <button onClick={() => setLocalized(true)} type="button">
+          Update locale and labels
+        </button>
+        <button onClick={() => setEqualScaleRevision((revision) => revision + 1)} type="button">
+          Allocate equal scale
+        </button>
+        <button onClick={() => setValue(17)} type="button">
+          Echo 8.5
+        </button>
+        <button onClick={() => setValue(15)} type="button">
+          Echo 7.5
+        </button>
+        <button onClick={() => setValue(null)} type="button">
+          Echo clear
+        </button>
+        <button onClick={() => setValue(14)} type="button">
+          Set controlled 7
+        </button>
+        <button onClick={() => setScaleVersion('B')} type="button">
+          Use scale B
+        </button>
+        <button onClick={() => setScaleVersion('A')} type="button">
+          Use scale A
+        </button>
+        <button onClick={() => setDisabled(true)} type="button">
+          Disable input
+        </button>
+        <button onClick={() => setDisabled(false)} type="button">
+          Enable input
+        </button>
+        <button onClick={() => setMounted(false)} type="button">
+          Unmount primary
+        </button>
+        <button onClick={() => setMounted(true)} type="button">
+          Mount primary
+        </button>
+      </div>
+      <p data-slot="equal-scale-revision">Equal scale allocation {equalScaleRevision}</p>
+      <ol aria-label="Primary save calls" data-slot="primary-save-log">
+        {rows.map((row) => (
+          <li key={row.id}>
+            {row.id}|{row.callback}|{row.units === null ? 'null' : row.units}|{row.status}
+          </li>
+        ))}
+      </ol>
+      <div className="flex gap-2">
+        {rows
+          .filter((row) => row.status === 'pending')
+          .map((row) => (
+            <span key={row.id}>
+              <button onClick={() => settle(row.id, 'resolved')} type="button">
+                Resolve save {row.id}
+              </button>
+              <button onClick={() => settle(row.id, 'rejected')} type="button">
+                Reject save {row.id}
+              </button>
+            </span>
+          ))}
+      </div>
+      <div data-slot="primary-rating">
+        {mounted ? (
+          <RatingInput disabled={disabled} labels={labels} locale={locale} onChange={save} scale={scale} value={value} />
+        ) : null}
+      </div>
+      <IndependentRatingInput />
+    </div>
+  );
+}
+
+function IndependentRatingInput() {
+  const [value, setValue] = useState<number | null>(12);
+  const [saves, setSaves] = useState(0);
+  const save = useCallback(async (units: number | null) => {
+    setSaves((count) => count + 1);
+    setValue(units);
+  }, []);
+  return (
+    <div data-slot="independent-rating">
+      <RatingInput locale="en" onChange={save} scale={scale} value={value} />
+      <output data-slot="independent-save-count">{saves}</output>
+    </div>
+  );
+}
+
+export const ConnectedSaveLifetime: Story = {
+  args: inputArgs,
+  render: () => <ConnectedRatingInputJourney />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const primary = canvasElement.querySelector('[data-slot="primary-rating"]') as HTMLElement;
+    const secondary = canvasElement.querySelector('[data-slot="independent-rating"]') as HTMLElement;
+    const callLines = () =>
+      Array.from(canvasElement.querySelectorAll('[data-slot="primary-save-log"] li'), (row) => row.textContent ?? '');
+    const expectCalls = async (...expected: string[]) => waitFor(() => expect(callLines()).toEqual(expected));
+    const output = (region: HTMLElement) => region.querySelector('[data-slot="rating-value"]') as HTMLElement;
+    const slider = (region: HTMLElement) => within(region).getByRole('slider');
+    const finish = async (id: number, result: 'Resolve' | 'Reject' = 'Resolve') =>
+      userEvent.click(canvas.getByRole('button', { name: `${result} save ${id}` }));
+
+    await expect(canvas.getByRole('slider', { name: 'Your rating Not rated' })).toBeVisible();
+    await expect(output(primary)).toHaveTextContent('Not rated');
+    await expect(within(primary).getByRole('button', { name: 'Clear rating' })).toBeDisabled();
+
+    slider(primary).focus();
+    await userEvent.keyboard('{End}');
+    await expectCalls('1|callback-0|20|pending');
+    await expect(output(primary)).toHaveTextContent('10 out of 10');
+    await expect(primary).toHaveAttribute('aria-busy', 'true');
+    await userEvent.keyboard('{ArrowLeft}');
+    await expect(output(primary)).toHaveTextContent('9.5 out of 10');
+    await expect(callLines()).toHaveLength(1);
+
+    const oldSliderBeforeDisable = slider(primary);
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace callback' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Update locale and labels' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Allocate equal scale' }));
+    await expect(canvas.getByRole('slider', { name: 'Votre évaluation' })).toBeVisible();
+    await expect(output(primary)).toHaveTextContent('9,5 sur 10');
+    await expect(oldSliderBeforeDisable.isConnected).toBe(true);
+    await expect(canvas.getByText('Equal scale allocation 1')).toBeVisible();
+
+    await finish(1);
+    await expectCalls('1|callback-0|20|resolved', '2|callback-0|19|pending');
+    slider(primary).focus();
+    await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+    await expect(output(primary)).toHaveTextContent('8,5 sur 10');
+    await expect(callLines()).toHaveLength(2);
+    await finish(2);
+    await expectCalls('1|callback-0|20|resolved', '2|callback-0|19|resolved', '3|callback-1|17|pending');
+    await userEvent.click(canvas.getByRole('button', { name: 'Echo 8.5' }));
+    await finish(3);
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+    );
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expect(output(primary)).toHaveTextContent('8,5 sur 10');
+
+    await userEvent.click(within(primary).getByRole('button', { name: 'Effacer' }));
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|pending',
+    );
+    await expect(output(primary)).toHaveTextContent('Non noté');
+    await expect(within(primary).getByRole('button', { name: 'Effacer' })).toBeDisabled();
+    await finish(4);
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await userEvent.click(canvas.getByRole('button', { name: 'Echo clear' }));
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Set controlled 7' }));
+    slider(primary).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(output(primary)).toHaveTextContent('7,5 sur 10');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|pending',
+    );
+    await finish(5, 'Reject');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+    );
+    await expect(within(primary).getByRole('status')).toHaveTextContent('Échec de l’enregistrement.');
+    await expect(output(primary)).toHaveTextContent('7 sur 10');
+    slider(primary).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|pending',
+    );
+    await expect(within(primary).queryByRole('status')).not.toBeInTheDocument();
+    await finish(6);
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await userEvent.click(canvas.getByRole('button', { name: 'Echo 7.5' }));
+
+    const pointerControl = slider(primary).closest('[data-slot="slider"]')?.querySelector('[data-slot="slider-track"]')
+      ?.parentElement as HTMLElement;
+    const pointerBounds = pointerControl.getBoundingClientRect();
+    const pointerX = pointerBounds.left + pointerBounds.width * 0.8;
+    const pointerY = pointerBounds.top + pointerBounds.height / 2;
+    await fireEvent.pointerDown(pointerControl, {
+      button: 0,
+      clientX: pointerX,
+      clientY: pointerY,
+      pointerType: 'mouse',
+    });
+    await expect(output(primary)).toHaveTextContent('8 sur 10');
+    await expect(callLines()).toHaveLength(6);
+    await fireEvent.pointerUp(pointerControl, {
+      button: 0,
+      clientX: pointerX,
+      clientY: pointerY,
+      pointerType: 'mouse',
+    });
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|pending',
+    );
+
+    slider(secondary).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(output(secondary)).toHaveTextContent('6.5 out of 10');
+    await expect(secondary.querySelector('[data-slot="independent-save-count"]')).toHaveTextContent('1');
+    await expect(callLines()).toHaveLength(7);
+
+    slider(primary).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(output(primary)).toHaveTextContent('8,5 sur 10');
+    await expect(callLines()).toHaveLength(7);
+    const retiredSlider = slider(primary);
+    const retiredClear = within(primary).getByRole('button', { name: 'Effacer' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Disable input' }));
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expect(slider(primary)).toBeDisabled();
+    await expect(retiredSlider.isConnected).toBe(false);
+    await userEvent.click(canvas.getByRole('button', { name: 'Enable input' }));
+    await fireEvent.keyDown(retiredSlider, { key: 'End', code: 'End' });
+    await fireEvent.click(retiredClear);
+    await expect(callLines()).toHaveLength(7);
+
+    slider(primary).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|pending',
+      '8|callback-1|16|pending',
+    );
+    await finish(7, 'Reject');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|rejected',
+      '8|callback-1|16|pending',
+    );
+    await expect(primary).toHaveAttribute('aria-busy', 'true');
+    await expect(output(primary)).toHaveTextContent('8 sur 10');
+    await expect(within(primary).queryByRole('status')).not.toBeInTheDocument();
+    await finish(8);
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+
+    slider(primary).focus();
+    await userEvent.keyboard('{End}');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|rejected',
+      '8|callback-1|16|resolved',
+      '9|callback-1|20|pending',
+    );
+    await userEvent.keyboard('{ArrowLeft}');
+    const oldScaleSlider = slider(primary);
+    await userEvent.click(canvas.getByRole('button', { name: 'Use scale B' }));
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expect(output(primary)).toHaveTextContent('7,5 sur 12');
+    await userEvent.click(canvas.getByRole('button', { name: 'Use scale A' }));
+    await expect(output(primary)).toHaveTextContent('7,5 sur 10');
+    await fireEvent.keyDown(oldScaleSlider, { key: 'End', code: 'End' });
+    await expect(callLines()).toHaveLength(9);
+    await finish(9);
+    await expect(callLines()).toHaveLength(9);
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+
+    slider(primary).focus();
+    await userEvent.keyboard('{End}');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|rejected',
+      '8|callback-1|16|resolved',
+      '9|callback-1|20|resolved',
+      '10|callback-1|20|pending',
+    );
+    await finish(10);
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
+
+    slider(primary).focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|rejected',
+      '8|callback-1|16|resolved',
+      '9|callback-1|20|resolved',
+      '10|callback-1|20|resolved',
+      '11|callback-1|19|pending',
+    );
+    await userEvent.keyboard('{ArrowLeft}');
+    const unmountedSlider = slider(primary);
+    const unmountedClear = within(primary).getByRole('button', { name: 'Effacer' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Unmount primary' }));
+    await expect(within(primary).queryByRole('slider')).not.toBeInTheDocument();
+    await fireEvent.keyDown(unmountedSlider, { key: 'End', code: 'End' });
+    await fireEvent.click(unmountedClear);
+    await finish(11);
+    await expect(callLines()).toHaveLength(11);
+    await userEvent.click(canvas.getByRole('button', { name: 'Mount primary' }));
+    await expect(output(primary)).toHaveTextContent('7,5 sur 10');
+    slider(primary).focus();
+    await userEvent.keyboard('{End}');
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|rejected',
+      '8|callback-1|16|resolved',
+      '9|callback-1|20|resolved',
+      '10|callback-1|20|resolved',
+      '11|callback-1|19|resolved',
+      '12|callback-1|20|pending',
+    );
+    await finish(12);
+    await expect(primary).toHaveAttribute('aria-busy', 'false');
   },
 };

@@ -1,9 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Slider } from '@base-ui/react/slider';
 import { cn } from '../utils.ts';
 import { MetaLine } from './meta-line.tsx';
+
+const useSafeLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /**
  * Rating display and input. shadcn has no rating pattern (its `chart` is a general plotting layer, and a vote
@@ -460,6 +462,41 @@ interface Choice {
   units: number | null;
 }
 
+interface SaveOperation {
+  id: number;
+  units: number | null;
+  onChange: RatingInputProps['onChange'];
+}
+
+interface SaveRunner {
+  id: number;
+}
+
+interface RatingInputVisit {
+  id: number;
+  disabled: boolean;
+  scale: RatingScale;
+  retired: boolean;
+  choice: Choice | null;
+  draft: number | null;
+  failed: boolean;
+  active: SaveOperation | null;
+  queued: SaveOperation | null;
+  runner: SaveRunner | null;
+}
+
+function copyScale(scale: RatingScale): RatingScale {
+  return { minimum: scale.minimum, maximum: scale.maximum, unitsPerPoint: scale.unitsPerPoint };
+}
+
+function sameScale(left: RatingScale, right: RatingScale): boolean {
+  return (
+    Object.is(left.minimum, right.minimum) &&
+    Object.is(left.maximum, right.maximum) &&
+    Object.is(left.unitsPerPoint, right.unitsPerPoint)
+  );
+}
+
 /**
  * The control that writes the reader's one vote: a slider over the question's scale and a clear button. It shows the
  * vote at once, rolls back with an announced message when saving fails, and is the same on every surface.
@@ -469,51 +506,142 @@ export function RatingInput(props: RatingInputProps) {
   const labels = resolveLabels(ratingInputLabels, props.labels);
   const id = useId();
   const propsRef = useRef(props);
-  propsRef.current = props;
-  const labelsRef = useRef(labels);
-  labelsRef.current = labels;
-  const [choice, setChoice] = useState<Choice | null>(null);
-  const [draft, setDraft] = useState<number | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const running = useRef(false);
-  const queued = useRef<Choice | null>(null);
+  const mounted = useRef(false);
+  const nextOperationId = useRef(0);
+  const nextRunnerId = useRef(0);
+  const [, setRenderTick] = useState(0);
+  const refresh = () => setRenderTick((tick) => tick + 1);
+  const createVisit = (visitId: number, disabled: boolean, visitScale: RatingScale): RatingInputVisit => ({
+    id: visitId,
+    disabled,
+    scale: copyScale(visitScale),
+    retired: false,
+    choice: null,
+    draft: null,
+    failed: false,
+    active: null,
+    queued: null,
+    runner: null,
+  });
+  const retire = (visit: RatingInputVisit) => {
+    visit.retired = true;
+    visit.choice = null;
+    visit.draft = null;
+    visit.failed = false;
+    visit.queued = null;
+  };
+  const [storedVisit, setStoredVisit] = useState(() => createVisit(1, Boolean(props.disabled), scale));
+  let visit = storedVisit;
+  if (visit.disabled !== Boolean(props.disabled) || !sameScale(visit.scale, scale)) {
+    visit = createVisit(storedVisit.id + 1, Boolean(props.disabled), scale);
+    setStoredVisit(visit);
+  }
+  const currentVisit = useRef<RatingInputVisit | null>(null);
 
-  // Drop the optimistic choice once the controlled value echoes it and nothing is queued.
-  useEffect(() => {
-    if (!busy && choice !== null && choice.units === props.value) setChoice(null);
-  }, [busy, choice, props.value]);
+  useSafeLayoutEffect(() => {
+    propsRef.current = props;
+  });
 
-  const save = async (units: number | null) => {
-    queued.current = { units };
-    setChoice({ units });
-    setDraft(null);
-    setFailure(null);
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
-    try {
-      while (queued.current !== null) {
-        const next = queued.current;
-        queued.current = null;
-        try {
-          await propsRef.current.onChange(next.units);
-        } catch {
-          queued.current = null;
-          setChoice(null);
-          setFailure(labelsRef.current.failed);
+  const isCurrentVisit = (candidate: RatingInputVisit) =>
+    mounted.current && currentVisit.current === candidate && !candidate.retired && !candidate.disabled;
+
+  const startRunner = (candidate: RatingInputVisit) => {
+    if (!isCurrentVisit(candidate) || candidate.runner !== null || candidate.queued === null) return;
+    const runner = { id: ++nextRunnerId.current };
+    candidate.runner = runner;
+
+    const drain = async () => {
+      try {
+        while (isCurrentVisit(candidate) && candidate.queued !== null) {
+          const operation = candidate.queued;
+          candidate.queued = null;
+          candidate.active = operation;
+          refresh();
+          try {
+            // A queued choice keeps the callback it was admitted with, even after a harmless prop rerender.
+            await operation.onChange(operation.units);
+          } catch {
+            if (isCurrentVisit(candidate)) {
+              candidate.queued = null;
+              candidate.choice = null;
+              candidate.draft = null;
+              candidate.failed = true;
+            }
+          } finally {
+            if (candidate.active === operation) candidate.active = null;
+          }
+          if (!isCurrentVisit(candidate)) {
+            candidate.queued = null;
+            break;
+          }
         }
+      } finally {
+        if (candidate.runner === runner) candidate.runner = null;
+        if (isCurrentVisit(candidate)) refresh();
       }
-    } finally {
-      running.current = false;
-      setBusy(false);
-    }
+    };
+
+    void drain();
   };
 
-  const units = draft ?? (choice === null ? props.value : choice.units);
-  const max = number(locale, topOf(scale), [0, 1]);
-  const display = (value: number) => number(locale, value / scale.unitsPerPoint, [0, 1]);
-  const middle = Math.round((scale.minimum + scale.maximum) / 2);
+  const save = (candidate: RatingInputVisit, units: number | null) => {
+    if (!isCurrentVisit(candidate)) return;
+    candidate.queued = {
+      id: ++nextOperationId.current,
+      units,
+      onChange: propsRef.current.onChange,
+    };
+    candidate.choice = { units };
+    candidate.draft = null;
+    candidate.failed = false;
+    refresh();
+    startRunner(candidate);
+  };
+
+  const clear = (candidate: RatingInputVisit) => {
+    if (!isCurrentVisit(candidate)) return;
+    const currentUnits = candidate.draft ?? (candidate.choice === null ? propsRef.current.value : candidate.choice.units);
+    if (currentUnits !== null) save(candidate, null);
+  };
+
+  useSafeLayoutEffect(() => {
+    mounted.current = true;
+    const previous = currentVisit.current;
+    if (previous !== visit) {
+      if (previous !== null) retire(previous);
+      currentVisit.current = visit;
+    } else if (visit.retired && visit.active === null && visit.runner === null) {
+      // StrictMode's development effect replay models an unmount before this visit has admitted any work.
+      visit.retired = false;
+      visit.choice = null;
+      visit.draft = null;
+      visit.failed = false;
+      visit.queued = null;
+    }
+    return () => {
+      if (currentVisit.current === visit) {
+        mounted.current = false;
+        retire(visit);
+      }
+    };
+  }, [visit]);
+
+  // Echoed values display from the controlled prop immediately; the layout effect below only retires their internal choice.
+  const echoedChoice =
+    visit.runner === null &&
+    visit.queued === null &&
+    visit.choice !== null &&
+    visit.choice.units === props.value;
+  useSafeLayoutEffect(() => {
+    if (echoedChoice) visit.choice = null;
+  }, [echoedChoice, props.value, visit]);
+
+  const currentChoice = echoedChoice ? null : visit.choice;
+  const units = visit.draft ?? (currentChoice === null ? props.value : currentChoice.units);
+  const busy = visit.runner !== null;
+  const max = number(locale, topOf(visit.scale), [0, 1]);
+  const display = (value: number) => number(locale, value / visit.scale.unitsPerPoint, [0, 1]);
+  const middle = Math.round((visit.scale.minimum + visit.scale.maximum) / 2);
   const text = units === null ? labels.unrated : `${display(units)} ${fill(labels.outOf, { max })}`;
 
   return (
@@ -523,72 +651,80 @@ export function RatingInput(props: RatingInputProps) {
       data-slot="rating-input"
       data-state={units === null ? 'unrated' : 'rated'}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <span className="font-medium text-sm" id={`${id}-label`}>
-          {labels.label}
-        </span>
-        <div className="flex items-center gap-2">
-          <output
-            aria-live="polite"
-            className={cn('font-semibold tabular-nums', units === null && 'font-normal text-muted-foreground text-sm')}
-            data-slot="rating-value"
-            id={`${id}-value`}
-          >
-            {text}
-          </output>
-          <Button
-            disabled={props.disabled || units === null}
-            onClick={() => void save(null)}
-            size="sm"
-            variant="outline"
-          >
-            {labels.clear}
-          </Button>
+      <Fragment key={visit.id}>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <span className="font-medium text-sm" id={`${id}-label`}>
+            {labels.label}
+          </span>
+          <div className="flex items-center gap-2">
+            <output
+              aria-live="polite"
+              className={cn('font-semibold tabular-nums', units === null && 'font-normal text-muted-foreground text-sm')}
+              data-slot="rating-value"
+              id={`${id}-value`}
+            >
+              {text}
+            </output>
+            <Button
+              disabled={props.disabled || units === null}
+              onClick={() => clear(visit)}
+              size="sm"
+              variant="outline"
+            >
+              {labels.clear}
+            </Button>
+          </div>
         </div>
-      </div>
-      <Slider.Root
-        className={cn(
-          '[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary',
-          units === null &&
-            '**:data-[slot=slider-range]:opacity-0 **:data-[slot=slider-thumb]:bg-muted **:data-[slot=slider-thumb]:ring-primary/50',
-        )}
-        disabled={props.disabled}
-        data-slot="slider"
-        locale={locale}
-        thumbAlignment="edge"
-        // The slider works in displayed points, so assistive technology reads 8.5 rather than the stored 17.
-        max={topOf(scale)}
-        min={scale.minimum / scale.unitsPerPoint}
-        onValueChange={(next) => setDraft(toUnits(next, scale))}
-        onValueCommitted={(next) => void save(toUnits(next, scale))}
-        step={1 / scale.unitsPerPoint}
-        value={[(units ?? middle) / scale.unitsPerPoint]}
-      >
-        <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
-          <Slider.Track
-            data-slot="slider-track"
-            className="relative h-1 w-full grow overflow-hidden rounded-2xl bg-input/90"
-          >
-            <Slider.Indicator data-slot="slider-range" className="h-full bg-primary" />
-          </Slider.Track>
-          <Slider.Thumb
-            // An unrated resting position is not a vote. Name and value text belong to the native range.
-            aria-labelledby={units === null ? `${id}-label ${id}-value` : `${id}-label`}
-            aria-valuetext={text}
-            data-slot="slider-thumb"
-            className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
-          />
-        </Slider.Control>
-      </Slider.Root>
-      <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
-        <span>{display(scale.minimum)}</span>
-        <span>{display(scale.maximum)}</span>
-      </div>
-      {failure === null ? null : (
-        <p className="text-sm" role="status">
-          {failure}
-        </p>
-      )}
+        <Slider.Root
+          className={cn(
+            '[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary',
+            units === null &&
+              '**:data-[slot=slider-range]:opacity-0 **:data-[slot=slider-thumb]:bg-muted **:data-[slot=slider-thumb]:ring-primary/50',
+          )}
+          disabled={props.disabled}
+          data-slot="slider"
+          key={visit.id}
+          locale={locale}
+          thumbAlignment="edge"
+          // The slider works in displayed points, so assistive technology reads 8.5 rather than the stored 17.
+          max={topOf(visit.scale)}
+          min={visit.scale.minimum / visit.scale.unitsPerPoint}
+          onValueChange={(next) => {
+            if (isCurrentVisit(visit)) {
+              visit.draft = toUnits(next, visit.scale);
+              refresh();
+            }
+          }}
+          onValueCommitted={(next) => save(visit, toUnits(next, visit.scale))}
+          step={1 / visit.scale.unitsPerPoint}
+          value={[(units ?? middle) / visit.scale.unitsPerPoint]}
+        >
+          <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
+            <Slider.Track
+              data-slot="slider-track"
+              className="relative h-1 w-full grow overflow-hidden rounded-2xl bg-input/90"
+            >
+              <Slider.Indicator data-slot="slider-range" className="h-full bg-primary" />
+            </Slider.Track>
+            <Slider.Thumb
+              // An unrated resting position is not a vote. Name and value text belong to the native range.
+              aria-labelledby={units === null ? `${id}-label ${id}-value` : `${id}-label`}
+              aria-valuetext={text}
+              data-slot="slider-thumb"
+              className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+            />
+          </Slider.Control>
+        </Slider.Root>
+        <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
+          <span>{display(visit.scale.minimum)}</span>
+          <span>{display(visit.scale.maximum)}</span>
+        </div>
+        {visit.failed ? (
+          <p className="text-sm" role="status">
+            {labels.failed}
+          </p>
+        ) : null}
+      </Fragment>
     </div>
   );
 }
