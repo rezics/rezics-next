@@ -6,6 +6,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { EllipsisIcon } from 'lucide-react';
@@ -21,16 +22,21 @@ import type { LibraryLabelSummary } from './subject-labels';
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
   return (
     <>
-      <ListRowLink data-library-label-link href={shelfHref(locale, { label: label.id })}>
+      <ContentItemTitleLink
+        as={ListRowLink}
+        stretch={false}
+        data-library-label-link
+        href={shelfHref(locale, { label: label.id })}
+      >
         {label.name}
-      </ListRowLink>
-      <span
-        aria-hidden="true"
-        className="min-w-0 flex-1 truncate font-medium text-foreground group-hover:underline group-focus-within:underline"
+      </ContentItemTitleLink>
+      <ContentItemHeading
+        level={2}
+        className="min-w-0 flex-1 line-clamp-2 break-words text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:line-clamp-1 sm:text-lg md:text-xl"
         title={label.name}
       >
         {label.name}
-      </span>
+      </ContentItemHeading>
     </>
   );
 }
@@ -523,8 +529,8 @@ export function LabelsPageView({
                 },
               });
             return (
-              <ListRow key={label.id} className="min-w-0 px-2 py-2">
-                <div className="flex min-w-0 items-center gap-3">
+              <ListRow key={label.id} className="min-w-0 px-2 py-3 sm:py-4">
+                <div className="flex min-w-0 items-start gap-3">
                   <LabelShelfLink label={label} locale={locale} />
                   {hydrated && entries.length ? (
                     <ListRowControl className="shrink-0">
@@ -551,41 +557,43 @@ export function LabelsPageView({
                   ) : null}
                 </div>
                 {!hydrated ? (
-                  <ListRowControl className="flex min-w-0 flex-wrap gap-2">
+                  <div className="flex min-w-0 flex-wrap gap-2">
                     {(['rename', 'delete'] as const).map((operation) => (
                       <LabelExposure key={operation} page={page} operation={operation}>
-                        <details
-                          name="library-label-action"
-                          className="min-w-0 max-w-full open:basis-full"
-                          open={fieldError(operation, label.id) || undefined}
-                        >
-                          <summary
-                            className={buttonVariants({
-                              variant: 'outline',
-                              className: `${actionClass} cursor-pointer`,
-                            })}
+                        <ListRowControl className="min-w-0 max-w-full has-[details[open]]:basis-full">
+                          <details
+                            name="library-label-action"
+                            className="min-w-0 max-w-full open:basis-full"
+                            open={fieldError(operation, label.id) || undefined}
                           >
-                            {operation === 'rename' ? m.library_label_rename() : m.library_label_delete()}
-                          </summary>
-                          <div className="space-y-3 py-3">
-                            {operation === 'delete' ? (
-                              <p className="break-words [overflow-wrap:anywhere]">
-                                {m.library_label_delete_confirmation({ name: label.name })}
-                              </p>
-                            ) : null}
-                            {actionForm(
-                              {
-                                operation,
-                                label,
-                                name: fieldError(operation, label.id) ? (feedback?.name ?? label.name) : label.name,
-                              },
-                              true,
-                            )}
-                          </div>
-                        </details>
+                            <summary
+                              className={buttonVariants({
+                                variant: 'outline',
+                                className: `${actionClass} cursor-pointer`,
+                              })}
+                            >
+                              {operation === 'rename' ? m.library_label_rename() : m.library_label_delete()}
+                            </summary>
+                            <div className="space-y-3 py-3">
+                              {operation === 'delete' ? (
+                                <p className="break-words [overflow-wrap:anywhere]">
+                                  {m.library_label_delete_confirmation({ name: label.name })}
+                                </p>
+                              ) : null}
+                              {actionForm(
+                                {
+                                  operation,
+                                  label,
+                                  name: fieldError(operation, label.id) ? (feedback?.name ?? label.name) : label.name,
+                                },
+                                true,
+                              )}
+                            </div>
+                          </details>
+                        </ListRowControl>
                       </LabelExposure>
                     ))}
-                  </ListRowControl>
+                  </div>
                 ) : null}
               </ListRow>
             );
