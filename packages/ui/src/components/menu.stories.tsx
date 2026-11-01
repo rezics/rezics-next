@@ -447,6 +447,7 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
 
 export const ShelfToolbarCustomFormsDesktop: Story = {
   name: 'Shelf Toolbar Custom Forms Desktop',
+  args: { entries: [] },
   render: () => <ShelfToolbarFormStory />,
   globals: { viewport: { value: 'desktop' } },
   play: customFormRegression,
@@ -454,6 +455,7 @@ export const ShelfToolbarCustomFormsDesktop: Story = {
 
 export const ShelfToolbarCustomFormsPhone: Story = {
   name: 'Shelf Toolbar Custom Forms Phone',
+  args: { entries: [] },
   render: () => <ShelfToolbarFormStory />,
   globals: phone,
   play: async ({ canvasElement }) => {

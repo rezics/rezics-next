@@ -1,8 +1,10 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Button } from '../shadcn/button.tsx';
 import { ToggleGroup, ToggleGroupItem } from '../shadcn/toggle-group.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shadcn/tabs.tsx';
 import { Badge } from '../shadcn/badge.tsx';
+import { Field, FieldLabel } from '../shadcn/field.tsx';
+import { NativeSelect, NativeSelectOption } from '../shadcn/native-select.tsx';
 import { Menu } from './menu.tsx';
 
 type Option = { value: string; label: string };
@@ -31,7 +33,22 @@ export function ShelfTabs({
           ref={tab.value === value ? active : undefined}
           href={tab.href}
           aria-current={tab.value === value ? 'page' : undefined}
-          onClick={() => onValueChange(tab.value)}
+          onClick={(event) => {
+            if (
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey ||
+              event.defaultPrevented
+            )
+              return;
+            const nativeEvent = event.nativeEvent;
+            const nextValue = tab.value;
+            queueMicrotask(() => {
+              if (!nativeEvent.defaultPrevented) onValueChange(nextValue);
+            });
+          }}
           className="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground aria-[current=page]:border-primary aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
         >
           {tab.label}{' '}
@@ -117,33 +134,41 @@ type Props = {
 /** Shelf controls combine shadcn primitives; the registry has no shelf toolbar. */
 export function ShelfToolbar(p: Props) {
   const { labels: l } = p;
+  const sortId = useId();
+  const directionId = useId();
   const sort = (
     <div className="grid min-w-0 gap-3">
-      <label className="grid min-w-0 gap-1 break-words text-sm">
-        <span>{l.sort}</span>
-        <select
-          className="w-full min-w-0 max-w-full rounded-md border bg-background p-2"
+      <Field className="min-w-0 gap-1">
+        <FieldLabel htmlFor={sortId} className="min-w-0 max-w-full whitespace-normal break-words text-sm">
+          {l.sort}
+        </FieldLabel>
+        <NativeSelect
+          id={sortId}
+          className="w-full min-w-0 max-w-full [&>select]:h-11 [&>select]:min-h-11 sm:[&>select]:h-8 sm:[&>select]:min-h-8"
           value={p.sort}
           onChange={(e) => p.onSortChange(e.target.value, p.direction)}
         >
           {p.sorts.map((o) => (
-            <option key={o.value} value={o.value}>
+            <NativeSelectOption key={o.value} value={o.value}>
               {o.label}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
-      </label>
-      <label className="grid min-w-0 gap-1 break-words text-sm">
-        <span>{l.direction}</span>
-        <select
-          className="w-full min-w-0 max-w-full rounded-md border bg-background p-2"
+        </NativeSelect>
+      </Field>
+      <Field className="min-w-0 gap-1">
+        <FieldLabel htmlFor={directionId} className="min-w-0 max-w-full whitespace-normal break-words text-sm">
+          {l.direction}
+        </FieldLabel>
+        <NativeSelect
+          id={directionId}
+          className="w-full min-w-0 max-w-full [&>select]:h-11 [&>select]:min-h-11 sm:[&>select]:h-8 sm:[&>select]:min-h-8"
           value={p.direction}
           onChange={(e) => p.onSortChange(p.sort, e.target.value as 'asc' | 'desc')}
         >
-          <option value="asc">{l.ascending}</option>
-          <option value="desc">{l.descending}</option>
-        </select>
-      </label>
+          <NativeSelectOption value="asc">{l.ascending}</NativeSelectOption>
+          <NativeSelectOption value="desc">{l.descending}</NativeSelectOption>
+        </NativeSelect>
+      </Field>
     </div>
   );
   const filter = (
@@ -164,7 +189,11 @@ export function ShelfToolbar(p: Props) {
         ))}
       </div>
       {p.active.length > 0 && (
-        <Button variant="outline" onClick={p.onClearFilters}>
+        <Button
+          variant="outline"
+          className="min-w-0 max-w-full whitespace-normal break-words text-left"
+          onClick={p.onClearFilters}
+        >
           {l.clearFilters}
         </Button>
       )}
@@ -183,13 +212,13 @@ export function ShelfToolbar(p: Props) {
           className="max-w-full flex-wrap"
         >
           {(['grid', 'list'] as const).map((v) => (
-            <ToggleGroupItem key={v} value={v}>
+            <ToggleGroupItem key={v} value={v} className="max-w-full whitespace-normal break-words text-left">
               {l[v]}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
       </div>
-      <span className="text-sm">{l.density}</span>
+      <span className="min-w-0 max-w-full whitespace-normal break-words text-sm">{l.density}</span>
       <ToggleGroup
         aria-label={l.density}
         value={[p.density]}
@@ -200,7 +229,7 @@ export function ShelfToolbar(p: Props) {
         className="max-w-full flex-wrap"
       >
         {(['small', 'medium', 'large'] as const).map((v) => (
-          <ToggleGroupItem key={v} value={v}>
+          <ToggleGroupItem key={v} value={v} className="max-w-full whitespace-normal break-words text-left">
             {l[v]}
           </ToggleGroupItem>
         ))}
@@ -244,7 +273,7 @@ export function ShelfToolbar(p: Props) {
             </Tabs>
           }
         />
-        <div className="hidden items-center gap-2 sm:flex">
+        <div className="hidden min-w-0 items-center gap-2 sm:flex">
           <Menu
             title={l.sort}
             trigger={
@@ -271,9 +300,14 @@ export function ShelfToolbar(p: Props) {
             }}
             variant="outline"
             spacing={0}
+            className="max-w-full flex-wrap"
           >
             {(['grid', 'list', 'table'] as const).map((v) => (
-              <ToggleGroupItem key={v} value={v} className={v === 'table' ? 'hidden md:inline-flex' : undefined}>
+              <ToggleGroupItem
+                key={v}
+                value={v}
+                className={`max-w-full whitespace-normal break-words text-left ${v === 'table' ? 'hidden md:inline-flex' : ''}`}
+              >
                 {l[v]}
               </ToggleGroupItem>
             ))}
@@ -288,7 +322,11 @@ export function ShelfToolbar(p: Props) {
             content={display}
           />
         </div>
-        <Button variant="outline" onClick={p.onSelect}>
+        <Button
+          variant="outline"
+          className="min-w-0 max-w-full whitespace-normal break-words text-left"
+          onClick={p.onSelect}
+        >
           {l.select}
         </Button>
         <span className="hidden text-sm text-muted-foreground sm:inline">
@@ -296,19 +334,25 @@ export function ShelfToolbar(p: Props) {
         </span>
       </div>
       {p.active.length > 0 && (
-        <div className="hidden flex-wrap items-center gap-2 sm:flex">
+        <div className="hidden min-w-0 flex-wrap items-center gap-2 sm:flex">
           {p.active.map((f) => (
             <Button
               key={f.key}
               variant="secondary"
               size="sm"
               aria-label={`${l.removeFilter}: ${f.label}`}
+              className="min-w-0 max-w-full whitespace-normal break-words text-left"
               onClick={() => p.onRemoveFilter(f.key)}
             >
               {f.label} ×
             </Button>
           ))}
-          <Button variant="ghost" size="sm" onClick={p.onClearFilters}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-w-0 max-w-full whitespace-normal break-words text-left"
+            onClick={p.onClearFilters}
+          >
             {l.clearFilters}
           </Button>
         </div>
