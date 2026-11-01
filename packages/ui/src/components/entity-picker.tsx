@@ -1,7 +1,7 @@
 'use client';
 
 import { XIcon } from 'lucide-react';
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentProps } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@rezics/ui/shadcn/combobox';
 import { Spinner } from '@rezics/ui/shadcn/spinner';
@@ -11,6 +11,8 @@ import { cn } from '../utils.ts';
 import { entityPickerMessages } from './entity-picker-messages.ts';
 import { useLocale } from './locale.tsx';
 import { Cover, sharedRatio, type CoverRatio, type CoverSummary } from './cover.tsx';
+
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /** One search result: the subject's summary as the kernel returns it, with the site's own type label. */
 export interface EntityPickerSubject {
@@ -25,7 +27,7 @@ export interface EntityPickerSubject {
   cover: CoverSummary | null;
 }
 
-/** Searches subjects. The signal aborts when the person types again, so a slow search never overwrites a newer one. */
+/** Searches subjects. The signal advises obsolete work to stop; the picker also ignores obsolete completions. */
 export type EntityPickerSearch = (text: string, signal: AbortSignal) => Promise<readonly EntityPickerSubject[]>;
 
 /** Builds the address of one cover variant; the site owns the media route. */
@@ -55,9 +57,24 @@ interface Results {
   /** The text the results answer, trimmed. */
   query: string;
   items: readonly EntityPickerSubject[];
+  multiple: boolean;
+  /** Single-select results belong to the selected label as well as the query. */
+  selectionKey: string;
 }
 
-/** The small cover of a result: `Cover` at `xs`, which paints its title's initials when the subject has no image. */
+interface SearchInvocation {
+  query: string;
+  multiple: boolean;
+  selectionKey: string;
+  timer?: ReturnType<typeof setTimeout>;
+  request?: AbortController;
+}
+
+function selectionKey(items: readonly EntityPickerSubject[]): string {
+  return JSON.stringify(items.map(({ id, title }) => [id, title])) ?? '[]';
+}
+
+/** The small cover of a result, using the shared compact placeholder when the subject has no image. */
 function ResultCover({ subject, src, ratio }: { subject: EntityPickerSubject; src: CoverSrc; ratio: CoverRatio }) {
   return (
     <span data-slot="entity-picker-cover" className="shrink-0">
@@ -110,82 +127,202 @@ export function EntityPicker({
   const t = entityPickerMessages[uiCopyLocale(useLocale().locale)];
   const [inner, setInner] = useState<readonly EntityPickerSubject[]>(defaultValue ?? []);
   const selected = controlled ?? inner;
+  const selectedKey = selectionKey(selected);
+  const selectedTitle = selected[0]?.title ?? '';
+  const isDisabled = !!disabled;
   const [text, setText] = useState(() => (multiple ? '' : (selected[0]?.title ?? '')));
-  const [results, setResults] = useState<Results>({ phase: 'idle', query: '', items: [] });
-  const pending = useRef<{ timer?: ReturnType<typeof setTimeout>; request?: AbortController }>({});
+  const [results, setResults] = useState<Results>({
+    phase: 'idle',
+    query: '',
+    items: [],
+    multiple,
+    selectionKey: multiple ? '' : selectedKey,
+  });
+  const pending = useRef<SearchInvocation | null>(null);
+  const boundary = useRef({ multiple, disabled: isDisabled, selectionKey: selectedKey });
   const searchRef = useRef(search);
   searchRef.current = search;
 
-  const cancel = () => {
-    clearTimeout(pending.current.timer);
-    pending.current.request?.abort();
-  };
-  useEffect(() => cancel, []);
+  const cancel = useCallback(() => {
+    const invocation = pending.current;
+    pending.current = null;
+    if (!invocation) return;
+    if (invocation.timer !== undefined) clearTimeout(invocation.timer);
+    invocation.request?.abort();
+  }, []);
+  useIsomorphicLayoutEffect(() => cancel, [cancel]);
+
+  // Keep controlled label changes visible without treating fresh but equivalent parent objects as changes.
+  const textBoundaryChanged =
+    boundary.current.multiple !== multiple ||
+    (!multiple && boundary.current.selectionKey !== selectedKey);
+  const inputText = textBoundaryChanged ? (multiple ? '' : (selected[0]?.title ?? '')) : text;
+
+  useIsomorphicLayoutEffect(() => {
+    const previous = boundary.current;
+    const modeChanged = previous.multiple !== multiple;
+    const selectionChanged = previous.selectionKey !== selectedKey;
+    const disabledChanged = previous.disabled !== isDisabled;
+    const singleSelectionChanged = selectionChanged && (!multiple || !previous.multiple);
+
+    // Disabling/re-enabling and single selection changes retire any query that belonged to the old workflow.
+    // Re-enabling keeps the person's draft; they can continue typing to admit a fresh query.
+    if (modeChanged || disabledChanged || singleSelectionChanged) {
+      cancel();
+      setResults({
+        phase: 'idle',
+        query: '',
+        items: [],
+        multiple,
+        selectionKey: multiple ? '' : selectedKey,
+      });
+    }
+    if (modeChanged || (!multiple && selectionChanged)) setText(multiple ? '' : selectedTitle);
+
+    boundary.current = { multiple, disabled: isDisabled, selectionKey: selectedKey };
+  }, [cancel, isDisabled, multiple, selectedKey, selectedTitle]);
 
   const run = (typed: string, wait: number) => {
     cancel();
     const query = typed.trim();
-    if (!query) {
-      setResults({ phase: 'idle', query: '', items: [] });
+    if (!query || isDisabled) {
+      setResults({
+        phase: 'idle',
+        query: '',
+        items: [],
+        multiple,
+        selectionKey: multiple ? '' : selectedKey,
+      });
       return;
     }
+    const invocation: SearchInvocation = {
+      query,
+      multiple,
+      selectionKey: multiple ? '' : selectedKey,
+    };
+    pending.current = invocation;
     // Earlier results stay visible but unselectable until these arrive, so the list does not jump on every key.
-    setResults((current) => ({ ...current, phase: 'searching', query }));
-    pending.current.timer = setTimeout(() => {
+    setResults((current) => ({
+      phase: 'searching',
+      query,
+      items: current.items,
+      multiple,
+      selectionKey: multiple ? '' : selectedKey,
+    }));
+    invocation.timer = setTimeout(() => {
+      // Abort is advisory. Identity also retires work when a provider ignores its signal or resolves after unmount.
+      if (pending.current !== invocation || isDisabled) return;
       const request = new AbortController();
-      pending.current.request = request;
-      searchRef.current(query, request.signal).then(
-        (items) => {
-          if (!request.signal.aborted) setResults({ phase: 'done', query, items });
-        },
-        () => {
-          if (!request.signal.aborted) setResults({ phase: 'failed', query, items: [] });
-        },
-      );
+      invocation.request = request;
+      const complete = (phase: 'done' | 'failed', items: readonly EntityPickerSubject[]) => {
+        if (pending.current !== invocation || request.signal.aborted) return;
+        pending.current = null;
+        setResults({
+          phase,
+          query,
+          items,
+          multiple: invocation.multiple,
+          selectionKey: invocation.selectionKey,
+        });
+      };
+      try {
+        Promise.resolve(searchRef.current(query, request.signal)).then(
+          (items) => complete('done', items),
+          () => complete('failed', []),
+        );
+      } catch {
+        complete('failed', []);
+      }
     }, wait);
   };
 
   const change = (next: readonly EntityPickerSubject[]) => {
+    if (isDisabled) return;
     const value = multiple ? [...next] : next.slice(0, 1);
     if (controlled === undefined) setInner(value);
     onValueChange?.(value);
   };
 
+  const currentResults =
+    !isDisabled &&
+    results.multiple === multiple &&
+    results.query === inputText.trim() &&
+    (multiple || results.selectionKey === selectedKey)
+      ? results
+      : {
+          phase: 'idle' as const,
+          query: '',
+          items: [] as readonly EntityPickerSubject[],
+          multiple,
+          selectionKey: multiple ? '' : selectedKey,
+        };
+  // Base UI restores a selected label when an empty input's item collection changes. Keep an active single-select
+  // draft separate from that selected value so clearing or editing the query stays a real input state.
+  const singleValue = inputText === selectedTitle ? (selected[0] ?? null) : null;
+
   // Rows in one list share a frame ratio so the covers align.
-  const resultRatio = sharedRatio(results.items);
+  const resultRatio = sharedRatio(currentResults.items);
   const selectedRatio = sharedRatio(selected);
-  const busy = results.phase === 'searching';
+  const busy = currentResults.phase === 'searching';
   const status =
-    results.phase === 'idle'
+    currentResults.phase === 'idle'
       ? t.hint
-      : results.phase === 'failed'
+      : currentResults.phase === 'failed'
         ? t.failed
         : busy
           ? t.searching
-          : results.items.length === 0
-            ? t.empty.replace('{query}', results.query)
+          : currentResults.items.length === 0
+            ? t.empty.replace('{query}', currentResults.query)
             : null;
 
   return (
     <div data-slot="entity-picker" className={cn('grid min-w-0 gap-3', className)}>
       <Combobox
-        items={results.items}
+        items={currentResults.items}
         filter={null}
         multiple={multiple}
-        disabled={disabled}
-        value={multiple ? selected : (selected[0] ?? null)}
-        onValueChange={(next: EntityPickerSubject | EntityPickerSubject[] | null) =>
-          change(next === null ? [] : Array.isArray(next) ? next : [next])
-        }
-        inputValue={text}
+        disabled={isDisabled}
+        value={multiple ? selected : singleValue}
+        onValueChange={(next: EntityPickerSubject | EntityPickerSubject[] | null) => {
+          if (isDisabled) return;
+          const value = next === null ? [] : Array.isArray(next) ? next : [next];
+          const selectedIds = new Set(selected.map((subject) => subject.id));
+          const additions = value.filter((subject) => !selectedIds.has(subject.id));
+          const eligibleSubjects =
+            currentResults.phase === 'done'
+              ? new Set(currentResults.items)
+              : new Set<EntityPickerSubject>();
+
+          // Only a current, completed result may add a selection; removals and an explicit clear remain available.
+          if (additions.some((subject) => !eligibleSubjects.has(subject))) return;
+          if (!multiple && value[0] && !selectedIds.has(value[0].id) && !eligibleSubjects.has(value[0])) return;
+          change(value);
+        }}
+        inputValue={inputText}
         onInputValueChange={(typed, details) => {
           // Choosing an item writes its title into the box (or clears the box); neither is a new search.
           if (details.reason === 'item-press' || details.isItemPress) {
-            if (!multiple) setText(typed);
+            if (!multiple) {
+              cancel();
+              setText(typed);
+              setResults({ phase: 'idle', query: '', items: [], multiple, selectionKey: selectedKey });
+            }
             return;
           }
+          if (isDisabled) return;
           setText(typed);
-          if (details.reason === 'input-change' || details.reason === 'input-clear') run(typed, debounce);
+          if (details.reason === 'input-change' || details.reason === 'input-clear') {
+            run(typed, debounce);
+          } else if (typed !== inputText) {
+            cancel();
+            setResults({
+              phase: 'idle',
+              query: '',
+              items: [],
+              multiple,
+              selectionKey: multiple ? '' : selectedKey,
+            });
+          }
         }}
         itemToStringLabel={(subject: EntityPickerSubject) => subject.title}
         isItemEqualToValue={(a: EntityPickerSubject, b: EntityPickerSubject) => a.id === b.id}
@@ -193,15 +330,20 @@ export function EntityPicker({
         <ComboboxInput
           aria-label={label}
           placeholder={placeholder}
-          disabled={disabled}
+          disabled={isDisabled}
           showTrigger={false}
           className="w-full"
         />
         <ComboboxContent aria-busy={busy} className="min-w-0">
           {/* Results scroll, and a scrolling region needs a keyboard stop for assistive technology that does not follow the input. */}
-          <ComboboxList aria-label={label} tabIndex={results.items.length > 0 ? 0 : -1}>
+          <ComboboxList aria-label={label} tabIndex={currentResults.items.length > 0 ? 0 : -1}>
             {(subject: EntityPickerSubject) => (
-              <ComboboxItem key={subject.id} value={subject} disabled={busy} className="min-w-0 items-start gap-3 py-2">
+              <ComboboxItem
+                key={subject.id}
+                value={subject}
+                disabled={busy || isDisabled}
+                className="min-w-0 items-start gap-3 py-2"
+              >
                 <ResultCover subject={subject} src={src} ratio={resultRatio} />
                 <ResultText subject={subject} />
               </ComboboxItem>
@@ -216,13 +358,21 @@ export function EntityPicker({
           >
             {busy ? <Spinner role="presentation" aria-hidden="true" aria-label={undefined} /> : null}
             <span className="min-w-0">{status}</span>
-            {results.phase === 'failed' ? (
+            {currentResults.phase === 'failed' && !isDisabled ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-auto whitespace-normal py-1"
-                onClick={() => run(results.query, 0)}
+                onClick={() => {
+                  if (
+                    isDisabled ||
+                    currentResults.phase !== 'failed' ||
+                    currentResults.query !== inputText.trim()
+                  )
+                    return;
+                  run(currentResults.query, 0);
+                }}
               >
                 {t.retry}
               </Button>
@@ -243,7 +393,7 @@ export function EntityPicker({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                disabled={disabled}
+                disabled={isDisabled}
                 aria-label={t.remove.replace('{title}', subject.title)}
                 onClick={() => change(selected.filter((entry) => entry.id !== subject.id))}
               >

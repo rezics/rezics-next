@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { act, useState } from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { coverSrc, coverSummary } from '../stories/media-fixtures.ts';
 import { withSurface } from '../stories/support.tsx';
@@ -283,8 +284,10 @@ export const LongTitlesAndMissingData: Story = {
     for (const row of rows) {
       await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
     }
-    // A subject with no cover shows its initials, one with no year or type label shows only what it has.
-    await expect(screen.getByRole('option', { name: /Untitled/ })).toHaveTextContent(/^U\s*Untitled$/);
+    // The shared Cover contract uses its image icon at xs; only the title and metadata remain visible beside it.
+    const untitled = screen.getByRole('option', { name: /Untitled/ });
+    await expect(untitled).toHaveTextContent('Untitled');
+    await expect(untitled.querySelector('[data-slot="cover-placeholder-icon"]')).not.toBeNull();
     await expect(screen.getByRole('option', { name: /無題の物語/ })).toHaveTextContent(
       metaText(['Visual novel', '2011']),
     );
@@ -300,5 +303,310 @@ export const PhoneWidth: Story = {
     const popup = document.querySelector<HTMLElement>('[data-slot="combobox-content"]')!;
     await expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
     await expect(within(canvasElement).getByRole('list', { name: 'Selected' })).toBeVisible();
+  },
+};
+
+interface DeferredSearch {
+  query: string;
+  signal: AbortSignal;
+  resolve?: (items: readonly EntityPickerSubject[]) => void;
+  reject?: (reason: unknown) => void;
+}
+
+interface EntityPickerJourney {
+  calls: DeferredSearch[];
+  changes: EntityPickerSubject[][];
+}
+
+let connectedJourney: EntityPickerJourney | null = null;
+
+function journeyResult(query: string): EntityPickerSubject[] {
+  if (query === 'multi') {
+    return [
+      subject('journey-multi-a', 'Multi A', 'Novel', 2020, false),
+      subject('journey-multi-b', 'Multi B', 'Novel', 2021, false),
+    ];
+  }
+  return [subject(`journey-result-${query}`, `Result for ${query}`, 'Novel', 2024, false)];
+}
+
+function resolveJourneyQuery(query: string) {
+  const call = connectedJourney?.calls.findLast((entry) => entry.query === query);
+  call?.resolve?.(journeyResult(query));
+}
+
+function rejectJourneyQuery(query: string) {
+  const call = connectedJourney?.calls.findLast((entry) => entry.query === query);
+  call?.reject?.(new Error('temporary search failure'));
+}
+
+function ConnectedJourneyHarness() {
+  const [value, setValue] = useState<EntityPickerSubject[]>([
+    subject('journey-seed', 'Seed subject', 'Novel', 2020, false),
+  ]);
+  const [disabled, setDisabled] = useState(false);
+  const [multiple, setMultiple] = useState(false);
+  const [mounted, setMounted] = useState(true);
+  const [throwNext, setThrowNext] = useState(false);
+  const [responseQuery, setResponseQuery] = useState('');
+  const [, setRevision] = useState(0);
+  const [journey] = useState<EntityPickerJourney>(() => ({ calls: [], changes: [] }));
+  connectedJourney = journey;
+
+  // Deliberately create a wrapper on each parent render. It must not restart an admitted query by identity alone.
+  const search: EntityPickerSearch = (query, signal) => {
+    const call: DeferredSearch = { query, signal };
+    journey.calls.push(call);
+    setRevision((current) => current + 1);
+    if (throwNext) {
+      setThrowNext(false);
+      throw new Error('temporary synchronous failure');
+    }
+    return new Promise<readonly EntityPickerSubject[]>((resolve, reject) => {
+      call.resolve = (items) => resolve(items);
+      call.reject = (reason) => reject(reason);
+    });
+  };
+
+  const choose = (items: EntityPickerSubject[]) => {
+    journey.changes.push(items);
+    // Echo equivalent values through new arrays and subject objects, as a controlled parent commonly does.
+    setValue(items.map((item) => ({ ...item })));
+  };
+  const replacement = subject('journey-replacement', 'Replacement subject', 'Novel', 2022, false);
+  const renamed = { ...replacement, title: 'Renamed replacement' };
+
+  return (
+    <div className="grid max-w-md gap-4">
+      <div role="group" aria-label="Journey controls" className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => setValue([replacement])}>
+          Replace selection
+        </button>
+        <button type="button" onClick={() => setValue([])}>
+          Clear selection
+        </button>
+        <button type="button" onClick={() => setValue([renamed])}>
+          Refresh title
+        </button>
+        <button type="button" onClick={() => setDisabled(true)}>
+          Disable picker
+        </button>
+        <button type="button" onClick={() => setDisabled(false)}>
+          Enable picker
+        </button>
+        <button type="button" onClick={() => setMultiple(true)}>
+          Use multiple selection
+        </button>
+        <button type="button" onClick={() => setThrowNext(true)}>
+          Throw next search
+        </button>
+        <button type="button" onClick={() => setRevision((current) => current + 1)}>
+          Rerender parent
+        </button>
+        <button type="button" onClick={() => setMounted(false)}>
+          Unmount picker
+        </button>
+      </div>
+      <label className="grid gap-1">
+        Response query
+        <input value={responseQuery} onChange={(event) => setResponseQuery(event.currentTarget.value)} />
+      </label>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => resolveJourneyQuery(responseQuery)}>
+          Resolve search
+        </button>
+        <button type="button" onClick={() => rejectJourneyQuery(responseQuery)}>
+          Reject search
+        </button>
+      </div>
+      <output aria-label="Search calls">{journey.calls.length}</output>
+      <output aria-label="Selection changes">{journey.changes.length}</output>
+      {mounted ? (
+        <EntityPicker
+          label="Journey subject"
+          search={search}
+          src={coverSrc}
+          value={value}
+          multiple={multiple}
+          disabled={disabled}
+          debounce={250}
+          onValueChange={choose}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function activeJourney(): EntityPickerJourney {
+  if (!connectedJourney) throw new Error('The connected EntityPicker harness is not mounted.');
+  return connectedJourney;
+}
+
+export const ConnectedSelectionLifetime: Story = {
+  render: () => <ConnectedJourneyHarness />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const queryInput = () => canvas.getByRole('combobox', { name: 'Journey subject' });
+    const responseInput = canvas.getByRole('textbox', { name: 'Response query' });
+    const calls = () => activeJourney().calls;
+    const changes = () => activeJourney().changes;
+    const waitForCalls = async (length: number) => waitFor(() => expect(calls()).toHaveLength(length));
+    const response = async (query: string, action: 'resolve' | 'reject' = 'resolve') => {
+      await userEvent.clear(responseInput);
+      await userEvent.type(responseInput, query);
+      await userEvent.click(canvas.getByRole('button', { name: action === 'resolve' ? 'Resolve search' : 'Reject search' }));
+    };
+    const typeQuery = async (query: string) => {
+      await userEvent.clear(queryInput());
+      await userEvent.type(queryInput(), query);
+    };
+    const settleFor = async (query: string, action: 'resolve' | 'reject' = 'resolve') => {
+      await response(query, action);
+    };
+    const settleAndWait = async (query: string, name: RegExp | string) => {
+      await settleFor(query);
+      await enabled(name);
+    };
+    const initialCalls = calls().length;
+
+    await expect(queryInput()).toHaveValue('Seed subject');
+    await typeQuery('queued');
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace selection' }));
+    await waitFor(() => expect(queryInput()).toHaveValue('Replacement subject'));
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    await expect(calls()).toHaveLength(initialCalls);
+
+    await typeQuery('clear-pending');
+    await waitForCalls(initialCalls + 1);
+    const clearPending = calls().at(-1)!;
+    await userEvent.click(canvas.getByRole('button', { name: 'Rerender parent' }));
+    await expect(clearPending.signal.aborted).toBe(false);
+    await expect(calls()).toHaveLength(initialCalls + 1);
+    await userEvent.click(canvas.getByRole('button', { name: 'Clear selection' }));
+    await waitFor(() => expect(queryInput()).toHaveValue(''));
+    await expect(clearPending.signal.aborted).toBe(true);
+    await settleFor('clear-pending');
+    await expect(screen.queryByRole('option')).toBeNull();
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace selection' }));
+    await typeQuery('title-pending');
+    await waitForCalls(initialCalls + 2);
+    const titlePending = calls().at(-1)!;
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh title' }));
+    await waitFor(() => expect(queryInput()).toHaveValue('Renamed replacement'));
+    await expect(titlePending.signal.aborted).toBe(true);
+    await settleFor('title-pending');
+    await expect(screen.queryByRole('option')).toBeNull();
+
+    await typeQuery('slow-a');
+    await waitForCalls(initialCalls + 3);
+    const slowA = calls().at(-1)!;
+    await typeQuery('slow-b');
+    await waitForCalls(initialCalls + 4);
+    await expect(slowA.signal.aborted).toBe(true);
+    await settleAndWait('slow-b', /Result for slow-b/);
+    await settleFor('slow-a', 'reject');
+    await expect(screen.getByRole('option', { name: /Result for slow-b/ })).toBeVisible();
+    await expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+
+    await typeQuery('slow-c');
+    await waitForCalls(initialCalls + 5);
+    const slowC = calls().at(-1)!;
+    await typeQuery('slow-d');
+    await waitForCalls(initialCalls + 6);
+    await expect(slowC.signal.aborted).toBe(true);
+    await settleAndWait('slow-d', /Result for slow-d/);
+    await settleFor('slow-c');
+    await expect(screen.getByRole('option', { name: /Result for slow-d/ })).toBeVisible();
+    await expect(screen.queryByRole('option', { name: /Result for slow-c/ })).toBeNull();
+
+    await typeQuery('disabled-pending');
+    await waitForCalls(initialCalls + 7);
+    const disabledPending = calls().at(-1)!;
+    await userEvent.click(canvas.getByRole('button', { name: 'Disable picker' }));
+    await expect(queryInput()).toBeDisabled();
+    await expect(disabledPending.signal.aborted).toBe(true);
+    await settleFor('disabled-pending');
+    await expect(screen.queryByRole('option')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Enable picker' }));
+    await expect(queryInput()).toHaveValue('disabled-pending');
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    await expect(calls()).toHaveLength(initialCalls + 7);
+    await userEvent.type(queryInput(), 'x');
+    await waitForCalls(initialCalls + 8);
+    await expect(calls().at(-1)?.query).toBe('disabled-pendingx');
+    await settleAndWait('disabled-pendingx', /Result for disabled-pendingx/);
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Throw next search' }));
+    await typeQuery('retry-me');
+    await waitForCalls(initialCalls + 9);
+    await expect(await screen.findByText('The search failed.')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitForCalls(initialCalls + 10);
+    await expect(calls().at(-1)?.query).toBe('retry-me');
+    await settleAndWait('retry-me', /Result for retry-me/);
+    const beforeSinglePick = calls().length;
+    await choose(/Result for retry-me/);
+    await waitFor(() => expect(changes()).toHaveLength(1));
+    await expect(queryInput()).toHaveValue('Result for retry-me');
+    await expect(calls()).toHaveLength(beforeSinglePick);
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Use multiple selection' }));
+    await expect(queryInput()).toHaveValue('');
+    await typeQuery('multi');
+    await waitForCalls(initialCalls + 11);
+    await settleFor('multi');
+    await enabled(/Multi A/);
+    const beforeMultiplePicks = calls().length;
+    await choose(/Multi A/);
+    await waitFor(() => expect(changes()).toHaveLength(2));
+    await expect(queryInput()).toHaveValue('multi');
+    await choose(/Multi B/);
+    await waitFor(() => expect(changes()).toHaveLength(3));
+    await expect(queryInput()).toHaveValue('multi');
+    const selected = canvas.getByRole('list', { name: 'Selected' });
+    await expect(within(selected).getAllByRole('listitem')).toHaveLength(3);
+    await userEvent.click(canvas.getByRole('button', { name: 'Remove Multi A' }));
+    await waitFor(() => expect(changes()).toHaveLength(4));
+    await expect(within(selected).getAllByRole('listitem')).toHaveLength(2);
+    await expect(queryInput()).toHaveValue('multi');
+    await expect(calls()).toHaveLength(beforeMultiplePicks);
+
+    const input = queryInput() as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (!valueSetter) throw new Error('The browser input value setter is unavailable.');
+    await act(async () => {
+      input.focus();
+      input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      valueSetter.call(input, 'ime-draft');
+      input.dispatchEvent(
+        new InputEvent('input', {
+          bubbles: true,
+          data: 'ime-draft',
+          inputType: 'insertCompositionText',
+          isComposing: true,
+        }),
+      );
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    await expect(calls()).toHaveLength(beforeMultiplePicks);
+    await act(async () => {
+      valueSetter.call(input, 'ime-final');
+      input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'ime-final' }));
+    });
+    await waitForCalls(initialCalls + 12);
+    await expect(calls().at(-1)?.query).toBe('ime-final');
+    await settleAndWait('ime-final', /Result for ime-final/);
+
+    await typeQuery('unmount-pending');
+    await waitForCalls(initialCalls + 13);
+    const beforeUnmount = changes().length;
+    const unmounted = calls().at(-1)!;
+    await userEvent.click(canvas.getByRole('button', { name: 'Unmount picker' }));
+    await expect(unmounted.signal.aborted).toBe(true);
+    await settleFor('unmount-pending');
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    await expect(changes()).toHaveLength(beforeUnmount);
+    await expect(canvas.queryByRole('combobox', { name: 'Journey subject' })).toBeNull();
   },
 };
