@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
-import { act, useState } from 'react';
+import { act } from 'react';
 import * as start from '../.storybook/react-start';
 import type { MineFollowingRead } from '../src/library/mine-following-actions';
 import type { FollowWriteInput, FollowWriteResult } from '../src/library/follow-records';
@@ -198,9 +198,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
-  const { CurrentViewerMineFollowingPage, mineFollowingQuery } = await import('../src/library/mine-following-page');
+  const { mineFollowingQuery } = await import('../src/library/mine-following-page');
+  const { Route } = await import('../src/routes/library/following');
   const followActions = await import('../src/library/follow-actions');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale } = await import('../src/paraglide/runtime.js');
@@ -221,13 +222,17 @@ test('the mounted default Following composition retires viewer, cursor and row l
   client.setQueryData(sessionQuery.queryKey, viewer('A'));
   client.setQueryData(exposureQuery.queryKey, ['personal_library']);
   const initial = loaded('A', null, 'A private title');
-  let replace!: (input: { initial: MineFollowingRead; cursor?: string }) => void;
-  function Page() {
-    const [input, setInput] = useState<{ initial: MineFollowingRead; cursor?: string }>({ initial });
-    replace = setInput;
-    return <CurrentViewerMineFollowingPage {...input} />;
-  }
-  const router = createRouter({ routeTree: createRootRoute({ component: Page }), history: createMemoryHistory({ initialEntries: ['/library/following'] }) });
+  const retainedLoader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
+  const rootRoute = createRootRoute();
+  const followingRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/library/following',
+    component: Route.options.component!,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([followingRoute]),
+    history: createMemoryHistory({ initialEntries: ['/library/following'] }),
+  });
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
@@ -282,7 +287,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).not.toContain('Late A disclosure');
     expect(host.textContent).not.toContain(m.library_follow_removed());
 
-    await act(async () => { replace({ initial, cursor: 'current/cursor+' }); await tick(); });
+    await act(async () => {
+      await router.navigate({ to: '/library/following', search: { cursor: 'current/cursor+' } });
+      await tick();
+    });
     expectRetired();
     expect(reads.at(-1)!.cursor).toBe('current/cursor+');
     await settle(reads.at(-1)!, loaded('B', 'wrong/cursor+', 'Wrong address disclosure'));
@@ -320,6 +328,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     client.clear();
     read.mockRestore();
     write.mockRestore();
+    retainedLoader.mockRestore();
     await window.happyDOM.close();
     for (const [name, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);
