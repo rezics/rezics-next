@@ -106,8 +106,11 @@ failure, including negative-shard constraint failures; totals are never clamped.
 same shard use additive locked PostgreSQL updates, so neither replaces the other's contribution. A source crash
 before delivery retains its outbox and pending obligation; a destination crash before acknowledgment retains its
 applied receipt and continuation. Retrying a vote also drains previously committed obligations instead of attempting
-to reconstruct their old deltas. Foreground draining reads pending source obligations in pages of 100; individual
-effect replay performs fixed keyed work without a receipt-history scan.
+to reconstruct their old deltas. Foreground completion selects only the caller's populations in batches of 100,
+reading pending source obligations in pages of 100. It includes their necessary ordered predecessors; unrelated
+population backlogs do not extend that call. Figure draining completes its source partition's pending pages before
+publication. Total recovery work grows with pending page count; each individual effect replay performs fixed keyed
+work without a receipt-history scan.
 
 Installation retains every nonzero total as the cutover baseline. The migration locks the total relation while
 installing an always-enabled writer fence. Old transactions finish before that barrier; subsequent old writers

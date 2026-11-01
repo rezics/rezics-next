@@ -342,6 +342,30 @@ test('source pages, destination statements and exact replay stay bounded as unre
   }
 }, 120_000);
 
+test('foreground completion does not deliver unrelated populations with outstanding durable source pages', async () => {
+  const stalled = Array.from({ length: 16 }, () => vote());
+  fault = (text) => /INSERT INTO rating\.population_total_inbox/.test(text);
+  await expect(applyRatingChanges(pool, stalled)).rejects.toThrow('injected durable boundary');
+  for (const change of stalled) expect(await pending(change.populationId)).toHaveLength(1);
+  statements.length = 0;
+  const own = vote();
+  await applyRatingChanges(pool, [own]);
+  expect(await totals(own.populationId)).toEqual({ count: 1n, sum: 10n });
+  const admissions = statements.filter(({ text }) => /INSERT INTO rating\.population_total_inbox/.test(text));
+  expect(admissions).toHaveLength(1);
+  expect(admissions[0]!.values).toContain(own.populationId);
+  for (const change of stalled) {
+    expect(await pending(change.populationId)).toHaveLength(1);
+    expect(await totals(change.populationId)).toEqual({ count: 0n, sum: 0n });
+  }
+  // An interrupted caller's replay completes its own pages through the same production path.
+  await applyRatingChanges(pool, stalled);
+  for (const change of stalled) {
+    expect(await pending(change.populationId)).toEqual([]);
+    expect(await totals(change.populationId)).toEqual({ count: 1n, sum: 10n });
+  }
+});
+
 test('the default installed worker admits committed deliveries, recovers an interrupted caller and survives process restart', async () => {
   const first = vote();
   await interruptSource([first]);

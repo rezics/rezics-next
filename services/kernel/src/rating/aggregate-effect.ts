@@ -342,7 +342,11 @@ export async function applyRatingChanges(pool: Pool, input: readonly RatingChang
     for (let offset = 0; offset < changes.length; offset += 100)
       await applyPartition(pool, changes.slice(offset, offset + 100), partition, scales);
   // Also recover committed obligations on a vote replay: its old delta cannot be reconstructed.
-  for (const partition of grouped.keys()) await flushPopulationTotalDeliveries(pool, partition);
+  for (const [partition, changes] of grouped) {
+    const populations = [...new Set(changes.map((change) => change.populationId))];
+    for (let offset = 0; offset < populations.length; offset += 100)
+      await flushPopulationTotalDeliveries(pool, partition, populations.slice(offset, offset + 100));
+  }
 }
 
 /** Resolve the private counting key at the event T, then apply that vote to every listed population. */

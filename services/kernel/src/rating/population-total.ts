@@ -189,13 +189,21 @@ async function deliver(pool: Pool, data: PopulationTotalDelivery): Promise<void>
 }
 
 /** Shared foreground completion and registered worker recovery use the identical inbox/receipt commands. */
-export async function flushPopulationTotalDeliveries(pool: Pool, partition: number): Promise<void> {
+export async function flushPopulationTotalDeliveries(
+  pool: Pool, partition: number, populations?: readonly string[],
+): Promise<void> {
+  if (populations && (populations.length === 0 || populations.length > PAGE))
+    throw new RangeError('Rating population delivery selection must contain 1 to 100 populations');
   for (;;) {
     const page = await withReadTransaction(pool, async (client) => {
       await partitionReadClient(client, partition);
       return client.query<{ payload: PopulationTotalDelivery }>(
-        `SELECT payload FROM rating.population_total_delivery WHERE partition_no=$1 AND pending
-         ORDER BY population_id,serial LIMIT $2`, [partition, PAGE]);
+        populations
+          ? `SELECT payload FROM rating.population_total_delivery WHERE partition_no=$1 AND pending
+             AND population_id=ANY($3::uuid[]) ORDER BY population_id,serial LIMIT $2`
+          : `SELECT payload FROM rating.population_total_delivery WHERE partition_no=$1 AND pending
+             ORDER BY population_id,serial LIMIT $2`,
+        populations ? [partition, PAGE, populations] : [partition, PAGE]);
     });
     if (page.rows.length === 0) return;
     for (const { payload } of page.rows) await deliver(pool, payload);
