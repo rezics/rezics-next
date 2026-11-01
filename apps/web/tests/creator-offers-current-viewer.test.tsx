@@ -463,6 +463,8 @@ describe('Creator offer list creation reprice and delist accept only their actua
       refreshed.data.keys[creatorOfferFixture.id] = { reprice: id(70), delist: id(71) };
       refreshed.data.schema = { ...configuredPriceExample, configuredSaleCurrencies: [] };
       await page.render({ initial: refreshed, session: viewer(A, 'csrf-rotated'), locale: 'de' });
+      refreshed.data.page = { kind: 'ready', offers: [], next: null };
+      await page.render({ initial: { ...refreshed }, session: viewer(A, 'csrf-rotated'), locale: 'de' });
       await act(async () => retryFromOldRender({ preventDefault() {} }));
       expect(page.writes[1]!.data).toEqual(page.writes[0]!.data);
       expect(page.writes[1]!.csrf).toBe('csrf-rotated');
@@ -499,6 +501,11 @@ describe('Creator offer list creation reprice and delist accept only their actua
       if (refreshed.data.editor.kind === 'ready')
         refreshed.data.editor.schema = { ...configuredPriceExample, configuredSaleCurrencies: [] };
       await page.render({ initial: refreshed, locale: 'fr', session: viewer(A, 'csrf-rotated') });
+      await page.render({
+        initial: { ...refreshed, data: { ...refreshed.data, editor: { kind: 'unavailable' } } },
+        locale: 'fr',
+        session: viewer(A, 'csrf-rotated'),
+      });
       await page.submit();
       expect(page.writes[1]!.data).toEqual(page.writes[0]!.data);
       expect(page.writes[1]!.csrf).toBe('csrf-rotated');

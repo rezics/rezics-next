@@ -205,14 +205,12 @@ function CreatorRead({
     refetchOnReconnect: false,
   });
   const [display, setDisplay] = useState(() => ({
-    loader: initial,
     outcome: initialData,
     value: initialData?.kind === 'accepted' ? initialData.value : undefined,
   }));
-  if (seed && initial !== display.loader) {
-    // Ordinary same-origin loader refreshes may update rows without replacing uncertain commands.
-    setDisplay({ ...display, loader: initial, value: matches(initial, subject, address) ? initial : display.value });
-  } else if (query.data && query.data !== display.outcome) {
+  // A loader refresh is not a new admitted origin. Keep its observed rows/edition and
+  // command operands mounted, even if that refresh omits a row or temporarily fails.
+  if (query.data && query.data !== display.outcome) {
     setDisplay({
       ...display,
       outcome: query.data,
