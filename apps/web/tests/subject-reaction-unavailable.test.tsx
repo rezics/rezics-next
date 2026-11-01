@@ -740,15 +740,18 @@ async function equalSuccess(source: 'manual' | 'fetch', afterCommit: () => void)
 function noSelection() {
   expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
 }
-function independentZone(combined: number, counts: number) {
+function independentZonePayload(combined: number, counts: number, follows = 1) {
   expect(personalCalls).toHaveLength(combined);
   expect(countReads).toHaveLength(counts);
   expect(preferenceReads).toEqual(['reader-one']);
   expect(libraryEntryReads).toEqual([subjectId]);
-  expect(followReads).toEqual([subjectId]);
+  expect(followReads).toEqual(Array.from({ length: follows }, () => subjectId));
   expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
-  expect(libraryEntryButton()?.disabled).toBe(false);
   expect(chip('like').textContent).toContain('2');
+}
+function independentZone(combined: number, counts: number) {
+  independentZonePayload(combined, counts);
+  expect(libraryEntryButton()?.disabled).toBe(false);
   const follow = [...host.querySelectorAll<HTMLButtonElement>('button')]
     .find((button) => button.textContent?.trim() === m.library_follow());
   expect(follow?.disabled).toBe(false);
@@ -918,19 +921,22 @@ test('production Zone keeps exact independent loads across private refusal, reta
   });
   expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
   expect(client.getQueryData(sessionQuery.queryKey)).toEqual(sessionData());
-  independentZone(1, 1);
+  // Session loss keeps the independently completed payload, but does not override Library/follow authority.
+  expect(personalCalls[0]!.result!.library?.provenance?.viewer).toBe('reader-one');
+  independentZonePayload(1, 1);
   expect(ownReads).toHaveLength(1);
   browserSessionPending = deferred<SessionIdentity>();
   await flush(() => client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true }));
-  independentZone(1, 1);
+  independentZonePayload(1, 1);
   noSelection();
   expect(chips().every((button) => button.disabled)).toBe(true);
   expect(ownReads).toHaveLength(1);
   expect(nativeWrites).toHaveLength(0);
   queueNativeRead({ status: 200, data: { kind: null } });
   await flush(() => browserSessionPending!.resolve(storySession()));
-  await until(() => ownReads.length === 2 && chips().some((button) => !button.disabled));
-  independentZone(1, 1);
+  await until(() => ownReads.length === 2 && followReads.length === 2 && chips().some((button) => !button.disabled));
+  // A genuine session loss can require the follow owner's fresh read; reaction replacement alone never does.
+  independentZonePayload(1, 1, 2);
 });
 
 test('anonymous production Zone makes zero private reaction reads and preserves its public counts', async () => {
