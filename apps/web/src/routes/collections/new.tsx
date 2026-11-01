@@ -1,10 +1,10 @@
-import { Exposure } from '../../kernel/exposure';
+import { useOperation } from '../../kernel/exposure';
 import { requireSignedIn } from '../../session/guard';
 import { useSession } from '../../session/query';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createCollection, readNewCollection } from '../../library/collection-edit';
 import { buttonClass, fieldClass, VisibilityField } from '../../library/collection-page';
 import type { CollectionVisibility } from '../../library/reads';
@@ -12,6 +12,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { CollectionPresentationFields } from '../../library/collection-editor';
 import { PageHeading } from '../../shell/page-heading';
+import type { CollectionTypeOption } from '../../library/collection-presentation';
 
 export const Route = createFileRoute('/collections/new')({
   beforeLoad: requireSignedIn,
@@ -23,78 +24,127 @@ export const Route = createFileRoute('/collections/new')({
 
 function NewCollectionPage() {
   const loaded = Route.useLoaderData();
-  const { csrfToken } = useSession();
-  const [idempotencyKey, setIdempotencyKey] = useState(loaded.idempotencyKey);
-  const [visibility, setVisibility] = useState<CollectionVisibility | ''>('');
-  const [hydrated, setHydrated] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [kind, setKind] = useState<string | null>(null);
-  const [failure, setFailure] = useState('');
-  useEffect(() => setHydrated(true), []);
-  useEffect(() => setIdempotencyKey(loaded.idempotencyKey), [loaded.idempotencyKey]);
-
-  async function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!hydrated || pending || visibility === '') return;
-    const form = new FormData(event.currentTarget);
-    setPending(true);
-    setFailure('');
-    try {
-      const result = await createCollection({
-        data: {
-          title: String(form.get('title') ?? ''),
-          description: String(form.get('description') ?? ''),
-          visibility,
-          presentationKind: kind,
-          idempotencyKey,
-        },
-        headers: { 'X-CSRF-Token': csrfToken ?? '' },
-      });
-      if (result.ok) {
-        window.location.assign(`/${getLocale()}/collections/${encodeURIComponent(result.id)}`);
-        return;
-      }
-      // A refused draft is a different request from the one the key was spent on.
-      if (result.reason !== 'unavailable') setIdempotencyKey(crypto.randomUUID());
-      setFailure(m.error_message());
-    } catch {
-      setFailure(m.error_message());
-    } finally {
-      setPending(false);
-    }
-  }
+  const { state, subject, csrfToken } = useSession();
+  const admitted = useOperation('collection.create');
 
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
         <PageHeading>{m.library_collection_new()}</PageHeading>
       </header>
-
-      <Exposure operation="collection.create">
-        <form className="space-y-6" onSubmit={(event) => void create(event)}>
-          <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
-          <label className="block">
-            {m.library_collection_title()}
-            <input className={fieldClass} maxLength={512} name="title" required />
-          </label>
-          <label className="block">
-            {m.library_collection_description()}
-            <textarea className={fieldClass} name="description" rows={4} />
-          </label>
-          <CollectionPresentationFields
-            types={loaded.types}
-            kind={kind}
-            onKindChange={setKind}
-            coverMediaId={null}
-            disabled={pending}
-          />
-          <VisibilityField onChange={setVisibility} value={visibility} />
-          {failure ? <p role="alert">{failure}</p> : null}
-          <button className={buttonClass} disabled={!hydrated || pending || visibility === ''} type="submit">
-            {m.library_collection_create()}
-          </button>
-        </form>
-      </Exposure>
+      {state === 'signed-in' && subject && csrfToken && admitted ? (
+        <NewCollectionForm key={subject} csrfToken={csrfToken} types={loaded.types} />
+      ) : null}
     </article>
+  );
+}
+
+type CreateIntent = {
+  title: string;
+  description: string;
+  visibility: CollectionVisibility;
+  presentationKind: string | null;
+  idempotencyKey: string;
+};
+
+function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: CollectionTypeOption[] | null }) {
+  // The loader UUID is public, not a viewer lifetime. Every admitted mount gets a fresh command key.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [visibility, setVisibility] = useState<CollectionVisibility | ''>('');
+  const [pending, setPending] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const [kind, setKind] = useState<string | null>(null);
+  const [failure, setFailure] = useState('');
+  const lifetime = useRef({ active: false, locked: false, intent: null as CreateIntent | null });
+  useLayoutEffect(() => {
+    const current = { active: true, locked: false, intent: null as CreateIntent | null };
+    lifetime.current = current;
+    return () => {
+      // Native IO may still commit. Its callbacks and private intent no longer belong to any current UI.
+      current.active = false;
+      current.locked = false;
+      current.intent = null;
+    };
+  }, []);
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const current = lifetime.current;
+    // This mounted lifetime exists only while the observed subject, CSRF and operation are admitted.
+    if (!current.active || current.locked || !csrfToken || visibility === '') return;
+    current.locked = true;
+    setPending(true);
+    setFailure('');
+    let navigating = false;
+    try {
+      if (!current.intent) {
+        const form = new FormData(event.currentTarget);
+        current.intent = {
+          title: String(form.get('title') ?? ''),
+          description: String(form.get('description') ?? ''),
+          visibility,
+          presentationKind: kind,
+          idempotencyKey,
+        };
+      }
+      const result = await createCollection({
+        data: current.intent,
+        headers: { 'X-CSRF-Token': csrfToken },
+      });
+      if (!current.active) return;
+      if (result.ok) {
+        navigating = true;
+        window.location.assign(`/${getLocale()}/collections/${encodeURIComponent(result.id)}`);
+        return;
+      }
+      if (result.reason === 'unavailable') {
+        setUncertain(true);
+        setFailure(m.library_publication_unknown());
+      } else {
+        // A definite refusal permits correction; an uncertain request must first recover its exact outcome.
+        current.intent = null;
+        setUncertain(false);
+        setIdempotencyKey(crypto.randomUUID());
+        setFailure(m.error_message());
+      }
+    } catch {
+      if (current.active) {
+        setUncertain(true);
+        setFailure(m.library_publication_unknown());
+      }
+    } finally {
+      if (current.active && !navigating) {
+        current.locked = false;
+        setPending(false);
+      }
+    }
+  }
+
+  return (
+    <form className="space-y-6" onSubmit={(event) => void create(event)}>
+      <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
+      <fieldset className="space-y-6" disabled={pending || uncertain}>
+        <label className="block">
+          {m.library_collection_title()}
+          <input className={fieldClass} maxLength={512} name="title" required />
+        </label>
+        <label className="block">
+          {m.library_collection_description()}
+          <textarea className={fieldClass} name="description" rows={4} />
+        </label>
+        <CollectionPresentationFields
+          types={types}
+          kind={kind}
+          onKindChange={setKind}
+          coverMediaId={null}
+          disabled={pending || uncertain}
+        />
+        <VisibilityField onChange={setVisibility} value={visibility} disabled={pending || uncertain} />
+      </fieldset>
+      {failure ? <p role="alert">{failure}</p> : null}
+      <button className={buttonClass} disabled={pending || visibility === ''} aria-busy={pending} type="submit">
+        {uncertain ? m.library_publication_retry() : m.library_collection_create()}
+      </button>
+    </form>
   );
 }
