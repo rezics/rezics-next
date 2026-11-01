@@ -4,7 +4,7 @@ import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
-import { useQuery, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useSuspenseQuery, useSuspenseQueries, useQueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { isView } from '@rezics/composition';
 import { SubjectPage, pageRelationProperties, subjectPageTitle, subjectPageType } from '../../features/pages/subject';
@@ -13,7 +13,14 @@ import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/
 import { subjectTabs } from '../../features/pages/views';
 import { SubjectHeaderActions } from '../../features/pages/subject-reactions-view';
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
-import { RatingControlContext, RatingsContext } from '../../features/pages/subject-ratings-view';
+import {
+  RatingControlContext,
+  RatingsContext,
+  RatingsRecoveryContext,
+  RatingPopulationsContext,
+} from '../../features/pages/subject-ratings-view';
+import { RATING_SOURCES, type RatingSources, type RatingSource } from '../../features/pages/subject-ratings';
+import { SubjectRatingPopulations } from '../../features/pages/subject-rating-populations-view';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { useSubjectReactionReader } from '../../features/pages/subject-reaction-reader';
 import { postSubjectRatingForm } from '../../features/pages/rating-actions';
@@ -274,7 +281,14 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
         : Promise.resolve({ label: undefined, ratio: undefined, schemaOrgType: undefined }),
       context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(page.page), getLocale())),
       context.queryClient.ensureQueryData(subjectReactionsQuery(params.id, getLocale())),
-      context.queryClient.ensureQueryData(subjectRatingQuery(params.id, getLocale())),
+      Promise.all(
+        RATING_SOURCES.map((source) => context.queryClient.ensureQueryData(subjectRatingQuery(params.id, getLocale(), source))),
+      ).then(([question, figure, global, statistics]): RatingSources => ({
+        question: question!.question,
+        figure: figure!.figure,
+        global: global!.global,
+        statistics: statistics!.statistics,
+      })),
     ]);
     return {
       ...data,
@@ -299,7 +313,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           realm: loaderData.realm,
           ...(loaderData.frame.label ? { typeLabel: loaderData.frame.label } : {}),
           ...(loaderData.frame.schemaOrgType ? { schemaOrgType: loaderData.frame.schemaOrgType } : {}),
-          ...(loaderData.ratings ? { ratings: loaderData.ratings } : {}),
+          ...(loaderData.ratings.figure.kind === 'ready' ? { ratings: { figure: loaderData.ratings.figure.value } } : {}),
         })
       : { meta: [{ title: m.not_found_heading() }] },
   component: SubjectRoute,
@@ -338,7 +352,29 @@ export function SubjectOverview({
   const { data: frame } = useSuspenseQuery(type ? subjectFrameQuery(type, locale) : subjectFrameQuery('', locale));
   const { data: relations } = useSuspenseQuery(subjectRelationsQuery(pageRelationProperties(page), locale));
   const { data: publicReactions } = useSuspenseQuery(subjectReactionsQuery(id, locale));
-  const { data: publicRatings } = useSuspenseQuery(subjectRatingQuery(id, locale));
+  const [questionQuery, figureQuery, globalQuery, statisticsQuery] = useSuspenseQueries({
+    queries: [
+      subjectRatingQuery(id, locale, 'question'),
+      subjectRatingQuery(id, locale, 'figure'),
+      subjectRatingQuery(id, locale, 'global'),
+      subjectRatingQuery(id, locale, 'statistics'),
+    ],
+  });
+  const publicRatings: RatingSources = {
+    question: questionQuery.data.question,
+    figure: figureQuery.data.figure,
+    global: globalQuery.data.global,
+    statistics: statisticsQuery.data.statistics,
+  };
+  const retryRatingSource = (source: RatingSource) => {
+    const request = {
+      question: questionQuery,
+      figure: figureQuery,
+      global: globalQuery,
+      statistics: statisticsQuery,
+    }[source];
+    void request.refetch().catch(() => {});
+  };
   const { data: library } = useQuery({
     ...subjectLibraryQuery(id, locale, slot === 'collections', labelResult, labelUndo, subjectPageType(page)),
     enabled: session === 'signed-in',
@@ -361,9 +397,7 @@ export function SubjectOverview({
   const reader = personal.reader;
   const ownRating = personal.ownRating;
   const reactions = publicReactions ? { ...publicReactions, value: subjectReaction.ownReaction?.value ?? null } : null;
-  const ratings = publicRatings
-    ? { ...publicRatings, own: session === 'signed-in' && ownRating?.kind === 'ready' ? ownRating.units : null }
-    : null;
+  const ratings = publicRatings;
   const returnTo = contextHref(useLocation().publicHref.split(/[?#]/, 1)[0]!, realm);
   const nonce = useRouter().options.ssr?.nonce;
   if (!currentReader) return <PendingPage />;
@@ -379,6 +413,10 @@ export function SubjectOverview({
         ...(ratingFailure ? { failure: true } : {}),
       }}
     >
+      <RatingsRecoveryContext.Provider value={retryRatingSource}>
+      <RatingPopulationsContext.Provider value={ratings.question.kind === 'ready' ?
+        <SubjectRatingPopulations subjectId={id} question={ratings.question.value} locale={locale}
+          session={browserSession} enabled={currentReader} /> : null}>
       <RatingsContext.Provider value={ratings}>
         <SubjectPage
           page={page}
@@ -433,6 +471,8 @@ export function SubjectOverview({
           )}
         />
       </RatingsContext.Provider>
+      </RatingPopulationsContext.Provider>
+      </RatingsRecoveryContext.Provider>
     </RatingControlContext.Provider>
   );
 }

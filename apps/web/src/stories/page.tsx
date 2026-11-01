@@ -18,7 +18,7 @@ import { selectLabelStory } from '../kernel/fake/library-labels';
 import { selectRatingsFixture, type RatingsFixtureName } from '../kernel/fake/ratings';
 import { threadHref } from '../threads/thread-href';
 import { RatingsPreviewContext } from '../features/pages/subject-ratings-view';
-import type { Ratings } from '../features/pages/subject-ratings';
+import type { Ratings, RatingSources } from '../features/pages/subject-ratings';
 import boardRecording from '../kernel/recorded/board.json';
 import boardThreadsRecording from '../kernel/recorded/board-threads.json';
 import searchEmptyRecording from '../kernel/recorded/search-empty.json';
@@ -145,7 +145,7 @@ export function PageStory({
   visitor: 'Signed In' | 'Signed Out';
   path: string;
   credentialMode?: ReadCredentialMode;
-  ratings?: Ratings;
+  ratings?: Ratings | RatingSources;
   ratingsFixture?: RatingsFixtureName;
   labelsFixture?: Parameters<typeof selectLabelStory>[0];
   homeFeedFixture?: HomeFeedStory;
@@ -173,7 +173,7 @@ export function PageStory({
     });
     void router.load();
     return { router, queryClient };
-  }, [entry, labelsFixture, visitor, credentialMode, homeFeedFixture]);
+  }, [entry, labelsFixture, visitor, credentialMode, homeFeedFixture, ratingsFixture]);
   useLayoutEffect(
     () =>
       bindPreviewNavigation({

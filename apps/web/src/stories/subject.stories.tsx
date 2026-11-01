@@ -373,7 +373,6 @@ export const RealmsAndOwnVote: Story = {
     <PageStory
       visitor="Signed In"
       path={pagePaths.subject}
-      ratings={ratingsFixtures['subject-ratings-realms'].preview}
       ratingsFixture="subject-ratings-realms"
     />
   ),
@@ -552,4 +551,32 @@ export const EditionsSecondPage: Story = {
   tags: ['!dev'],
   play: (context) => continuationReady(context, true),
   render: () => <PageStory visitor="Signed Out" path={`${path}?cursor=continuation-next`} />,
+};
+
+/** Connected route fixtures: assertions are authored, UNRUN in this source delivery. */
+export const RatingSourceFailure: Story = {
+  name: 'Ratings / Independent source failure',
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(context.canvasElement.querySelector('[data-slot="public-rating-figure"]')).not.toBeNull();
+    await expect(context.canvasElement.querySelector('[data-slot="rating-distribution"]')).not.toBeNull();
+    await expect(await canvas.findByText(m.rating_population_choose())).toBeVisible();
+    await expect(context.canvasElement.querySelector('[data-source="statistics"][data-state="failed"]')).not.toBeNull();
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-statistics-failed" />,
+};
+export const SparseRatingPopulations: Story = {
+  name: 'Ratings / Sparse population page with next',
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(m.rating_population_empty_page())).toBeVisible();
+    const next = canvas.getByRole('button', { name: m.rating_population_next() });
+    await userEvent.click(next);
+    const first = await canvas.findByRole('checkbox', { name: 'The Quiet Novel Club' });
+    await expect(canvas.getAllByRole('checkbox').length).toBeGreaterThan(3);
+    await expect(first).toHaveFocus();
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-sparse" />,
 };

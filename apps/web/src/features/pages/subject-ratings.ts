@@ -1,7 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
-import { isPlatformClosedError } from '../../kernel/platform-closed';
 
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';
@@ -91,58 +90,92 @@ export async function preparedRatingReader(request: Request, authorization: stri
   return `credential:${Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
-export async function readRatings(
-  client: KernelClient,
-  id: string,
-  authorization: string | null,
-  memberships: Realm[] = [],
-): Promise<Ratings | null> {
-  const realms = memberships.slice(0, 3);
+/** Public sources have independent, serializable outcomes. Absence is never a successful zero. */
+export type RatingOutcome<T> =
+  | { kind: 'ready'; value: T }
+  | { kind: 'idle' | 'absent' | 'unavailable' | 'terminal' | 'failed' };
+export type RatingSources = {
+  question: RatingOutcome<RatingQuestion>;
+  figure: RatingOutcome<PublicFigure>;
+  global: RatingOutcome<Figure>;
+  statistics: RatingOutcome<Statistic[]>;
+};
+export type RatingSource = keyof RatingSources;
+export const RATING_SOURCES: RatingSource[] = ['question', 'figure', 'global', 'statistics'];
+
+export function failedRatingSources(only?: RatingSource): RatingSources {
+  const outcome = (source: RatingSource): RatingOutcome<never> => ({
+    kind: only === undefined || only === source ? 'failed' : 'idle',
+  });
+  return {
+    question: outcome('question'),
+    figure: outcome('figure'),
+    global: outcome('global'),
+    statistics: outcome('statistics'),
+  };
+}
+
+export function ratingFailure(status: number): Exclude<RatingOutcome<never>, { kind: 'ready' }> {
+  if (status === 404) return { kind: 'absent' };
+  if (status === 410) return { kind: 'terminal' };
+  if (status === 401 || status === 403) return { kind: 'unavailable' };
+  return { kind: 'failed' };
+}
+
+/** Legacy supplied display fixtures are adapted explicitly; they are never native population authority. */
+export function suppliedRatingSources(data: Ratings): RatingSources {
+  const global = data.figures.find((item) => item.population === GLOBAL);
+  return {
+    question: { kind: 'ready', value: data.question },
+    figure: { kind: 'ready', value: data.figure },
+    global: global ? { kind: 'ready', value: global } : { kind: 'absent' },
+    statistics: { kind: 'ready', value: data.statistics },
+  };
+}
+
+/** One anonymous read per requested source, concurrently; no credential, memberships or own vote is acquired. */
+export async function readRatings(client: KernelClient, id: string, only?: RatingSource): Promise<RatingSources> {
   const subject = client.subjects({ id });
-  const headers = authorization ? { authorization } : {};
-  try {
-    const ownVote = authorization
-      ? subject
-          .ratings({ questionId: QUESTION })
-          .vote.get({ headers })
-          .catch((error: unknown) => {
-            if (isPlatformClosedError(error)) return { status: 403, data: null };
-            throw error;
-          })
-      : null;
-    const [question, headline, aggregate, sources, vote] = await Promise.all([
-      readRatingQuestion(client),
-      subject.figure.get({ headers }),
-      subject.ratings.get({
-        query: { question: QUESTION, population: [GLOBAL, ...realms.map((realm) => realm.id)] },
-        headers,
-      }),
-      subject['source-statistics'].get({ headers }),
-      ownVote,
-    ]);
-    if (
-      !question ||
-      headline.status !== 200 ||
-      !headline.data ||
-      headline.data.figure.questionId !== question.id ||
-      aggregate.status !== 200 ||
-      !aggregate.data ||
-      sources.status !== 200 ||
-      !sources.data ||
-      (vote && ![200, 401, 403, 404].includes(vote.status))
-    )
-      return null;
-    return {
-      question,
-      figure: headline.data.figure,
-      figures: aggregate.data.figures,
-      statistics: sources.data,
-      realms,
-      own: vote?.status === 200 ? (vote.data?.units ?? null) : null,
-    };
-  } catch {
-    return null;
+  const requested = (source: RatingSource) => only === undefined || only === source;
+  async function settle<T>(source: RatingSource, read: () => Promise<RatingOutcome<T>>): Promise<RatingOutcome<T>> {
+    if (!requested(source)) return { kind: 'idle' };
+    try {
+      return await read();
+    } catch {
+      return { kind: 'failed' };
+    }
   }
+  const [question, figure, global, statistics] = await Promise.all([
+    settle('question', async () => {
+      const result = await client['rating-questions']({ questionId: QUESTION }).get();
+      return result.status === 200 && result.data?.id === QUESTION
+        ? { kind: 'ready', value: result.data }
+        : ratingFailure(result.status);
+    }),
+    settle('figure', async () => {
+      const result = await subject.figure.get();
+      return result.status === 200 &&
+        result.data?.figure.questionId === QUESTION &&
+        result.data.figure.populationId === GLOBAL
+        ? { kind: 'ready', value: result.data.figure }
+        : ratingFailure(result.status);
+    }),
+    settle('global', async () => {
+      const result = await subject.ratings.get({ query: { question: QUESTION, population: [GLOBAL] } });
+      if (result.status !== 200 || !result.data) return ratingFailure(result.status);
+      const value = result.data.figures.find((item) => item.population === GLOBAL);
+      return result.data.subject === id && result.data.question === QUESTION && value
+        ? { kind: 'ready', value }
+        : { kind: 'failed' };
+    }),
+    settle('statistics', async () => {
+      const result = await subject['source-statistics'].get();
+      return result.status === 200 && result.data
+        ? { kind: 'ready', value: result.data }
+        : ratingFailure(result.status);
+    }),
+  ]);
+  return { question, figure, global, statistics };
 }
 
 export async function readOwnRating(
@@ -193,13 +226,11 @@ export async function writeOwnRating(
   }
 }
 
-export async function loadSubjectRatings(client: KernelClient, request: Request, env: Partial<SessionEnv>, id: string) {
-  let authorization: string | null = null;
-  try {
-    await prepareSession(request, env);
-    authorization = viewerCredential(request);
-  } catch {
-    /* Public figures remain readable. */
-  }
-  return readRatings(client, id, authorization);
+export async function loadSubjectRatings(
+  client: KernelClient,
+  _request: Request,
+  _env: Partial<SessionEnv>,
+  id: string,
+) {
+  return readRatings(client, id);
 }

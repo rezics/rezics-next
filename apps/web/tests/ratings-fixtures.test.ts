@@ -47,7 +47,11 @@ test.each(fixtureNames)('the %s state serves typed rating responses', async (nam
   expect(aggregate).toMatchObject({ status: 200, question: QUESTION, subject: fixtureSubject, figures });
 
   const statistics = await answer(name, 1, `/v1/subjects/${fixtureSubject}/source-statistics`);
-  expect(statistics).toMatchObject({ status: 200, __responseBody: ratingsFixtures[name].statistics });
+  expect(statistics).toMatchObject(
+    ratingsFixtures[name].statisticsStatus === 503
+      ? { status: 503, __responseBody: { code: 'overloaded' } }
+      : { status: 200, __responseBody: ratingsFixtures[name].statistics },
+  );
 
   const vote = await answer(name, 2, `/v1/subjects/${fixtureSubject}/ratings/${QUESTION}/vote`);
   expect(vote).toMatchObject({ status: ratingsFixtures[name].voteStatus });
@@ -61,7 +65,7 @@ test('the standard global population is part of the native rating fixtures', () 
 test('the fake kernel keeps rating reads constant for empty and populated subjects', async () => {
   const fakeFetch = createRecordedKernelFetch({});
   for (const name of ['subject-ratings-imported', 'subject-ratings-global'] as const) {
-    for (const authorization of [null, 'Bearer story-token']) {
+    {
       (globalThis as typeof globalThis & { __rezicsStoryContext?: { ratingsFixture?: string } }).__rezicsStoryContext =
         {
           ratingsFixture: name,
@@ -73,12 +77,17 @@ test('the fake kernel keeps rating reads constant for empty and populated subjec
           return fakeFetch(input, init);
         }) as typeof fetch,
       });
-      expect(await readRatings(client, subject, authorization)).not.toBeNull();
+      const reading = await readRatings(client, subject);
+      expect(reading.question.kind).toBe('ready');
+      expect(reading.figure.kind).toBe('ready');
+      expect(reading.global.kind).toBe('ready');
+      expect(reading.statistics.kind).toBe('ready');
       expect(paths.sort()).toEqual(
         [
           `/v1/subjects/${subject}/ratings`,
           `/v1/subjects/${subject}/source-statistics`,
-          ...(authorization ? [`/v1/subjects/${subject}/ratings/${QUESTION}/vote`] : []),
+          `/v1/rating-questions/${QUESTION}`,
+          `/v1/subjects/${subject}/figure`,
         ].sort(),
       );
     }

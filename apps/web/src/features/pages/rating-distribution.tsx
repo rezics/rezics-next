@@ -1,7 +1,7 @@
 import { m } from '../../paraglide/messages.js';
-import { displayRating, GLOBAL, hasPublicMean, type Figure, type Ratings } from './subject-ratings';
+import { displayRating, GLOBAL, QUESTION, hasPublicMean, type Figure, type Ratings } from './subject-ratings';
 
-/** Only a supplied, eligible Global distribution accompanies the published headline. */
+/** A healthy eligible Global distribution survives an unavailable headline without lowering its privacy threshold. */
 export function RatingDistribution({
   figure,
   headline,
@@ -9,21 +9,25 @@ export function RatingDistribution({
   locale,
 }: {
   figure: Figure | undefined;
-  headline: Ratings['figure'];
+  headline?: Ratings['figure'] | undefined;
   question: Ratings['question'];
   locale: string;
 }) {
   const { scale } = question;
   const histogram = figure?.histogram;
   if (
-    !hasPublicMean(headline) ||
-    headline.questionId !== question.id ||
+    question.id !== QUESTION ||
+    !Number.isSafeInteger(figure?.count) ||
+    (headline !== undefined &&
+      (!hasPublicMean(headline) || headline.questionId !== question.id || figure?.count !== headline.count)) ||
+    (figure?.count ?? 0) < (['episode', 'character'].includes(question.grain) ? 10 : 5) ||
     figure?.population !== GLOBAL ||
-    figure.count !== headline.count ||
     figure.remaining !== undefined ||
     figure.freshness?.updating === true ||
     figure.mean === undefined ||
     !Number.isFinite(figure.mean) ||
+    figure.mean < scale.min ||
+    figure.mean > scale.max ||
     !histogram ||
     scale.max <= scale.min ||
     scale.displayStep <= 0 ||

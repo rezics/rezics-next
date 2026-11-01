@@ -12,7 +12,14 @@ import type { typeFrame as TypeFrame } from '../../subject/definitions';
 import { validatePageRealm, validatePageNode, validateViewCursor } from './view-cursor';
 import { loadSubjectPage, PageReadError } from './subject';
 import { loadContextSubject } from './context-subject';
-import { readRatings, readOwnRating, type SubjectOwnRating } from './subject-ratings';
+import {
+  readRatings,
+  failedRatingSources,
+  readOwnRating,
+  RATING_SOURCES,
+  type RatingSource,
+  type SubjectOwnRating,
+} from './subject-ratings';
 import { readReactionCounts, readOwnReaction, type SubjectOwnReaction } from './subject-reactions';
 import { communityOverview, withComposedCommunity } from './subject-community';
 import { projectShareCardPage } from '../../media/share-card-page';
@@ -364,10 +371,12 @@ const readSubjectRatings = createServerFn({ method: 'GET', strict: false })
       value.locale.length > 35
     )
       throw notFound();
-    return { id: value.id, locale: value.locale };
+    const source = RATING_SOURCES.find((source) => source === value.source);
+    if (value.source !== undefined && !source) throw notFound();
+    return { id: value.id, locale: value.locale, source };
   })
   .handler(async ({ data }) => {
-    return readRatings((await subjectKernelClient(data.locale)).client, data.id, null);
+    return readRatings((await subjectKernelClient(data.locale)).client, data.id, data.source);
   });
 
 const readSubjectOwnRating = createServerFn({ method: 'GET', strict: false })
@@ -590,11 +599,13 @@ export const subjectReactionsQuery = (id: string, locale: string) =>
     queryFn: () => readSubjectReactions({ data: { id, locale } }),
   });
 
-export const subjectRatingQuery = (id: string, locale: string) =>
+export const subjectRatingQuery = (id: string, locale: string, source?: RatingSource) =>
   queryOptions({
     ...publicRead,
-    queryKey: ['subject-rating', id, locale] as const,
-    queryFn: () => readSubjectRatings({ data: { id, locale } }),
+    queryKey: ['subject-rating', id, locale, ...(source ? [source] : [])] as const,
+    retry: false,
+    queryFn: () =>
+      readSubjectRatings({ data: { id, locale, ...(source ? { source } : {}) } }).catch(() => failedRatingSources(source)),
   });
 
 export type SubjectReactionQueryScope = {

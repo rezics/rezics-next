@@ -248,7 +248,7 @@ test('subject and Search render published ready, pending and below-threshold fig
         throw new Error(`Unexpected request: ${path}`);
       },
     });
-    const data = await readRatings(client, subjectId, null);
+    const data = await readRatings(client, subjectId);
     expect(data).not.toBeNull();
     if (!data) throw new Error('Expected published rating data');
     expect(requests).toHaveLength(4);
@@ -272,7 +272,7 @@ test('subject and Search render published ready, pending and below-threshold fig
       origin: 'https://site.example',
       locale: 'en',
       path: `/en/subjects/${subjectId}/kokoro`,
-      ratings: data,
+      ...(data.figure.kind === 'ready' ? { ratings: { figure: data.figure.value } } : {}),
     });
     const metadata = JSON.parse(head.scripts[0]!.children);
     for (const html of [subject, search]) {

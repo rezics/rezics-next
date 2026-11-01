@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { PageStory, pagePaths, pageReady } from '../page';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RatingControlView } from '../../features/pages/rating-control';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
 import { GLOBAL, type PublicFigure, type Ratings } from '../../features/pages/subject-ratings';
@@ -207,7 +208,7 @@ export const SaveFailure: Story = {
   },
 };
 
-// Illustrative supplied data only: this does not enable Realm discovery or change readRatings' three-Realm limit.
+// Retained illustrative presentation data; connected directory stories below use the actual route and BFF.
 const suppliedContexts: Ratings = {
   ...ready,
   realms: [
@@ -316,4 +317,72 @@ export const SteppedDistribution: Story = {
       }}
     />
   ),
+};
+
+/** UNRUN connected journey cases; use the same IDs at phone390/desktop1280 in all eight locale globals. */
+export const PopulationChooser: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-realms" />,
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(context.canvasElement);
+    const first = await view.findByRole('checkbox', { name: 'The Quiet Novel Club' });
+    await expect(view.getByRole('group', { name: m.rating_population_choose() })).toContainElement(first);
+    first.focus();
+    await userEvent.keyboard(' ');
+    await expect(first).toBeChecked();
+    await userEvent.tab();
+    await expect(view.getByRole('checkbox', { name: 'Night Shift Translators' })).toHaveFocus();
+    for (const name of ['Night Shift Translators', 'Hearth and Skillet', 'Weekend Readers'])
+      await userEvent.click(view.getByRole('checkbox', { name }));
+    await waitFor(() =>
+      expect(context.canvasElement.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(4),
+    );
+    const remove = view.getByRole('button', { name: m.rating_population_remove({ name: 'Weekend Readers' }) });
+    await expectComfortableAction(remove);
+    await userEvent.click(remove);
+    await expect(view.getByRole('checkbox', { name: 'Weekend Readers' })).not.toBeChecked();
+    await expect(view.getByText(m.rating_population_choose())).toHaveFocus();
+    const next = view.getByRole('button', { name: m.rating_population_next() });
+    await expect(next).toBeDisabled();
+    await expect(view.getAllByText(m.subject_ratings_global()).length).toBeGreaterThan(0);
+    await expect(context.canvasElement.scrollWidth).toBeLessThanOrEqual(context.canvasElement.clientWidth);
+  },
+};
+export const SparsePopulationPage: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-sparse" />,
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(context.canvasElement);
+    await expect(await view.findByText(m.rating_population_empty_page())).toBeVisible();
+    const next = view.getByRole('button', { name: m.rating_population_next() });
+    await expectComfortableAction(next);
+    next.focus();
+    await userEvent.keyboard('{Enter}');
+    const first = await view.findByRole('checkbox', { name: 'The Quiet Novel Club' });
+    await expect(first).toHaveFocus();
+    await userEvent.click(view.getByRole('button', { name: m.rating_population_restart() }));
+    await expect(await view.findByText(m.rating_population_empty_page())).toBeVisible();
+  },
+};
+export const IndependentSources: Story = {
+  render: () => (
+    <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-statistics-failed" />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(context.canvasElement);
+    await expect(await view.findByRole('checkbox', { name: 'The Quiet Novel Club' })).toBeEnabled();
+    const figure = context.canvasElement.querySelector('[data-slot="public-rating-figure"]');
+    const histogram = context.canvasElement.querySelector('[data-slot="rating-distribution"]');
+    await expect(figure).not.toBeNull();
+    await expect(histogram).not.toBeNull();
+    await expect(context.canvasElement.querySelector('[data-slot="rating-control-reserved"]')).not.toBeNull();
+    await userEvent.click(view.getByText(m.subject_ratings_provenance()));
+    const failure = within(context.canvasElement.querySelector<HTMLElement>('[data-source="statistics"]')!);
+    const retry = failure.getByRole('button', { name: m.subject_section_retry() });
+    await expectComfortableAction(retry);
+    await userEvent.click(retry);
+    await expect(context.canvasElement.querySelector('[data-slot="public-rating-figure"]')).toBe(figure);
+    await expect(context.canvasElement.querySelector('[data-slot="rating-distribution"]')).toBe(histogram);
+  },
 };

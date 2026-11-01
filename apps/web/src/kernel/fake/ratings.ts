@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { PublicFigure, RatingQuestion, Ratings } from '../../features/pages/subject-ratings';
 import type { FakeRoute } from '../fake-modules';
+import realmRecording from '../recorded/realm.json';
 import subjectSourceStatisticsRecording from '../recorded/subject-source-statistics.json';
 
 type SubjectRoutes = ReturnType<KernelClient['subjects']>;
@@ -38,10 +39,13 @@ const readyPublicFigure: PublicFigure = {
   score: 8.3,
 };
 
-const realmList = [
+export const ratingPopulationRealms = [
   { id: '01a1a000-0000-7000-8000-000000000002', name: 'The Quiet Novel Club' },
   { id: '01a1a000-0000-7000-8000-000000000051', name: 'Night Shift Translators' },
   { id: '01a1a000-0000-7000-8000-000000000052', name: 'Hearth and Skillet' },
+  { id: '01a1a000-0000-7000-8000-000000000053', name: 'Weekend Readers' },
+  { id: '01a1a000-0000-7000-8000-000000000054', name: 'Small Press Discussion' },
+  { id: '01a1a000-0000-7000-8000-000000000055', name: 'Archive Readers' },
 ];
 
 const histogram = (entries: [number, number][]) => {
@@ -89,6 +93,8 @@ const emptyGlobal = {
 const ownVote = { units: 17, revision: 1, at: '2026-10-28T00:00:00.000Z' } satisfies VoteResponse;
 
 export type RatingsFixtureName =
+  | 'subject-ratings-statistics-failed'
+  | 'subject-ratings-sparse'
   | 'subject-ratings-empty'
   | 'subject-ratings-global'
   | 'subject-ratings-realms'
@@ -102,13 +108,18 @@ export type RatingsFixture = {
   voteStatus: number;
   vote?: VoteResponse;
   preview: Ratings;
+  statisticsStatus?: number;
+  sparse?: boolean;
 };
 
 function aggregate(figures: AggregateResponse['figures']): AggregateResponse {
   return { question: QUESTION, subject: '00000000-0000-4000-8000-000000000001', figures };
 }
 
-export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
+const baseRatingsFixtures: Record<
+  Exclude<RatingsFixtureName, 'subject-ratings-statistics-failed' | 'subject-ratings-sparse'>,
+  RatingsFixture
+> = {
   'subject-ratings-empty': {
     aggregate: aggregate([emptyGlobal]),
     statistics: emptyStatistics,
@@ -139,7 +150,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
     aggregate: aggregate([
       globalScore,
       {
-        population: realmList[0]!.id,
+        population: ratingPopulationRealms[0]!.id,
         count: 36,
         freshness: { asOf: null, updating: false },
         mean: 17.61,
@@ -149,7 +160,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
         ]),
       },
       {
-        population: realmList[1]!.id,
+        population: ratingPopulationRealms[1]!.id,
         count: 82,
         freshness: { asOf: null, updating: false },
         mean: 16.4,
@@ -158,7 +169,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
           [17, 33],
         ]),
       },
-      { population: realmList[2]!.id, count: 0, freshness: { asOf: null, updating: false } },
+      { population: ratingPopulationRealms[2]!.id, count: 0, freshness: { asOf: null, updating: false } },
     ]),
     statistics: emptyStatistics,
     voteStatus: 200,
@@ -169,7 +180,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
       figures: [
         globalScore,
         {
-          population: realmList[0]!.id,
+          population: ratingPopulationRealms[0]!.id,
           count: 36,
           mean: 17.61,
           histogram: histogram([
@@ -178,7 +189,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
           ]),
         },
         {
-          population: realmList[1]!.id,
+          population: ratingPopulationRealms[1]!.id,
           count: 82,
           mean: 16.4,
           histogram: histogram([
@@ -186,10 +197,10 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
             [17, 33],
           ]),
         },
-        { population: realmList[2]!.id, count: 0 },
+        { population: ratingPopulationRealms[2]!.id, count: 0 },
       ],
       statistics: [],
-      realms: realmList,
+      realms: ratingPopulationRealms,
       own: ownVote.units,
     },
   },
@@ -234,6 +245,12 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
   },
 };
 
+export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
+  ...baseRatingsFixtures,
+  'subject-ratings-statistics-failed': { ...baseRatingsFixtures['subject-ratings-realms'], statisticsStatus: 503 },
+  'subject-ratings-sparse': { ...baseRatingsFixtures['subject-ratings-realms'], sparse: true },
+};
+
 let selectedName: RatingsFixtureName | undefined;
 
 export function selectRatingsFixture(name?: RatingsFixtureName): void {
@@ -261,7 +278,14 @@ function aggregateRoute(request: Request, path: string, fixture: RatingsFixture)
     status: 200,
     question: requestUrl(request).searchParams.get('question') ?? fixture.aggregate.question,
     subject,
-    figures: fixture.aggregate.figures.filter((figure) => requested.includes(figure.population)),
+    figures: requested.map(
+      (population) =>
+        fixture.aggregate.figures.find((figure) => figure.population === population) ?? {
+          population,
+          count: 0,
+          freshness: { asOf: null, updating: false },
+        },
+    ),
   } satisfies AggregateResponse & { status: number };
 }
 
@@ -271,8 +295,10 @@ function ratingsRoutes(): FakeRoute[] {
   const aggregateAnswer: NonNullable<FakeRoute['story']> = ({ request, match }) =>
     match ? aggregateRoute(request, match[0], selectedFixture(request)) : undefined;
   const statisticsAnswer: NonNullable<FakeRoute['story']> = ({ request }) => ({
-    status: 200,
-    __responseBody: selectedFixture(request).statistics,
+    status: selectedFixture(request).statisticsStatus ?? 200,
+    __responseBody: selectedFixture(request).statisticsStatus
+      ? { code: 'overloaded' }
+      : selectedFixture(request).statistics,
   });
   const voteAnswer: NonNullable<FakeRoute['story']> = ({ request }) => {
     const fixture = selectedFixture(request);
@@ -305,6 +331,18 @@ export const routes: FakeRoute[] = [
   ...ratingsRoutes(),
   {
     method: 'GET',
+    path: /^\/v1\/subjects\/[^/]+\/ratings\/populations$/,
+    story: ({ request }) => populationPage(request),
+    fixture: ({ request }) => populationPage(request),
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/realms\/[^/]+$/,
+    story: ({ request }) => populationRealm(request),
+    fixture: ({ request }) => populationRealm(request),
+  },
+  {
+    method: 'GET',
     path: /^\/v1\/rating-questions\/[^/]+$/,
     story: () => ({ status: 200, ...standardRatingQuestion }),
     fixture: () => ({ status: 200, ...standardRatingQuestion }),
@@ -316,3 +354,25 @@ export const routes: FakeRoute[] = [
     fixture: ({ request }) => ({ status: 200, figure: selectedFixture(request).preview.figure }),
   },
 ];
+
+// Declared native DTO fixtures for connected consumers; no membership, credential freshness or native proof is inferred.
+function populationPage(request: Request) {
+  const url = new URL(request.url);
+  const fixture = selectedFixture(request);
+  if (url.searchParams.get('question') !== QUESTION) return { status: 400, code: 'invalid_request' };
+  const cursor = url.searchParams.get('cursor');
+  const continuation = `recorded.opaque.${url.pathname.split('/')[3]}.next`;
+  if (cursor !== null && cursor !== continuation) return { status: 400, code: 'invalid_cursor' };
+  return {
+    status: 200,
+    populations:
+      fixture.sparse && cursor === null ? [] : fixture.preview.realms.map(({ id }) => ({ population: id, count: 1 })),
+    next: fixture.sparse && cursor === null ? continuation : null,
+  };
+}
+function populationRealm(request: Request) {
+  const id = new URL(request.url).pathname.split('/')[3];
+  const item = ratingPopulationRealms.find((item) => item.id === id);
+  if (!item || !selectedFixture(request).preview.realms.some((realm) => realm.id === item.id)) return;
+  return { status: 200, realm: { ...realmRecording.realm, realmId: item.id, title: item.name } };
+}

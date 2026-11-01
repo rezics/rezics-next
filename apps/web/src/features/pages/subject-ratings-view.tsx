@@ -1,11 +1,22 @@
-import { createContext, useContext, useState, type ContextType } from 'react';
+import { createContext, useContext, useState, type ContextType, type ReactNode } from 'react';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { locales } from '../../paraglide/runtime.js';
 import { SubjectRatingControl } from './rating-control';
 import type { SubjectOwnRating } from './subject-ratings';
 import type { SubjectPersonalLease } from './subject-personal-reader';
-import { displayRating, GLOBAL, PUBLIC_RATING_SCALE, type Figure, type Ratings } from './subject-ratings';
+import {
+  displayRating,
+  GLOBAL,
+  PUBLIC_RATING_SCALE,
+  suppliedRatingSources,
+  type Figure,
+  type Ratings,
+  type RatingSources,
+  type RatingSource,
+  type RatingOutcome,
+} from './subject-ratings';
 import { PublicRatingFigure } from './public-rating-figure';
 import { RatingDistribution } from './rating-distribution';
 
@@ -14,9 +25,71 @@ const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const linkClass = 'text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80';
 
-export const RatingsContext = createContext<Ratings | null | undefined>(undefined);
+export const RatingsContext = createContext<Ratings | RatingSources | null | undefined>(undefined);
 /** Story fixtures can show each display state without adding another request to the subject page. */
-export const RatingsPreviewContext = createContext<Ratings | null | undefined>(undefined);
+export const RatingsPreviewContext = createContext<Ratings | RatingSources | null | undefined>(undefined);
+export const RatingsRecoveryContext = createContext<((source: RatingSource) => void) | null>(null);
+export const RatingPopulationsContext = createContext<ReactNode>(null);
+
+/** A source-local recovery never invalidates a sibling or submits the personal vote. */
+export function RatingSourceStatus({
+  outcome,
+  source,
+  locale,
+  retry,
+}: {
+  outcome: RatingOutcome<unknown>;
+  source: string;
+  locale: string;
+  retry?: (() => void) | undefined;
+}) {
+  const options = { locale: locales.find((item) => item === locale) ?? 'en' };
+  if (outcome.kind === 'ready') return null;
+  const labels: Record<string, string> = {
+    question: m.rating_population_source_question({}, options),
+    figure: m.rating_population_source_figure({}, options),
+    global: m.rating_population_source_global({}, options),
+    statistics: m.rating_population_source_statistics({}, options),
+    directory: m.rating_population_source_directory({}, options),
+    selected: m.rating_population_source_selected({}, options),
+    comparison: m.rating_population_source_comparison({}, options),
+  };
+  const label = labels[source] ?? m.rating_population_source_comparison({}, options);
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      data-slot="rating-source-status"
+      data-source={source}
+      data-state={outcome.kind}
+      className="space-y-2 text-sm"
+    >
+      <p className="font-medium">{label}</p>
+      <p role="status">
+        {outcome.kind === 'idle'
+          ? m.rating_population_loading({}, options)
+          : outcome.kind === 'absent'
+            ? m.rating_population_absent({}, options)
+            : outcome.kind === 'terminal'
+              ? m.rating_population_terminal({}, options)
+              : outcome.kind === 'unavailable'
+                ? m.rating_population_unavailable({}, options)
+                : m.rating_population_failed({}, options)}
+      </p>
+      {retry && outcome.kind !== 'terminal' && outcome.kind !== 'idle' && (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          onClick={retry}
+        >
+          {m.subject_section_retry({}, options)}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export const RatingControlContext = createContext<{
   subjectId: string;
   locale: string;
@@ -69,17 +142,31 @@ export function RatingsView({
   locale,
   control,
 }: {
-  data: Ratings | null;
+  data: Ratings | RatingSources | null;
   id: string;
   subject: string;
   locale: string;
   control?: ContextType<typeof RatingControlContext>;
 }) {
   const options = { locale: locale as never };
+  const recovery = useContext(RatingsRecoveryContext);
+  const populations = useContext(RatingPopulationsContext);
   const title = m.subject_ratings({}, options);
   const reviewsHref = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}/reviews`;
-
   if (!data) return <RatingsFailure id={id} subject={subject} locale={locale} />;
+  const supplied = 'figures' in data ? data : undefined;
+  const sources = 'figures' in data ? suppliedRatingSources(data) : data;
+  const question = sources.question.kind === 'ready' ? sources.question.value : undefined;
+  const headline = sources.figure.kind === 'ready' ? sources.figure.value : undefined;
+  const statistics = sources.statistics.kind === 'ready' ? sources.statistics.value : [];
+  const status = (source: RatingSource) => (
+    <RatingSourceStatus
+      outcome={sources[source]}
+      source={source}
+      locale={locale}
+      retry={recovery ? () => recovery(source) : undefined}
+    />
+  );
 
   const number = (value: number, digits = 0) =>
     new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
@@ -93,36 +180,48 @@ export function RatingsView({
       : value;
   };
 
-  const globalFigure = data.figures.find((item) => item.population === GLOBAL);
-  const threshold = ['episode', 'character'].includes(data.question.grain) ? 10 : 5;
+  const globalFigure = sources.global.kind === 'ready' ? sources.global.value : undefined;
+  const threshold = question && ['episode', 'character'].includes(question.grain) ? 10 : 5;
 
   return (
     <section data-slot="rating-summary" aria-labelledby={`${id}-title`} className={sectionClass}>
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
-      <p className="text-sm font-medium" data-slot="rating-question" data-revision={data.question.revision}>
-        {data.question.label}
-        <span className="ml-2 text-muted-foreground">
-          {m.rating_question_revision({ revision: number(data.question.revision) }, options)}
-        </span>
-      </p>
+      {question ? (
+        <p className="text-sm font-medium" data-slot="rating-question" data-revision={question.revision}>
+          {question.label}
+          <span className="ml-2 text-muted-foreground">
+            {m.rating_question_revision({ revision: number(question.revision) }, options)}
+          </span>
+        </p>
+      ) : (
+        status('question')
+      )}
       <div data-slot="rating-figures" className="space-y-4">
         <div className="space-y-2 [&_strong]:text-3xl [&_strong]:font-semibold">
-          <PublicRatingFigure figure={data.figure} locale={locale} remaining={threshold - data.figure.count} />
-          {data.figure.count === 0 && data.figure.state !== 'updating' && (
+          {headline ? (
+            <PublicRatingFigure
+              figure={headline}
+              locale={locale}
+              {...(question ? { remaining: threshold - headline.count } : {})}
+            />
+          ) : (
+            status('figure')
+          )}
+          {headline?.count === 0 && headline.state !== 'updating' && (
             <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
           )}
         </div>
-        {!control && data.own !== null && (
+        {!control && supplied && supplied.own !== null && question && (
           <p data-slot="own-rating" className="text-sm text-muted-foreground">
-            {m.subject_ratings_yours({ score: number(displayRating(data.own, data.question.scale), 2) }, options)}
+            {m.subject_ratings_yours({ score: number(displayRating(supplied.own!, question.scale), 2) }, options)}
           </p>
         )}
-        {control && (
+        {control && question && (
           <SubjectRatingControl
             {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
-            question={data.question}
+            question={question}
             locale={control.locale}
             own={control.own}
             {...(control.binding ? { binding: control.binding } : {})}
@@ -132,19 +231,69 @@ export function RatingsView({
           />
         )}
       </div>
-      <RatingDistribution figure={globalFigure} headline={data.figure} question={data.question} locale={locale} />
-      <RatingComparisons
-        key={`${subject}:${data.question.id}:${data.question.revision}`}
-        data={data}
-        id={id}
-        locale={locale}
-      />
+      <p data-slot="rating-global" className="text-sm font-medium">
+        {m.subject_ratings_global({}, options)}
+      </p>
+      {status('global')}
+      {!headline && globalFigure && question && (
+        <div data-slot="rating-global-aggregate" className="space-y-1 text-sm">
+          {globalFigure.freshness?.updating ? (
+            <p role="status">{m.rating_public_updating({}, options)}</p>
+          ) : globalFigure.count === 0 ? (
+            <p>{m.subject_ratings_empty({}, options)}</p>
+          ) : (
+            <>
+              <p>
+                {m.subject_ratings_realm_count(
+                  { count: number(globalFigure.count), population: m.subject_ratings_global({}, options) },
+                  options,
+                )}
+              </p>
+              {globalFigure.remaining !== undefined || globalFigure.count < threshold ? (
+                <p>
+                  {m.subject_ratings_remaining(
+                    { count: number(globalFigure.remaining ?? threshold - globalFigure.count) },
+                    options,
+                  )}
+                </p>
+              ) : globalFigure.mean !== undefined &&
+                Number.isFinite(globalFigure.mean) &&
+                globalFigure.mean >= question.scale.min &&
+                globalFigure.mean <= question.scale.max &&
+                question.scale.max > question.scale.min ? (
+                <p>
+                  {m.rating_public_mean(
+                    {
+                      mean: number(displayRating(globalFigure.mean, question.scale), 2),
+                      maximum: number(PUBLIC_RATING_SCALE.max),
+                    },
+                    options,
+                  )}
+                </p>
+              ) : (
+                <p>{m.subject_ratings_figure_unavailable({}, options)}</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {question && <RatingDistribution figure={globalFigure} headline={headline} question={question} locale={locale} />}
+      {populations}
+      {supplied && (
+        <RatingComparisons
+          key={`${subject}:${supplied.question.id}:${supplied.question.revision}`}
+          data={supplied}
+          id={id}
+          locale={locale}
+        />
+      )}
       <details data-slot="rating-provenance" className="text-sm">
         <summary className="cursor-pointer font-medium">{m.subject_ratings_provenance({}, options)}</summary>
         <div className="mt-3 space-y-3 text-muted-foreground">
           <p>{m.rating_public_delay({}, options)}</p>
           <p>{m.rating_public_ordering({}, options)}</p>
-          {data.statistics.map((item) => (
+          {status('statistics')}
+          {statistics.map((item) => (
             <p key={item.source} data-slot="imported-score" className="min-w-0 break-words">
               <MetaLine
                 items={[

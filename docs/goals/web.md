@@ -123,6 +123,34 @@ locale/path) and `Patterns/Subjects/Purchase entry slot` (empty, populated, priv
 components and recorded public subject composition; the owner-region fixture makes no business claim. These
 patterns and source integration do not establish native journey acceptance or full page/visual review.
 
+## Subject rating sources and populations
+
+Adopt the rating journey selected by the [first-scope audit](../research/first-scope-remaining-backlog.md), under
+[Subject scores](../subject-pages.md#scores-on-pages). Web owns independent anonymous question/headline/Global/
+imported-source outcomes and targeted retries, plus the actual bounded native population chooser, current Realm
+labels, exact selected aggregates and mounted reader lifetime. Global stays separate; at most twenty selected
+Realms enter one aggregate call. Sparse pages retain opaque next and explicit navigation, with no hidden refill,
+search, membership scan or history aggregation. Healthy sources and existing private vote drafts survive sibling
+failure. Genuine zero, suppression, updating/as-of, absence, unavailable and terminal states stay distinguishable.
+
+Source delivery includes the real generated-client BFF wire and route/context/view binding, source-isolated caches,
+private actual-reader comparison, fresh anonymous/null-CSRF read admission, monotonic retirement and bounded current labels.
+Eight-locale copy and full-page phone390/desktop1280 stories cover selection, removal, sparse continuation and
+source failure. Connected assertions cover native wire operands and refusal, independent recovery/public head,
+selection bounds, delayed work, equal-success and ABA replacement, QueryClient/visit/unmount and useful ordinary
+notifications. They are authored **UNRUN**; source presence and local typing are not whole-feature acceptance.
+Native/browser/growth/physical verification and integration proof remain deferred. Private first-render/SSR and
+unobserved cross-cache credential history remain unresolved, rather than proved by an in-memory fixture.
+
+Content retains questions, privacy/math, aggregates and native vote authority; Accounts/Auth retain session and
+Realm disclosure authority; Search retains public composition/canonical frame and its shared-file regions. The
+existing reaction and personal-vote consumers remain intact. The public figure/head receive no private credential,
+population payload or provenance. The audit's broad shared-UI migrations are already integrated and stay closed.
+Creator Sales remains Commerce's native/page journey, Space-selected Home remains Search-led with Content/Web,
+provider review remains Semantic with Imports, and redirected-population maintenance remains Performance with
+Content/Semantic. Library retained preparation and whole-selection bulk stay conditional on actual producer,
+confirmation ABI and inclusive cost; this Subject consumer does not install those dependencies.
+
 ## Mixed Home delivery
 
 Home is one bounded mixed stream of public discovery, Following and Continue, with one renderer. Kind, Space and

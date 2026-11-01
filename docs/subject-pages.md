@@ -718,10 +718,66 @@ groups, and are labelled with the Context they come from.
 
 ## Scores on pages
 
-A score is never shown without its population and count. The page headline uses the population of the page's
-context: Global on the general site, the Realm on a Realm-routed page. Other populations appear as a labelled list
-beside the distribution, each with its own figure; they are never averaged, blended or silently substituted for one
-another. See [ratings](../services/kernel/src/rating/README.md#display).
+A score is never shown without its population, question, scale and count. The installed public headline is the
+standard question's eligible Global published figure, in its documented 0–10 display domain. A Realm-routed page
+never relabels that Global figure as a Realm result. Exact selected Realm populations appear separately; figures
+are never averaged, blended or silently substituted. See [ratings](../services/kernel/src/rating/README.md#display).
+
+### Independent reading and population comparison
+
+The [first-scope audit](research/first-scope-remaining-backlog.md) is adopted for this Subject journey. The old
+all-siblings-or-null read and first-three-memberships comparison are superseded. Question, published public figure,
+Global aggregate/distribution and imported source statistics have independently settled serializable outcomes and
+separate public query keys. Each failed source has its own explicit retry, which reads that source once and keeps
+successful siblings and the personal vote draft intact. An absent, failed, unavailable or terminal source is never
+a successful zero. Genuine zero, privacy suppression and native updating/as-of observations remain distinct.
+Imported scales, dates, source names, licence and attribution come from their own source DTO; they are not Realm
+populations or community votes. Public head and JSON-LD consume only the eligible anonymous published figure.
+A healthy Global distribution can remain readable when that figure's request fails; it still requires the real
+question scale, threshold, supplied mean/buckets and a non-updating aggregate. When a headline is supplied, its
+eligibility and matching count continue to constrain the distribution. No buckets are inferred from a mean.
+
+A reader opens the installed `GET /v1/subjects/:id/ratings/populations` directory for the exact Subject
+and question. One native page examines at most twenty candidates. It may be sparse or empty while carrying `next`;
+the consumer preserves that cursor opaquely and offers explicit Next, Start again and Retry, with no automatic
+refill, text search, membership enumeration or history accumulation. Global is explicit and read separately.
+The reader can select up to twenty Realm populations across pages. The selected aggregate request carries the exact
+complete selection in one call; it never silently truncates it or includes Global beyond the native twenty limit.
+Removing a selection retires its held response and callbacks. Page transitions and removal place keyboard focus at
+the next useful field or legend; native labelled checkboxes, shared fields and wrapping actions support phone use.
+
+Private directory and selection readers live only in `subject-rating-populations.ts`, its actions and its view.
+Each BFF read prepares the actual Request once, derives actual reader provenance from its credential/subject and
+returns a serializable envelope. Expected reader only compares the result; it supplies neither authentication nor
+a browser authority stamp. Current Realm identity/labels come from generated `client.realms({realmId})` reads,
+bounded to the current page or selected items. A masked aggregate zero alone never establishes readability.
+Refused Realm names/counts disappear from comparison and current choices, including after clearing; only a fresh
+matching private response can restore them. Signed-out readers use a fresh anonymous envelope, as the native picker permits; signing out retires the prior
+private visit before that read. Healthy same-subject signed-in observations with null CSRF may read.
+The original non-null-token native vote command, bodies, rollback and finally ownership remain unchanged.
+
+Browser keys separate actual readers and visits. The cache listener subscribes before async work. Observed session
+Query replacement/removal, every committed session success (including equal data), sign-out, Subject/question,
+QueryClient, transport and visit replacement and unmount retire old work monotonically. Selection/page versions
+prevent ABA restoration; source successes replace callback ownership before React commit, and explicit source
+replacement/removal requires a fresh private response. Useful ordinary fetch, invalidation, observer and non-success
+notifications preserve current work. Ownership is checked before reads, completion/publication, dispatch, focus and
+retry; late responses or queued callbacks cannot revive the old visit. Private payloads/provenance never enter
+public aggregate caches, loader head operands or JSON-LD.
+
+Cost: four independent anonymous source reads, one per requested source; targeted retry touches one. A private page
+uses one native directory call and at most twenty exact Realm reads. A selected batch uses at most twenty aggregate
+operands and twenty exact Realm reads concurrently, with no per-render requests or hidden page loop. Global has its
+own call. Mounted metadata retains only current/selected keys; unrelated members, votes or imported history do not
+increase the request count. Native examined-work and physical cost remain the producer's verification obligation.
+
+Source and proof are separate: the consumer, generated-client wire, fixtures, eight-locale copy and connected
+Subject/reader/lifetime/keyboard stories and assertions are authored. All new connected assertions remain **UNRUN**.
+Workspace typing establishes compiler compatibility only. Native signatures, native disclosure/growth, browser
+keyboard/focus/layout at phone390 and desktop1280 in all eight locales, physical cost and integration acceptance
+remain unverified. A fixture does not prove private first-render/SSR production or unobserved credential history
+across independent QueryClients; both boundaries remain unresolved. Existing Subject shell, reactions, personal
+preference/own-vote helpers, canonical routing and native producers keep their ordinary owners.
 
 ## Realm context
 
