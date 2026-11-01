@@ -286,12 +286,21 @@ export function assertCandidateIntegrity(
   );
 }
 
+/** A rejected owned command cannot release its siblings' worktree or leases early. */
+async function settleOwnedCommands<T>(commands: Promise<T>[]): Promise<T[]> {
+  const results = await Promise.allSettled(commands);
+  const rejected = results.find((result) => result.status === 'rejected');
+  if (rejected?.status === 'rejected') throw rejected.reason;
+  return results.map((result) => (result as PromiseFulfilledResult<T>).value);
+}
+
 /** No wall timeout: a check waiting for a shared host slot is still queued. */
 export async function runAffectedTest(
   command: readonly string[],
   cwd: string,
   logPath: string,
   env: NodeJS.ProcessEnv,
+  options?: { signal: AbortSignal },
 ): Promise<AffectedTestResult> {
   const started = Date.now();
   let output = '';
@@ -300,7 +309,7 @@ export async function runAffectedTest(
   let environmentUnverified = false;
   for (let retry = 0; retry < 2; retry++) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const result = await processGroupRunner(undefined, undefined, env, false)(command, cwd, logPath);
+    const result = await processGroupRunner(undefined, undefined, env, false)(command, cwd, logPath, options);
     output = result.output;
     passed = result.passed;
     environmentUnverified = checkEnvironmentFailed(output);
@@ -357,7 +366,7 @@ export async function runIntegrationChecks(
     const started = Date.now();
     record(command, await execute(command, cwd, logPath), started);
   }
-  const parallel = await Promise.all(
+  const parallel = await Promise.allSettled(
     rest.map(async (command, index) => {
       const own = `${logPath}.check-${index}`;
       writeFileSync(own, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
@@ -366,11 +375,16 @@ export async function runIntegrationChecks(
       return { command, result, started, own };
     }),
   );
-  for (const { command, result, started, own } of parallel) {
+  for (const settled of parallel) {
+    // Rejected commands keep their exact section log. Every sibling has settled before custody can be released.
+    if (settled.status === 'rejected') continue;
+    const { command, result, started, own } = settled.value;
     appendFileSync(logPath, readFileSync(own, 'utf8'));
     rmSync(own, { force: true });
     record(command, result, started);
   }
+  const rejected = parallel.find((result) => result.status === 'rejected');
+  if (rejected?.status === 'rejected') throw rejected.reason;
   for (const command of after) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
     const started = Date.now();
@@ -598,6 +612,7 @@ type ControlPlaneReleaseRecord = {
   mainBranch: string;
   mainCommit: string;
   mainExpected: string;
+  source?: { branch: string; commit: string };
   devBranch: string;
   devScriptTree: string;
   devCommit: string;
@@ -1114,6 +1129,27 @@ type BatchLandingResult = {
   skippedIds: number[];
 };
 
+class ControlPlaneProofInterrupted extends Error {}
+
+type OrdinaryProofAttempt = {
+  source: string;
+  snapshot: ControlPlaneReleaseSnapshot;
+  logPath: string;
+  status: 'running' | 'interrupted' | 'finished';
+  outcome?: GateOutcome;
+  candidate?: string;
+  validations?: number;
+  reason?: string;
+};
+
+type OrdinaryProofCustody = {
+  signal: AbortSignal;
+  checkpoint(): void;
+  run(runner: GateRunner): GateRunner;
+  logPath: string;
+  capture(candidate: string, snapshot: ControlPlaneReleaseSnapshot): void;
+};
+
 type SpawnTextResult = {
   status: number | null;
   stdout: string | null;
@@ -1253,7 +1289,7 @@ export class MergeTrain {
                 }
               }
             } else {
-              const outcome = await this.integrateOrdinary(entry, lane);
+              const outcome = await this.integrateOrdinary(entry, lane, handOff);
               if (!outcome) {
                 // Leave the request pending for the next pump, without retrying contention in this drain.
                 if (o.codeIsCurrent && !o.codeIsCurrent()) await handOff();
@@ -2008,8 +2044,12 @@ export class MergeTrain {
     return { outcomes: orderedOutcomes(), deferredIds: [...deferred], skippedIds: [...skipped] };
   }
 
-  /** The main lane is already owned. Dev drains never acquire main, so this ordering cannot form a lease cycle. */
-  private async integrateOrdinary(entry: LandingEntry, lane: 'main' | 'dev'): Promise<GateOutcome | undefined> {
+  /** Main may borrow idle dev custody, but product work always gets the next turn. */
+  private async integrateOrdinary(
+    entry: LandingEntry,
+    lane: 'main' | 'dev',
+    handOff: () => Promise<void>,
+  ): Promise<GateOutcome | undefined> {
     const o = this.options;
     if (
       lane !== 'main' ||
@@ -2018,6 +2058,8 @@ export class MergeTrain {
     )
       return this.integrate(entry);
 
+    const drainDev = () => this.drain('dev', false, handOff);
+    const devPending = () => o.queue.nextBatch(1, [], 'dev').length > 0;
     const timeoutMs = o.controlPlaneDevLeaseTimeoutMs ?? 30_000;
     if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 30_000)
       throw new Error('Control-plane dev lease wait must be within 30 seconds');
@@ -2025,6 +2067,17 @@ export class MergeTrain {
     for (;;) {
       o.fence.assertCurrent(entry.request);
       if (o.codeIsCurrent && !o.codeIsCurrent()) return;
+      if (devPending()) {
+        // The initial dev drain may have found another owner. Use the same native lane again, never take its lease
+        // ahead of its backlog. A live owner remains responsible for its own shutdown queue recheck.
+        await drainDev();
+        if (devPending()) {
+          const remaining = deadline - performance.now();
+          if (remaining <= 0) return;
+          await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
+          continue;
+        }
+      }
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
         lease = acquireDirectoryLease(join(o.stateDirectory, 'train.lease'));
@@ -2041,19 +2094,188 @@ export class MergeTrain {
         await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
         continue;
       }
+      let yielded = false;
       try {
         o.fence.assertCurrent(entry.request);
         if (o.codeIsCurrent && !o.codeIsCurrent()) return;
-        // Capture refs and form the candidate only after both lanes are owned. Keep dev through every proof,
-        // propagation preparation and the existing final atomic main/dev/stabilize compare-and-swap.
-        return await this.integrate(entry);
+        return await this.runOrdinaryProof(entry, devPending, () => {
+          yielded = true;
+        });
       } finally {
         lease.release();
+        // Cancellation has settled every owned command before this point. Drain actual product requests even when
+        // the original idle dev drain has already returned, and even if no other controller was spawned on enqueue.
+        if (yielded) await drainDev();
       }
     }
   }
 
-  private async integrate(entry: LandingEntry): Promise<GateOutcome> {
+  private async runOrdinaryProof(
+    entry: LandingEntry,
+    devPending: () => boolean,
+    onYield: () => void,
+  ): Promise<GateOutcome | undefined> {
+    const o = this.options;
+    const path = join(o.stateDirectory, `control-plane-proof-${entry.id}.json`);
+    const history = existsSync(path)
+      ? (JSON.parse(readFileSync(path, 'utf8')) as { version: number; attempts: OrdinaryProofAttempt[] })
+      : { version: 1, attempts: [] as OrdinaryProofAttempt[] };
+    if (history.version !== 1 || !Array.isArray(history.attempts))
+      throw new Error('Invalid ordinary control-plane proof journal');
+    const save = () => {
+      const temporary = `${path}.${randomUUID()}.tmp`;
+      writeFileSync(temporary, `${JSON.stringify(history, null, 2)}\n`, { mode: 0o600 });
+      renameSync(temporary, path);
+    };
+    const source = git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}`);
+    const snapshot = this.controlPlaneSnapshot(o.mainBranch ?? 'main');
+    const previous = history.attempts.at(-1);
+    if (previous?.status === 'running') {
+      // A new lease owner cannot inherit a partially run proof from a crashed controller.
+      previous.status = 'interrupted';
+      previous.reason = 'Previous controller exited before proof completion';
+      appendFileSync(previous.logPath, `${previous.reason}; proof remains non-green\n`);
+      save();
+    }
+    if (previous?.source === source) {
+      // A real assertion failure belongs to its source owner, regardless of unrelated dev progress.
+      if (previous.status === 'finished' && previous.outcome && !previous.outcome.passed) return previous.outcome;
+      if (previous.status === 'interrupted' && JSON.stringify(previous.snapshot) === JSON.stringify(snapshot)) return;
+    }
+    const attempts = history.attempts.filter((attempt) => attempt.source === source);
+    const logPath = join(o.stateDirectory, `landing-${entry.id}-proof-${history.attempts.length + 1}.log`);
+    if (attempts.length >= 3) {
+      const output = 'Control-plane proof interrupted three times for this source; owning source decision required';
+      appendFileSync(previous!.logPath, `${output}\n`);
+      return {
+        ...entry.request,
+        passed: false,
+        stage: 'gate',
+        firstFailure: firstFailure(output),
+        logPath: previous!.logPath,
+        hostMs: 0,
+        changedFiles: [],
+        diffLines: 0,
+      };
+    }
+    const attempt: OrdinaryProofAttempt = { source, snapshot, logPath, status: 'running' };
+    history.attempts.push(attempt);
+    save();
+    const controller = new AbortController();
+    let failure: (GateResult & { failedCommand: readonly string[] }) | undefined;
+    const observe = () => {
+      if (controller.signal.aborted) return;
+      if (devPending()) controller.abort(new ControlPlaneProofInterrupted('Product dev request needs the dev lane'));
+      else if (o.codeIsCurrent && !o.codeIsCurrent())
+        controller.abort(
+          new ControlPlaneProofInterrupted('Control-plane code changed; current controller must hand off'),
+        );
+      else {
+        try {
+          o.fence.assertCurrent(entry.request);
+        } catch (error) {
+          controller.abort(error);
+        }
+      }
+    };
+    const checkpoint = () => {
+      observe();
+      controller.signal.throwIfAborted();
+      if (git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}`) !== source) {
+        const error = new Error(
+          'Accepted control-plane source ref changed during proof; owning source decision required',
+        );
+        controller.abort(error);
+        throw error;
+      }
+    };
+    const custody: OrdinaryProofCustody = {
+      signal: controller.signal,
+      logPath,
+      checkpoint,
+      capture(candidate, snapshot) {
+        const spent = attempts.reduce((total, prior) => total + Math.max(1, prior.validations ?? 0), 0);
+        if (spent + (attempt.validations ?? 0) >= 5)
+          throw new Error('Control-plane source exhausted five candidate validations; owning source decision required');
+        attempt.validations = (attempt.validations ?? 0) + 1;
+        attempt.candidate = candidate;
+        attempt.snapshot = snapshot;
+        save();
+      },
+      run: (runner) => async (argv, cwd, log) => {
+        checkpoint();
+        const result = await runner(argv, cwd, log, { signal: controller.signal });
+        if (!result.passed) failure ??= { ...result, failedCommand: [...argv] };
+        checkpoint();
+        return result;
+      },
+    };
+    const timer = setInterval(() => {
+      try {
+        observe();
+      } catch (error) {
+        controller.abort(error);
+      }
+    }, 50);
+    try {
+      const outcome = await this.integrate(entry, custody);
+      attempt.status = 'finished';
+      attempt.outcome = outcome;
+      save();
+      return outcome;
+    } catch (error) {
+      attempt.status = 'interrupted';
+      attempt.reason = String(error);
+      appendFileSync(logPath, `${error}; proof remains non-green, no publication or reusable proof\n`);
+      if (failure) {
+        // Do not turn an observed assertion failure into a new proof admission merely because dev also arrived.
+        const outcome: GateOutcome = {
+          taskId: entry.request.taskId,
+          attempt: entry.request.attempt,
+          passed: false,
+          stage: 'gate',
+          logPath,
+          hostMs: 0,
+          changedFiles: [],
+          diffLines: 0,
+          firstFailure: firstFailure(failure.output),
+          failedCommand: failure.failedCommand,
+          timedOut: failure.timedOut,
+        };
+        attempt.status = 'finished';
+        attempt.outcome = outcome;
+        save();
+        if (error instanceof ControlPlaneProofInterrupted) onYield();
+        else if (error instanceof StaleAttemptError) throw error;
+        return outcome;
+      }
+      save();
+      if (!(error instanceof ControlPlaneProofInterrupted)) {
+        if (error instanceof StaleAttemptError) throw error;
+        const outcome: GateOutcome = {
+          taskId: entry.request.taskId,
+          attempt: entry.request.attempt,
+          passed: false,
+          stage: 'gate',
+          logPath,
+          hostMs: 0,
+          changedFiles: [],
+          diffLines: 0,
+          firstFailure: firstFailure(String(error)),
+        };
+        attempt.status = 'finished';
+        attempt.outcome = outcome;
+        save();
+        return outcome;
+      }
+      onYield();
+      return;
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
+  private async integrate(entry: LandingEntry, custody?: OrdinaryProofCustody): Promise<GateOutcome> {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
       assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit);
@@ -2093,7 +2315,7 @@ export class MergeTrain {
     // A stabilize task uses the same rebase, check and compare-and-swap path, aimed at the stabilize branch.
     let integratesIntoDev = integrationTarget !== 'main';
     const started = Date.now();
-    const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
+    const logPath = custody?.logPath ?? join(o.stateDirectory, `landing-${entry.id}.log`);
     writeFileSync(logPath, '');
     const result: GateOutcome = {
       taskId: request.taskId,
@@ -2126,7 +2348,9 @@ export class MergeTrain {
     let added = false;
     let workerCommit: string | undefined;
     let activeTargetHead: string | undefined;
-    const runGate = o.runGate ?? gateRunner();
+    const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
+      runAffectedTest(command, cwd, log, env, custody ? { signal: custody.signal } : undefined);
+    const runGate = custody ? custody.run(o.runGate ?? gateRunner()) : (o.runGate ?? gateRunner());
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
     const refreshManagerLanding = () => {
       if (request.managerLanding) return;
@@ -2381,14 +2605,22 @@ export class MergeTrain {
             !formatCommand[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(formatCommand[0]!);
           if (formatFiles.length && formatterAvailable) {
             stage = 'setup';
-            const formatted = spawnSync(formatCommand[0]!, [...formatCommand.slice(1), ...formatFiles], {
-              cwd: trainTree,
-              encoding: 'utf8',
-            });
-            const output = `${formatted.stdout ?? ''}${formatted.stderr ?? ''}`;
-            appendFileSync(logPath, `$ ${[...formatCommand, ...formatFiles].join(' ')} (cwd: ${trainTree})\n${output}`);
-            if (formatted.status !== 0)
-              throw new Error(`Formatter failed: ${output || formatted.error?.message || 'command failed'}`);
+            const argv = [...formatCommand, ...formatFiles];
+            if (custody) {
+              const formatted = await custody.run(processGroupRunner(undefined, o.stateDirectory))(
+                argv,
+                trainTree,
+                logPath,
+              );
+              appendFileSync(logPath, `$ ${argv.join(' ')} (cwd: ${trainTree})\n`);
+              if (!formatted.passed) throw new Error(`Formatter failed: ${formatted.output || 'command failed'}`);
+            } else {
+              const formatted = spawnSync(argv[0]!, argv.slice(1), { cwd: trainTree, encoding: 'utf8' });
+              const output = `${formatted.stdout ?? ''}${formatted.stderr ?? ''}`;
+              appendFileSync(logPath, `$ ${argv.join(' ')} (cwd: ${trainTree})\n${output}`);
+              if (formatted.status !== 0)
+                throw new Error(`Formatter failed: ${output || formatted.error?.message || 'command failed'}`);
+            }
             if (spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0) {
               git(trainTree, 'add', '--', ...formatFiles);
               git(trainTree, 'commit', '-m', `style: format ${request.taskId}`);
@@ -2446,7 +2678,7 @@ export class MergeTrain {
         ) {
           // A fresh landing worktree has no postinstall outputs. Prepare it once before affected commands run.
           landingAffectedResults.push(
-            await runAffectedTest(
+            await runOwnedAffected(
               ['bun', 'install', '--frozen-lockfile'],
               trainTree,
               logPath,
@@ -2456,9 +2688,9 @@ export class MergeTrain {
         }
         if (!landingAffectedResults.some((checked) => checked.status !== 'passed'))
           landingAffectedResults.push(
-            ...(await Promise.all(
+            ...(await settleOwnedCommands(
               affectedChecks.map((check) =>
-                runAffectedTest(check.command, trainTree, logPath, {
+                runOwnedAffected(check.command, trainTree, logPath, {
                   ...gateEnvironment(process.env, o.stateDirectory),
                   KERNEL_CHECK_AFFECTED: base,
                 }),
@@ -2524,7 +2756,7 @@ export class MergeTrain {
               };
               // As with promotion's narrowed gates, a fresh local worktree needs its installed tools.
               if (existsSync(join(baselineTree, 'package.json'))) {
-                const installed = await runAffectedTest(
+                const installed = await runOwnedAffected(
                   ['bun', 'install', '--frozen-lockfile'],
                   baselineTree,
                   logPath,
@@ -2533,7 +2765,7 @@ export class MergeTrain {
                 if (installed.status !== 'passed')
                   throw new Error(`Affected-test baseline install failed: ${installed.output}`);
               }
-              const measured = await runAffectedTest(baselineCommand, baselineTree, logPath, environment);
+              const measured = await runOwnedAffected(baselineCommand, baselineTree, logPath, environment);
               if (measured.status === 'unverified') {
                 appendFileSync(logPath, 'Affected test baseline unverified (landing allowed)\n');
                 continue;
@@ -2576,7 +2808,14 @@ export class MergeTrain {
         refreshManagerLanding();
         if (controlPlane) {
           stage = 'gate';
-          const proof = await this.verifyControlPlaneCandidate(trainTree, candidate, releaseSnapshot!, logPath);
+          custody?.capture(candidate, releaseSnapshot!);
+          const proof = await this.verifyControlPlaneCandidate(
+            trainTree,
+            candidate,
+            releaseSnapshot!,
+            logPath,
+            custody,
+          );
           if (proof.moved) {
             retryMovedControlPlaneRefs();
             continue;
@@ -2748,6 +2987,7 @@ export class MergeTrain {
         o.queue.candidate(entry.id, candidate);
         let preparedControlPlaneRelease: PreparedControlPlaneRelease | undefined;
         if (controlPlane) {
+          custody?.checkpoint();
           if (!releaseSnapshot || !lifecycleEvidence || !compatibilityCommand)
             throw new Error('Control-plane candidate reached publication without complete gate evidence');
           if (target() !== base || !this.controlPlaneSnapshotMatches(releaseSnapshot)) {
@@ -2804,6 +3044,7 @@ export class MergeTrain {
             continue;
           }
           preparedControlPlaneRelease = release.prepared;
+          preparedControlPlaneRelease.record.source = { branch: request.branch, commit: tip };
         }
         if (target() !== base || (controlPlane && !this.controlPlaneSnapshotMatches(releaseSnapshot!))) {
           if (controlPlane) retryMovedControlPlaneRefs();
@@ -2819,6 +3060,7 @@ export class MergeTrain {
           if (controlPlane) {
             o.beforeIntegrationAdvance?.();
             o.beforePromotionAdvance?.();
+            custody?.checkpoint();
             if (
               target() !== base ||
               !preparedControlPlaneRelease ||
@@ -2890,7 +3132,7 @@ export class MergeTrain {
         return finish();
       }
     } catch (error) {
-      if (error instanceof StaleAttemptError) throw error;
+      if (custody?.signal.aborted || error instanceof StaleAttemptError) throw error;
       const message = String(error);
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;
@@ -3937,6 +4179,7 @@ export class MergeTrain {
     candidate: string,
     snapshot: ControlPlaneReleaseSnapshot,
     logPath: string,
+    custody?: OrdinaryProofCustody,
   ): Promise<
     GateResult & {
       failedCommand?: readonly string[];
@@ -3946,7 +4189,8 @@ export class MergeTrain {
     }
   > {
     const o = this.options;
-    const run = o.runControlPlaneGate ?? o.runGate ?? gateRunner(600_000, o.stateDirectory);
+    const runner = o.runControlPlaneGate ?? o.runGate ?? gateRunner(600_000, o.stateDirectory);
+    const run = custody ? custody.run(runner) : runner;
     const integrity = (cwd: string, head: string, phase: string) =>
       assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit);
     const moved = () => !this.controlPlaneSnapshotMatches(snapshot);
@@ -3963,8 +4207,8 @@ export class MergeTrain {
         ? { failedCommand: installs.failedCommand ?? validation.failedCommand }
         : {}),
     };
-    if (moved()) return { ...checked, moved: true };
     if (!checked.passed) return checked;
+    if (moved()) return { ...checked, moved: true };
     integrity(tree, candidate, 'control-plane verification');
     const devTree = resolve(o.worktreeRoot, `control-plane-dev-${randomUUID()}`);
     const compatibilityCommand = ['bun', 'tools/goal/scripts/check-compatibility.ts', '--scripts-root', devTree];
@@ -3974,21 +4218,26 @@ export class MergeTrain {
       const devInstall = await runIntegrationChecks([['bun', 'install', '--frozen-lockfile']], devTree, logPath, run);
       integrity(tree, candidate, 'control-plane dev compatibility install');
       integrity(devTree, snapshot.devHead, 'control-plane dev compatibility install');
-      if (moved()) return { ...devInstall, moved: true };
       if (!devInstall.passed) return devInstall;
+      if (moved()) return { ...devInstall, moved: true };
       const compatibility = await runIntegrationChecks([compatibilityCommand], tree, logPath, run);
       integrity(tree, candidate, 'main-dev compatibility contract');
       integrity(devTree, snapshot.devHead, 'main-dev compatibility contract');
-      if (moved()) return { ...compatibility, moved: true };
       if (!compatibility.passed) return compatibility;
+      if (moved()) return { ...compatibility, moved: true };
     } finally {
       git(o.mainCheckout, 'worktree', 'remove', '--force', devTree);
     }
     appendFileSync(logPath, '\nComplete real-boundary lifecycle suite on control-plane candidate\n');
     const smokeCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts', '--expected-dev-script-tree', snapshot.devHead];
-    const smoke = await runIntegrationChecks([smokeCommand], tree, logPath, o.runLaunchSmoke ?? gateRunner(300_000));
+    const smokeRunner = o.runLaunchSmoke ?? gateRunner(300_000);
+    const smoke = await runIntegrationChecks(
+      [smokeCommand],
+      tree,
+      logPath,
+      custody ? custody.run(smokeRunner) : smokeRunner,
+    );
     integrity(tree, candidate, 'launch smoke');
-    if (moved()) return { ...smoke, moved: true };
     const prefix = `release evidence: candidate=${candidate} dev-script-tree=${snapshot.devHead}`;
     const lifecycleEvidence = smoke.output.split(/\r?\n/).find((line) => line.startsWith(prefix));
     if (!smoke.passed || !lifecycleEvidence) {
@@ -4004,6 +4253,7 @@ export class MergeTrain {
         output: !smoke.passed ? smoke.output : `Lifecycle smoke omitted exact release evidence: ${prefix}`,
       };
     }
+    if (moved()) return { ...smoke, moved: true };
     appendFileSync(
       logPath,
       `Verified ${lifecycleEvidence}; compatibility command passed: ${compatibilityCommand.join(' ')}\n`,
@@ -4250,6 +4500,12 @@ export class MergeTrain {
     }
     if (!snapshot.stabilizeHead)
       lines.push(`verify refs/heads/${snapshot.stabilizeBranch} ${'0'.repeat(snapshot.mainHead.length)}`);
+    if (record.source) {
+      const branch = `refs/heads/${record.source.branch}`;
+      const valid = spawnSync('git', ['check-ref-format', branch], { cwd: this.options.mainCheckout });
+      if (valid.status !== 0 || references.includes(branch)) throw new Error(`Invalid release source ref: ${branch}`);
+      lines.push(`verify ${branch} ${record.source.commit}`);
+    }
     for (const member of record.members ?? []) {
       const branch = `refs/heads/${member.request.branch}`;
       const valid = spawnSync('git', ['check-ref-format', branch], { cwd: this.options.mainCheckout });

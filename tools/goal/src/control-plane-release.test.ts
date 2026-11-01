@@ -981,3 +981,390 @@ test('an accepted source already represented by main has an honest zero-delta di
     h.dispose();
   }
 });
+
+// Controlled scheduling cases exercise the real train, queue, leases and Git publication path.
+import { processGroupRunner } from './merge.ts';
+
+async function schedulingUntil(condition: () => boolean) {
+  for (let turn = 0; turn < 200 && !condition(); turn++) await Bun.sleep(10);
+  expect(condition()).toBe(true);
+}
+
+function ordinaryProofs(h: ReturnType<typeof integrationHarness>, id: number) {
+  return JSON.parse(readFileSync(join(h.settings.stateDirectory, `control-plane-proof-${id}.json`), 'utf8')) as {
+    attempts: {
+      source: string;
+      candidate?: string;
+      status: string;
+      logPath: string;
+      reason?: string;
+      outcome?: GateOutcome;
+      snapshot: { devHead: string };
+    }[];
+  };
+}
+
+function commandAlive(pid: number) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return !stat.slice(stat.lastIndexOf(')') + 2).startsWith('Z ');
+  } catch {
+    return false;
+  }
+}
+
+test('A queued product dev landing advances through its ordinary lane while a slow control-plane main proof is pending without weakening final proof or stealing live custody', async () => {
+  const h = integrationHarness();
+  let running: Promise<void> | undefined;
+  const gateRelease = join(h.settings.stateDirectory, 'release-slow-proof');
+  try {
+    h.ensureDev();
+    h.settings.integration.devLandingChecks = false;
+    const main = h.head('main');
+    git(h.root, 'branch', 'stabilize', main);
+    const control = dispatchControlPlane(h);
+    await h.start(control);
+    const source = h.head(control.branch);
+    const workerEvidence = h.store.attempt({ taskId: control.id, attempt: 1 }).result;
+    const entry = h.queue.entry({ taskId: control.id, attempt: 1 })!;
+    const pidFiles: string[] = [];
+    const native = processGroupRunner(5000);
+    let smokeCalls = 0;
+    running = train(
+      h,
+      async (command, cwd, log, options) => {
+        if (!isFullControlPlaneSuite(command) && !command.includes('typecheck')) return success(command, cwd, log);
+        const pidFile = join(h.settings.stateDirectory, `slow-proof-${pidFiles.length}.pid`);
+        pidFiles.push(pidFile);
+        return native(
+          [
+            'sh',
+            '-c',
+            `echo $$ > '${pidFile}'; echo partial-proof-output; while [ ! -f '${gateRelease}' ]; do sleep 1; done`,
+          ],
+          cwd,
+          log,
+          options,
+        );
+      },
+      async (...args) => {
+        smokeCalls++;
+        return releaseEvidence(args[0], args[1]);
+      },
+    );
+    await schedulingUntil(() => pidFiles.length === 2 && pidFiles.every((file) => existsSync(file)));
+    const pids = pidFiles.map((file) => Number(readFileSync(file, 'utf8').trim()));
+    const ownerPaths = ['train-main.lease', 'train.lease'].map((name) => join(h.settings.stateDirectory, name));
+    const owners = ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'));
+    // Another real train cannot steal either live owner, even though its initial idle dev drain has no work.
+    await train(
+      h,
+      async () => {
+        throw new Error('A second controller must not run the held proof');
+      },
+      releaseEvidence,
+      {},
+      'pump',
+    );
+    expect(ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'))).toEqual(owners);
+    const product = h.dispatch('arrived-during-main.txt');
+    await h.start(product);
+    await schedulingUntil(() => h.head('dev') !== main);
+    expect(existsSync(gateRelease)).toBe(false);
+    expect(h.store.task(product.id).state).toBe('integrated');
+    expect(h.head('main')).toBe(main);
+    expect(h.head('stabilize')).toBe(main);
+    await running;
+    expect(pids.every((pid) => !commandAlive(pid))).toBe(true);
+    expect(h.head(control.branch)).toBe(source);
+    expect(h.store.attempt({ taskId: control.id, attempt: 1 }).result).toBe(workerEvidence);
+    expect(h.store.task(control.id).state).toBe('landing');
+    expect(h.queue.entry({ taskId: control.id, attempt: 1 })?.outcome).toBeNull();
+    expect(h.outcomes.map((outcome) => outcome.taskId)).toEqual([product.id]);
+    expect(smokeCalls).toBe(0);
+    expect(releaseRecords(h)).toEqual([]);
+    const interrupted = ordinaryProofs(h, entry.id).attempts[0]!;
+    expect(interrupted).toMatchObject({ status: 'interrupted', source, candidate: expect.any(String) });
+    expect(interrupted.outcome).toBeUndefined();
+    expect(interrupted.reason).toContain('Product dev request');
+    expect(readFileSync(interrupted.logPath, 'utf8')).toContain('proof remains non-green');
+    expect(readFileSync(`${interrupted.logPath}.check-0`, 'utf8')).toContain('partial-proof-output');
+    for (const path of ownerPaths) expect(existsSync(path)).toBe(false);
+
+    const capturedDev = h.head('dev');
+    const commands: string[][] = [];
+    let publications = 0;
+    // A later finite controller performs a fresh, complete proof for the changed dev capture.
+    await train(
+      h,
+      async (command, cwd, log) => {
+        commands.push([...command]);
+        return success(command, cwd, log);
+      },
+      releaseEvidence,
+      {
+        beforePromotionAdvance() {
+          publications++;
+          expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual([main, main, capturedDev]);
+        },
+      },
+    );
+    expect(publications).toBe(1);
+    expect(commands.filter(isFullControlPlaneSuite)).toHaveLength(1);
+    expect(commands).toContainEqual(['bun', 'run', '--cwd', 'tools/goal', 'typecheck']);
+    expect(commands.some((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toBe(true);
+    expect(releaseRecords(h)[0]).toMatchObject({ mainCommit: h.head('main'), devScriptTree: capturedDev });
+    expect(h.head('main')).not.toBe(main);
+    expect(git(h.root, 'merge-base', '--is-ancestor', capturedDev, 'dev')).toBe('');
+    expect(git(h.root, 'merge-base', '--is-ancestor', h.head('main'), 'stabilize')).toBe('');
+    expect(ordinaryProofs(h, entry.id).attempts.map((attempt) => attempt.status)).toEqual(['interrupted', 'finished']);
+    expect(readFileSync(interrupted.logPath, 'utf8')).toContain('proof remains non-green');
+    expect(h.head(control.branch)).toBe(source);
+  } finally {
+    writeFileSync(gateRelease, 'release fixture groups\n');
+    await running?.catch(() => {});
+    h.dispose();
+  }
+});
+
+test('ordinary dev independence: startup backlog lands before main captures proof refs', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.settings.integration.devLandingChecks = false;
+    const control = dispatchControlPlane(h);
+    const product = h.dispatch('startup-product.txt');
+    await h.start(control);
+    await h.start(product);
+    let captured = '';
+    await train(h, async (command, cwd, log) => {
+      expect(h.store.task(product.id).state).toBe('integrated');
+      captured = h.store.task(product.id).integratedCommit!;
+      expect(h.head('dev')).toBe(captured);
+      return success(command, cwd, log);
+    });
+    expect(h.outcomes.map((outcome) => outcome.taskId)).toEqual([product.id, control.id]);
+    expect(releaseRecords(h)[0]?.devScriptTree).toBe(captured);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('ordinary dev independence: stale proof hands off without reusing partial evidence or taking a live dev lease', async () => {
+  const h = integrationHarness();
+  let current = true;
+  let owner: ReturnType<typeof acquireDirectoryLease> | undefined;
+  try {
+    h.ensureDev();
+    h.settings.integration.devLandingChecks = false;
+    const main = h.head('main');
+    const control = dispatchControlPlane(h);
+    await h.start(control);
+    const source = h.head(control.branch);
+    const entry = h.queue.entry({ taskId: control.id, attempt: 1 })!;
+    let handoffs = 0;
+    await train(
+      h,
+      async (_command, _cwd, _log, options) => {
+        current = false;
+        await new Promise<void>((resolve) =>
+          options!.signal!.addEventListener('abort', () => resolve(), { once: true }),
+        );
+        return { passed: true, output: 'partial immutable-tree evidence', timedOut: false };
+      },
+      releaseEvidence,
+      {
+        codeIsCurrent: () => current,
+        handOff() {
+          handoffs++;
+        },
+      },
+    );
+    expect(handoffs).toBe(1);
+    expect([h.head('main'), h.head('dev'), h.head(control.branch)]).toEqual([main, main, source]);
+    expect(h.outcomes).toEqual([]);
+    expect(ordinaryProofs(h, entry.id).attempts[0]?.status).toBe('interrupted');
+    // Model a controller exit between its running record and terminal journal write.
+    const crashed = ordinaryProofs(h, entry.id);
+    crashed.attempts[0]!.status = 'running';
+    writeFileSync(join(h.settings.stateDirectory, `control-plane-proof-${entry.id}.json`), JSON.stringify(crashed));
+    const path = join(h.settings.stateDirectory, 'train.lease');
+    owner = acquireDirectoryLease(path);
+    const files = readdirSync(path);
+    const identity = readFileSync(join(path, files[0]!), 'utf8');
+    await train(
+      h,
+      async () => {
+        throw new Error('Restart cannot take live custody');
+      },
+      releaseEvidence,
+      { controlPlaneDevLeaseTimeoutMs: 1 },
+      'pump',
+    );
+    expect(readFileSync(join(path, files[0]!), 'utf8')).toBe(identity);
+    owner.release();
+    current = true;
+    await train(h, async () => {
+      throw new Error('Unchanged interrupted source and refs must not hot-loop');
+    });
+    expect(ordinaryProofs(h, entry.id).attempts).toHaveLength(1);
+    expect(ordinaryProofs(h, entry.id).attempts[0]?.reason).toContain('Previous controller exited');
+    expect(h.outcomes).toEqual([]);
+    expect(releaseRecords(h)).toEqual([]);
+    const product = h.dispatch('fresh-capture.txt');
+    await h.start(product);
+    await train(h);
+    expect(h.store.task(control.id).state).toBe('merged');
+    expect(h.head(control.branch)).toBe(source);
+    expect(ordinaryProofs(h, entry.id).attempts).toHaveLength(2);
+  } finally {
+    owner?.release();
+    h.dispose();
+  }
+});
+
+test('ordinary dev independence: a launch assertion stays failed when product progress changes dev', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.settings.integration.devLandingChecks = false;
+    const main = h.head('main');
+    const control = dispatchControlPlane(h);
+    const product = h.dispatch('after-failed-launch.txt');
+    await h.start(control);
+    let launches = 0;
+    const options: TrainOptions = {
+      ...h.settings,
+      queue: h.queue,
+      fence: h.store,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+        },
+      },
+      runGate: success,
+      runLaunchSmoke: async () => {
+        launches++;
+        await h.start(product);
+        return {
+          passed: false,
+          output: 'AssertionError: exact launch failure requiring a source fix',
+          timedOut: false,
+        };
+      },
+    };
+    await new MergeTrain(options).run();
+    expect(h.head('main')).toBe(main);
+    expect(h.head('dev')).not.toBe(main);
+    expect(h.outcomes.find((outcome) => outcome.taskId === control.id)).toMatchObject({
+      passed: false,
+      stage: 'gate',
+      firstFailure: { assertion: expect.stringContaining('exact launch failure') },
+    });
+    expect(releaseRecords(h)).toEqual([]);
+    await new MergeTrain(options).pump();
+    expect(launches).toBe(1);
+    expect(h.head('main')).toBe(main);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('ordinary dev independence: repeated interrupted admissions are finite across controllers', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.settings.integration.devLandingChecks = false;
+    const main = h.head('main');
+    const control = dispatchControlPlane(h);
+    await h.start(control);
+    const entry = h.queue.entry({ taskId: control.id, attempt: 1 })!;
+    const source = h.head(control.branch);
+    let gateCalls = 0;
+    for (let turn = 0; turn < 3; turn++) {
+      let current = true;
+      await train(
+        h,
+        async (_command, _cwd, _log, options) => {
+          gateCalls++;
+          current = false;
+          await new Promise<void>((resolve) =>
+            options!.signal!.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          return { passed: true, output: '', timedOut: false };
+        },
+        releaseEvidence,
+        { codeIsCurrent: () => current, handOff() {} },
+      );
+      expect(h.head('main')).toBe(main);
+      const product = h.dispatch(`between-proofs-${turn}.txt`);
+      await h.start(product);
+    }
+    await new MergeTrain({
+      ...h.settings,
+      queue: h.queue,
+      fence: h.store,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+        },
+      },
+      runGate: async () => {
+        throw new Error('Admission budget must stop unchanged source proofs');
+      },
+      runLaunchSmoke: releaseEvidence,
+    }).pump();
+    expect(gateCalls).toBe(3);
+    expect(h.head('main')).toBe(main);
+    expect(h.head(control.branch)).toBe(source);
+    const proof = ordinaryProofs(h, entry.id);
+    expect(proof.attempts).toHaveLength(3);
+    expect(proof.attempts.every((attempt) => attempt.status === 'interrupted' && existsSync(attempt.logPath))).toBe(
+      true,
+    );
+    expect(h.outcomes.find((outcome) => outcome.taskId === control.id)).toMatchObject({
+      passed: false,
+      firstFailure: { assertion: expect.stringContaining('owning source decision required') },
+    });
+    expect(releaseRecords(h)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('ordinary dev independence: accepted source movement at publication cannot certify the old proof', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const main = h.head('main');
+    const control = dispatchControlPlane(h);
+    await h.start(control);
+    const source = h.head(control.branch);
+    let moved = '';
+    await new MergeTrain({
+      ...h.settings,
+      queue: h.queue,
+      fence: h.store,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+        },
+      },
+      runGate: success,
+      runLaunchSmoke: releaseEvidence,
+      beforePromotionAdvance() {
+        moved = addBranchCommit(h, control.branch, { 'tools/goal/src/moved-source.ts': 'later source\n' });
+      },
+    }).run();
+    expect(moved).not.toBe(source);
+    expect([h.head('main'), h.head('dev')]).toEqual([main, main]);
+    expect(h.outcomes).toHaveLength(1);
+    expect(h.outcomes[0]).toMatchObject({
+      passed: false,
+      firstFailure: { assertion: expect.stringContaining('source ref changed during proof') },
+    });
+    expect(releaseRecords(h)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+});

@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -10,6 +10,22 @@ import {
   type CheckResult,
   type CheckResults,
 } from './check-results.ts';
+
+/** Attach cancellation to this spawned group without replacing the runner's normal terminal cleanup. */
+function cancelOwnedCommand(child: ChildProcess, signal: AbortSignal | undefined): void {
+  if (!signal) return;
+  const cancel = () => {
+    if (child.pid === undefined) return;
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch {}
+  };
+  const detach = () => signal.removeEventListener('abort', cancel);
+  child.once('error', detach);
+  child.once('close', detach);
+  signal.addEventListener('abort', cancel, { once: true });
+  if (signal.aborted) cancel();
+}
 
 export function git(cwd: string, ...args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
@@ -49,7 +65,14 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
 }
 
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
-export type GateRunner = (argv: readonly string[], cwd: string, logPath: string) => Promise<GateResult>;
+/** Cancellation belongs to one invocation, never to all commands in a controller process. */
+export type GateRunOptions = { signal?: AbortSignal };
+export type GateRunner = (
+  argv: readonly string[],
+  cwd: string,
+  logPath: string,
+  options?: GateRunOptions,
+) => Promise<GateResult>;
 
 const activeCommandGroups = new Set<number>();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -72,7 +95,7 @@ export function processGroupRunner(
   parent: NodeJS.ProcessEnv = process.env,
   sanitizeEnvironment = true,
 ): GateRunner {
-  return async (argv, cwd, logPath) => {
+  const run: GateRunner = async (argv, cwd, logPath, options) => {
     if (!argv.length) throw new Error('A gate command is required');
     return await new Promise<GateResult>((resolve, reject) => {
       const child = spawn(argv[0]!, argv.slice(1), {
@@ -98,6 +121,7 @@ export function processGroupRunner(
       };
       child.stdout.on('data', collect);
       child.stderr.on('data', collect);
+      cancelOwnedCommand(child, options?.signal);
       const timer =
         timeoutMs === undefined
           ? undefined
@@ -124,6 +148,13 @@ export function processGroupRunner(
       });
     });
   };
+  return async (argv, cwd, logPath, options) => {
+    options?.signal?.throwIfAborted();
+    // Await the complete runner, including any asynchronous terminal cleanup composed by the receiving tree.
+    const result = await run(argv, cwd, logPath, options);
+    options?.signal?.throwIfAborted();
+    return result;
+  };
 }
 
 export type CheckResultGateOptions = {
@@ -148,7 +179,8 @@ export function gateRunner(
   }
   const env = environment as NodeJS.ProcessEnv;
   const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...env });
-  return async (argv, cwd, logPath) => {
+  return async (argv, cwd, logPath, options = {}) => {
+    options.signal?.throwIfAborted();
     let key: ReturnType<typeof checkResultKey> | undefined;
     let cached: CheckResult | undefined;
     let cleanBefore = false;
@@ -170,7 +202,8 @@ export function gateRunner(
       }
     }
     try {
-      const result = await run(argv, cwd, logPath);
+      const result = await run(argv, cwd, logPath, options);
+      options.signal?.throwIfAborted();
       try {
         if (
           key &&
