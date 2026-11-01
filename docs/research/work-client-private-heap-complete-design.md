@@ -218,6 +218,7 @@ CREATE TABLE work_private.node (
   terminal bigint NOT NULL,
   terminal_refs bigint NOT NULL,
   minimum_terminal bigint NOT NULL,
+  CHECK (cardinality(children) = 256),
   CHECK (array_ndims(children) = 1),
   CHECK (array_lower(children, 1) = 0),
   CHECK (array_upper(children, 1) = 255),
@@ -931,8 +932,9 @@ from Library allocation to NativeStepWork and no replacement ledger.
 
 ### The minimum remaining original owner body
 
-`services/kernel/src/library/identity-source-scope-effects.ts` at the pin returns
-unavailable for `readLibraryScopeEffectsPage` and false for the seal verifier.
+`services/kernel/src/library/identity-scope-effects.ts` at the pin returns
+unavailable for `readLibraryScopeEffectsPage` and false for
+`verifyLibraryScopeEffectsSeal`.
 A successful page/verifier/locked-plan/current-plan/seal/fence SQL footprint,
 including failure/repeat/rollback and actual nested reservation identity, is not
 available. Unknown SQL remains refused. Its unsuccessful stub is not a successful
