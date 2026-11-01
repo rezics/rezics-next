@@ -168,7 +168,7 @@ export const loadMemberList = createServerFn({ method: 'GET', strict: false })
       },
     };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<Section> => {
     setResponseHeader('cache-control', 'private, no-store');
     let authorization: string | undefined;
     if (data.expectedReader !== null) {
