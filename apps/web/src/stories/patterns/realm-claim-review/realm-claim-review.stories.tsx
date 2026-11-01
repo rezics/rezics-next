@@ -6,6 +6,7 @@ import { m } from '../../../paraglide/messages.js';
 const meta = {
   title: 'Patterns/Community/Realm Claim Review',
   component: RealmClaimReviewExample,
+  excludeStories: ['confirmReview'],
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof RealmClaimReviewExample>;
 export default meta;

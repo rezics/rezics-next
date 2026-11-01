@@ -6,6 +6,7 @@ import { m } from '../../../paraglide/messages.js';
 const meta = {
   title: 'Patterns/Community/Realm Claim',
   component: RealmClaimExample,
+  excludeStories: ['claimJourney'],
   tags: ['autodocs'],
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof RealmClaimExample>;
