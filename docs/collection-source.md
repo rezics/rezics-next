@@ -407,7 +407,7 @@ and each invocation's original frame and deadline. The comparison normalizes loc
 `(candidateKeys, identityMetadataRows, nativeRows, nativePoints, witnessKeys, statements, bytes, emptySeeks)`.
 Local query prices from the reports remain query-specific and are not complete callable quotes. The Semantic
 guard subtotal `(0,14,112,14,0,4,2124544+sumQ,4)` is local only; two such sequences reserve `4249088+sumQ`
-bytes, exceeding 4 MiB by 54784 before nested work. The old mapper's 8 statements per original exceeds
+bytes, already exceeding 4 MiB by 54784 before SQL/argument and nested-work bytes. The old mapper's 8 statements per original exceeds
 preparation's 16 at three originals. Sweeping 4096 privacy homes twice is 8192 rows, conflicting with
 `64+2(behind+changed)` when behind and changed are zero; complete indexed coverage is required. These are
 conditional composition conflicts, not whole-call prices. Inclusive whole-call and numeric remaining costs
