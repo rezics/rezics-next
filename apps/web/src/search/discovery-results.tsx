@@ -1,5 +1,5 @@
 import { Cover } from '@rezics/ui/cover';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../media/cover-src';
@@ -20,36 +20,37 @@ function AccountRow({ account, kind, locale }: { account: AccountDiscoverySummar
   const href = discoveryAccountHref(account, locale);
   const verified = account.verifiedAgent;
   return (
-    <ListRow className="flex min-w-0 items-start gap-4 py-2" data-discovery-account={account.id}>
-      {href && <ListRowLink href={href}>{title}</ListRowLink>}
-      <div className="w-[72px] shrink-0 sm:w-24">
-        <Cover
-          subject={{ id: account.id, title, types: [] }}
-          cover={account.avatar}
-          ratio="1:1"
-          size="fill"
-          src={coverSrc}
-          decorative
-        />
-      </div>
-      <div className="min-w-0 space-y-1">
-        <h2 className="line-clamp-2 text-base leading-snug font-semibold" aria-hidden={href ? true : undefined}>
-          {title}
-        </h2>
-        <p className="text-sm text-muted-foreground">{kind}</p>
-        {account.handle && <p className="break-words text-sm text-muted-foreground">@{account.handle}</p>}
-        {verified && (
-          <ListRowControl className="text-sm">
+    <ContentItem
+      data-discovery-account={account.id}
+      title={title}
+      href={href}
+      visual={
+        <div className="w-[72px] sm:w-24">
+          <Cover
+            subject={{ id: account.id, title, types: [] }}
+            cover={account.avatar}
+            ratio="1:1"
+            size="fill"
+            src={coverSrc}
+            decorative
+          />
+        </div>
+      }
+      metadata={
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm text-muted-foreground">{kind}</p>
+          {account.handle && <p className="break-words text-sm text-muted-foreground">@{account.handle}</p>}
+          {verified && (
             <a
               className="text-primary underline underline-offset-4"
               href={subjectHref({ id: verified.id, label: verified.label }, locale).href}
             >
               {m.discovery_verified_as({ name: verified.label })}
             </a>
-          </ListRowControl>
-        )}
-      </div>
-    </ListRow>
+          )}
+        </div>
+      }
+    />
   );
 }
 
