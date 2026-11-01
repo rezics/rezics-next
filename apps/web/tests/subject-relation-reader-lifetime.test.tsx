@@ -658,7 +658,9 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
         expect(trigger('side-stories').getAttribute('href')).toContain('cursor=recovered-next');
         expect(stream('side-stories').getAttribute('aria-busy')).toBe('false');
         expect(stream('side-stories').querySelector('[role="alert"]')).toBeNull();
-        expect(clientB.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })).toBe(healthySessionQuery);
+        expect(clientB.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })).toBe(
+          healthySessionQuery,
+        );
         expect(clientB.getQueryCache().find({ queryKey: recoveredKey, exact: true })).toBeUndefined();
         expect(heldRelations).toHaveLength(0);
         expect(window.document.activeElement).toBe(recoveredAction);
