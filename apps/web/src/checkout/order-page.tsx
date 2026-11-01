@@ -1,7 +1,7 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
@@ -22,15 +22,10 @@ const recheckMs = 2_000;
 const recheckLimit = 15;
 const openSettlement = new Set<Settlement>(['pending', 'unknown']);
 
-function normalize(value: string): Settlement {
-  if (value === 'paid' || value === 'pending' || value === 'failed' || value === 'unknown') return value;
-  return 'unknown';
-}
-
 /** Status polling updates settlement only; current access needs a fresh page read. */
 export function applyOrderStatus(order: OrderPageData, settlement: Settlement, offerId: string): OrderPageData {
-  if (order.settlement === settlement && order.offerId === offerId) return order;
-  return { ...order, settlement, offerId, entitlement: { kind: 'refresh' } };
+  if (order.offerId !== offerId || order.settlement === settlement) return order;
+  return { ...order, settlement, entitlement: { kind: 'refresh' }, canUseBenefit: false };
 }
 
 function entitlementLabel(entitlement: CurrentEntitlement): string {
@@ -41,77 +36,163 @@ function entitlementLabel(entitlement: CurrentEntitlement): string {
   return m.order_entitlement_unavailable();
 }
 
-export function OrderPage({
-  order: initial,
-  checkout,
-  reconcile,
-}: {
+type OrderPageProps = {
   order: OrderPageData;
   checkout?: 'canceled' | 'success';
   /** Component stories substitute only this operation's contract-shaped response. */
   reconcile?: ReconciliationSender;
-}) {
-  const [order, setOrder] = useState(initial);
+};
+
+export function OrderPage(props: OrderPageProps) {
+  return <OrderReceipt key={props.order.id} {...props} />;
+}
+
+function OrderReceipt(props: OrderPageProps) {
+  const [loaded, setLoaded] = useState(props.order);
+  const [order, setOrder] = useState(props.order);
+  if (loaded !== props.order) {
+    setLoaded(props.order);
+    setOrder(props.order);
+  }
   const [gaveUp, setGaveUp] = useState(false);
-  const polls = useRef(0);
   const canReadOrder = useOperation('order.get');
-  const { state: session, csrfToken } = useSession();
+  const { state: session, csrfToken, subject } = useSession();
+  // Admission/session changes retire work, but cannot replenish this loaded order's read allowance.
+  const polls = useRef(0);
+  return (
+    <OrderLifetime
+      key={JSON.stringify([props.order.offerId, session, subject ?? null, canReadOrder, props.order.canReconcile === true])}
+      {...props}
+      order={order}
+      setOrder={setOrder}
+      gaveUp={gaveUp}
+      setGaveUp={setGaveUp}
+      canReadOrder={canReadOrder}
+      signedIn={session === 'signed-in'}
+      csrfToken={csrfToken}
+      polls={polls}
+    />
+  );
+}
+
+function OrderLifetime({
+  order: initial,
+  setOrder,
+  gaveUp,
+  setGaveUp,
+  checkout,
+  reconcile,
+  canReadOrder,
+  signedIn,
+  csrfToken,
+  polls,
+}: OrderPageProps & {
+  setOrder: Dispatch<SetStateAction<OrderPageData>>;
+  gaveUp: boolean;
+  setGaveUp: Dispatch<SetStateAction<boolean>>;
+  canReadOrder: boolean;
+  signedIn: boolean;
+  csrfToken: string | null;
+  polls: { current: number };
+}) {
+  const order = initial;
   const [reconciliation, setReconciliation] = useState<ReconciliationPhase>('ready');
   const [refreshQueued, setRefreshQueued] = useState(false);
   const operation = useRef<ReturnType<typeof createReconciliationRequest> | null>(null);
+  const lifetime = useRef({ active: false });
+  // Retire callbacks at commit, before a late microtask can update the retained receipt state.
+  useLayoutEffect(() => {
+    const current = { active: true };
+    lifetime.current = current;
+    return () => {
+      current.active = false;
+      operation.current = null;
+    };
+  }, []);
   const sender = useRef<ReconciliationSender>(async () => ({ kind: 'unavailable' }));
   sender.current = (intent) =>
     reconcile
       ? reconcile(intent)
       : requestOrderReconciliation({ data: intent, headers: { 'X-CSRF-Token': csrfToken ?? '' } });
   async function checkStatus() {
-    if (!initial.canReconcile || session !== 'signed-in' || !csrfToken || reconciliation === 'refreshing') return;
+    const current = lifetime.current;
+    if (
+      !current.active ||
+      !canReadOrder ||
+      !initial.canReconcile ||
+      !signedIn ||
+      !csrfToken ||
+      ['refreshing', 'queued', 'denied', 'conflict'].includes(reconciliation)
+    )
+      return;
     operation.current ??= createReconciliationRequest(initial.id, (intent) => sender.current(intent));
     setReconciliation('refreshing');
     const result = await operation.current();
-    if (!result) return;
+    if (!current.active || !result) return;
     setReconciliation(result.kind);
     if (result.kind === 'queued') {
-      setOrder((current) => ({ ...current, entitlement: { kind: 'refresh' } }));
+      setOrder((current) => ({ ...current, entitlement: { kind: 'refresh' }, canUseBenefit: false }));
       setRefreshQueued(true);
     }
   }
+  const shouldPoll =
+    signedIn && canReadOrder && (refreshQueued || (checkout !== 'canceled' && openSettlement.has(order.settlement)));
   useEffect(() => {
-    if (!refreshQueued && (checkout === 'canceled' || !openSettlement.has(order.settlement))) return;
+    if (!shouldPoll) return;
+    const current = lifetime.current;
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
     const recheck = () => {
+      if (stopped || !current.active) return;
+      if (polls.current >= recheckLimit) {
+        setGaveUp(true);
+        return;
+      }
       timer = setTimeout(async () => {
-        if (stopped) return;
-        if (polls.current >= recheckLimit) {
-          setGaveUp(true);
-          return;
-        }
+        if (stopped || !current.active) return;
         polls.current += 1;
-        const attempt = polls.current;
         try {
-          const response = await fetch(`/orders/${order.id}/status`, { headers: { accept: 'application/json' } });
-          if (response.ok && !stopped) {
-            const body = (await response.json()) as { settlement?: unknown; offerId?: unknown };
-            if (typeof body.settlement === 'string' && typeof body.offerId === 'string') {
-              const settlement = normalize(body.settlement);
-              setOrder((current) => applyOrderStatus(current, settlement, body.offerId as string));
-              if ((!refreshQueued && !openSettlement.has(settlement)) || attempt >= recheckLimit) {
-                if (openSettlement.has(settlement)) setGaveUp(true);
-                return;
-              }
+          const response = await fetch(`/orders/${order.id}/status`, {
+            headers: { accept: 'application/json' },
+            cache: 'no-store',
+            redirect: 'manual',
+            signal: controller.signal,
+          });
+          if (stopped || !current.active) return;
+          if (response.ok) {
+            const body: unknown = await response.json();
+            if (stopped || !current.active) return;
+            if (
+              body &&
+              typeof body === 'object' &&
+              !Array.isArray(body) &&
+              'id' in body &&
+              body.id === order.id &&
+              'offerId' in body &&
+              body.offerId === order.offerId &&
+              'settlement' in body &&
+              (body.settlement === 'paid' ||
+                body.settlement === 'failed' ||
+                body.settlement === 'pending' ||
+                body.settlement === 'unknown')
+            ) {
+              const settlement = body.settlement;
+              setOrder((current) => applyOrderStatus(current, settlement, order.offerId));
+              if (!refreshQueued && !openSettlement.has(settlement)) return;
             }
           }
         } catch {}
-        if (!stopped) recheck();
+        recheck();
       }, recheckMs);
     };
     recheck();
     return () => {
       stopped = true;
       clearTimeout(timer);
+      controller.abort();
     };
-  }, [checkout, order.id, order.settlement, refreshQueued]);
+  }, [shouldPoll, order.id, order.offerId, refreshQueued]);
 
   const pending = openSettlement.has(order.settlement);
   const canceled = checkout === 'canceled' && order.settlement !== 'paid';
@@ -226,7 +307,7 @@ export function OrderPage({
           </a>
         </p>
       ) : null}
-      {initial.canReconcile && session === 'signed-in' && (
+      {initial.canReconcile && signedIn && canReadOrder && (
         <section className="space-y-3" aria-label={m.order_reconcile_action()}>
           <Button
             variant="outline"
