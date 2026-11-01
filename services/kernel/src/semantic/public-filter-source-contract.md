@@ -571,17 +571,15 @@ The canonical import/re-export is `PublicFilterQueriedObservation` from Search. 
 `PrivacyReductionObservationRequest.population.{queried,start,execution,context}` and
 `PrivacyReductionObservation.observed.blocking`. It removes duplicate requirements/returned-subject input types
 and the live/null-consumer shortcut. The factory and exactly THREE Source readers are unchanged. These are
-specification boundaries, not runtime producer/feasibility approval. Co-owner review of the exact committed
-names/types and native scenarios is required again before runtime implementation. Existing native user-case
-implementations proceed independently of this specification closure.
+current shared interfaces, not native feasibility evidence. Their installed binding and captured-window
+repair implementation are described below; the complete serving and growth obligations remain distinct.
 
 ### Required integration schedule not yet frozen
 
-The actual runtime binding of registered Source identity and immutable read definition is still MISSING; the
-reader-only Source interface cannot implement it by itself. Do not guess an ABI, add an operation/resolver or
-manufacture a consumer to close it. Native population/join tests require both actual producer modules and must
-fail until implemented. The owner must close this native identity/definition binding before executable approval.
-The following full integration schedules remain REQUIRED and NOT YET FROZEN at this Source boundary:
+The native binding now resolves the registered Source identity and immutable read definition through the
+installed Source and Search custody modules. Complete maintained population observations and a single default
+page root remain unimplemented, so that binding cannot authorize ordinary serving yet. The following full
+integration schedules remain required native acceptance obligations:
 
 - A relevant local, tuple, foreign target/qualifier, consent or Collection reduction during actual PIT/prepared
   execution, with complete local AND FOREIGN repair/refresh/actual ACK before final; pending is empty but the
@@ -621,13 +619,11 @@ must itself be bounded. Latest-key state loses earlier relevant reductions; key-
 classification multiply examined work. A global transactional UPDATE lock is a conditional one-database proposal,
 not selected cross-home command placement or serialization.
 
-Native snapshot membership can distinguish a lower-XID late commit at a fresh final snapshot. Correct membership
-is NOT indexed-cost proof: XIP, packed and server-retained snapshots may copy/sort/probe the active transaction
-set; xmin ranges can scan committed unchanged homes behind one pinned transaction. IF a chosen future layout
-reads/probes that set, its producer growth check independently holds 1, 8 and 64 native transactions with allocated
-`pg_current_xact_id()` open across the measured read at fixed data scale. Judge actual rows/blocks/statements by
-series. There is NO active-XID term in the adopted bound, so growth fails. This specification adds no concurrency
-harness and reruns no unchanged Search case to adopt that evidence.
+Ordinary PostgreSQL statement visibility handles lower-XID late commits. Application work uses the original
+indexed pending/behind/changed paths; it does not enumerate active XIDs or meter invisible engine versions.
+Growth acceptance still counts every design-visible key, row, fanout and expansion under the unchanged bounds.
+A lower-XID reduction visible after start must remain pending or leave a later applied change generation that
+the current final observation detects, even after repair and ACK.
 
 Refresh of a same-version external-write conflict may preserve the OLD winner: FOREIGN repair needs dependent
 source-own anchored advancement and actual repaired winner/visibility. Native engine write-block verification
@@ -636,10 +632,10 @@ traversal still needs lossless concurrent creation/change handover, pinned requi
 recovery; legacy label/history hydration is neither public truth nor cheap key enumeration. Unknown custody or
 registration cannot become none/erased/clean, and permanent preparation fails quiescent finite progress.
 
-Still REQUIRED: exact native Source identity/definition binding, indexed changed/behind/cut and registration
-maintenance, native joins/availability, LOCAL+FOREIGN repair, durable all-writer/retained-copy custody, all-role
-minimized-source completion, direct/prepared/composed full growth matrix and served-share at 64/512/4096 with
-rising reduction rates and actual latency. Default public queries, API surfaces, Source256 compatibility and main
+Remaining serving implementation includes indexed changed/behind/cut observations and the complete default
+page root. The installed native identity/definition, captured-window repair and all-writer/retained-copy custody
+bodies still owe native acceptance. All-role minimized-source completion, the direct/prepared/composed growth
+matrix and served-share at 64/512/4096 with rising reduction rates and actual latency remain required proof. Default public queries, API surfaces, Source256 compatibility and main
 acceptance remain distinct obligations. No helper/type/protocol pass here claims runtime availability, native
 feasibility, public default queries, the main gate or completion of this remaining matrix.
 
