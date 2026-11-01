@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseCheckRunArguments, runCheck, type CandidateSnapshot, type CheckRunArguments } from './check-run.ts';
 import type { RemoteCheck, RemotePhysicalRunReceipt } from './remote-check.ts';
+import type { RemoteCheckSettlement } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const temporary: string[] = [];
@@ -92,6 +93,40 @@ function receipt(host: string, exitCode: number, run = 'physical-run-1'): Remote
 function finish(options: RemoteCheck, host = 'a', exitCode = 0): void {
   options.started?.(host);
   options.completed?.(receipt(host, exitCode));
+}
+
+function remoteSettlement(
+  options: RemoteCheck,
+  native: RemotePhysicalRunReceipt,
+  overrides: Partial<RemoteCheckSettlement> = {},
+): RemoteCheckSettlement {
+  return {
+    schema: 1,
+    host: native.host,
+    run: native.run,
+    native,
+    preparedInputs: {
+      schema: 1,
+      sourceSha256: options.expectedSourceSha256!,
+      manifestSha256: 'a'.repeat(64),
+      fileCount: 1,
+      totalBytes: 12,
+    },
+    returns: { schema: 1, status: 'empty', entries: [], failures: [] },
+    cleanup: {
+      schema: 1,
+      host: native.host,
+      run: native.run,
+      status: 'verified',
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    },
+    transportChildReaped: true,
+    ...overrides,
+  };
 }
 
 function removeRetainedSnapshot(fixture: ReturnType<typeof candidate>, snapshot: CandidateSnapshot): void {
@@ -396,4 +431,82 @@ test('candidate source mutation during transport is rejected after the authentic
     },
   });
   expect(result).toBe(75);
+});
+
+test('Early native zero cannot settle before returns source verification and cleanup', async () => {
+  const missing = candidate({ output: 'reports/result.txt' });
+  const missingFinals: string[] = [];
+  const missingCode = await runCheck(
+    argsFor(missing, ['bun', 'run', 'check'], ['reports/result.txt']),
+    {
+      settlementWriter: (line) => missingFinals.push(line),
+      transport: async (options) => {
+        const native = receipt('a', 0);
+        options.completed?.(native);
+        options.settled?.(
+          remoteSettlement(options, native, {
+            returns: { schema: 1, status: 'missing', entries: [], failures: ['reports/result.txt absent'] },
+          }),
+        );
+        return 0;
+      },
+    },
+  );
+  expect(missingCode).toBe(75);
+  expect(missingFinals).toHaveLength(1);
+  expect(JSON.parse(missingFinals[0]!).cleanup).toMatchObject({ disposition: 'unknown' });
+
+  const changed = candidate();
+  const changedFinals: string[] = [];
+  const changedCode = await runCheck(argsFor(changed, ['bun', 'run', 'check']), {
+    settlementWriter: (line) => changedFinals.push(line),
+    transport: async (options) => {
+      const native = receipt('b', 0);
+      options.completed?.(native);
+      options.settled?.(remoteSettlement(options, native));
+      writeFileSync(join(changed.root, 'src/input.ts'), 'changed while native exit was already zero\n');
+      return 0;
+    },
+  });
+  expect(changedCode).toBe(75);
+  expect(JSON.parse(changedFinals[0]!).cleanup).toMatchObject({ source: 'changed' });
+
+  const cleanup = candidate();
+  let retained: CandidateSnapshot | undefined;
+  const cleanupFinals: string[] = [];
+  try {
+    const cleanupCode = await runCheck(
+      argsFor(cleanup, ['bun', 'run', 'check']),
+      {
+        settlementWriter: (line) => cleanupFinals.push(line),
+        onRetainSnapshot: (snapshot) => (retained = snapshot),
+        transport: async (options) => {
+          const native = receipt('a', 0);
+          options.completed?.(native);
+          options.settled?.(
+            remoteSettlement(options, native, {
+              cleanup: {
+                schema: 1,
+                host: 'a',
+                run: native.run,
+                status: 'unknown',
+                supervisorStopped: false,
+                commandGroupTerminal: false,
+                containersRemoved: false,
+                runDirectoryRemoved: false,
+                failures: ['mock remote cleanup failure'],
+              },
+            }),
+          );
+          return 0;
+        },
+      },
+    );
+    expect(cleanupCode).toBe(75);
+    expect(cleanupFinals).toHaveLength(1);
+    expect(retained).toBeDefined();
+    expect(existsSync(retained!.workspace)).toBe(true);
+  } finally {
+    if (retained) removeRetainedSnapshot(cleanup, retained);
+  }
 });
