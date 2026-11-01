@@ -151,10 +151,9 @@ function bunFixture(parentExits: boolean): Fixture {
   });
   const stdout = child.stdout.tee();
   const stderr = child.stderr.tee();
-  const independentOutputCompletion = Promise.all([
-    drainFixtureOutput(stdout[1]),
-    drainFixtureOutput(stderr[1]),
-  ]).then(() => undefined);
+  const independentOutputCompletion = Promise.all([drainFixtureOutput(stdout[1]), drainFixtureOutput(stderr[1])]).then(
+    () => undefined,
+  );
   const custody = ownBunProcess(child, {
     label: 'Bun fixture group',
     termGraceMs: 80,
@@ -279,14 +278,11 @@ test('cancellation after partial setup still cleans the process group', async ()
   const cancellation = new DOMException('fixture setup cancelled', 'AbortError');
   let failure: unknown;
   try {
-    await withCleanup(
-      async () => {
-        controller.abort();
-        expect(controller.signal.aborted).toBe(true);
-        throw cancellation;
-      },
-      [{ label: 'partial Storybook setup', run: () => fixture.custody.close(), timeoutMs: 4000 }],
-    );
+    await withCleanup(async () => {
+      controller.abort();
+      expect(controller.signal.aborted).toBe(true);
+      throw cancellation;
+    }, [{ label: 'partial Storybook setup', run: () => fixture.custody.close(), timeoutMs: 4000 }]);
   } catch (error) {
     failure = error;
   }
@@ -301,15 +297,12 @@ test('operation and cleanup failures retain both original errors', async () => {
   const cleanup = new Error('browser close failed');
   let failure: unknown;
   try {
-    await withCleanup(
-      async () => {
-        throw primary;
-      },
-      [
-        { label: 'browser.close', run: () => Promise.reject(cleanup), timeoutMs: 250 },
-        { label: 'server group', run: () => fixture.custody.close(), timeoutMs: 4000 },
-      ],
-    );
+    await withCleanup(async () => {
+      throw primary;
+    }, [
+      { label: 'browser.close', run: () => Promise.reject(cleanup), timeoutMs: 250 },
+      { label: 'server group', run: () => fixture.custody.close(), timeoutMs: 4000 },
+    ]);
   } catch (error) {
     failure = error;
   }

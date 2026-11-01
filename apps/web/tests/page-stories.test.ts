@@ -6,7 +6,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createServer } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
-import { cleanupAll, ownBunProcess, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import {
+  cleanupAll,
+  ownBunProcess,
+  ownNodeProcess,
+  withCleanup,
+  type ProcessCustody,
+} from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -106,13 +112,11 @@ async function storybook() {
   const origin = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 150_000;
   for (;;) {
-    if (child.exitCode !== null)
-      throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
+    if (child.exitCode !== null) throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
     try {
       if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(10_000) })).ok) return origin;
     } catch {}
-    if (Date.now() > deadline)
-      throw new Error(`Storybook did not serve its index in time:\n${custody.diagnostics()}`);
+    if (Date.now() > deadline) throw new Error(`Storybook did not serve its index in time:\n${custody.diagnostics()}`);
     await Bun.sleep(500);
   }
 }

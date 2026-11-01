@@ -35,8 +35,7 @@ test('signed-in Subject and Entries use the default AppShell composition for one
   const custody = (storybookCustody = ownBunProcess(child, { label: 'Shell toast Storybook' }));
   const deadline = Date.now() + 150_000;
   for (;;) {
-    if (child.exitCode !== null)
-      throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
+    if (child.exitCode !== null) throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
     try {
       const response = await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(5000) });
       if (response.ok) break;

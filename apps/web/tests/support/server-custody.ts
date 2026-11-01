@@ -191,10 +191,7 @@ function makeProcessCustody(
 }
 
 /** Take ownership of a Bun.spawn child and drain both Bun ReadableStreams immediately. */
-export function ownBunProcess(
-  child: Bun.Subprocess,
-  options: ProcessCustodyOptions = {},
-): ProcessCustody {
+export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOptions = {}): ProcessCustody {
   const errors: unknown[] = [];
   const recorder = makeOutputRecorder(options, errors);
   const drain = async (stream: ReadableStream<Uint8Array> | null, name: ProcessOutputStream) => {
@@ -202,9 +199,11 @@ export function ownBunProcess(
     try {
       for await (const chunk of stream) recorder.recordOutput(chunk, name);
     } catch (error) {
-      errors.push(new Error(`${options.label ?? 'Child process group'} ${name} capture failed: ${errorText(error)}`, {
-        cause: error,
-      }));
+      errors.push(
+        new Error(`${options.label ?? 'Child process group'} ${name} capture failed: ${errorText(error)}`, {
+          cause: error,
+        }),
+      );
     }
   };
   const streams = options.streams ?? { stdout: child.stdout, stderr: child.stderr };
@@ -214,9 +213,11 @@ export function ownBunProcess(
   const childCompletion = Promise.resolve(child.exited).then(
     () => undefined,
     (error) => {
-      errors.push(new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
-        cause: error,
-      }));
+      errors.push(
+        new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
+          cause: error,
+        }),
+      );
     },
   );
   void outputCompletion.catch(() => {});
@@ -235,9 +236,11 @@ export function ownNodeProcess(child: ChildProcess, options: ProcessCustodyOptio
     }
     child.once('exit', () => resolve());
     child.once('error', (error) => {
-      errors.push(new Error(`${options.label ?? 'Child process group'} child error: ${errorText(error)}`, {
-        cause: error,
-      }));
+      errors.push(
+        new Error(`${options.label ?? 'Child process group'} child error: ${errorText(error)}`, {
+          cause: error,
+        }),
+      );
       resolve();
     });
   });
@@ -248,9 +251,11 @@ export function ownNodeProcess(child: ChildProcess, options: ProcessCustodyOptio
   ] as const) {
     stream?.on('data', (chunk: Uint8Array) => recorder.recordOutput(chunk, name));
     stream?.on('error', (error: unknown) => {
-      errors.push(new Error(`${options.label ?? 'Child process group'} ${name} stream failed: ${errorText(error)}`, {
-        cause: error,
-      }));
+      errors.push(
+        new Error(`${options.label ?? 'Child process group'} ${name} stream failed: ${errorText(error)}`, {
+          cause: error,
+        }),
+      );
     });
   }
   const childCompletion = exited;
@@ -299,7 +304,9 @@ export async function withCleanup<T>(
 
   const cleanupErrors = await collectCleanupErrors(actions, options);
   if (failed && cleanupErrors.length > 0)
-    throw new AggregateError([primary, ...cleanupErrors], 'The operation and its cleanup both failed', { cause: primary });
+    throw new AggregateError([primary, ...cleanupErrors], 'The operation and its cleanup both failed', {
+      cause: primary,
+    });
   if (failed) throw primary;
   if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, 'One or more cleanup actions failed');
   return value as T;

@@ -35,7 +35,8 @@ afterAll(async () => {
       }
       const deadline = Date.now() + 2500;
       while (fixtureGroupExists(pid) && Date.now() < deadline) await Bun.sleep(10);
-      if (fixtureGroupExists(pid)) throw new Error(`Independent dev-server fixture cleanup could not remove group ${pid}`);
+      if (fixtureGroupExists(pid))
+        throw new Error(`Independent dev-server fixture cleanup could not remove group ${pid}`);
       rmSync(file, { force: true });
     } catch (error) {
       failures.push(new Error(`Independent dev-server fixture cleanup failed; evidence: ${file}`, { cause: error }));

@@ -26,19 +26,17 @@ const activeCustodies = new Set<ProcessCustody>();
 const activeLogClosers = new Set<() => void>();
 
 afterAll(async () => {
-  await cleanupAll(
-    [
-      ...[...activeCustodies].map((custody) => ({
-        label: `Storybook manifest group ${custody.pid ?? 'without pid'}`,
-        run: () => custody.close(),
-        timeoutMs: 7000,
-      })),
-      ...[...activeLogClosers].map((closeLog) => ({
-        label: 'Storybook manifest log descriptor',
-        run: closeLog,
-      })),
-    ],
-  );
+  await cleanupAll([
+    ...[...activeCustodies].map((custody) => ({
+      label: `Storybook manifest group ${custody.pid ?? 'without pid'}`,
+      run: () => custody.close(),
+      timeoutMs: 7000,
+    })),
+    ...[...activeLogClosers].map((closeLog) => ({
+      label: 'Storybook manifest log descriptor',
+      run: closeLog,
+    })),
+  ]);
 });
 
 async function unusedPort() {

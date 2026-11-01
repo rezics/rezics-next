@@ -34,8 +34,7 @@ beforeAll(async () => {
   const custody = (storybookCustody = ownBunProcess(child, { label: 'Subject continuation Storybook' }));
   const deadline = Date.now() + 150_000;
   for (;;) {
-    if (child.exitCode !== null)
-      throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
+    if (child.exitCode !== null) throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
     try {
       if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(5000) })).ok) break;
     } catch {}

@@ -51,15 +51,15 @@ function sandbox() {
   const directory = mkdtempSync(join(root, '.temp/fake-modules-'));
   activeDirectories.set(directory, undefined);
   try {
-  cpSync(join(app, 'src/kernel'), join(directory, 'src/kernel'), { recursive: true });
-  symlinkSync(join(app, 'node_modules'), join(directory, 'node_modules'), 'dir');
-  const kernel = join(directory, 'src/kernel');
-  const original = readFileSync(join(kernel, 'fake.ts'), 'utf8');
-  mkdirSync(join(kernel, 'fake'), { recursive: true });
-  mkdirSync(join(kernel, 'fixtures'), { recursive: true });
-  writeFileSync(
-    join(kernel, 'fake/extension.ts'),
-    `export const routes = [
+    cpSync(join(app, 'src/kernel'), join(directory, 'src/kernel'), { recursive: true });
+    symlinkSync(join(app, 'node_modules'), join(directory, 'node_modules'), 'dir');
+    const kernel = join(directory, 'src/kernel');
+    const original = readFileSync(join(kernel, 'fake.ts'), 'utf8');
+    mkdirSync(join(kernel, 'fake'), { recursive: true });
+    mkdirSync(join(kernel, 'fixtures'), { recursive: true });
+    writeFileSync(
+      join(kernel, 'fake/extension.ts'),
+      `export const routes = [
       { method: 'POST', path: /^\\/v1\\/extensions\\/([^/]+)$/, 
         story: async ({ request, recordings, match }) => ({
           ...recordings['extension-recording'], id: match[1], body: await request.json(),
@@ -78,40 +78,40 @@ function sandbox() {
       { method: 'GET', path: /^\\/v1\\/subjects\\/module-override$/, 
         story: () => ({ status: 200, override: true }), fixture: () => ({ status: 200, override: true }) }
     ];\n`,
-  );
-  writeFileSync(
-    join(kernel, 'recorded/extension-recording.json'),
-    JSON.stringify({ status: 201, recorded: 'new file' }),
-  );
-  // Deliberately write in reverse filename order.
-  for (const suffix of ['z', 'a']) {
-    writeFileSync(
-      join(kernel, `fixtures/extension-${suffix}.json`),
-      JSON.stringify({
-        subjects: [{ id: `extension-${suffix}`, type: 'schema:Book', labels: { en: suffix }, statements: {} }],
-        accounts: [
-          {
-            id: `account-${suffix}`,
-            handle: `extension-${suffix}`,
-            kind: 'actor',
-            state: 'active',
-            displayName: suffix,
-            bio: null,
-            links: [],
-            avatar: null,
-            subject: null,
-          },
-        ],
-      }),
     );
-  }
-  // Exactly the shared files copied above remain untouched.
-  expect(readFileSync(join(kernel, 'fake.ts'), 'utf8')).toBe(original);
-  expect(readFileSync(join(kernel, 'fixtures.json'), 'utf8')).toBe(
-    readFileSync(join(app, 'src/kernel/fixtures.json'), 'utf8'),
-  );
-  writeFileSync(join(directory, 'exercise.ts'), exercise);
-  return directory;
+    writeFileSync(
+      join(kernel, 'recorded/extension-recording.json'),
+      JSON.stringify({ status: 201, recorded: 'new file' }),
+    );
+    // Deliberately write in reverse filename order.
+    for (const suffix of ['z', 'a']) {
+      writeFileSync(
+        join(kernel, `fixtures/extension-${suffix}.json`),
+        JSON.stringify({
+          subjects: [{ id: `extension-${suffix}`, type: 'schema:Book', labels: { en: suffix }, statements: {} }],
+          accounts: [
+            {
+              id: `account-${suffix}`,
+              handle: `extension-${suffix}`,
+              kind: 'actor',
+              state: 'active',
+              displayName: suffix,
+              bio: null,
+              links: [],
+              avatar: null,
+              subject: null,
+            },
+          ],
+        }),
+      );
+    }
+    // Exactly the shared files copied above remain untouched.
+    expect(readFileSync(join(kernel, 'fake.ts'), 'utf8')).toBe(original);
+    expect(readFileSync(join(kernel, 'fixtures.json'), 'utf8')).toBe(
+      readFileSync(join(app, 'src/kernel/fixtures.json'), 'utf8'),
+    );
+    writeFileSync(join(directory, 'exercise.ts'), exercise);
+    return directory;
   } catch (primary) {
     try {
       rmSync(directory, { recursive: true, force: true });

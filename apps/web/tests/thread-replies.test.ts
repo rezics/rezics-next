@@ -177,8 +177,7 @@ test('real composed reading Page and Pattern keep selected parent and keyboard d
   await withCleanup(async () => {
     const deadline = Date.now() + 150_000;
     for (;;) {
-      if (child.exitCode !== null)
-        throw new Error(`Storybook exited (${child.exitCode}): ${custody.diagnostics()}`);
+      if (child.exitCode !== null) throw new Error(`Storybook exited (${child.exitCode}): ${custody.diagnostics()}`);
       try {
         if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(1000) })).ok) break;
       } catch {}
