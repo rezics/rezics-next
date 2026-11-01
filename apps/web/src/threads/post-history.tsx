@@ -1,6 +1,7 @@
 import { DocumentBody } from '../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useEffect, useId, useRef, useState } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { useContext, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Byline } from './byline';
@@ -9,8 +10,13 @@ import { exactRevisionHref } from './exact-revision-href';
 import { revisionDocumentImage } from './exact-revision-media';
 import { readPostHistory } from './reads';
 import { RevisionProvenance } from './revision-provenance-view';
+import {
+  historySessionReady,
+  PostHistoryLifetime,
+  postHistorySessionSource,
+  type HistoryPage,
+} from './post-history-lifetime';
 
-type HistoryPage = Extract<Awaited<ReturnType<typeof readPostHistory>>, { available: true }>;
 type Revision = HistoryPage['revisions'][number];
 
 type PostHistoryProps = {
@@ -22,85 +28,124 @@ type PostHistoryProps = {
   className?: string;
 };
 
-/** A disclosure belongs to one post and the current reader's existing authority. */
+const noSubscription = () => () => {};
+const serverRevision = () => 0;
+
+/** A disclosure belongs to its original caller and actual browser session cache lifetime. */
 export function PostHistory(props: PostHistoryProps) {
   const { postId, viewerId, readAuthority } = props;
-  const [scope, setScope] = useState({ postId, viewerId, readAuthority, generation: 0 });
-  if (scope.postId !== postId || scope.viewerId !== viewerId || scope.readAuthority !== readAuthority) {
-    setScope({ postId, viewerId, readAuthority, generation: scope.generation + 1 });
+  const client = useContext(QueryClientContext);
+  const source = client && typeof window !== 'undefined' ? postHistorySessionSource(client) : undefined;
+  const revision = useSyncExternalStore(
+    source?.subscribe ?? noSubscription,
+    source?.snapshot ?? serverRevision,
+    serverRevision,
+  );
+  const binding = useMemo(
+    () => ({ postId, viewerId, readAuthority, source, revision }),
+    [postId, viewerId, readAuthority, source, revision],
+  );
+  const current = useRef(binding);
+  current.current = binding;
+  const lifetime = useMemo(
+    () =>
+      new PostHistoryLifetime(
+        () => current.current === binding && (!source || source.snapshot() === revision),
+        source?.subscribe,
+      ),
+    [binding, source, revision],
+  );
+  const previous = useRef(lifetime);
+  if (previous.current !== lifetime) {
+    // The parent is already replacing the old subtree; clear it without notifying during render.
+    previous.current.retire(false);
+    previous.current = lifetime;
   }
-  return <HistoryDisclosure key={scope.generation} {...props} />;
+  useLayoutEffect(lifetime.connect, [lifetime]);
+  return (
+    <HistoryDisclosure
+      key={lifetime.id}
+      {...props}
+      lifetime={lifetime}
+      ready={() => historySessionReady(source, viewerId)}
+    />
+  );
 }
 
 /** A bounded, cursor-paged view of the immutable revisions returned by the native post history API. */
-function HistoryDisclosure({ postId, viewerId, review = false, className = 'mt-3' }: PostHistoryProps) {
+function HistoryDisclosure({
+  postId,
+  viewerId,
+  review = false,
+  className = 'mt-3',
+  lifetime,
+  ready,
+}: PostHistoryProps & {
+  lifetime: PostHistoryLifetime;
+  ready: () => boolean;
+}) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [available, setAvailable] = useState(true);
-  const [failedCursor, setFailedCursor] = useState<string>();
-  const [revisions, setRevisions] = useState<{ revision: Revision; documentMedia: HistoryPage['documentMedia'] }[]>([]);
-  const [authors, setAuthors] = useState<HistoryPage['authors']>({});
-  const [mentions, setMentions] = useState<HistoryPage['mentions']>({});
-  const [subjects, setSubjects] = useState<HistoryPage['subjects']>([]);
-  const [reviewVotes, setReviewVotes] = useState<HistoryPage['reviewVotes']>({});
-  const [next, setNext] = useState<string | null>(null);
-  const [now, setNow] = useState(() => new Date().toISOString());
-  const request = useRef<{ pending: boolean } | undefined>(undefined);
-
-  useEffect(() => {
-    request.current = { pending: false };
-    return () => {
-      request.current = undefined;
-    };
-  }, []);
+  const {
+    open,
+    loading,
+    loaded,
+    available,
+    failedCursor,
+    revisions,
+    authors,
+    mentions,
+    subjects,
+    reviewVotes,
+    next,
+    now,
+  } = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
+  const connection = lifetime.ticket();
 
   async function load(cursor?: string) {
-    const current = request.current;
-    if (!current || current.pending) return;
-    current.pending = true;
-    setLoading(true);
+    const request = lifetime.begin(connection);
+    if (!request) return;
+    lifetime.update(connection, (view) => ({ ...view, loading: true }));
     try {
-      const result = await readPostHistory({ data: { postId, ...(cursor ? { cursor } : {}) } });
-      if (request.current !== current) return;
+      // Fence the queued transport itself, before it can borrow replacement session credentials.
+      await Promise.resolve();
+      if (!lifetime.owns(request)) return;
+      const result = ready()
+        ? await readPostHistory({ data: { postId, ...(cursor ? { cursor } : {}) } })
+        : { available: false as const };
+      if (!lifetime.owns(request)) return;
       if (!result.available) {
-        setAvailable(false);
-        setLoaded(true);
-        setFailedCursor(cursor);
+        lifetime.update(connection, (view) => ({ ...view, available: false, loaded: true, failedCursor: cursor }));
         return;
       }
       const entries = result.revisions.map((revision) => ({ revision, documentMedia: result.documentMedia }));
-      setRevisions((current) => (cursor ? [...current, ...entries] : entries));
-      setAuthors((current) => ({ ...(current ?? {}), ...(result.authors ?? {}) }));
-      setMentions((current) => ({ ...current, ...result.mentions }));
-      setSubjects((current) => [
-        ...new Map([...current, ...result.subjects].map((subject) => [subject.id, subject])).values(),
-      ]);
-      setReviewVotes((current) => ({ ...current, ...result.reviewVotes }));
-      setNext(result.next);
-      setNow(result.now);
-      setLoaded(true);
-      setAvailable(true);
-      setFailedCursor(undefined);
+      lifetime.update(connection, (view) => ({
+        ...view,
+        revisions: cursor ? [...view.revisions, ...entries] : entries,
+        authors: { ...(view.authors ?? {}), ...(result.authors ?? {}) },
+        mentions: { ...view.mentions, ...result.mentions },
+        subjects: [...new Map([...view.subjects, ...result.subjects].map((subject) => [subject.id, subject])).values()],
+        reviewVotes: { ...view.reviewVotes, ...result.reviewVotes },
+        next: result.next,
+        now: result.now,
+        loaded: true,
+        available: true,
+        failedCursor: undefined,
+      }));
     } catch {
-      if (request.current === current) {
-        setAvailable(false);
-        setLoaded(true);
-        setFailedCursor(cursor);
+      if (lifetime.owns(request)) {
+        lifetime.update(connection, (view) => ({ ...view, available: false, loaded: true, failedCursor: cursor }));
       }
     } finally {
-      if (request.current === current) {
-        current.pending = false;
-        setLoading(false);
-      }
+      lifetime.finish(request);
     }
   }
 
   function toggle() {
-    const reveal = !open;
-    setOpen(reveal);
-    if (reveal && !loaded && !loading) void load();
+    if (!lifetime.ownsConnection(connection)) return;
+    const view = lifetime.snapshot();
+    const reveal = !view.open;
+    lifetime.update(connection, (current) => ({ ...current, open: reveal }));
+    if (reveal && !view.loaded && !view.loading) void load();
   }
 
   return (
