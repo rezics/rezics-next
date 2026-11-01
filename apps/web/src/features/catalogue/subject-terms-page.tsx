@@ -24,6 +24,16 @@ import {
   type TermsTransport,
 } from './subject-terms';
 
+// Keep dense fine-pointer controls while allowing translated actions to grow onto multiple lines.
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:min-h-8 md:py-1 pointer-coarse:min-h-11 pointer-coarse:py-2';
+const inputClassName = 'min-h-11 md:min-h-8 pointer-coarse:min-h-11';
+// NativeSelect applies className to its wrapper; enlarge the actual select inside it.
+const selectClassName =
+  'min-w-0 max-w-full [&_select]:min-h-11 md:[&_select]:min-h-8 pointer-coarse:[&_select]:min-h-11';
+const linkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:min-h-8 pointer-coarse:min-h-11';
+
 export function SubjectTermsPage({
   id,
   locale,
@@ -187,7 +197,7 @@ export function SubjectTermsPage({
     errors.some((error) => error.pointer.startsWith(`/${field}/${language}`) || error.pointer === `/${field}`);
 
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
+    <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-3">
         <PageHeading>{m.catalogue_terms_title({}, options)}</PageHeading>
         {base && (
@@ -198,7 +208,7 @@ export function SubjectTermsPage({
         )}
         <p className="text-muted-foreground">{m.catalogue_terms_intro({}, options)}</p>
         {base && !saved && (
-          <a className="underline" href={base.href}>
+          <a className={linkClassName} href={base.href}>
             {m.catalogue_create_open({}, options)}
           </a>
         )}
@@ -213,7 +223,7 @@ export function SubjectTermsPage({
                 ? m.catalogue_result_read_denied({}, options)
                 : m.catalogue_result_read_unavailable({}, options)}
           </p>
-          <Button variant="outline" onClick={() => void query.refetch()}>
+          <Button className={actionClassName} variant="outline" onClick={() => void query.refetch()}>
             {m.catalogue_retry_loading_result({}, options)}
           </Button>
         </section>
@@ -230,7 +240,10 @@ export function SubjectTermsPage({
               {session === 'signed-out' && (
                 <>
                   {' '}
-                  <a className="underline" href={`/auth/sign-in?return_to=${encodeURIComponent(`${base.href}/terms`)}`}>
+                  <a
+                    className={linkClassName}
+                    href={`/auth/sign-in?return_to=${encodeURIComponent(`${base.href}/terms`)}`}
+                  >
                     {m.account_sign_in({}, options)}
                   </a>
                 </>
@@ -243,7 +256,7 @@ export function SubjectTermsPage({
               {saved.reader.state === 'ready' ? (
                 <>
                   {values(saved.reader.snapshot, termLanguages(saved.reader.snapshot))}
-                  <a className={buttonVariants()} href={saved.reader.snapshot.href}>
+                  <a className={buttonVariants({ className: actionClassName })} href={saved.reader.snapshot.href}>
                     {m.catalogue_create_open({}, options)}
                   </a>
                 </>
@@ -256,7 +269,7 @@ export function SubjectTermsPage({
                         ? m.catalogue_result_read_denied({}, options)
                         : m.catalogue_terms_reader_unavailable({}, options)}
                   </p>
-                  <Button disabled={busy} onClick={() => void reread()}>
+                  <Button className={actionClassName} disabled={busy} onClick={() => void reread()}>
                     {m.catalogue_retry_loading_result({}, options)}
                   </Button>
                 </>
@@ -272,6 +285,7 @@ export function SubjectTermsPage({
               <Field>
                 <FieldLabel htmlFor="terms-language">{m.catalogue_create_language({}, options)}</FieldLabel>
                 <NativeSelect
+                  className={selectClassName}
                   id="terms-language"
                   value={language}
                   disabled={busy}
@@ -285,10 +299,11 @@ export function SubjectTermsPage({
                 </NativeSelect>
                 <FieldDescription>{m.catalogue_create_language_help({}, options)}</FieldDescription>
               </Field>
-              <div className="flex flex-wrap items-end gap-3">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
                 <Field className="min-w-0 flex-1">
                   <FieldLabel htmlFor="terms-new-language">{m.catalogue_terms_new_language({}, options)}</FieldLabel>
                   <Input
+                    className={inputClassName}
                     id="terms-new-language"
                     value={newLanguage}
                     disabled={locked}
@@ -302,6 +317,7 @@ export function SubjectTermsPage({
                   {languageError && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
                 </Field>
                 <Button
+                  className={actionClassName}
                   type="button"
                   variant="outline"
                   disabled={locked}
@@ -336,6 +352,7 @@ export function SubjectTermsPage({
                   <Field>
                     <FieldLabel htmlFor={`terms-${field}-mode`}>{m.catalogue_terms_action({}, options)}</FieldLabel>
                     <NativeSelect
+                      className={selectClassName}
                       id={`terms-${field}-mode`}
                       value={row[field].mode}
                       onChange={(event) =>
@@ -362,6 +379,7 @@ export function SubjectTermsPage({
                         />
                       ) : (
                         <Input
+                          className={inputClassName}
                           id={`terms-${field}`}
                           lang={language}
                           value={row[field].value}
@@ -385,12 +403,18 @@ export function SubjectTermsPage({
                   <p>{failureText(failure.reason)}</p>
                   {failure.detail && <p>{failure.detail}</p>}
                   {failure.reason === 'denied' && base.profileHref && (
-                    <a href={base.profileHref} className="underline">
+                    <a href={base.profileHref} className={linkClassName}>
                       {m.catalogue_terms_profile({}, options)}
                     </a>
                   )}
                   {stale && (
-                    <Button type="button" variant="outline" disabled={busy} onClick={() => void reread()}>
+                    <Button
+                      className={actionClassName}
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void reread()}
+                    >
                       {m.catalogue_terms_compare({}, options)}
                     </Button>
                   )}
@@ -421,6 +445,7 @@ export function SubjectTermsPage({
                 </section>
               )}
               <Button
+                className={actionClassName}
                 type="submit"
                 disabled={busy || session !== 'signed-in' || (stale && comparison?.state !== 'ready')}
               >

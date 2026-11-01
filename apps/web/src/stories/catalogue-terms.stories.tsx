@@ -67,6 +67,20 @@ async function submit(canvasElement: HTMLElement) {
   return canvas;
 }
 
+// Browser geometry belongs in the canonical story, not the DOM-only regression.
+async function phoneControls(canvasElement: HTMLElement) {
+  if (!matchMedia('(max-width: 767px), (pointer: coarse)').matches) return;
+  const editor = canvasElement.querySelector('article')!;
+  await expect(editor.scrollWidth).toBeLessThanOrEqual(editor.clientWidth);
+  for (const control of editor.querySelectorAll<HTMLElement>('select, input, textarea, button, a')) {
+    const bounds = control.getBoundingClientRect();
+    await expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await expect(bounds.width).toBeGreaterThanOrEqual(44);
+    await expect(bounds.left).toBeGreaterThanOrEqual(0);
+    await expect(bounds.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  }
+}
+
 export const Ready: Story = {};
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const SignedOut: Story = { args: { scenario: 'signed-out' } };
@@ -104,17 +118,48 @@ export const Invalid: Story = {
 };
 export const StaleDraft: Story = {
   args: { scenario: 'stale' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
-    const canvas = await submit(canvasElement);
+    const canvas = await fill(canvasElement);
+    await phoneControls(canvasElement);
+    const language = canvas.getByRole('combobox', { name: m.catalogue_create_language() });
+    language.focus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('textbox', { name: m.catalogue_terms_new_language() })).toHaveFocus();
+    await expect(getComputedStyle(document.activeElement!).boxShadow).not.toBe('none');
+    await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
+    const aliases = within(canvas.getByRole('group', { name: m.catalogue_create_aliases() }));
+    await userEvent.selectOptions(aliases.getByRole('combobox'), 'set');
+    const multiline = aliases.getByRole('textbox');
+    await expect(multiline.tagName).toBe('TEXTAREA');
+    await expect(multiline).toHaveAttribute('rows', '3');
+    await userEvent.clear(multiline);
+    await userEvent.type(multiline, 'Primo{Enter}Secondo');
+    await phoneControls(canvasElement);
+    await userEvent.selectOptions(language, 'en');
+    await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Corrected title');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_terms_stale());
+    await expect(canvas.getByRole('button', { name: m.catalogue_terms_save() })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.catalogue_create_add_language() })).toBeDisabled();
+    await phoneControls(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_compare() }));
     expect(await canvas.findByText('Another editor’s title')).toBeVisible();
+    await phoneControls(canvasElement);
+    await userEvent.selectOptions(language, 'it');
+    await expect(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() })).toHaveValue('Primo\nSecondo');
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'ja');
     expect(canvas.getAllByText('元の映画', { selector: 'span[lang="ja"]' })[0]).toBeVisible();
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Corrected title');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_confirm() }));
     expect(await canvas.findByText(m.catalogue_terms_saved())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
+      'href',
+      expect.stringContaining(`/${getLocale()}/subjects/${termsSubjectId}/`),
+    );
+    await phoneControls(canvasElement);
   },
 };
 export const Denied: Story = {

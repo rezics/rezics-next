@@ -8,7 +8,7 @@ test('A contributor retries only the failed reading after a confirmed save', asy
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/catalogue', width: 1280, height: 900 });
+  const window = new Window({ url: 'https://site.test/en/catalogue', width: 390, height: 844 });
   const globals = {
     window,
     document: window.document,
@@ -116,6 +116,91 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     expect(host.querySelector('form')).toBeNull();
     expect(submitTerms).toHaveBeenCalledTimes(1);
     expect(terms.calls.filter((call) => call.method === 'PATCH')).toEqual([originalWrite]);
+
+    // Exercise the actual terms composition through stale comparison and uncertain confirmation.
+    await act(async () => root.render(null));
+    queryClient.clear();
+    const staleTerms = catalogueTermsFixture('stale');
+    const submitStale = mock(staleTerms.transport.submit);
+    const readStale = mock(staleTerms.transport.read);
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SubjectTermsPage, {
+            id: termsSubjectId,
+            locale: 'en',
+            session: 'signed-in',
+            transport: { read: readStale, submit: submitStale },
+          }),
+        ),
+      );
+    });
+    await act(async () => {
+      await Bun.sleep(10);
+    });
+    const select = async (id: string, value: string) => {
+      await act(async () => {
+        const control = host.querySelector(`#${id}`)!;
+        control.value = value;
+        control.dispatchEvent(new window.Event('change', { bubbles: true }));
+      });
+    };
+    await select('terms-labels-mode', 'set');
+    await input('terms-labels', 'Phone draft');
+    await select('terms-descriptions-mode', 'remove');
+    await input('terms-new-language', 'it');
+    await act(async () => button(m.catalogue_create_add_language()).click());
+    expect(host.querySelector('#terms-language')!.value).toBe('it');
+    await select('terms-aliases-mode', 'set');
+    await act(async () => {
+      const aliases = host.querySelector('#terms-aliases')!;
+      expect(aliases.tagName).toBe('TEXTAREA');
+      expect(aliases.getAttribute('rows')).toBe('3');
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(aliases, 'Primo\nSecondo');
+      aliases.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    await select('terms-language', 'en');
+    expect(host.querySelector('#terms-labels')!.value).toBe('Phone draft');
+    await act(async () => button(m.catalogue_terms_save()).click());
+    expect(host.textContent).toContain(m.catalogue_terms_stale());
+    expect(button(m.catalogue_terms_save()).disabled).toBe(true);
+    expect(host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(button(m.catalogue_create_add_language()).disabled).toBe(true);
+    expect(host.querySelector('#terms-language')!.disabled).toBe(false);
+    expect(submitStale).toHaveBeenCalledTimes(1);
+    const firstCommand = structuredClone(submitStale.mock.calls[0]![0]);
+    expect(firstCommand).toMatchObject({
+      id: termsSubjectId,
+      etag: '"7"',
+      session: 'terms-read',
+      patch: { labels: { en: 'Phone draft' }, descriptions: { en: null }, aliases: { it: ['Primo', 'Secondo'] } },
+    });
+    await act(async () => button(m.catalogue_terms_compare()).click());
+    expect(host.textContent).toContain('Another editor’s title');
+    expect(readStale.mock.calls.at(-1)).toEqual([termsSubjectId, 'terms-read']);
+    expect(submitStale).toHaveBeenCalledTimes(1);
+    await select('terms-language', 'it');
+    expect(host.querySelector('#terms-aliases')!.value).toBe('Primo\nSecondo');
+    await select('terms-language', 'en');
+    expect(host.querySelector('#terms-labels')!.value).toBe('Phone draft');
+    staleTerms.setScenario('uncertain');
+    await act(async () => button(m.catalogue_terms_confirm()).click());
+    expect(host.textContent).toContain(m.catalogue_terms_uncertain());
+    expect(host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(button(m.catalogue_create_add_language()).disabled).toBe(true);
+    const confirmedCommand = structuredClone(submitStale.mock.calls[1]![0]);
+    expect(confirmedCommand).toMatchObject({ ...firstCommand, key: expect.any(String), etag: '"8"' });
+    expect(confirmedCommand.key).not.toBe(firstCommand.key);
+    await act(async () => button(m.catalogue_create_retry()).click());
+    expect(submitStale.mock.calls[2]![0]).toEqual(confirmedCommand);
+    expect(host.textContent).toContain(m.catalogue_terms_saved());
+    expect(staleTerms.subject.labels).toEqual({ en: 'Phone draft', ja: '元の映画' });
+    expect(staleTerms.subject.descriptions).toEqual({ ja: '元の説明' });
+    expect(staleTerms.subject.aliases).toEqual({ en: ['Working title'], ja: ['別名'], it: ['Primo', 'Secondo'] });
+    expect(host.querySelector('form')).toBeNull();
+    expect(submitStale).toHaveBeenCalledTimes(3);
 
     const authored = authoredFixture();
     const initial = await authored.transport.read();
