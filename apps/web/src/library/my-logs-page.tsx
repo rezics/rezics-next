@@ -1,4 +1,4 @@
-import { ListRow } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -13,7 +13,7 @@ import { fullDateTime } from '../threads/byline';
 import { myLogsSearch, type MyLogsPage } from './my-logs';
 import { readMyPublishedLogHistoryForViewer, type MyLogsViewerHistory } from './logs-server';
 import { SubjectCover, rowRatio } from './subject-row';
-import { displayLibraryTitle, LibraryTitle } from './title';
+import { displayLibraryTitle } from './title';
 
 const subscribe = () => () => {};
 const hydratedSnapshot = () => true;
@@ -193,8 +193,8 @@ export function MyLogsPageView({
             <ol aria-label={m.library_logs_heading()} className="space-y-2">
               {page.logs.map((log) => {
                 const title = log.subject
-                  ? displayLibraryTitle(log.subject.label, getLocale()).text
-                  : m.library_subject_unavailable();
+                  ? displayLibraryTitle(log.subject.label, getLocale())
+                  : { text: m.library_subject_unavailable(), lang: undefined };
                 const state =
                   log.sessionState === 'completed'
                     ? m.library_progress_state_completed()
@@ -202,30 +202,33 @@ export function MyLogsPageView({
                       ? m.library_progress_state_abandoned()
                       : m.library_progress_state_active();
                 return (
-                  <ListRow
+                  <ContentItem
                     key={log.id}
-                    className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-2 rounded-xl px-3 py-4"
-                  >
-                    <SubjectCover subject={log.subject} ratio={ratio} />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <p className="line-clamp-2 font-semibold [overflow-wrap:anywhere]">
-                        {log.subject ? <LibraryTitle label={log.subject.label} locale={getLocale()} /> : title}
-                      </p>
+                    title={title.text}
+                    {...(title.lang === undefined ? {} : { titleLang: title.lang })}
+                    headingLevel={2}
+                    className="px-3 [overflow-wrap:anywhere]"
+                    visual={<SubjectCover subject={log.subject} ratio={ratio} />}
+                    state={
                       <p className="text-sm text-muted-foreground">
                         {m.library_logs_session_state()}: {state}
                       </p>
-                      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+                    }
+                    metadata={
+                      <div className="flex flex-col gap-1">
                         <SnapshotDate label={m.library_logs_published()} value={log.publishedAt} />
                         <SnapshotDate label={m.library_logs_started()} value={log.startedAt} />
                         {log.completedAt ? (
                           <SnapshotDate label={m.library_logs_completed()} value={log.completedAt} />
                         ) : null}
                       </div>
+                    }
+                    actions={
                       <Exposure operation="published_log.read">
                         <a
                           href={`/${getLocale()}/logs/${encodeURIComponent(log.id)}`}
                           aria-label={m.library_my_logs_read({
-                            title,
+                            title: title.text,
                             date: fullDateTime(log.publishedAt, getLocale()),
                           })}
                           className="inline-flex min-h-11 items-center rounded text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -233,24 +236,26 @@ export function MyLogsPageView({
                           {m.library_my_logs_open_log()}
                         </a>
                       </Exposure>
-                    </div>
-                    {log.note ? (
-                      <details className="group/note col-span-full min-w-0">
-                        <summary className="cursor-pointer list-none rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-                          <span
-                            aria-hidden="true"
-                            className="line-clamp-3 whitespace-pre-wrap [overflow-wrap:anywhere] group-open/note:hidden"
-                          >
-                            {log.note}
-                          </span>
-                          <span className="flex min-h-11 items-center text-sm text-primary underline underline-offset-4">
-                            {m.library_my_logs_full_note()}
-                          </span>
-                        </summary>
-                        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{log.note}</p>
-                      </details>
-                    ) : null}
-                  </ListRow>
+                    }
+                    preview={
+                      log.note ? (
+                        <details className="group/note min-w-0">
+                          <summary className="cursor-pointer list-none rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                            <span
+                              aria-hidden="true"
+                              className="line-clamp-3 whitespace-pre-wrap [overflow-wrap:anywhere] group-open/note:hidden"
+                            >
+                              {log.note}
+                            </span>
+                            <span className="flex min-h-11 items-center text-sm text-primary underline underline-offset-4">
+                              {m.library_my_logs_full_note()}
+                            </span>
+                          </summary>
+                          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{log.note}</p>
+                        </details>
+                      ) : null
+                    }
+                  />
                 );
               })}
             </ol>
