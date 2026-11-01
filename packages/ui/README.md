@@ -42,11 +42,21 @@ belongs in the rating components, not in a generic slider wrapper.
 Editable input, textarea, grouped combobox and select boundaries use `--control`, with at least 3:1 non-text
 contrast on Aura's light and dark surfaces. Decorative borders keep `--border`. Focus retains the blue ring;
 invalid fields retain the danger boundary and disabled controls retain their disabled state. Grouped inputs draw
-one outer boundary. Theme adaptations live in `styles.css`; generated shadcn controls stay unchanged.
+one outer boundary. Theme adaptations live in `styles.css`; the shared modal source applies the viewport contract below.
 
 Below 768px or with a coarse primary pointer, editable controls and standard action buttons have a minimum 44px
 target. Fine-pointer desktop controls retain their dense sizes. Inline combobox tokens and editor toolbar buttons
 keep their own composition; callers must not treat an inline token as a standalone action.
+
+## Dialogs and sheets
+
+`DialogContent` and `AlertDialogContent` keep their centered widths and are bounded by the dynamic viewport with safe-area gutters. Their popup is the vertical scroll container, so long forms, descriptions, the close control and final actions stay in one reachable flow. Long unbroken text wraps within the popup. `SheetContent` keeps its selected edge and width, uses the dynamic viewport between safe insets, and scrolls long content inside the panel; `SheetFooter` does not shrink when the panel is constrained. `AlertDialogAction` remains a plain button: the caller performs the confirmed action and decides whether pending work blocks dismissal.
+
+The shared defaults use `cn`'s caller-last class merging. Explicit `className`, `style`, refs and primitive props remain
+forwarded, so existing `max-h-*`, `overflow-*` and width utilities keep their caller override behavior. A popup with a
+nested scroll owner can keep that contract by supplying its existing explicit overflow class (as `CommandDialog` does);
+avoid adding a second unconstrained scroller inside custom content. The shared scroll bounds do not replace caller-owned
+pending, confirmation or close behavior.
 
 ## Menu
 
