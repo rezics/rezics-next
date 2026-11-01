@@ -57,10 +57,7 @@ export function ContentItem({
         </ListRowLink>
       )}
       {hasSlot(visual) && (
-        <div
-          data-content-item-slot="visual"
-          className="shrink-0 [&_button]:relative [&_button]:z-10"
-        >
+        <div data-content-item-slot="visual" className="shrink-0 [&_button]:relative [&_button]:z-10">
           {visual}
         </div>
       )}

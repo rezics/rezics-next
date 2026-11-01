@@ -56,16 +56,9 @@ test('ContentItem composes its slots as one named heading, one stretched link an
   expect(primaryLink).toBeDefined();
   expect(primaryLink).not.toMatch(/<(?:a|button|input)\b/);
 
-  const slotOrder = [
-    'visual',
-    'context',
-    'title',
-    'metadata',
-    'preview',
-    'state',
-    'actions',
-    'trailing',
-  ].map((slot) => html.indexOf(`data-content-item-slot="${slot}"`));
+  const slotOrder = ['visual', 'context', 'title', 'metadata', 'preview', 'state', 'actions', 'trailing'].map((slot) =>
+    html.indexOf(`data-content-item-slot="${slot}"`),
+  );
   expect(slotOrder.every((position) => position >= 0)).toBe(true);
   expect(slotOrder).toEqual([...slotOrder].sort((left, right) => left - right));
 

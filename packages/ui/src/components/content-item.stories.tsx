@@ -25,9 +25,7 @@ export const Composed: Story = {
     const primaryLink = canvas.getByRole('link', { name: title });
     await expect(primaryLink).toHaveAttribute('aria-labelledby', heading.id);
     await expect(canvas.getAllByRole('link', { name: title })).toHaveLength(1);
-    await expect(
-      canvas.getByRole('heading', { name: 'A heading without a destination' }),
-    ).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'A heading without a destination' })).toBeVisible();
     await expect(canvas.queryByRole('link', { name: 'A heading without a destination' })).toBeNull();
 
     await userEvent.tab();
