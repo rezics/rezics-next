@@ -345,7 +345,7 @@ test('admission, address, native authority and unmount retire reads while ordina
   }
 });
 
-async function beginEditing(ui: Awaited<ReturnType<typeof mount>>) {
+async function beginEditing(ui: Awaited<ReturnType<typeof mount>>, viewer = 'alice') {
   await settle(() =>
     ui.host.querySelector<HTMLButtonElement>(`button[aria-label="${m.library_collection_actions()}"]`)!.click(),
   );
@@ -358,7 +358,7 @@ async function beginEditing(ui: Awaited<ReturnType<typeof mount>>) {
   });
   const call = calls.at(-1)!;
   expect(call.input.editor).toBe(true);
-  await ui.answer(call);
+  await ui.answer(call, ready(call, viewer));
   expect(ui.host.querySelector('#collection-edit-form')).not.toBeNull();
 }
 
@@ -394,8 +394,6 @@ test('a mounted editor draft survives ordinary current reads and retires before 
   }
 });
 
-// The route can retire read callbacks and children, but cannot fence this continuation inside the
-// contract's closed curated editor implementation. Retain the required outcome for owner integration.
 test('a dispatched native save cannot send its next member write with replacement credentials', async () => {
   const ui = await mount();
   const edits = await import('../src/library/collection-edit');
@@ -428,6 +426,199 @@ test('a dispatched native save cannot send its next member write with replacemen
   } finally {
     update.mockRestore();
     note.mockRestore();
+    await ui.close();
+  }
+});
+
+type MountedCollection = Awaited<ReturnType<typeof mount>>;
+async function changeValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  await settle(() => {
+    const prototype = input.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+}
+async function clickNamed(ui: MountedCollection, name: string) {
+  const button = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (node) => node.textContent?.trim() === name,
+  );
+  expect(button).toBeDefined();
+  expect(button!.disabled).toBe(false);
+  await settle(() => button!.click());
+}
+async function submitDraft(ui: MountedCollection) {
+  await settle(() =>
+    ui.host.querySelector('#collection-edit-form')!.dispatchEvent(
+      new window.Event('submit', { bubbles: true, cancelable: true }),
+    ),
+  );
+}
+async function stageDraft(ui: MountedCollection, next: 'transfer' | 'batch' | 'member' | 'chain') {
+  if (next === 'member' || next === 'chain') {
+    const notes = ui.host.querySelectorAll<HTMLTextAreaElement>('textarea[id^="collection-member-note-"]');
+    if (next === 'chain') await changeValue(notes[notes.length - 2]!, 'First originating private note');
+    await changeValue(notes[notes.length - 1]!, 'Originating private note');
+  }
+  if (next === 'transfer' || next === 'chain') {
+    const destination = collectionRecording.collection;
+    await settle(() => ui.client.setQueryData(libraryNavigationQuery('en', 100).queryKey, {
+      pins: { state: 'closed' }, collections: [destination],
+    }));
+    await settle(() => ui.host.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click());
+    await settle(() => {
+      const select = ui.host.querySelector<HTMLSelectElement>('[data-collection-selection] select')!;
+      select.value = destination.id;
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    await clickNamed(ui, m.library_collection_move_selected());
+  }
+  if (next === 'batch' || next === 'chain') {
+    await settle(() => ui.host.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click());
+    await clickNamed(ui, m.library_collection_remove_selected());
+  }
+}
+
+test('originating parent saves stop transfer, batch and member continuations on viewer, admission, address retirement and unmount', async () => {
+  const edits = await import('../src/library/collection-edit');
+  const commands = await import('../src/library/collection-commands');
+  const reads = await import('../src/library/collection-read');
+  for (const retirement of ['viewer', 'admission', 'authority', 'address', 'unmount'] as const) {
+    for (const next of ['transfer', 'batch', 'member'] as const) {
+      const ui = await mount();
+      const parent = deferred<{ ok: true; id: string; revision: number }>();
+      const update = spyOn(edits, 'updateCollection').mockImplementation(() => parent.promise);
+      const transfer = spyOn(commands, 'transferCollectionMembers').mockResolvedValue({ ok: true, revision: 3, destinationRevision: 2 });
+      const batch = spyOn(commands, 'batchRemoveCollectionMembers').mockResolvedValue({ ok: true, revision: 3, undo: [] });
+      const note = spyOn(edits, 'updateMemberNote').mockResolvedValue({ ok: true, id: 'member' });
+      const destination = spyOn(reads, 'readCollectionDestination').mockResolvedValue(collectionRecording.collection);
+      try {
+        await ui.show();
+        await ui.answer();
+        await beginEditing(ui);
+        await stageDraft(ui, next);
+        await submitDraft(ui);
+        expect(update).toHaveBeenCalledTimes(1);
+        if (retirement === 'viewer') {
+          await ui.show('bob', { csrf: 'csrf-bob' });
+          const call = calls.at(-1)!;
+          await ui.answer(call, ready(call, 'bob'));
+          await beginEditing(ui, 'bob'); // The replacement remains usable while Alice's IO is pending.
+        } else if (retirement === 'admission') {
+          await ui.show('alice', { admitted: false });
+          expect(ui.host.querySelector('#collection-edit-form')).toBeNull();
+          await ui.show();
+          await ui.answer();
+          await beginEditing(ui); // Regaining admission cannot revive the retired save.
+        } else if (retirement === 'address') {
+          address = { id: 'replacement', cursor: 'next', filters: { 'f.schema:genre': 'new' } };
+          await ui.show();
+          await ui.answer();
+          await beginEditing(ui);
+        } else if (retirement === 'authority') {
+          await ui.refetch();
+          const call = calls.at(-1)!;
+          await ui.answer(call, ready(call, 'alice', { viewerActions: { state: 'unavailable' } }));
+          expect(ui.host.querySelector('#collection-edit-form')).toBeNull();
+        } else await ui.hide();
+        const readCount = calls.length;
+        const currentMarkup = ui.host.innerHTML;
+        await settle(() => parent.resolve({ ok: true, id: 'original', revision: 2 }));
+        expect(transfer).not.toHaveBeenCalled();
+        expect(batch).not.toHaveBeenCalled();
+        expect(note).not.toHaveBeenCalled();
+        expect(calls).toHaveLength(readCount);
+        expect(ui.invalidations).not.toHaveBeenCalled();
+        expect(ui.host.innerHTML).toBe(currentMarkup);
+      } finally {
+        update.mockRestore(); transfer.mockRestore(); batch.mockRestore(); note.mockRestore(); destination.mockRestore();
+        await ui.close();
+      }
+    }
+  }
+});
+
+test('retirement during transfer, batch or member IO keeps its native outcome without later commands or reload effects', async () => {
+  const edits = await import('../src/library/collection-edit');
+  const commands = await import('../src/library/collection-commands');
+  const reads = await import('../src/library/collection-read');
+  for (const pending of ['transfer', 'batch', 'member'] as const) {
+    const ui = await mount();
+    const transferResult = deferred<{ ok: true; revision: number; destinationRevision: number }>();
+    const batchResult = deferred<{ ok: true; revision: number; undo: [] }>();
+    const memberResult = deferred<{ ok: true; id: string }>();
+    const update = spyOn(edits, 'updateCollection').mockResolvedValue({ ok: true, id: 'original', revision: 2 });
+    const transfer = spyOn(commands, 'transferCollectionMembers').mockImplementation(() =>
+      pending === 'transfer' ? transferResult.promise : Promise.resolve({ ok: true, revision: 3, destinationRevision: 2 }),
+    );
+    const batch = spyOn(commands, 'batchRemoveCollectionMembers').mockImplementation(() =>
+      pending === 'batch' ? batchResult.promise : Promise.resolve({ ok: true, revision: 4, undo: [] }),
+    );
+    const note = spyOn(edits, 'updateMemberNote').mockImplementation(() => memberResult.promise);
+    const destination = spyOn(reads, 'readCollectionDestination').mockResolvedValue(collectionRecording.collection);
+    try {
+      await ui.show();
+      await ui.answer();
+      await beginEditing(ui);
+      await stageDraft(ui, 'chain');
+      await submitDraft(ui);
+      expect(transfer).toHaveBeenCalledTimes(1);
+      expect(batch).toHaveBeenCalledTimes(pending === 'transfer' ? 0 : 1);
+      expect(note).toHaveBeenCalledTimes(pending === 'member' ? 1 : 0);
+      await ui.show('bob');
+      const replacement = calls.at(-1)!;
+      await ui.answer(replacement, ready(replacement, 'bob'));
+      const readCount = calls.length;
+      await settle(() => {
+        transferResult.resolve({ ok: true, revision: 3, destinationRevision: 2 });
+        batchResult.resolve({ ok: true, revision: 4, undo: [] });
+        memberResult.resolve({ ok: true, id: 'member' });
+      });
+      expect(batch).toHaveBeenCalledTimes(pending === 'transfer' ? 0 : 1);
+      expect(note).toHaveBeenCalledTimes(pending === 'member' ? 1 : 0);
+      expect(calls).toHaveLength(readCount);
+      expect(ui.invalidations).not.toHaveBeenCalled();
+      expect(ui.host.textContent).toContain('bob private Collection');
+      expect(ui.host.querySelector('[role="alert"]')).toBeNull();
+    } finally {
+      update.mockRestore(); transfer.mockRestore(); batch.mockRestore(); note.mockRestore(); destination.mockRestore();
+      await ui.close();
+    }
+  }
+});
+
+test('a current editor keeps its exact uncertain save payload and key across nonempty CSRF rotation and ordinary refetch', async () => {
+  const ui = await mount();
+  const edits = await import('../src/library/collection-edit');
+  const uncertain = deferred<{ ok: false; reason: 'unavailable' }>();
+  const update = spyOn(edits, 'updateCollection')
+    .mockImplementationOnce(() => uncertain.promise)
+    .mockResolvedValue({ ok: true, id: 'original', revision: 2 });
+  const note = spyOn(edits, 'updateMemberNote').mockResolvedValue({ ok: true, id: 'member' });
+  try {
+    await ui.show();
+    await ui.answer();
+    await beginEditing(ui);
+    await stageDraft(ui, 'member');
+    await submitDraft(ui);
+    expect(update).toHaveBeenCalledTimes(1);
+    const original = structuredClone(update.mock.calls[0]![0]!.data);
+    await ui.show('alice', { csrf: 'rotated-nonempty' });
+    await ui.refetch();
+    await ui.answer();
+    await settle(() => uncertain.resolve({ ok: false, reason: 'unavailable' }));
+    expect(ui.host.querySelector('#collection-edit-form')).not.toBeNull();
+    await submitDraft(ui);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update.mock.calls[1]![0]!.data).toEqual(original);
+    expect(new Headers(update.mock.calls[1]![0]!.headers).get('X-CSRF-Token')).toBe('rotated-nonempty');
+    expect(note).toHaveBeenCalledTimes(1);
+    const refresh = calls.at(-1)!;
+    expect(refresh.input.editor).not.toBe(true);
+    await ui.answer(refresh, ready(refresh, 'alice', { revision: 2 }));
+    expect(ui.invalidations).toHaveBeenCalledTimes(1);
+    expect(ui.host.querySelector('#collection-edit-form')).toBeNull();
+  } finally {
+    update.mockRestore(); note.mockRestore();
     await ui.close();
   }
 });

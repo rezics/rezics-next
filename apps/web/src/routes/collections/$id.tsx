@@ -289,6 +289,7 @@ function CollectionResultLifetime({
       layout={layout}
       {...(input.search ? { search: input.search } : {})}
       queryKey={queryKey}
+      isCurrent={() => active.current && mode === 'session' && canRead}
       refreshPage={() => refreshPage()}
       readEditorPage={() => refreshPage(true)}
     />

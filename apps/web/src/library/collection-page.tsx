@@ -25,11 +25,12 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { csrfHeaders } from '../threads/composer';
-import { useSession } from '../session/query';
+import { exposureQuery, sessionQuery, useSession } from '../session/query';
+import { operationIsAdmitted, useOperation } from '../kernel/exposure';
 import { AccountRef } from './account-ref';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
@@ -46,6 +47,7 @@ import {
 } from './collection-edit';
 import {
   collectionRenderPolicy,
+  collectionRequestVariant,
   type CollectionPageResult,
   type CollectionPolicyPage,
   type EditableCollectionPage,
@@ -244,15 +246,7 @@ type BoundaryMove = {
   refusal?: string;
 };
 
-export function CollectionPage({
-  page,
-  queryKey,
-  refreshPage,
-  readEditorPage,
-  cursor,
-  layout = 'list',
-  search,
-}: {
+type CollectionPageProps = {
   page: EditableCollectionPage;
   queryKey: readonly unknown[];
   refreshPage: () => Promise<EditableCollectionPage>;
@@ -260,7 +254,57 @@ export function CollectionPage({
   cursor: string | undefined;
   layout?: 'grid' | 'list';
   search?: Record<string, string | string[]>;
-}) {
+  /** An enclosing read lifetime can retire this editor; it never supplies viewer authority. */
+  isCurrent?: () => boolean;
+};
+
+export function CollectionPage(props: CollectionPageProps) {
+  const session = useSession();
+  const admitted = useOperation('collection.get');
+  const client = useQueryClient();
+  const viewer = session.state === 'signed-in' && session.subject ? session.subject : null;
+  const ready = viewer !== null && Boolean(session.csrfToken) && admitted;
+  const { page } = props;
+  const identity = JSON.stringify([
+    collectionRequestVariant({ id: page.id, cursor: props.cursor, search: props.search }),
+    props.queryKey,
+    session.state,
+    viewer,
+    Boolean(session.csrfToken),
+    admitted,
+    page.visibility,
+    page.viewerActions?.state,
+    page.viewerActions?.state === 'ready'
+      ? page.viewerActions.actions.map(({ action, operations }) => [action, [...operations].sort()]).sort()
+      : null,
+  ]);
+  function current() {
+    // Consult the actual session cache too: a transport may resume before React commits its next observation.
+    const actual = client.getQueryData(sessionQuery.queryKey);
+    return (
+      ready &&
+      actual?.state === 'signed-in' &&
+      actual.subject === viewer &&
+      Boolean(actual.csrfToken) &&
+      operationIsAdmitted('collection.get', client.getQueryData(exposureQuery.queryKey)) &&
+      (props.isCurrent?.() ?? true)
+    );
+  }
+  // Retire draft, receipt and callback state in the same render that observes replacement authority.
+  // A nonempty CSRF rotation or ordinary refetch keeps the originating intent and idempotency keys.
+  return <CollectionPageLifetime key={identity} {...props} current={current} />;
+}
+
+function CollectionPageLifetime({
+  page,
+  queryKey,
+  refreshPage,
+  readEditorPage,
+  cursor,
+  layout = 'list',
+  search,
+  current,
+}: CollectionPageProps & { current: () => boolean }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useSession();
@@ -302,7 +346,10 @@ export function CollectionPage({
   const [writing, setPending] = useState(false);
   const [boundary, setBoundary] = useState<BoundaryMove | null>(null);
   const boundaryRef = useRef<BoundaryMove | null>(null);
-  const mounted = useRef(true);
+  const mounted = useRef(false);
+  function isCurrent() {
+    return mounted.current && current();
+  }
   const pending = writing || (boundary !== null && boundary.phase !== 'done');
   const [deletion, setDeletion] = useState<{ collectionId: string; revision: number; idempotencyKey: string } | null>(
     null,
@@ -332,14 +379,14 @@ export function CollectionPage({
     page.viewerActions,
     session.state,
     session.subject,
-    session.csrfToken,
+    Boolean(session.csrfToken),
   ]);
   const currentBoundaryContext = useRef(boundaryContext);
   currentBoundaryContext.current = boundaryContext;
   const boundaryFenced = boundary !== null && boundary.phase !== 'done' && boundary.intent.context !== boundaryContext;
 
   useEffect(() => setHydrated(true), []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
@@ -348,7 +395,7 @@ export function CollectionPage({
   useEffect(() => {
     let current = true;
     setDestination(null);
-    if (!editing || !destinationId) {
+    if (!editing || !destinationId || !isCurrent()) {
       setDestinationLoading(false);
       return;
     }
@@ -356,14 +403,14 @@ export function CollectionPage({
     void readCollectionDestination({ data: destinationId })
       .then(
         (value) => {
-          if (current) setDestination(value);
+          if (current && isCurrent()) setDestination(value?.id === destinationId ? value : null);
         },
         () => {
-          if (current) setDestination(null);
+          if (current && isCurrent()) setDestination(null);
         },
       )
       .finally(() => {
-        if (current) setDestinationLoading(false);
+        if (current && isCurrent()) setDestinationLoading(false);
       });
     return () => {
       current = false;
@@ -385,9 +432,23 @@ export function CollectionPage({
   }, [snapshot]);
 
   async function reloadCollection() {
+    if (!isCurrent()) return;
     const refreshed = await refreshPage();
+    if (!isCurrent()) return;
     queryClient.setQueryData(queryKey, refreshed);
     await router.invalidate();
+  }
+
+  async function reloadFromControl() {
+    if (!isCurrent()) return;
+    setPending(true);
+    try {
+      await reloadCollection();
+    } catch {
+      if (isCurrent()) setFailure(m.error_message());
+    } finally {
+      if (isCurrent()) setPending(false);
+    }
   }
 
   function recordBoundary(value: BoundaryMove | null) {
@@ -397,7 +458,7 @@ export function CollectionPage({
 
   function boundaryIsCurrent(value: BoundaryMove) {
     return (
-      mounted.current &&
+      isCurrent() &&
       boundaryRef.current?.intent === value.intent &&
       currentBoundaryContext.current === value.intent.context
     );
@@ -422,7 +483,7 @@ export function CollectionPage({
       if (boundaryIsCurrent(value)) recordBoundary({ ...value, reading: false });
     } finally {
       // A page/actor change fences the result, including an in-flight read, without abandoning its intent.
-      if (mounted.current && boundaryRef.current?.intent === value.intent && boundaryRef.current.reading)
+      if (isCurrent() && boundaryRef.current?.intent === value.intent && boundaryRef.current.reading)
         recordBoundary({ ...boundaryRef.current, reading: false });
     }
   }
@@ -436,7 +497,7 @@ export function CollectionPage({
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
-    if (!mounted.current || boundaryRef.current?.intent !== value.intent) return;
+    if (!isCurrent() || boundaryRef.current?.intent !== value.intent) return;
     if (result.ok) {
       const confirmed: BoundaryMove = { ...value, phase: 'confirmed', reading: false };
       recordBoundary(confirmed);
@@ -453,6 +514,7 @@ export function CollectionPage({
   function moveToBoundary(memberId: string, placement: 'start' | 'end') {
     if (
       !hydrated ||
+      !isCurrent() ||
       pending ||
       conflict ||
       !editing ||
@@ -487,11 +549,13 @@ export function CollectionPage({
   }
 
   async function beginEditing() {
-    if (pending) return;
+    if (!isCurrent() || pending || !owner) return;
     setPending(true);
     setFailure('');
     try {
       const editable = readEditorPage ? await readEditorPage() : page;
+      if (!isCurrent()) return;
+      if (editable.id !== page.id) throw new Error('Collection editor address changed');
       if (editable.revision !== page.revision) {
         setConflict(true);
         return;
@@ -514,14 +578,14 @@ export function CollectionPage({
       setBulkUnavailable(false);
       setEditing(true);
     } catch {
-      setFailure(m.error_message());
+      if (isCurrent()) setFailure(m.error_message());
     } finally {
-      setPending(false);
+      if (isCurrent()) setPending(false);
     }
   }
 
   function cancelEditing() {
-    if (pending) return;
+    if (!isCurrent() || pending) return;
     setBatchRemovalIds(new Set());
     setTransfer(null);
     setDestinationId('');
@@ -541,7 +605,7 @@ export function CollectionPage({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!hydrated || pending || conflict || !owner) return;
+    if (!isCurrent() || !hydrated || pending || conflict || !owner) return;
     setPending(true);
     setFailure('');
     setConflict(false);
@@ -561,6 +625,7 @@ export function CollectionPage({
       const initial = (editorMembers ?? page.members).filter((member) => !transfer?.memberIds.includes(member.id));
       const plan = buildCollectionMemberEditPlan(initial, members, page.firstPage);
       const fail = async (result: Extract<CollectionWriteResult, { ok: false }>) => {
+        if (!isCurrent()) return;
         if (committed > 0) {
           setConflict(true);
           setFailure(m.library_collection_save_partial({ count: committed }));
@@ -580,6 +645,7 @@ export function CollectionPage({
         kind !== storedKind ||
         coverMediaId !== (page.coverMediaId ?? null)
       ) {
+        if (!isCurrent()) return;
         const result = await updateCollection({
           data: {
             collectionId: page.id,
@@ -593,6 +659,7 @@ export function CollectionPage({
           },
           headers: csrfHeaders(),
         });
+        if (!isCurrent()) return;
         if (!result.ok) {
           if (result.reason === 'conflict') setConflict(true);
           else {
@@ -606,6 +673,7 @@ export function CollectionPage({
       }
 
       if (transfer) {
+        if (!isCurrent()) return;
         if (currentRevision === undefined) throw new Error('Missing source revision');
         const data = {
           collectionId: page.id,
@@ -619,6 +687,7 @@ export function CollectionPage({
           data: { ...data, idempotencyKey: keyFor(data) },
           headers: csrfHeaders(),
         });
+        if (!isCurrent()) return;
         if (!result.ok) {
           await fail(result);
           return;
@@ -629,6 +698,7 @@ export function CollectionPage({
       const removals = plan.filter((operation) => operation.kind === 'remove');
       const batchRemoval = removals.length > 1 || removals.some((operation) => batchRemovalIds.has(operation.memberId));
       if (batchRemoval) {
+        if (!isCurrent()) return;
         if (currentRevision === undefined) throw new Error('Missing source revision');
         const data = {
           collectionId: page.id,
@@ -639,6 +709,7 @@ export function CollectionPage({
           data: { ...data, idempotencyKey: keyFor(data) },
           headers: csrfHeaders(),
         });
+        if (!isCurrent()) return;
         if (!result.ok) {
           await fail(result);
           return;
@@ -655,6 +726,7 @@ export function CollectionPage({
       const applied = await applyCollectionMemberEditPlan(
         batchRemoval ? plan.filter((operation) => operation.kind !== 'remove') : plan,
         async (operation) => {
+          if (!isCurrent()) return { ok: false, reason: 'unavailable' };
           const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation, currentRevision]) };
           if (operation.kind === 'remove') {
             if (currentRevision === undefined) return { ok: false, reason: 'unavailable' };
@@ -662,6 +734,7 @@ export function CollectionPage({
               data: { ...common, memberId: operation.memberId, revision: currentRevision },
               headers: csrfHeaders(),
             });
+            if (!isCurrent()) return result;
             if (result.ok) {
               currentRevision = result.revision;
               const episode = result.undo;
@@ -685,6 +758,7 @@ export function CollectionPage({
           });
         },
       );
+      if (!isCurrent()) return;
       committed += applied.completed;
       if (applied.failed) {
         if (committed > 0) {
@@ -695,22 +769,24 @@ export function CollectionPage({
         return;
       }
       await reloadCollection();
+      if (!isCurrent()) return;
       setEditing(false);
       setConflict(false);
       setSelectedIds(new Set());
       setFailure('');
     } catch {
+      if (!isCurrent()) return;
       if (committed > 0) {
         setConflict(true);
         setFailure(m.library_collection_save_partial({ count: committed }));
       } else setFailure(m.error_message());
     } finally {
-      setPending(false);
+      if (isCurrent()) setPending(false);
     }
   }
 
   async function undoRemoval(episode: CollectionMemberUndo & { key: string }) {
-    if (pending || !owner) return;
+    if (!isCurrent() || pending || !owner) return;
     setPending(true);
     setFailure('');
     try {
@@ -719,36 +795,39 @@ export function CollectionPage({
         data: { ...deletion, idempotencyKey: key },
         headers: csrfHeaders(),
       });
+      if (!isCurrent()) return;
       if (result.ok || (!result.ok && result.reason === 'expired'))
         setUndo((current) => current.filter((item) => item.deletionId !== episode.deletionId));
       if (result.ok) await reloadCollection();
       else setFailure(result.reason === 'expired' ? m.library_restore_expired() : writeMessage(result));
     } catch {
-      setFailure(m.error_message());
+      if (isCurrent()) setFailure(m.error_message());
     } finally {
-      setPending(false);
+      if (isCurrent()) setPending(false);
     }
   }
 
   async function removeCollection() {
-    if (!deletion || deleting || pending || !deleteAdmitted) return;
+    if (!isCurrent() || !deletion || deleting || pending || !deleteAdmitted) return;
     setDeleting(true);
     setDeleteFailure('');
     try {
       const result = await deleteCollection({ data: deletion, headers: csrfHeaders() });
+      if (!isCurrent()) return;
       if (!result.ok) {
         setDeleteFailure(result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result));
         return;
       }
       window.location.assign(`/${getLocale()}/library/collections`);
     } catch {
-      setDeleteFailure(m.error_message());
+      if (isCurrent()) setDeleteFailure(m.error_message());
     } finally {
-      setDeleting(false);
+      if (isCurrent()) setDeleting(false);
     }
   }
 
   function setMemberOrder(memberId: string, after: string | null) {
+    if (!isCurrent()) return;
     setMembers((current) => reorderCollectionMembers(current, memberId, after, page.firstPage));
   }
 
@@ -756,7 +835,7 @@ export function CollectionPage({
     try {
       await navigator.clipboard.writeText(`${location.origin}${href}`);
     } catch {
-      setFailure(m.error_message());
+      if (mounted.current) setFailure(m.error_message());
     }
   }
 
@@ -871,6 +950,7 @@ export function CollectionPage({
                         label: m.library_collection_delete(),
                         disabled: !hydrated || pending || editing || adding,
                         onSelect: () => {
+                          if (!isCurrent()) return;
                           setDeleteFailure('');
                           setDeletion({
                             collectionId: page.id,
@@ -893,6 +973,7 @@ export function CollectionPage({
         <AlertDialog
           open={deletion !== null}
           onOpenChange={(open, details) => {
+            if (!isCurrent()) return;
             if (!open && deleting) {
               details.cancel();
               return;
@@ -993,11 +1074,9 @@ export function CollectionPage({
               type="button"
               disabled={pending}
               onClick={() => {
+                if (!isCurrent()) return;
                 cancelEditing();
-                setPending(true);
-                void reloadCollection()
-                  .catch(() => setFailure(m.error_message()))
-                  .finally(() => setPending(false));
+                void reloadFromControl();
               }}
             >
               {m.library_collection_reload()}
@@ -1010,7 +1089,9 @@ export function CollectionPage({
             key={page.id}
             collectionId={page.id}
             onAdded={reloadCollection}
-            onClose={() => setAdding(false)}
+            onClose={() => {
+              if (isCurrent()) setAdding(false);
+            }}
           />
         ) : null}
         {editing && owner ? (
@@ -1191,7 +1272,7 @@ export function CollectionPage({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => void reloadCollection().catch(() => setFailure(m.error_message()))}
+                onClick={() => void reloadFromControl()}
               >
                 {m.library_collection_reload()}
               </Button>
@@ -1204,7 +1285,7 @@ export function CollectionPage({
                 type="button"
                 variant="outline"
                 disabled={pending}
-                onClick={() => void reloadCollection().catch(() => setFailure(m.error_message()))}
+                onClick={() => void reloadFromControl()}
               >
                 {m.library_collection_reload()}
               </Button>
