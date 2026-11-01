@@ -16,6 +16,7 @@ import { SpaceSetupEntry } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
 import { useSession } from '../session/query';
 import { useShelfList } from './space-queries';
+import { useSpacePageLifetime } from './space-page-lifetime';
 import { changeRealmPublication, readRealmBoards, readRealmPublications } from './space-actions';
 import {
   PublicationControls,
@@ -198,6 +199,7 @@ export function RealmShelf({
   search?: EntityPickerSearch | undefined;
 }) {
   const { state, csrfToken, subject: reader } = useSession();
+  const lifetime = useSpacePageLifetime();
   const boards = useShelfList(
     {
       items: realm.boards,
@@ -206,6 +208,7 @@ export function RealmShelf({
       credentialMode: realm.credentialMode ?? 'anonymous',
     },
     transport?.boards ?? ((input) => readRealmBoards({ data: { realmId: realm.id, ...input } })),
+    lifetime,
   );
   const publications = useShelfList(
     {
@@ -215,6 +218,7 @@ export function RealmShelf({
       credentialMode: realm.credentialMode ?? 'anonymous',
     },
     transport?.publications ?? ((input) => readRealmPublications({ data: { realmId: realm.id, ...input } })),
+    lifetime,
   );
   const sendPublication = useCallback<PublicationSend>(
     (input) =>
@@ -285,6 +289,7 @@ function Home({
   participation: ReactNode;
   removed: boolean;
 }) {
+  const lifetime = useSpacePageLifetime();
   const managementVisible = !removed && !frozen && readable;
   const managementMounted = useRef(false);
   if (managementVisible) managementMounted.current = true;
@@ -293,7 +298,9 @@ function Home({
       {!removed && readable && presentationCurrent ? (
         <RealmHomeHeader realm={realm} participation={frozen ? null : participation} />
       ) : null}
-      {!removed && readable ? <RealmShelf key={realm.id} realm={realm} frozen={frozen} /> : null}
+      {!removed && readable ? (
+        <RealmShelf key={`${realm.id}:${lifetime?.scopeKey ?? 'standalone'}`} realm={realm} frozen={frozen} />
+      ) : null}
       {!removed ? claim : null}
       {managementMounted.current ? (
         <div hidden={!managementVisible} inert={!managementVisible} className="space-y-10">
