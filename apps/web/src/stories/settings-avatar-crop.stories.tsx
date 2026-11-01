@@ -261,7 +261,11 @@ export const Default: Story = {
       displayName: 'Avery Crop Journey',
     });
     await expect(traffic.profileWrites[0]!.csrf).toBe('story-csrf-token');
-    await expect(traffic.profileWrites[0]!.idempotencyKey).toMatch(
+    const idempotencyKeyHeader = traffic.profileWrites[0]!.idempotencyKey;
+    await expect(idempotencyKeyHeader).toMatch(
+      /^"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"$/i,
+    );
+    await expect(JSON.parse(idempotencyKeyHeader!)).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
   },
