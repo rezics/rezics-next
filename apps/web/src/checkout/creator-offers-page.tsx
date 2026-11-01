@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -6,6 +6,7 @@ import { PageHeading } from '../shell/page-heading';
 import {
   manageCreatorOffer,
   type CreatorOffer,
+  type CreatorOfferGuard,
   type CreatorOfferMutation,
   type CreatorOfferResult,
   type CreatorOffersData,
@@ -19,10 +20,12 @@ function OwnedOfferControls({
   offer,
   data,
   locale,
+  guard,
 }: {
   offer: CreatorOffer;
   data: CreatorOffersPageData;
   locale: string;
+  guard?: CreatorOfferGuard | undefined;
 }) {
   // Keep the observed row and original command stable while a write's outcome is uncertain.
   const [observed] = useState(offer);
@@ -32,12 +35,27 @@ function OwnedOfferControls({
   const pending = useRef<CreatorOfferMutation | null>(null);
   const locked = useRef(false);
   const keys = useRef(data.keys[observed.id]);
-  const rule = data.schema?.configuredSaleCurrencies.find((row) => row.currency === observed.currency);
+  const [rule] = useState(() =>
+    data.schema?.configuredSaleCurrencies.find((row) => row.currency === observed.currency),
+  );
+  const currentData = useRef(data);
+  currentData.current = data;
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const isCurrent = () => mounted.current && (guard ? guard.isCurrent() : currentData.current.selling);
+  const csrf = () => (guard ? guard.csrfToken() : currentData.current.csrfToken);
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
-  const editable = observed.state === 'active' && data.selling && !!data.csrfToken && !!keys.current;
+  const editable =
+    observed.state === 'active' && data.selling && !!csrf() && !!keys.current && (!guard || guard.isCurrent());
   async function change(operation: 'reprice' | 'delist') {
-    if (locked.current || !editable || result?.kind === 'saved') return;
+    const csrfToken = csrf();
+    if (!isCurrent() || !csrfToken || locked.current || !editable || result?.kind === 'saved') return;
     if (!pending.current) {
       const key = keys.current?.[operation];
       if (!key) return;
@@ -50,18 +68,23 @@ function OwnedOfferControls({
     }
     locked.current = true;
     setBusy(true);
+    let saved = false;
     try {
-      const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': data.csrfToken } });
+      const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': csrfToken } });
+      if (!isCurrent()) return;
+      saved = next.kind === 'saved';
       setResult(next);
       if (next.kind !== 'retry' && next.kind !== 'saved') {
         pending.current = null;
         keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
       }
     } catch {
-      setResult({ kind: 'retry' });
+      if (isCurrent()) setResult({ kind: 'retry' });
     } finally {
-      locked.current = false;
-      setBusy(false);
+      if (isCurrent()) {
+        locked.current = saved;
+        setBusy(false);
+      }
     }
   }
   return (
@@ -93,7 +116,7 @@ function OwnedOfferControls({
               onClick={() => {
                 if (pending.current?.operation !== 'create') void change(pending.current?.operation ?? 'reprice');
               }}
-              disabled={busy}
+              disabled={busy || !editable}
               className="min-h-11"
             >
               {m.creator_retry()}
@@ -135,12 +158,14 @@ export function CreatorOffersPage({
   locale,
   cursor,
   offerPageAvailable = true,
+  guard,
 }: {
   page?: CreatorOffersData;
   data?: CreatorOffersPageData;
   locale: string;
   cursor?: string;
   offerPageAvailable?: boolean;
+  guard?: CreatorOfferGuard | undefined;
 }) {
   const page = data?.page ?? suppliedPage ?? { kind: 'unavailable' as const };
   const href = creatorOffersHref(locale, cursor);
@@ -241,7 +266,7 @@ export function CreatorOffersPage({
                   trailing={
                     data && (
                       <div className="w-full min-w-0 max-w-sm">
-                        <OwnedOfferControls offer={offer} data={data} locale={locale} />
+                        <OwnedOfferControls offer={offer} data={data} locale={locale} guard={guard} />
                       </div>
                     )
                   }

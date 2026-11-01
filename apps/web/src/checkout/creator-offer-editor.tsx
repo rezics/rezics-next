@@ -13,6 +13,7 @@ import {
   manageCreatorOffer,
   type CreatorEditorPageData,
   type CreatorFailure,
+  type CreatorOfferGuard,
   type CreatorOfferMutation,
   type CreatorOfferResult,
 } from './creator-offers';
@@ -151,39 +152,66 @@ export function CreatorPriceFields({
   );
 }
 
-export function CreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
+export function CreatorOfferEditor({
+  data,
+  locale,
+  guard,
+}: {
+  data: CreatorEditorPageData;
+  locale: string;
+  guard?: CreatorOfferGuard;
+}) {
   const session = useSession();
   // The existing owned-offer operation resolves the shared selling gate.
   const selling = useOperation('offer.list');
   const identity = JSON.stringify([
     data.editor.kind === 'ready' ? data.editor.edition.editionId : data.editor.kind,
-    session.state,
-    session.subject ?? null,
-    selling,
+    guard ? null : session.state,
+    guard ? null : (session.subject ?? null),
+    guard ? null : selling,
     data.selling,
-    Boolean(session.csrfToken),
-    Boolean(data.csrfToken),
   ]);
-  const [lifetime, setLifetime] = useState(() => ({ identity, createKey: data.createKey }));
+  const [lifetime, setLifetime] = useState(() => ({
+    identity,
+    generation: 0,
+    createKey: data.createKey,
+    origin: { active: true, csrfToken: null as string | null, admitted: false },
+  }));
   if (lifetime.identity !== identity) {
     // Returning to a retired viewer/edition must not reuse a dispatched creation key.
-    setLifetime({ identity, createKey: crypto.randomUUID() });
+    lifetime.origin.active = false;
+    setLifetime({
+      identity,
+      generation: lifetime.generation + 1,
+      createKey: crypto.randomUUID(),
+      origin: { active: true, csrfToken: null, admitted: false },
+    });
   }
-  const canSubmit =
+  lifetime.origin.csrfToken = session.csrfToken;
+  lifetime.origin.admitted =
     session.state === 'signed-in' &&
     Boolean(session.subject) &&
     Boolean(session.csrfToken) &&
     Boolean(data.csrfToken) &&
     selling &&
     data.selling;
+  useLayoutEffect(() => {
+    lifetime.origin.active = true;
+    return () => {
+      lifetime.origin.active = false;
+    };
+  }, [lifetime.origin]);
+  const fallback = {
+    isCurrent: () => lifetime.origin.active && lifetime.origin.admitted,
+    csrfToken: () => lifetime.origin.csrfToken,
+  };
   return (
     <CreatorOfferForm
-      key={identity}
+      key={lifetime.generation}
       data={data}
       locale={locale}
       createKey={lifetime.createKey}
-      csrfToken={session.csrfToken}
-      canSubmit={canSubmit}
+      guard={guard ?? fallback}
     />
   );
 }
@@ -192,14 +220,12 @@ function CreatorOfferForm({
   data,
   locale,
   createKey,
-  csrfToken,
-  canSubmit,
+  guard,
 }: {
   data: CreatorEditorPageData;
   locale: string;
   createKey: string;
-  csrfToken: string | null;
-  canSubmit: boolean;
+  guard: CreatorOfferGuard;
 }) {
   const [intent, setIntent] = useState<CreatorPriceIntent>({ currency: '', text: '' });
   const { currency, text } = intent;
@@ -221,20 +247,23 @@ function CreatorOfferForm({
     };
   }, []);
   const fieldId = useId();
-  const editor = data.editor;
+  // The selected edition and its price facts are the observed create operand, including on retry.
+  const [editor] = useState(data.editor);
   const rules = submittedRules.current ?? (editor.kind === 'ready' ? editor.schema.configuredSaleCurrencies : []);
   const rule = rules.find((row) => row.currency === currency);
   const amount = parsedPrice(text, rule);
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
+  const canSubmit = guard.isCurrent() && !!guard.csrfToken();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const current = lifetime.current;
+    const csrfToken = guard.csrfToken();
     if (
       !current.active ||
       locked.current ||
-      !canSubmit ||
+      !guard.isCurrent() ||
       !csrfToken ||
       editor.kind !== 'ready' ||
       result?.kind === 'saved'
@@ -258,7 +287,7 @@ function CreatorOfferForm({
     let saved = false;
     try {
       const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': csrfToken } });
-      if (!current.active) return;
+      if (!current.active || !guard.isCurrent()) return;
       saved = next.kind === 'saved';
       setResult(next);
       if (next.kind !== 'saved' && next.kind !== 'retry') {
@@ -267,9 +296,9 @@ function CreatorOfferForm({
         key.current = crypto.randomUUID();
       }
     } catch {
-      if (current.active) setResult({ kind: 'retry' });
+      if (current.active && guard.isCurrent()) setResult({ kind: 'retry' });
     } finally {
-      if (current.active) {
+      if (current.active && guard.isCurrent()) {
         locked.current = saved;
         setBusy(false);
       }

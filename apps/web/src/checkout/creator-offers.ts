@@ -12,7 +12,7 @@ import {
 import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { readSessionIdentity } from '../session/state';
 import {
   createNativeMoneySchemaApi,
@@ -83,6 +83,18 @@ export type CreatorOffersPageData = {
   selling: boolean;
   keys: Record<string, { reprice: string; delist: string }>;
 };
+export type CreatorOffersAddress = { kind: 'list'; cursor: string | null };
+export type CreatorEditorAddress = { kind: 'editor'; contentEditionId: string | null };
+export type CreatorOfferAddress = CreatorOffersAddress | CreatorEditorAddress;
+export type CreatorCurrentRead<T, A extends CreatorOfferAddress> = {
+  sessionSubject: string | null;
+  requested: A;
+  data: T;
+};
+export type CreatorOffersCurrentRead = CreatorCurrentRead<CreatorOffersPageData, CreatorOffersAddress>;
+export type CreatorEditorCurrentRead = CreatorCurrentRead<CreatorEditorPageData, CreatorEditorAddress>;
+/** A mounted origin supplies current CSRF only while its viewer/address/admission still holds. */
+export type CreatorOfferGuard = { isCurrent(): boolean; csrfToken(): string | null };
 export type CreatorOfferMutation =
   | {
       operation: 'create';
@@ -166,6 +178,7 @@ async function loadPreparedCreatorOffers(
   caller: CreatorOffersCaller,
   authorization: string,
   query: CreatorOffersSearch,
+  subject?: string,
 ): Promise<CreatorOffersData> {
   try {
     const result = await caller.get({
@@ -182,6 +195,10 @@ async function loadPreparedCreatorOffers(
       !Array.isArray(page.offers) ||
       page.offers.length > CREATOR_OFFERS_PAGE_SIZE ||
       !page.offers.every(validOffer) ||
+      (subject !== undefined &&
+        page.offers.some(
+          (offer) => offer.contentEdition !== null && offer.contentEdition.creatorAccountId !== subject,
+        )) ||
       !(page.next === null || (typeof page.next === 'string' && page.next.length > 0 && page.next.length <= 4096))
     )
       return { kind: 'unavailable' };
@@ -318,6 +335,7 @@ export async function loadCreatorEditor(
   moneyApi: MoneySchemaApi,
   authorization: string,
   contentEditionId?: string,
+  subject?: string,
 ): Promise<CreatorEditorData> {
   if (!contentEditionId) return { kind: 'choose-edition' };
   try {
@@ -326,6 +344,7 @@ export async function loadCreatorEditor(
     if (metadata.state !== 'available') return { kind: 'unavailable' };
     const edition = parseEditionMetadata(metadata.value);
     if (!edition || edition.editionId !== contentEditionId) return { kind: 'unavailable' };
+    if (subject !== undefined && edition.creatorAccountId !== subject) return { kind: 'denied' };
     if (edition.state !== 'published') return { kind: 'rejected' };
     const money = await moneyApi.read(authorization);
     if (money.kind !== 'ready') return { kind: 'unavailable' };
@@ -389,19 +408,75 @@ function privatePage() {
   setResponseHeader('cache-control', 'private, no-store');
   setResponseHeader('x-robots-tag', 'noindex, nofollow');
 }
-async function viewer() {
-  const request = getRequest();
-  const denied = { authorization: null, csrfToken: '', selling: false };
+async function viewer(requireSubject = false) {
+  // A current read cannot inherit an earlier Request's retained preparation operands.
+  const request = requireSubject ? new Request(getRequest()) : getRequest();
+  const denied = { authorization: null, sessionSubject: null, csrfToken: '', selling: false };
   if (await prepareSession(request, env as Partial<SessionEnv>)) return denied;
   const authorization = viewerCredential(request);
-  if (!authorization) return denied;
+  const subject = request.headers.has('authorization') ? null : (sessionSubject(request) ?? null);
+  if (!authorization || (requireSubject && !subject)) return denied;
   const identity = await readSessionIdentity(request, env as Partial<SessionEnv>);
   const result = await kernelClient().platform.exposure.get({
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
   if (result && (result.error || !result.data)) throw new Error('Platform exposure unavailable');
-  return { authorization, csrfToken: identity.csrfToken ?? '', selling: !!result?.data?.admitted.includes('selling') };
+  return {
+    authorization,
+    sessionSubject: subject,
+    csrfToken: identity.csrfToken ?? '',
+    selling: !!result?.data?.admitted.includes('selling'),
+  };
+}
+
+async function editorPage(
+  current: Awaited<ReturnType<typeof viewer>>,
+  contentEditionId?: string,
+  strict = false,
+): Promise<CreatorEditorPageData> {
+  const empty = { csrfToken: '', createKey: crypto.randomUUID(), selling: false };
+  if (!current.authorization) return { ...empty, editor: { kind: 'denied' } };
+  const editor = !current.selling
+    ? { kind: 'closed' as const }
+    : await loadCreatorEditor(
+        createNativeEditionApi(kernelClient()),
+        createNativeMoneySchemaApi(kernelClient()),
+        current.authorization,
+        contentEditionId,
+        strict ? current.sessionSubject! : undefined,
+      );
+  return { ...empty, csrfToken: current.csrfToken, selling: current.selling, editor };
+}
+
+async function offersPage(
+  current: Awaited<ReturnType<typeof viewer>>,
+  search: CreatorOffersSearch,
+  strict = false,
+): Promise<CreatorOffersPageData> {
+  const empty = { schema: null, csrfToken: '', selling: false, keys: {} };
+  if (!current.authorization) return { ...empty, page: { kind: 'denied' } };
+  if (!current.selling) return { ...empty, page: { kind: 'closed' } };
+  const page = await loadPreparedCreatorOffers(
+    createNativeCreatorOffersCaller(kernelClient()),
+    current.authorization,
+    search,
+    strict ? current.sessionSubject! : undefined,
+  );
+  const money = await createNativeMoneySchemaApi(kernelClient()).read(current.authorization);
+  const schema = money.kind === 'ready' ? parseMoneySchema(money.schema) : null;
+  return {
+    csrfToken: current.csrfToken,
+    selling: current.selling,
+    schema,
+    page,
+    keys:
+      page.kind === 'ready'
+        ? Object.fromEntries(
+            page.offers.map((offer) => [offer.id, { reprice: crypto.randomUUID(), delist: crypto.randomUUID() }]),
+          )
+        : {},
+  };
 }
 
 export const readCreatorOfferEditor = createServerFn({ method: 'GET' })
@@ -410,17 +485,7 @@ export const readCreatorOfferEditor = createServerFn({ method: 'GET' })
     privatePage();
     const empty = { csrfToken: '', createKey: crypto.randomUUID(), selling: false };
     try {
-      const current = await viewer();
-      if (!current.authorization) return { ...empty, editor: { kind: 'denied' } };
-      const editor = !current.selling
-        ? { kind: 'closed' as const }
-        : await loadCreatorEditor(
-            createNativeEditionApi(kernelClient()),
-            createNativeMoneySchemaApi(kernelClient()),
-            current.authorization,
-            data.contentEditionId,
-          );
-      return { ...empty, csrfToken: current.csrfToken, selling: current.selling, editor };
+      return await editorPage(await viewer(), data.contentEditionId);
     } catch {
       return { ...empty, editor: { kind: 'unavailable' } };
     }
@@ -432,29 +497,48 @@ export const readCreatorOffers = createServerFn({ method: 'GET' })
     privatePage();
     const empty = { schema: null, csrfToken: '', selling: false, keys: {} };
     try {
-      const current = await viewer();
-      if (!current.authorization) return { ...empty, page: { kind: 'denied' } };
-      const page = await loadPreparedCreatorOffers(
-        createNativeCreatorOffersCaller(kernelClient()),
-        current.authorization,
-        data,
-      );
-      const money = await createNativeMoneySchemaApi(kernelClient()).read(current.authorization);
-      const schema = money.kind === 'ready' ? parseMoneySchema(money.schema) : null;
-      return {
-        csrfToken: current.csrfToken,
-        selling: current.selling,
-        schema,
-        page,
-        keys:
-          page.kind === 'ready'
-            ? Object.fromEntries(
-                page.offers.map((offer) => [offer.id, { reprice: crypto.randomUUID(), delist: crypto.randomUUID() }]),
-              )
-            : {},
-      };
+      return await offersPage(await viewer(), data);
     } catch {
       return { ...empty, page: { kind: 'unavailable' } };
+    }
+  });
+
+/** Additive route readers bind even an empty page to one actual preparation and normalized address. */
+export const readCreatorOffersCurrent = createServerFn({ method: 'GET' })
+  .validator(input)
+  .handler(async ({ data }): Promise<CreatorOffersCurrentRead> => {
+    privatePage();
+    const requested: CreatorOffersAddress = { kind: 'list', cursor: data.cursor ?? null };
+    let subject: string | null = null;
+    try {
+      const current = await viewer(true);
+      subject = current.sessionSubject;
+      return { sessionSubject: subject, requested, data: await offersPage(current, data, true) };
+    } catch {
+      return {
+        sessionSubject: subject,
+        requested,
+        data: { page: { kind: 'unavailable' }, schema: null, csrfToken: '', selling: false, keys: {} },
+      };
+    }
+  });
+
+export const readCreatorOfferEditorCurrent = createServerFn({ method: 'GET' })
+  .validator((value: unknown) => creatorEditionSearch(object(value)))
+  .handler(async ({ data }): Promise<CreatorEditorCurrentRead> => {
+    privatePage();
+    const requested: CreatorEditorAddress = { kind: 'editor', contentEditionId: data.contentEditionId ?? null };
+    let subject: string | null = null;
+    try {
+      const current = await viewer(true);
+      subject = current.sessionSubject;
+      return { sessionSubject: subject, requested, data: await editorPage(current, data.contentEditionId, true) };
+    } catch {
+      return {
+        sessionSubject: subject,
+        requested,
+        data: { editor: { kind: 'unavailable' }, csrfToken: '', createKey: crypto.randomUUID(), selling: false },
+      };
     }
   });
 
