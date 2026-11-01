@@ -34,11 +34,11 @@ const messages = {
   aliases: '別名',
   search: '検索',
 };
-const homeHeadings = Object.fromEntries(
+const homeLabels = Object.fromEntries(
   await Promise.all(
     UI_LOCALES.map(async (locale) => {
       const file = new URL(`../messages/${locale}.json`, import.meta.url);
-      return [locale, ((await Bun.file(file).json()) as { home_heading: string }).home_heading] as const;
+      return [locale, ((await Bun.file(file).json()) as { nav_home: string }).nav_home] as const;
     }),
   ),
 );
@@ -86,12 +86,12 @@ test('a level-1 heading is the page heading, and a page has at most one', () => 
   ]);
 });
 
-test('the platform home opens with its heading and keeps a personal slot for signed-in visitors', () => {
+test('the platform home opens with its localized identity heading and keeps a personal slot for signed-in visitors', () => {
   expect(SLOT_NAMES).toContain('personal');
   expect(validateProfile(platformRegistry, platform)).toEqual([]);
   const content = home().document.content as Node[];
   expect(content.map(({ type }) => type)).toEqual(['Heading', 'Slot', 'TypeList', 'TypeList', 'TypeList', 'TypeList']);
-  expect(content[0]).toEqual({ type: 'Heading', props: { id: 'heading', level: 1, text: homeHeadings } });
+  expect(content[0]).toEqual({ type: 'Heading', props: { id: 'heading', level: 1, text: homeLabels } });
   expect(content[1]).toEqual({ type: 'Slot', props: { id: 'personal', name: 'personal', children: [] } });
   const subjectPages = [platform.generic, ...platform.bases, ...platform.types].flatMap((entry) =>
     Object.values(templateViews(entry)),
@@ -114,7 +114,7 @@ test('the route page shows the template heading as its only h1 and lets the host
     }),
   );
   expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
-  expect(html).toMatch(new RegExp(`<h1[^>]*lang="ja"[^>]*>${homeHeadings.ja}</h1>`));
+  expect(html).toMatch(new RegExp(`<h1[^>]*lang="ja"[^>]*>${homeLabels.ja}</h1>`));
   expect(html).not.toContain('Fallback heading');
   expect(html).toMatch(/<section[^>]*data-slot="personal"[^>]*><p>続きを読む<\/p><\/section>/);
   expect(html).not.toContain('<form');

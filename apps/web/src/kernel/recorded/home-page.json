@@ -1,5 +1,5 @@
 {
-  "profile": "sha256:87bffa44c5daff94f3e3609cb63384a3f1a9480ce507a9da47a24a2320ed29a1",
+  "profile": "sha256:88be000e568c303cfffdf9e0a063b6d84eca85454b903ff95bc89880b4d5d943",
   "template": { "scope": "route", "key": "/" },
   "document": {
     "root": { "props": {} },
@@ -9,14 +9,14 @@
         "props": {
           "id": "heading",
           "text": {
-            "de": "Klarer sehen, was zählt",
-            "en": "A clearer view of what matters",
-            "es": "Una visión más clara de lo importante",
-            "fr": "Voir plus clairement l’essentiel",
-            "ja": "大切なことを、もっと明確に",
-            "ko": "중요한 것을 더 선명하게",
-            "zh-Hans": "看清真正重要的事",
-            "zh-Hant": "看清真正重要的事"
+            "de": "Startseite",
+            "en": "Home",
+            "es": "Inicio",
+            "fr": "Accueil",
+            "ja": "ホーム",
+            "ko": "홈",
+            "zh-Hans": "首页",
+            "zh-Hant": "首頁"
           },
           "level": 1
         }

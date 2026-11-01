@@ -185,7 +185,7 @@ test(
     try {
       expect(searches(before)).toHaveLength(1);
       await page.getByRole('link', { name: 'REZICS' }).click();
-      await page.getByRole('main').getByRole('heading', { name: 'A clearer view of what matters' }).waitFor();
+      await page.getByRole('main').getByRole('heading', { name: 'Home' }).waitFor();
       await page.goBack();
       await page.getByRole('main').getByRole('heading', { level: 1 }).waitFor();
       expect(searches(before)).toHaveLength(1);

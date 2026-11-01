@@ -72,7 +72,6 @@ const messages = {
   shell_close_navigation: m.shell_close_navigation,
   shell_collapse_navigation: m.shell_collapse_navigation,
   shell_expand_navigation: m.shell_expand_navigation,
-  home_heading: m.home_heading,
   not_found_heading: m.not_found_heading,
   not_found_message: m.not_found_message,
   error_heading: m.error_heading,
@@ -585,7 +584,7 @@ export function StatusPage({
   );
 }
 export function HomePage() {
-  return <PageHeading>{m.home_heading()}</PageHeading>;
+  return <PageHeading>{m.nav_home()}</PageHeading>;
 }
 export function NotFoundPage() {
   return <StatusPage heading={m.not_found_heading()} message={m.not_found_message()} />;

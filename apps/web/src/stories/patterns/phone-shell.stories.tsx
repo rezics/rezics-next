@@ -185,7 +185,7 @@ function Connected({ state, loadRealms = emptyRealms }: { state: State; loadReal
         />
       }
     >
-      <PageHeading>{m.home_heading()}</PageHeading>
+      <PageHeading>{m.nav_home()}</PageHeading>
       {state === 'creation-owners' || state === 'creation-session' ? (
         <CreationOwners transitions={state === 'creation-session'} />
       ) : null}

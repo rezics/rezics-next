@@ -19,7 +19,6 @@ import {
   type HomeQuestionReader,
 } from './home-feed-questions';
 import type { ReactNode } from 'react';
-import { PageHeading } from '../../shell/page-heading';
 import { homeFeedDestination, homeFeedResume, homeFeedTitle } from './home-feed-destination';
 import {
   createHomeFeedWindow,
@@ -141,15 +140,15 @@ export function HomeFeed({
   };
   return (
     <main className="mx-auto w-full max-w-3xl space-y-5 text-foreground" aria-busy={busy}>
-      <PageHeading>{m.home_heading({}, options)}</PageHeading>
-      <nav aria-label={m.home_heading({}, options)} className="flex flex-wrap items-center gap-3">
+      <h1 className="sr-only">{m.nav_home({}, options)}</h1>
+      <nav aria-label={m.nav_home({}, options)} className="flex flex-wrap items-center gap-3">
         <Button
           variant={stream === 'home' ? 'secondary' : 'ghost'}
           aria-pressed={stream === 'home'}
           disabled={busy}
           onClick={() => onSelect?.('home')}
         >
-          {m.home_heading({}, options)}
+          {m.nav_home({}, options)}
         </Button>
         {signedIn ? (
           <Button
@@ -210,7 +209,7 @@ export function HomeFeed({
               );
             })}
           </ul>
-          <ol className="list-none" aria-label={m.home_heading({}, options)}>
+          <ol className="list-none" aria-label={m.nav_home({}, options)}>
             {page.feedItems.map((item) => (
               <FeedRow key={item.id} item={item} locale={locale} />
             ))}

@@ -406,7 +406,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     feedStatus = 200;
     await click(m.library_follow_retry());
     expect(query().get('kind')).toBe('account');
-    await click(m.home_heading());
+    await click(m.nav_home());
     await choose('');
     choicesUnavailable = true;
     // Remount on rotation keeps old private rows out and starts a fresh choices window.
@@ -640,7 +640,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
     expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
     expect(query().get('cursor')).toBe('illustrative-signed-frontier');
-    await click(m.home_heading());
+    await click(m.nav_home());
     await click(m.library_next_page());
     questionStatus = 409;
     await click(m.home_questions_next());

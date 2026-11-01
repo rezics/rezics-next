@@ -662,7 +662,7 @@ test(
           const height = width === 390 ? 844 : 900;
           const page = await open(`/${locale}`, cookie, { width, height }, theme, errors);
           try {
-            const ownHeading = await messageOf(locale, 'home_heading');
+            const ownHeading = await messageOf(locale, 'nav_home');
             await mkdir(join(screenshots, locale, theme), { recursive: true });
             await page.getByRole('heading', { level: 1, name: ownHeading, exact: true }).waitFor();
             expect(await page.getByRole('heading', { level: 1 }).count()).toBe(1);

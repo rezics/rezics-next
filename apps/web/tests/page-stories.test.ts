@@ -595,7 +595,7 @@ test(
             expect(await menu.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
           }
           if (name === 'home' || name === 'missing-subject')
-            expect(headingText).toBe(name === 'home' ? own.home_heading : own.not_found_heading);
+            expect(headingText).toBe(name === 'home' ? own.nav_home : own.not_found_heading);
           if (name === 'subject') {
             const recording = await Bun.file(join(recorded, 'subject.json')).json();
             expect(headingText).toBe(recording.subject.labels[locale] ?? recording.subject.labels.en);
