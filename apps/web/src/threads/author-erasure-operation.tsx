@@ -188,7 +188,9 @@ function createOperationVisit(input: {
       visit.pending = false;
       if (next) {
         const session = visit.sessionBound ? visit.source.read() : undefined;
-        visit.state = operationMatches(next, visit.operationId, session?.subject) ? next : { kind: 'unavailable' };
+        visit.state = operationMatches(next, visit.operationId, session?.subject ?? undefined)
+          ? next
+          : { kind: 'unavailable' };
         if (visit.state.kind !== 'available' || visit.state.operation.done) visit.automatic = false;
       }
       visit.publish();

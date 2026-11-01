@@ -25,7 +25,7 @@ export const Route = createFileRoute('/operations/$id')({
       <AuthorErasureOperationPage
         initial={initial}
         operationId={id}
-        navigationKey={location.key}
+        navigationKey={location.href}
         read={read}
       />
     );
