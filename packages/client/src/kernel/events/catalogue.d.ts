@@ -1,6 +1,24 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly "com.rezics.definitions.catalogue.artifact.v1": Type.TObject<{
+        digest: Type.TString;
+        kind: Type.TUnion<Type.TLiteral<string>[]>;
+    }>;
+    readonly "com.rezics.definitions.catalogue.build-requested.v1": Type.TObject<{
+        rootDigest: Type.TString;
+    }>;
+    readonly "com.rezics.definitions.catalogue.progress.v1": Type.TObject<{
+        rootDigest: Type.TString;
+        state: Type.TUnion<Type.TLiteral<string>[]>;
+        steps: Type.TString;
+    }>;
+    readonly "com.rezics.definitions.catalogue.activated.v1": Type.TObject<{
+        rootDigest: Type.TString;
+        head: Type.TInteger;
+        kindSpec: Type.TLiteral<"https://rezics.com/definitions/kind/1">;
+        reduction: Type.TLiteral<"https://rezics.com/definitions/kind-reduction/1">;
+    }>;
     readonly 'com.rezics.semantic.public-source.advanced.v1': Type.TObject<{
         id: Type.TString;
         bootstrap: Type.TString;

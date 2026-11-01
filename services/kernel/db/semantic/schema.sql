@@ -3284,6 +3284,164 @@ CREATE TABLE semantic.definition_activation (
 
 
 --
+-- Name: definition_catalogue_artifact; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_artifact (
+    route integer NOT NULL,
+    digest text NOT NULL,
+    kind text NOT NULL,
+    bytes bytea NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT definition_catalogue_artifact_bytes_check CHECK ((octet_length(bytes) <= 4194304)),
+    CONSTRAINT definition_catalogue_artifact_kind_check CHECK ((kind = ANY (ARRAY['root'::text, 'node'::text, 'release'::text, 'declaration'::text]))),
+    CONSTRAINT definition_catalogue_artifact_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_build; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_build (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    pin jsonb NOT NULL,
+    state text NOT NULL,
+    phase text DEFAULT 'node'::text NOT NULL,
+    next_node bigint,
+    steps bigint DEFAULT 0 NOT NULL,
+    nodes bigint DEFAULT 0 NOT NULL,
+    releases bigint DEFAULT 0 NOT NULL,
+    declarations bigint DEFAULT 0 NOT NULL,
+    indexed_rows bigint DEFAULT 0 NOT NULL,
+    examined_bytes bigint DEFAULT 0 NOT NULL,
+    missing_digest text,
+    error text,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT definition_catalogue_build_phase_check CHECK ((phase = ANY (ARRAY['node'::text, 'release'::text, 'declaration'::text]))),
+    CONSTRAINT definition_catalogue_build_route_check CHECK ((route = 0)),
+    CONSTRAINT definition_catalogue_build_state_check CHECK ((state = ANY (ARRAY['building'::text, 'incomplete'::text, 'refused'::text, 'ready'::text])))
+);
+
+
+--
+-- Name: definition_catalogue_head; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_head (
+    route integer NOT NULL,
+    root_digest text,
+    head integer DEFAULT 0 NOT NULL,
+    recorded_transaction_id uuid,
+    CONSTRAINT definition_catalogue_head_head_check CHECK ((head >= 0)),
+    CONSTRAINT definition_catalogue_head_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_identity; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_identity (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    identity_key text NOT NULL,
+    identity text NOT NULL,
+    digest text NOT NULL,
+    CONSTRAINT definition_catalogue_identity_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_kind; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_kind (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    id_key text NOT NULL,
+    id text NOT NULL,
+    ordinal bigint NOT NULL,
+    declaration_digest text NOT NULL,
+    body jsonb NOT NULL,
+    exact_type_key text NOT NULL,
+    exact_type_id text NOT NULL,
+    precedence integer NOT NULL,
+    eligible boolean NOT NULL,
+    CONSTRAINT definition_catalogue_kind_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_label; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_label (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    language_key text NOT NULL,
+    language text NOT NULL,
+    label_sort bytea NOT NULL,
+    ordinal bigint NOT NULL,
+    id_key text NOT NULL,
+    CONSTRAINT definition_catalogue_label_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_member; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_member (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    release_digest text NOT NULL,
+    category text NOT NULL,
+    id_key text NOT NULL,
+    id text NOT NULL,
+    body jsonb NOT NULL,
+    CONSTRAINT definition_catalogue_member_category_check CHECK ((category = ANY (ARRAY['type'::text, 'property'::text, 'profile'::text]))),
+    CONSTRAINT definition_catalogue_member_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_task; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_task (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    task_id bigint NOT NULL,
+    kind text NOT NULL,
+    digest text NOT NULL,
+    entry_key text,
+    first_key text,
+    last_key text,
+    next_node bigint,
+    offset_rows integer DEFAULT 0 NOT NULL,
+    done boolean DEFAULT false NOT NULL,
+    CONSTRAINT definition_catalogue_task_kind_check CHECK ((kind = ANY (ARRAY['node'::text, 'release'::text, 'declaration'::text]))),
+    CONSTRAINT definition_catalogue_task_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_task_task_id_seq; Type: SEQUENCE; Schema: semantic; Owner: -
+--
+
+ALTER TABLE semantic.definition_catalogue_task ALTER COLUMN task_id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME semantic.definition_catalogue_task_task_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: definition_release; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -6398,6 +6556,78 @@ ALTER TABLE ONLY semantic.definition_activation
 
 
 --
+-- Name: definition_catalogue_artifact definition_catalogue_artifact_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_artifact
+    ADD CONSTRAINT definition_catalogue_artifact_pkey PRIMARY KEY (route, digest);
+
+
+--
+-- Name: definition_catalogue_build definition_catalogue_build_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_build
+    ADD CONSTRAINT definition_catalogue_build_pkey PRIMARY KEY (route, root_digest);
+
+
+--
+-- Name: definition_catalogue_head definition_catalogue_head_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_head
+    ADD CONSTRAINT definition_catalogue_head_pkey PRIMARY KEY (route);
+
+
+--
+-- Name: definition_catalogue_identity definition_catalogue_identity_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_identity
+    ADD CONSTRAINT definition_catalogue_identity_pkey PRIMARY KEY (route, root_digest, identity_key);
+
+
+--
+-- Name: definition_catalogue_kind definition_catalogue_kind_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_kind
+    ADD CONSTRAINT definition_catalogue_kind_pkey PRIMARY KEY (route, root_digest, id_key);
+
+
+--
+-- Name: definition_catalogue_kind definition_catalogue_kind_route_root_digest_ordinal_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_kind
+    ADD CONSTRAINT definition_catalogue_kind_route_root_digest_ordinal_key UNIQUE (route, root_digest, ordinal);
+
+
+--
+-- Name: definition_catalogue_label definition_catalogue_label_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_label
+    ADD CONSTRAINT definition_catalogue_label_pkey PRIMARY KEY (route, root_digest, language_key, label_sort, ordinal);
+
+
+--
+-- Name: definition_catalogue_member definition_catalogue_member_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_member
+    ADD CONSTRAINT definition_catalogue_member_pkey PRIMARY KEY (route, root_digest, release_digest, category, id_key);
+
+
+--
+-- Name: definition_catalogue_task definition_catalogue_task_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_task
+    ADD CONSTRAINT definition_catalogue_task_pkey PRIMARY KEY (route, root_digest, task_id);
+
+
+--
 -- Name: definition_release definition_release_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -8033,6 +8263,34 @@ CREATE INDEX context_role_enrollment_context ON semantic.context_role_enrollment
 --
 
 CREATE UNIQUE INDEX definition_activation_erasure_key ON semantic.definition_activation USING btree (erasure_key, route);
+
+
+--
+-- Name: definition_catalogue_candidates; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_candidates ON semantic.definition_catalogue_kind USING btree (route, root_digest, exact_type_key, precedence DESC, ordinal) WHERE eligible;
+
+
+--
+-- Name: definition_catalogue_label_boundary; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX definition_catalogue_label_boundary ON semantic.definition_catalogue_label USING btree (route, root_digest, language_key, ordinal) INCLUDE (label_sort);
+
+
+--
+-- Name: definition_catalogue_node_once; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX definition_catalogue_node_once ON semantic.definition_catalogue_task USING btree (route, root_digest, digest) WHERE (kind = 'node'::text);
+
+
+--
+-- Name: definition_catalogue_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_pending ON semantic.definition_catalogue_task USING btree (route, root_digest, kind, task_id) WHERE (NOT done);
 
 
 --
@@ -10732,6 +10990,22 @@ ALTER TABLE ONLY semantic.definition_activation
 
 
 --
+-- Name: definition_catalogue_label definition_catalogue_label_route_root_digest_ordinal_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_label
+    ADD CONSTRAINT definition_catalogue_label_route_root_digest_ordinal_fkey FOREIGN KEY (route, root_digest, ordinal) REFERENCES semantic.definition_catalogue_kind(route, root_digest, ordinal);
+
+
+--
+-- Name: definition_catalogue_task definition_catalogue_task_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_task
+    ADD CONSTRAINT definition_catalogue_task_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_build(route, root_digest);
+
+
+--
 -- Name: erasure_progress erasure_progress_route_account_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11407,104 +11681,4 @@ ALTER TABLE ONLY semantic.term_head
 -- PostgreSQL database dump complete
 --
 
-
-
-
--- All catalogue configuration belongs to Global. Bodies and completed indexes are immutable.
-CREATE TABLE semantic.definition_catalogue_artifact (
-  route integer NOT NULL CHECK (route = 0),
-  digest text NOT NULL,
-  kind text NOT NULL CHECK (kind IN ('root','node','release','declaration')),
-  bytes bytea NOT NULL CHECK (octet_length(bytes) <= 4194304),
-  recorded_transaction_id uuid NOT NULL,
-  PRIMARY KEY (route, digest)
-);
-CREATE TABLE semantic.definition_catalogue_build (
-  route integer NOT NULL CHECK (route = 0),
-  root_digest text NOT NULL,
-  pin jsonb NOT NULL,
-  state text NOT NULL CHECK (state IN ('building','incomplete','refused','ready')),
-  phase text NOT NULL DEFAULT 'node' CHECK (phase IN ('node','release','declaration')),
-  next_node bigint,
-  steps bigint NOT NULL DEFAULT 0,
-  nodes bigint NOT NULL DEFAULT 0,
-  releases bigint NOT NULL DEFAULT 0,
-  declarations bigint NOT NULL DEFAULT 0,
-  indexed_rows bigint NOT NULL DEFAULT 0,
-  examined_bytes bigint NOT NULL DEFAULT 0,
-  missing_digest text,
-  error text,
-  recorded_transaction_id uuid NOT NULL,
-  PRIMARY KEY (route, root_digest)
-);
-CREATE TABLE semantic.definition_catalogue_task (
-  route integer NOT NULL CHECK (route = 0),
-  root_digest text NOT NULL,
-  task_id bigint GENERATED ALWAYS AS IDENTITY,
-  kind text NOT NULL CHECK (kind IN ('node','release','declaration')),
-  digest text NOT NULL,
-  entry_key text,
-  first_key text,
-  last_key text,
-  next_node bigint,
-  offset_rows integer NOT NULL DEFAULT 0,
-  done boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (route, root_digest, task_id),
-  FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_build(route,root_digest)
-);
-CREATE UNIQUE INDEX definition_catalogue_node_once ON semantic.definition_catalogue_task(route,root_digest,digest) WHERE kind='node';
-CREATE INDEX definition_catalogue_pending ON semantic.definition_catalogue_task(route,root_digest,kind,task_id) WHERE NOT done;
-CREATE TABLE semantic.definition_catalogue_identity (
-  route integer NOT NULL CHECK (route = 0),
-  root_digest text NOT NULL,
-  identity_key text NOT NULL,
-  identity text NOT NULL,
-  digest text NOT NULL,
-  PRIMARY KEY (route,root_digest,identity_key)
-);
-CREATE TABLE semantic.definition_catalogue_member (
-  route integer NOT NULL CHECK (route = 0),
-  root_digest text NOT NULL,
-  release_digest text NOT NULL,
-  category text NOT NULL CHECK (category IN ('type','property','profile')),
-  id_key text NOT NULL,
-  id text NOT NULL,
-  body jsonb NOT NULL,
-  PRIMARY KEY (route,root_digest,release_digest,category,id_key)
-);
-CREATE TABLE semantic.definition_catalogue_kind (
-  route integer NOT NULL CHECK (route = 0),
-  root_digest text NOT NULL,
-  id_key text NOT NULL,
-  id text NOT NULL,
-  ordinal bigint NOT NULL,
-  declaration_digest text NOT NULL,
-  body jsonb NOT NULL,
-  exact_type_key text NOT NULL,
-  exact_type_id text NOT NULL,
-  precedence integer NOT NULL,
-  eligible boolean NOT NULL,
-  PRIMARY KEY (route,root_digest,id_key),
-  UNIQUE (route,root_digest,ordinal)
-);
-CREATE INDEX definition_catalogue_candidates ON semantic.definition_catalogue_kind(route,root_digest,exact_type_key,precedence DESC,ordinal) WHERE eligible;
-CREATE TABLE semantic.definition_catalogue_label (
-  route integer NOT NULL CHECK (route = 0),
-  root_digest text NOT NULL,
-  language_key text NOT NULL,
-  language text NOT NULL,
-  label_sort bytea NOT NULL,
-  ordinal bigint NOT NULL,
-  id_key text NOT NULL,
-  PRIMARY KEY (route,root_digest,language_key,label_sort,ordinal),
-  FOREIGN KEY (route,root_digest,ordinal) REFERENCES semantic.definition_catalogue_kind(route,root_digest,ordinal)
-);
-CREATE UNIQUE INDEX definition_catalogue_label_boundary ON semantic.definition_catalogue_label(route,root_digest,language_key,ordinal) INCLUDE(label_sort);
-CREATE TABLE semantic.definition_catalogue_head (
-  route integer PRIMARY KEY CHECK (route = 0),
-  root_digest text,
-  head integer NOT NULL DEFAULT 0 CHECK (head >= 0),
-  recorded_transaction_id uuid
-);
-INSERT INTO semantic.definition_catalogue_head(route) VALUES (0);
 
