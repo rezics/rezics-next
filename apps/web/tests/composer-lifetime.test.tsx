@@ -299,7 +299,7 @@ test('real reply and inline composers retire pending copies and submissions, whi
         expect(router.state.location.pathname).toBe('/compose');
         expect(host.textContent).toContain('Replacement writing.');
         expect(host.textContent).not.toContain('Original private writing.');
-        expect(host.querySelector('img[alt="Private copied chart"]')).toBeNull();
+        expect(host.querySelector('[role="img"][aria-label="Private copied chart"]')).toBeNull();
         expect(blocked()).toBe(true);
       }
     }
@@ -404,7 +404,8 @@ test('real reply and inline composers retire pending copies and submissions, whi
       expect(blocked()).toBe(true);
       mediaMode = 'available';
       await click(m.thread_media_check_again());
-      await settle(() => host.querySelector(`img[src="${reservedId}"]`) !== null);
+      await settle(() => !button(kind === 'reply' ? m.thread_write_send() : m.thread_edit_save()).disabled);
+      expect(host.querySelector('[role="img"][aria-label="Private copied chart"]')).not.toBeNull();
       expect(originals).toHaveLength(1);
       expect(hops.filter((hop) => hop.method === 'POST')).toEqual([
         expect.objectContaining({ path: '/media', body: expect.objectContaining({ containerId: id(2) }) }),

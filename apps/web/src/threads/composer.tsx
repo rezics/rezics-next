@@ -699,11 +699,13 @@ function PostComposerContent<T, Context = undefined>({
         bodyRef.current = next;
         setBody(next);
         setBodyCanSend(hasDocumentContent(next));
-        setFailure((failure) =>
-          failure && 'media' in failure
-            ? { ...failure, media: failure.media?.filter((item) => item.id !== source && item.id !== id) }
-            : failure,
-        );
+        setFailure((failure) => {
+          if (failure?.reason !== 'media-unavailable') return failure;
+          const media = (failure.media ?? []).filter((item) => item.id !== source && item.id !== id);
+          return media.every((item) => item.state === 'available')
+            ? null
+            : { ...failure, media: [...media, { id: uploaded.src, state: 'available' }] };
+        });
       } catch (error) {
         if (!current()) return;
         setFailure((failure) => ({
@@ -1128,11 +1130,13 @@ function InlinePostEditorContent({
         const next = replaceImageSource(bodyRef.current, source, uploaded.src);
         bodyRef.current = next;
         setBody(next);
-        setFailure((failure) =>
-          failure && 'media' in failure
-            ? { ...failure, media: failure.media?.filter((item) => item.id !== source && item.id !== id) }
-            : failure,
-        );
+        setFailure((failure) => {
+          if (failure?.reason !== 'media-unavailable') return failure;
+          const media = (failure.media ?? []).filter((item) => item.id !== source && item.id !== id);
+          return media.every((item) => item.state === 'available')
+            ? null
+            : { ...failure, media: [...media, { id: uploaded.src, state: 'available' }] };
+        });
       } catch (error) {
         if (!current()) return;
         setFailure((failure) => ({
