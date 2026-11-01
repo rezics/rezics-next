@@ -39,8 +39,15 @@ type PinAttempt = {
 
 function pinLifetime(key: string, origin: object | undefined, put: boolean, remove: boolean) {
   return {
-    key, origin, lifetime: Symbol(), guard: { active: true }, pending: false, notice: '', action: null as PinAction | null,
-    put: { allowed: put, active: true }, remove: { allowed: remove, active: true },
+    key,
+    origin,
+    lifetime: Symbol(),
+    guard: { active: true },
+    pending: false,
+    notice: '',
+    action: null as PinAction | null,
+    put: { allowed: put, active: true },
+    remove: { allowed: remove, active: true },
   };
 }
 
@@ -60,10 +67,14 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
   const actualSession = cachedSession(queryClient);
   const { state: session, subject, csrfToken } = actualSession ?? observedSession;
   const groups = cachedExposure(queryClient);
-  const canPut = (actualSession ? exposure.operationIsAdmitted('library_pin.put', groups) : putAdmitted) &&
-    pins.state === 'loaded' && pins.canUpdate === true;
-  const canRemove = (actualSession ? exposure.operationIsAdmitted('library_pin.delete', groups) : removeAdmitted) &&
-    pins.state === 'loaded' && pins.canRemove === true;
+  const canPut =
+    (actualSession ? exposure.operationIsAdmitted('library_pin.put', groups) : putAdmitted) &&
+    pins.state === 'loaded' &&
+    pins.canUpdate === true;
+  const canRemove =
+    (actualSession ? exposure.operationIsAdmitted('library_pin.delete', groups) : removeAdmitted) &&
+    pins.state === 'loaded' &&
+    pins.canRemove === true;
   const viewer = session === 'signed-in' && subject ? subject : null;
   const hasCsrf = Boolean(csrfToken);
   const agreed = !pins.origin || (pins.origin.credentialAgrees && pins.origin.sessionSubject === viewer);
@@ -79,14 +90,19 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     setControl(pinLifetime(key, origin?.lifetime, canPut, canRemove));
   }
   // PUT and DELETE retire independently. Losing target/PUT access must not cancel an admitted removal.
-  for (const [name, allowed] of [['put', canPut], ['remove', canRemove]] as const) {
+  for (const [name, allowed] of [
+    ['put', canPut],
+    ['remove', canRemove],
+  ] as const) {
     if (!control[name].active || control[name].allowed !== allowed) {
       const previous = control[name];
       previous.active = false;
       control[name] = { allowed, active: true };
       if (attempt.current?.admission === previous) {
         attempt.current = null;
-        setControl((value) => value.lifetime === lifetime ? { ...value, pending: false, notice: '', action: null } : value);
+        setControl((value) =>
+          value.lifetime === lifetime ? { ...value, pending: false, notice: '', action: null } : value,
+        );
       }
     }
   }
@@ -104,26 +120,41 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     if (!actual && !now.origin && !now.pins.origin) return now.viewer === viewer && !!now.csrfToken;
     return actual?.state === 'signed-in' && actual.subject === viewer && !!actual.csrfToken;
   };
-  const isCurrent = () => committed.current === lifetime && control.guard.active &&
-    live.current.viewer === viewer && live.current.collectionId === collectionId &&
-    live.current.origin?.lifetime === control.origin && actualViewer() &&
+  const isCurrent = () =>
+    committed.current === lifetime &&
+    control.guard.active &&
+    live.current.viewer === viewer &&
+    live.current.collectionId === collectionId &&
+    live.current.origin?.lifetime === control.origin &&
+    actualViewer() &&
     (live.current.origin?.isCurrent() ?? true);
   const admissionCurrent = (value: WriteAdmission, action: PinAction) => {
     if (!isCurrent() || !value.active || !value.allowed) return false;
     const client = live.current.queryClient;
     if (!cachedSession(client) && !live.current.origin && !live.current.pins.origin) return true;
-    return exposure.operationIsAdmitted(action === 'unpin' ? 'library_pin.delete' : 'library_pin.put', cachedExposure(client));
+    return exposure.operationIsAdmitted(
+      action === 'unpin' ? 'library_pin.delete' : 'library_pin.put',
+      cachedExposure(client),
+    );
   };
   const update = (change: Partial<typeof control>) =>
-    setControl((current) => current.lifetime === lifetime && control.guard.active ? { ...current, ...change } : current);
+    setControl((current) =>
+      current.lifetime === lifetime && control.guard.active ? { ...current, ...change } : current,
+    );
   useLayoutEffect(() => {
     const observe = () => {
-      if (!viewer || !hasCsrf || !loadedPins || !agreed || !control.guard.active || committed.current !== lifetime) return;
+      if (!viewer || !hasCsrf || !loadedPins || !agreed || !control.guard.active || committed.current !== lifetime)
+        return;
       let retired = false;
-      if (!actualViewer()) { control.guard.active = false; retired = true; }
-      else if (cachedSession(queryClient)) {
+      if (!actualViewer()) {
+        control.guard.active = false;
+        retired = true;
+      } else if (cachedSession(queryClient)) {
         const groups = cachedExposure(queryClient);
-        for (const [value, operation] of [[control.put, 'library_pin.put'], [control.remove, 'library_pin.delete']] as const) {
+        for (const [value, operation] of [
+          [control.put, 'library_pin.put'],
+          [control.remove, 'library_pin.delete'],
+        ] as const) {
           // Capabilities from the accepted pins response remain an additional restriction.
           if (value.active && value.allowed && !exposure.operationIsAdmitted(operation, groups)) {
             value.active = false;
@@ -169,7 +200,8 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
       attempt.current = current;
     }
     const captured = current;
-    const isCurrentAttempt = () => admissionCurrent(captured.admission, captured.action) && attempt.current === captured;
+    const isCurrentAttempt = () =>
+      admissionCurrent(captured.admission, captured.action) && attempt.current === captured;
     // This synchronous lock also covers two selections before React commits the pending render.
     captured.pending = true;
     update({ pending: true, notice: '', action: captured.action });
@@ -179,9 +211,11 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
       const now = live.current;
       const navigation = now.router.invalidate();
       const cache = isCurrentAttempt()
-        ? now.queryClient.invalidateQueries(now.origin?.queryKey
-          ? { queryKey: now.origin.queryKey, exact: true }
-          : { queryKey: ['library-navigation'] })
+        ? now.queryClient.invalidateQueries(
+            now.origin?.queryKey
+              ? { queryKey: now.origin.queryKey, exact: true }
+              : { queryKey: ['library-navigation'] },
+          )
         : undefined;
       return [navigation, cache];
     };

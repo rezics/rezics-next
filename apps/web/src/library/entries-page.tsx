@@ -255,7 +255,10 @@ export function PersonalLibraryPage({
   const [fallbackLease] = useState(shelfMutationLease);
   const mutationLease = originatingLease ?? fallbackLease;
   const navigation = useCurrentLibraryNavigation(
-    locale, 8, JSON.stringify(page.signedIn ? [page.type, page.state, cursor, page.sort] : [cursor]), acceptedNavigation === undefined,
+    locale,
+    8,
+    JSON.stringify(page.signedIn ? [page.type, page.state, cursor, page.sort] : [cursor]),
+    acceptedNavigation === undefined,
   );
   const currentNavigation = acceptedNavigation ?? navigation.data;
   const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);

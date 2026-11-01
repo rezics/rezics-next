@@ -24,10 +24,15 @@ type DynamicCollectionPageProps = {
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
   const [source, setSource] = useState({ page: props.page, lifetime: 0 });
   const navigation = useCurrentLibraryNavigation(
-    getLocale(), 100, JSON.stringify([props.page.id, props.page.cursor, props.search]),
+    getLocale(),
+    100,
+    JSON.stringify([props.page.id, props.page.cursor, props.search]),
   );
   const pinActions = usePinControlActions({
-    collectionId: props.page.id, pins: navigation.data.pins, mode: 'collection', origin: navigation.pinsOrigin,
+    collectionId: props.page.id,
+    pins: navigation.data.pins,
+    mode: 'collection',
+    origin: navigation.pinsOrigin,
   });
   // A newly observed loader object starts a page before any of its children render, even at the same URL.
   if (source.page !== props.page) setSource({ page: props.page, lifetime: source.lifetime + 1 });

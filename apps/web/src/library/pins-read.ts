@@ -95,7 +95,8 @@ export async function readPreparedLibraryPins(
   const origin = preparedPinsOrigin(request, limit);
   const authorization = viewerCredential(request);
   if (!origin.credentialAgrees || !authorization) return { state: 'closed', origin };
-  const current = () => sessionSubject(request) === origin.sessionSubject && viewerCredential(request) === authorization;
+  const current = () =>
+    sessionSubject(request) === origin.sessionSubject && viewerCredential(request) === authorization;
   const pins = await readLibraryPins(client, authorization, limit, current);
   return current() ? { ...pins, origin } : { state: 'closed', origin: { ...origin, credentialAgrees: false } };
 }
@@ -153,13 +154,20 @@ export async function loadLibraryNavigation(
   const refused = await prepareSession(request, sessionEnv);
   const prepared = preparedPinsOrigin(request, limit);
   const origin = refused ? { ...prepared, sessionSubject: null, credentialAgrees: false } : prepared;
-  const closed: LibraryNavigationRead = { origin, pins: { state: 'closed', origin }, collections: [], collectionsState: 'loaded' };
+  const closed: LibraryNavigationRead = {
+    origin,
+    pins: { state: 'closed', origin },
+    collections: [],
+    collectionsState: 'loaded',
+  };
   const authorization = viewerCredential(request);
   const accountId = origin.sessionSubject;
   if (!origin.credentialAgrees || !authorization || !accountId) return closed;
   const [pins, owner] = await Promise.all([
     reads.pins ? readPreparedLibraryPins(client, request, limit) : { state: 'closed' as const, origin },
-    reads.collections ? loadMineCollectionsForOwner(client, accountId, authorization).catch(() => undefined) : undefined,
+    reads.collections
+      ? loadMineCollectionsForOwner(client, accountId, authorization).catch(() => undefined)
+      : undefined,
   ]);
   if (sessionSubject(request) !== accountId || viewerCredential(request) !== authorization) {
     const refusedOrigin = { ...origin, credentialAgrees: false };
@@ -169,8 +177,12 @@ export async function loadLibraryNavigation(
     origin,
     pins,
     collections: owner?.collections ?? [],
-    collectionsState: !reads.collections || (owner && (!owner.state || owner.state === 'loaded'))
-      ? 'loaded' : owner?.state === 'preparing' ? 'preparing' : 'unavailable',
+    collectionsState:
+      !reads.collections || (owner && (!owner.state || owner.state === 'loaded'))
+        ? 'loaded'
+        : owner?.state === 'preparing'
+          ? 'preparing'
+          : 'unavailable',
   };
 }
 
@@ -178,7 +190,11 @@ type NavigationInput = { limit: 8 | 100; pins: boolean; collections: boolean };
 function navigationInput(input: unknown): NavigationInput {
   if (input && typeof input === 'object') {
     const value = input as Partial<NavigationInput>;
-    return { limit: value.limit === 100 ? 100 : 8, pins: value.pins !== false, collections: value.collections !== false };
+    return {
+      limit: value.limit === 100 ? 100 : 8,
+      pins: value.pins !== false,
+      collections: value.collections !== false,
+    };
   }
   return { limit: input === 100 ? 100 : 8, pins: true, collections: true };
 }
@@ -201,13 +217,22 @@ export type LibraryNavigationAdmission = {
 export function libraryNavigationQuery(locale: string, limit: 8 | 100 = 8, admission?: LibraryNavigationAdmission) {
   return queryOptions({
     ...personalRead,
-    enabled: personalRead.enabled && (!admission || (admission.pins || admission.collections)),
-    queryKey: readQueryKey(['library-navigation', locale, limit, ...(admission ? [admission.subject, admission.lifetime] : [])], 'session'),
+    enabled: personalRead.enabled && (!admission || admission.pins || admission.collections),
+    queryKey: readQueryKey(
+      ['library-navigation', locale, limit, ...(admission ? [admission.subject, admission.lifetime] : [])],
+      'session',
+    ),
     queryFn: async () => {
       if (admission && !admission.isCurrent()) throw new Error('Retired Library navigation');
-      const value = await readLibraryNavigationPage({ data: admission ? { limit, pins: admission.pins, collections: admission.collections } : limit });
-      if (admission && (!admission.isCurrent() || !matchesPinsOrigin(value.origin, admission.subject, limit) ||
-        (admission.pins && !matchesPinsOrigin(value.pins.origin, admission.subject, limit))))
+      const value = await readLibraryNavigationPage({
+        data: admission ? { limit, pins: admission.pins, collections: admission.collections } : limit,
+      });
+      if (
+        admission &&
+        (!admission.isCurrent() ||
+          !matchesPinsOrigin(value.origin, admission.subject, limit) ||
+          (admission.pins && !matchesPinsOrigin(value.pins.origin, admission.subject, limit)))
+      )
         throw new Error('Unaccepted Library navigation origin');
       return value;
     },
@@ -221,7 +246,10 @@ export const readLibraryPinsPage = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     if (await prepareSession(request, env as Partial<SessionEnv>))
-      return { state: 'closed', origin: { sessionSubject: null, credentialAgrees: false, requestedLimit: data } } as const;
+      return {
+        state: 'closed',
+        origin: { sessionSubject: null, credentialAgrees: false, requestedLimit: data },
+      } as const;
     return readPreparedLibraryPins(kernelClient(), request, data);
   });
 

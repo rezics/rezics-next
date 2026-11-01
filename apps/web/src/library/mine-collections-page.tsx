@@ -125,8 +125,11 @@ function MineCollectionsViewerRead({
     enabled: hydrated && personalRead.enabled,
     queryFn: async () => {
       if (!origin.mounted() || !origin.isCurrent()) throw new Error('Retired My Collections read');
-      const result = await readMineCollectionsViewerPage({ data: { cursor: address.cursor ?? undefined, layout: address.layout } });
-      if (!origin.mounted() || !origin.isCurrent() || !matchesViewer(result, subject, address)) throw new Error('Unaccepted My Collections read');
+      const result = await readMineCollectionsViewerPage({
+        data: { cursor: address.cursor ?? undefined, layout: address.layout },
+      });
+      if (!origin.mounted() || !origin.isCurrent() || !matchesViewer(result, subject, address))
+        throw new Error('Unaccepted My Collections read');
       return result;
     },
     initialData,
@@ -143,11 +146,17 @@ function MineCollectionsViewerRead({
     previousLoader.current = initial;
     void query.refetch();
   }, [initial, query.refetch]);
-  const accepted = !query.isError && origin.isCurrent() && matchesViewer(query.data, subject, address) ? query.data : undefined;
+  const accepted =
+    !query.isError && origin.isCurrent() && matchesViewer(query.data, subject, address) ? query.data : undefined;
   // The initial envelope is itself the parent's same-prepared viewer/address authority.
   // Older pure fixtures omit nested provenance; a supplied conflicting provenance always fails closed.
-  const pins = accepted && pinsAdmitted && origin.pinsCurrent() &&
-    (!accepted.pins.origin || matchesPinsOrigin(accepted.pins.origin, subject, 100)) ? accepted.pins : { state: 'closed' as const };
+  const pins =
+    accepted &&
+    pinsAdmitted &&
+    origin.pinsCurrent() &&
+    (!accepted.pins.origin || matchesPinsOrigin(accepted.pins.origin, subject, 100))
+      ? accepted.pins
+      : { state: 'closed' as const };
   const current = useRef(false);
   current.current = !!accepted && pins.state === 'loaded';
   const pinsOrigin: AcceptedPinsOrigin = {
@@ -158,12 +167,14 @@ function MineCollectionsViewerRead({
   return (
     <MineCollectionsPageView
       page={
-        accepted && collectionsAdmitted && origin.collectionsCurrent() ? accepted.page : {
-          signedIn: true,
-          state: !collectionsAdmitted ? 'denied' : query.isError || query.data ? 'unavailable' : 'preparing',
-          collections: [],
-          next: null,
-        }
+        accepted && collectionsAdmitted && origin.collectionsCurrent()
+          ? accepted.page
+          : {
+              signedIn: true,
+              state: !collectionsAdmitted ? 'denied' : query.isError || query.data ? 'unavailable' : 'preparing',
+              collections: [],
+              next: null,
+            }
       }
       pins={pins}
       pinsOrigin={pinsOrigin}

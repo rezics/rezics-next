@@ -320,7 +320,12 @@ function CollectionPageLifetime({
   const navigation = useCurrentLibraryNavigation(getLocale(), 100, JSON.stringify([page.id, cursor, search, queryKey]));
   const pins = navigation.data?.pins ?? { state: 'closed' as const };
   const navigationCollections = navigation.data?.collections ?? [];
-  const pinActions = usePinControlActions({ collectionId: page.id, pins, mode: 'collection', origin: navigation.pinsOrigin });
+  const pinActions = usePinControlActions({
+    collectionId: page.id,
+    pins,
+    mode: 'collection',
+    origin: navigation.pinsOrigin,
+  });
   const [hydrated, setHydrated] = useState(false);
   const [members, setMembers] = useState(page.members);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
