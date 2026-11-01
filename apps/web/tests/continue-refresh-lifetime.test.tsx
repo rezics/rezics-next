@@ -108,12 +108,14 @@ async function paint(initial: ContinueView | undefined, read: () => Promise<Cont
   await act(async () => root.render(<Harness initial={initial} read={read} scope={scope} />));
 }
 
-async function startRefresh() {
+type RefreshHandle = { pending: Promise<ContinueResult> };
+
+async function startRefresh(): Promise<RefreshHandle> {
   let pending!: Promise<ContinueResult>;
   await act(async () => {
     pending = controls.current!.refresh();
   });
-  return pending;
+  return { pending };
 }
 
 async function settle(index: number, result: ContinueResult | Error) {
@@ -189,8 +191,8 @@ test('Older Continue refreshes cannot replace current results or clear a newer p
   const read = reader();
   await paint({ state: 'unavailable' }, read, 'same-view');
 
-  const first = await startRefresh();
-  const second = await startRefresh();
+  const { pending: first } = await startRefresh();
+  const { pending: second } = await startRefresh();
   await settle(0, loaded('Older while pending'));
   await first;
   expect(state()).toBe('unknown');
@@ -201,8 +203,8 @@ test('Older Continue refreshes cannot replace current results or clear a newer p
   expect(host.textContent).toContain('Current while pending');
   expect(host.textContent).not.toContain('Older while pending');
 
-  const olderSuccess = await startRefresh();
-  const newerSuccess = await startRefresh();
+  const { pending: olderSuccess } = await startRefresh();
+  const { pending: newerSuccess } = await startRefresh();
   await settle(3, loaded('Newest result'));
   await newerSuccess;
   await settle(2, loaded('Late older result'));
@@ -211,8 +213,8 @@ test('Older Continue refreshes cannot replace current results or clear a newer p
   expect(host.textContent).toContain('Newest result');
   expect(host.textContent).not.toContain('Late older result');
 
-  const olderRejection = await startRefresh();
-  const newerPending = await startRefresh();
+  const { pending: olderRejection } = await startRefresh();
+  const { pending: newerPending } = await startRefresh();
   await settle(4, new Error('old read failed'));
   await olderRejection;
   expect(state()).toBe('unknown');
@@ -226,7 +228,7 @@ test('Older Continue refreshes cannot replace current results or clear a newer p
 test('initial and scope replacements show their own state and retire late completions through unmount', async () => {
   const read = reader();
   await paint({ state: 'unavailable' }, read, 'cursor-one');
-  const oldInitialRead = await startRefresh();
+  const { pending: oldInitialRead } = await startRefresh();
 
   const replacement = preparing(600);
   await paint(replacement, read, 'cursor-one');
@@ -237,7 +239,7 @@ test('initial and scope replacements show their own state and retire late comple
   expect(state()).toBe('preparing');
   expect(host.textContent).not.toContain('Retired initial result');
 
-  const oldScopeRead = await startRefresh();
+  const { pending: oldScopeRead } = await startRefresh();
   await paint(replacement, read, 'cursor-two');
   expect(state()).toBe('preparing');
   expect(busy()).toBe(false);
@@ -246,7 +248,7 @@ test('initial and scope replacements show their own state and retire late comple
   expect(state()).toBe('preparing');
   expect(host.textContent).not.toContain('Retired scope result');
 
-  const unmountedRead = await startRefresh();
+  const { pending: unmountedRead } = await startRefresh();
   await act(async () => root.unmount());
   mounted = false;
   await settle(2, loaded('After unmount'));
