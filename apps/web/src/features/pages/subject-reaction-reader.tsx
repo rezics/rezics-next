@@ -292,6 +292,7 @@ export function useSubjectReactionReader(input: {
   session: SessionAdmission;
   enabled?: boolean;
 }) {
+  const client = useQueryClient();
   const admission = useSubjectReactionAdmission(input);
   const ownReactionQuery = subjectOwnReactionQuery(
     input.subjectId,
