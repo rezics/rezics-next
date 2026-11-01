@@ -11,7 +11,16 @@ import {
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useBlocker, useRouter } from '@tanstack/react-router';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@rezics/ui/shadcn/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
@@ -21,9 +30,7 @@ type Draft = {
   unresolved: () => boolean;
   discard: () => void;
 };
-type Decision =
-  | { kind: 'navigation'; resolve: (stay: boolean) => void }
-  | { kind: 'discard'; draftId: number };
+type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
 
 /** A page-local registry keeps editors' state in their owners while presenting one shared decision. */
 export class AuthoringDepartureState {
@@ -91,10 +98,7 @@ export class AuthoringDepartureState {
 
   refresh = () => {
     if (this.decision?.kind === 'navigation' && !this.needsDecision()) this.settleNavigation(false);
-    else if (
-      this.decision?.kind === 'discard' &&
-      !this.drafts.get(this.decision.draftId)?.needsDecision()
-    )
+    else if (this.decision?.kind === 'discard' && !this.drafts.get(this.decision.draftId)?.needsDecision())
       this.decision = null;
     this.notify();
   };
@@ -286,11 +290,7 @@ function DepartureDialog({ navigation }: { navigation: AuthoringDepartureState }
 
 /** An isolated composer gets the same native guard and decision UI; route siblings share their page owner. */
 export function AuthoringDepartureBoundary({ children }: { children: ReactNode }) {
-  return useContext(DepartureContext) ? (
-    children
-  ) : (
-    <AuthoringDepartureProvider>{children}</AuthoringDepartureProvider>
-  );
+  return useContext(DepartureContext) ? children : <AuthoringDepartureProvider>{children}</AuthoringDepartureProvider>;
 }
 
 export function useAuthoringDeparture(
@@ -327,19 +327,16 @@ export function useAuthoringDeparture(
     latest.current.released = true;
     navigation?.refresh();
   }, [navigation]);
-  const requestDiscard = useCallback(
-    (fallback?: () => void) => {
-      const current = registration.current;
-      if (!current) {
-        fallback?.();
-        return;
-      }
-      current.owner.requestDiscard(
-        current.id,
-        document.activeElement instanceof HTMLElement ? document.activeElement : null,
-      );
-    },
-    [],
-  );
+  const requestDiscard = useCallback((fallback?: () => void) => {
+    const current = registration.current;
+    if (!current) {
+      fallback?.();
+      return;
+    }
+    current.owner.requestDiscard(
+      current.id,
+      document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    );
+  }, []);
   return { release, requestDiscard };
 }

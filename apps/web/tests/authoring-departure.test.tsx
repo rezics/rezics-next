@@ -185,7 +185,9 @@ test('default thread composers preserve drafts on Stay, allow Leave and success 
   try {
     await router.load();
     await act(async () => root.render(createElement(RouterProvider, { router })));
-    await settle(() => titleInput() !== null && textbox(m.thread_new_body_label())?.classList.contains('ProseMirror') === true);
+    await settle(
+      () => titleInput() !== null && textbox(m.thread_new_body_label())?.classList.contains('ProseMirror') === true,
+    );
     expect(beforeUnloadIsBlocked()).toBe(false);
     await act(async () => user.type(titleInput()!, 'An unsaved opening'));
     await typeBody(m.thread_new_body_label(), 'A structured opening paragraph.');
