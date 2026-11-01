@@ -255,7 +255,7 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
                   key={zone.id}
                   className="p-3"
                   title={title}
-                  titleLang={name.lang}
+                  {...(name.lang ? { titleLang: name.lang } : {})}
                   {...(!input.deleted
                     ? { href: zoneLinks.edit, primaryLinkLabel: m.zones_owner_configure_named({ title }, options) }
                     : {})}
