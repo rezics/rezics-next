@@ -66,6 +66,7 @@ type Fixture = {
 
 type RuntimeOverrides = Partial<Omit<PublicationControllerOptions, 'db' | 'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'operationsManager'>> & {
   failReceiptDelivery?: boolean;
+  useDefaultDependencyPreparation?: boolean;
 };
 
 function git(root: string, args: string[]): string {
@@ -362,6 +363,9 @@ function runtimeFor(fixture: Fixture, overrides: RuntimeOverrides = {}): Runtime
       deliver(event);
     };
   }
+  const prepareDependencies = overrides.useDefaultDependencyPreparation
+    ? undefined
+    : overrides.prepareDependencies ?? ((_main, sourceTree, worktreeRoot) => fixtureDependencies(sourceTree, worktreeRoot));
   const controller = new PublicationController({
     db,
     mainCheckout: fixture.mainCheckout,
@@ -372,7 +376,7 @@ function runtimeFor(fixture: Fixture, overrides: RuntimeOverrides = {}): Runtime
     now: () => fixture.now,
     inbox,
     workflowBlobs: WORKFLOW_BLOBS,
-    prepareDependencies: overrides.prepareDependencies ?? ((_main, sourceTree, worktreeRoot) => fixtureDependencies(sourceTree, worktreeRoot)),
+    ...(prepareDependencies ? { prepareDependencies } : {}),
     fetchLiveBuild: overrides.fetchLiveBuild ?? (() => Promise.resolve({ commit: fixture.sourceCommit })),
     ...(overrides.process ? { process: overrides.process } : {}),
     ...(overrides.beforeSpawn ? { beforeSpawn: overrides.beforeSpawn } : {}),
@@ -924,7 +928,11 @@ test('Exact eligible source dependencies unchanged workflow six smokes and live 
   const unavailableDependencies = createFixture();
   try {
     const authorityId = await setupRetainedAuthority(unavailableDependencies);
-    expect(await invoke(unavailableDependencies, ['publication', 'start', authorityId])).toBe(1);
+    await withFixtureEnvironment(unavailableDependencies, '0.05', async () => {
+      expect(await invoke(unavailableDependencies, ['publication', 'start', authorityId], OPERATIONS, {
+        useDefaultDependencyPreparation: true,
+      })).toBe(1);
+    });
     const receipt = JSON.parse(stateRow<{ receipt: string }>(unavailableDependencies,
       'SELECT receipt FROM publication_invocations WHERE authority_id=?', authorityId)!.receipt);
     expect(receipt.terminalCause).toBe('preparation-failed-before-workflow-spawn');
