@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
-import { prepareSession, viewerCredential } from '../session/request.ts';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request.ts';
 
 const kinds = new Set(['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad']);
 
@@ -14,6 +14,8 @@ export type ChangeReactionInput = {
   target: 'thread' | 'post' | 'subject';
   id: string;
   kind: ReactionKind | null;
+  /** Original reader captured by the mounted browser caller; it is only a mismatch fence. */
+  expectedReader?: string;
 };
 
 type FailureReason = 'closed' | 'forbidden' | 'not-found' | 'conflict' | 'invalid' | 'rate-limited' | 'unavailable';
@@ -34,9 +36,20 @@ export function validateReaction(input: unknown): ChangeReactionInput {
     !(input.kind === null || (typeof input.kind === 'string' && kinds.has(input.kind)))
   )
     throw new Error('Invalid reaction');
+  if (
+    'expectedReader' in input &&
+    input.expectedReader !== undefined &&
+    (typeof input.expectedReader !== 'string' || !input.expectedReader || input.expectedReader.length > 128)
+  )
+    throw new Error('Invalid reaction');
   if (input.target === 'subject' && (input.kind === 'upvote' || input.kind === 'downvote'))
     throw new Error('Invalid reaction');
-  return { target: input.target, id: input.id, kind: input.kind as ReactionKind | null };
+  return {
+    target: input.target,
+    id: input.id,
+    kind: input.kind as ReactionKind | null,
+    ...(typeof input.expectedReader === 'string' ? { expectedReader: input.expectedReader } : {}),
+  };
 }
 
 function parseRetryAfter(value: unknown): number | undefined {
@@ -69,7 +82,9 @@ export async function changeReactionRequest(
 ): Promise<{ ok: true } | ReactionFailure> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
-  if (!authorization) return { ok: false, reason: 'forbidden' };
+  const actualReader = sessionSubject(request);
+  if (!input.expectedReader || !actualReader || input.expectedReader !== actualReader || !authorization)
+    return { ok: false, reason: 'forbidden' };
   const headers = { authorization, 'idempotency-key': crypto.randomUUID() } as { 'idempotency-key': string };
   const resource =
     input.target === 'thread'

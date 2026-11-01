@@ -3,7 +3,7 @@ import { m } from '../../paraglide/messages.js';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { ThreadReactions } from '../../threads/thread-reactions';
-import type { SubjectReactions } from './subject-reactions';
+import type { SubjectReactionKind, SubjectReactions } from './subject-reactions';
 import { FollowTargetControl } from '../../library/follow-target-control';
 
 /**
@@ -19,6 +19,7 @@ export function SubjectHeaderActions({
   verification,
   personalReady = true,
   onPersonalChange,
+  reactionOrigin,
   children,
 }: {
   id: string;
@@ -27,7 +28,8 @@ export function SubjectHeaderActions({
   returnTo: string;
   verification: VerificationConfig;
   personalReady?: boolean;
-  onPersonalChange?: () => Promise<void>;
+  onPersonalChange?: (kind: SubjectReactionKind | null) => Promise<void>;
+  reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
   children?: ReactNode;
 }) {
   return (
@@ -45,7 +47,10 @@ export function SubjectHeaderActions({
               target={{ kind: 'subject', id }}
               value={reactions.value}
               personalReady={personalReady}
-              {...(onPersonalChange ? { onMutation: onPersonalChange } : {})}
+              {...(reactionOrigin ? { reactionOrigin } : {})}
+              {...(onPersonalChange
+                ? { onMutation: (kind) => onPersonalChange(kind as SubjectReactionKind | null) }
+                : {})}
             />
           </div>
         ) : (

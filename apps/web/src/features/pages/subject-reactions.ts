@@ -1,15 +1,19 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { subjectReactionKinds } from '../../threads/reaction-request';
 
 export type SubjectReactionKind = (typeof subjectReactionKinds)[number];
 
 export type SubjectReactions = {
   counts: Partial<Record<SubjectReactionKind, number>>;
-  /** The reader's own reaction; always null for a signed-out reader. */
+  /** The reader's own reaction; null while private data is unavailable or for a signed-out reader. */
   value: SubjectReactionKind | null;
+  /** Present only when this value came from a private read prepared for this actual reader. */
+  reader?: string;
 };
+
+export type SubjectOwnReaction = { reader: string; value: SubjectReactionKind | null };
 
 export async function readReactionCounts(client: KernelClient, id: string): Promise<SubjectReactions | null> {
   const counts = await client
@@ -27,16 +31,24 @@ export async function readOwnReaction(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   id: string,
-): Promise<SubjectReactionKind | null> {
+  expectedReader?: string | null,
+): Promise<SubjectOwnReaction | null> {
+  if (!expectedReader) return null;
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
-    if (!authorization) return null;
+    const reader = sessionSubject(request);
+    if (!authorization || !reader || reader !== expectedReader) return null;
+    // Capture the identity from the same preparation that supplied this request's credential.
+    const preparedReader = reader;
     const own = await (client.subjects({ id }) as unknown as OwnReactionRoute).reaction
       .get({ headers: { authorization } })
       .catch(() => null);
     const kind = own?.status === 200 ? own.data?.kind : null;
-    return kind && admitted.has(kind) ? (kind as SubjectReactionKind) : null;
+    return {
+      reader: preparedReader,
+      value: kind && admitted.has(kind) ? (kind as SubjectReactionKind) : null,
+    };
   } catch {
     return null;
   }
@@ -63,10 +75,13 @@ export async function loadSubjectReactions(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   id: string,
+  expectedReader?: string | null,
 ): Promise<SubjectReactions | null> {
   const [counts, own] = await Promise.all([
     readReactionCounts(client, id),
-    readOwnReaction(client, request, sessionEnv, id),
+    readOwnReaction(client, request, sessionEnv, id, expectedReader),
   ]);
-  return counts ? { ...counts, value: own } : null;
+  return counts
+    ? { ...counts, value: own?.value ?? null, ...(own ? { reader: own.reader } : {}) }
+    : null;
 }

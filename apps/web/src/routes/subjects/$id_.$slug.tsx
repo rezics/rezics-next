@@ -15,11 +15,11 @@ import { SubjectHeaderActions } from '../../features/pages/subject-reactions-vie
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { RatingControlContext, RatingsContext } from '../../features/pages/subject-ratings-view';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
+import { useSubjectReactionReader } from '../../features/pages/subject-reaction-reader';
 import { postSubjectRatingForm } from '../../features/pages/rating-actions';
 import {
   subjectFrameQuery,
   subjectLibraryQuery,
-  subjectOwnReactionQuery,
   subjectCanonicalQuery,
   subjectRequestReader,
   subjectKernelClient,
@@ -341,11 +341,17 @@ function SubjectRoute() {
     enabled: currentReader,
     includeOwnRating: true,
   });
-  const { data: ownReaction } = useQuery({ ...subjectOwnReactionQuery(id, locale), enabled: session === 'signed-in' });
+  const subjectReaction = useSubjectReactionReader({
+    subjectId: id,
+    locale,
+    view: 'overview',
+    session: browserSession,
+    enabled: currentReader,
+  });
   const reader = personal.reader;
   const ownRating = personal.ownRating;
   const reactions = publicReactions
-    ? { ...publicReactions, value: session === 'signed-in' ? (ownReaction ?? null) : null }
+    ? { ...publicReactions, value: subjectReaction.ownReaction?.value ?? null }
     : null;
   const ratings = publicRatings
     ? { ...publicRatings, own: session === 'signed-in' && ownRating?.kind === 'ready' ? ownRating.units : null }
@@ -386,12 +392,11 @@ function SubjectRoute() {
               id={subject.id}
               reactions={reactions}
               signedIn={session === 'signed-in'}
-              personalReady={session !== 'signed-in' || ownReaction !== undefined}
-              onPersonalChange={async () => {
-                await Promise.all([
-                  queryClient.invalidateQueries({ queryKey: ['subject-own-reaction', id, locale] }),
-                  queryClient.invalidateQueries({ queryKey: ['subject-reactions', id, locale] }),
-                ]);
+              personalReady={session !== 'signed-in' || subjectReaction.ready}
+              reactionOrigin={subjectReaction.origin}
+              onPersonalChange={async (kind) => {
+                subjectReaction.applyMutation(kind);
+                await queryClient.invalidateQueries({ queryKey: ['subject-reactions', id, locale] });
               }}
               returnTo={returnTo}
               verification={verification}

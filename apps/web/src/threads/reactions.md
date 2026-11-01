@@ -19,11 +19,26 @@ cannot admit a write. Standalone prepared fixtures without a QueryClient retain 
 existing CSRF-header contract. Hydration and personal readiness still gate controls; anonymous readers keep the
 same sign-in return URL. Thread/post kinds and Subject's restricted kinds keep their existing one-slot semantics.
 
+Mounted commands capture the current session reader with their CSRF token. The server prepares that command's
+session once and compares the supplied reader with the identity recorded by the same preparation before making a
+native request. The reader is only a mismatch fence; the native credential and CSRF/origin checks remain authoritative.
+Standalone prepared transports may omit the operand, but production mounted commands may not dispatch without it.
+
+Subject own-reaction reads use a separate mounted scope keyed by subject, locale, view, actual browser reader,
+session admission and provider-local generation. The BFF prepares authorization once, captures the reader from that
+preparation, and returns the private value only with that reader. Session cache errors, removal, replacement, route
+changes and unmount retire the old scope synchronously. Public counts remain visible with no own selection while a
+private response is unavailable. A fresh same-reader admission performs a fresh private read; no stale cache entry,
+in-flight response or queued command is reused. A successful current command updates that exact private cache or
+Zone result from its admitted intent, so it does not add another own-reaction read in the same admission. The public
+counts request remains independent of reaction count, and server rendering performs no private own-reaction read.
+
 Cost is one constant-size identity/revision observer per mounted caller and constant work per relevant cache event
 or queued choice. Only this caller's existing choices are retained, with the existing serialized writes and refresh
 callbacks; there is no polling, cache enumeration, background replay or additional request.
 
-`tests/thread-reactions-lifetime.test.tsx` authors default-composition regressions using real `ThreadReactions`,
-shared `Reactions` and the session cache, gating only the existing change transport. These regressions are **UNRUN**
-pending controller verification. Browser/native assertions remain separate integration obligations; local web
-typing does not establish their completion.
+`tests/thread-reactions-lifetime.test.tsx` and `tests/subject-reaction-reader.test.tsx` author mounted regressions
+using real `ThreadReactions`, shared `Reactions`, the QueryClient cache and the ordinary Subject adapter, gating only
+the existing read and change transports. These regressions are **UNRUN** pending integration verification.
+Browser/native assertions remain separate integration obligations; local web typing does not establish their
+completion.

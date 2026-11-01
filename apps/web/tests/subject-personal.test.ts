@@ -47,7 +47,7 @@ test('personal subject data queries are disabled during server rendering', async
   expect(queries.map((query) => query.queryKey)).toEqual([
     ['subject-library', id, 'en'],
     ['subject-reader', id, 'en', null, 0, 'overview', 0, 0, 0],
-    ['subject-own-reaction', id, 'en'],
+    ['subject-own-reaction', id, 'en', null, 0, 'overview', 0],
     ['subject-own-rating', id, 'en', null, 0, 'overview', 0, 0, 0],
   ]);
   expect(queries.every((query) => query.enabled === false)).toBe(true);
@@ -107,6 +107,7 @@ test('the subject server loader only ensures public reads and personal reads are
   expect(route).toContain('useSuspenseQuery(subjectPageQuery');
   expect(route).toContain("enabled: session === 'signed-in'");
   expect(route).toContain('useSubjectPersonalReader');
+  expect(route).toContain('useSubjectReactionReader');
   expect(route).toContain("view: 'overview'");
   expect(route).toContain('includeOwnRating: true');
   expect(route).not.toContain('loadSubjectLibrarySlot(');
@@ -128,4 +129,19 @@ test('the subject server loader only ensures public reads and personal reads are
   expect(adapter).toContain('subjectReaderQuery(subjectId, locale, queryScope, transport)');
   expect(adapter).toContain('subjectOwnRatingQuery(subjectId, locale, queryScope, transport)');
   expect(adapter).toContain('personalRead.enabled');
+});
+
+test('private reaction query partitions by its actual admitted reader and mounted observation', () => {
+  const query = subjectOwnReactionQuery(id, 'en', {
+    reader: 'alice',
+    admission: 7,
+    view: 'overview',
+    cacheEpoch: 11,
+    scopeKey: 'subject-observation',
+    isCurrent: () => true,
+    hasLiveObserver: () => true,
+  });
+  expect(query.queryKey).toEqual(['subject-own-reaction', id, 'en', 'alice', 7, 'overview', 11]);
+  expect(query.retry).toBe(false);
+  expect(query.meta).toEqual({ subjectReactionScope: 'subject-observation', subjectReactionCacheEpoch: 11 });
 });

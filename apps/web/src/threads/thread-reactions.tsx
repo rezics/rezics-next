@@ -81,17 +81,24 @@ type ThreadReactionsProps = {
   value: ReactionKind | null;
   signedIn: boolean;
   returnTo: string;
-  onMutation?: () => Promise<void>;
+  onMutation?: (kind: ReactionKind | null) => Promise<void>;
   personalReady?: boolean;
+  reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
 };
 
 /** Observe the existing cache only. Remember transitions even when React batches away/back into one render. */
 function observeReactionSession(client: QueryClient | undefined) {
   // Observe sessionQuery's existing key without importing its server actions into isolated prepared renderers.
   const read = () => client?.getQueryData<ReturnType<typeof useSession>>(['session']);
+  const queryState = () => client?.getQueryState(['session']);
   const identity = () => {
     const session = read();
-    return JSON.stringify([session?.state, session?.subject ?? null, session?.csrfToken ?? null]);
+    return JSON.stringify([
+      queryState()?.status ?? 'missing',
+      session?.state,
+      session?.subject ?? null,
+      session?.csrfToken ?? null,
+    ]);
   };
   let previous = identity();
   let revision = 0;
@@ -103,15 +110,26 @@ function observeReactionSession(client: QueryClient | undefined) {
     }
     return revision;
   };
+  const healthy = () => queryState()?.status === 'success';
   return {
     read,
     snapshot,
+    healthy,
     serverSnapshot: () => 0,
     subscribe: (notify: () => void) =>
-      client?.getQueryCache().subscribe(({ query }) => {
-        if (query.queryKey.length !== 1 || query.queryKey[0] !== 'session') return;
-        const before = revision;
-        if (snapshot() !== before) notify();
+      client?.getQueryCache().subscribe((event) => {
+        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
+        if (
+          event.type !== 'added' &&
+          event.type !== 'removed' &&
+          !(event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error'))
+        )
+          return;
+        const next = identity();
+        if (next === previous) return;
+        previous = next;
+        revision++;
+        notify();
       }) ?? (() => {}),
   };
 }
@@ -131,8 +149,14 @@ export function ThreadReactions(props: ThreadReactionsProps) {
 
   const session = observation.read();
   // Standalone prepared views keep their explicit admission; a real client must have a known browser session.
-  const sessionReady = !client || Boolean(session?.state === 'signed-in' && session.subject && session.csrfToken);
-  const admitted = hydrated && props.signedIn && (props.personalReady ?? true) && sessionReady;
+  const sessionReady =
+    !client ||
+    Boolean(observation.healthy() && session?.state === 'signed-in' && session.subject && session.csrfToken);
+  const expectedReader = client && session?.state === 'signed-in' && session.subject ? session.subject : null;
+  const originCurrent = props.reactionOrigin
+    ? props.reactionOrigin.isCurrent() && props.reactionOrigin.reader === expectedReader
+    : true;
+  const admitted = hydrated && props.signedIn && (props.personalReady ?? true) && sessionReady && originCurrent;
   const key = JSON.stringify([
     provider.visit,
     revision,
@@ -140,17 +164,28 @@ export function ThreadReactions(props: ThreadReactionsProps) {
     props.target.id,
     props.signedIn,
     props.personalReady ?? true,
+    props.reactionOrigin?.key ?? null,
     hydrated,
   ]);
+  const desiredKey = useRef(key);
+  desiredKey.current = key;
   return (
     <ReactionCaller
       key={key}
       {...props}
       admitted={admitted}
-      disabled={!hydrated || !(props.personalReady ?? true) || (props.signedIn && !sessionReady)}
+      disabled={
+        !hydrated ||
+        !(props.personalReady ?? true) ||
+        !originCurrent ||
+        (props.signedIn && !sessionReady)
+      }
       observation={observation}
       revision={revision}
       csrfToken={client ? (session?.csrfToken ?? '') : null}
+      expectedReader={expectedReader}
+      reactionOrigin={props.reactionOrigin}
+      isDesired={() => desiredKey.current === key}
     />
   );
 }
@@ -167,12 +202,18 @@ function ReactionCaller({
   observation,
   revision,
   csrfToken,
+  expectedReader,
+  reactionOrigin,
+  isDesired,
 }: ThreadReactionsProps & {
   admitted: boolean;
   disabled: boolean;
   observation: ReturnType<typeof observeReactionSession>;
   revision: number;
   csrfToken: string | null;
+  expectedReader: string | null;
+  reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
+  isDesired(): boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const live = useRef(false);
@@ -183,14 +224,24 @@ function ReactionCaller({
       live.current = false;
     };
   }, []);
-  const current = () => live.current && admitted && observation.snapshot() === revision;
+  const current = () =>
+    live.current &&
+    admitted &&
+    isDesired() &&
+    observation.snapshot() === revision &&
+    (reactionOrigin?.isCurrent() ?? true);
 
   async function onChange(kind: ReactionKind | null) {
     if (!current()) return;
     let result: { ok: true } | ReactionFailure;
     try {
       result = await changeReaction({
-        data: { target: target.kind, id: target.id, kind },
+        data: {
+          target: target.kind,
+          id: target.id,
+          kind,
+          ...(expectedReader ? { expectedReader } : {}),
+        },
         headers,
       });
     } catch {
@@ -206,7 +257,7 @@ function ReactionCaller({
       throw new Error(message);
     }
     try {
-      await onMutation?.();
+      await onMutation?.(kind);
     } catch (error) {
       if (current()) throw error;
     }

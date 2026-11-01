@@ -13,7 +13,7 @@ import { validatePageRealm, validatePageNode, validateViewCursor } from './view-
 import { loadSubjectPage, PageReadError } from './subject';
 import { loadContextSubject } from './context-subject';
 import { readRatings, readOwnRating, type SubjectOwnRating } from './subject-ratings';
-import { readReactionCounts, readOwnReaction } from './subject-reactions';
+import { readReactionCounts, readOwnReaction, type SubjectOwnReaction } from './subject-reactions';
 import { communityOverview, withComposedCommunity } from './subject-community';
 import { projectShareCardPage } from '../../media/share-card-page';
 import { locales } from '../../paraglide/runtime.js';
@@ -330,10 +330,17 @@ const readSubjectOwnReaction = createServerFn({ method: 'GET', strict: false })
       typeof value.id !== 'string' ||
       value.id.length > 128 ||
       typeof value.locale !== 'string' ||
-      value.locale.length > 35
+      value.locale.length > 35 ||
+      (value.expectedReader !== undefined &&
+        value.expectedReader !== null &&
+        (typeof value.expectedReader !== 'string' || !value.expectedReader || value.expectedReader.length > 128))
     )
       throw notFound();
-    return { id: value.id, locale: value.locale };
+    return {
+      id: value.id,
+      locale: value.locale,
+      expectedReader: typeof value.expectedReader === 'string' ? value.expectedReader : null,
+    };
   })
   .handler(async ({ data }) => {
     const { env } = await import('cloudflare:workers');
@@ -343,6 +350,7 @@ const readSubjectOwnReaction = createServerFn({ method: 'GET', strict: false })
       getRequest(),
       env as Partial<SessionEnv>,
       data.id,
+      data.expectedReader,
     );
   });
 
@@ -589,12 +597,57 @@ export const subjectRatingQuery = (id: string, locale: string) =>
     queryFn: () => readSubjectRatings({ data: { id, locale } }),
   });
 
-export const subjectOwnReactionQuery = (id: string, locale: string) =>
+export type SubjectReactionQueryScope = {
+  reader: string | null;
+  admission: number;
+  view: string;
+  cacheEpoch: number;
+  scopeKey: string;
+  isCurrent(): boolean;
+  hasLiveObserver(): boolean;
+};
+
+const emptySubjectReactionScope: SubjectReactionQueryScope = {
+  reader: null,
+  admission: 0,
+  view: 'overview',
+  cacheEpoch: 0,
+  scopeKey: 'anonymous',
+  isCurrent: () => false,
+  hasLiveObserver: () => false,
+};
+
+export const subjectOwnReactionQuery = (
+  id: string,
+  locale: string,
+  scope: SubjectReactionQueryScope = emptySubjectReactionScope,
+) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['subject-own-reaction', id, locale] as const,
-    queryFn: () => readSubjectOwnReaction({ data: { id, locale } }),
+    queryKey: [
+      'subject-own-reaction',
+      id,
+      locale,
+      scope.reader,
+      scope.admission,
+      scope.view,
+      scope.cacheEpoch,
+    ] as const,
+    meta: { subjectReactionScope: scope.scopeKey, subjectReactionCacheEpoch: scope.cacheEpoch },
+    queryFn: async (): Promise<SubjectOwnReaction> => {
+      const reader = scope.reader;
+      if (!reader || !scope.isCurrent() || !scope.hasLiveObserver())
+        throw new Error('Subject reaction observation retired');
+      const result = await readSubjectOwnReaction({ data: { id, locale, expectedReader: reader } });
+      if (!result || result.reader !== reader || !scope.isCurrent() || !scope.hasLiveObserver())
+        throw new Error('Subject reaction reader changed');
+      return result;
+    },
+    enabled: personalRead.enabled && scope.reader !== null && scope.isCurrent() && scope.hasLiveObserver(),
+    staleTime: Infinity,
     retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
 export const subjectOwnRatingQuery = (

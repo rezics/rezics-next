@@ -14,6 +14,7 @@ export const session = '__Host-rezics_session';
 const login = '__Host-rezics_login';
 const resource = 'https://api.rezics.test';
 export const subjectId = fixtures.subjects[0]!.id;
+export const subjectReactionReader = 'alice';
 export const subjectPath = `/en/subjects/${subjectId}/${slug(fixtures.subjects[0]!.labels.en!)}`;
 export type Call = { method: string; path: string; body: unknown; key: string | null; authorization: string | null };
 export type SubjectKind = 'like' | 'love' | 'laugh' | 'insightful' | 'sad';
@@ -321,7 +322,7 @@ export async function createSubjectReactionPages(state: SubjectReactionState = {
       nonce: params.get('nonce')!,
       redirectUri: params.get('redirect_uri')!,
       scope: params.get('scope')!,
-      sub: 'alice',
+      sub: subjectReactionReader,
       expiresIn: 3600,
     });
     const loginCookie = cookieValue(start, login);

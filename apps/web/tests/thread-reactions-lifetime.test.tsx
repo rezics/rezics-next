@@ -151,6 +151,7 @@ const boundaries = [
   'csrf',
   'away/back',
   'session-loss',
+  'session-error',
   'session-removal',
   'readiness',
   'signed-in',
@@ -165,7 +166,7 @@ for (const boundary of boundaries)
       await click(m.reaction_sad());
       expect(calls).toHaveLength(1);
       expect(chip(m.reaction_sad()).disabled).toBe(false);
-      expect(calls[0]!.data).toEqual({ target: 'post', id: 'one', kind: 'love' });
+      expect(calls[0]!.data).toEqual({ target: 'post', id: 'one', kind: 'love', expectedReader: 'reader-one' });
       expect(calls[0]!.headers.get('x-csrf-token')).toBe('csrf-one');
 
       if (boundary === 'target-id') await paint({ ...fresh(), target: { kind: 'post', id: 'two' } });
@@ -189,7 +190,23 @@ for (const boundary of boundaries)
         await paint(fresh());
         previousClient.clear();
       }
-      if (['account', 'csrf', 'away/back', 'session-loss', 'session-removal'].includes(boundary)) {
+      if (boundary === 'session-error') {
+        await act(async () => {
+          await client
+            .fetchQuery({
+              ...sessionQuery,
+              staleTime: 0,
+              queryFn: async () => {
+                throw new Error('session refresh failed');
+              },
+            })
+            .catch(() => {});
+        });
+        const sessionEntry = client.getQueryCache().find({ queryKey: sessionQuery.queryKey });
+        expect(sessionEntry?.state.status).toBe('error');
+        expect(sessionEntry?.state.data).toEqual(viewer());
+      }
+      if (['account', 'csrf', 'away/back', 'session-loss', 'session-error', 'session-removal'].includes(boundary)) {
         await act(async () => {
           if (boundary === 'account') client.setQueryData(sessionQuery.queryKey, viewer('reader-two', 'csrf-two'));
           if (boundary === 'csrf') client.setQueryData(sessionQuery.queryKey, viewer('reader-one', 'csrf-two'));
@@ -202,7 +219,7 @@ for (const boundary of boundaries)
             client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
           if (boundary === 'session-removal') client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
         });
-        if (boundary === 'session-loss' || boundary === 'session-removal') {
+        if (boundary === 'session-loss' || boundary === 'session-error' || boundary === 'session-removal') {
           expect(chips().every((node) => node.disabled)).toBe(true);
           await act(async () => {
             client.setQueryData(sessionQuery.queryKey, viewer());
@@ -225,7 +242,12 @@ for (const boundary of boundaries)
       // A fresh current choice remains usable; it does not wait for or replay the retired queue.
       await click(m.reaction_like());
       expect(calls).toHaveLength(2);
-      expect(calls[1]!.data).toEqual({ target: props.target.kind, id: props.target.id, kind: 'like' });
+      expect(calls[1]!.data).toEqual({
+        target: props.target.kind,
+        id: props.target.id,
+        kind: 'like',
+        expectedReader: boundary === 'account' ? 'reader-two' : 'reader-one',
+      });
       expect(calls[1]!.headers.get('x-csrf-token')).toBe(
         boundary === 'account' || boundary === 'csrf' ? 'csrf-two' : 'csrf-one',
       );
@@ -234,6 +256,53 @@ for (const boundary of boundaries)
       expect(pressed()).toEqual([`${m.reaction_like()}10`]);
     });
   }
+
+for (const targetKind of ['thread', 'post', 'subject'] as const)
+  test(`${targetKind} commands retire on a retained-data session error and recover for the same reader`, async () => {
+    props = { ...baseline(), target: { kind: targetKind, id: 'one' } };
+    await paint();
+    await click(m.reaction_love());
+    await click(m.reaction_sad());
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.data.expectedReader).toBe('reader-one');
+    const queuedChoice = chip(m.reaction_sad());
+
+    await act(async () => {
+      await client
+        .fetchQuery({
+          ...sessionQuery,
+          staleTime: 0,
+          queryFn: async () => {
+            throw new Error('session refresh failed');
+          },
+        })
+        .catch(() => {});
+      const sessionEntry = client.getQueryCache().find({ queryKey: sessionQuery.queryKey });
+      expect(sessionEntry?.state.status).toBe('error');
+      expect(sessionEntry?.state.data).toEqual(viewer());
+      queuedChoice.click();
+      calls[0]!.resolve({ ok: true });
+      await tick();
+    });
+    expect(calls).toHaveLength(1);
+    expect(refreshed).toEqual([]);
+    expect(chips().every((node) => node.disabled)).toBe(true);
+
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, viewer());
+    });
+    await paint(fresh());
+    await click(m.reaction_like());
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.data).toEqual({
+      target: targetKind,
+      id: 'one',
+      kind: 'like',
+      expectedReader: 'reader-one',
+    });
+    await settle(1);
+    expect(refreshed).toEqual(['replacement']);
+  });
 
 test('a session transition before queued work starts fences transport immediately, before a replacement render', async () => {
   await paint();

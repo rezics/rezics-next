@@ -6,6 +6,7 @@ import {
   subjectPath,
   subjectId,
   session,
+  subjectReactionReader,
   type Call,
   type SubjectKind,
 } from './support/reaction-pages';
@@ -157,7 +158,11 @@ test(
       expect(browserPosts).toHaveLength(3);
       const csrf = await browserSessionToken(page);
       expect(csrf).toBeTruthy();
-      for (const request of browserPosts) expect(request.headers()['x-csrf-token']).toBe(csrf!);
+      for (const request of browserPosts) {
+        expect(request.headers()['x-csrf-token']).toBe(csrf!);
+        expect(request.postData() ?? '').toContain('expectedReader');
+        expect(request.postData() ?? '').toContain(subjectReactionReader);
+      }
     } finally {
       await page.context().close();
     }
