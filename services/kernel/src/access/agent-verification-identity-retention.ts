@@ -1,4 +1,24 @@
 import { createHash } from 'node:crypto';
+import type { WorkContext } from '../work/registry.ts';
+import type { WorkClient } from '../work/client.ts';
+import {
+  withAgentIdentityHistoryUnit,
+  currentAgentIdentityHistoryUnit,
+  readAgentIdentityRetirementStage,
+  type AgentIdentityRetirementStage,
+} from '../history/agent-identity-retirement.ts';
+import {
+  identityHistoryCommand,
+  reserveIdentityHistoryWork,
+  nativeWork,
+  addNativeWork,
+  IdentityHistoryWorkUnavailable,
+} from '../history/agent-identity-inventory-work.ts';
+import {
+  AGENT_IDENTITY_HISTORY_GUARD_COST,
+  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+} from '../history/agent-identity-sdk-fence.ts';
+import type { HistoryReceivingContext } from '../history/receiving.ts';
 import type { Pool } from 'pg';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import {
@@ -11,7 +31,6 @@ import {
   verifyIdentitySourceConsumerCustody,
   type IdentitySourceConsumerCustody,
 } from '../semantic/identity-source-consumer-custody.ts';
-import { identityBindingData, lookupIdentityBinding, readAccountIdentityUndo } from '../semantic/identity-epoch-binding.ts';
 import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
 import {
   agentIdentityCopyRetention,
@@ -93,12 +112,20 @@ function live(tx: CommandTransaction, receipt: AccountReceipt): boolean {
 /** Only the Account writer's actual closed branches survive, never arbitrary JSON fields. */
 function technicalIntent(value: IdentityIntent, receipt: AccountReceipt): IdentityIntent | null {
   if (receipt.kind === 'account-agent.verify' && value.kind === 'merge')
-    return { kind: 'merge', redirected: value.redirected, survivor: value.survivor, release: value.release };
+    return {
+      kind: 'merge',
+      redirected: value.redirected,
+      survivor: value.survivor,
+      release: value.release,
+    };
   if (receipt.kind === 'account-agent.unverify' && value.kind === 'unmerge')
     return {
       kind: 'unmerge',
       original: value.original,
-      undoJob: { jobId: value.undoJob.jobId, epoch: BigInt(value.undoJob.epoch) },
+      undoJob: {
+        jobId: value.undoJob.jobId,
+        epoch: BigInt(value.undoJob.epoch),
+      },
       verificationReceipt: value.verificationReceipt,
       release: value.release,
     };
@@ -186,7 +213,10 @@ async function decodeTechnicalSource(tx: CommandTransaction, receipt: AccountRec
     return null;
   const intent = technicalIntent(row.intent as IdentityIntent, receipt);
   if (!intent) return null;
-  const input = Object.freeze({ intent: Object.freeze(intent), receipt: Object.freeze({ ...receipt }) });
+  const input = Object.freeze({
+    intent: Object.freeze(intent),
+    receipt: Object.freeze({ ...receipt }),
+  });
   const binding = await accepted(tx, input);
   if (
     !binding ||
@@ -363,10 +393,24 @@ export type AgentIdentityRetentionPending = Readonly<{
     | 'native-erasure-source-home-root-custody-unavailable'
     | 'native-source-job-unavailable'
     | 'native-source-copies-pending'
+    | 'native-source-recovery-copies-unavailable'
+    | 'identity-history-native-funding-unavailable'
+    | 'identity-history-current-unit-unavailable'
     | AgentIdentityConsumerCustodyPending['dependency'];
   copies: ReturnType<typeof agentIdentityCopyRetention>;
   receiving?: 'unavailable' | 'verified';
 }>;
+
+export type AgentIdentityRetentionResult =
+  | AgentIdentityRetentionPending
+  | Readonly<{
+      state: 'minimized';
+      key: AgentIdentitySourceKey;
+      gap: null;
+      copies: ReturnType<typeof agentIdentityCopyRetention>;
+      receiving: 'verified';
+    }>;
+export type AgentIdentityRetentionDependencies = Pick<WorkContext, 'client' | 'env' | 'clock'>;
 
 type NativeSource = {
   account_id: string;
@@ -389,19 +433,23 @@ function validateInput(input: AgentIdentityRetentionInput): number {
   const { barrier, keys, role } = input;
   if (
     routeOf(barrier.accountId) !== barrier.accountRoute ||
-    !Number.isSafeInteger(barrier.version) || barrier.version < 1 || barrier.version > 2147483647 ||
-    typeof barrier.at !== 'string' || barrier.at.length > 64 || !Number.isFinite(Date.parse(barrier.at)) ||
+    !Number.isSafeInteger(barrier.version) ||
+    barrier.version < 1 ||
+    barrier.version > 2147483647 ||
+    typeof barrier.at !== 'string' ||
+    barrier.at.length > 64 ||
+    !Number.isFinite(Date.parse(barrier.at)) ||
     !['account_id', 'requested_by', 'decided_by'].includes(role) ||
-    keys.length < 1 || keys.length > MAX_AGENT_IDENTITY_RETENTION_KEYS
-  ) throw new TypeError('Invalid native identity retention request');
+    keys.length < 1 ||
+    keys.length > MAX_AGENT_IDENTITY_RETENTION_KEYS
+  )
+    throw new TypeError('Invalid native identity retention request');
   const partition = partitionOf(keys[0]!.route);
   const unique = new Set<string>();
   for (const key of keys) {
     const identity = agentIdentitySourceKey(key);
-    if (
-      partitionOf(key.route) !== partition ||
-      unique.has(identity)
-    ) throw new TypeError('Identity retention requires at most eight distinct native keys in one home');
+    if (partitionOf(key.route) !== partition || unique.has(identity))
+      throw new TypeError('Identity retention requires at most eight distinct native keys in one home');
     unique.add(identity);
   }
   return partition;
@@ -413,20 +461,25 @@ function validateInput(input: AgentIdentityRetentionInput): number {
 async function lockRoot(tx: CommandTransaction, barrier: HistoryBarrier): Promise<boolean> {
   // Neither an indexed foreign read nor a released snapshot carries a live root fence.
   if (currentCommand(tx).partition !== partitionOf(barrier.accountRoute)) return false;
-  const root = (await tx.query<{ version: number; at: string }>(
-    'SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2 FOR SHARE',
-    [barrier.accountRoute, barrier.accountId],
-  )).rows[0];
+  const root = (
+    await tx.query<{ version: number; at: string }>(
+      'SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2 FOR SHARE',
+      [barrier.accountRoute, barrier.accountId],
+    )
+  ).rows[0];
   if (!root || root.version !== barrier.version || root.at !== barrier.at) return false;
-  const account = (await tx.query<{ state: string; authn_fenced: boolean }>(
-    'SELECT state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',
-    [barrier.accountRoute, barrier.accountId],
-  )).rows[0];
+  const account = (
+    await tx.query<{ state: string; authn_fenced: boolean }>(
+      'SELECT state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',
+      [barrier.accountRoute, barrier.accountId],
+    )
+  ).rows[0];
   if (account?.state !== 'deleted' || !account.authn_fenced) return false;
-  const home = (await tx.query<{ write_state: string }>(
-    'SELECT write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
-    [partitionOf(barrier.accountRoute)],
-  )).rows[0];
+  const home = (
+    await tx.query<{ write_state: string }>('SELECT write_state FROM core.partition WHERE partition_no=$1 FOR SHARE', [
+      partitionOf(barrier.accountRoute),
+    ])
+  ).rows[0];
   return home?.write_state === 'active';
 }
 
@@ -437,7 +490,7 @@ async function lockRoot(tx: CommandTransaction, barrier: HistoryBarrier): Promis
 export async function prepareAgentIdentityRetention(
   tx: CommandTransaction,
   input: AgentIdentityRetentionInput,
-): Promise<readonly AgentIdentityRetentionPending[]> {
+): Promise<readonly AgentIdentityRetentionResult[]> {
   return prepareNativeRetention(tx, input);
 }
 
@@ -445,13 +498,15 @@ type StagedRetention = Readonly<{
   reference: IdentitySourceConsumerReference | null;
   custody: IdentitySourceConsumerCustody | null;
   copy: PreparedAgentIdentityCopy;
+  stage: AgentIdentityRetirementStage | null;
+  client: WorkClient;
 }>;
 
 async function prepareNativeRetention(
   tx: CommandTransaction,
   input: AgentIdentityRetentionInput,
   staged?: readonly (StagedRetention | null)[],
-): Promise<readonly AgentIdentityRetentionPending[]> {
+): Promise<readonly AgentIdentityRetentionResult[]> {
   const partition = validateInput(input);
   const command = currentCommand(tx);
   if (command.partition !== partition || command.basis !== null)
@@ -461,62 +516,141 @@ async function prepareNativeRetention(
     if (Date.now() >= deadline) throw new Error('Identity retention command deadline expired');
   };
   checkDeadline();
-  if (partition !== partitionOf(input.barrier.accountRoute)) return Object.freeze(input.keys.map((key) =>
-    Object.freeze({ state: 'pending' as const, key: Object.freeze({ ...key }),
-      gap: 'native-erasure-source-home-root-custody-unavailable' as const,
-      copies: agentIdentityCopyRetention() }),
-  ));
+  if (partition !== partitionOf(input.barrier.accountRoute))
+    return Object.freeze(
+      input.keys.map((key) =>
+        Object.freeze({
+          state: 'pending' as const,
+          key: Object.freeze({ ...key }),
+          gap: 'native-erasure-source-home-root-custody-unavailable' as const,
+          copies: agentIdentityCopyRetention(),
+        }),
+      ),
+    );
+  if (staged)
+    await reserveIdentityHistoryWork(
+      currentCommandResources(tx).pool,
+      nativeWork(4 + input.keys.length, 4 + input.keys.length, 4 + input.keys.length, 16384),
+    );
   const root = await lockRoot(tx, input.barrier);
-  const home = root ? (await tx.query<{ epoch: number; position: string; write_state: string }>(
-    'SELECT epoch,position::text,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
-    [partition],
-  )).rows[0] : undefined;
-  const prepared: AgentIdentityRetentionPending[] = [];
+  const home = root
+    ? (
+        await tx.query<{
+          epoch: number;
+          position: string;
+          write_state: string;
+        }>('SELECT epoch,position::text,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE', [partition])
+      ).rows[0]
+    : undefined;
+  const preparedResults: AgentIdentityRetentionResult[] = [];
   for (const [index, key] of input.keys.entries()) {
     checkDeadline();
     let gap: AgentIdentityRetentionPending['gap'] = 'native-erasure-root-unavailable';
     let receiving: AgentIdentityRetentionPending['receiving'];
     let copies = agentIdentityCopyRetention(staged?.[index]?.copy);
     if (root) {
-      const row = (await tx.query<NativeSource>(
-        `SELECT account_id,requested_by,decided_by,source_partition,source_epoch,source_position::text,
+      const row = (
+        await tx.query<NativeSource>(
+          `SELECT account_id,requested_by,decided_by,source_partition,source_epoch,source_position::text,
            source_transaction_id,intent_digest,minimized
          FROM access.agent_identity_intent
          WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4 FOR UPDATE`,
-        [key.route, key.accountId, key.direction, key.receiptId],
-      )).rows[0];
-      gap = !row ? 'native-source-missing'
-        : row[input.role] !== input.barrier.accountId ? 'native-source-role-unavailable'
-        : !home || home.write_state !== 'active' || row.source_partition !== partition ||
-          row.source_epoch !== home.epoch || BigInt(row.source_position) > BigInt(home.position) ||
-          row.minimized || !/^[0-9a-f]{64}$/.test(row.intent_digest)
-          ? 'native-source-owner-unavailable'
-          : agentIdentityConsumerCustody.dependency;
+          [key.route, key.accountId, key.direction, key.receiptId],
+        )
+      ).rows[0];
+      gap = !row
+        ? 'native-source-missing'
+        : row[input.role] !== input.barrier.accountId
+          ? 'native-source-role-unavailable'
+          : !home ||
+              home.write_state !== 'active' ||
+              row.source_partition !== partition ||
+              row.source_epoch !== home.epoch ||
+              BigInt(row.source_position) > BigInt(home.position) ||
+              row.minimized ||
+              !/^[0-9a-f]{64}$/.test(row.intent_digest)
+            ? 'native-source-owner-unavailable'
+            : agentIdentityConsumerCustody.dependency;
       const prepared = staged?.[index];
       if (row && prepared && gap === agentIdentityConsumerCustody.dependency) {
         const { reference, custody, copy } = prepared;
         // Bind the released original component again under the live source/root/owner locks.
         if (!reference) gap = 'native-source-job-unavailable';
-        else if (reference.source.partition !== row.source_partition || reference.source.epoch !== row.source_epoch ||
+        else if (
+          reference.source.partition !== row.source_partition ||
+          reference.source.epoch !== row.source_epoch ||
           reference.source.position !== BigInt(row.source_position) ||
-          reference.source.transactionId !== row.source_transaction_id || reference.sourceDigest !== row.intent_digest)
+          reference.source.transactionId !== row.source_transaction_id ||
+          reference.sourceDigest !== row.intent_digest
+        )
           gap = 'native-source-owner-unavailable';
         else {
-          const consumed = custody !== null && await verifyIdentitySourceConsumerCustody(tx, reference, custody);
-          receiving = await verifyAgentIdentityCopyRetention(tx, input.barrier, copy) ? 'verified' : 'unavailable';
-          const inventory = await verifyAgentIdentityCopyInventory(tx, input.barrier, key, copy);
+          const consumed = custody !== null && (await verifyIdentitySourceConsumerCustody(tx, reference, custody));
+          await reserveIdentityHistoryWork(currentCommandResources(tx).pool, nativeWork(72, 72, 12, 20480));
+          receiving = (await verifyAgentIdentityCopyRetention(tx, input.barrier, copy)) ? 'verified' : 'unavailable';
+          const inventory = await verifyAgentIdentityCopyInventory(
+            tx,
+            input.barrier,
+            key,
+            copy,
+            prepared.stage ?? undefined,
+            prepared.client,
+          );
           copies = agentIdentityCopyRetention(copy, inventory);
-          // The original inventory verifier has only a pending result: native receiving
-          // closure does not discharge the independently retained SDK obligation.
           gap = consumed ? 'native-source-copies-pending' : agentIdentityConsumerCustody.dependency;
+          if (consumed && receiving === 'verified' && inventory.state === 'verified') {
+            const { pool } = currentCommandResources(tx);
+            await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 0));
+            const recovery = await tx.query(
+              `SELECT 1 FROM access.agent_identity_recovery
+              WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4 FOR SHARE`,
+              [key.route, key.accountId, key.direction, key.receiptId],
+            );
+            if (recovery.rowCount) gap = 'native-source-recovery-copies-unavailable';
+            else {
+              // One UPDATE; the native trigger independently locks original authority,
+              // all-role copy/physical custody, root, restore and current writer closure.
+              await reserveIdentityHistoryWork(pool, AGENT_IDENTITY_ROLE_TRANSITION_COST);
+              const changed = await tx.query(
+                `UPDATE access.agent_identity_intent
+                SET requested_by=CASE WHEN requested_by=$5 THEN NULL ELSE requested_by END,
+                    decided_by=CASE WHEN decided_by=$5 THEN NULL ELSE decided_by END,
+                    reason=CASE WHEN decided_by=$5 THEN NULL ELSE reason END,
+                    intent=CASE WHEN $6='account_id' THEN '{}'::jsonb ELSE intent END,
+                    minimized=minimized OR $6='account_id'
+                WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+                [key.route, key.accountId, key.direction, key.receiptId, input.barrier.accountId, input.role],
+              );
+              if (changed.rowCount !== 1) throw new Error('Identity retention source changed after verification');
+              // Do not re-read the destroyed payload as authority. Native trigger locks
+              // and Source's original handoff survive this actual command COMMIT.
+              preparedResults.push(
+                Object.freeze({
+                  state: 'minimized',
+                  key: Object.freeze({ ...key }),
+                  gap: null,
+                  copies,
+                  receiving: 'verified',
+                }),
+              );
+              continue;
+            }
+          }
         }
       }
     }
-    prepared.push(Object.freeze({ state: 'pending', key: Object.freeze({ ...key }), gap,
-      copies, ...(receiving ? { receiving } : {}) }));
+    preparedResults.push(
+      Object.freeze({
+        state: 'pending',
+        key: Object.freeze({ ...key }),
+        gap,
+        copies,
+        ...(receiving ? { receiving } : {}),
+      }),
+    );
   }
   checkDeadline();
-  return Object.freeze(prepared);
+  return Object.freeze(preparedResults);
 }
 
 /** Resolve the actual current job without admitting a receipt or substituting the reversal's
@@ -528,71 +662,129 @@ async function consumerReference(
   key: AgentIdentitySourceKey,
   deadline: number,
 ): Promise<IdentitySourceConsumerReference | null> {
-  const receipt = { kind: key.direction, account: key.accountId, receipt: key.receiptId };
+  const receipt = {
+    kind: key.direction,
+    account: key.accountId,
+    receipt: key.receiptId,
+  };
   try {
-    let source: AccountIdentitySource;
-    let job: IdentitySourceConsumerReference['job'];
-    if (receipt.kind === 'account-agent.verify') {
-      const undo = await readAccountIdentityUndo(pool, { ...receipt, kind: receipt.kind });
-      source = undo.source;
-      job = undo.job;
-    } else {
-      source = (await runCommand(pool, { partition: partitionOf(key.route), deadline }, async (tx) =>
+    await reserveIdentityHistoryWork(pool, nativeWork(70, 68, 25, 73984));
+    const source = (
+      await runCommand(pool, { partition: partitionOf(key.route), deadline }, async (tx) =>
         noEffect(await readAccountIdentitySource(tx, receipt, undefined, true)),
-      )).value;
-      const binding = await lookupIdentityBinding(pool, { deadline }, source.input);
-      if (!binding) return null;
-      const accepted = identityBindingData(binding);
-      if (accepted.state !== 'accepted' || accepted.digest !== source.digest) return null;
-      job = accepted.job;
-    }
-    const role = { account_id: 'subject', requested_by: 'requester', decided_by: 'decider' } as const;
-    return Object.freeze({ receipt, job, source: {
-      partition: source.partition, epoch: source.epoch, position: source.position, transactionId: source.transactionId,
-    }, sourceDigest: source.digest, barrier: input.barrier, erasedRole: role[input.role] });
+      )
+    ).value;
+    const { readOriginalAccountAgentIdentity } = await import('../semantic/account-agent-identity-recovery.ts');
+    const accepted = await readOriginalAccountAgentIdentity(pool, {
+      account: receipt.account,
+      direction: receipt.kind,
+      receipt: receipt.receipt,
+    });
+    if (!accepted || accepted.digest !== source.digest) return null;
+    const job = accepted.job;
+    const role = {
+      account_id: 'subject',
+      requested_by: 'requester',
+      decided_by: 'decider',
+    } as const;
+    return Object.freeze({
+      receipt,
+      job,
+      source: {
+        partition: source.partition,
+        epoch: source.epoch,
+        position: source.position,
+        transactionId: source.transactionId,
+      },
+      sourceDigest: source.digest,
+      barrier: input.barrier,
+      erasedRole: role[input.role],
+    });
   } catch (error) {
     if (error instanceof IdentityEpochStoreError && error.code === 'identity_epoch_unavailable') return null;
     throw error;
   }
 }
 
-/** Narrow per-row Access cleanup port. Stage the current root and all released Source/copy
- * probes BEFORE the final home command. Preparation is useful native retained custody, never
- * permission to delete. The native finite cut and Source terminal proof remain independent
- * of the inventory owner's unavailable positive all-SDK-custody result.
- */
+// Trigger expansion: fixed native points plus four all-role copy cuts (LIMIT65),
+// original G + A, exact outbox consumers (2*LIMIT33). No invalidation writes occur.
+export const AGENT_IDENTITY_ROLE_TRANSITION_COST = addNativeWork(
+  nativeWork(460, 460, 50, 180224),
+  AGENT_IDENTITY_HISTORY_GUARD_COST,
+  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+);
+
+/** Bounded native role minimizer. Foreign probes release before the final home
+ * command. The original Source frame remains live through the guarded COMMIT. */
 export function minimizeAgentIdentityRetention(
   pool: Pool,
   input: AgentIdentityRetentionInput,
-): Promise<readonly AgentIdentityRetentionPending[]> {
+  deps?: AgentIdentityRetentionDependencies,
+): Promise<readonly AgentIdentityRetentionResult[]> {
   const partition = validateInput(input);
-  // Snapshot caller-owned arrays before any asynchronous work. These select native keys only.
   const fixed = structuredClone(input);
   const deadline = Math.min(deadlineFor(5000), Date.now() + 5000);
+  const pending = (gap: AgentIdentityRetentionPending['gap']) =>
+    fixed.keys.map((key) =>
+      Object.freeze({
+        state: 'pending' as const,
+        key,
+        gap,
+        copies: agentIdentityCopyRetention(),
+      }),
+    );
   return withRequestDeadline(deadline, async () => {
-    // A released root observation screens work only. The final source-home lock is mandatory.
-    const root = (await runCommand(pool, { partition: partitionOf(fixed.barrier.accountRoute), deadline },
-      async (tx) => noEffect(await lockRoot(tx, fixed.barrier)),
-    )).value;
-    if (!root) return fixed.keys.map((key) => Object.freeze({ state: 'pending' as const, key,
-      gap: 'native-erasure-root-unavailable' as const, copies: agentIdentityCopyRetention() }));
-    const initial = (await runCommand(pool, { partition, deadline }, async (tx) =>
-      noEffect(await prepareNativeRetention(tx, fixed)),
-    )).value;
-    const staged: (StagedRetention | null)[] = [];
-    for (const item of initial) {
-      if (item.gap !== agentIdentityConsumerCustody.dependency) { staged.push(null); continue; }
-      const reference = await consumerReference(pool, fixed, item.key, deadline);
-      const copy = await prepareAgentIdentityCopyRetention(pool, fixed.barrier, item.key, deadline);
-      // Reuse an existing original-owner maintenance frame; never allocate or fake funding.
-      const funded = currentIdentitySourceConsumerMaintenance(pool, deadline);
-      const custody = reference ? await readIdentitySourceConsumerCustody(pool, reference, {
-        deadline, ...(funded ? { identityConsumerWork: funded } : {}),
-      }) : null;
-      staged.push({ reference, custody, copy });
+    // Pool-only compatibility never allocates a frame or pretends to possess an SDK client.
+    const unit = currentAgentIdentityHistoryUnit();
+    const client = deps?.client ?? unit?.client;
+    if (!client)
+      return (
+        await runCommand(pool, { partition, deadline }, async (tx) => noEffect(await prepareNativeRetention(tx, fixed)))
+      ).value;
+    const execute = async (context: HistoryReceivingContext) => {
+      if (partition !== 0 || partitionOf(fixed.barrier.accountRoute) !== partition)
+        return pending('native-erasure-source-home-root-custody-unavailable');
+      const initial = await identityHistoryCommand(pool, context, async (tx) => {
+        await reserveIdentityHistoryWork(
+          pool,
+          nativeWork(4 + fixed.keys.length, 4 + fixed.keys.length, 4 + fixed.keys.length, 16384),
+        );
+        return prepareNativeRetention(tx, fixed);
+      });
+      const staged: (StagedRetention | null)[] = [];
+      for (const item of initial) {
+        if (item.gap !== agentIdentityConsumerCustody.dependency) {
+          staged.push(null);
+          continue;
+        }
+        await reserveIdentityHistoryWork(pool, nativeWork(86, 80, 59, 205920));
+        const reference = await consumerReference(pool, fixed, item.key, context.deadline);
+        const stage = reference ? await readAgentIdentityRetirementStage(pool, reference, context) : null;
+        const copy = await prepareAgentIdentityCopyRetention(pool, fixed.barrier, item.key, context.deadline, {
+          client,
+          context,
+        });
+        staged.push({
+          reference,
+          custody: stage?.consumer ?? null,
+          stage,
+          copy,
+          client,
+        });
+      }
+      return identityHistoryCommand(pool, context, (tx) => prepareNativeRetention(tx, fixed, staged));
+    };
+    try {
+      // Reuse an existing callback frame; nested/replacement frames are forbidden.
+      if (unit) return await execute(unit.context);
+      if (currentIdentitySourceConsumerMaintenance(pool, deadline))
+        return pending('identity-history-current-unit-unavailable');
+      if (!deps) return pending('identity-history-current-unit-unavailable');
+      return await withAgentIdentityHistoryUnit({ pool, ...deps }, { deadline }, execute);
+    } catch (error) {
+      if (error instanceof IdentityHistoryWorkUnavailable)
+        return pending('identity-history-native-funding-unavailable');
+      throw error;
     }
-    return (await runCommand(pool, { partition, deadline }, async (tx) =>
-      noEffect(await prepareNativeRetention(tx, fixed, staged)),
-    )).value;
   });
 }

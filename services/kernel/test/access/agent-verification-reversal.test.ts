@@ -3266,3 +3266,179 @@ test('native identity retention refuses a foreign root on a source-home command 
     [accountRoute, account.id],
   )).rows).toEqual(before);
 });
+
+test('default native identity cleanup refuses incomplete copies then minimizes the exact original source under real receiving closure while preserving surviving attribution and technical undo', async () => {
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueAgentIdentityVerification, enqueueAgentIdentityReversal, agentIdentityRetirementReadiness } =
+    await import('../../src/history/agent-identity-work.ts');
+  const { reverseDeletedAccountAgent } = await import('../../src/access/agent-verification.ts');
+  const { openNativeErasure, advanceNativeErasure, NATIVE_ERASURE_GROUPS } =
+    await import('../../src/access/erasure-native.ts');
+  const { admitSharedHistory, advanceSharedHistory } = await import('../../src/access/shared-history.ts');
+  const { HistoryRegistry } = await import('../../src/history/registry.ts');
+  const { readAccountIdentityUndo } = await import('../../src/semantic/identity-epoch-binding.ts');
+  const { account } = await verifiedHistoryHomeZero();
+  const original = (
+    await pool.query(
+      `SELECT * FROM access.agent_identity_intent WHERE route=0 AND account_id=$1 AND direction='account-agent.verify'`,
+      [account.id],
+    )
+  ).rows[0]!;
+  const client = await createWorkClient(databaseUrl, pool);
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityVerification(pool, client, original.request_id, original.receipt_id)).toBe(
+      'admitted',
+    );
+    await pool.query(
+      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+       VALUES(0,$1,$1,'account:delete','(,)',$1)`,
+      [account.id],
+    );
+    const actor = await authenticateAccount(
+      access,
+      { pool, deadline: Date.now() + 10_000 },
+      {
+        accountId: account.id,
+        clientId: 'native-identity-cleanup-test',
+        scopes: ['account:delete'],
+      },
+    );
+    await createLifecycleCommands({ pool, access, clock }).tombstone(
+      { actor, deadline: Date.now() + 10_000 },
+      { accountId: account.id, key: key() },
+    );
+    await reverseDeletedAccountAgent(pool, account.id);
+    const reversal = (
+      await pool.query(
+        `SELECT data FROM core.outbox WHERE partition_no=0 AND subject=$1
+       AND type='com.rezics.access.agent-verification.reversing.v1'`,
+        [account.id],
+      )
+    ).rows[0]!.data as AgentVerificationReversal;
+    await finish(reversal);
+    expect(await enqueueAgentIdentityReversal(pool, client, reversal)).toBe('admitted');
+    const sources = (
+      await pool.query(
+        'SELECT * FROM access.agent_identity_intent WHERE route=0 AND account_id=$1 ORDER BY direction,receipt_id',
+        [account.id],
+      )
+    ).rows;
+    expect(sources).toHaveLength(2);
+    const progress = await openNativeErasure(pool, account.id);
+    const phase = NATIVE_ERASURE_GROUPS.findIndex(
+      ([store, role]) => store === 'agent_identity_intent' && role === 'account_id',
+    );
+    expect(phase).toBeGreaterThanOrEqual(0);
+    // Select an ordinary scalar page, never install a Source/SDK/receiving verdict.
+    const select = () =>
+      pool.query('UPDATE access.erasure_native_progress SET phase=$2,page=0 WHERE progress_id=$1', [progress, phase]);
+    await select();
+    await advanceNativeErasure(pool, progress, {
+      client,
+      env: process.env,
+      clock,
+    });
+    expect(
+      (
+        await pool.query(
+          'SELECT * FROM access.agent_identity_intent WHERE route=0 AND account_id=$1 ORDER BY direction,receipt_id',
+          [account.id],
+        )
+      ).rows,
+    ).toEqual(sources);
+    expect(
+      (
+        await pool.query('SELECT reason FROM access.erasure_native_blocked WHERE progress_id=$1 AND phase=$2', [
+          progress,
+          phase,
+        ])
+      ).rows[0]?.reason,
+    ).toBe('verification-source-custody');
+
+    const history = randomUUID();
+    await runCommand(pool, { partition: 0 }, async (tx) => {
+      await admitSharedHistory(tx, account.id, history);
+      return noEffect(null);
+    });
+    const registry = new HistoryRegistry();
+    registry.registerOwner({
+      name: 'access.agent-identity',
+      artifactType: 'durable-work/v1',
+      version: 1,
+      readiness: agentIdentityRetirementReadiness,
+    });
+    // Exercise the installed default selected unit and native physical minimizers.
+    // This regression intentionally runs only with final-frame funding installed.
+    for (let step = 0; step < 32; step++) {
+      await advanceSharedHistory({ pool, client, registry, env: process.env, clock }, history);
+      const remaining = (
+        await pool.query(
+          `SELECT count(*)::integer n FROM core.history_locator WHERE partition_no=0 AND account_id=$1
+         AND state<>'minimized'`,
+          [account.id],
+        )
+      ).rows[0]!.n;
+      if (remaining === 0) break;
+    }
+    expect(
+      (
+        await pool.query(
+          `SELECT count(*)::integer n FROM core.history_locator WHERE partition_no=0 AND account_id=$1
+       AND state<>'minimized'`,
+          [account.id],
+        )
+      ).rows[0]!.n,
+    ).toBe(0);
+    await select();
+    await advanceNativeErasure(pool, progress, {
+      client,
+      env: process.env,
+      clock,
+    });
+    const minimized = (
+      await pool.query(
+        'SELECT * FROM access.agent_identity_intent WHERE route=0 AND account_id=$1 ORDER BY direction,receipt_id',
+        [account.id],
+      )
+    ).rows;
+    expect(minimized).toHaveLength(sources.length);
+    for (let i = 0; i < sources.length; i++) {
+      expect(minimized[i]).toMatchObject({
+        minimized: true,
+        intent: {},
+        decided_by: sources[i].decided_by === account.id ? null : sources[i].decided_by,
+        requested_by: sources[i].requested_by === account.id ? null : sources[i].requested_by,
+        intent_digest: sources[i].intent_digest,
+        source_transaction_id: sources[i].source_transaction_id,
+      });
+    }
+    expect(
+      (await pool.query('SELECT state FROM access.account WHERE route=$1 AND account_id=$2', [accountRoute, staff.id]))
+        .rows[0]!.state,
+    ).toBe('active');
+    const undo = await readAccountIdentityUndo(pool, {
+      kind: 'account-agent.verify',
+      account: account.id,
+      receipt: original.receipt_id,
+    });
+    expect(undo.source.digest).toBe(original.intent_digest);
+    // A retry cannot delete the technical skeleton or surviving decider attribution.
+    await select();
+    await advanceNativeErasure(pool, progress, {
+      client,
+      env: process.env,
+      clock,
+    });
+    expect(
+      (
+        await pool.query(
+          'SELECT * FROM access.agent_identity_intent WHERE route=0 AND account_id=$1 ORDER BY direction,receipt_id',
+          [account.id],
+        )
+      ).rows,
+    ).toEqual(minimized);
+  } finally {
+    await client.destroy();
+  }
+});

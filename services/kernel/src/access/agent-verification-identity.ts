@@ -187,7 +187,10 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
       : `accounts.agent-verification-reversal:${source.account}:${source.receipt.receipt}`;
   const commandReceipt =
     source.receipt.kind === 'account-agent.verify'
-      ? { kind: 'access.agent-verification.pending', key: `${source.requestId}:pending` }
+      ? {
+          kind: 'access.agent-verification.pending',
+          key: `${source.requestId}:pending`,
+        }
       : source.commandReceipt;
   if (!commandReceipt) throw new TypeError('Reversal source requires its original native command key');
   const actualReceipt = currentCommandReceipt(tx);
@@ -238,7 +241,11 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
   const row = inserted.rows[0];
   const { ACCOUNT_ROLE_BITS: roles } = await import('../history/contracts.ts');
   const { unionHistoryScope } = await import('../history/record.ts');
-  const ref = (accountId: string, mask: number) => ({ accountRoute: routeOf(accountId)!, accountId, roles: mask });
+  const ref = (accountId: string, mask: number) => ({
+    accountRoute: routeOf(accountId)!,
+    accountId,
+    roles: mask,
+  });
   const undoRoles =
     source.undo?.source.roles.map(({ account_id, role }) => {
       // This is the genuine released undo's closed Accounts vocabulary, not caller role text.
@@ -313,10 +320,14 @@ export async function readAccountIdentitySource(
   if (command.basis !== null || command.partition !== partitionOf(route))
     throw new TypeError('Accounts source verification requires its native platform home');
   const time = authoritativeTimeValue(command.time);
-  const account = await tx.query<{ kind: 'actor' | 'organization'; state: string; authn_fenced: boolean }>(
-    `SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`,
-    [route, receipt.account],
-  );
+  const account = await tx.query<{
+    kind: 'actor' | 'organization';
+    state: string;
+    authn_fenced: boolean;
+  }>(`SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`, [
+    route,
+    receipt.account,
+  ]);
   const current = account.rows[0];
   // A committed terminal tombstone is authority only for the exact existing mechanical reversal.
   if (
@@ -325,7 +336,7 @@ export async function readAccountIdentitySource(
   )
     throw accountIdentityUnavailable(`account fenced or absent ${receipt.account}`);
   const row = (await tx.query(read.sql, [route, receipt.account, receipt.kind, receipt.receipt])).rows[0];
-  if (!row && undoOnly) {
+  if ((!row || row.minimized) && undoOnly) {
     const technical = await readAccountIdentityTechnicalSource(tx, receipt);
     if (technical) {
       if (intent && normalized(intent) !== normalized(technical.input.intent))
@@ -372,10 +383,19 @@ export async function readAccountIdentitySource(
   // pg JSON carries decimal bigint text; reconstruct only this closed native field.
   const nativeIntent: IdentityIntent =
     stored.kind === 'unmerge'
-      ? { ...stored, undoJob: { jobId: stored.undoJob.jobId, epoch: BigInt(stored.undoJob.epoch) } }
+      ? {
+          ...stored,
+          undoJob: {
+            jobId: stored.undoJob.jobId,
+            epoch: BigInt(stored.undoJob.epoch),
+          },
+        }
       : stored;
   const source = Object.freeze({
-    input: Object.freeze({ intent: Object.freeze(nativeIntent), receipt: Object.freeze({ ...receipt }) }),
+    input: Object.freeze({
+      intent: Object.freeze(nativeIntent),
+      receipt: Object.freeze({ ...receipt }),
+    }),
     partition: command.partition,
     epoch: row.source_epoch,
     position: BigInt(row.source_position),
@@ -390,7 +410,12 @@ export async function readAccountIdentitySource(
       ].map((role) => Object.freeze(role)),
     ),
   });
-  nativeSources.set(source, { time, key: keyOf(receipt), deadline: currentCommandResources(tx).deadline, undoOnly });
+  nativeSources.set(source, {
+    time,
+    key: keyOf(receipt),
+    deadline: currentCommandResources(tx).deadline,
+    undoOnly,
+  });
   return source;
 }
 
@@ -493,7 +518,11 @@ export async function publishedAccountIdentityUndo(
   job: IdentityJobRef;
   source: AccountIdentitySource;
 }> {
-  const receipt: AccountReceipt = { kind: 'account-agent.verify', account, receipt: verificationReceipt };
+  const receipt: AccountReceipt = {
+    kind: 'account-agent.verify',
+    account,
+    receipt: verificationReceipt,
+  };
   const { readAccountIdentityUndo } = await import('../semantic/identity-epoch-binding.ts');
   const existing = await readAccountIdentityUndo(pool, receipt);
   const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-epoch-store.ts');

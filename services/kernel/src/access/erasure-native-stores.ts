@@ -143,6 +143,7 @@ export async function nativeStoreBlocker(
   store: string,
   key: readonly string[],
   accountId: string,
+  role?: string,
 ): Promise<NativeStoreBlocker | null> {
   if (store === 'account_discovery_intent' || store === 'account_discovery_claim_intent') {
     // Source notifications must commit their actual outbox delivery. Deleting an
@@ -171,13 +172,19 @@ export async function nativeStoreBlocker(
     );
     return row.rowCount ? 'verification-source-custody' : null;
   }
+  if (store === 'agent_identity_intent' && ['account_id', 'requested_by', 'decided_by'].includes(role ?? '')) {
+    const row = await tx.query(
+      `SELECT 1 FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4
+       AND ${role}=$5 ${role === 'account_id' ? 'AND NOT minimized' : ''}`,
+      [...key, accountId],
+    );
+    return row.rowCount ? 'verification-source-custody' : null;
+  }
   if (store === 'agent_identity_intent' || store === 'agent_identity_recovery') {
     const row = await tx.query(
       `SELECT 1 FROM access.${store} WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
       [...key],
     );
-    // The source's immutable-row guard explicitly requires receiving erasure
-    // custody. A published job alone cannot release later undo/recovery reads.
     if (row.rowCount) return 'verification-source-custody';
   }
   if (store === 'realm_erasure_succession') {
@@ -188,7 +195,11 @@ export async function nativeStoreBlocker(
     if (row.rowCount) return 'realm-succession-source-custody';
   }
   if (store === 'organization_member') {
-    const row = await tx.query<{ live: boolean; held: boolean; closing: boolean }>(
+    const row = await tx.query<{
+      live: boolean;
+      held: boolean;
+      closing: boolean;
+    }>(
       `SELECT (upper_inf(m.valid) OR m.valid @> statement_timestamp()) AS live,
          EXISTS (SELECT 1 FROM access.lifecycle_membership_slot s
            WHERE s.route=m.route AND s.organization_id=m.organization_id AND s.member_account_id=m.member_account_id
@@ -266,6 +277,7 @@ export function nativeResiduePredicate(store: string, role?: string): string {
     AND pending_agent_subject_id IS NULL AND pending_agent_receipt_id IS NULL AND created_at IS NULL
     AND public_changed_at IS NULL AND membership_time IS NULL AND rate_tier='ordinary' AND operator_relation_version=0)`;
 
+  if (store === 'agent_identity_intent' && role === 'account_id') return 'NOT minimized';
   if (store === 'resource_initialization') return '(creator_id IS NOT NULL OR initialized_at IS NOT NULL)';
   return 'true';
 }

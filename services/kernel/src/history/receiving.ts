@@ -15,7 +15,10 @@ import {
   type HistoryProducerFamily,
 } from './registry.ts';
 
-export type HistoryReceivingDependencies = Readonly<{ pool: Pool; clock?: () => Date }>;
+export type HistoryReceivingDependencies = Readonly<{
+  pool: Pool;
+  clock?: () => Date;
+}>;
 export type HistoryReceivingContext = Readonly<{
   deadline: number;
   identityConsumerWork?: IdentitySourceConsumerMaintenanceWork;
@@ -38,7 +41,11 @@ type ReceiptBinding = Readonly<{
 const receipts = new WeakMap<HistoryReceivingReceipt, ReceiptBinding>();
 const coverages = new WeakMap<
   HistoryOwnerCoverage,
-  Readonly<{ barrier: HistoryBarrier; family: HistoryProducerFamily; native: NativeFamilyCoverage }>
+  Readonly<{
+    barrier: HistoryBarrier;
+    family: HistoryProducerFamily;
+    native: NativeFamilyCoverage;
+  }>
 >();
 
 function validateBarrier(barrier: HistoryBarrier): void {
@@ -126,9 +133,10 @@ export async function recordHistoryReceivingProof(
   }
   if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
   const encoded = Buffer.from(encodeLocator(locator));
-  const custodyGap = await receivingGap(tx, partition, locator);
+  const { pool } = (await import('../command/command.ts')).currentCommandResources(tx);
+  const custodyGap = await historyReceivingGap(tx, partition, locator, barrier, pool);
   if (custodyGap) return custodyGap;
-  if (!(await physicalProof(tx, partition, locator))) throw new TypeError('History physical copy remains');
+  if (!(await historyPhysicalProof(tx, partition, locator))) throw new TypeError('History physical copy remains');
   const rows = await nativeScope(tx, partition, locator.artifactType, encoded);
   const own = rows?.find((row) => row.account_id === barrier.accountId && row.account_route === barrier.accountRoute);
   if (!own || own.state !== 'minimized' || own.proof_barrier !== barrier.accountId)
@@ -165,10 +173,12 @@ export async function recordHistoryReceivingProof(
   return null;
 }
 
-async function receivingGap(
+export async function historyReceivingGap(
   tx: CommandTransaction,
   partition: number,
   locator: HistoryArtifact['locator'],
+  barrier?: HistoryBarrier,
+  pool?: Pool,
 ): Promise<string | null> {
   let mapping: Awaited<ReturnType<typeof import('./agent-identity-work.ts').resolveAgentIdentitySDKWork>> = null;
   if (locator.artifactType === 'durable-work/v1') {
@@ -205,17 +215,88 @@ async function receivingGap(
   if (identityGap) return identityGap;
   if (locator.artifactType === 'durable-work/v1') return mapping?.gap ?? null;
   if (locator.artifactType !== 'outbox-event/v1') return null;
-  const consumers = await tx.query(
-    `SELECT consumer FROM core.history_event_consumer
-    WHERE partition_no=$1 AND position=$2 AND event_seq=$3 ORDER BY consumer LIMIT 1`,
-    [partition, locator.position.toString(), locator.eventSeq],
-  );
-  // Completed business effects can still retain their original private DBOS inputs/results.
-  // Until their exact receiving binding is delivered, a source disposition is not copy closure.
-  return consumers.rows.length ? 'outbox-receiving-custody-unavailable' : null;
+  if (partition !== 0 || !barrier) return 'outbox-receiving-custody-unavailable';
+  const charge = async (rows: number, points: number, statements: number, bytes: number) => {
+    if (!pool) return;
+    const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
+    if (owner.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1)) {
+      const { reserveIdentityHistoryWork, nativeWork } = await import('./agent-identity-inventory-work.ts');
+      await reserveIdentityHistoryWork(pool, nativeWork(rows, points, statements, bytes));
+    }
+  };
+  await charge(33, 33, 1, 65536);
+  // Enumerate the closed runtime fanout (32 plus overflow). A completed effect can
+  // retain SDK arguments; only its actual immutable receiving association can close it.
+  const consumers = (
+    await tx.query(
+      `SELECT consumer,workflow_id,state FROM core.history_event_consumer
+     WHERE partition_no=$1 AND position=$2 AND event_seq=$3 ORDER BY consumer LIMIT 33 FOR SHARE`,
+      [partition, locator.position.toString(), locator.eventSeq],
+    )
+  ).rows;
+  if (consumers.length > 32) return 'outbox-receiving-custody-unavailable';
+  for (const consumer of consumers) {
+    if (consumer.state !== 'transferred' && consumer.state !== 'completed')
+      return 'outbox-receiving-custody-unavailable';
+    // Resolve the ORIGINAL outbox handoff, never parse a workflow name or treat a
+    // successful wrapper as the mapped receiving execution. Unknown wrappers refuse.
+    await charge(7, 7, 1, 16384);
+    const association = (
+      await tx.query(
+        `SELECT m.custody_id FROM core.agent_identity_work m
+       JOIN core.agent_identity_sdk_obligation o ON o.partition_no=(m.source->>'partition')::integer
+         AND o.source_route=get_byte(uuid_send((m.source_key::jsonb->>1)::uuid),10)*256+
+                            get_byte(uuid_send((m.source_key::jsonb->>1)::uuid),11)
+         AND o.source_account_id=(m.source_key::jsonb->>1)::uuid
+         AND o.source_direction=m.source_key::jsonb->>0 AND o.source_receipt_id=(m.source_key::jsonb->>2)::uuid
+         AND m.source_key=o.delivery_key AND m.workflow_id=o.workflow_id
+       JOIN core.outbox e ON e.partition_no=o.handoff_partition AND e.epoch=o.handoff_epoch
+         AND e.position=o.handoff_position
+         AND e.type=o.handoff_event_type
+       JOIN core.receipt r ON r.partition_no=o.handoff_partition AND r.epoch=o.handoff_epoch
+         AND r.position=o.handoff_position AND r.transaction_id=o.handoff_transaction_id
+         AND r.principal_kind='account' AND r.command_kind=CASE WHEN $5='agent_verification'
+           THEN 'access.agent-verification.approve' ELSE (SELECT native_command_kind FROM core.agent_identity_inventory i
+               WHERE i.partition_no=o.partition_no AND i.source_route=o.source_route
+                 AND i.source_account_id=o.source_account_id AND i.source_direction=o.source_direction
+                 AND i.source_receipt_id=o.source_receipt_id) END
+       JOIN core.agent_identity_work_source s ON s.partition_no=o.partition_no AND s.source_key=m.source_key
+         AND s.custody_id=m.custody_id AND s.source=m.source AND s.source_generation=m.receiver_generation
+       WHERE m.workflow_id=$4 AND m.creation_captured AND o.handoff_partition=$1 AND o.handoff_position=$2 AND e.event_seq=$3
+         AND (($5='agent_verification' AND e.type='com.rezics.access.agent-verification.approved.v1')
+           OR ($5='agent_verification_reversal' AND e.type='com.rezics.access.agent-verification.reversing.v1'))
+       ORDER BY o.source_route,o.source_account_id,o.source_direction,o.source_receipt_id LIMIT 2 FOR SHARE OF o,e,r,m,s`,
+        [partition, locator.position.toString(), locator.eventSeq, consumer.workflow_id, consumer.consumer],
+      )
+    ).rows;
+    if (association.length !== 1) return 'outbox-receiving-custody-unavailable';
+    const { lockAgentIdentityReceivingArtifact } = await import('./agent-identity-sdk-fence.ts');
+    await charge(69, 69, 4, 24576);
+    const artifact = await lockAgentIdentityReceivingArtifact(tx, association[0]!.custody_id);
+    if (!artifact) return 'outbox-receiving-custody-unavailable';
+    if (pool) {
+      const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
+      if (owner.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1)) {
+        const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
+          await import('./agent-identity-inventory-work.ts');
+        const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
+          await import('./agent-identity-sdk-fence.ts');
+        await reserveIdentityHistoryWork(
+          pool,
+          addNativeWork(
+            nativeWork(76, 75, 13, 131872),
+            AGENT_IDENTITY_HISTORY_GUARD_COST,
+            AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+          ),
+        );
+      }
+    }
+    if (!(await nativeReceipt(tx, barrier, artifact, pool))) return 'outbox-receiving-custody-unavailable';
+  }
+  return null;
 }
 
-async function physicalProof(
+export async function historyPhysicalProof(
   tx: CommandTransaction,
   partition: number,
   locator: HistoryArtifact['locator'],
@@ -262,9 +343,10 @@ async function nativeReceipt(
   tx: CommandTransaction,
   barrier: HistoryBarrier,
   artifact: HistoryArtifact,
+  pool?: Pool,
 ): Promise<ReceiptBinding | null> {
   if (!(await lockHistoryBarrier(tx, barrier))) return null;
-  if (await receivingGap(tx, artifact.partition, artifact.locator)) return null;
+  if (await historyReceivingGap(tx, artifact.partition, artifact.locator, barrier, pool)) return null;
   const digest = scopeDigest(artifact);
   const encoded = Buffer.from(encodeLocator(artifact.locator));
   const rows = await nativeScope(tx, artifact.partition, artifact.locator.artifactType, encoded);
@@ -275,7 +357,11 @@ async function nativeReceipt(
     own.proof_barrier !== barrier.accountId ||
     !scopeDigest({
       ...artifact,
-      accounts: rows!.map((row) => ({ accountRoute: row.account_route, accountId: row.account_id, roles: row.roles })),
+      accounts: rows!.map((row) => ({
+        accountRoute: row.account_route,
+        accountId: row.account_id,
+        roles: row.roles,
+      })),
     }).equals(digest)
   )
     return null;
@@ -302,7 +388,7 @@ async function nativeReceipt(
   if (
     !proof ||
     !Buffer.from(proof.role_digest).equals(digest) ||
-    !(await physicalProof(tx, artifact.partition, artifact.locator))
+    !(await historyPhysicalProof(tx, artifact.partition, artifact.locator))
   )
     return null;
   return {
@@ -326,21 +412,20 @@ export async function readHistoryReceivingReceipt(
   const fixedArtifact = structuredClone(artifact);
   const fixedBarrier = Object.freeze({ ...barrier });
   const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (
-    fixedArtifact.locator.artifactType === 'durable-work/v1' &&
-    maintenance.currentIdentitySourceConsumerMaintenance(deps.pool, context.deadline)
-  ) {
+  if (maintenance.currentIdentitySourceConsumerMaintenance(deps.pool, context.deadline)) {
     const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
       await import('./agent-identity-inventory-work.ts');
     const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
       await import('./agent-identity-sdk-fence.ts');
     await reserveIdentityHistoryWork(
       deps.pool,
-      addNativeWork(
-        nativeWork(76, 75, 17, 132000),
-        AGENT_IDENTITY_HISTORY_GUARD_COST,
-        AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-      ),
+      fixedArtifact.locator.artifactType === 'durable-work/v1'
+        ? addNativeWork(
+            nativeWork(76, 75, 17, 132000),
+            AGENT_IDENTITY_HISTORY_GUARD_COST,
+            AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+          )
+        : nativeWork(76, 75, 12, 24576),
     );
   }
   return withConnection(deps.pool, async (tx) => {
@@ -349,7 +434,7 @@ export async function readHistoryReceivingReceipt(
       await tx.query("SELECT set_config('statement_timeout',$1,true)", [
         `${Math.max(1, context.deadline - Date.now())}ms`,
       ]);
-      const binding = await nativeReceipt(tx, fixedBarrier, fixedArtifact);
+      const binding = await nativeReceipt(tx, fixedBarrier, fixedArtifact, deps.pool);
       historyDeadline(context, artifact.partition);
       await tx.query('COMMIT');
       if (!binding) return null;
@@ -399,7 +484,8 @@ export async function verifyHistoryReceivingReceipt(
       );
     }
   }
-  const current = await nativeReceipt(tx, barrier, artifact);
+  const { pool } = (await import('../command/command.ts')).currentCommandResources(tx);
+  const current = await nativeReceipt(tx, barrier, artifact, pool);
   return current !== null && current.epoch === bound.epoch && current.roleDigest.equals(bound.roleDigest);
 }
 
@@ -424,7 +510,11 @@ export async function readHistoryOwnerCoverage(
       await tx.query('COMMIT');
       if (result.state === 'pending') return result;
       const coverage = Object.freeze({}) as HistoryOwnerCoverage;
-      coverages.set(coverage, { barrier: fixedBarrier, family, native: result.binding });
+      coverages.set(coverage, {
+        barrier: fixedBarrier,
+        family,
+        native: result.binding,
+      });
       return { state: 'complete', coverage };
     } catch (error) {
       await tx.query('ROLLBACK');
@@ -515,7 +605,11 @@ async function recordIdentityReceivingProof(
   const roleDigest = scopeDigest({
     partition,
     locator,
-    accounts: rows!.map((r) => ({ accountRoute: r.account_route, accountId: r.account_id, roles: r.roles })),
+    accounts: rows!.map((r) => ({
+      accountRoute: r.account_route,
+      accountId: r.account_id,
+      roles: r.roles,
+    })),
   });
   // INSERT guard: association + current native guard + eight absence points + work,
   // exact locator, 64 role-digest keys, two FK checks and the original invalidation.
@@ -543,4 +637,15 @@ async function recordIdentityReceivingProof(
     ],
   );
   return null;
+}
+
+/** Current native receiving proof in the held home. This grants no new writer authority. */
+export async function verifyCurrentHistoryReceiving(
+  tx: CommandTransaction,
+  barrier: HistoryBarrier,
+  artifact: HistoryArtifact,
+): Promise<boolean> {
+  if (currentCommand(tx).partition !== artifact.partition) return false;
+  const { pool } = (await import('../command/command.ts')).currentCommandResources(tx);
+  return (await nativeReceipt(tx, barrier, artifact, pool)) !== null;
 }

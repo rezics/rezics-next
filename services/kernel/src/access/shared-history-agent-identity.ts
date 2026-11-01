@@ -1,8 +1,11 @@
+import type { WorkClient } from '../work/client.ts';
+import type { AgentIdentityRetirementStage } from '../history/agent-identity-retirement.ts';
+import type { HistoryReceivingContext } from '../history/receiving.ts';
+import { lookupAgentIdentityReceivingCopies } from '../history/agent-identity-source.ts';
+import type { HistoryArtifact } from '../history/registry.ts';
+import { reserveIdentityHistoryWork, nativeWork } from '../history/agent-identity-inventory-work.ts';
 import type { Pool } from 'pg';
-import {
-  readAgentIdentityCopyReceiving,
-  type AgentIdentitySourceKey,
-} from '../history/agent-identity-source.ts';
+import { readAgentIdentityCopyReceiving, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import {
   readAgentIdentityInventory,
   verifyAgentIdentityInventory,
@@ -14,12 +17,18 @@ import type { CommandTransaction } from '../command/command.ts';
 import { verifyHistoryReceivingReceipt } from '../history/receiving.ts';
 
 export type AgentIdentityCopyRetention =
-  | Readonly<{ state: 'pending'; gaps: readonly string[]; native?: 'pending' | 'verified' }>
+  | Readonly<{
+      state: 'pending';
+      gaps: readonly string[];
+      native?: 'pending' | 'verified';
+    }>
   | Readonly<{ state: 'received'; gaps: readonly []; native: 'verified' }>;
-export type PreparedAgentIdentityCopy = Awaited<ReturnType<typeof readAgentIdentityCopyReceiving>> & Readonly<{
-  inventory: Awaited<ReturnType<typeof readAgentIdentityInventory>>;
-  sdkGap: string | null;
-}>;
+export type PreparedAgentIdentityCopy = Awaited<ReturnType<typeof readAgentIdentityCopyReceiving>> &
+  Readonly<{
+    inventory: Awaited<ReturnType<typeof readAgentIdentityInventory>>;
+    sdkGap: string | null;
+    durable: HistoryArtifact | null;
+  }>;
 
 /** Without a native inventory read, coverage is unknown. Once staged, report the original
  * owner's exact current branch; neither a point association nor an SDK mapping seals it.
@@ -29,10 +38,20 @@ export function agentIdentityCopyRetention(
   verified?: AgentIdentityInventoryVerification,
 ): AgentIdentityCopyRetention {
   const gaps = copy
-    ? [...new Set([verified?.gap ?? copy.inventory.gap, copy.sdkGap].filter((gap): gap is string => gap !== null))]
+    ? [
+        ...new Set(
+          [verified ? verified.gap : copy.inventory.gap, verified?.state === 'verified' ? null : copy.sdkGap].filter(
+            (gap): gap is string => gap !== null,
+          ),
+        ),
+      ]
     : ['agent-identity-original-inventory-unsealed', 'agent-identity-sdk-recording-port-unavailable'];
   if (gaps.length === 0)
-    return Object.freeze({ state: 'received', gaps: Object.freeze([]) as readonly [], native: 'verified' });
+    return Object.freeze({
+      state: 'received',
+      gaps: Object.freeze([]) as readonly [],
+      native: 'verified',
+    });
   return Object.freeze({
     state: 'pending',
     gaps: Object.freeze(gaps),
@@ -49,13 +68,43 @@ export async function prepareAgentIdentityCopyRetention(
   barrier: HistoryBarrier,
   key: AgentIdentitySourceKey,
   deadline: number,
+  receiving?: Readonly<{
+    client: WorkClient;
+    context: HistoryReceivingContext;
+  }>,
 ): Promise<PreparedAgentIdentityCopy> {
-  const point = await readAgentIdentityCopyReceiving({ pool }, barrier, [key], { deadline });
-  const inventory = await readAgentIdentityInventory({ pool }, barrier, key, { deadline });
-  const sdkGap = await readAgentIdentitySDKRetirementGap(pool, {
-    kind: key.direction, account: key.accountId, receipt: key.receiptId,
-  }, { deadline });
-  return { ...point, inventory, sdkGap };
+  const context = receiving?.context ?? { deadline };
+  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(270, 270, 12, 90112));
+  const point = await readAgentIdentityCopyReceiving({ pool }, barrier, [key], {
+    deadline,
+  });
+  const inventory = await readAgentIdentityInventory(
+    { pool, ...(receiving ? { client: receiving.client } : {}) },
+    barrier,
+    key,
+    context,
+  );
+  const sdkGap = receiving
+    ? inventory.gap
+    : await readAgentIdentitySDKRetirementGap(
+        pool,
+        {
+          kind: key.direction,
+          account: key.accountId,
+          receipt: key.receiptId,
+        },
+        context,
+      );
+  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(80, 80, 12, 32768));
+  const [lookup] = await lookupAgentIdentityReceivingCopies(pool, [
+    { kind: key.direction, account: key.accountId, receipt: key.receiptId },
+  ]);
+  return {
+    ...point,
+    inventory,
+    sdkGap,
+    durable: lookup?.state === 'associated' ? lookup.artifact : null,
+  };
 }
 
 /** A point receipt is independent of complete inventory custody. */
@@ -64,21 +113,31 @@ export async function verifyAgentIdentityCopyRetention(
   barrier: HistoryBarrier,
   copy: PreparedAgentIdentityCopy,
 ): Promise<boolean> {
-  return copy.artifact !== null && copy.receipt !== null &&
-    await verifyHistoryReceivingReceipt(tx, barrier, copy.artifact, copy.receipt);
+  return (
+    copy.artifact !== null &&
+    copy.receipt !== null &&
+    (await verifyHistoryReceivingReceipt(tx, barrier, copy.artifact, copy.receipt))
+  );
 }
 
 /** SAME original source-home command. The original inventory owner rechecks generation,
- * all native role/receiving/physical rows and SDK obligation. Its current result remains
- * pending even when native copies verify: it has no positive all-SDK-custody declaration.
+ * all native role/receiving/physical rows and SDK obligation. It reuses the original current Source/SDK guard and the actual durable-work receiving association.
  */
 export async function verifyAgentIdentityCopyInventory(
   tx: CommandTransaction,
   barrier: HistoryBarrier,
   key: AgentIdentitySourceKey,
   copy: PreparedAgentIdentityCopy,
+  stage?: AgentIdentityRetirementStage,
+  client?: WorkClient,
 ): Promise<AgentIdentityInventoryVerification> {
-  if (!copy.inventory.proof)
-    return { state: 'pending', native: 'pending', gap: copy.inventory.gap };
-  return verifyAgentIdentityInventory(tx, barrier, key, copy.inventory.proof);
+  if (!copy.inventory.proof) return { state: 'pending', native: 'pending', gap: copy.inventory.gap };
+  return verifyAgentIdentityInventory(
+    tx,
+    barrier,
+    key,
+    copy.inventory.proof,
+    stage,
+    client && copy.durable ? { client, artifact: copy.durable } : undefined,
+  );
 }

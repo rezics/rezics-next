@@ -6,6 +6,8 @@ import {
   CONTINUATION_ARTIFACTS,
   continuationArtifact,
 } from './erasure-native-consumers.ts';
+import { minimizeDiscoveredAgentIdentitySources } from './erasure-agent-identity.ts';
+import type { AgentIdentityRetentionDependencies } from './agent-verification-identity-retention.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { reverseDeletedAccountAgent } from './agent-verification.ts';
 import { consumeAccountDiscoveryClaim, deliverAccountDiscoveryIntent } from './account-discovery-work.ts';
@@ -99,7 +101,11 @@ export async function openNativeErasure(pool: Pool, accountId: string): Promise<
  * Concurrent deliveries converge under the native progress lock. No account graph,
  * locator, page or native payload is returned to DBOS.
  */
-export async function advanceNativeErasure(pool: Pool, progressId: string): Promise<NativeErasureResult> {
+export async function advanceNativeErasure(
+  pool: Pool,
+  progressId: string,
+  identity?: AgentIdentityRetentionDependencies,
+): Promise<NativeErasureResult> {
   const initial = await withConnection(pool, (tx) =>
     tx.query<Progress>(
       'SELECT route,account_id,progress_id,phase,page,retry_phase FROM access.erasure_native_progress WHERE progress_id=$1',
@@ -204,7 +210,11 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
         ).rows[0],
     );
     if (intent) {
-      const input = { route: Number(key[0]), accountId: key[1]!, revision: intent.revision };
+      const input = {
+        route: Number(key[0]),
+        accountId: key[1]!,
+        revision: intent.revision,
+      };
       const deps = { pool };
       if (store === 'account_discovery_intent' || (await consumeAccountDiscoveryClaim(deps, input)))
         await deliverAccountDiscoveryIntent(deps, input, store === 'account_discovery_intent' ? 'account' : 'claim');
@@ -236,6 +246,43 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
       else throw error;
     }
     consumerIndex = (index + 1) % page.keys.length;
+  }
+  if (store === 'agent_identity_intent' && page.keys.length && identity) {
+    const root = (
+      await withConnection(pool, (tx) =>
+        tx.query<{ version: number; at: string }>(
+          'SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2',
+          [expected.route, expected.account_id],
+        ),
+      )
+    ).rows[0];
+    const cursor =
+      (
+        await withConnection(pool, (tx) =>
+          tx.query<{ consumer_index: number }>(
+            'SELECT consumer_index FROM access.erasure_native_blocked WHERE progress_id=$1 AND phase=$2',
+            [progressId, expected.phase],
+          ),
+        )
+      ).rows[0]?.consumer_index ?? 0;
+    const start = cursor % page.keys.length;
+    const keys = page.keys.slice(start, start + 8);
+    if (root && (role === 'account_id' || role === 'requested_by' || role === 'decided_by')) {
+      await minimizeDiscoveredAgentIdentitySources(
+        pool,
+        {
+          barrier: {
+            accountId: expected.account_id,
+            accountRoute: expected.route,
+            ...root,
+          },
+          role,
+          keys,
+        },
+        identity,
+      );
+    }
+    consumerIndex = (start + keys.length) % page.keys.length;
   }
   if (store === 'agent_page' && page.keys.length) {
     // Start the actual receipt-bound reversal. Its registered consumer must
@@ -335,7 +382,7 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
           expected.phase,
           current.phase === NATIVE_ERASURE_GROUPS.length,
         )) ??
-        (await nativeStoreBlocker(tx, store, key, current.account_id));
+        (await nativeStoreBlocker(tx, store, key, current.account_id, role));
       if (blocker) return pending(blocker);
     }
     // No dynamic caller-provided SQL: identifiers/types come only from the adopted manifest.
@@ -344,7 +391,10 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
       const params: unknown[] = [...key, current.account_id];
       const where = columns.map(({ name, type }, i) => `${name}=$${i + 1}::${type}`).join(' AND ');
       const owner = `${role}=$${params.length}::uuid ${spec[4] ? `AND ${spec[4]}` : ''}`;
-      if (store === 'handle_claim') {
+      if (store === 'agent_identity_intent' || store === 'agent_identity_recovery') {
+        // Only the dedicated same-Source-frame minimizer can mutate original proof.
+        // The blocker above and residue below verify its durable role disposition.
+      } else if (store === 'handle_claim') {
         await tx.query(
           `UPDATE access.handle_claim SET state='retired',account_id=NULL,transaction_id=NULL,
            expires_at=NULL,reserved_until=NULL,reservation_id=NULL,hold_operation_id=NULL,
@@ -437,10 +487,13 @@ export async function advanceNativeErasure(pool: Pool, progressId: string): Prom
 
 async function claimsReady(tx: PoolClient, page: ErasureDiscoveryPage): Promise<boolean> {
   for (const [route, handle] of page.keys) {
-    const row = await tx.query<{ state: string; hold_operation_id: string | null }>(
-      'SELECT state,hold_operation_id FROM access.handle_claim WHERE route=$1 AND normalized_handle=$2 FOR UPDATE',
-      [route, handle],
-    );
+    const row = await tx.query<{
+      state: string;
+      hold_operation_id: string | null;
+    }>('SELECT state,hold_operation_id FROM access.handle_claim WHERE route=$1 AND normalized_handle=$2 FOR UPDATE', [
+      route,
+      handle,
+    ]);
     const claim = row.rows[0];
     if (claim && (claim.state !== 'reserved' || claim.hold_operation_id !== null)) return false;
   }
@@ -452,7 +505,7 @@ async function claimsReady(tx: PoolClient, page: ErasureDiscoveryPage): Promise<
  * even when the completed DBOS attempt is deleted. No fake shared-history handoff.
  */
 export function registerNativeErasureWork(context: WorkContext): void {
-  const step = DBOS.registerStep((progressId: string) => advanceNativeErasure(context.pool, progressId), {
+  const step = DBOS.registerStep((progressId: string) => advanceNativeErasure(context.pool, progressId, context), {
     name: 'access.erasure.native-page',
     retriesAllowed: true,
     maxAttempts: 10,

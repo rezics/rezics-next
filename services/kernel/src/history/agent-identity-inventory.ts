@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { WorkClient } from '../work/client.ts';
-import { currentCommand, currentCommandReceipt, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  currentCommandReceipt,
+  currentCommandResources,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf } from '../route/route.ts';
 import type { originalAccountIdentitySource } from '../access/agent-verification-identity.ts';
@@ -10,17 +15,20 @@ import {
   commandAgentIdentitySource,
   type AgentIdentitySourceKey,
 } from './agent-identity-source.ts';
+import { lockRecordedAgentIdentityHistory } from './agent-identity-sdk-fence.ts';
+import { reserveIdentityHistoryWork, nativeWork } from './agent-identity-inventory-work.ts';
 import { decodeLocator, encodeLocator } from './locator.ts';
 import { commandHistoryKind, COMMAND_HISTORY_KINDS } from './record.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 import {
   readAgentIdentitySDKRetirementGap,
-  IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
-  verifyAgentIdentityRetirementStage,
+  currentAgentIdentityHistoryUnit,
   type AgentIdentityRetirementStage,
 } from './agent-identity-retirement.ts';
 import {
   historyDeadline,
+  historyReceivingGap,
+  verifyCurrentHistoryReceiving,
   readHistoryReceivingReceipt,
   type HistoryReceivingContext,
   type HistoryReceivingDependencies,
@@ -55,14 +63,29 @@ export type AgentIdentityInventoryProof = Readonly<{
   readonly [inventoryProof]: true;
 }>;
 export type AgentIdentityNativeInventory =
-  | Readonly<{ state: 'pending'; gap: 'agent-identity-original-inventory-unsealed'; proof: null }>
-  | Readonly<{ state: 'sealed'; gap: null; proof: AgentIdentityInventoryProof }>;
-export type AgentIdentityInventoryVerification = Readonly<{
-  state: 'pending';
-  native: 'pending' | 'verified';
-  gap: string;
-}>;
-const unsealed = () => ({ state: 'pending', gap: 'agent-identity-original-inventory-unsealed', proof: null }) as const;
+  | Readonly<{
+      state: 'pending';
+      gap: 'agent-identity-original-inventory-unsealed';
+      proof: null;
+    }>
+  | Readonly<{
+      state: 'sealed';
+      gap: null;
+      proof: AgentIdentityInventoryProof;
+    }>;
+export type AgentIdentityInventoryVerification =
+  | Readonly<{
+      state: 'pending';
+      native: 'pending' | 'verified';
+      gap: string;
+    }>
+  | Readonly<{ state: 'verified'; native: 'verified'; gap: null }>;
+const unsealed = () =>
+  ({
+    state: 'pending',
+    gap: 'agent-identity-original-inventory-unsealed',
+    proof: null,
+  }) as const;
 const sdkGap = 'agent-identity-sdk-recording-port-unavailable';
 const expected = new WeakMap<CommandTransaction, readonly Buffer[]>();
 const eventsFor = (kind: string): readonly string[] => {
@@ -330,6 +353,10 @@ export async function readAgentIdentityNativeInventory(
   const fixed = structuredClone(key);
   const partition = params(fixed)[0];
   historyDeadline(context, partition);
+  const { currentIdentitySourceConsumerMaintenance } =
+    await import('../semantic/identity-source-consumer-maintenance.ts');
+  if (currentIdentitySourceConsumerMaintenance(pool, context.deadline))
+    await reserveIdentityHistoryWork(pool, nativeWork(203, 202, 9, 65664));
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -370,13 +397,34 @@ export async function readAgentIdentityInventory(
   }
   const gap = await readAgentIdentitySDKRetirementGap(
     deps.pool,
-    { kind: fixedKey.direction, account: fixedKey.accountId, receipt: fixedKey.receiptId },
+    {
+      kind: fixedKey.direction,
+      account: fixedKey.accountId,
+      receipt: fixedKey.receiptId,
+    },
     context,
-    deps.client ? { client: deps.client, original: inventory.proof.original, barrier: fixedBarrier } : undefined,
+    deps.client
+      ? {
+          client: deps.client,
+          original: inventory.proof.original,
+          barrier: fixedBarrier,
+        }
+      : undefined,
   );
   // A released observation never grants later source-home cleanup authority.
-  if (gap === null) return { ...inventory, state: 'received' as const, native: 'verified' as const, gap: null };
-  return { ...inventory, state: 'pending' as const, native: 'sealed' as const, gap };
+  if (gap === null)
+    return {
+      ...inventory,
+      state: 'received' as const,
+      native: 'verified' as const,
+      gap: null,
+    };
+  return {
+    ...inventory,
+    state: 'pending' as const,
+    native: 'sealed' as const,
+    gap,
+  };
 }
 
 /** SAME source-home command. All queries address local core rows. The portable snapshot is
@@ -388,10 +436,17 @@ export async function verifyAgentIdentityInventory(
   key: AgentIdentitySourceKey,
   proof: AgentIdentityInventoryProof,
   sdkStage?: AgentIdentityRetirementStage,
+  receiving?: Readonly<{ client: WorkClient; artifact: HistoryArtifact }>,
 ): Promise<AgentIdentityInventoryVerification> {
-  const pending = (gap: string): AgentIdentityInventoryVerification => ({ state: 'pending', native: 'pending', gap });
+  const pending = (gap: string): AgentIdentityInventoryVerification => ({
+    state: 'pending',
+    native: 'pending',
+    gap,
+  });
   if (currentCommand(tx).partition !== params(key)[0])
     throw new TypeError('Identity inventory requires its SAME source home');
+  const { pool } = currentCommandResources(tx);
+  if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(202, 202, 5, 65536));
   const current = await readAgentIdentityInventoryInTransaction(tx, key);
   if (
     current.state !== 'sealed' ||
@@ -410,6 +465,7 @@ export async function verifyAgentIdentityInventory(
   // Receiving rows bind the exact barrier below. Current native barrier revalidation
   // belongs to the optional Source owner stage and its existing funding reservation.
   for (const artifact of current.proof.artifacts) {
+    if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 1024));
     const locator = artifact.locator;
     const encoded = Buffer.from(encodeLocator(locator));
     const received = (
@@ -458,16 +514,12 @@ export async function verifyAgentIdentityInventory(
          AND payload_state='minimized' AND data='{}'::jsonb AND subject IS NULL FOR SHARE`,
         [artifact.partition, current.proof.original.epoch, locator.position.toString(), locator.eventSeq],
       );
-      // Even a completed dispatch retains its SDK inputs/results until its real owner binds custody.
-      const consumer = await tx.query(
-        `SELECT consumer FROM core.history_event_consumer WHERE partition_no=$1 AND position=$2 AND event_seq=$3
-         ORDER BY consumer LIMIT 1 FOR SHARE`,
-        [artifact.partition, locator.position.toString(), locator.eventSeq],
-      );
-      if (consumer.rows.length) return pending('outbox-receiving-custody-unavailable');
+      const gap = await historyReceivingGap(tx, artifact.partition, locator, barrier, pool);
+      if (gap) return pending(gap);
     }
     if (physical?.rows.length !== 1) return pending(`agent-identity-physical-copy-pending:${locator.artifactType}`);
   }
+  if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 1024));
   const obligation = (
     await tx.query(
       `SELECT generation,future_writer_state FROM core.agent_identity_sdk_obligation
@@ -494,12 +546,34 @@ export async function verifyAgentIdentityInventory(
       reference.barrier.at !== barrier.at
     )
       return pending('agent-identity-sdk-retirement-reference-mismatch');
-    const verified = await verifyAgentIdentityRetirementStage(tx, sdkStage);
-    if (verified.state === 'pending') return { state: 'pending', native: 'verified', gap: verified.gap };
-    // The SDK current-lock port is installed, but the Source verifier supplies no
-    // durable native History handoff. Neither its released result nor a generation-2
-    // SDK receipt authorizes the separate readiness and receiving-copy transitions.
-    return { state: 'pending', native: 'verified', gap: IDENTITY_HISTORY_HANDOFF_UNAVAILABLE };
+    const unit = currentAgentIdentityHistoryUnit();
+    const client = receiving?.client ?? unit?.client;
+    if (!client || !receiving?.artifact) return pending('identity-history-current-unit-unavailable');
+    const artifact = receiving.artifact;
+    if (
+      artifact.partition !== current.proof.original.partition ||
+      artifact.locator.artifactType !== 'durable-work/v1' ||
+      artifact.locator.workId !== sdkStage.handoff.custodyId
+    )
+      return pending('identity-sdk-retirement-receiving-binding-changed');
+    const held = await lockRecordedAgentIdentityHistory(tx, client, sdkStage, currentCommandResources(tx));
+    if (held.state === 'pending') return { state: 'pending', native: 'verified', gap: held.gap };
+    // This verifies the actual original durable-work physical row, full immutable
+    // role union, later receiving COMMIT, generation-2 guard and eight-table absence.
+    const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
+      await import('./agent-identity-sdk-fence.ts');
+    const { addNativeWork } = await import('./agent-identity-inventory-work.ts');
+    await reserveIdentityHistoryWork(
+      pool,
+      addNativeWork(
+        nativeWork(76, 75, 13, 131872),
+        AGENT_IDENTITY_HISTORY_GUARD_COST,
+        AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+      ),
+    );
+    if (!(await verifyCurrentHistoryReceiving(tx, barrier, artifact)))
+      return pending('identity-sdk-physical-receiving-pending');
+    return { state: 'verified', native: 'verified', gap: null };
   }
   // A discovery/absence/status flag cannot establish native SDK or source transfer custody.
   return { state: 'pending', native: 'verified', gap: sdkGap };

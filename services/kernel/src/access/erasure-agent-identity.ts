@@ -4,6 +4,7 @@ import {
   minimizeAgentIdentityRetention,
   type AgentIdentitySourceKey,
   type AgentIdentitySourceRole,
+  type AgentIdentityRetentionDependencies,
 } from './agent-verification-identity-retention.ts';
 
 /** Adapter for the existing scalar inventory's exact native key order. Discovery is never
@@ -11,7 +12,12 @@ import {
  */
 export function minimizeDiscoveredAgentIdentitySources(
   pool: Pool,
-  input: Readonly<{ barrier: HistoryBarrier; role: AgentIdentitySourceRole; keys: readonly (readonly string[])[] }>,
+  input: Readonly<{
+    barrier: HistoryBarrier;
+    role: AgentIdentitySourceRole;
+    keys: readonly (readonly string[])[];
+  }>,
+  deps?: AgentIdentityRetentionDependencies,
 ) {
   const keys: AgentIdentitySourceKey[] = input.keys.map((key) => {
     if (key.length !== 4 || !/^(0|[1-9][0-9]{0,4})$/.test(key[0]!))
@@ -19,7 +25,12 @@ export function minimizeDiscoveredAgentIdentitySources(
     const [route, accountId, direction, receiptId] = key;
     if (direction !== 'account-agent.verify' && direction !== 'account-agent.unverify')
       throw new TypeError('Invalid discovered native identity source direction');
-    return { route: Number(route), accountId: accountId!, direction, receiptId: receiptId! };
+    return {
+      route: Number(route),
+      accountId: accountId!,
+      direction,
+      receiptId: receiptId!,
+    };
   });
-  return minimizeAgentIdentityRetention(pool, { barrier: input.barrier, role: input.role, keys });
+  return minimizeAgentIdentityRetention(pool, { barrier: input.barrier, role: input.role, keys }, deps);
 }
