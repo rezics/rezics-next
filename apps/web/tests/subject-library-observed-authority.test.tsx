@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, useState, type ComponentProps } from 'react';
+import { act, StrictMode, useState, type ComponentProps } from 'react';
 import type {
   SubjectLibrarySlotData,
   SubjectLibraryMutationResponse,
@@ -213,9 +213,11 @@ async function paint(data = props.data) {
   props = { ...props, data };
   await act(async () => {
     root.render(
-      <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </StrictMode>,
     );
     renderProps?.(props);
     await tick();
@@ -420,12 +422,10 @@ test('Complete Subject Library entry labels and member chooser authority preserv
     incarnationId: id(10),
   });
   await act(async () =>
-    entries
-      .at(-1)!
-      .resolve({
-        result: 'saved',
-        entry: { subjectId: subject.id, state: 'completed', revision: 8, incarnationId: id(10) },
-      }),
+    entries.at(-1)!.resolve({
+      result: 'saved',
+      entry: { subjectId: subject.id, state: 'completed', revision: 8, incarnationId: id(10) },
+    }),
   );
   expect(host.textContent).toContain(m.library_subject_saved());
   await openLabels();
@@ -433,12 +433,10 @@ test('Complete Subject Library entry labels and member chooser authority preserv
   await click(m.library_label_more());
   expect(pages.at(-1)!.data).toEqual({ query: '', cursor: 'cursor-one' });
   await act(async () =>
-    pages
-      .at(-1)!
-      .resolve({
-        ...page('A', '', null, 'wrong-cursor'),
-        labels: [{ id: id(95), name: 'Wrong cursor choice', revision: 1 }],
-      }),
+    pages.at(-1)!.resolve({
+      ...page('A', '', null, 'wrong-cursor'),
+      labels: [{ id: id(95), name: 'Wrong cursor choice', revision: 1 }],
+    }),
   );
   expect(host.textContent).not.toContain('Wrong cursor choice');
   // A fresh query has its own page lifetime and is not blocked by the rejected continuation.
@@ -450,26 +448,22 @@ test('Complete Subject Library entry labels and member chooser authority preserv
   await openLabels();
   await labelName('New label');
   await act(async () =>
-    prefixes
-      .at(-1)!
-      .resolve({
-        state: 'loaded',
-        labels: [],
-        next: null,
-        provenance: { viewer: 'A', csrfToken: 'csrf-A', query: 'New label' },
-      }),
+    prefixes.at(-1)!.resolve({
+      state: 'loaded',
+      labels: [],
+      next: null,
+      provenance: { viewer: 'A', csrfToken: 'csrf-A', query: 'New label' },
+    }),
   );
   await submit('[data-subject-label-picker]');
   expect(labels.at(-1)!.data).toMatchObject({ intent: 'create-and-assign', name: 'New label', createKey: id(31) });
   expect(labels.at(-1)!.data.idempotencyKey).not.toBe(id(32));
   await act(async () =>
-    labels
-      .at(-1)!
-      .resolve({
-        ok: true,
-        assignment: { id: id(25), revision: 1 },
-        label: { id: id(26), name: 'New label', revision: 1 },
-      }),
+    labels.at(-1)!.resolve({
+      ok: true,
+      assignment: { id: id(25), revision: 1 },
+      label: { id: id(26), name: 'New label', revision: 1 },
+    }),
   );
   expect(host.textContent).toContain('New label');
   const form = host.querySelector('[data-subject-label-remove]:has(input[value="' + id(25) + '"])');

@@ -179,7 +179,6 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
           // Setup never reactivates an episode retired by cleanup, including StrictMode replay.
           value = {
             ...value,
-            scope: value.scope + 1,
             entry: value.entry + 1,
             labels: value.labels + 1,
             collections: value.collections + 1,
