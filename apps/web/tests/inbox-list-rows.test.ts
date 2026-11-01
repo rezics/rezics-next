@@ -57,7 +57,7 @@ function continuationButton(tree: ReactNode) {
 
 test('Inbox stories enter the inbox route through the shared page story shell', async () => {
   const source = await readFile(new URL('../src/stories/inbox.stories.tsx', import.meta.url), 'utf8');
-  expect(source).toContain("import { PageStory } from './page'");
+  expect(source).toMatch(/import\s*\{[^}]*\bPageStory\b[^}]*\}\s*from\s*['"]\.\/page['"]/);
   expect(source).toContain('<PageStory visitor="Signed In" path={`/inbox?fixture=${fixture}`} />');
   expect(source).toContain("title: 'Pages/Account/Inbox'");
 });
@@ -125,9 +125,10 @@ test('a sparse continuation preserves its callback and loading disables only the
   const exhausted = InboxRows({ page: { items: [], next: null }, onLoadMore });
   const availableButton = continuationButton(available);
   const loadingButton = continuationButton(loading);
+  const availableHandler = availableButton?.props.onClick;
 
   expect(availableButton).toBeDefined();
-  expect(availableButton?.props.onClick).toBe(onLoadMore);
+  expect(availableHandler).toBe(onLoadMore);
   expect(availableButton?.props.disabled).toBe(false);
   expect(availableButton?.props.className).toContain('min-h-11');
   expect(renderToStaticMarkup(available)).toContain(m.inbox_load_more());
@@ -135,7 +136,8 @@ test('a sparse continuation preserves its callback and loading disables only the
   expect(loadingButton?.props.disabled).toBe(true);
   expect(continuationButton(withoutCallback)).toBeUndefined();
   expect(continuationButton(exhausted)).toBeUndefined();
-  expect(calls).toBe(0);
+  if (availableHandler) Reflect.apply(availableHandler, undefined, []);
+  expect(calls).toBe(1);
 });
 
 let browser: Browser | undefined;
