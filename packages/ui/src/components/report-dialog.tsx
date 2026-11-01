@@ -1,5 +1,5 @@
 import { LoaderCircleIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   Dialog,
@@ -13,6 +13,8 @@ import {
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
+
+const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 export const reportDialogLabels = {
   title: 'Report this content',
@@ -89,16 +91,37 @@ export function ReportDialog({
   const [success, setSuccess] = useState(false);
   const [failure, setFailure] = useState('');
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const incarnation = useRef(0);
+  const mounted = useRef(false);
+  const openRef = useRef(open);
+  const pendingRef = useRef(false);
+  const successRef = useRef(false);
+  const operationRef = useRef<object | null>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  const failureLabelRef = useRef(labels.failure);
   const id = useId().replaceAll(':', '');
   const requiresDetails = reason === 'illegal' || reason === 'other';
   const hasRequiredDetails = !requiresDetails || details.trim().length > 0;
-  const canSubmit = Boolean(reason) && verified && hasRequiredDetails && !pending && !success;
+  const withinDetailsLimit = details.length <= detailsLimit;
+  const canSubmit = Boolean(reason) && verified && hasRequiredDetails && withinDetailsLimit && !pending && !success;
   const detailsId = `${id}-details`;
   const detailsHintId = `${id}-details-hint`;
   const characterCountId = `${id}-character-count`;
   const reasonsLabelId = `${id}-reasons-label`;
 
-  useEffect(() => {
+  useClientLayoutEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+    failureLabelRef.current = labels.failure;
+  });
+
+  useClientLayoutEffect(() => {
+    mounted.current = true;
+    openRef.current = open;
+    incarnation.current += 1;
+    operationRef.current = null;
+    pendingRef.current = false;
+    successRef.current = false;
+
     if (open) {
       setReason('');
       setDetails('');
@@ -108,26 +131,72 @@ export function ReportDialog({
     }
 
     return () => {
-      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+      mounted.current = false;
+      openRef.current = false;
+      incarnation.current += 1;
+      operationRef.current = null;
+      pendingRef.current = false;
+      successRef.current = false;
+      if (closeTimer.current !== null) {
+        clearTimeout(closeTimer.current);
+        closeTimer.current = null;
+      }
     };
   }, [open]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit || !reason) return;
+    if (
+      !openRef.current ||
+      !mounted.current ||
+      pendingRef.current ||
+      successRef.current ||
+      !reason ||
+      !verified ||
+      !hasRequiredDetails ||
+      !withinDetailsLimit
+    )
+      return;
 
+    const operation = {};
+    const operationIncarnation = incarnation.current;
+    operationRef.current = operation;
+    pendingRef.current = true;
     setPending(true);
     setFailure('');
+    const isCurrent = () =>
+      mounted.current &&
+      openRef.current &&
+      incarnation.current === operationIncarnation &&
+      operationRef.current === operation;
 
     try {
       await onSubmit({ reason, details });
+      if (!isCurrent()) return;
+
+      successRef.current = true;
       setSuccess(true);
-      closeTimer.current = setTimeout(() => onOpenChange(false), 900);
+      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+      closeTimer.current = setTimeout(() => {
+        closeTimer.current = null;
+        if (
+          mounted.current &&
+          openRef.current &&
+          incarnation.current === operationIncarnation &&
+          successRef.current
+        )
+          onOpenChangeRef.current(false);
+      }, 900);
     } catch (error) {
+      if (!isCurrent()) return;
       const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-      setFailure(message || labels.failure);
+      setFailure(message || failureLabelRef.current);
     } finally {
-      setPending(false);
+      if (isCurrent()) {
+        operationRef.current = null;
+        pendingRef.current = false;
+        setPending(false);
+      }
     }
   };
 
@@ -140,8 +209,8 @@ export function ReportDialog({
     <Dialog
       onOpenChange={(next, details) => {
         // A report in flight finishes before the dialog may close.
-        if (!next && pending) details.cancel();
-        else onOpenChange(next);
+        if (!next && pendingRef.current) details.cancel();
+        else onOpenChangeRef.current(next);
       }}
       open={open}
     >
