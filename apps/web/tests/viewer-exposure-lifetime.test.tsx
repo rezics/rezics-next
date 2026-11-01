@@ -12,8 +12,7 @@ const testStart = {
   createIsomorphicFn() {
     let serverHandler: (...args: unknown[]) => unknown = () => undefined;
     let clientHandler: (...args: unknown[]) => unknown = serverHandler;
-    const invoke = (...args: unknown[]) =>
-      (typeof window === 'undefined' ? serverHandler : clientHandler)(...args);
+    const invoke = (...args: unknown[]) => (typeof window === 'undefined' ? serverHandler : clientHandler)(...args);
     const chain = {
       server(handler: (...args: unknown[]) => unknown) {
         serverHandler = handler;
@@ -33,7 +32,11 @@ mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => currentRequest,
   setResponseHeader: () => {},
 }));
-mock.module('cloudflare:workers', () => ({ get env() { return sessionEnv; } }));
+mock.module('cloudflare:workers', () => ({
+  get env() {
+    return sessionEnv;
+  },
+}));
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { Exposure, operationIsAdmitted, prepareExposure, useOperation } = await import('../src/kernel/exposure');
@@ -241,7 +244,9 @@ test('viewer exposure retires each mounted reader observation without leaking or
         createElement(
           QueryClientProvider,
           { client },
-          strict ? createElement(StrictMode, null, createElement(ReaderSet, { count })) : createElement(ReaderSet, { count }),
+          strict
+            ? createElement(StrictMode, null, createElement(ReaderSet, { count }))
+            : createElement(ReaderSet, { count }),
         ),
       );
     const flush = async () => {
@@ -295,11 +300,14 @@ test('viewer exposure retires each mounted reader observation without leaking or
 
     // Query error retires cached controls even though React Query still has the prior data value.
     await act(async () => {
-      client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })?.setState({
-        status: 'error',
-        error: new Error('session read failed'),
-        errorUpdatedAt: Date.now(),
-      });
+      client
+        .getQueryCache()
+        .find({ queryKey: sessionQuery.queryKey, exact: true })
+        ?.setState({
+          status: 'error',
+          error: new Error('session read failed'),
+          errorUpdatedAt: Date.now(),
+        });
     });
     expect(privateControls()).toHaveLength(0);
     expect(publicControls()).toHaveLength(0);
@@ -368,9 +376,9 @@ test('viewer exposure retires each mounted reader observation without leaking or
     for (let index = beforeRemountReads; index < nativeReads.length; index++) await resolveRead(index);
     await until(() => secondHost.querySelectorAll('[data-private]').length === 2);
     expect(nativeReads.length - beforeRemountReads).toBeLessThanOrEqual(2);
-    expect(nativeReads.slice(beforeRemountReads).every(({ authorization }) => authorization === 'Bearer native-B')).toBe(
-      true,
-    );
+    expect(
+      nativeReads.slice(beforeRemountReads).every(({ authorization }) => authorization === 'Bearer native-B'),
+    ).toBe(true);
   } finally {
     if (secondRoot) await act(async () => secondRoot!.unmount());
     if (root) await act(async () => root!.unmount());

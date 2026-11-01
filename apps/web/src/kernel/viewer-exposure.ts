@@ -44,8 +44,7 @@ export function viewerExposureQuery(observation: ViewerObservation | undefined) 
     queryKey: observation
       ? (['exposure', 'viewer', observation.subject, observation.id] as const)
       : (['exposure', 'viewer', 'closed'] as const),
-    queryFn: () =>
-      observation ? readViewerExposure({ data: observation.subject }) : Promise.resolve(closedExposure),
+    queryFn: () => (observation ? readViewerExposure({ data: observation.subject }) : Promise.resolve(closedExposure)),
     enabled: observation !== undefined,
     staleTime: Infinity,
     gcTime: 0,
