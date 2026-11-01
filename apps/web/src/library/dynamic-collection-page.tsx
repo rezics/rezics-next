@@ -7,9 +7,9 @@ import { displayLibraryTitle } from './title';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import type { DynamicMembersResult } from './collection-load';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
-import { PinControl } from './pin-control';
+import { PinControlView, usePinControlActions } from './pin-control';
 import { LibraryNavigation } from './library-nav';
-import { useCurrentLibraryNavigation, type AcceptedPinsOrigin } from './pins-current';
+import { useCurrentLibraryNavigation } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
 import { collectionPageAddress } from './collection-presentation';
@@ -27,6 +27,9 @@ export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
     ...(props.page.pins.origin ? { origin: props.page.pins.origin } : {}),
     pins: props.page.pins, collections: props.page.navigationCollections ?? [],
   } : undefined);
+  const pinActions = usePinControlActions({
+    collectionId: props.page.id, pins: navigation.data.pins, mode: 'collection', origin: navigation.pinsOrigin,
+  });
   // A newly observed loader object starts a page before any of its children render, even at the same URL.
   if (source.page !== props.page) setSource({ page: props.page, lifetime: source.lifetime + 1 });
   return (
@@ -34,7 +37,7 @@ export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
       key={source.lifetime}
       {...props}
       pins={navigation.data.pins}
-      pinsOrigin={navigation.pinsOrigin}
+      pinActions={pinActions}
       collections={navigation.data.collections}
     />
   );
@@ -45,11 +48,11 @@ function DynamicCollectionPageLifetime({
   readMembers,
   search,
   pins,
-  pinsOrigin,
+  pinActions,
   collections,
 }: DynamicCollectionPageProps & {
   pins: NonNullable<DynamicCollectionPageData['pins']>;
-  pinsOrigin: AcceptedPinsOrigin;
+  pinActions: ReturnType<typeof usePinControlActions>;
   collections: NonNullable<DynamicCollectionPageData['navigationCollections']>;
 }) {
   const [current, setCurrent] = useState(page);
@@ -113,7 +116,7 @@ function DynamicCollectionPageLifetime({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <PageHeading>{current.title}</PageHeading>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <PinControl collectionId={current.id} pins={pins} mode="collection" origin={pinsOrigin} />
+              <PinControlView control={pinActions} />
               <CollectionReadActions
                 onShare={() => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`)}
               />

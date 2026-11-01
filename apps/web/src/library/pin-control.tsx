@@ -258,6 +258,11 @@ export function PinControlNotice({ notice }: { notice: string }) {
 
 export function PinControl({ collectionId, pins, mode, origin }: PinControlInput) {
   const control = usePinControlActions({ collectionId, pins, mode, ...(origin ? { origin } : {}) });
+  return <PinControlView control={control} />;
+}
+
+/** The menu can outlive a public members refresh while its owning action hook retains exact intent. */
+export function PinControlView({ control }: { control: ReturnType<typeof usePinControlActions> }) {
   if (!control.canUpdate) return null;
   return (
     <span className="inline-flex flex-col items-end gap-1">

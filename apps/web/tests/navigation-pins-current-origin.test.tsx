@@ -5,6 +5,8 @@ import * as start from '../.storybook/react-start';
 import type { LibraryNavigationRead } from '../src/library/pins-read';
 import type { PinMutation } from '../src/library/pins-actions';
 import type { usePinControlActions } from '../src/library/pin-control';
+import type { MenuProps } from '@rezics/ui/menu';
+import type { DynamicCollectionPage as DynamicPage } from '../src/library/dynamic-collection';
 
 // UNRUN: composed deferred assertions for integration. Use the installed DOM fixture,
 // real session/exposure cache and real owning hooks; only transports are deferred.
@@ -160,6 +162,13 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await act(async () => { void client.refetchQueries({ queryKey: navigation.pinsOrigin.queryKey, exact: true }); });
     await tick();
   };
+  const menu = await import('@rezics/ui/menu');
+  let pinMenu: MenuProps | undefined;
+  const OriginalMenu = menu.Menu;
+  const observeMenu = spyOn(menu, 'Menu').mockImplementation((props) => {
+    if (props.title === m.library_pin_actions()) pinMenu = props;
+    return OriginalMenu(props);
+  });
   try {
     await show(); // A remains unresolved while B becomes immediately usable.
     await act(async () => client.setQueryData(sessionQuery.queryKey, session('B'))); await tick();
@@ -233,9 +242,46 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(writes[4]!.input.data).toEqual({ collectionId: 'b', revision: 42, idempotencyKey: writes[4]!.input.data.idempotencyKey });
     await act(async () => writes[4]!.work.resolve({ ok: true, revision: 43 }));
     expect(control.pending).toBe(false);
+
+    const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');
+    const embedded = response('A');
+    let publicPage: DynamicPage = {
+      id: 'b', title: 'Public members', description: null, curator: null, members: [], next: null,
+      preparing: false, unavailable: false, retryAfterMs: 1000, following: true,
+      pins: embedded.pins, navigationCollections: embedded.collections,
+    };
+    const showDynamic = async () => {
+      await act(async () => root.render(<StrictMode><QueryClientProvider client={client}>
+        <RouterContextProvider router={router}><DynamicCollectionPage page={publicPage} /></RouterContextProvider>
+      </QueryClientProvider></StrictMode>));
+      await tick();
+    };
+    const dynamicPin = () => {
+      const entry = pinMenu?.entries.find((entry) => entry.type !== 'separator' && entry.label === m.library_pin_pin());
+      if (!entry || entry.type === 'separator' || !('onSelect' in entry) || !entry.onSelect) throw new Error('Missing dynamic pin action');
+      expect(entry.disabled).toBe(false); return entry.onSelect;
+    };
+    const dynamicRead = pendingReads.length;
+    await showDynamic();
+    expect(host.textContent).toContain('Public members');
+    expect(host.textContent).not.toContain('Private A'); // Embedded pins/owner shortcuts cannot lend A's authority to C.
+    await settle(dynamicRead, response('C'));
+    await act(async () => dynamicPin()());
+    const dynamicIntent = writes[5]!.input.data;
+    const refreshRead = pendingReads.length;
+    await act(async () => { void client.refetchQueries({ queryKey: ['library-navigation'], type: 'active' }); });
+    await tick(); await settle(refreshRead, response('C', [], 99));
+    publicPage = { ...publicPage }; // Keep the public retry/member remount, retain the outer originating pin action.
+    await act(async () => client.setQueryData(sessionQuery.queryKey, session('C', 'next-csrf')));
+    await showDynamic();
+    await act(async () => writes[5]!.work.reject(new Error('Unknown native result')));
+    await act(async () => dynamicPin()());
+    expect(writes[6]!.input.data).toEqual(dynamicIntent);
+    expect(new Headers(writes[6]!.input.headers).get('X-CSRF-Token')).toBe('next-csrf');
+    await act(async () => writes[6]!.work.resolve({ ok: true, revision: 8 }));
   } finally {
     await act(async () => root.unmount()); client.clear(); host.remove();
-    for (const spy of [read, put, remove, invalidate, cache]) spy.mockRestore();
+    for (const spy of [read, put, remove, invalidate, cache, observeMenu]) spy.mockRestore();
     await window.happyDOM.close();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key);
