@@ -9,7 +9,14 @@ import { kernelClient } from '../kernel/client';
 import { personalRead, publicRead, readQueryKey } from '../kernel/query';
 import type { ReadCredentialMode } from '../kernel/credential';
 import type { SessionEnv } from '../session/client';
-import { collectionRenderPolicy, loadEditableCollectionPage, type CollectionPageResult } from './collection-load';
+import {
+  collectionRenderPolicy,
+  collectionRequestVariant,
+  collectionResultMatches,
+  loadEditableCollectionPage,
+  type CollectionPageResult,
+  type DynamicMembersResult,
+} from './collection-load';
 import { readRelease } from '../subject/definitions';
 import { readCollectionFilterParams } from './collection-filter-params';
 import { facetProperties } from '@rezics/filter';
@@ -189,14 +196,18 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
   });
 
 export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => {
+  .validator(function validateDynamicMembersInput(input: unknown) {
     if (
       !input ||
       typeof input !== 'object' ||
       !('id' in input) ||
       typeof input.id !== 'string' ||
       !input.id ||
-      ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string')
+      ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
+      ('credentialMode' in input &&
+        input.credentialMode !== undefined &&
+        input.credentialMode !== 'anonymous' &&
+        input.credentialMode !== 'session')
     )
       throw notFound();
     const search: Record<string, string | string[]> = {};
@@ -211,11 +222,15 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
     }
     return {
       id: input.id,
+      credentialMode:
+        'credentialMode' in input && input.credentialMode === 'anonymous'
+          ? ('anonymous' as const)
+          : ('session' as const),
       ...('cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
       ...(Object.keys(search).length ? { search } : {}),
     };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<DynamicMembersResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     let filter;
     let filterStatus: 'failed' | undefined;
@@ -247,14 +262,18 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
       env as Partial<SessionEnv>,
       {
         id: data.id,
+        ...(data.search ? { search: data.search } : {}),
         ...(data.cursor ? { cursor: data.cursor } : {}),
         ...(filter ? { filter } : {}),
         ...(filterStatus ? { filterStatus } : {}),
       },
-      'session',
+      data.credentialMode,
     );
     if (!('preparing' in page)) throw notFound();
     return {
+      ...(page.provenance
+        ? { provenance: { ...page.provenance, request: collectionRequestVariant(data, 'members') } }
+        : {}),
       members: page.members,
       next: page.next,
       preparing: page.preparing,
@@ -263,6 +282,38 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
       ...(page.filterStatus ? { filterStatus: page.filterStatus } : {}),
     };
   });
+
+/** The route's private cache is bound to an observed viewer, request and mounted admission lifetime. */
+export function viewerCollectionPageQuery(
+  id: string,
+  cursor: string | undefined,
+  viewerId: string | null,
+  search?: Record<string, string | string[]>,
+  isCurrent: () => boolean = () => true,
+  lifetime?: string,
+) {
+  const input = { id, ...(cursor ? { cursor } : {}), ...(search ? { search } : {}) };
+  return queryOptions({
+    ...personalRead,
+    enabled: personalRead.enabled && Boolean(viewerId),
+    retry: false,
+    queryKey: readQueryKey(
+      ['collection-page', id, cursor ?? null, search ?? null, viewerId, lifetime ?? null],
+      'session',
+    ),
+    queryFn: async ({ signal }) => {
+      const assertCurrent = () => {
+        if (!viewerId || signal.aborted || !isCurrent()) throw new Error('Collection read retired');
+      };
+      assertCurrent();
+      const page = await readCollectionPage({ data: { ...input, credentialMode: 'session' } });
+      assertCurrent();
+      if (!collectionResultMatches(page, input, 'session', viewerId))
+        throw new Error('Collection response does not match the current viewer and request');
+      return page;
+    },
+  });
+}
 
 export function collectionPageQuery(
   id: string,

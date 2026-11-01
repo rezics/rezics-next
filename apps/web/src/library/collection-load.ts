@@ -32,12 +32,56 @@ import {
   type DynamicMembersPage,
 } from './dynamic-collection';
 
-export type CollectionPageResult = EditableCollectionPage | DynamicCollectionPage;
+export type CollectionReadAddress = {
+  id: string;
+  cursor?: string | undefined;
+  editor?: boolean | undefined;
+  search?: Record<string, string | string[]> | undefined;
+};
+
+/** Nonsecret evidence of the prepared server viewer and the exact addressed read. */
+export type CollectionReadProvenance = {
+  mode: ReadCredentialMode;
+  viewerId: string | null;
+  request: string;
+};
+
+export function collectionRequestVariant(input: CollectionReadAddress, kind: 'page' | 'members' = 'page'): string {
+  return JSON.stringify([
+    kind,
+    input.id,
+    input.cursor || null,
+    input.editor === true,
+    Object.entries(input.search ?? {}).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+  ]);
+}
+
+// Optional at the presentation boundary for existing public recordings. Private consumers require it at runtime.
+type CollectionReadResult = { provenance?: CollectionReadProvenance };
+export type CollectionPageResult = (EditableCollectionPage | DynamicCollectionPage) & CollectionReadResult;
 export type DynamicMembersResult = Pick<
   DynamicCollectionPage,
   'members' | 'next' | 'preparing' | 'retryAfterMs' | 'unavailable'
 > &
-  Pick<DynamicCollectionPage, 'filterStatus'>;
+  Pick<DynamicCollectionPage, 'filterStatus'> &
+  CollectionReadResult;
+
+export function collectionResultMatches(
+  result: CollectionReadResult & { id?: string },
+  input: CollectionReadAddress,
+  mode: ReadCredentialMode,
+  viewerId: string | null,
+  kind: 'page' | 'members' = 'page',
+): boolean {
+  const provenance = result.provenance;
+  return (
+    (mode === 'anonymous' ? viewerId === null : typeof viewerId === 'string' && viewerId.length > 0) &&
+    provenance?.mode === mode &&
+    provenance.viewerId === viewerId &&
+    provenance.request === collectionRequestVariant(input, kind) &&
+    (kind === 'members' || result.id === input.id)
+  );
+}
 type CuratedMemberPage = {
   members: {
     id: string;
@@ -254,6 +298,7 @@ export async function loadEditableCollectionPage(
     id: string;
     editor?: boolean;
     cursor?: string;
+    search?: Record<string, string | string[]>;
     filter?: FilterDocument;
     filterIgnored?: string[];
     filterType?: string;
@@ -269,6 +314,13 @@ export async function loadEditableCollectionPage(
     authorization = signedOut ? null : viewerCredential(request);
   }
   const viewer = authorization ? sessionSubject(request) : undefined;
+  // Explicit Authorization is transport, not evidence of a prepared browser subject.
+  if (credentialMode === 'session' && (!authorization || !viewer)) throw notFound();
+  const provenance: CollectionReadProvenance = {
+    mode: credentialMode,
+    viewerId: viewer ?? null,
+    request: collectionRequestVariant(input),
+  };
   const headers = authorization ? { headers: { authorization } } : {};
   const collectionResult = await client.collections({ collectionId: input.id }).get({
     query: libraryFullQuery(),
@@ -277,6 +329,7 @@ export async function loadEditableCollectionPage(
   const collectionEnvelope = readLibraryResult(collectionResult);
   // Keep the existing dynamic compatibility boundary; no new Source operation is called here.
   const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
+  if (collection.id !== input.id) throw notFound();
   // Public browsing always uses the anonymous member/facet population, including for its curator.
   const publicMembership = 'visibility' in collection && collection.visibility !== 'private';
   const editor =
@@ -327,6 +380,7 @@ export async function loadEditableCollectionPage(
   if (collection.membershipKind === 'dynamic') {
     const following = authorization ? await readCollectionFollow(client, collection.id, authorization) : null;
     const filterFields = {
+      provenance,
       ...(collection.revision === undefined ? {} : { revision: collection.revision }),
       ...(collection.curatorAccountId === undefined ? {} : { curatorAccountId: collection.curatorAccountId }),
       ...(input.filter ? { filter: input.filter } : {}),
@@ -429,6 +483,7 @@ export async function loadEditableCollectionPage(
           ? visibleMembers.length
           : null;
   return {
+    provenance,
     ...collectionPresentationOf(collectionEnvelope.collection),
     ...(owner &&
     'coverMediaId' in collectionEnvelope.collection &&

@@ -1,11 +1,19 @@
 import { createFileRoute, isNotFound } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import * as v from 'valibot';
 import { CollectionPage, collectionPageHead } from '../../library/collection-page';
 import { DynamicCollectionPage } from '../../library/dynamic-collection-page';
-import { collectionRenderPolicy, type CollectionPageResult } from '../../library/collection-load';
+import {
+  collectionRenderPolicy,
+  collectionRequestVariant,
+  collectionResultMatches,
+  type CollectionPageResult,
+  type CollectionReadAddress,
+} from '../../library/collection-load';
 import {
   collectionPageQuery,
+  viewerCollectionPageQuery,
   readCollectionPage,
   readDynamicCollectionMembers,
 } from '../../library/collection-queries';
@@ -16,6 +24,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { pageHead, pageLinks } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { useSession } from '../../session/query';
+import { useOperation } from '../../kernel/exposure';
 import { CollectionAccessState } from '../../library/collection-access';
 
 export const Route = createFileRoute('/collections/$id')({
@@ -102,62 +111,179 @@ function PrivateCollectionRoute() {
   return <CollectionContent />;
 }
 
-function CollectionContent({ initialPage }: { initialPage?: CollectionPageResult }) {
+function CollectionContent({ initialPage }: { initialPage?: CollectionPageResult | undefined }) {
   const { id } = Route.useParams();
   const search = Route.useSearch();
-  const { state: session } = useSession();
-  const sessionPage = useQuery({
-    ...collectionPageQuery(id, search.cursor, 'session', search.filters),
-    enabled: session === 'signed-in',
-    retry: false,
-  });
-  if (!initialPage && !sessionPage.data) {
-    const state =
-      sessionPage.error && !isNotFound(sessionPage.error)
-        ? 'unavailable'
-        : session === 'unknown' || (session === 'signed-in' && sessionPage.isPending)
-          ? 'loading'
-          : 'not-found';
+  const { state, subject, csrfToken } = useSession();
+  const getAdmitted = useOperation('collection.get');
+  const membersAdmitted = useOperation('collection_member.list');
+  const viewerId = state === 'signed-in' && subject ? subject : null;
+  const canRead = state === 'signed-in' && viewerId !== null && Boolean(csrfToken) && getAdmitted && membersAdmitted;
+  const identity = JSON.stringify([
+    collectionRequestVariant({ id, cursor: search.cursor, search: search.filters }),
+    state,
+    viewerId,
+    Boolean(csrfToken),
+    getAdmitted,
+    membersAdmitted,
+  ]);
+  const [observed, setObserved] = useState({ identity, generation: 0 });
+  // Retire children before they render with a replacement viewer, address or admission.
+  if (observed.identity !== identity) setObserved({ identity, generation: observed.generation + 1 });
+  return (
+    <CollectionContentLifetime
+      key={observed.generation}
+      id={id}
+      search={search}
+      initialPage={initialPage}
+      session={state}
+      viewerId={viewerId}
+      canRead={canRead}
+    />
+  );
+}
+
+function CollectionContentLifetime({
+  id,
+  search,
+  initialPage,
+  session,
+  viewerId,
+  canRead,
+}: {
+  id: string;
+  search: { cursor?: string; filters?: Record<string, string | string[]>; layout?: 'grid' | 'list' };
+  initialPage?: CollectionPageResult | undefined;
+  session: 'unknown' | 'signed-in' | 'signed-out';
+  viewerId: string | null;
+  canRead: boolean;
+}) {
+  const lifetime = useId();
+  const active = useRef(false);
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const input = {
+    id,
+    ...(search.cursor ? { cursor: search.cursor } : {}),
+    ...(search.filters ? { search: search.filters } : {}),
+  };
+  const privateQuery = viewerCollectionPageQuery(
+    id,
+    search.cursor,
+    viewerId,
+    search.filters,
+    () => active.current && canRead,
+    lifetime,
+  );
+  const sessionPage = useQuery({ ...privateQuery, enabled: canRead, retry: false });
+  // A loader is only an explicit anonymous representation, never a private-data fallback.
+  const publicPage =
+    initialPage && collectionResultMatches(initialPage, input, 'anonymous', null) ? initialPage : undefined;
+  const privatePage =
+    canRead && sessionPage.data && collectionResultMatches(sessionPage.data, input, 'session', viewerId)
+      ? sessionPage.data
+      : undefined;
+  if (canRead && sessionPage.error)
+    return <CollectionAccessState state={isNotFound(sessionPage.error) ? 'not-found' : 'unavailable'} />;
+  const page = privatePage ?? publicPage;
+  if (!page) {
+    const state = session === 'unknown' || (canRead && sessionPage.isPending) ? 'loading' : 'not-found';
     return <CollectionAccessState state={state} />;
   }
-  const page = session === 'signed-in' ? (sessionPage.data ?? initialPage) : initialPage;
-  if (!page) return <CollectionAccessState state="not-found" />;
-  if (session === 'signed-in' && sessionPage.error)
-    return <CollectionAccessState state={isNotFound(sessionPage.error) ? 'not-found' : 'unavailable'} />;
+  const mode = privatePage ? ('session' as const) : ('anonymous' as const);
+  const authority =
+    'preparing' in page
+      ? null
+      : [
+          page.visibility,
+          page.viewerActions?.state,
+          page.viewerActions?.state === 'ready'
+            ? page.viewerActions.actions.map(({ action, operations }) => [action, [...operations].sort()]).sort()
+            : null,
+        ];
+  return (
+    <CollectionResultLifetime
+      key={JSON.stringify([mode, authority])}
+      page={page}
+      input={input}
+      layout={search.layout ?? 'list'}
+      mode={mode}
+      viewerId={viewerId}
+      canRead={canRead}
+      queryKey={
+        mode === 'session'
+          ? privateQuery.queryKey
+          : collectionPageQuery(id, search.cursor, 'anonymous', search.filters).queryKey
+      }
+    />
+  );
+}
+
+function CollectionResultLifetime({
+  page,
+  input,
+  layout,
+  mode,
+  viewerId,
+  canRead,
+  queryKey,
+}: {
+  page: CollectionPageResult;
+  input: CollectionReadAddress;
+  layout: 'grid' | 'list';
+  mode: 'session' | 'anonymous';
+  viewerId: string | null;
+  canRead: boolean;
+  queryKey: readonly unknown[];
+}) {
+  const active = useRef(false);
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  function assertCurrent(privateRead = false) {
+    if (!active.current || (privateRead && (!canRead || mode !== 'session')))
+      throw new Error('Collection read retired');
+  }
   async function refreshPage(editor = false) {
-    const result = await readCollectionPage({
-      data: {
-        id,
-        ...(editor ? { editor: true } : {}),
-        ...(search.cursor ? { cursor: search.cursor } : {}),
-        credentialMode: 'session',
-        ...(search.filters ? { search: search.filters } : {}),
-      },
-    });
-    if ('preparing' in result) throw new Error('Expected a curated collection page');
+    assertCurrent(true);
+    const request = { ...input, ...(editor ? { editor: true } : {}) };
+    const result = await readCollectionPage({ data: { ...request, credentialMode: 'session' } });
+    assertCurrent(true);
+    if (!collectionResultMatches(result, request, 'session', viewerId) || 'preparing' in result)
+      throw new Error('Collection response does not match the current viewer and request');
+    return result;
+  }
+  async function readMembers(collectionId: string, cursor?: string) {
+    assertCurrent(mode === 'session');
+    // The dynamic retry reader addresses the same observed page, including a stale-cursor restart.
+    if (collectionId !== input.id || cursor !== page.cursor) throw new Error('Collection member address changed');
+    const request = {
+      id: collectionId,
+      ...(cursor ? { cursor } : {}),
+      ...(input.search ? { search: input.search } : {}),
+    };
+    const result = await readDynamicCollectionMembers({ data: { ...request, credentialMode: mode } });
+    assertCurrent(mode === 'session');
+    if (!collectionResultMatches(result, request, mode, mode === 'session' ? viewerId : null, 'members'))
+      throw new Error('Collection members do not match the current viewer and request');
     return result;
   }
   return 'preparing' in page ? (
-    <DynamicCollectionPage
-      page={page}
-      {...(search.filters ? { search: search.filters } : {})}
-      readMembers={(id, cursor) =>
-        readDynamicCollectionMembers({
-          data: {
-            id,
-            ...(cursor ? { cursor } : {}),
-            ...(search.filters ? { search: search.filters } : {}),
-          },
-        })
-      }
-    />
+    <DynamicCollectionPage page={page} {...(input.search ? { search: input.search } : {})} readMembers={readMembers} />
   ) : (
     <CollectionPage
       page={page}
-      cursor={search.cursor}
-      layout={search.layout ?? 'list'}
-      {...(search.filters ? { search: search.filters } : {})}
-      queryKey={collectionPageQuery(page.id, search.cursor, 'session', search.filters).queryKey}
+      cursor={input.cursor}
+      layout={layout}
+      {...(input.search ? { search: input.search } : {})}
+      queryKey={queryKey}
       refreshPage={() => refreshPage()}
       readEditorPage={() => refreshPage(true)}
     />
