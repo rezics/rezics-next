@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { routeWebCheck, workspacePath, WebCheckFailure } from './check-placement.ts';
 
 type DeploymentOptions = {
   dryRun: boolean;
@@ -8,6 +9,8 @@ type DeploymentOptions = {
   cloudflareOutputDir?: string;
   build: () => Promise<void>;
   smoke: () => Promise<void>;
+  /** Finite build and the same six smoke scenarios in one physical snapshot, before local publication. */
+  validate?: () => Promise<void>;
   wrangler: (args: string[]) => Promise<string>;
   fetchBuild?: () => Promise<{ commit?: string }>;
   isTreeClean?: () => Promise<string[]>;
@@ -36,8 +39,11 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
       }
     }
   }
-  await options.build();
-  await options.smoke();
+  if (options.validate) await options.validate();
+  else {
+    await options.build();
+    await options.smoke();
+  }
   const cloudflareOutputDir = options.cloudflareOutputDir ?? resolve(import.meta.dir, '../.cloudflare/output');
   rmSync(cloudflareOutputDir, { recursive: true, force: true });
   options.print(`Removed leftover Cloudflare build output: ${cloudflareOutputDir}`);
@@ -119,41 +125,67 @@ async function wrangler(args: string[]): Promise<string> {
   return `${stdout}\n${stderr}`;
 }
 
-if (import.meta.main) {
+/** No credentials or publication command crosses this finite remote validation boundary. */
+export async function validateStorybook(): Promise<void> {
   const app = resolve(import.meta.dir, '..');
-  const gitCommit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: resolve(app, '../..') });
-  if (gitCommit.exitCode !== 0) throw new Error('Could not read the current Git commit SHA.');
-  const commit = gitCommit.stdout.toString().trim();
-  if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('Git did not return a full commit SHA.');
-  if (process.argv.includes('--status')) {
-    process.exitCode = await runStatus({
-      localCommit: commit,
-      fetchBuild: fetchLiveBuild,
-      print: (line) => console.log(line),
-    });
-  } else {
-    const run = (script: string[]) =>
-      Bun.spawnSync(['bun', ...script], {
-        cwd: app,
-        env: process.env,
-        stdout: 'inherit',
-        stderr: 'inherit',
-      });
-    await runDeployment({
-      dryRun: process.argv.includes('--dry-run'),
-      force: process.argv.includes('--force'),
-      build: async () => {
-        const result = run(['scripts/storybook-build.ts']);
-        if (result.exitCode !== 0) throw new Error(`Storybook build failed with exit code ${result.exitCode}`);
-      },
-      smoke: async () => {
-        const result = run(['scripts/storybook-smoke.ts']);
-        if (result.exitCode !== 0) throw new Error(`Storybook smoke test failed with exit code ${result.exitCode}`);
-      },
-      commit,
-      wrangler,
-      fetchBuild: fetchLiveBuild,
-      print: (line) => console.log(line),
-    });
+  const root = resolve(app, '../..');
+  const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? resolve(app, 'storybook-static'));
+  const code = await routeWebCheck({ root, cwd: app,
+    command: ['bun', 'scripts/storybook-deploy.ts', '--validate-only'],
+    returns: [workspacePath(root, output)],
+  });
+  if (code !== null) {
+    if (code !== 0) throw new WebCheckFailure(code, 'Storybook validation');
+    return;
+  }
+  for (const script of ['scripts/storybook-build.ts', 'scripts/storybook-smoke.ts']) {
+    const child = Bun.spawn(['bun', script], { cwd: app, env: process.env,
+      stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+    const status = await child.exited;
+    if (status !== 0) throw new WebCheckFailure(status, script);
+  }
+}
+
+if (import.meta.main) {
+  try {
+    if (process.argv.slice(2).includes('--validate-only')) {
+      if (process.argv.length !== 3) throw new Error('--validate-only cannot be combined with publication options');
+      await validateStorybook();
+    } else {
+      const app = resolve(import.meta.dir, '..');
+      const gitCommit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: resolve(app, '../..') });
+      if (gitCommit.exitCode !== 0) throw new Error('Could not read the current Git commit SHA.');
+      const commit = gitCommit.stdout.toString().trim();
+      if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('Git did not return a full commit SHA.');
+      if (process.argv.includes('--status')) {
+        process.exitCode = await runStatus({
+          localCommit: commit,
+          fetchBuild: fetchLiveBuild,
+          print: (line) => console.log(line),
+        });
+      } else {
+        const run = async (script: string) => {
+          const result = Bun.spawn(['bun', script], {
+            cwd: app, env: process.env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit',
+          });
+          const code = await result.exited;
+          if (code !== 0) throw new WebCheckFailure(code, script);
+        };
+        await runDeployment({
+          dryRun: process.argv.includes('--dry-run'),
+          force: process.argv.includes('--force'),
+          validate: validateStorybook,
+          build: () => run('scripts/storybook-build.ts'),
+          smoke: () => run('scripts/storybook-smoke.ts'),
+          commit,
+          wrangler,
+          fetchBuild: fetchLiveBuild,
+          print: (line) => console.log(line),
+        });
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    process.exitCode = error instanceof WebCheckFailure ? error.code : 1;
   }
 }

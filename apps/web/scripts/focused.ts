@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
+import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
 
 const app = resolve(import.meta.dir, '..');
 const signals = [
@@ -77,13 +78,21 @@ async function stopProcessGroup(child: Bun.Subprocess<'inherit', 'pipe', 'pipe'>
     throw new Error(`Focused command process group ${pid} remains alive after SIGKILL`);
 }
 
-/** Runs a small focused test command locally, with a private marker root and no stack or remote placement. */
+/** Routes before preparation or spawn; the physical remote worker retains its independent fixture cleanup. */
 export async function runFocusedCommand(command: string[], options: FocusedRunnerOptions = {}): Promise<number> {
   if (command.length === 0) throw new Error('Usage: bun scripts/focused.ts [--private-network] -- <command...>');
   if (options.privateNetwork && process.platform !== 'linux')
     throw new Error('--private-network requires Linux user and network namespaces');
 
   const appDirectory = resolve(options.appDirectory ?? app);
+  if (!hasWebCheckCustody(resolve(app, '../..'), appDirectory) &&
+      (options.prepare || options.onStart || options.onOutput))
+    throw new Error('Focused check unavailable: in-process preparation/start/output hooks require actual remote custody; callbacks cannot be transferred through the finite CLI.');
+  const routed = await routeWebCheck({
+    root: resolve(app, '../..'), cwd: appDirectory,
+    command: ['bun', 'scripts/focused.ts', ...(options.privateNetwork ? ['--private-network'] : []), '--', ...command],
+  }, { ...process.env, ...options.env });
+  if (routed !== null) return routed;
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,

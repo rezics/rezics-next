@@ -1,8 +1,13 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
+import { routeWebCheck } from './check-placement.ts';
 
-const output = resolve(import.meta.dir, '../public/cards');
+const app = resolve(import.meta.dir, '..');
+const root = resolve(app, '../..');
+const routed = await routeWebCheck({ root, cwd: app, command: ['bun', 'scripts/cards.ts', ...process.argv.slice(2)], returns: ['apps/web/public/cards'] });
+if (routed !== null) process.exit(routed);
+const output = resolve(app, 'public/cards');
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {

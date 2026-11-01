@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
-import { stackRun } from '../../../scripts/stack-run.ts';
+import { placeWebCheck } from './check-placement.ts';
 
 export { observeStorybook, settle };
 
@@ -627,16 +627,17 @@ function workspaceRelative(path: string): string | undefined {
 function screenshotCommand(argv: readonly string[], relativeOut: string | undefined): string[] {
   if (relativeOut === undefined) return ['bun', 'scripts/screenshots.ts', ...argv];
   const command = ['bun', 'scripts/screenshots.ts'];
+  let outputSpecified = false;
   for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === undefined) continue;
+    const argument = argv[index]!;
+    command.push(argument);
     if (argument === '--out') {
       index += 1;
-      continue;
+      command.push(relativeOut);
+      outputSpecified = true;
     }
-    command.push(argument);
   }
-  command.push('--out', relativeOut);
+  if (!outputSpecified) command.push('--out', relativeOut);
   return command;
 }
 
@@ -698,7 +699,7 @@ async function captureScreenshots(options: Options): Promise<number> {
   }
 }
 
-/** Hands the capture to a check host. An output outside the workspace stays local, because nothing can copy it back. */
+/** Routes capture before building or starting a browser; unsupported destinations fail closed. */
 export async function runScreenshots(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
   const options = parseOptions(argv);
   if (options.help) {
@@ -706,13 +707,14 @@ export async function runScreenshots(argv: readonly string[] = process.argv.slic
     return 0;
   }
   const returned = workspaceRelative(options.out);
-  return stackRun(
+  if (returned === undefined) throw new Error('Web screenshots unavailable: --out must be inside the candidate workspace.');
+  return placeWebCheck(
     {
       label: 'web screenshots',
       root,
       cwd: app,
       command: screenshotCommand(argv, returned),
-      ...(returned === undefined ? { keepsFiles: true } : { returns: [returned] }),
+      returns: [returned],
     },
     async () => {
       return captureScreenshots(options);

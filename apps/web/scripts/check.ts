@@ -15,7 +15,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, w
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stackRun, type StackRun } from '../../../scripts/stack-run.ts';
+import type { StackRun } from '../../../scripts/stack-run.ts';
+import { placeWebCheck, requireWebCheckCustody, routeWebCheck, workspacePath } from './check-placement.ts';
 import {
   databaseCheck,
   ownDatabase,
@@ -96,6 +97,7 @@ function recordRunMarker(directory: string | undefined, phase: 'start' | 'end', 
 
 /** Runs every file in its own isolated Bun process, with separate browser and unit lane pools. */
 export async function runWebTestLanes(options: WebTestLanesOptions): Promise<WebTestLanesResult> {
+  requireWebCheckCustody(root, options.directory ?? app);
   const directory = resolve(options.directory ?? app);
   const timingsFile = resolve(options.timingsFile ?? defaultTimingsFile);
   const sourceEnvironment = options.env ?? process.env;
@@ -245,6 +247,7 @@ export async function runBrowserWorker(input: {
   if (input.report === '' || input.report.startsWith('/') || input.report.split('/').includes('..')) {
     throw new Error(`report must stay inside the workspace: ${input.report}`);
   }
+  requireWebCheckCustody(root, app);
   const reportDirectory = resolve(root, input.report);
   const result = await runWebTestLanes({
     files: input.files,
@@ -296,7 +299,7 @@ export async function placeBrowserCheck(
   const directory = resolve(root, report);
   const testScript = options.testScript;
   try {
-    const code = await stackRun(
+    const code = await placeWebCheck(
       {
         label: 'web browser check',
         root,
@@ -333,6 +336,11 @@ export async function placeBrowserCheck(
 async function runCommand(label: string, command: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
   process.stdout.write(`\n[web check] ${label}\n`);
   const started = performance.now();
+  const routed = await routeWebCheck({ root, cwd: app, command: [command, ...args] }, env);
+  if (routed !== null) {
+    if (routed !== 0) throw new Error(`${label} failed with status ${routed}`);
+    return;
+  }
   const child = Bun.spawn([command, ...args], {
     cwd: app,
     env,
@@ -345,10 +353,10 @@ async function runCommand(label: string, command: string, args: string[], env: N
   if (status !== 0) throw new Error(`${label} failed with status ${status}`);
 }
 
-/** Places Docker-backed host tests on a check host, with stack-run's local fallback and lease. */
+/** Places Docker-backed host tests through the finite remote driver, without local fallback. */
 export async function runHostTests(
   env: NodeJS.ProcessEnv = process.env,
-  place: typeof stackRun = stackRun,
+  place: typeof placeWebCheck = placeWebCheck,
   execute: typeof runCommand = runCommand,
 ): Promise<void> {
   const run: StackRun = {
@@ -374,6 +382,11 @@ export async function runHostTests(
 
 /** Runs the Auth-backed Web host fixture in Auth's database lane without widening the general Web host suite. */
 async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const routed = await routeWebCheck({ root, cwd: app, command: ['bun', 'scripts/check.ts', '--auth-binding-host'] }, env);
+  if (routed !== null) {
+    if (routed !== 0) throw new Error(`Auth binding host test placement failed with status ${routed}`);
+    return;
+  }
   const file = 'apps/web/tests/auth-binding.host.test.ts';
   const remoteCommand = ['bun', '../../apps/web/scripts/check.ts', '--auth-binding-host'];
   const code = await databaseCheck(remoteCommand, async () => {
@@ -548,6 +561,14 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
 }
 
 export async function main(args: string[], runtime: WebCheckRuntime = {}): Promise<void> {
+  const workerReport = browserWorkerRequest(args)?.report;
+  const returned = workerReport ? [workspacePath(root, workerReport)] : ['apps/web/.cache/check-timings.json'];
+  if (args.includes('--prepare-only')) returned.push('apps/web/.dev.vars');
+  const routed = await routeWebCheck({ root, cwd: app, command: ['bun', 'scripts/check.ts', ...args], returns: returned });
+  if (routed !== null) {
+    process.exitCode = routed;
+    return;
+  }
   if (args[0] === '--personal-host') {
     if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --personal-host');
     // Explicit integration gate: keep ordinary host discovery/placement and its

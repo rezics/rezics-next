@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { observeStorybook, settle, type StoryPreview } from './screenshots.ts';
+import { requireWebCheckCustody, routeWebCheck, WebCheckFailure } from './check-placement.ts';
 
 export type SmokeStoryEntry = { id: string; title: string; name: string; type: string };
 export type SmokeStoryIndex = { entries: Record<string, SmokeStoryEntry> };
@@ -53,23 +54,20 @@ export function selectSmokeStories(
 
 export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser): Promise<void> {
   const app = resolve(import.meta.dir, '..');
+  const root = resolve(app, '../..');
+  if (suppliedBrowser) requireWebCheckCustody(root, app);
+  else {
+    const routed = await routeWebCheck({ root, cwd: app,
+      command: ['bun', 'scripts/storybook-smoke.ts', ...(origin ? ['--origin', origin] : [])] });
+    if (routed !== null) {
+      if (routed !== 0) throw new WebCheckFailure(routed, 'Storybook smoke');
+      return;
+    }
+  }
   const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? `${app}/storybook-static`);
   const ownsBrowser = suppliedBrowser === undefined;
-  const browser = suppliedBrowser ?? (await chromium.launch({ headless: true }));
-  const server = origin
-    ? undefined
-    : Bun.serve({
-        hostname: '127.0.0.1',
-        port: 0,
-        async fetch(request) {
-          const pathname = decodeURIComponent(new URL(request.url).pathname);
-          const filePath = resolve(output, pathname === '/' ? 'index.html' : `.${pathname}`);
-          if (!filePath.startsWith(`${output}/`)) return new Response('not found', { status: 404 });
-          const file = Bun.file(filePath);
-          return (await file.exists()) ? new Response(file) : new Response('not found', { status: 404 });
-        },
-      });
-  const base = origin ?? server!.url.toString();
+  if (!existsSync(resolve(output, 'index.json')) || !existsSync(resolve(output, 'ui/index.json')))
+    throw new Error('Storybook smoke unavailable: both built indexes must exist in this physical snapshot. Use storybook-deploy.ts --validate-only to build and run the six smoke scenarios together.');
   const webIndex = JSON.parse(readFileSync(resolve(output, 'index.json'), 'utf8')) as SmokeStoryIndex;
   const uiIndex = JSON.parse(readFileSync(resolve(output, 'ui/index.json'), 'utf8')) as SmokeStoryIndex;
   const copyRecording = JSON.parse(
@@ -91,7 +89,25 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
     { id: stories.subject.id, globals: '', composed: false, requiresCover: false },
     { id: stories.copies.id, globals: '', composed: false, requiresCover: true, coverMedia: stories.coverMedia },
   ];
+  const browser = suppliedBrowser ?? (await chromium.launch({ headless: true }));
+  let server: ReturnType<typeof Bun.serve> | undefined;
+  let failed = false;
+  let failure: unknown;
   try {
+    server = origin
+    ? undefined
+    : Bun.serve({
+        hostname: '127.0.0.1',
+        port: 0,
+        async fetch(request) {
+          const pathname = decodeURIComponent(new URL(request.url).pathname);
+          const filePath = resolve(output, pathname === '/' ? 'index.html' : `.${pathname}`);
+          if (!filePath.startsWith(`${output}/`)) return new Response('not found', { status: 404 });
+          const file = Bun.file(filePath);
+          return (await file.exists()) ? new Response(file) : new Response('not found', { status: 404 });
+        },
+      });
+    const base = origin ?? server!.url.toString();
     for (const scenario of scenarios) {
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
@@ -191,10 +207,28 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         await page.close();
       }
     }
-  } finally {
-    server?.stop(true);
-    if (ownsBrowser) await browser.close();
+  } catch (error) {
+    failed = true;
+    failure = error;
   }
+  const cleanup: unknown[] = [];
+  try { server?.stop(true); } catch (error) { cleanup.push(error); }
+  if (ownsBrowser) {
+    try { await browser.close(); } catch (error) { cleanup.push(error); }
+  }
+  if (failed && cleanup.length) throw new AggregateError([failure, ...cleanup], 'Storybook smoke and cleanup failed', { cause: failure });
+  if (failed) throw failure;
+  if (cleanup.length) throw new AggregateError(cleanup, 'Storybook smoke cleanup failed');
 }
 
-if (import.meta.main) await smokeStorybook();
+if (import.meta.main) {
+  try {
+    const args = process.argv.slice(2);
+    if (args.length && (args.length !== 2 || args[0] !== '--origin' || !args[1]))
+      throw new Error('Usage: storybook-smoke.ts [--origin <url>]');
+    await smokeStorybook(args[1]);
+  } catch (error) {
+    console.error(error);
+    process.exitCode = error instanceof WebCheckFailure ? error.code : 1;
+  }
+}
