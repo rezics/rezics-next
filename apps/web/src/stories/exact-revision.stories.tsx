@@ -16,6 +16,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SelectedRevision: Story = { ...pattern.SelectedRevision };
+export const LongDocument: Story = { ...pattern.LongDocument };
 export const Unavailable: Story = { ...pattern.Unavailable };
 export const Loading: Story = { ...pattern.Loading };
 export const NativeRetry: Story = { ...pattern.NativeRetry };

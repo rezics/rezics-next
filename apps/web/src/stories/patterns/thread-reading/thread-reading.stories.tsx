@@ -40,7 +40,9 @@ async function mountedReplyEditor(canvas: ReturnType<typeof within>) {
 async function populatedReading({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   await canvas.findByRole('heading', { level: 1, name: thread.thread.title });
-  await canvas.findByRole('heading', { level: 2, name: m.thread_posts_heading() });
+  const postsHeading = await canvas.findByRole('heading', { level: 2, name: m.thread_posts_heading() });
+  await expect(postsHeading).toHaveAttribute('data-content-item-slot', 'title');
+  await expect(canvasElement.querySelectorAll('[data-slot="content-item-frame"]').length).toBeGreaterThan(0);
   await canvas.findAllByText(m.thread_post_edited());
   await expect(canvas.getAllByText(m.thread_post_edited())).toHaveLength(1);
   const labels = subject.subject.labels as Record<string, string>;
@@ -60,6 +62,18 @@ export const Populated: Story = {
   play: async (context) => {
     const canvas = await populatedReading(context);
     await mountedReplyEditor(canvas);
+  },
+};
+export const LongDocument: Story = {
+  args: { state: 'long-document', visitor: 'Signed Out' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('The final canonical paragraph remains visible in the complete discussion document.');
+    const frames = canvasElement.querySelectorAll('[data-slot="content-item-frame"]');
+    await expect(frames.length).toBeGreaterThan(0);
+    const document = canvasElement.querySelector('[data-slot="document-body"]');
+    await expect(document).not.toBeNull();
+    await expect(document?.className).not.toContain('line-clamp');
   },
 };
 export const SignedOut: Story = {

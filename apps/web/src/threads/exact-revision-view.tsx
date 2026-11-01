@@ -1,4 +1,5 @@
 import { DocumentBody } from '../document-body';
+import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { m } from '../paraglide/messages.js';
@@ -29,7 +30,9 @@ export function ExactRevisionView({
     page = { state: 'unavailable', status: 404 };
   }
   return (
-    <article
+    <ContentItemFrame
+      as="article"
+      data-slot="content-item-frame"
       className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]"
       aria-busy={page.state === 'loading'}
     >
@@ -106,6 +109,6 @@ export function ExactRevisionView({
           </Collapsible>
         </section>
       ) : null}
-    </article>
+    </ContentItemFrame>
   );
 }

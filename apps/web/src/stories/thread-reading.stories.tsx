@@ -16,6 +16,10 @@ export const Populated: Story = {
   ...Reading.Populated,
   play: async (context) => Reading.Populated.play!(context),
 };
+export const LongDocument: Story = {
+  ...Reading.LongDocument,
+  play: async (context) => Reading.LongDocument.play!(context),
+};
 export const SignedOut: Story = {
   ...Reading.SignedOut,
   play: async (context) => Reading.SignedOut.play!(context),

@@ -1,6 +1,6 @@
 import { Tombstone } from '@rezics/ui/tombstone';
 import { Withheld } from '@rezics/ui/withheld';
-import { ListRow } from '@rezics/ui/list-row';
+import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
@@ -56,89 +56,97 @@ export function RemovedPost({
     id: anchorId,
     ref: itemRef,
     tabIndex: -1 as const,
-    className: 'scroll-mt-24 py-5 target:bg-muted/50',
+    className: 'min-w-0 scroll-mt-24 target:bg-muted/50',
     style: minHeight === undefined ? undefined : { minHeight },
   };
 
   if (post.availability === 'withheld') {
     return (
-      <ListRow {...common}>
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <Byline
-            author={author}
-            createdAt={post.createdAt}
-            now={now}
-            showAuthor={authors !== null && authorId !== undefined}
-            className="min-h-8 flex-1"
-          />
-        </div>
-        {children}
-        <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
-        {owner && 'decisionId' in post && post.decisionId ? (
-          <a
-            className="mt-3 inline-block underline-offset-4 hover:underline"
-            href={`/moderation/decisions/${encodeURIComponent(post.decisionId)}`}
-          >
-            {m.thread_post_decision_link()}
-          </a>
-        ) : null}
-      </ListRow>
+      <li {...common}>
+        <ContentItemFrame
+          as="div"
+          data-slot="content-item-frame"
+          className="min-w-0 rounded-xl px-4 py-5 sm:px-6"
+        >
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <Byline
+              author={author}
+              createdAt={post.createdAt}
+              now={now}
+              showAuthor={authors !== null && authorId !== undefined}
+              className="min-h-8 flex-1"
+            />
+          </div>
+          {children}
+          <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
+          {owner && 'decisionId' in post && post.decisionId ? (
+            <a
+              className="mt-3 inline-block underline-offset-4 hover:underline"
+              href={`/moderation/decisions/${encodeURIComponent(post.decisionId)}`}
+            >
+              {m.thread_post_decision_link()}
+            </a>
+          ) : null}
+        </ContentItemFrame>
+      </li>
     );
   }
 
   const reason = deleted && !restored ? 'deleted' : 'unavailable';
   const ownedRestorableUntil = owner && deleted && !restored ? restorableUntil : undefined;
   return (
-    <ListRow {...common}>
-      {children}
-      <div className="relative">
-        <Tombstone
-          shape="post"
-          reason={reason}
-          {...(ownedRestorableUntil && onRestore ? { restoreUntil: ownedRestorableUntil, onRestore } : {})}
-          labels={{
-            unavailable: m.thread_post_unavailable(),
-            deleted: m.thread_post_deleted(),
-            restore: m.thread_post_restore(),
-            restoreUntil: (relative) => m.thread_post_restore_until({ relative }),
-          }}
-        />
-        {owner && deleted ? (
-          <div className="absolute right-2 top-2">
-            <Menu
-              title={m.thread_content_more_actions()}
-              backLabel={m.thread_delete_cancel()}
-              trigger={
-                <Button aria-label={m.thread_content_more_actions()} ref={menuButton} size="icon-sm" variant="ghost">
-                  <EllipsisIcon aria-hidden="true" />
-                </Button>
-              }
-              entries={[{ type: 'item', label: m.thread_content_copy_link(), onSelect: onCopyLink }]}
-            />
+    <li {...common}>
+      <ContentItemFrame as="div" data-slot="content-item-frame" className="min-w-0 rounded-xl px-4 py-5 sm:px-6">
+        {children}
+        <div className="relative">
+          <Tombstone
+            shape="post"
+            reason={reason}
+            {...(ownedRestorableUntil && onRestore ? { restoreUntil: ownedRestorableUntil, onRestore } : {})}
+            labels={{
+              unavailable: m.thread_post_unavailable(),
+              deleted: m.thread_post_deleted(),
+              restore: m.thread_post_restore(),
+              restoreUntil: (relative) => m.thread_post_restore_until({ relative }),
+            }}
+          />
+          {owner && deleted ? (
+            <div className="absolute right-2 top-2">
+              <Menu
+                title={m.thread_content_more_actions()}
+                backLabel={m.thread_delete_cancel()}
+                trigger={
+                  <Button aria-label={m.thread_content_more_actions()} ref={menuButton} size="icon-sm" variant="ghost">
+                    <EllipsisIcon aria-hidden="true" />
+                  </Button>
+                }
+                entries={[{ type: 'item', label: m.thread_content_copy_link(), onSelect: onCopyLink }]}
+              />
+            </div>
+          ) : null}
+        </div>
+        {deadlineUnknown ? (
+          <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+            <p>{m.thread_post_restore_deadline_unknown()}</p>
+            {onRestore ? (
+              <Button variant="outline" size="sm" onClick={onRestore}>
+                {m.thread_post_restore()}
+              </Button>
+            ) : null}
           </div>
         ) : null}
-      </div>
-      {deadlineUnknown ? (
-        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-          <p>{m.thread_post_restore_deadline_unknown()}</p>
-          {onRestore ? (
-            <Button variant="outline" size="sm" onClick={onRestore}>
-              {m.thread_post_restore()}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {restoreError ? (
-        <div className="mt-3 space-y-2 text-sm" role="alert">
-          <p className="text-destructive">{restoreError}</p>
-          {existingReviewId ? <ExistingReviewNotice reviewId={existingReviewId} /> : null}
-          {onRefresh ? (
-            <Button variant="outline" size="sm" onClick={onRefresh}>
-              {m.thread_post_refresh()}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </ListRow>
+        {restoreError ? (
+          <div className="mt-3 space-y-2 text-sm" role="alert">
+            <p className="text-destructive">{restoreError}</p>
+            {existingReviewId ? <ExistingReviewNotice reviewId={existingReviewId} /> : null}
+            {onRefresh ? (
+              <Button variant="outline" size="sm" onClick={onRefresh}>
+                {m.thread_post_refresh()}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </ContentItemFrame>
+    </li>
   );
 }

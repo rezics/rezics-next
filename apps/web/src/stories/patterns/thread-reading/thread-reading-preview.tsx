@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { fromPlainText } from '@rezics/document';
 import { ThreadReading } from '../../../threads/thread-reading';
 import { AuthoringDepartureProvider } from '../../../threads/authoring-departure';
 import type { ThreadPost } from '../../../threads/thread-page';
@@ -18,8 +19,21 @@ import owned from '../../../kernel/recorded/thread-owned.json';
 import history from '../../../kernel/recorded/thread-history-thread.json';
 import community from '../../../kernel/recorded/board-realm-thread.json';
 
+const longDocument = fromPlainText(
+  [
+    ...Array.from(
+      { length: 24 },
+      (_, index) =>
+        `Canonical paragraph ${index + 1}: a full discussion remains readable at its original length, with its own complete text and paragraph boundaries.`,
+    ),
+    'The final canonical paragraph remains visible in the complete discussion document.',
+  ].join('\n\n'),
+  'blocks',
+);
+
 export type ReadingState =
   | 'populated'
+  | 'long-document'
   | 'community'
   | 'existing-reply'
   | 'deleted-organization'
@@ -92,7 +106,17 @@ function Connected({ state }: { state: ReadingState }) {
             }),
           },
         }
-      : loaded;
+      : state === 'long-document'
+        ? {
+            ...loaded,
+            posts: {
+              ...loaded.posts,
+              posts: loaded.posts.posts.map((post, index): ThreadPost =>
+                index === 0 && post.availability === 'available' ? { ...post, body: longDocument } : post,
+              ),
+            },
+          }
+        : loaded;
   return (
     <ThreadReading
       key={`${id}-${state}`}

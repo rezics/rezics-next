@@ -1,4 +1,5 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { ContentItemHeading } from '@rezics/ui/content-item';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { reactionKinds } from '@rezics/ui/reactions';
 import { QueryClientContext } from '@tanstack/react-query';
@@ -210,13 +211,13 @@ export function ThreadReading({
         <div data-slot="thread-reading-column" className="mx-auto w-full min-w-0 max-w-3xl space-y-5">
           {renderHeader(displayTitle)}
           <section aria-labelledby="thread-posts-heading" className="min-w-0 space-y-3">
-            <h2 id="thread-posts-heading" className="px-1 text-sm font-semibold text-muted-foreground">
+            <ContentItemHeading level={2} id="thread-posts-heading" className="px-1 text-sm font-semibold text-muted-foreground">
               {m.thread_posts_heading()}
-            </h2>
+            </ContentItemHeading>
             {posts.posts.length ? (
               <ol
                 id={`thread-${thread.id}`}
-                className="space-y-3 scroll-mt-24 [&>li]:rounded-xl [&>li]:bg-card [&>li]:px-4 sm:[&>li]:px-6"
+                className="space-y-3 scroll-mt-24"
               >
                 {posts.posts.map((post) => {
                   const firstPost = post.id === thread.firstPost.id;

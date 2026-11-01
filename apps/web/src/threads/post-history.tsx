@@ -1,4 +1,5 @@
 import { DocumentBody } from '../document-body';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
@@ -160,7 +161,9 @@ function HistoryDisclosure({
         aria-label={m.thread_history_heading()}
         className="order-last mt-3 min-w-0 basis-full space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5"
       >
-        <h3 className="text-base font-semibold">{m.thread_history_heading()}</h3>
+        <ContentItemHeading level={3} className="text-base font-semibold">
+          {m.thread_history_heading()}
+        </ContentItemHeading>
         {loading && !loaded ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.thread_history_loading()}
@@ -243,38 +246,43 @@ export function RevisionEntry({
 }) {
   const locale = getLocale();
   return (
-    <li className="min-w-0 space-y-3 border-t border-border/60 pt-4 first:border-0 first:pt-0">
-      <h4 className="font-semibold">
-        <a
-          href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
-          className="inline-flex min-h-11 items-center underline underline-offset-4"
-        >
-          {m.thread_history_version({ number: String(number) })}
-        </a>
-      </h4>
-      <Byline
-        author={authors?.[revision.authorId]}
-        createdAt={revision.revisedAt ?? revision.createdAt}
-        now={now}
-        showAuthor
-      />
-      {revision.availability === 'available' && revision.body ? (
-        <DocumentBody
-          document={revision.body}
-          mentions={mentions}
-          locale={locale}
-          renderImage={({ mediaId, alt }) => (
-            <NativeDocumentImage
-              image={revisionDocumentImage(documentMedia, revision, mediaId)}
-              alt={alt}
-              locale={locale}
-            />
-          )}
+    <li className="min-w-0 border-t border-border/60 pt-4 first:border-0 first:pt-0">
+      <ContentItemFrame
+        as="article"
+        data-slot="content-item-frame"
+        aria-labelledby={`revision-entry-${revision.revisionId}`}
+        className="min-w-0 space-y-3 rounded-xl"
+      >
+        <ContentItemHeading level={4} id={`revision-entry-${revision.revisionId}`} className="font-semibold">
+          <a
+            href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
+            className="inline-flex min-h-11 items-center underline underline-offset-4"
+          >
+            {m.thread_history_version({ number: String(number) })}
+          </a>
+        </ContentItemHeading>
+        <Byline
+          author={authors?.[revision.authorId]}
+          createdAt={revision.revisedAt ?? revision.createdAt}
+          now={now}
+          showAuthor
         />
-      ) : null}
-      <div className="min-w-0 max-w-2xl rounded-lg border border-border/60 bg-muted/30 p-3 [overflow-wrap:anywhere]">
+        {revision.availability === 'available' && revision.body ? (
+          <DocumentBody
+            document={revision.body}
+            mentions={mentions}
+            locale={locale}
+            renderImage={({ mediaId, alt }) => (
+              <NativeDocumentImage
+                image={revisionDocumentImage(documentMedia, revision, mediaId)}
+                alt={alt}
+                locale={locale}
+              />
+            )}
+          />
+        ) : null}
         <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
-      </div>
+      </ContentItemFrame>
     </li>
   );
 }

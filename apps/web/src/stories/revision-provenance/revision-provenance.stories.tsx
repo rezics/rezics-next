@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { STANDARD_QUESTION_ID } from '../../threads/review-vote';
 import { m } from '../../paraglide/messages.js';
@@ -13,7 +14,16 @@ const meta = {
   decorators: [
     (Story) => (
       <div className="mx-auto max-w-3xl p-4 sm:p-8">
-        <Story />
+        <ContentItemFrame
+          as="article"
+          data-slot="content-item-frame"
+          className="space-y-4 rounded-xl"
+        >
+          <ContentItemHeading level={2} className="text-lg font-semibold">
+            {m.thread_provenance_heading()}
+          </ContentItemHeading>
+          <Story />
+        </ContentItemFrame>
       </div>
     ),
   ],
@@ -37,6 +47,8 @@ type Story = StoryObj<typeof meta>;
 
 export const Recorded: Story = {
   play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('heading', { level: 2, name: m.thread_provenance_heading() })).toBeVisible();
+    await expect(canvasElement.querySelector('[data-slot="content-item-frame"]')).not.toBeNull();
     const link = within(canvasElement).getByRole('link', { name: 'The first edition' });
     await userEvent.tab();
     await expect(link).toHaveFocus();
