@@ -145,7 +145,7 @@ export class CurationReaderAdmission {
       this.raw.session.state === 'signed-out' ||
       this.raw.session.state === 'unavailable' ||
       (this.raw.session.state === 'signed-in' && this.raw.session.subject !== initialReader);
-    const retired = !!initialReader && retiredReaders.get(queryClient)?.has(initialReader);
+    const retired = !!(initialReader && retiredReaders.get(queryClient)?.has(initialReader));
     this.securityInvalidated = !!options.forceFresh || contradicted || retired;
 
     if (initialReader && !this.securityInvalidated) {

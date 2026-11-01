@@ -510,7 +510,7 @@ function AdmittedPresentationViewEditor({
     lifetime.current.epoch === epoch &&
     (!lease || lease.isCurrent()) &&
     !!visit?.isCurrent();
-  function setOwned<T>(setter: Dispatch<SetStateAction<T>>, update: SetStateAction<T>) {
+  function setOwned<T>(setter: Dispatch<SetStateAction<T>>, update: NoInfer<SetStateAction<T>>) {
     setter((previous) => {
       if (!isCurrent()) return previous;
       return typeof update === 'function' ? (update as (value: T) => T)(previous) : update;
