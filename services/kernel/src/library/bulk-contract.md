@@ -78,8 +78,8 @@ custody keep their own contracts; this adoption neither restarts them nor releas
 
 Everything/state selection uses actual accepted `(profileId, stateSetId, stateId)` and immutable release pins.
 Historical facts retain their meaning. New status intentions use the actual current native validator, not a
-five-state enum, type-name inference, active-head position or legacy/default fallback. Labels are presentation,
-not identities; a label-only edit need not change membership, though an existing stricter source fence may stale.
+five-state enum, type-name inference, active-head position or legacy/default fallback. Profile/state display labels
+are presentation, not identities; a label-only edit need not change membership, though a stricter source fence may stale.
 A changed accepting meaning is never silently substituted. Historic clearing and generic curated membership
 retain their ordinary profile-independent permissions and semantics.
 
@@ -118,6 +118,8 @@ actual scoped original/terminal observation through its normal owner boundary; a
 full observation, and identity revalidation alone is not arbitrary filtered-population confirmation.
 Privacy reduction invalidates admission/disclosure immediately; repairing or acknowledging a reduction during a read
 cannot rescue its old observation. Missing foreign or original support remains unavailable, never negative evidence.
+Native Source captures/holds require their existing same-home live transaction and retain all receiving/retirement
+obligations. They confer neither bulk work authority nor permission to borrow another episode's paid foreign source.
 
 Each bounded step re-admits its real episode and settles Source/filter/identity/foreign work. Insert only proven
 matches into this manifest. Page ownership, exact retained page/target bytes, checkpoint CAS, counters and native
@@ -264,6 +266,9 @@ delegation/Collection authority loss stops new dispatch while retaining earlier 
 An operation's own successful writes do not cause selection to be rerun or invalidate its remaining intentions.
 Operation-change events use the owning account, membership events the Collection and entry events the account;
 event payloads contain no manifest/subject arrays. Any later new event needs its actual registered schema.
+Serialization/deadline/overload/partition-fence failures use the existing shared command-step retry policy with the
+same key. Retry exhaustion is an operational interruption; resolve exact receipt disposition before classifying a
+terminal outcome. A replayed DBOS step result supplies no authority to execute the next command.
 
 ## Native storage, work and outcome obligations
 
@@ -287,6 +292,9 @@ through `libraryWorkModule` with deterministic workflow identity. Both retain th
 Actual `WorkIntent.input` includes exact fenced `accounts`, alongside operation/route/generation locators; old
 `SegmentInput` omits them. Never put target arrays in DBOS input. Retain the `workflows` queue, bounded checkpoints
 and at most 100 pages per segment; enqueue success advances no effect counter. Unacknowledged intents recover.
+Seek at most 100 pending/reconciling targets by indexed operation ordinal, reducing the batch to its remaining
+allowance. Execute serially per operation through the existing queue and yield between commands under the admitted
+page deadline; queue concurrency is no permission for unbounded target `Promise.all` or a transaction spanning targets.
 
 Status reads use one fixed header, never manifest counts or arrays. Keep distinct scanned/selected/captured/effect
 target counters and `targets = pending + reconciling + applied + no_effect + conflict + denied + failed + cancelled`.
