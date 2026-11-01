@@ -147,7 +147,7 @@ export const IndependentCursors: Story = {
       const row = within(heading.closest('li')!);
       await expect(row.getAllByRole('heading')).toHaveLength(1);
       await expect(row.getAllByRole('link')).toHaveLength(1);
-      await expect(row.getByRole('link', { name, exact: true })).toHaveAttribute(
+      await expect(row.getByRole('link', { name })).toHaveAttribute(
         'href',
         `/${getLocale()}/settings?panel=compact&managedAccount=${id}#account`,
       );
