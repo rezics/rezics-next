@@ -177,29 +177,43 @@ export async function adoptPublicFilterCoverageBaseline(
            native_enqueue_revision=$6,native_revision=$7,native_claim_revision=$8,
            acknowledged_position=0,acknowledged_native_enqueue=0,
            acknowledged_native_revision=NULL,acknowledged_native_claim_revision=NULL,
+           baseline_bootstrap=$10,acknowledged_baseline=NULL,
            last_change_generation=$9,behind=true
          WHERE (partition_no,registration,source_home)=($1,$2,$3)`,
         [binding.registration.partition,binding.registration.id,receipt.partition,receipt.epoch,
           String(receipt.sourcePosition),String(receipt.enqueueRevision),
           binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null,
-          changed.generation],
+          changed.generation,binding.bootstrap],
       );
     } else if (!current) {
       await client.query(
         `INSERT INTO search.public_filter_coverage_home
            (partition_no,registration,source_home,source_epoch,relevant_position,
-            native_enqueue_revision,native_revision,native_claim_revision,last_change_generation,behind)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,true)`,
+            native_enqueue_revision,native_revision,native_claim_revision,last_change_generation,behind,
+            baseline_bootstrap)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,true,$9)`,
         [binding.registration.partition,binding.registration.id,receipt.partition,receipt.epoch,
           String(receipt.sourcePosition),String(receipt.enqueueRevision),
-          binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null],
+          binding.accounts ? String(receipt.revision) : null,binding.accounts ? String(receipt.claimRevision) : null,
+          binding.bootstrap],
+      );
+    } else {
+      // A late baseline cannot inherit an earlier preparation's repaired state.
+      // Preserve actual change generation and native positions; this receipt is
+      // an enrollment obligation, not another Source change or a receiver ACK.
+      await client.query(
+        `UPDATE search.public_filter_coverage_home SET baseline_bootstrap=$4,behind=true
+         WHERE (partition_no,registration,source_home)=($1,$2,$3)`,
+        [binding.registration.partition,binding.registration.id,receipt.partition,binding.bootstrap],
       );
     }
-    await client.query(
+    const advanced = await client.query(
       `UPDATE search.public_filter_coverage_preparation SET after_home=$4,root=$5
        WHERE (partition_no,registration,bootstrap)=($1,$2,$3) AND after_home=$6`,
       [binding.registration.partition,binding.registration.id,binding.bootstrap,receipt.partition+1,root,receipt.partition],
     );
+    if (advanced.rowCount !== 1)
+      throw new CommandUnavailableError('contention',binding.registration.partition);
     return { after: receipt.partition+1,root,generation: BigInt(preparation.generation) };
   });
 }
