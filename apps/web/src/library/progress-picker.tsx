@@ -55,7 +55,7 @@ export function ProgressPicker({
   onValueChange,
   label = m.library_progress_subject(),
   isCurrent = publicChoice,
-  disabled,
+  disabled = false,
 }: {
   value: readonly ProgressPickerSubject[];
   onValueChange: (value: ProgressPickerSubject[]) => void;

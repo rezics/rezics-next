@@ -110,6 +110,7 @@ export function useProgressEpisode(identity: unknown, validate: () => boolean, a
     latest.current!.mounted = true;
     const observe = () => {
       const current = latest.current!;
+      current.revoked ||= current.admissionLost();
       if (!current.retired && !current.validate()) {
         current.retired = true;
         current.revoked ||= current.admissionLost();
