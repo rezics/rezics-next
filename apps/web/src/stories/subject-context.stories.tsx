@@ -30,8 +30,20 @@ function reading(fallback = false): SubjectPageData {
   return page;
 }
 
-function ContextPage({ fallback = false }: { fallback?: boolean }) {
-  const page = reading(fallback);
+const longRealmTitle = `${realmRecording.realm.title} — Literature, translations and long-running reading discussions / 読書と翻訳について語り合うコミュニティ`;
+
+function ContextPage({
+  fallback = false,
+  global = false,
+  title,
+}: {
+  fallback?: boolean;
+  global?: boolean;
+  title?: string;
+}) {
+  const page = reading(fallback || global);
+  if (global) delete page.requestedRealm;
+  if (title && page.context?.population.kind === 'realm') page.context.population.title = title;
   return (
     <SubjectPage
       page={page}
@@ -44,8 +56,8 @@ function ContextPage({ fallback = false }: { fallback?: boolean }) {
   );
 }
 
-function ContinuedGroup() {
-  const overview = reading();
+function ContinuedGroup({ fallback = false }: { fallback?: boolean }) {
+  const overview = reading(fallback);
   const locale = getLocale();
   const frame = subjectFrame(overview, locale)!;
   const continuation = { node: 'editions', cursor: 'current-native-cursor' };
@@ -126,6 +138,19 @@ export const GlobalFallback: Story = {
     );
     await expect(canvas.queryByText(realmRecording.realm.title)).toBeNull();
   },
+};
+
+/** Long metadata exercises wrapping; locale, theme and phone390 stay shared catalogue globals. */
+export const LongRealmTitle: Story = {
+  render: () => <ContextPage title={longRealmTitle} />,
+};
+
+export const NormalGlobal: Story = {
+  render: () => <ContextPage global />,
+};
+
+export const FallbackContinuation: Story = {
+  render: () => <ContinuedGroup fallback />,
 };
 
 export const IndependentContinuation: Story = {
