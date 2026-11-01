@@ -224,12 +224,7 @@ export function EditorialContextWorkspace({
             />
           </Field>
           {!pending && (
-            <Button
-              type="submit"
-              className={actionControlClass}
-              data-editorial-control
-              disabled={busy || !name.trim()}
-            >
+            <Button type="submit" className={actionControlClass} data-editorial-control disabled={busy || !name.trim()}>
               {m.editorial_create({}, o)}
             </Button>
           )}
