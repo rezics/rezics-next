@@ -170,6 +170,27 @@ function validImpact(value: unknown, partition: number): value is PrivacyReducti
   return value.kind === 'dependency' && validDependency(value.locator, partition);
 }
 
+function validBroadReduction(
+  reduction: Pick<PrivacyReduction, 'cause' | 'affected' | 'impacts'>,
+): boolean {
+  if (reduction.cause !== 'realm' && reduction.cause !== 'board') return true;
+  // Broad native causes carry authority locators, never a synthetic Subject
+  // or a hit-derived key list. A Realm board has one immutable parent Realm.
+  const affected = reduction.affected.filter((value) => value.kind === 'realm' || value.kind === 'board');
+  const primary = affected.filter((value) => value.kind === reduction.cause);
+  if (primary.length !== 1 || affected.length > (reduction.cause === 'board' ? 2 : 1) ||
+    affected.some((value) => value.kind !== reduction.cause &&
+      !(reduction.cause === 'board' && value.kind === 'realm')) ||
+    affected.some((value) => reduction.impacts.filter((impact) => impact.kind === 'dependency' &&
+        isDeepStrictEqual(impact.locator, value)).length !== 1) ||
+    reduction.impacts.some((impact) => impact.kind === 'dependency' &&
+      (impact.locator.kind === 'realm' || impact.locator.kind === 'board') &&
+      !affected.some((value) => isDeepStrictEqual(impact.locator,value))))
+    return false;
+
+  return true;
+}
+
 function validatePrivacyReduction(
   tx: CommandTransaction,
   reduction: PrivacyReduction,
@@ -201,21 +222,7 @@ function validatePrivacyReduction(
     throw new TypeError('Invalid native privacy dependency');
   if (!reduction.impacts.every((value) => validImpact(value, reduction.partition)))
     throw new TypeError('Invalid native privacy impact');
-  if (reduction.cause === 'realm' || reduction.cause === 'board') {
-    // Broad native causes carry authority locators, never a synthetic Subject
-    // or a hit-derived key list. A Realm board has one immutable parent Realm.
-    const affected = reduction.affected.filter((value) => value.kind === 'realm' || value.kind === 'board');
-    const primary = affected.filter((value) => value.kind === reduction.cause);
-    if (primary.length !== 1 || affected.length > (reduction.cause === 'board' ? 2 : 1) ||
-      affected.some((value) => value.kind !== reduction.cause &&
-        !(reduction.cause === 'board' && value.kind === 'realm')) ||
-      affected.some((value) => reduction.impacts.filter((impact) => impact.kind === 'dependency' &&
-          isDeepStrictEqual(impact.locator, value)).length !== 1) ||
-      reduction.impacts.some((impact) => impact.kind === 'dependency' &&
-        (impact.locator.kind === 'realm' || impact.locator.kind === 'board') &&
-        !affected.some((value) => isDeepStrictEqual(impact.locator,value))))
-      throw new TypeError('Invalid broad native privacy reduction');
-  }
+  if (!validBroadReduction(reduction)) throw new TypeError('Invalid broad native privacy reduction');
   return command;
 }
 
@@ -412,7 +419,8 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
                   !Array.isArray(entry.affected) ||
                   !entry.affected.every((value) => validDependency(value, request.partition)) ||
                   !Array.isArray(entry.impacts) ||
-                  !entry.impacts.every((value) => validImpact(value, request.partition)),
+                  !entry.impacts.every((value) => validImpact(value, request.partition)) ||
+                  !validBroadReduction(entry),
               )
             )
               return { ...unready('metadata_missing'), cost: cost(found.length) };

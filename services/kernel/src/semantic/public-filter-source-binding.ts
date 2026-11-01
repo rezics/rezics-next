@@ -17,7 +17,8 @@ import {
 } from '../access/account-discovery-source.ts';
 import { readRelease, freeze } from './definitions.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { withConnection, discardConnection } from '../database/pool.ts';
 import registerSource from './public-filter-source-binding-register.sql';
 import defineSource from './public-filter-source-binding-define.sql';
 import readDefinition from './public-filter-source-binding-definition.sql';
@@ -42,7 +43,6 @@ import {
   readPublicFilterRepairHomeSeal,
   advancePublicFilterRepairAckFrontier,
 } from './public-filter-repair-chain.ts';
-import { acknowledgePublicFilterRepairBaseline, type PublicFilterRepairBaseline } from './public-filter-coverage-ack.ts';
 import { encodePublicFilterNativeState } from '../search/public-filter-custody.ts';
 import readAccounts from './public-filter-source-binding-accounts.sql';
 import repairState from './public-filter-source-binding-repair-state.sql';
@@ -85,6 +85,98 @@ import type {
   PrivacyReductionObservationRequest,
   PublicFilterProjectionFrontier,
 } from './public-filter-source-contract.ts';
+/** Internal native receipt, resolved from the original independently verified
+ * home/window chain. Never accepted by a public callable or a caller ACK setter.
+ */
+type PublicFilterRepairBaseline = Readonly<{
+  bootstrap: string; registration: string; registrationPartition: number; home: number;
+  epoch: number; receipt: string; sourcePosition: string; enqueue: string;
+  revision: string | null; claimRevision: string | null;
+  observation: string; execution: string; settlement: string;
+}>;
+
+/** ACK only this original baseline's complete prefix. Subsequent Source positions
+ * and native enqueue revisions remain obligations even if delivered meanwhile.
+ * Apply and ACK serialize on the SAME registration and coverage-summary locks.
+ */
+async function acknowledgePublicFilterRepairBaseline(
+  pool: Pool, baseline: PublicFilterRepairBaseline, deadline: number,
+): Promise<boolean> {
+  requireAccessDeadline(deadline);
+  return withConnection(pool,async (client) => {
+    await client.query('BEGIN');
+    try {
+      await client.query(`SET LOCAL statement_timeout = '${Math.max(1,Math.floor(deadline-Date.now()))}ms'`);
+      const owner = (await client.query<{ write_state: string }>(
+        `SELECT p.write_state FROM core.partition p
+         JOIN semantic.public_filter_home_enrollment e ON
+           (e.partition_no,e.bootstrap)=(p.partition_no,$2::uuid)
+         WHERE p.partition_no=$1 AND e.complete AND e.owner_epoch=p.epoch
+         FOR SHARE OF p,e`,
+        [baseline.registrationPartition,baseline.bootstrap],
+      )).rows[0];
+      const registration = (await client.query<{ state: string }>(
+        `SELECT state FROM search.public_filter_registration
+         WHERE (partition_no,id)=($1,$2) FOR UPDATE`,
+        [baseline.registrationPartition,baseline.registration],
+      )).rows[0];
+      if (!owner || owner.write_state !== 'active' || registration?.state !== 'active')
+        throw new CommandUnavailableError('fenced',baseline.registrationPartition);
+      const summary = (await client.query<{
+        source_epoch: number; baseline_bootstrap: string; acknowledged_position: string;
+        acknowledged_native_enqueue: string;
+      }>(
+        `SELECT source_epoch,baseline_bootstrap::text,acknowledged_position::text,
+           acknowledged_native_enqueue::text
+         FROM search.public_filter_coverage_home
+         WHERE (partition_no,registration,source_home)=($1,$2,$3) FOR UPDATE`,
+        [baseline.registrationPartition,baseline.registration,baseline.home],
+      )).rows[0];
+      const original = (await client.query<{ receipt: string; source_epoch: number;
+        source_position: string; native_enqueue_revision: string;
+        native_revision: string | null; native_claim_revision: string | null }>(
+        `SELECT receipt,source_epoch,source_position::text,native_enqueue_revision::text,
+           native_revision::text,native_claim_revision::text
+         FROM search.public_filter_coverage_baseline
+         WHERE (partition_no,registration,bootstrap,source_home)=($1,$2,$3,$4)`,
+        [baseline.registrationPartition,baseline.registration,baseline.bootstrap,baseline.home],
+      )).rows[0];
+      if (!summary || !original || summary.source_epoch !== baseline.epoch ||
+        summary.baseline_bootstrap !== baseline.bootstrap || original.receipt !== baseline.receipt ||
+        original.source_epoch !== baseline.epoch || original.source_position !== baseline.sourcePosition ||
+        original.native_enqueue_revision !== baseline.enqueue || original.native_revision !== baseline.revision ||
+        original.native_claim_revision !== baseline.claimRevision ||
+        BigInt(summary.acknowledged_position)>BigInt(baseline.sourcePosition) ||
+        BigInt(summary.acknowledged_native_enqueue)>BigInt(baseline.enqueue))
+        throw new CommandUnavailableError('contention',baseline.registrationPartition);
+      // The verified full native baseline plus its original creation/change
+      // successors covers every obligation through these exact positions. This
+      // is not max(delivered), a counter tick, or an event-delivery receipt.
+      await client.query(
+        `UPDATE search.public_filter_coverage_home SET
+           acknowledged_position=$4::bigint,acknowledged_native_enqueue=$5::bigint,
+           acknowledged_native_revision=$6::bigint,acknowledged_native_claim_revision=$7::bigint,
+           acknowledged_baseline=$8::uuid,
+           acknowledged_observation=$9,acknowledged_execution=$10,acknowledged_settlement=$11,
+           behind=(relevant_position>$4::bigint OR native_enqueue_revision>$5::bigint
+             OR native_revision IS DISTINCT FROM $6::bigint
+             OR native_claim_revision IS DISTINCT FROM $7::bigint)
+         WHERE (partition_no,registration,source_home)=($1,$2,$3)`,
+        [baseline.registrationPartition,baseline.registration,baseline.home,baseline.sourcePosition,
+          baseline.enqueue,baseline.revision,baseline.claimRevision,baseline.bootstrap,
+          baseline.observation,baseline.execution,baseline.settlement],
+      );
+      requireAccessDeadline(deadline);
+      await client.query('COMMIT');
+      return true;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { discardConnection(client,rollbackError as Error); }
+      throw error;
+    }
+  });
+}
+
 /** Agreed additive native binding handoff. The Source producer owns all implementation. */
 export type JoinedPopulationRequest =
   | Readonly<{ kind: 'queried'; phase: 'start' | 'status'; queried: PublicFilterQueriedObservation }>
@@ -1916,7 +2008,7 @@ export function createPublicFilterSourceBinding(
           await acknowledgePublicFilterRepairBaseline(db,baseline,deadline);
           // The Source frontier is adopted only after the actual registration
           // ACK commit. A crash before this CAS repeats that same prefix safely.
-          cost.rows += 5; cost.dependencyPoints += 5; cost.inputKeys += 16;
+          cost.rows += 6; cost.dependencyPoints += 6; cost.inputKeys += 18;
           cost.bytes += Buffer.byteLength(encode([chain,seal.terminal,seal.home]));
           if (!await advancePublicFilterRepairAckFrontier(db,chain,seal.terminal,seal.home))
             throw new BindingError('owner_unavailable');

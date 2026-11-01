@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
+import { publicFilterCoverageKey } from '../../src/semantic/public-filter-coverage-pending.ts';
 import { readConfig, startServer } from '../../src/server.ts';
 import { createSemanticDriver } from '../semantic/outcome-driver.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
@@ -29,6 +30,13 @@ test('ordinary configured server returns current mixed discovery through its def
   // The fixture establishes actual owner resources only. Every search below goes to startServer.
   const driver = await createSemanticDriver(undefined, { isolatedAuth: true });
   const { pool, runtime } = driver.fixtures;
+  // The shared Realm input names its native authority even when no Subject or
+  // positive support exists. Delimiters and non-native identities cannot alias it.
+  const realmIdentity = newId(31000);
+  expect(publicFilterCoverageKey({ kind: 'realm',realm: realmIdentity })).toBe(
+    JSON.stringify(['authority','realm',31000,realmIdentity]),
+  );
+  expect(() => publicFilterCoverageKey({ kind: 'realm',realm: `realm:${realmIdentity}` })).toThrow();
   const prefix = `default-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
   const marker = `mixed${randomUUID().replaceAll('-', '')}`;
   const search = createOpenSearch(endpoint);
@@ -197,6 +205,13 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
   // The fixture establishes actual owner resources only. Every search below goes to startServer.
   const driver = await createSemanticDriver(undefined, { isolatedAuth: true });
   const { pool, runtime } = driver.fixtures;
+  // The shared Realm input names its native authority even when no Subject or
+  // positive support exists. Delimiters and non-native identities cannot alias it.
+  const realmIdentity = newId(31000);
+  expect(publicFilterCoverageKey({ kind: 'realm',realm: realmIdentity })).toBe(
+    JSON.stringify(['authority','realm',31000,realmIdentity]),
+  );
+  expect(() => publicFilterCoverageKey({ kind: 'realm',realm: `realm:${realmIdentity}` })).toThrow();
   const prefix = `default-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
   const marker = `mixed${randomUUID().replaceAll('-', '')}`;
   const search = createOpenSearch(endpoint);
