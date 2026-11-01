@@ -13,12 +13,7 @@ import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import {
-  currentCommand,
-  runCommand,
-  type CommandAuthorization,
-  type CommandTransaction,
-} from '../command/command.ts';
+import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';

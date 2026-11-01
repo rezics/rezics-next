@@ -625,7 +625,12 @@ export function createDiscoveryProjection(options: {
         selected.set(row.type, registry.key({ owner: 'semantic', kind: row.type, route, id }));
     }
     if (owner === 'accounts') {
-      const snapshot = validateAccountSnapshot(await accounts.source.read(partition, [id]), partition, [id], obligation);
+      const snapshot = validateAccountSnapshot(
+        await accounts.source.read(partition, [id]),
+        partition,
+        [id],
+        obligation,
+      );
       if (snapshot.accounts.length)
         selected.set('account', registry.key({ owner: 'accounts', kind: 'account', route, id }));
     }

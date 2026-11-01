@@ -688,8 +688,7 @@ export function createCollectionCommands(config: {
           command,
         );
         if (!value) throw new ProblemError('conflict');
-        if (wasListed && !listed(value))
-          await recordPublicCollectionReduction(tx, route, id, command.transactionId);
+        if (wasListed && !listed(value)) await recordPublicCollectionReduction(tx, route, id, command.transactionId);
         return {
           value: current.membershipKind === 'dynamic' ? await activeCollection(tx, route, id) : value,
           events: collectionEvents('updated', id, wasListed !== listed(value)),
@@ -925,8 +924,7 @@ export function createCollectionCommands(config: {
         if (current.revision !== expectedRevision) throw new ProblemError('conflict');
         const value = await deleteMemberRow(tx, route, collectionId, memberId, expectedRevision, deletionId, command);
         if (!value) throw new ProblemError('conflict');
-        if (listed(current))
-          await recordPublicCollectionReduction(tx, route, collectionId, command.transactionId);
+        if (listed(current)) await recordPublicCollectionReduction(tx, route, collectionId, command.transactionId);
         return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
       },
     );

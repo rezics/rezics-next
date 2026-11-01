@@ -1,11 +1,6 @@
 import { subjectPageSlot, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
-import {
-  currentCommand,
-  runCommand,
-  type CommandAuthorization,
-  type CommandTransaction,
-} from '../command/command.ts';
+import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

@@ -1,8 +1,4 @@
-import {
-  authoritativeTimeValue,
-  currentCommand,
-  type CommandTransaction,
-} from '../command/command.ts';
+import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import type {
   PrivacyReduction,
   PrivacyReductionLogEntry,
@@ -85,20 +81,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function belongsToPartition(route: unknown, partition: number): route is number {
   return (
-    typeof route === 'number' &&
-    Number.isInteger(route) &&
-    route >= 0 &&
-    route < 65_536 &&
-    (route >>> 4) === partition
+    typeof route === 'number' && Number.isInteger(route) && route >= 0 && route < 65_536 && route >>> 4 === partition
   );
 }
 
 function validDependency(value: unknown, partition: number): value is PrivacyReduction['affected'][number] {
   if (!isRecord(value) || typeof value.kind !== 'string') return false;
   const routed = (route: unknown, id: unknown) =>
-    belongsToPartition(route, partition) &&
-    typeof id === 'string' &&
-    routeOf(id) === route;
+    belongsToPartition(route, partition) && typeof id === 'string' && routeOf(id) === route;
   if (value.kind === 'subject') return routed(value.route, value.subject);
   if (value.kind === 'selection')
     return (
@@ -144,8 +134,7 @@ function validDependencyKey(value: unknown): boolean {
   if (value.kind === 'order') return ['relevance', 'name', 'id', 'collections', 'rating'].includes(String(value.order));
   if (value.kind === 'field')
     return ['labels', 'aliases', 'descriptions', 'name_sort', 'id'].includes(String(value.field));
-  if (value.kind === 'function')
-    return ['public_collection_count', 'public_rating'].includes(String(value.input));
+  if (value.kind === 'function') return ['public_collection_count', 'public_rating'].includes(String(value.input));
   return false;
 }
 
@@ -170,31 +159,36 @@ function validImpact(value: unknown, partition: number): value is PrivacyReducti
   return value.kind === 'dependency' && validDependency(value.locator, partition);
 }
 
-function validBroadReduction(
-  reduction: Pick<PrivacyReduction, 'cause' | 'affected' | 'impacts'>,
-): boolean {
+function validBroadReduction(reduction: Pick<PrivacyReduction, 'cause' | 'affected' | 'impacts'>): boolean {
   if (reduction.cause !== 'realm' && reduction.cause !== 'board') return true;
   // Broad native causes carry authority locators, never a synthetic Subject
   // or a hit-derived key list. A Realm board has one immutable parent Realm.
   const affected = reduction.affected.filter((value) => value.kind === 'realm' || value.kind === 'board');
   const primary = affected.filter((value) => value.kind === reduction.cause);
-  if (primary.length !== 1 || affected.length > (reduction.cause === 'board' ? 2 : 1) ||
-    affected.some((value) => value.kind !== reduction.cause &&
-      !(reduction.cause === 'board' && value.kind === 'realm')) ||
-    affected.some((value) => reduction.impacts.filter((impact) => impact.kind === 'dependency' &&
-        isDeepStrictEqual(impact.locator, value)).length !== 1) ||
-    reduction.impacts.some((impact) => impact.kind === 'dependency' &&
-      (impact.locator.kind === 'realm' || impact.locator.kind === 'board') &&
-      !affected.some((value) => isDeepStrictEqual(impact.locator,value))))
+  if (
+    primary.length !== 1 ||
+    affected.length > (reduction.cause === 'board' ? 2 : 1) ||
+    affected.some(
+      (value) => value.kind !== reduction.cause && !(reduction.cause === 'board' && value.kind === 'realm'),
+    ) ||
+    affected.some(
+      (value) =>
+        reduction.impacts.filter((impact) => impact.kind === 'dependency' && isDeepStrictEqual(impact.locator, value))
+          .length !== 1,
+    ) ||
+    reduction.impacts.some(
+      (impact) =>
+        impact.kind === 'dependency' &&
+        (impact.locator.kind === 'realm' || impact.locator.kind === 'board') &&
+        !affected.some((value) => isDeepStrictEqual(impact.locator, value)),
+    )
+  )
     return false;
 
   return true;
 }
 
-function validatePrivacyReduction(
-  tx: CommandTransaction,
-  reduction: PrivacyReduction,
-) {
+function validatePrivacyReduction(tx: CommandTransaction, reduction: PrivacyReduction) {
   const command = currentCommand(tx);
   authoritativeTimeValue(command.time);
   if (
@@ -206,10 +200,10 @@ function validatePrivacyReduction(
     command.transactionId !== reduction.transactionId ||
     command.time !== reduction.time ||
     command.authorization === null ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      reduction.transactionId,
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reduction.transactionId) ||
+    !['subject', 'candidate', 'selection', 'sourceTuple', 'consent', 'collection', 'realm', 'board'].includes(
+      reduction.cause,
     ) ||
-    !['subject', 'candidate', 'selection', 'sourceTuple', 'consent', 'collection', 'realm', 'board'].includes(reduction.cause) ||
     !Array.isArray(reduction.affected) ||
     !Array.isArray(reduction.impacts) ||
     reduction.affected.length < 1 ||
@@ -413,9 +407,16 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
                   !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
                     entry.transactionId,
                   ) ||
-                  !['subject', 'candidate', 'selection', 'sourceTuple', 'consent', 'collection', 'realm', 'board'].includes(
-                    entry.cause,
-                  ) ||
+                  ![
+                    'subject',
+                    'candidate',
+                    'selection',
+                    'sourceTuple',
+                    'consent',
+                    'collection',
+                    'realm',
+                    'board',
+                  ].includes(entry.cause) ||
                   !Array.isArray(entry.affected) ||
                   !entry.affected.every((value) => validDependency(value, request.partition)) ||
                   !Array.isArray(entry.impacts) ||
@@ -425,8 +426,8 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
             )
               return { ...unready('metadata_missing'), cost: cost(found.length) };
             const after = entries.at(-1)?.head.position ?? request.after;
-            const contiguous = entries.every((entry, index) =>
-              entry.head.position === request.after + BigInt(index) + 1n,
+            const contiguous = entries.every(
+              (entry, index) => entry.head.position === request.after + BigInt(index) + 1n,
             );
             if (!contiguous || (entries.length === 0 && request.after < request.through))
               return { ...unready('metadata_missing'), cost: cost(found.length) };
@@ -460,8 +461,12 @@ export const recordPrivacyReduction: RecordPrivacyReductionType = async (
     if (!board || board.kind !== 'board') throw new TypeError('Missing native board authority');
     const native = await realmOfBoard.run(tx, { route: board.route, id: board.board });
     const realm = reduction.affected.find((value) => value.kind === 'realm');
-    if (!native || (native.realm_id === null ? realm !== undefined :
-      realm?.kind !== 'realm' || realm.realm !== native.realm_id || realm.route !== board.route))
+    if (
+      !native ||
+      (native.realm_id === null
+        ? realm !== undefined
+        : realm?.kind !== 'realm' || realm.realm !== native.realm_id || realm.route !== board.route)
+    )
       throw new TypeError('Board privacy reduction does not bind its native parent Realm');
   }
   const owner = await readPartition(tx, reduction.partition);

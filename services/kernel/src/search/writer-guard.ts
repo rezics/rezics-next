@@ -250,8 +250,10 @@ async function verifyRetainedRepairWriter(
     writer.repair_locator !== receipt.locator ||
     !writer.repair_receipt ||
     !isDeepStrictEqual(JSON.parse(writer.repair_receipt, repairReviver), receipt) ||
-    (isDiscoveryRepairWriterReceipt(receipt) && receipt.owner === 'accounts' &&
-      (!writer.repair_account || !isDeepStrictEqual(JSON.parse(writer.repair_account, repairReviver), receipt.account))) ||
+    (isDiscoveryRepairWriterReceipt(receipt) &&
+      receipt.owner === 'accounts' &&
+      (!writer.repair_account ||
+        !isDeepStrictEqual(JSON.parse(writer.repair_account, repairReviver), receipt.account))) ||
     (isDiscoveryRepairWriterReceipt(receipt) &&
       (!writer.repair_action ||
         !isDeepStrictEqual(
@@ -303,19 +305,33 @@ export function validatePublicFilterRepairWriterEvidence(index: string, receipt:
     receipt.effects.length > 100
   )
     throw unavailable('Mixed repair receipt changed');
-  if (receipt.owner === 'accounts' ? !receipt.account ||
-      receipt.account.id !== receipt.subject || receipt.account.head.partition !== receipt.partition ||
-      receipt.account.head.epoch !== receipt.epoch || receipt.account.position > receipt.sourcePosition :
-      receipt.account !== undefined)
+  if (
+    receipt.owner === 'accounts'
+      ? !receipt.account ||
+        receipt.account.id !== receipt.subject ||
+        receipt.account.head.partition !== receipt.partition ||
+        receipt.account.head.epoch !== receipt.epoch ||
+        receipt.account.position > receipt.sourcePosition
+      : receipt.account !== undefined
+  )
     throw unavailable('Mixed repair native Account binding changed');
   if (receipt.account) {
     const { binding, account, claimHead } = receipt.account;
-    if ((account === null) !== (binding === null) ||
-      (account !== null && (account.id !== receipt.subject || account.revision !== binding!.revision ||
-        account.handle !== binding!.handle)) ||
-      (binding?.claim ? !claimHead || claimHead.partition !== partitionOf(binding.claim.route) ||
-        claimHead.epoch < 1 || claimHead.revision < 1n || claimHead.claimRevision < 1n ||
-        binding.consumedClaimRevision < binding.claim.revision : claimHead !== null))
+    if (
+      (account === null) !== (binding === null) ||
+      (account !== null &&
+        (account.id !== receipt.subject ||
+          account.revision !== binding!.revision ||
+          account.handle !== binding!.handle)) ||
+      (binding?.claim
+        ? !claimHead ||
+          claimHead.partition !== partitionOf(binding.claim.route) ||
+          claimHead.epoch < 1 ||
+          claimHead.revision < 1n ||
+          claimHead.claimRevision < 1n ||
+          binding.consumedClaimRevision < binding.claim.revision
+        : claimHead !== null)
+    )
       throw unavailable('Mixed repair native claim binding changed');
   }
   const seen = new Set<string>();
@@ -404,199 +420,47 @@ export function createDiscoveryRepairWriter(options: {
     if (!row || row.closed_token) throw unavailable('Mixed repair writer requires native generation/home handoff');
   }
   async function repair(
-      subject: string,
-      obligation: bigint,
-      locator: string,
-      context: PublicFilterConsumerContext,
-      owner: 'semantic' | 'accounts' = 'semantic',
-    ): Promise<DiscoveryRepairWriterReceipt> {
-      if (!locator || locator.length > 8192 || obligation < 0n) throw new TypeError('Invalid mixed repair locator');
-      const partition = subjectPartition(subject);
-      const commandOptions = { partition, deadline: context.deadline };
-      const physical = await readDiscoveryWriterPhysicalTarget(pool, search, index);
-      if (physical.incarnation !== projection.target.uuid || physical.allocation !== projection.target.incarnation)
-        throw unavailable('Mixed projection allocation changed');
-      type Row = {
-        repair_locator: string | null;
-        repair_receipt: string | null;
-        repair_action: string | null;
-        repair_account: string | null;
-        writer_token: string | null;
-        writer_transaction_id: string;
-        writer_position: string;
-        owner_epoch: number;
-        incarnation: string;
-        dispatch_state: string;
-        closed_job: string | null;
-      };
-      const read = async () =>
-        (
-          await pool.query<Row>(
-            `SELECT repair_locator,repair_receipt,repair_action,repair_account,writer_token,writer_transaction_id,writer_position,owner_epoch,
+    subject: string,
+    obligation: bigint,
+    locator: string,
+    context: PublicFilterConsumerContext,
+    owner: 'semantic' | 'accounts' = 'semantic',
+  ): Promise<DiscoveryRepairWriterReceipt> {
+    if (!locator || locator.length > 8192 || obligation < 0n) throw new TypeError('Invalid mixed repair locator');
+    const partition = subjectPartition(subject);
+    const commandOptions = { partition, deadline: context.deadline };
+    const physical = await readDiscoveryWriterPhysicalTarget(pool, search, index);
+    if (physical.incarnation !== projection.target.uuid || physical.allocation !== projection.target.incarnation)
+      throw unavailable('Mixed projection allocation changed');
+    type Row = {
+      repair_locator: string | null;
+      repair_receipt: string | null;
+      repair_action: string | null;
+      repair_account: string | null;
+      writer_token: string | null;
+      writer_transaction_id: string;
+      writer_position: string;
+      owner_epoch: number;
+      incarnation: string;
+      dispatch_state: string;
+      closed_job: string | null;
+    };
+    const read = async () =>
+      (
+        await pool.query<Row>(
+          `SELECT repair_locator,repair_receipt,repair_action,repair_account,writer_token,writer_transaction_id,writer_position,owner_epoch,
          incarnation,dispatch_state,closed_job FROM search.identity_writer
          WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
-            [partition, index, subject],
-          )
-        ).rows[0];
-      let row = await read();
-      if (row?.repair_locator !== locator) {
-        const token = crypto.randomUUID();
-        await runCommand(pool, commandOptions, async (tx, context) => {
-          const enrollment = await native(tx, context.transactionId);
-          await gate(tx, enrollment, physical);
-          const enrolled = await tx.query(enroll.sql, [
-            partition,
-            index,
-            physical.incarnation,
-            enrollment.epoch,
-            token,
-            enrollment.transactionId,
-            enrollment.position.toString(),
-            [subject],
-          ]);
-          if (enrolled.rowCount !== 1) throw unavailable('Mixed repair writer is pending or structurally fenced');
-          await tx.query(
-            `UPDATE search.identity_writer SET repair_locator=$4,repair_action=NULL,repair_account=NULL,repair_receipt=NULL
-            WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
-            [partition, index, subject, locator],
-          );
-          await tx.query(
-            `UPDATE search.identity_writer_gate SET enrollment_generation=enrollment_generation+1
-            WHERE partition_no=$1 AND physical_target=$2`,
-            [partition, index],
-          );
-          return { value: null, events: changed() };
-        });
-        row = await read();
-      }
-      if (!row || row.repair_locator !== locator || row.closed_job || row.incarnation !== physical.incarnation)
-        throw unavailable('Mixed retained repair changed');
-      if (row.dispatch_state === 'settled' && !row.writer_token && row.repair_receipt) {
-        const receipt: PublicFilterRepairWriterReceipt = JSON.parse(row.repair_receipt, repairReviver);
-        if (!isDiscoveryRepairWriterReceipt(receipt) || (receipt.owner ?? 'semantic') !== owner)
-          throw unavailable('Mixed repair retained a different native owner');
-        if (owner === 'accounts') {
-          const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-          if (!receipt.account || !isDeepStrictEqual({ ...current, position: receipt.account.position }, receipt.account))
-            throw unavailable('Retained Account repair input changed');
-        }
-        return receipt;
-      }
-      if (!row.repair_action && row.dispatch_state === 'enrolled' && row.writer_token) {
-        const token = row.writer_token;
-        const epoch = row.owner_epoch;
-        const account = owner === 'accounts'
-          ? await readAccountDiscoveryRepairObservation(pool, subject, context) : undefined;
-        const actions = await projection.prepareRepair(subject, obligation, owner);
-        if (account) {
-          const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-          if (!isDeepStrictEqual({ ...current, position: account.position }, account))
-            throw unavailable('Account repair changed during preparation');
-        }
-        const body = repairEncode(actions);
-        if (Buffer.byteLength(body) > 1048576) throw unavailable('Mixed repair actions exceed native custody');
-        await runCommand(pool, commandOptions, async (tx, command) => {
-          const receipt = await native(tx, command.transactionId);
-          if (receipt.epoch !== epoch) throw unavailable('Mixed repair home moved during preparation');
-          await gate(tx, receipt, physical);
-          const saved = await tx.query(
-            `UPDATE search.identity_writer SET repair_action=$5,repair_account=$7
-            WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND writer_token=$4
-            AND dispatch_state='enrolled' AND repair_locator=$6 AND repair_action IS NULL RETURNING original_id`,
-            [partition, index, subject, token, body, locator, account ? repairEncode(account) : null],
-          );
-          // A concurrent prepare of this same retained locator may already have won. Use ONLY that
-          // immutable native action array, never the losing callback's current Source result.
-          return saved.rowCount === 1 ? { value: null, events: changed() } : noEffect(null);
-        });
-        row = await read();
-      }
-      if (!row || row.repair_locator !== locator || row.closed_job || row.incarnation !== physical.incarnation)
-        throw unavailable('Mixed retained actions changed before dispatch');
-      if (!row.repair_action || !row.writer_token || !['enrolled', 'dispatched'].includes(row.dispatch_state))
-        throw unavailable('Mixed repair dispatch custody is unavailable');
-      const token = row.writer_token;
-      const dispatchState = row.dispatch_state;
-      const enrollment: IdentityNativeReceipt = {
-        partition,
-        epoch: row.owner_epoch,
-        transactionId: row.writer_transaction_id,
-        position: BigInt(row.writer_position),
-      };
+          [partition, index, subject],
+        )
+      ).rows[0];
+    let row = await read();
+    if (row?.repair_locator !== locator) {
+      const token = crypto.randomUUID();
       await runCommand(pool, commandOptions, async (tx, context) => {
-        const dispatch = await native(tx, context.transactionId);
-        if (dispatch.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved');
-        await gate(tx, dispatch, physical);
-        if (dispatchState === 'enrolled') {
-          const dispatched = await tx.query(dispatchSql.sql, [
-            partition,
-            index,
-            physical.incarnation,
-            dispatch.epoch,
-            token,
-            [subject],
-          ]);
-          if (dispatched.rowCount !== 1) throw unavailable('Mixed repair dispatch was revoked');
-        } else {
-          // Serialize replay admission against native cancellation and retain the same enrollment.
-          const retained = await tx.query(
-            `SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
-            AND original_id=$3 AND writer_token=$4 AND dispatch_state='dispatched' FOR UPDATE`,
-            [partition, index, subject, token],
-          );
-          if (retained.rowCount !== 1) throw unavailable('Mixed repair replay was revoked');
-        }
-        return { value: null, events: changed() };
-      });
-      const actions: DiscoveryIndexAction[] = JSON.parse(row.repair_action, repairReviver);
-      if (actions.some((action) => parseDiscoveryDocumentId(projection.registry, action.id).owner !== owner))
-        throw unavailable('Mixed repair actions belong to a different native owner');
-      const account: AccountDiscoveryRepairObservation | undefined = row.repair_account
-        ? JSON.parse(row.repair_account, repairReviver) : undefined;
-      if ((owner === 'accounts') !== (account !== undefined))
-        throw unavailable('Mixed repair original Account input is unavailable');
-      if (account) {
-        const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-        if (!isDeepStrictEqual({ ...current, position: account.position }, account))
-          throw unavailable('Account repair changed before dispatch');
-      }
-      const effects = await projection.applyRepair(actions);
-      if (!effects.length) throw unavailable('Mixed repair produced no native action');
-      const sourcePosition = effects.reduce(
-        (floor, effect) => (effect.action.version < floor ? effect.action.version : floor),
-        effects[0]!.action.version,
-      );
-      if (sourcePosition < obligation) throw unavailable('Mixed repair did not cover its own-home Source version');
-      if (!isDeepStrictEqual(await readDiscoveryWriterPhysicalTarget(pool, search, index), physical))
-        throw unavailable('Mixed repair allocation changed after dispatch');
-      if (account) {
-        const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-        // Native writer commands advance core.position themselves. Compare the
-        // independent Account/claim facts, retaining the original writer floor.
-        if (!isDeepStrictEqual({ ...current, position: account.position }, account))
-          throw unavailable('Account repair changed during dispatch');
-      }
-      const completed = await runCommand(pool, commandOptions, async (tx, context) => {
-        const completion = await native(tx, context.transactionId);
-        if (completion.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved before settlement');
-        await gate(tx, completion, physical);
-        const receipt: DiscoveryRepairWriterReceipt = {
-          writer: 'discovery',
-          owner,
-          ...(account ? { account } : {}),
-          locator,
-          subject,
-          partition,
-          epoch: enrollment.epoch,
-          ...physical,
-          consumer,
-          sourcePosition,
-          effects,
-          enrollment,
-          completion,
-        };
-        validatePublicFilterRepairWriterEvidence(index, receipt);
-        const settled = await tx.query(settle.sql, [
+        const enrollment = await native(tx, context.transactionId);
+        await gate(tx, enrollment, physical);
+        const enrolled = await tx.query(enroll.sql, [
           partition,
           index,
           physical.incarnation,
@@ -605,19 +469,172 @@ export function createDiscoveryRepairWriter(options: {
           enrollment.transactionId,
           enrollment.position.toString(),
           [subject],
-          completion.transactionId,
-          completion.position.toString(),
-          sourcePosition.toString(),
         ]);
-        if (settled.rowCount !== 1) throw unavailable('Mixed repair changed at final native fence');
+        if (enrolled.rowCount !== 1) throw unavailable('Mixed repair writer is pending or structurally fenced');
         await tx.query(
-          `UPDATE search.identity_writer SET repair_receipt=$4
-          WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND repair_locator=$5`,
-          [partition, index, subject, repairEncode(receipt), locator],
+          `UPDATE search.identity_writer SET repair_locator=$4,repair_action=NULL,repair_account=NULL,repair_receipt=NULL
+            WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+          [partition, index, subject, locator],
         );
-        return { value: receipt, events: changed() };
+        await tx.query(
+          `UPDATE search.identity_writer_gate SET enrollment_generation=enrollment_generation+1
+            WHERE partition_no=$1 AND physical_target=$2`,
+          [partition, index],
+        );
+        return { value: null, events: changed() };
       });
-      return completed.value;
+      row = await read();
+    }
+    if (!row || row.repair_locator !== locator || row.closed_job || row.incarnation !== physical.incarnation)
+      throw unavailable('Mixed retained repair changed');
+    if (row.dispatch_state === 'settled' && !row.writer_token && row.repair_receipt) {
+      const receipt: PublicFilterRepairWriterReceipt = JSON.parse(row.repair_receipt, repairReviver);
+      if (!isDiscoveryRepairWriterReceipt(receipt) || (receipt.owner ?? 'semantic') !== owner)
+        throw unavailable('Mixed repair retained a different native owner');
+      if (owner === 'accounts') {
+        const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
+        if (!receipt.account || !isDeepStrictEqual({ ...current, position: receipt.account.position }, receipt.account))
+          throw unavailable('Retained Account repair input changed');
+      }
+      return receipt;
+    }
+    if (!row.repair_action && row.dispatch_state === 'enrolled' && row.writer_token) {
+      const token = row.writer_token;
+      const epoch = row.owner_epoch;
+      const account =
+        owner === 'accounts' ? await readAccountDiscoveryRepairObservation(pool, subject, context) : undefined;
+      const actions = await projection.prepareRepair(subject, obligation, owner);
+      if (account) {
+        const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
+        if (!isDeepStrictEqual({ ...current, position: account.position }, account))
+          throw unavailable('Account repair changed during preparation');
+      }
+      const body = repairEncode(actions);
+      if (Buffer.byteLength(body) > 1048576) throw unavailable('Mixed repair actions exceed native custody');
+      await runCommand(pool, commandOptions, async (tx, command) => {
+        const receipt = await native(tx, command.transactionId);
+        if (receipt.epoch !== epoch) throw unavailable('Mixed repair home moved during preparation');
+        await gate(tx, receipt, physical);
+        const saved = await tx.query(
+          `UPDATE search.identity_writer SET repair_action=$5,repair_account=$7
+            WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND writer_token=$4
+            AND dispatch_state='enrolled' AND repair_locator=$6 AND repair_action IS NULL RETURNING original_id`,
+          [partition, index, subject, token, body, locator, account ? repairEncode(account) : null],
+        );
+        // A concurrent prepare of this same retained locator may already have won. Use ONLY that
+        // immutable native action array, never the losing callback's current Source result.
+        return saved.rowCount === 1 ? { value: null, events: changed() } : noEffect(null);
+      });
+      row = await read();
+    }
+    if (!row || row.repair_locator !== locator || row.closed_job || row.incarnation !== physical.incarnation)
+      throw unavailable('Mixed retained actions changed before dispatch');
+    if (!row.repair_action || !row.writer_token || !['enrolled', 'dispatched'].includes(row.dispatch_state))
+      throw unavailable('Mixed repair dispatch custody is unavailable');
+    const token = row.writer_token;
+    const dispatchState = row.dispatch_state;
+    const enrollment: IdentityNativeReceipt = {
+      partition,
+      epoch: row.owner_epoch,
+      transactionId: row.writer_transaction_id,
+      position: BigInt(row.writer_position),
+    };
+    await runCommand(pool, commandOptions, async (tx, context) => {
+      const dispatch = await native(tx, context.transactionId);
+      if (dispatch.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved');
+      await gate(tx, dispatch, physical);
+      if (dispatchState === 'enrolled') {
+        const dispatched = await tx.query(dispatchSql.sql, [
+          partition,
+          index,
+          physical.incarnation,
+          dispatch.epoch,
+          token,
+          [subject],
+        ]);
+        if (dispatched.rowCount !== 1) throw unavailable('Mixed repair dispatch was revoked');
+      } else {
+        // Serialize replay admission against native cancellation and retain the same enrollment.
+        const retained = await tx.query(
+          `SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
+            AND original_id=$3 AND writer_token=$4 AND dispatch_state='dispatched' FOR UPDATE`,
+          [partition, index, subject, token],
+        );
+        if (retained.rowCount !== 1) throw unavailable('Mixed repair replay was revoked');
+      }
+      return { value: null, events: changed() };
+    });
+    const actions: DiscoveryIndexAction[] = JSON.parse(row.repair_action, repairReviver);
+    if (actions.some((action) => parseDiscoveryDocumentId(projection.registry, action.id).owner !== owner))
+      throw unavailable('Mixed repair actions belong to a different native owner');
+    const account: AccountDiscoveryRepairObservation | undefined = row.repair_account
+      ? JSON.parse(row.repair_account, repairReviver)
+      : undefined;
+    if ((owner === 'accounts') !== (account !== undefined))
+      throw unavailable('Mixed repair original Account input is unavailable');
+    if (account) {
+      const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
+      if (!isDeepStrictEqual({ ...current, position: account.position }, account))
+        throw unavailable('Account repair changed before dispatch');
+    }
+    const effects = await projection.applyRepair(actions);
+    if (!effects.length) throw unavailable('Mixed repair produced no native action');
+    const sourcePosition = effects.reduce(
+      (floor, effect) => (effect.action.version < floor ? effect.action.version : floor),
+      effects[0]!.action.version,
+    );
+    if (sourcePosition < obligation) throw unavailable('Mixed repair did not cover its own-home Source version');
+    if (!isDeepStrictEqual(await readDiscoveryWriterPhysicalTarget(pool, search, index), physical))
+      throw unavailable('Mixed repair allocation changed after dispatch');
+    if (account) {
+      const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
+      // Native writer commands advance core.position themselves. Compare the
+      // independent Account/claim facts, retaining the original writer floor.
+      if (!isDeepStrictEqual({ ...current, position: account.position }, account))
+        throw unavailable('Account repair changed during dispatch');
+    }
+    const completed = await runCommand(pool, commandOptions, async (tx, context) => {
+      const completion = await native(tx, context.transactionId);
+      if (completion.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved before settlement');
+      await gate(tx, completion, physical);
+      const receipt: DiscoveryRepairWriterReceipt = {
+        writer: 'discovery',
+        owner,
+        ...(account ? { account } : {}),
+        locator,
+        subject,
+        partition,
+        epoch: enrollment.epoch,
+        ...physical,
+        consumer,
+        sourcePosition,
+        effects,
+        enrollment,
+        completion,
+      };
+      validatePublicFilterRepairWriterEvidence(index, receipt);
+      const settled = await tx.query(settle.sql, [
+        partition,
+        index,
+        physical.incarnation,
+        enrollment.epoch,
+        token,
+        enrollment.transactionId,
+        enrollment.position.toString(),
+        [subject],
+        completion.transactionId,
+        completion.position.toString(),
+        sourcePosition.toString(),
+      ]);
+      if (settled.rowCount !== 1) throw unavailable('Mixed repair changed at final native fence');
+      await tx.query(
+        `UPDATE search.identity_writer SET repair_receipt=$4
+          WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND repair_locator=$5`,
+        [partition, index, subject, repairEncode(receipt), locator],
+      );
+      return { value: receipt, events: changed() };
+    });
+    return completed.value;
   }
   return {
     repair(subject: string, obligation: bigint, locator: string, context: PublicFilterConsumerContext) {

@@ -9,7 +9,10 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import { readAccountDiscoveryReductionBinding, type AccountDiscoveryReductionHead } from './account-discovery-reduction.ts';
+import {
+  readAccountDiscoveryReductionBinding,
+  type AccountDiscoveryReductionHead,
+} from './account-discovery-reduction.ts';
 import type { AccountDiscoverySource, AccountDiscoverySummary } from '../search/discovery.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from '../semantic/summaries.ts';
 
@@ -272,7 +275,9 @@ export type AccountDiscoveryRepairObservation = Readonly<{
  * Missing/fenced rows are retained as keyed deletion inputs, never Subjects.
  */
 export async function readAccountDiscoveryRepairObservation(
-  pool: Pool, id: string, context: Readonly<{ deadline: number }>,
+  pool: Pool,
+  id: string,
+  context: Readonly<{ deadline: number }>,
 ): Promise<AccountDiscoveryRepairObservation> {
   const route = routeOf(id);
   if (route === null) throw new TypeError('Account repair requires a native Account key');
@@ -285,19 +290,29 @@ export async function readAccountDiscoveryRepairObservation(
     // The handle is routed independently. Its native epoch cannot be inferred
     // from the Account home or from the consumed claim revision alone.
     const claimPartition = binding?.claim ? partitionOf(binding.claim.route) : null;
-    const claimBefore = claimPartition === null ? null
-      : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
+    const claimBefore =
+      claimPartition === null
+        ? null
+        : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
     const current = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id) ?? null;
-    const claimAfter = claimPartition === null ? null
-      : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
+    const claimAfter =
+      claimPartition === null
+        ? null
+        : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
     const after = (await readAccountDiscoveryReductionBinding(pool, [partition], context)).heads[0]!;
     const account = snapshot.accounts[0] ?? null;
     requireAccessDeadline(context.deadline);
-    if (!isDeepStrictEqual(before, after) || !isDeepStrictEqual(binding, current) ||
+    if (
+      !isDeepStrictEqual(before, after) ||
+      !isDeepStrictEqual(binding, current) ||
       !isDeepStrictEqual(claimBefore, claimAfter) ||
-      (account === null ? binding !== null : binding === null || binding.revision !== account.revision ||
-        binding.handle !== account.handle ||
-        (binding.claim !== null && binding.consumedClaimRevision < binding.claim.revision)))
+      (account === null
+        ? binding !== null
+        : binding === null ||
+          binding.revision !== account.revision ||
+          binding.handle !== account.handle ||
+          (binding.claim !== null && binding.consumedClaimRevision < binding.claim.revision))
+    )
       throw new CommandUnavailableError('contention', partition);
     return Object.freeze({ id, head: before, claimHead: claimBefore, position: snapshot.position, account, binding });
   });

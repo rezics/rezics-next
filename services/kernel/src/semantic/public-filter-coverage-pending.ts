@@ -1,8 +1,5 @@
 import type { CommandTransaction } from '../command/command.ts';
-import type {
-  PrivacyReductionLogEntry,
-  PublicFilterDependencyKey,
-} from './public-filter-source-contract.ts';
+import type { PrivacyReductionLogEntry, PublicFilterDependencyKey } from './public-filter-source-contract.ts';
 import enqueue from './public-filter-coverage-pending.sql';
 import { routeOf } from '../route/route.ts';
 
@@ -45,8 +42,7 @@ export async function enqueuePublicFilterCoverage(
     if (impact.kind === 'dependency') {
       keys.add(PUBLIC_FILTER_UNRESOLVED_SCOPE);
       const dependency = impact.locator;
-      if (dependency.kind === 'realm')
-        keys.add(publicFilterCoverageKey({ kind: 'realm', realm: dependency.realm }));
+      if (dependency.kind === 'realm') keys.add(publicFilterCoverageKey({ kind: 'realm', realm: dependency.realm }));
       if (dependency.kind === 'board')
         keys.add(JSON.stringify(['authority', 'board', dependency.route, dependency.board]));
       if (dependency.kind === 'subject' || dependency.kind === 'selection' || dependency.kind === 'consent')
@@ -69,9 +65,7 @@ export async function enqueuePublicFilterCoverage(
     position: entry.head.position.toString(),
     transaction_id: entry.transactionId,
     input_keys: [...keys].sort(),
-    subjects: [...subjects]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([subject, route]) => ({ subject, route })),
+    subjects: [...subjects].sort(([a], [b]) => a.localeCompare(b)).map(([subject, route]) => ({ subject, route })),
   });
   if (!retained || (Array.isArray(retained) && retained.length !== 1))
     throw new Error('Privacy log append lost its pending coverage barriers');
@@ -79,6 +73,7 @@ export async function enqueuePublicFilterCoverage(
 
 /** Full compiler closure, including explicit whole-subject and unresolved scopes. */
 export function publicFilterCoverageKeys(keys: readonly PublicFilterDependencyKey[]): readonly string[] {
-  return [...new Set([PUBLIC_FILTER_SUBJECT_SCOPE, PUBLIC_FILTER_UNRESOLVED_SCOPE, ...keys.map(publicFilterCoverageKey)])]
-    .sort();
+  return [
+    ...new Set([PUBLIC_FILTER_SUBJECT_SCOPE, PUBLIC_FILTER_UNRESOLVED_SCOPE, ...keys.map(publicFilterCoverageKey)]),
+  ].sort();
 }

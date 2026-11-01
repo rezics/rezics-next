@@ -117,7 +117,9 @@ export async function takedownSourceFence(
         time: currentCommand(tx).time,
         cause: 'sourceTuple',
         affected: [{ kind: 'sourceTuple', tuple: { route, source, external_id, field_group } }],
-        impacts: [{ kind: 'dependency', locator: { kind: 'sourceTuple', tuple: { route, source, external_id, field_group } } }],
+        impacts: [
+          { kind: 'dependency', locator: { kind: 'sourceTuple', tuple: { route, source, external_id, field_group } } },
+        ],
       });
       const data: SourceFenceEventData<'com.rezics.content.source_fence.taken_down.v1'> = {
         route,

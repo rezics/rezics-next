@@ -821,7 +821,6 @@ still has to drain its actual users, writers, copies and captured obligations
 before releasing enrollment and pins; the checkpoint guard grants no retirement
 or repaired coverage.
 
-
 ### Realm and board native authority identities
 
 `PublicFilterDependency` also accepts `{kind:'realm', route, realm}` and

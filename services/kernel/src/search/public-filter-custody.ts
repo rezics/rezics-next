@@ -691,7 +691,8 @@ export async function readPublicFilterRepairSettlement(
             receipt.owner !== 'accounts' ||
             !receipt.account ||
             !isDeepStrictEqual({ ...receipt.account, position: page.account.position }, page.account) ||
-            receipt.locator !== encode({ observation: q.snapshot.observation, execution: input.execution, page: ordinal, item: 0 }) ||
+            receipt.locator !==
+              encode({ observation: q.snapshot.observation, execution: input.execution, page: ordinal, item: 0 }) ||
             receipt.subject !== page.account.id ||
             receipt.partition !== page.account.head.partition ||
             receipt.epoch !== page.account.head.epoch ||
@@ -701,8 +702,12 @@ export async function readPublicFilterRepairSettlement(
             throw new Failure('binding_mismatch');
           validatePublicFilterRepairWriterEvidence(q.consumer.physicalTarget, receipt);
           const previous = latest.get(receipt.subject);
-          if (previous && (repairWriterPosition(receipt) < repairWriterPosition(previous) ||
-            receipt.enrollment.position <= previous.completion.position)) throw new Failure('binding_mismatch');
+          if (
+            previous &&
+            (repairWriterPosition(receipt) < repairWriterPosition(previous) ||
+              receipt.enrollment.position <= previous.completion.position)
+          )
+            throw new Failure('binding_mismatch');
           effects.push({ page: ordinal, item: 0, receipt: effect.receipt });
           latest.set(receipt.subject, receipt);
         }
