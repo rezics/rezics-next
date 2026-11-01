@@ -152,7 +152,7 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
       'following:unavailable',
     );
     expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);
-    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_feed_unavailable());
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_presentation_partial());
     expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.library_follow_retry())).toBe(
       true,
     );
@@ -160,7 +160,7 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     const preparing: HomeFeedResult = { state: 'ready', page: homeFeedStoryPage('en', true, 'preparing') };
     await act(async () => root.render(<ComposedHome result={preparing} />));
     expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);
-    expect(host.querySelector('[role="status"]')?.textContent).toContain(m.home_feed_preparing());
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_presentation_partial());
     expect(host.textContent).not.toContain(m.home_feed_empty());
     expect(host.querySelector('[data-feed-source-state]')?.getAttribute('data-feed-source-state')).toContain(
       'following:preparing',

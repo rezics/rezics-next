@@ -4,8 +4,14 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { m } from '../src/paraglide/messages.js';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createHomeFeedWindow, homeFeedViewer } from '../src/features/pages/home-feed-read';
-import { HomeFeed } from '../src/features/pages/home-feed';
+import {
+  createHomeFeedWindow,
+  homeFeedViewer,
+  type FeedInput,
+  type HomeFeedResult,
+} from '../src/features/pages/home-feed-read';
+import { HomeFeed, HomeFeedConsumer } from '../src/features/pages/home-feed';
+import type { QuestionPointResult } from '../src/features/pages/home-feed-questions';
 import {
   homeFeedStoryPage,
   homeKindStoryPage,
@@ -843,6 +849,156 @@ test('The default home route renders a bounded mixed discovery Following and Con
   } finally {
     await act(async () => root.unmount());
     client.clear();
+    await browser.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
+
+test('Default Home keeps question details optional and recovers partial, refused and expired selections in place', async () => {
+  setLocale('en', { reload: false });
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const browser = new Window({ url: 'https://rezics.example/en' });
+  const globals = {
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    HTMLInputElement: browser.HTMLInputElement,
+    HTMLSelectElement: browser.HTMLSelectElement,
+    HTMLButtonElement: browser.HTMLButtonElement,
+    Element: browser.Element,
+    Node: browser.Node,
+    Document: browser.Document,
+    ShadowRoot: browser.ShadowRoot,
+    DocumentFragment: browser.DocumentFragment,
+    MutationObserver: browser.MutationObserver,
+    ResizeObserver: browser.ResizeObserver,
+    Event: browser.Event,
+    NodeFilter: browser.NodeFilter,
+    KeyboardEvent: browser.KeyboardEvent,
+    FocusEvent: browser.FocusEvent,
+    MouseEvent: browser.MouseEvent,
+    PointerEvent: browser.PointerEvent,
+    CSS: browser.CSS,
+    getComputedStyle: browser.getComputedStyle.bind(browser),
+    requestAnimationFrame: browser.requestAnimationFrame.bind(browser),
+    cancelAnimationFrame: browser.cancelAnimationFrame.bind(browser),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const require = createRequire(import.meta.url);
+  const storybook = createRequire(require.resolve('storybook/test'));
+  const { default: userEvent } = await import(storybook.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: browser.document });
+  const { createRoot } = await import('react-dom/client');
+  const host = browser.document.createElement('div');
+  browser.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const initial: HomeFeedResult = {
+    state: 'ready',
+    page: { ...homeFeedStoryPage('en', true, 'partial'), next: 'illustrative-partial-frontier' },
+  };
+  const question = homeQuestionStoryPage().ratingQuestions[0]!;
+  const feedInputs: FeedInput[] = [];
+  let questionPoint: QuestionPointResult = { status: 'ready', question };
+  const read = async (input: FeedInput): Promise<HomeFeedResult> => {
+    feedInputs.push({ ...input });
+    return input.cursor ? { state: 'cursor', code: 'invalid_cursor' } : initial;
+  };
+  const click = (label: string) =>
+    act(async () => {
+      const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === label);
+      if (!button) throw new Error(`Missing Home control: ${label}`);
+      await user.click(button);
+    });
+  const select = (element: HTMLSelectElement, value: string) =>
+    act(async () => {
+      await user.selectOptions(element, value);
+    });
+  const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+
+  try {
+    await act(async () => {
+      root.render(
+        <HomeFeedConsumer
+          initial={initial}
+          locale="en"
+          signedIn
+          read={read}
+          readKinds={async (cursor) => ({ status: 'ready', kinds: homeKindStoryPage(cursor) })}
+          readSpace={async () => ({ status: 'unavailable' })}
+          readQuestions={async (cursor) => ({ status: 'ready', page: homeQuestionStoryPage(cursor) })}
+          readQuestion={async () => questionPoint}
+          origin="https://rezics.example"
+        />,
+      );
+    });
+    await settle();
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(2);
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_presentation_partial());
+
+    await click(m.search_filters());
+    await click(m.home_kinds_load());
+    const kindSelect = host.querySelector<HTMLSelectElement>('select')!;
+    await select(kindSelect, 'schema:Book');
+    await click(m.home_questions_load());
+    const questionSelect = host.querySelectorAll<HTMLSelectElement>('select')[1]!;
+    await select(questionSelect, question.id);
+    await settle();
+
+    const selected = [...host.querySelectorAll<HTMLUListElement>('ul')].find(
+      (list) => list.getAttribute('aria-label') === m.refinement_selected(),
+    )!;
+    expect(selected.textContent).toContain(question.label);
+    expect(selected.textContent).toContain('Book');
+    const details = host.querySelector('details')!;
+    expect(details.querySelector('summary')?.textContent).toBe(m.home_presentation_question_information());
+    expect(details.open).toBe(false);
+    const information = details.querySelector('p')!;
+    expect(information.textContent).toContain(question.label);
+    expect(information.textContent).toContain(m.home_question_work());
+    expect(information.textContent).toContain('Revision 1');
+    expect(information.textContent).toContain('Scale 0–100, step 5');
+    await act(async () => user.click(details.querySelector('summary')!));
+    expect(details.open).toBe(true);
+
+    const beforeRetry = feedInputs.length;
+    await click(m.library_follow_retry());
+    await settle();
+    expect(feedInputs).toHaveLength(beforeRetry + 1);
+    expect(feedInputs.at(-1)).toMatchObject({ kind: 'schema:Book', ratingQuestionId: question.id });
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(2);
+    expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_presentation_partial());
+
+    questionPoint = { status: 'lost', code: 'not_found' };
+    await click(m.home_question_refresh());
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(m.home_questions_lost());
+    expect(host.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(host.textContent).not.toContain(m.home_feed_unavailable());
+    expect(selected.textContent).toContain(question.label);
+    await click(m.home_question_clear());
+    await settle();
+    expect(questionSelect.value).toBe('');
+
+    await click(m.library_next_page());
+    expect(host.textContent).toContain(m.home_feed_cursor());
+    expect(m.home_feed_cursor()).not.toMatch(/cursor/i);
+    expect(selected.textContent).toContain('Book');
+    await click(m.home_feed_restart());
+    await settle();
+    expect(feedInputs.at(-1)).toEqual({ stream: 'home', kind: 'schema:Book' });
+    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(2);
+    expect(selected.textContent).toContain('Book');
+  } finally {
+    await act(async () => root.unmount());
     await browser.happyDOM.close();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

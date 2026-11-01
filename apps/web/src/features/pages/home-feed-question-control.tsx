@@ -104,19 +104,24 @@ export function HomeFeedQuestionControl({
       </div>
       <p className="text-sm text-muted-foreground">{m.home_question_help({}, options)}</p>
       {selected ? (
-        <p className="text-sm">
-          {m.home_question_metadata(
-            {
-              label: selected.label,
-              revision: number.format(selected.revision),
-              grain: grains[selected.grain]({}, options),
-              min: number.format(selected.scale.min),
-              max: number.format(selected.scale.max),
-              step: number.format(selected.scale.displayStep),
-            },
-            options,
-          )}
-        </p>
+        <details className="text-sm text-muted-foreground">
+          <summary className="min-h-11 cursor-pointer py-2">
+            {m.home_presentation_question_information({}, options)}
+          </summary>
+          <p className="pb-2">
+            {m.home_question_metadata(
+              {
+                label: selected.label,
+                revision: number.format(selected.revision),
+                grain: grains[selected.grain]({}, options),
+                min: number.format(selected.scale.min),
+                max: number.format(selected.scale.max),
+                step: number.format(selected.scale.displayStep),
+              },
+              options,
+            )}
+          </p>
+        </details>
       ) : null}
       {snapshot.status !== 'idle' && snapshot.status !== 'ready' ? (
         <p role={failure ? 'alert' : 'status'} className="text-sm text-muted-foreground">

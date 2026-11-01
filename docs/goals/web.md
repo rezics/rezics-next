@@ -223,16 +223,20 @@ with discovery/Following/Continue protocol names.
 Home and Following share one compact mode band. Kind, exact-address Space and rating-question Context controls sit
 inside one labelled Filters disclosure. When it is closed, each active selection's human label remains visible;
 opening it exposes the existing bounded choices and their selected-value, clear, refresh and retry controls. The
-reading column stays approximately 720–800 px wide and uses the same composition on phone. The row visual is 80 px
-wide on phone and 96 px on desktop for subjects, and 64 px for supplied account avatars.
+selected question label remains visible by default; its grain, scale and revision sit in a closed, accessible
+information disclosure. Space guidance tells people what to enter without explaining address parsing or review
+witnesses. The reading column stays approximately 720–800 px wide and uses the same composition on phone. The row
+visual is 80 px wide on phone and 96 px on desktop for subjects, and 64 px for supplied account avatars.
 
-Remove the permanent feed-horizon explanation and successful Ready source ledger. When one or more sources are
-preparing or unavailable, show their applicable localized outcome once and retain Retry. Whole-request denial,
-unavailability, cursor expiry, sparse continuation, unknown progress and genuine empty results keep their existing
-distinct message and recovery; incomplete sources never become an empty/success claim. Native ordering, the 20-row
-page limit, one-page replacement, exact conjunctive filters, viewer/CSRF remount, private no-store behavior and
-late-response fencing are unchanged. The composed Home regression covers row order and identity, primary/Continue
-links, absence of technical scaffolding, accessible filter disclosure and bounded kind choice interaction. Its source
+Remove the permanent feed-horizon explanation and successful Ready source ledger. When sources are incomplete, keep
+usable rows and show one concise notice with a real Retry. A blocked selected Space or question is explained and
+recovered by its own control, without a duplicate generic Home error. Whole-request denial, unavailability,
+expired-page recovery, sparse continuation, unknown progress and genuine empty results keep their truthful
+distinctions; a restart preserves current filters, and an unavailable selection stays selected until refreshed or
+cleared. Native ordering, the 20-row page limit, one-page replacement, exact conjunctive filters, viewer/CSRF remount,
+private no-store behavior and late-response fencing are unchanged. The composed Home regression covers row order and
+identity, primary/Continue links, absence of technical scaffolding, accessible filter and question-information
+disclosure, selected-label visibility, partial-result retry, refusal recovery and expired-page restart. Its source
 and the updated Home stories are authored evidence only until the permitted integration checks run.
 
 ### Exact Home Space consumer

@@ -102,6 +102,7 @@ export function HomeFeed({
   kindControl,
   spaceControl,
   questionControl,
+  suppressResultMessage = false,
   onRetry,
   onNext,
   onRestart,
@@ -116,6 +117,8 @@ export function HomeFeed({
   kindControl?: ReactNode;
   spaceControl?: ReactNode;
   questionControl?: ReactNode;
+  /** The selected metadata control already explains and recovers its own blocked selection. */
+  suppressResultMessage?: boolean;
   onRetry?: () => void;
   onNext?: (cursor: string) => void;
   onRestart?: () => void;
@@ -203,7 +206,7 @@ export function HomeFeed({
         {spaceControl}
         {questionControl}
       </div>
-      {busy ? (
+      {busy && !suppressResultMessage ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.home_feed_loading({}, options)}
         </p>
@@ -216,10 +219,9 @@ export function HomeFeed({
             ))}
           </ol>
           {hasPreparing || hasUnavailable ? (
-            <div role="status" className="flex flex-wrap gap-x-2 text-sm text-muted-foreground">
-              {hasPreparing ? <span>{m.home_feed_preparing({}, options)}</span> : null}
-              {hasUnavailable ? <span>{m.home_feed_unavailable({}, options)}</span> : null}
-            </div>
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.home_presentation_partial({}, options)}
+            </p>
           ) : null}
           {!page.feedItems.length &&
           Object.values(page.sources).every((state) => state === 'ready' || state === 'not_requested') ? (
@@ -258,7 +260,7 @@ export function HomeFeed({
             </Button>
           ) : null}
         </>
-      ) : (
+      ) : suppressResultMessage ? null : (
         <div
           role={result.state === 'loading' ? 'status' : 'alert'}
           className="space-y-3 rounded-lg border border-border p-5"
@@ -394,6 +396,9 @@ export function HomeFeedConsumer({
       </span>,
     );
   }
+  const filterOwnsResultMessage =
+    (Boolean(spaceSnapshot.selected) && !spaceSnapshot.available) ||
+    (Boolean(questionSnapshot.selected) && questionSnapshot.selection !== 'ready');
   return (
     <HomeFeed
       result={snapshot.result}
@@ -402,6 +407,7 @@ export function HomeFeedConsumer({
       stream={snapshot.input.stream}
       busy={snapshot.busy}
       activeFilters={activeFilters}
+      suppressResultMessage={filterOwnsResultMessage}
       spaceControl={
         <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
       }

@@ -39,7 +39,18 @@ export const SignedOut: Story = {
 };
 export const PartialSources: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="partial" />,
-  play: pageReady,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
+    await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
+    await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
+    const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
+    await expect(retry).toBeEnabled();
+    await userEvent.click(retry);
+    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
+    await expect(canvas.getByText(m.home_presentation_partial())).toBeVisible();
+  },
 };
 export const Preparing: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="preparing" />,
@@ -172,6 +183,33 @@ export const QuestionSelection: Story = {
     },
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-selection" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_load() }));
+    const select = canvas.getByRole('combobox', { name: m.home_question_label() });
+    const questionId = '00000000-0000-7000-8000-000000000001';
+    await waitFor(() => expect(select.querySelector(`option[value="${questionId}"]`)).not.toBeNull());
+    await userEvent.selectOptions(select, questionId);
+    await waitFor(() => expect(context.canvasElement.querySelector('main[aria-busy="false"]')).not.toBeNull());
+    const selected = canvas.getByRole('list', { name: m.refinement_selected() });
+    await expect(selected).toHaveTextContent('Overall impression');
+    await userEvent.click(canvas.getByRole('button', { name: m.search_close_filters() }));
+    await expect(selected).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    const summary = canvas.getByText(m.home_presentation_question_information());
+    const details = summary.closest('details')!;
+    await expect(details).not.toHaveAttribute('open');
+    const information = details.querySelector('p')!;
+    await expect(information).not.toBeVisible();
+    await userEvent.click(summary);
+    await expect(information).toBeVisible();
+    await expect(information).toHaveTextContent(m.home_question_work());
+    await expect(information).toHaveTextContent('Overall impression');
+    await expect(information).toHaveTextContent('100');
+  },
 };
 export const QuestionChoicesUnavailable: Story = {
   parameters: {
@@ -194,4 +232,54 @@ export const QuestionChoicesNextPage: Story = {
     },
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-next" />,
+};
+
+export const QuestionSelectionLost: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="question-lost" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_load() }));
+    const select = canvas.getByRole('combobox', { name: m.home_question_label() });
+    const questionId = '00000000-0000-7000-8000-000000000001';
+    await waitFor(() => expect(select.querySelector(`option[value="${questionId}"]`)).not.toBeNull());
+    await userEvent.selectOptions(select, questionId);
+    await expect(await canvas.findByText(m.home_questions_lost())).toBeVisible();
+    await expect(canvas.getByRole('list', { name: m.refinement_selected() })).toHaveTextContent(
+      'Overall impression',
+    );
+    await expect(canvas.getAllByRole('alert')).toHaveLength(1);
+    await expect(canvas.queryByText(m.home_feed_unavailable())).toBeNull();
+    await expect(canvas.getByRole('button', { name: m.home_question_refresh() })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: m.home_question_clear() })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.home_question_clear() }));
+    await expect(canvas.queryByRole('list', { name: m.refinement_selected() })).toBeNull();
+  },
+};
+
+export const ExpiredPageRecovery: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="expired-page" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByRole('link', { name: 'Letters from B-612' });
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.home_kinds_load() }));
+    const kind = canvas.getByRole('combobox', { name: m.home_kind_label() });
+    await waitFor(() => expect(kind.querySelector('option[value="schema:Book"]')).not.toBeNull());
+    await userEvent.selectOptions(kind, 'schema:Book');
+    await userEvent.click(canvas.getByRole('button', { name: m.search_close_filters() }));
+    const selected = canvas.getByRole('list', { name: m.refinement_selected() });
+    const selectedLabel = kind.selectedOptions[0]!.textContent!;
+    await expect(selected).toHaveTextContent(selectedLabel);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_next_page() }));
+    await expect(await canvas.findByText(m.home_feed_cursor())).toBeVisible();
+    await expect(m.home_feed_cursor()).not.toMatch(/cursor/i);
+    await userEvent.click(canvas.getByRole('button', { name: m.home_feed_restart() }));
+    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
+    await expect(selected).toHaveTextContent(selectedLabel);
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await expect(kind).toHaveValue('schema:Book');
+  },
 };

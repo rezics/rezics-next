@@ -21,8 +21,10 @@ export type HomeFeedStory =
   | 'space-unavailable'
   | 'space-identity-changed'
   | 'questions-selection'
+  | 'question-lost'
   | 'questions-unavailable'
-  | 'questions-next';
+  | 'questions-next'
+  | 'expired-page';
 let selected: HomeFeedStory = 'mixed';
 let homeActive = false;
 let spaceReads = 0;
@@ -216,6 +218,7 @@ export const routes: FakeRoute[] = [
     path: /^\/v1\/rating-questions\/([^/]+)$/,
     story: ({ match }) => {
       if (!homeActive) return;
+      if (selected === 'question-lost') return { status: 404, code: 'not_found' };
       const question = [homeQuestionStoryPage(), homeQuestionStoryPage('illustrative-question-frontier')]
         .flatMap((page) => page.ratingQuestions)
         .find((question) => question.id === match?.[1]);
@@ -279,6 +282,8 @@ export const routes: FakeRoute[] = [
     path: '/v1/feedItems',
     story: ({ request }) => {
       const url = new URL(request.url);
+      if (selected === 'expired-page' && url.searchParams.has('cursor'))
+        return { status: 409, code: 'invalid_cursor' };
       const locale = request.headers.get('accept-language')?.split(',')[0] ?? 'en';
       const personal = request.headers.has('authorization');
       const state = url.searchParams.get('stream') === 'following' ? 'following' : selected;
