@@ -23,7 +23,11 @@ class DigestStream extends WritableStream<Uint8Array> {
   constructor(algorithm: string) {
     const hash = createHash(algorithm.replace('-', '').toLowerCase());
     let resolve!: (value: ArrayBuffer) => void;
-    const digest = new Promise<ArrayBuffer>((done) => (resolve = done));
+    let reject!: (reason?: unknown) => void;
+    const digest = new Promise<ArrayBuffer>((done, fail) => {
+      resolve = done;
+      reject = fail;
+    });
     super({
       write(chunk) {
         hash.update(chunk);
@@ -31,6 +35,9 @@ class DigestStream extends WritableStream<Uint8Array> {
       close() {
         const bytes = hash.digest();
         resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+      },
+      abort(reason) {
+        reject(reason);
       },
     });
     this.digest = digest;
