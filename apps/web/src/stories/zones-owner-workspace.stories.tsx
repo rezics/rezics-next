@@ -57,9 +57,42 @@ const meta = {
 } satisfies Meta<typeof WorkspaceStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const List: Story = {};
+export const List: Story = {
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const list = await canvas.findByRole('list', { name: m.zones_owner_active() });
+    const row = within(within(list).getAllByRole('listitem')[0]!);
+    const title = row.getByRole('heading', { level: 2 }).textContent!;
+    const primary = row.getByRole('link', { name: m.zones_owner_configure_named({ title }) });
+    expect(primary).toHaveAttribute('href', expect.stringContaining('/edit'));
+    primary.focus();
+    await userEvent.tab();
+    expect(row.getByRole('link', { name: m.zones_owner_open() })).toHaveFocus();
+    await userEvent.tab();
+    expect(row.getByRole('link', { name: m.zones_owner_configure() })).toHaveFocus();
+    await userEvent.tab();
+    expect(row.getByRole('button', { name: m.zones_owner_trash_action() })).toHaveFocus();
+  },
+};
+export const ListPhone: Story = { ...List, globals: { viewport: { value: 'phone390', isRotated: false } } };
 export const Empty: Story = { args: { scenario: 'empty' } };
-export const Trash: Story = { args: { scenario: 'trash' } };
+export const Trash: Story = {
+  args: { scenario: 'trash' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const list = await canvas.findByRole('list', { name: m.zones_owner_trash() });
+    const row = within(within(list).getAllByRole('listitem')[0]!);
+    expect(row.getByRole('heading', { level: 2 })).toBeVisible();
+    expect(row.queryAllByRole('link')).toHaveLength(0);
+    const restore = row.getByRole('button', { name: m.zones_owner_restore() });
+    restore.focus();
+    expect(restore).toHaveFocus();
+    expect(restore).toBeEnabled();
+  },
+};
+export const TrashPhone: Story = { ...Trash, globals: { viewport: { value: 'phone390', isRotated: false } } };
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const Denied: Story = { args: { scenario: 'denied' } };
 export const ActorDenied: Story = { args: { scenario: 'actor' } };

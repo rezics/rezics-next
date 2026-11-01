@@ -12,7 +12,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { PageHeading } from '../../../shell/page-heading';
 import { m } from '../../../paraglide/messages.js';
 import { ZoneFeedback } from './feedback';
@@ -251,28 +251,33 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
                 public: m.zones_owner_public,
               }[zone.visibility];
               return (
-                <ListRow key={zone.id} className="space-y-3 p-3">
-                  <h2 lang={name.lang} className="text-xl font-semibold break-words">
-                    {title}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">{visibility({}, options)}</p>
-                  {!input.deleted ? (
-                    <ListRowLink href={zoneLinks.edit}>{m.zones_owner_configure_named({ title }, options)}</ListRowLink>
-                  ) : null}
-                  {input.deleted && zone.restoreUntil ? (
-                    <p className="text-sm text-muted-foreground">
-                      {m.zones_owner_deadline({}, options)}{' '}
-                      <time dateTime={zone.restoreUntil}>
-                        {new Intl.DateTimeFormat(locale, {
-                          dateStyle: 'medium',
-                          timeStyle: 'long',
-                          timeZone: 'UTC',
-                        }).format(new Date(zone.restoreUntil))}
-                      </time>
-                    </p>
-                  ) : null}
-                  <ListRowControl className="flex flex-wrap gap-2">
-                    {input.deleted ? (
+                <ContentItem
+                  key={zone.id}
+                  className="p-3"
+                  title={title}
+                  titleLang={name.lang}
+                  {...(!input.deleted
+                    ? { href: zoneLinks.edit, primaryLinkLabel: m.zones_owner_configure_named({ title }, options) }
+                    : {})}
+                  metadata={
+                    <>
+                      <span>{visibility({}, options)}</span>
+                      {input.deleted && zone.restoreUntil ? (
+                        <span>
+                          {m.zones_owner_deadline({}, options)}{' '}
+                          <time dateTime={zone.restoreUntil}>
+                            {new Intl.DateTimeFormat(locale, {
+                              dateStyle: 'medium',
+                              timeStyle: 'long',
+                              timeZone: 'UTC',
+                            }).format(new Date(zone.restoreUntil))}
+                          </time>
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                  actions={
+                    input.deleted ? (
                       <Button
                         variant="outline"
                         disabled={blocked || expired}
@@ -311,10 +316,10 @@ export function ZonesOwnerWorkspace({ locale, input, outcome, owner, onChange, o
                           }
                         />
                       </>
-                    )}
-                  </ListRowControl>
-                  {input.deleted && expired ? <p role="status">{m.zones_owner_expired({}, options)}</p> : null}
-                </ListRow>
+                    )
+                  }
+                  state={input.deleted && expired ? <p role="status">{m.zones_owner_expired({}, options)}</p> : null}
+                />
               );
             })}
         </ul>

@@ -21,6 +21,8 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -32,8 +34,8 @@ const { ZonesOwnerWorkspace } = await import('../src/features/zones/manage/works
 const { fixtureZone, fixtureZoneId, zonesFixture } = await import('../src/features/zones/manage/fixtures');
 const { m } = await import('../src/paraglide/messages.js');
 
-afterAll(() => {
-  window.happyDOM.abort();
+afterAll(async () => {
+  await window.happyDOM.close();
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
