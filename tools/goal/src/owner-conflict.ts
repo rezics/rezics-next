@@ -121,14 +121,7 @@ export function ownerConflictGitConfig(cwd: string): string[] {
   if (common.status !== 0)
     throw new Error(common.stderr?.trim() || common.error?.message || 'Cannot locate Git common directory');
   const rrCache = resolve(cwd, common.stdout.trim(), 'rr-cache');
-  return [
-    '-c',
-    'rerere.enabled=true',
-    '-c',
-    'rerere.autoupdate=true',
-    '-c',
-    `rerere.dir=${rrCache}`,
-  ];
+  return ['-c', 'rerere.enabled=true', '-c', 'rerere.autoupdate=true', '-c', `rerere.dir=${rrCache}`];
 }
 
 /** Git settings for commands started by a resumed worker, scoped to that process tree. */
@@ -172,8 +165,7 @@ export function ownerConflictGit(cwd: string, ...args: string[]): OwnerConflictG
 
 export function ownerConflictGitOrThrow(cwd: string, ...args: string[]): string {
   const result = ownerConflictGit(cwd, ...args);
-  if (result.status !== 0)
-    throw new Error(result.stderr.trim() || result.error?.message || `git ${args[0]} failed`);
+  if (result.status !== 0) throw new Error(result.stderr.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout.trim();
 }
 

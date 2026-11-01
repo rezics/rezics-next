@@ -8,12 +8,20 @@ import { codexAdapter } from './codex.ts';
 function options(cli: Cli = 'codex'): AgentLaunchOptions {
   const profile: Profile = { cli, model: 'gpt-6.1-sol', effort: 'high', poolClass: 'implementation' };
   const pool: Pool = {
-    name: 'resolver-test', cli, command: 'unused-provider-command',
+    name: 'resolver-test',
+    cli,
+    command: 'unused-provider-command',
     configDirectory: join(import.meta.dir, '../../../../.temp/resolver-command-test-config'),
-    classes: ['implementation'], allowanceKey: 'resolver-test',
+    classes: ['implementation'],
+    allowanceKey: 'resolver-test',
     policy: { weight: 1, reservePercent: 0, allowUnknown: true, maxAgeMs: 1000 },
   };
-  return { profile, pool, worktree: join(import.meta.dir, '../../../..'), prompt: 'Resolve only the supplied source paths.' };
+  return {
+    profile,
+    pool,
+    worktree: join(import.meta.dir, '../../../..'),
+    prompt: 'Resolve only the supplied source paths.',
+  };
 }
 
 test('the Codex resolver constructs a fresh sandbox command without ordinary worker permissions or schema', () => {
@@ -58,21 +66,26 @@ test('resolver support follows the selected adapter capability rather than its C
   const adapter: AgentAdapter = {
     ...agentAdapter('cursor'),
     supportsResolver: true,
-    resume() { throw new Error('resume must not run'); },
+    resume() {
+      throw new Error('resume must not run');
+    },
     start(value) {
       received.push(value);
       return ['bounded-adapter', ['fresh-sandbox', value.worktree, value.prompt]];
     },
   };
-  expect(launchCommand({ ...input, resolver: true }, () => adapter))
-    .toEqual(['bounded-adapter', ['fresh-sandbox', input.worktree, input.prompt]]);
+  expect(launchCommand({ ...input, resolver: true }, () => adapter)).toEqual([
+    'bounded-adapter',
+    ['fresh-sandbox', input.worktree, input.prompt],
+  ]);
   expect(received).toHaveLength(1);
   expect(received[0]!.profile).toEqual(input.profile);
   expect(received[0]!.pool).toEqual(input.pool);
   expect(received[0]!.resolver).toBe(true);
   expect(received[0]!.resumeSession).toBeUndefined();
-  expect(() => launchCommand({ ...input, resolver: true, resumeSession: 'old' }, () => adapter))
-    .toThrow('fresh session');
+  expect(() => launchCommand({ ...input, resolver: true, resumeSession: 'old' }, () => adapter)).toThrow(
+    'fresh session',
+  );
   expect(received).toHaveLength(1);
 });
 
@@ -81,11 +94,16 @@ test('adapters without the resolver capability refuse without falling back to wo
     const { supportsResolver: _capability, ...unsupported } = agentAdapter(cli);
     const adapter: AgentAdapter = {
       ...unsupported,
-      start() { throw new Error('ordinary start must not run'); },
-      resume() { throw new Error('resume must not run'); },
+      start() {
+        throw new Error('ordinary start must not run');
+      },
+      resume() {
+        throw new Error('resume must not run');
+      },
     };
-    expect(() => launchCommand({ ...options(cli), resolver: true }, () => adapter))
-      .toThrow('does not support train resolution');
+    expect(() => launchCommand({ ...options(cli), resolver: true }, () => adapter)).toThrow(
+      'does not support train resolution',
+    );
     if (cli !== 'codex') expect(agentAdapter(cli).supportsResolver).toBeUndefined();
   }
 });

@@ -50,8 +50,10 @@ export type ControlPlaneScopeApprovalReceipt = ControlPlaneScopeApprovalRequest 
 /** Complete mapping: a corrected generation can replace only the same task. */
 export type ControlPlaneBatchMemberMapping = {
   previous: ControlPlaneBatchSource;
-} & ({ disposition: 'replacement'; current: ControlPlaneBatchSource } |
-  { disposition: 'deferred-to-dev'; cause: string });
+} & (
+  | { disposition: 'replacement'; current: ControlPlaneBatchSource }
+  | { disposition: 'deferred-to-dev'; cause: string }
+);
 
 /** Immutable migration input. Its queue claims remain reserved until the native dev receiver consumes it. */
 export type ControlPlaneBatchDevHandoff = {

@@ -198,7 +198,9 @@ function command(options: AgentLaunchOptions): [string, string[]] {
           ? [...(options.resumeSession ? [] : ['-s', 'read-only']), '-c', 'approval_policy="never"']
           : ['--dangerously-bypass-approvals-and-sandbox']),
       ...(options.research ? ['-c', 'web_search="live"'] : []),
-      ...(!options.readOnly && !resolver ? ['--output-schema', join(import.meta.dir, '../../worker-result.schema.json')] : []),
+      ...(!options.readOnly && !resolver
+        ? ['--output-schema', join(import.meta.dir, '../../worker-result.schema.json')]
+        : []),
       ...(options.resumeSession ? [] : ['-C', worktree]),
       '--',
       prompt,

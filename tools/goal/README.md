@@ -1448,7 +1448,9 @@ owning manager provider session. For an already manager-authorized queue source:
 ```ts
 const source = { taskId, attempt, acceptedCommit }; // Actual accepted current source, never a historical generation.
 const input = {
-  version: 1 as const, managerId, ...source,
+  version: 1 as const,
+  managerId,
+  ...source,
   ...controlPlaneScopeApprovalIdentity(source, runtime),
   additionalPaths: [
     { path: 'tools/goal/src/lease.ts', reason: 'Required native publication lease custody adapter' },
@@ -1657,22 +1659,39 @@ For example, operations supplies actual accepted identities and verified retirem
 
 ```ts
 const input: ControlPlaneBatchSupersession = {
-  version: 1, previousBatchId, replacement: sevenCurrentMainSources,
-  handoff: { journalHash, controller, ownedCommands: knownOwnedCommands,
-    inventory: 'legacy-inventory-unavailable', evidence: retirementReceipt, failures: retainedLegacyFailures },
+  version: 1,
+  previousBatchId,
+  replacement: sevenCurrentMainSources,
+  handoff: {
+    journalHash,
+    controller,
+    ownedCommands: knownOwnedCommands,
+    inventory: 'legacy-inventory-unavailable',
+    evidence: retirementReceipt,
+    failures: retainedLegacyFailures,
+  },
   memberMapping: [
-    ...previousMainMembers.map(previous => ({ previous, disposition: 'replacement' as const,
-      current: currentAcceptedByTask.get(previous.taskId)! })),
-    ...thirteenPreparationExclusions.map(previous => ({ previous, disposition: 'deferred-to-dev' as const,
-      cause: 'Preparation conflict deferred to dev under the retained Root order' })),
+    ...previousMainMembers.map((previous) => ({
+      previous,
+      disposition: 'replacement' as const,
+      current: currentAcceptedByTask.get(previous.taskId)!,
+    })),
+    ...thirteenPreparationExclusions.map((previous) => ({
+      previous,
+      disposition: 'deferred-to-dev' as const,
+      cause: 'Preparation conflict deferred to dev under the retained Root order',
+    })),
   ],
   deferralAuthorization: { order: retainedRootOrder, expectedDeferredCount: 13 },
   changedInputs: relevantCorrectedProducerInputs,
 };
 const closure = await receiveControlPlaneBatchSupersession(input, runtime, managerEnv);
 await receiveControlPlaneBatch(input.replacement, runtime, managerEnv);
-await receiveControlPlaneBatchDevHandoff({ previousBatchId,
-  replacementBatchId: closure.replacementBatchId }, { train: runtime.train, receiveDev: migrationReceiver }, managerEnv);
+await receiveControlPlaneBatchDevHandoff(
+  { previousBatchId, replacementBatchId: closure.replacementBatchId },
+  { train: runtime.train, receiveDev: migrationReceiver },
+  managerEnv,
+);
 ```
 
 The existing supersession JSON CLI receives the same mapping fields. Workers must never invoke these operations.
