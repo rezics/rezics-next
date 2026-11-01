@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fireEvent, screen, userEvent, waitFor, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
+import { Button } from '../shadcn/button.tsx';
 import { Field, FieldLabel } from '../shadcn/field.tsx';
 import { NativeSelect, NativeSelectOption } from '../shadcn/native-select.tsx';
 import { Textarea } from '../shadcn/textarea.tsx';
@@ -11,6 +12,7 @@ import {
   defaultShelfColumns,
   type ShelfColumn,
   type ShelfColumnId,
+  type ShelfTableRow,
 } from './shelf-table.tsx';
 import { ShelfTabs, ShelfToolbar, ShelfTypeChips } from './shelf-toolbar.tsx';
 const subject = { id: 'book', title: 'A journey through the city of stars', types: ['schema:Book'] };
