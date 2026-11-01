@@ -188,7 +188,9 @@ export const SharedVersionRecovery: Story = {
       const beforeWrite = fixture.readingCommands.length;
       await userEvent.click(
         reading.getByRole('radio', {
-          name: ([m.settings_spoiler_0_title(), m.settings_spoiler_1_title(), m.settings_spoiler_2_title()] as const)[level],
+          name: ([m.settings_spoiler_0_title(), m.settings_spoiler_1_title(), m.settings_spoiler_2_title()] as const)[
+            level
+          ],
         }),
       );
       await reading.findByText(m.settings_saved());
