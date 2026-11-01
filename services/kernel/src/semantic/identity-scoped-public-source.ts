@@ -368,3 +368,13 @@ export async function verifyPublicIdentitySourceCaptureLocator(
   );
   return result.rowCount === 1;
 }
+
+/** Native receiving uses only persisted Semantic selectors on the actual shared command. */
+export async function lockPublicIdentityOutputCaptureDisposition(
+  tx: CommandTransaction,
+  selection: import('../library/native-public-output-contract.ts').PublicOutputDispositionSelection,
+  context: import('../library/native-public-output-contract.ts').PublicOutputCommandContext,
+) {
+  const { resolvePublicIdentityOutputCaptureDisposition } = await import('./identity-public-output-capture.ts');
+  return resolvePublicIdentityOutputCaptureDisposition(tx, selection, context);
+}

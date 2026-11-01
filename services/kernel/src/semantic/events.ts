@@ -97,6 +97,7 @@ const publicationComponent = Type.Object(
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
+  'com.rezics.semantic.public-output.capture.v1': Type.Object({ captureId: UUID }, { additionalProperties: false }),
   [CATALOGUE_ARTIFACT]: Type.Object(
     {
       digest: Type.String(),

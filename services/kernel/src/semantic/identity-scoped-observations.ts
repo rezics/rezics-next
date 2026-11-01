@@ -28,6 +28,11 @@ import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/coll
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type * as S from './identity-scope-types.ts';
+import type { PublicIdentityOutputCapture } from './identity-public-output-types.ts';
+import {
+  lockPublicIdentityOutputCaptureCurrent,
+  readPublicIdentityOutputCaptureCurrent,
+} from './identity-public-output-capture.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
@@ -206,7 +211,10 @@ type Head = {
   source: S.IdentityScopeSource;
   registration: string;
   capture_id: string;
-  capture: S.IdentityScopeCapture | PublicLocator;
+  capture:
+    | S.IdentityScopeCapture
+    | PublicLocator
+    | { kind: 'public-output-locator'; capture: PublicIdentityOutputCapture };
   state: 'capturing' | 'enrolling' | 'ready' | 'repair' | 'retiring' | 'retired';
   revision: string;
   active: number;
@@ -342,6 +350,26 @@ async function proofCurrent(
 ): Promise<boolean> {
   if (!same(key.source, row.source) || !(await ownerCurrent(tx, key))) return false;
   if (row.capture.kind === 'public-locator') return verifyPublicIdentitySourceCaptureLocator(tx, row.capture);
+  if (row.capture.kind === 'public-output-locator') {
+    if (!budget) return false;
+    const capture = row.capture.capture;
+    const result = await budget.compose((allowance) =>
+      lockPublicIdentityOutputCaptureCurrent(
+        tx,
+        capture,
+        {
+          pool: currentCommandResources(tx).pool,
+          at: currentCommand(tx).time,
+          deadline: currentCommandResources(tx).deadline,
+          allowance,
+        },
+        retained,
+      ),
+    );
+    charge(measured, result.work);
+    measured.outputWork = result.work;
+    return result.status === (retained ? 'retained' : 'current') && same(result.key, key);
+  }
   if (
     key.source.kind !== 'library' ||
     row.capture.kind !== 'library' ||
@@ -931,6 +959,18 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     allowance?: WorkAllowance,
   ): Promise<S.IdentityScopeRegistrationResult> {
     const k = identityScopeAddress(key);
+    if (key.source.kind === 'library' && key.source.identity.scope === 'public_output') {
+      if (!allowance) return fail('custody_missing', measured);
+      const result = await readPublicIdentityOutputCaptureCurrent(pool, key, { deadline, allowance });
+      charge(measured, result.work);
+      measured.outputWork = result.work;
+      if (result.status !== 'current' || !same(result.key, key)) return fail('source_unready', measured);
+      return {
+        status: 'registered',
+        observation: { key, captureId: result.capture.captureId, committedRevision: result.committedRevision },
+        work: measured,
+      };
+    }
     let row = await withReadTransaction(pool, (tx) => head(tx, key, measured));
     if (!row) return fail('summary_missing', measured);
     if (!same(row.source, key.source)) return fail('owner_moved', measured, 'stale');
@@ -1125,6 +1165,8 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
   }
   async function finishScope(input: S.IdentityScopeFinishInput): Promise<S.IdentityScopeFinishResult> {
     const measured = work();
+    if (input.key.source.kind === 'library' && input.key.source.identity.scope === 'public_output')
+      return fail('custody_missing', measured);
     if ((input.records?.length ?? 0) > 8) throw new RangeError('Finish receiving hints must be bounded');
     if (Date.now() >= input.deadline) return fail('deadline', measured);
     const budget = new NativeCollectionWork(input.allowance, input.deadline);
@@ -1377,6 +1419,8 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
   async function retireScope(input: S.IdentityScopeRetireInput): Promise<S.IdentityScopeRetireResult> {
     const measured = work();
     const partition = identityScopeAddress(input.key).partition;
+    if (input.key.source.kind === 'library' && input.key.source.identity.scope === 'public_output')
+      return fail('custody_missing', measured);
     if ((input.receiving?.length ?? 0) > 8) throw new RangeError('Retirement receiving hints must be bounded');
     if (Date.now() >= input.deadline) return fail('deadline', measured);
     const snapshot = await runCommand(pool, { partition, deadline: input.deadline }, async (tx) => {
@@ -1499,6 +1543,24 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
   return {
     async register(input) {
       const measured = work();
+      if (input.capture.kind === 'public-output') {
+        const result = await readPublicIdentityOutputCaptureCurrent(pool, input.capture.capture, {
+          deadline: input.deadline,
+          allowance: input.capture.allowance,
+        });
+        charge(measured, result.work);
+        measured.outputWork = result.work;
+        if (result.status !== 'current' || !same(result.key, input.key)) return fail('capture_incomplete', measured);
+        return {
+          status: 'registered',
+          observation: {
+            key: input.key,
+            captureId: input.capture.capture.captureId,
+            committedRevision: result.committedRevision,
+          },
+          work: measured,
+        };
+      }
       const k = identityScopeAddress(input.key);
       if (Date.now() >= input.deadline) return fail('deadline', measured);
       let capture: S.IdentityScopeCapture | PublicLocator = input.capture;
@@ -1593,6 +1655,27 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
       const measured = work();
       if (!same(input.key, input.expected.key)) return fail('source_unready', measured, 'stale');
       if (Date.now() >= input.deadline) return fail('deadline', measured);
+      if (input.key.source.kind === 'library' && input.key.source.identity.scope === 'public_output') {
+        if (!input.allowance) return fail('custody_missing', measured);
+        const options = { deadline: input.deadline, allowance: input.allowance };
+        const result = input.tx
+          ? await lockPublicIdentityOutputCaptureCurrent(input.tx, input.key, {
+              ...options,
+              pool,
+              at: currentCommand(input.tx).time,
+            })
+          : await readPublicIdentityOutputCaptureCurrent(pool, input.key, options);
+        charge(measured, result.work);
+        measured.outputWork = result.work;
+        if (
+          result.status !== 'current' ||
+          !same(result.key, input.key) ||
+          result.capture.captureId !== input.expected.captureId ||
+          result.committedRevision !== input.expected.committedRevision
+        )
+          return fail('source_unready', measured, 'stale');
+        return { status: 'current', observation: input.expected, work: measured };
+      }
       const read = async (tx: CommandTransaction): Promise<S.IdentityScopeRevalidateResult> => {
         const row = await head(tx, input.key, measured);
         if (!row) return fail('summary_missing', measured);
@@ -1744,6 +1827,11 @@ export async function receiveScopePreparation(
   ticket: IdentityPrearmTicketData,
   cancellation?: IdentityNativeReceipt,
 ): Promise<IdentityNativeReceipt> {
+  if (ticket.scope.source.kind === 'library' && ticket.scope.source.identity.scope === 'public_output')
+    throw new IdentityEpochStoreError(
+      'identity_epoch_unavailable',
+      'Public output preparation requires its original caller work frame via receiveIdentityScopePrearm',
+    );
   const key = ticket.scope;
   const k = identityScopeAddress(key);
   const measured = work();

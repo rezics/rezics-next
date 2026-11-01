@@ -2011,3 +2011,12 @@ use the Kind primary key; label keysets use the label primary key and
 declares those partition/root-leading indexes. Build continuations in
 [definition-catalogue-publication.ts](definition-catalogue-publication.ts) use the
 retained DFS link and `definition_catalogue_pending`, never a complete-directory scan.
+
+Public COMPLETE output capture is implemented by
+[identity-public-output-capture.ts](identity-public-output-capture.ts), with literal work plans, immutable SQL
+receipts and an additive migration. The [epoch contract](identity-epoch-contract.md#public-output-capture-execution-and-composition)
+records bounded continuation, current validation, persisted successor staging, native disposition, monotone
+enrollment fencing and literal eight-axis composition. Unknown enrolled receiver/writer closure and admitted
+Subject inverse removal remain precisely refusing and retained. Generic registered public Source capture remains a separate variant.
+The authored production-composition regression is `test/semantic/identity-public-output-capture.test.ts`;
+acceptance/native/browser execution is deferred to controller integration.

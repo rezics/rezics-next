@@ -95,12 +95,23 @@ export class NativeCollectionWork {
       settle(result.work);
       return result;
     } catch (error) {
-      // Without a completed receipt no dispatched child work can be refunded. Poison the parent so a
-      // caller cannot catch an unavailable child and use its unknown work to continue the same page.
-      for (const axis of axes) {
-        this.held[axis] -= remaining[axis];
-        this.used[axis] += remaining[axis];
+      // An owned child attaches its settled receipt even when its final operation fails. Preserve
+      // those actual charges. Without a valid receipt the entire admitted remainder stays charged.
+      const failed = error instanceof Error && 'work' in error ? (error.work as WorkReceipt) : undefined;
+      let accounted = false;
+      if (failed) {
+        try {
+          settle(failed);
+          accounted = true;
+        } catch {
+          /* unknown work stays fully charged */
+        }
       }
+      if (!accounted)
+        for (const axis of axes) {
+          this.held[axis] -= remaining[axis];
+          this.used[axis] += remaining[axis];
+        }
       this.failure = error instanceof Error ? error : new Error('Composed source failed');
       if (error instanceof Error)
         Object.defineProperty(error, 'work', { get: () => this.receipt(), configurable: true });
@@ -118,9 +129,11 @@ export class NativeCollectionWork {
     cleanup = false,
   ): {
     dispatch(): void;
+    query<T>(operation: () => Promise<T>): Promise<T>;
     settle(actual?: Partial<WorkDimensions>): void;
     cancel(): void;
   } {
+    if (!cleanup) this.assertReady();
     if (Date.now() >= this.deadline || footprint === undefined) throw this.unavailable();
     const bound = Object.freeze({ ...footprint });
     for (const axis of axes) {
@@ -129,6 +142,7 @@ export class NativeCollectionWork {
     }
     for (const axis of axes) this.held[axis] += bound[axis];
     let state: 'reserved' | 'dispatched' | 'settled' = 'reserved';
+    let queried = false;
     const release = (charged: WorkDimensions) => {
       for (const axis of axes) {
         this.held[axis] -= bound[axis];
@@ -144,6 +158,13 @@ export class NativeCollectionWork {
           throw this.unavailable();
         }
         state = 'dispatched';
+      },
+      // The owner already admitted this literal. Suppress only duplicate observation of this
+      // single dispatched query; no unreserved operation can enter the enclosing frame this way.
+      query: (operation) => {
+        if (state !== 'dispatched' || queried) throw new TypeError('Source query was not uniquely dispatched');
+        queried = true;
+        return observing.run(undefined, operation);
       },
       settle: (actual = {}) => {
         if (state !== 'dispatched') throw new TypeError('Source work was not dispatched');
@@ -170,9 +191,97 @@ export class NativeCollectionWork {
 }
 
 type Footprint = (sql: string, values: readonly unknown[]) => WorkDimensions | undefined;
-const observing = new AsyncLocalStorage<{ work: NativeCollectionWork; footprint: Footprint }>();
+const observing = new AsyncLocalStorage<{ work: NativeCollectionWork; footprint: Footprint } | undefined>();
 const pools = new WeakSet<Pool>();
 const clients = new WeakSet<PoolClient>();
+
+function observeNativeCollectionClient(client: PoolClient, delegated = false): void {
+  if (clients.has(client)) return;
+  clients.add(client);
+  const original = client.query;
+  let terminal:
+    | {
+        work: NativeCollectionWork;
+        reservation: ReturnType<NativeCollectionWork['reserve']>;
+        bound: WorkDimensions;
+      }
+    | undefined;
+  client.query = function (this: PoolClient, ...args: unknown[]) {
+    const active = observing.getStore();
+    const invoke = original as unknown as (...args: unknown[]) => unknown;
+    if (!active) return invoke.apply(this, args);
+    // A live Core transaction forwards to a bound PoolClient query. Observe that exact
+    // transaction even if it predates pool instrumentation, without charging its client twice.
+    const invokeQuery = () =>
+      delegated ? observing.run(undefined, () => invoke.apply(this, args)) : invoke.apply(this, args);
+    const config = args[0] as string | QueryConfig;
+    const sql = typeof config === 'string' ? config : config.text;
+    const values = (typeof config === 'string' ? args[1] : config.values) as unknown[] | undefined;
+    const finishing = /^(?:COMMIT|ROLLBACK)\b/i.test(sql) && terminal?.work === active.work;
+    let reservation: ReturnType<NativeCollectionWork['reserve']>;
+    let bound: WorkDimensions | undefined;
+    try {
+      if (finishing && terminal) {
+        ({ reservation, bound } = terminal);
+        terminal = undefined;
+      } else {
+        active.work.assertReady();
+        if (/^BEGIN\b/i.test(sql)) {
+          const cleanupBound = active.footprint('ROLLBACK', []);
+          const cleanup = active.work.reserve(cleanupBound, true);
+          terminal = { work: active.work, reservation: cleanup, bound: cleanupBound! };
+        }
+        bound = active.footprint(sql, Array.isArray(values) ? values : []);
+        reservation = active.work.reserve(bound);
+      }
+      reservation.dispatch();
+    } catch (error) {
+      active.work.failure = error instanceof Error ? error : new Error('Native work admission failed');
+      throw error;
+    }
+    const settle = (result?: QueryResult, error?: unknown) => {
+      if ((finishing || /^BEGIN\b/i.test(sql)) && error)
+        discardConnection(client, error instanceof Error ? error : new Error('Native transaction cleanup failed'));
+      reservation.settle({
+        emptySeeks:
+          !result || bound!.emptySeeks > 1 ? bound!.emptySeeks : result.rows.length === 0 ? bound!.emptySeeks : 0,
+        candidateKeys: result ? Math.min(bound!.candidateKeys, result.rows.length) : bound!.candidateKeys,
+        witnessKeys: result ? Math.min(bound!.witnessKeys, result.rows.length) : bound!.witnessKeys,
+      });
+    };
+    const callbackIndex = args.findIndex((arg) => typeof arg === 'function');
+    if (callbackIndex >= 0) {
+      const callback = args[callbackIndex] as (error: unknown, result: QueryResult) => void;
+      args[callbackIndex] = (error: unknown, result: QueryResult) => {
+        observing.run(active, () => {
+          settle(result, error);
+          callback(error, result);
+        });
+      };
+      try {
+        return invokeQuery();
+      } catch (error) {
+        settle(undefined, error);
+        throw error;
+      }
+    }
+    try {
+      return Promise.resolve(invokeQuery()).then(
+        (result) => {
+          settle(result as QueryResult);
+          return result;
+        },
+        (error) => {
+          settle(undefined, error);
+          throw error;
+        },
+      );
+    } catch (error) {
+      settle(undefined, error);
+      throw error;
+    }
+  } as PoolClient['query'];
+}
 
 /** Observe the original pool/clients: no shadow pool, client proxy or identity/time registration changes. */
 export async function instrumentNativeCollectionWork<T>(
@@ -180,7 +289,11 @@ export async function instrumentNativeCollectionWork<T>(
   work: NativeCollectionWork,
   footprint: Footprint,
   operation: () => Promise<T>,
+  client?: PoolClient,
 ): Promise<T> {
+  // The caller may have acquired this live command before this pool was first observed.
+  // Its forwarding wrapper suppresses only duplicate observation at the bound client.
+  if (client) observeNativeCollectionClient(client, true);
   if (!pools.has(pool)) {
     pools.add(pool);
     const connect = pool.connect.bind(pool);
@@ -199,86 +312,7 @@ export async function instrumentNativeCollectionWork<T>(
       }
       return (connect as unknown as (...args: unknown[]) => unknown)(...args);
     }) as Pool['connect'];
-    pool.on('acquire', (client) => {
-      if (clients.has(client)) return;
-      clients.add(client);
-      const original = client.query;
-      let terminal:
-        | {
-            work: NativeCollectionWork;
-            reservation: ReturnType<NativeCollectionWork['reserve']>;
-            bound: WorkDimensions;
-          }
-        | undefined;
-      client.query = function (this: PoolClient, ...args: unknown[]) {
-        const active = observing.getStore();
-        const invoke = original as unknown as (...args: unknown[]) => unknown;
-        if (!active) return invoke.apply(this, args);
-        const config = args[0] as string | QueryConfig;
-        const sql = typeof config === 'string' ? config : config.text;
-        const values = (typeof config === 'string' ? args[1] : config.values) as unknown[] | undefined;
-        const finishing = /^(?:COMMIT|ROLLBACK)\b/i.test(sql) && terminal?.work === active.work;
-        let reservation: ReturnType<NativeCollectionWork['reserve']>;
-        let bound: WorkDimensions | undefined;
-        try {
-          if (finishing && terminal) {
-            ({ reservation, bound } = terminal);
-            terminal = undefined;
-          } else {
-            active.work.assertReady();
-            if (/^BEGIN\b/i.test(sql)) {
-              const cleanupBound = active.footprint('ROLLBACK', []);
-              const cleanup = active.work.reserve(cleanupBound, true);
-              terminal = { work: active.work, reservation: cleanup, bound: cleanupBound! };
-            }
-            bound = active.footprint(sql, Array.isArray(values) ? values : []);
-            reservation = active.work.reserve(bound);
-          }
-          reservation.dispatch();
-        } catch (error) {
-          active.work.failure = error instanceof Error ? error : new Error('Native work admission failed');
-          throw error;
-        }
-        const settle = (result?: QueryResult, error?: unknown) => {
-          if ((finishing || /^BEGIN\b/i.test(sql)) && error)
-            discardConnection(client, error instanceof Error ? error : new Error('Native transaction cleanup failed'));
-          reservation.settle({
-            emptySeeks: bound!.emptySeeks && result?.rows.length === 0 ? 1 : 0,
-            candidateKeys: result ? Math.min(bound!.candidateKeys, result.rows.length) : bound!.candidateKeys,
-            witnessKeys: result ? Math.min(bound!.witnessKeys, result.rows.length) : bound!.witnessKeys,
-          });
-        };
-        const callbackIndex = args.findIndex((arg) => typeof arg === 'function');
-        if (callbackIndex >= 0) {
-          const callback = args[callbackIndex] as (error: unknown, result: QueryResult) => void;
-          args[callbackIndex] = (error: unknown, result: QueryResult) => {
-            settle(result, error);
-            callback(error, result);
-          };
-          try {
-            return invoke.apply(this, args);
-          } catch (error) {
-            settle(undefined, error);
-            throw error;
-          }
-        }
-        try {
-          return Promise.resolve(invoke.apply(this, args)).then(
-            (result) => {
-              settle(result as QueryResult);
-              return result;
-            },
-            (error) => {
-              settle(undefined, error);
-              throw error;
-            },
-          );
-        } catch (error) {
-          settle(undefined, error);
-          throw error;
-        }
-      } as PoolClient['query'];
-    });
+    pool.on('acquire', observeNativeCollectionClient);
   }
   return observing.run({ work, footprint }, async () => {
     try {

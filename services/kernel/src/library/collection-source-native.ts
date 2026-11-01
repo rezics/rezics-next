@@ -38,6 +38,15 @@ import assignment from '../access/permission-assignment.sql';
 import membership from '../access/permission-membership.sql';
 import opening from '../access/gates/opening-read.sql';
 
+export {
+  readNativePublicCollectionOutput,
+  lockNativePublicCollectionOutput,
+  bindAndHoldNativePublicCollectionOutput,
+  revalidateNativePublicCollectionOutputHold,
+  transferNativePublicCollectionOutputHold,
+  releaseNativePublicCollectionOutputHold,
+} from './native-public-output-custody.ts';
+
 /** Structural alias of the existing raw owner key; no canonical-order or Access claim. */
 export type CanonicalRangeKey = CanonicalRawKey;
 type Options = {
@@ -453,6 +462,19 @@ export function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, option
   return call(pool, options, async (work) => ({
     metadata: await readOnly(pool, options, work, (client) => observeWorking(client, ref, work)),
   }));
+}
+
+/** Public-only observation on the caller's already metered snapshot/client. */
+export async function observeNativePublicCollectionOutput(
+  client: QueryClient,
+  ref: Ref,
+  work: NativeCollectionWork,
+): Promise<NativeCollectionMetadata | null> {
+  const metadata = await observe(client, ref, work);
+  return metadata?.state === 'active' && metadata.membershipKind === 'dynamic' &&
+    metadata.visibility !== 'private' && metadata.authority === 'activated_output'
+    ? metadata
+    : null;
 }
 
 export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options) {

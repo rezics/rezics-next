@@ -91,3 +91,11 @@ export type {
   ContextDirectoryQuery,
   ContextDirectoryRead,
 } from './context-directory.ts';
+
+export {
+  createPublicIdentityOutputCapture,
+  lockPublicIdentityOutputCaptureCurrent,
+  readPublicIdentityOutputCaptureCurrent,
+} from './identity-public-output-capture.ts';
+export { lockPublicIdentityOutputCaptureDisposition } from './identity-scoped-public-source.ts';
+export type * from './identity-public-output-types.ts';

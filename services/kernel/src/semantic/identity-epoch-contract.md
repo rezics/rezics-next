@@ -1641,6 +1641,214 @@ not completion verdicts. Registration and bounded repair may return pending. No 
 coverage, publication, permission or a current reader observation. The indexed pre-arm protocol closes the
 claim-to-Source boundary before the first pending claim; asynchronous arm delivery cannot establish it.
 
+### Public COMPLETE output capture boundary
+
+A Collection output capture is a separate variant of the existing public capture producer. The generic
+registered `NativePublicSource` capture retains its Source and Subject homes, expanded definition dependencies,
+population, excluded and order originals, writer guards and claim/first-apply fencing. A generic capture or an
+`active_explicit_output` receipt does not establish canonical coverage of a Collection publication.
+
+The output variant receives its native identity from Commerce's
+`collection-source-native.ts:bindAndHoldNativePublicCollectionOutput`, on the original Collection-home
+`runCommand` Pool/client/time. The binder establishes the capture-specific receiving epoch and effect key;
+the caller cannot supply either as authority. The native hold and Semantic accepted binding share the fixed
+`identity-public-output-capture` executor component and commit or roll back together. The accepted record binds
+the exact full activation, actual COMPLETE publication, immutable registered definition digest and native binding
+digest. A returned acceptance is an uncommitted locator. Released replay independently verifies its original
+Core/native provenance before checking fresh eligibility; it never resets a stale capture to a new publication.
+
+The released output driver consumes at most 100 native raw keys per page with exact persisted continuation.
+It retains the full native identity/publication and acquires current original **and terminal** Subject closure
+outside Collection transactions. Neither raw page/count equality nor a sweep of 4096 homes substitutes for that
+closure. Zero-output exhaustion still requires the real COMPLETE publication and genuine closure. Sealing uses
+the original Collection home, complete retained closure and genuine native hold/current locks through commit.
+The seal and its executor receipt are immutable. Changed, moved, private or incomplete authority refuses fresh
+use while retaining uncertain custody.
+
+Commerce resolves Semantic disposition through
+`identity-scoped-public-source.ts:lockPublicIdentityOutputCaptureDisposition(tx, selection, context)`. The
+selection is the exact capture/hold/binding digest and disposition receipt; the context carries the genuine
+Pool, command time, deadline and original allowance. Resolution accepts neither a proof callback nor a caller
+disposition body. A staged same-command disposition uses the actual shared executor component and deferred
+commit constraints; it cannot require its own receipt to have committed already. Released replay independently
+checks committed provenance. Applied disposition requires the exact seal and actual successor native retention
+installed atomically before consuming the predecessor. Cancelled disposition requires a native cancellation
+fence preventing subsequent page/seal/apply/enrollment and genuine closure of all admitted copies and writers.
+Missing successor retention or foreign closure remains refusing. A seal, deadline or newer generation cannot
+release a hold. Account capture types and private working readers cannot implement this public boundary.
+
+Every literal SQL, control, callback, closure acquisition, repeated current check, native hold, transition,
+disposition, release and dispatched failure/rollback prefix must reserve all eight `WorkDimensions` before
+dispatch in the caller's original finite frame. Native calls retain smaller child ceilings and remainders;
+unknown SQL refuses. This addition receives no allowance from historical public-capture envelopes and cannot
+claim readiness from a sufficient final aggregate, a refund, or a second ledger. The actual producer and native
+owners must supply their literal and nested operation bounds before consumer composition.
+
+### Public output capture execution and composition
+
+`createPublicIdentityOutputCapture(config)` is the executable producer. `accept`, `capturePage`, `seal`,
+`ready`/`revalidate`, `membership`, `prefix`, `enrollConsumer`, `apply` and `cancel` each require the caller's
+`{deadline, allowance}`; no operation allocates a production allowance. Capture ID is also the Source scope ID.
+A locator can be serialized; its original accepted native/Core/outbox provenance is re-resolved on every use.
+Acceptance and persisted replay additionally compare the identity's output generation and full activation
+transaction/decimal position/source generation with the returned native publication, and its owner epoch with
+the accepted component. An internally mismatched tuple refuses before use; these local comparisons dispatch
+no additional SQL and cannot replace the native hold or provenance checks.
+The explicit scoped-registration variant is `{kind:'public-output',capture,allowance}`. Current validation accepts
+an original-frame allowance and the actual caller transaction when supplied. It resolves the persisted locator
+inside that same metered home, then locks the native hold and current publication through commit. It never
+casts a public identity into Account custody. Scoped output results retain the complete eight-axis debit as
+`work.outputWork`; consumers settle that receipt instead of its legacy four-axis projection, never both.
+Original generic capture paths retain their original bodies.
+
+One continuation consumes `min(requestedLimit,8)` raw output keys (requested limit is 1..100). Original mappings
+and terminal self-mappings are double-collected in released source/control snapshots. At most 16 distinct
+original/terminal cuts are planned. The immutable plan is persisted before any foreign dispatch; each control
+home installs both actual inverse directories and an immutable, same-T native cut. Its slot serializes a late
+send against cancellation. Final page commit rechecks every retained mapping, original scope revision/active
+count, native hold/publication and exact pending version. It retains raw keys, native tuple, mappings, cuts and
+real cut receipts in the rolling manifest. A retry resumes the exact same pending plan or refuses; it does not
+invent a new publication. Sealing requires exhausted progress with no pending plan, original revision 1 and no
+active preparation. Current readiness, membership and prefix take both hold and publication locks; membership
+has at most 100 keys and prefix at most 101 including lookahead. No foreign home is checked out inside a
+Collection command.
+
+Cancellation first commits an immutable no-future-use fence. Each subsequent call closes at most one retained
+page/plan (16 cuts), then acknowledges that exact closure ordinal. A never-delivered cut is tombstoned with a
+real native release receipt. An admitted inverse is deliberately retained with `foreign_closure_missing`:
+its installed `capture_erasure_source_removal` requires actual editorial write-basis custody, which a platform
+capture command does not possess. The producer does not bypass erasure or delete through a fabricated basis.
+The necessary owner delta is an actual platform-native inverse removal/retirement operation, same control
+Pool/home/T, returning its charged eight-axis receipt and committed provenance. A retired boolean alone is
+insufficient: the installed pre-arm export still includes such inverses. Any ordinary consumer intent also
+refuses disposition until its actual copy/writer closure is installed. Ordinary output closure and identity-job
+Search closure are separate authorities. Scoped finish/retire refuse this output branch while that foreign
+identity-job closure composition is absent. These refusals preserve all retained obligations.
+
+`receivePublicIdentityOutputCapturePrearm(pool,ticket,work,cancellation?)` resolves the real released native
+ticket before opening the Collection command. It invalidates the original scope revision and records the
+actual preparation/cancellation receipt, including for a stale retained publication. Source's existing pre-arm
+wrapper accepts this finite work as its additive third operand (`outputWork` on cancellation); the caller must
+transfer its original remainder and settle the returned receipt, including a refusing/thrown prefix. Callers
+without that operand cannot claim an output preparation receipt. No allowance is supplied by the wrapper.
+
+Applied/cancelled disposition rows, native transfer/release and transition rows share one original Collection
+transaction and executor purpose. Commerce resolves a persisted stage only for the actual current component, transaction and native xid on
+that same transaction; deferred constraints require native component, real outbox event and corresponding
+transition to commit together. Semantic persists its genuine distinct successor selection before dispatching native transfer. It binds the
+capture/predecessor/digest/original receiving epoch and current component. Native installs precisely that
+successor before consuming predecessor or fencing receiving; Semantic checks the returned successor against
+the persisted selection. Applied purpose is `identity-public-output-applied`; cancelled purpose is
+`identity-public-output-cancelled` and cancellation epoch is exactly `BigInt(original receivingEpoch)+1`. Released replay selects the exact
+original disposition and independently validates its committed component and original transition. Faults after
+native transfer roll the whole command back. A missing successor, foreign closure or original provenance
+retains custody and grants no fresh read.
+
+The canonical concurrent installation input is Commerce's `library/native-public-output-contract.ts`, with
+its six agreed native operations and types. Direct imports use those declarations; there is no copied foreign
+type, placeholder adapter or callback authority. The owner must compose Semantic's disposition work in its
+native frame and charge its own literal SQL, controls and rollback prefix. The producer does not publish a
+whole-feature installation verdict when that module or the closure hooks above are absent.
+
+### Public output finite work
+
+`identity-public-output-work.ts` registers literal vectors on all eight axes. Unknown SQL refuses before dispatch.
+A key operation reserves eight logical native rows for its indexed input, relation/lock, join and projection plan
+nodes; it is a declaration of application work, not a heap/MVCC visibility measurement. Each unique-index check,
+FK probe and mutation is counted separately. For reads, one exact relation contributes one point and eight rows.
+A root insert/update charges mutation plus its PK; each additional unique index and FK adds one point. The
+resulting literal bounds below are reserved before dispatch, including queued deferred checks at COMMIT.
+`M/R/P/B/C/W/E/S` are identity metadata rows, native rows, native points, internal/result bytes, candidate keys,
+witness keys, empty seeks and statements. SQL text and encoded argument bytes are added to B for every dispatch.
+
+| Literal suffix (`identity-public-output-`)                                         |      M |        R |      P |                              B |   C |   W |     E |     S |
+| ---------------------------------------------------------------------------------- | -----: | -------: | -----: | -----------------------------: | --: | --: | ----: | ----: |
+| accepted / insert                                                                  |  5 / 5 |  40 / 64 |  5 / 8 |                2114560 / 32768 |   0 |   0 | 1 / 3 | 1 / 3 |
+| progress / progress-start                                                          |  1 / 0 |   8 / 24 |  1 / 3 |                     66304 / 64 |   0 |   0 |     1 |     1 |
+| component                                                                          |      1 |        8 |      1 |                            128 |   0 |   0 |     1 |     1 |
+| plan / advance / close-progress, each                                              |      1 |       24 |      3 |                         131072 |   0 |   0 |     2 |     2 |
+| page / seal-insert, each                                                           |      7 |       88 |     11 |                         131072 |   0 |   0 |     6 |     6 |
+| original (at most eight mappings, two inserts each)                                |      0 |      256 |     32 |                           4096 |   0 |   0 |     1 |     1 |
+| scope-start / scope-seal, each                                                     |      2 |       32 |      4 |                          32768 |   0 |   0 |     3 |     3 |
+| scope                                                                              |      1 |        8 |      1 |                           9216 |   0 |   0 |     1 |     1 |
+| seal / fence, each                                                                 |      4 |       32 |      4 |                      512 / 256 |   0 |   0 |     1 |     1 |
+| fence-insert                                                                       |      3 |       48 |      6 |                           1024 |   0 |   0 |     2 |     2 |
+| prefix (k <= 101)                                                                  |      k |       8k |      1 |                            64k |   k |   0 |     1 |     1 |
+| membership (n <= 100)                                                              |      n |       8n |      n |                            64n |   n |   0 |     n |     1 |
+| definition-size / cut-group / cut-group-read / cut-bridge-lock, each               |      2 |       16 |      2 |          128 / 512 / 512 / 256 |   0 |   0 |     1 |     1 |
+| mapping / cut-slot-lock / cut-member / admissions / existing / disposition-locator |      1 |        8 |      1 | 256 / 256 / 64 / 64 / 64 / 256 |   0 |   0 |     1 |     1 |
+| cut-slot                                                                           |      0 |       16 |      2 |                              0 |   0 |   0 |     1 |     1 |
+| cut-bridge                                                                         |      5 |       80 |     10 |                           1024 |   0 |   0 |     6 |     6 |
+| cut-insert                                                                         |     12 |      192 |     24 |                          16384 |   0 |   1 |     9 |     9 |
+| cut                                                                                |      8 |       64 |      8 |                            768 |   0 |   1 |     1 |     1 |
+| cut-release / cut-released                                                         |  3 / 4 |  64 / 32 |  8 / 4 |                      1024 / 64 |   0 |   0 | 2 / 1 | 2 / 1 |
+| cut-live                                                                           |      2 |       16 |      2 |                             64 |   0 |   0 |     1 |     1 |
+| release-setting                                                                    |      0 |        0 |      0 |                             64 |   0 |   0 |     0 |     1 |
+| disposition                                                                        |      8 |       64 |      8 |                          32768 |   0 |   0 |     1 |     1 |
+| disposition-insert / transition, each                                              |     14 |      136 |     17 |                          32768 |   0 |   0 |     3 |     3 |
+| gate-start / gate-close                                                            |  3 / 5 |  48 / 56 |  6 / 7 |                   32768 / 1024 |   0 |   0 |     2 |     2 |
+| gate / stage                                                                       | 6 / 17 | 48 / 168 | 6 / 21 |                   1024 / 32768 |   0 |   0 | 1 / 3 | 1 / 3 |
+| consumer                                                                           |      9 |      104 |     13 |                         131072 |   0 |   0 |     8 |     8 |
+| plans                                                                              |      1 |        8 |      1 |                          66560 |   0 |   0 |     1 |     1 |
+
+The native validator is one SELECT over three exact relations (native component, current partition, outbox).
+Accepted insertion adds this SELECT and the two-relation binding/gate validator to its mutation/PK/FK (3+3+2=8
+points; three statements). Page/seal add four fresh-write SELECTs over accepted address, fence, summary and
+progress plus native validation to their mutation/PK/two FKs (4+4+3=11 points; six statements). The fresh-write
+trigger projects only the address from accepted, avoiding a second 2 MiB definition transfer. Consumer adds a
+locked enrollment-gate point and the monotone gate update (3+4+3+1+2=13 points; eight statements). An ignored
+consumer replay cannot increment the gate; its BEFORE checks remain reserved and charged.
+
+The atomic transition validator is one keyed eleven-relation SELECT over stage, disposition, transition,
+accepted, gate, native transition, predecessor, receiving, successor, seal and progress. Stage adds three
+SELECT input relations, mutation/PK/two FKs, native validation and this atomic validation (3+4+3+11=21 points;
+three statements). Disposition and transition each add mutation/PK/native FK plus native/atomic validation
+(3+3+11=17 points; three statements), separately, even on later rollback. Initial gate adds its mutation/PK/FK
+and original accepted/binding/gate SELECT (3+3=6 points). Closing gate adds update/PK and the five-relation
+fence/component/partition/outbox/gate validator (2+5=7 points). Gate origin and closure are durable evidence;
+an empty consumer query is only an additional consistency check. No older capture is backfilled as zero.
+
+The Subject cut CTE writes both inverse directories, bridge version and immutable cut. Their mutation/PK,
+extra erasure index and FKs contribute twelve points; the prearm inverse guard adds four, native validation
+three, and erasure capture five (24 total). Its nine statements include root CTE, two inverse guard SELECTs,
+the erasure-role PERFORM plus four SELECTs, and native validation. Bridge creation contributes five write/index
+points plus five erasure-capture points, six statements. These platform commands have fresh executor UUIDs,
+no actor/basis or copied erasure roles; erasure role queries are still charged, and no writer attribution is
+invented. A live inverse's removal is refused before deletion until its owning platform-native removal exists.
+A never-admitted cut release charges slot update/PK, release insert/PK/FK and native validation (2+3+3=8).
+
+Other registered owning literals and their vectors are in the same dispatch table: prearm attempt read is
+`1/8/1/1024/0/0/1/1`; unsafe summary update `2/32/4/512/0/0/3/3`; attempt upsert
+`4/48/6/4096/0/0/5/5` includes both INSERT and UPDATE consumer guards; receipt insert
+`2/32/4/512/0/0/3/3`; released receipt and cancellation read `4/32/4/256 or 64/0/0/1/1`;
+released ticket `12/96/12/6144/0/0/1/1`. Native component insertion is `1/32/4/128/0/0/1/1`
+(Core partition, mutation and two unique indexes). The one-event actorless Core fence is
+`0/40/5/128/0/0/1/1` (partition update/PK, outbox insert/PK/FK). A different event count/type or non-null
+basis/receipt is unproved and refuses. Controls, including dynamic deadline SQL and terminal cleanup, use
+`0/0/0/0/0/0/0/1`. Time mint uses `1/8/1/128/0/0/1/1`. Full unbounded partition projections are not registered.
+Public Source register/define use `2/32/4/256/0/0/1/1` and `3/40/5/128/0/0/1/1`; definition/release
+reads use `3/24/3/admitted/0/0/1/1` and `1/8/1/admitted/0/0/1/1`, after immutable size admission;
+definition existence is `1/8/1/128/0/0/1/1`. Mapping owner/source/pending/current arrays reserve n/4n/n/2n
+metadata and points, 8n/32n/8n/16n rows, 256n/1024n/256n/256n bytes, and n/4n/n/2n empty seeks.
+Every repeated snapshot collection is charged again.
+
+One continuation has no aggregate funding envelope. A new page performs three eligibility passes, one native
+raw page, original/terminal/retained-cut mapping double-collections, at most sixteen released mapping/group
+plan pairs and control commands with their original/cut receipt reads. Resume uses the persisted plan and
+repeats the complete cut/current/final eligibility prefix. Final seal retains both native hold and publication
+locks through commit. Identity PREPARE and its inverses serialize any later Subject change with Source revision
+invalidation; a stale/active scope refuses, without reading a foreign home in the Collection transaction.
+
+Each native or reentrant Semantic child receives only the parent's remaining finite reservation via `compose`.
+The parent holds that remainder while the child runs; an already-reserved native query suppresses duplicate
+parent observation, without changing the real client or authoritative T. A thrown child with a valid settled
+receipt charges precisely that prefix; missing/invalid evidence charges the full transferred remainder and
+poisons the frame. BEGIN reserves terminal cleanup first; failed dispatch and late deferred constraint failure
+retain their admitted row/point/byte/nested-empty charges, and ROLLBACK uses that already-reserved slot.
+A single successful seek can refund only its unused empty/candidate/witness bound. Nested seek bounds stay
+charged because top-level returned rows cannot show which nested relation was empty. No allowance is minted
+by a callback, refusal, replay, control statement or rollback.
+
 ### Mapping execution boundary
 
 `identity-epoch-mapping.ts:stepIdentityEpochMapping(pool, job)` consumes only a saved admitted job. Its input
