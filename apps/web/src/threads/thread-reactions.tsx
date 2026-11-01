@@ -184,7 +184,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
       revision={revision}
       csrfToken={client ? (session?.csrfToken ?? '') : null}
       expectedReader={expectedReader}
-      reactionOrigin={props.reactionOrigin}
+      {...(props.reactionOrigin ? { reactionOrigin: props.reactionOrigin } : {})}
       isDesired={() => desiredKey.current === key}
     />
   );
