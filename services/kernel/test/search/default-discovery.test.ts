@@ -380,6 +380,7 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
       const chains = await pool.query<{
         bootstrap: string; execution: string; pages: number; complete: number; tips: number;
         bound: boolean; contiguous: boolean; claimInputs: boolean;
+        windows: number; acknowledged: number;
       }>(
         `WITH originals AS (
            SELECT s.*,lead(step) OVER w AS successor,
@@ -394,6 +395,8 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
          ) SELECT bootstrap::text,execution,count(*)::integer AS pages,
            count(*) FILTER (WHERE complete)::integer AS complete,
            count(*) FILTER (WHERE verified_next IS NULL)::integer AS tips,
+           count(*) FILTER (WHERE verified_home IS NOT NULL)::integer AS windows,
+           max(ack_after)::integer AS acknowledged,
            bool_and(verified_root IS NOT NULL AND verified_binding IS NOT NULL) AS bound,
            bool_and(position('["claimInputs",["value",true]]' IN state)>0) AS "claimInputs",
            bool_and(verified_ordinal=ordinal AND verified_next IS NOT DISTINCT FROM successor
@@ -408,8 +411,28 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         expect(chain.bound).toBe(true);
         expect(chain.contiguous).toBe(true);
         expect(chain.claimInputs).toBe(true);
+        expect(chain.windows).toBe(4096);
+        expect(chain.acknowledged).toBe(4096);
       }
       const originalChain = chains.rows[0]!;
+      const ackReceipts = await pool.query<{ homes: number; original: boolean; physical: boolean }>(
+        `SELECT count(*)::integer AS homes,
+           bool_and(h.acknowledged_baseline=b.bootstrap AND h.source_epoch=b.source_epoch
+             AND h.acknowledged_position=b.source_position
+             AND h.acknowledged_native_enqueue=b.native_enqueue_revision
+             AND h.acknowledged_native_revision IS NOT DISTINCT FROM b.native_revision
+             AND h.acknowledged_native_claim_revision IS NOT DISTINCT FROM b.native_claim_revision) AS original,
+           bool_and(h.acknowledged_observation IS NOT NULL AND h.acknowledged_settlement IS NOT NULL
+             AND e.repair_settlement IS NOT NULL AND t.ack_after=4096) AS physical
+         FROM search.public_filter_coverage_baseline b
+         JOIN search.public_filter_coverage_home h USING(partition_no,registration,source_home)
+         LEFT JOIN search.public_filter_execution e ON
+           (e.partition_no,e.observation,e.id)=(h.partition_no,h.acknowledged_observation,h.acknowledged_execution)
+         LEFT JOIN semantic.public_filter_repair_step t ON
+           (t.partition_no,t.bootstrap,t.execution,t.complete)=(0,b.bootstrap,h.acknowledged_execution,true)
+         WHERE b.bootstrap=$1`, [originalChain.bootstrap],
+      );
+      expect(ackReceipts.rows).toEqual([{ homes: 4096,original: true,physical: true }]);
       const immutable = await pool.connect();
       try {
         await immutable.query('BEGIN');
@@ -419,6 +442,24 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
           [originalChain.bootstrap,originalChain.execution],
         )).rejects.toMatchObject({ code: '23514' });
         await immutable.query('ROLLBACK');
+        // Missing original window evidence and a jumped/regressed native ACK
+        // frontier cannot be supplied by a complete bit or a caller's counter.
+        await immutable.query('BEGIN');
+        await expect(immutable.query(
+          `UPDATE semantic.public_filter_repair_step SET verified_home=NULL
+           WHERE (partition_no,bootstrap,execution,verified_home)=(0,$1,$2,0)`,
+          [originalChain.bootstrap,originalChain.execution],
+        )).rejects.toMatchObject({ code: '23514' });
+        await immutable.query('ROLLBACK');
+        for (const delta of [-1,2]) {
+          await immutable.query('BEGIN');
+          await expect(immutable.query(
+            `UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+$3
+             WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete`,
+            [originalChain.bootstrap,originalChain.execution,delta],
+          )).rejects.toMatchObject({ code: '23514' });
+          await immutable.query('ROLLBACK');
+        }
         await immutable.query('BEGIN');
         await expect(immutable.query(
           `UPDATE semantic.public_filter_repair_step SET verified_root=repeat('0',64)
@@ -516,6 +557,20 @@ test('default mixed discovery uses commit-visible Subject Account and claim writ
         lower.release();
       }
       expect(BigInt((await head()).revision)).toBeGreaterThan(BigInt(before.revision));
+      const later = await pool.query<{ newer: boolean; prefix: boolean; guarded: boolean }>(
+        `SELECT q.enqueue_revision>b.native_enqueue_revision AS newer,
+           (h.acknowledged_baseline IS DISTINCT FROM b.bootstrap OR
+             h.acknowledged_native_enqueue<=b.native_enqueue_revision) AS prefix,
+           (q.live OR h.behind OR h.last_change_generation>s.coverage_generation) AS guarded
+         FROM search.public_filter_coverage_baseline b
+         JOIN semantic.public_filter_bootstrap s ON (s.partition_no,s.bootstrap)=(0,b.bootstrap)
+         JOIN search.public_filter_coverage_home h ON
+           (h.partition_no,h.registration,h.source_home)=(b.partition_no,b.registration,b.source_home)
+         JOIN semantic.public_filter_privacy_pending q
+           ON q.partition_no=b.source_home AND q.input_key='["domain","accounts"]'
+         WHERE b.bootstrap=$1 AND b.source_home=$2`, [originalChain.bootstrap,accountHome],
+      );
+      expect(later.rows).toEqual([{ newer: true,prefix: true,guarded: true }]);
       // A repaired/acknowledged later state cannot restamp the retained old PIT.
       const fresh = await page(request);
       expect(fresh.hits).toHaveLength(1);

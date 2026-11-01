@@ -414,8 +414,16 @@ generation is pinned before the first home; only the contiguous 4096-home chain
 can seal the Source bootstrap. Existing enrollment rows without these original
 receipts stay unknown. Each adopted baseline records its own outstanding repair
 obligation on the existing home summary. Enrollment never copies an older
-baseline's ACK or changes an immutable covered cut. These bodies do not implement
-the remaining mixed receiver repair, contiguous ACK or bounded population reader.
+baseline's ACK or changes an immutable covered cut. Native Source settlement now combines the original
+independently verified Subject and Account/claim window chain with genuine Search mixed physical
+settlement. Each funded step acknowledges only one original baseline prefix on the same coverage
+summary locked by apply, recording its actual observation/execution/settlement locator. It rechecks
+original native authority around foreign work and retains later enqueue/revision/claimRevision
+obligations. ACK does not change the registration change generation or an old covered/start cut.
+The original terminal retains crash-resumable home progress after that ACK commit; Source pending
+retirement still requires complete captured registration apply receipts and home/key revision CAS.
+The bounded maintained population reader and complete response root remain sequential work;
+current serving stays unavailable until those native bindings replace the old head sweeps.
 
 The internal `advanceNativePublicFilterPreparation` handoff locates the actual
 Source factory body without changing public Source method/result signatures. It

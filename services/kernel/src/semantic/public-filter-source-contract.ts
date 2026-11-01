@@ -39,7 +39,9 @@ export type PublicFilterDependency =
   | Readonly<{ kind: 'selection'; route: number; subject: string; slot: string; candidate: string }>
   | Readonly<{ kind: 'sourceTuple'; tuple: SourceFenceTuple }>
   | Readonly<{ kind: 'consent'; route: number; account: string; subject: string; candidate: string }>
-  | Readonly<{ kind: 'collection'; route: number; collection: string }>;
+  | Readonly<{ kind: 'collection'; route: number; collection: string }>
+  | Readonly<{ kind: 'realm'; route: number; realm: string }>
+  | Readonly<{ kind: 'board'; route: number; board: string }>;
 
 /** Local selection evidence; dependency heads separately invalidate foreign changes. */
 export type PublicFilterProjectionObservation = Readonly<{
@@ -131,7 +133,8 @@ export type PublicFilterDependencyKey =
   | Readonly<{ kind: 'type' }>
   | Readonly<{ kind: 'order'; order: SearchPlan['sort'] }>
   | Readonly<{ kind: 'field'; field: 'labels' | 'aliases' | 'descriptions' | 'name_sort' | 'id' }>
-  | Readonly<{ kind: 'function'; input: 'public_collection_count' | 'public_rating' }>;
+  | Readonly<{ kind: 'function'; input: 'public_collection_count' | 'public_rating' }>
+  | Readonly<{ kind: 'realm'; realm: string }>;
 
 /** Shared caller deadline; fresh native T is minted inside each read, never accepted from JSON. */
 export type PublicFilterReadContext = Pick<AccessContext, 'deadline'>;
@@ -156,7 +159,7 @@ export type PrivacyReduction = Readonly<{
   partition: PublicFilterHome;
   transactionId: string;
   time: AuthoritativeTime;
-  cause: 'subject' | 'candidate' | 'selection' | 'sourceTuple' | 'consent' | 'collection';
+  cause: 'subject' | 'candidate' | 'selection' | 'sourceTuple' | 'consent' | 'collection' | 'realm' | 'board';
   /** 1..1000 bounded affected identities, no fact bodies or copied permissions. */
   affected: readonly PublicFilterDependency[];
   impacts: readonly PrivacyReductionImpact[];

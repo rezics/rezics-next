@@ -40,6 +40,8 @@ import advancePrivacyHead from './public-filter-source-head-advance.sql';
 import appendPrivacyEntry from './public-filter-source-log-append.sql';
 import { enqueuePublicFilterCoverage } from './public-filter-coverage-pending.ts';
 import { readPublicFilterProjectionPage as readProjectionPage } from './public-filter-projection.ts';
+import { isDeepStrictEqual } from 'node:util';
+import realmOfBoard from '../content/realm-of-board.sql';
 
 type SourceConfiguration = Parameters<PublicFilterSourceFactory>[0];
 const origins = new WeakMap<PublicFilterSource, SourceConfiguration>();
@@ -129,12 +131,15 @@ function validDependency(value: unknown, partition: number): value is PrivacyRed
       value.account.length > 0
     );
   if (value.kind === 'collection') return routed(value.route, value.collection);
+  if (value.kind === 'realm') return routed(value.route, value.realm);
+  if (value.kind === 'board') return routed(value.route, value.board);
   return false;
 }
 
 function validDependencyKey(value: unknown): boolean {
   if (!isRecord(value) || typeof value.kind !== 'string') return false;
   if (value.kind === 'type') return true;
+  if (value.kind === 'realm') return typeof value.realm === 'string' && routeOf(value.realm) !== null;
   if (value.kind === 'property') return typeof value.property === 'string' && value.property.length > 0;
   if (value.kind === 'order') return ['relevance', 'name', 'id', 'collections', 'rating'].includes(String(value.order));
   if (value.kind === 'field')
@@ -183,7 +188,7 @@ function validatePrivacyReduction(
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       reduction.transactionId,
     ) ||
-    !['subject', 'candidate', 'selection', 'sourceTuple', 'consent', 'collection'].includes(reduction.cause) ||
+    !['subject', 'candidate', 'selection', 'sourceTuple', 'consent', 'collection', 'realm', 'board'].includes(reduction.cause) ||
     !Array.isArray(reduction.affected) ||
     !Array.isArray(reduction.impacts) ||
     reduction.affected.length < 1 ||
@@ -196,6 +201,21 @@ function validatePrivacyReduction(
     throw new TypeError('Invalid native privacy dependency');
   if (!reduction.impacts.every((value) => validImpact(value, reduction.partition)))
     throw new TypeError('Invalid native privacy impact');
+  if (reduction.cause === 'realm' || reduction.cause === 'board') {
+    // Broad native causes carry authority locators, never a synthetic Subject
+    // or a hit-derived key list. A Realm board has one immutable parent Realm.
+    const affected = reduction.affected.filter((value) => value.kind === 'realm' || value.kind === 'board');
+    const primary = affected.filter((value) => value.kind === reduction.cause);
+    if (primary.length !== 1 || affected.length > (reduction.cause === 'board' ? 2 : 1) ||
+      affected.some((value) => value.kind !== reduction.cause &&
+        !(reduction.cause === 'board' && value.kind === 'realm')) ||
+      affected.some((value) => reduction.impacts.filter((impact) => impact.kind === 'dependency' &&
+          isDeepStrictEqual(impact.locator, value)).length !== 1) ||
+      reduction.impacts.some((impact) => impact.kind === 'dependency' &&
+        (impact.locator.kind === 'realm' || impact.locator.kind === 'board') &&
+        !affected.some((value) => isDeepStrictEqual(impact.locator,value))))
+      throw new TypeError('Invalid broad native privacy reduction');
+  }
   return command;
 }
 
@@ -386,7 +406,7 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
                   !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
                     entry.transactionId,
                   ) ||
-                  !['subject', 'candidate', 'selection', 'sourceTuple', 'consent', 'collection'].includes(
+                  !['subject', 'candidate', 'selection', 'sourceTuple', 'consent', 'collection', 'realm', 'board'].includes(
                     entry.cause,
                   ) ||
                   !Array.isArray(entry.affected) ||
@@ -427,6 +447,15 @@ export const recordPrivacyReduction: RecordPrivacyReductionType = async (
   reduction: PrivacyReduction,
 ): Promise<PrivacyReductionLogEntry> => {
   const command = validatePrivacyReduction(tx, reduction);
+  if (reduction.cause === 'board') {
+    const board = reduction.affected.find((value) => value.kind === 'board');
+    if (!board || board.kind !== 'board') throw new TypeError('Missing native board authority');
+    const native = await realmOfBoard.run(tx, { route: board.route, id: board.board });
+    const realm = reduction.affected.find((value) => value.kind === 'realm');
+    if (!native || (native.realm_id === null ? realm !== undefined :
+      realm?.kind !== 'realm' || realm.realm !== native.realm_id || realm.route !== board.route))
+      throw new TypeError('Board privacy reduction does not bind its native parent Realm');
+  }
   const owner = await readPartition(tx, reduction.partition);
   if (!owner || owner.writeState !== 'active' || owner.epoch < 1)
     throw new CommandUnavailableError('fenced', reduction.partition);

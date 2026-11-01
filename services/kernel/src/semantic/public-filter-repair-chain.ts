@@ -7,6 +7,7 @@ type Chain = Readonly<{ bootstrap: string; execution: string; binding: string }>
 type Page = Readonly<{
   step: string; predecessor: string | null; state: string; complete: boolean;
   inputLimit: number; digests: string;
+  closedHome?: number;
 }>;
 type Proof = { step: string; predecessor: string | null; binding: string | null;
   root: string | null; ordinal: string | null; next: string | null; complete: boolean };
@@ -125,6 +126,14 @@ export async function retainPublicFilterRepairVerification(
           [chain.bootstrap,chain.execution,page.step,chain.binding,root,String(ordinal)],
         );
       }
+      if (page.closedHome !== undefined) {
+        await client.query(
+          `UPDATE semantic.public_filter_repair_step SET verified_home=$4
+           WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)
+             AND verified_root IS NOT NULL AND (verified_home IS NULL OR verified_home=$4)`,
+          [chain.bootstrap,chain.execution,page.step,page.closedHome],
+        );
+      }
       requireAccessDeadline(context.deadline);
       await client.query('COMMIT');
       return current.root === null;
@@ -134,4 +143,60 @@ export async function retainPublicFilterRepairVerification(
       throw error;
     }
   });
+}
+
+/** One original closed window in the independently verified, non-branching
+ * prefix ending at the actual complete successor. No current replacement page
+ * or producer complete bit can supply this point lookup.
+ */
+export async function readPublicFilterRepairHomeSeal(pool: Pool, chain: Chain) {
+  return (await pool.query<{
+    step: string; predecessor: string; state: string; home: number;
+    terminal: string; after: number; root: string;
+  }>(
+    `SELECT w.step::text,w.predecessor::text,w.state,t.ack_after AS home,
+       t.step::text AS terminal,t.ack_after AS after,t.verified_root AS root
+     FROM semantic.public_filter_repair_step t
+     LEFT JOIN semantic.public_filter_repair_step w ON
+       (w.partition_no,w.bootstrap,w.execution,w.verified_home)=
+       (t.partition_no,t.bootstrap,t.execution,t.ack_after)
+       AND w.verified_binding=t.verified_binding AND w.verified_root IS NOT NULL
+       AND w.verified_ordinal<t.verified_ordinal
+     WHERE (t.partition_no,t.bootstrap,t.execution)=(0,$1,$2)
+       AND t.verified_binding=$3 AND t.verified_root IS NOT NULL
+       AND t.verified_next IS NULL AND t.complete`,
+    [chain.bootstrap,chain.execution,chain.binding],
+  )).rows[0] ?? null;
+}
+
+/** Receiver ACK commits first. Advancing this original terminal's bounded home
+ * frontier is a separate Source phase; replay repeats the same idempotent ACK.
+ */
+export async function advancePublicFilterRepairAckFrontier(
+  pool: Pool, chain: Chain, terminal: string, home: number,
+): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+1
+     WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)
+       AND verified_binding=$4 AND complete AND verified_next IS NULL AND ack_after=$5
+       AND EXISTS (SELECT 1 FROM core.partition p
+         JOIN semantic.public_filter_bootstrap b ON b.partition_no=p.partition_no
+         WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.owner_epoch=p.epoch
+           AND p.write_state='active' AND b.state='adopted')
+       AND EXISTS (SELECT 1 FROM semantic.public_filter_home_enrollment e
+         JOIN search.public_filter_coverage_home h ON
+           (h.partition_no,h.registration,h.source_home)=(e.registration_partition,e.registration,e.partition_no)
+         JOIN search.public_filter_coverage_baseline b ON
+           (b.partition_no,b.registration,b.bootstrap,b.source_home)=
+           (e.registration_partition,e.registration,e.bootstrap,e.partition_no)
+         WHERE (e.partition_no,e.bootstrap)=($5,$1) AND e.complete AND b.receipt=e.receipt
+           AND h.source_epoch=e.owner_epoch AND h.baseline_bootstrap=e.bootstrap
+           AND h.acknowledged_baseline=e.bootstrap AND h.acknowledged_position>=b.source_position
+           AND h.acknowledged_execution=$2 AND h.acknowledged_settlement IS NOT NULL
+           AND h.acknowledged_native_enqueue>=b.native_enqueue_revision
+           AND h.acknowledged_native_revision IS NOT DISTINCT FROM b.native_revision
+           AND h.acknowledged_native_claim_revision IS NOT DISTINCT FROM b.native_claim_revision)`,
+    [chain.bootstrap,chain.execution,terminal,chain.binding,home],
+  );
+  return result.rowCount === 1;
 }

@@ -39,7 +39,10 @@ import {
   readPublicFilterRepairVerification,
   readPublicFilterRepairVerificationTip,
   retainPublicFilterRepairVerification,
+  readPublicFilterRepairHomeSeal,
+  advancePublicFilterRepairAckFrontier,
 } from './public-filter-repair-chain.ts';
+import { acknowledgePublicFilterRepairBaseline, type PublicFilterRepairBaseline } from './public-filter-coverage-ack.ts';
 import { encodePublicFilterNativeState } from '../search/public-filter-custody.ts';
 import readAccounts from './public-filter-source-binding-accounts.sql';
 import repairState from './public-filter-source-binding-repair-state.sql';
@@ -726,37 +729,6 @@ export function createPublicFilterSourceBinding(
     }
   }
   type Joined = Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>, { status: 'joined' }>;
-  async function validateOriginalAndFinal(
-    bootstrap: PublicSourceBootstrap,
-    joined: Joined,
-    cost: BindingCost,
-    context: PublicFilterConsumerContext,
-  ) {
-    if (!joined.execution) throw new BindingError('execution_missing');
-    const observed = await sourceReader(bootstrap.definition).readPrivacyReductionHeads({
-      kind: 'population',
-      queried: joined.queried,
-      start: joined.execution.start,
-      execution: joined.execution.id,
-      context,
-    });
-    addCost(cost, observed.cost);
-    if (observed.status !== 'observed')
-      throw new BindingError(
-        'reason' in observed && observed.reason === 'identity_pending'
-          ? 'identity_pending'
-          : 'reason' in observed && observed.reason === 'deadline'
-            ? 'deadline'
-            : 'owner_unavailable',
-      );
-    if (
-      !observed.routingComplete ||
-      observed.changed.length ||
-      observed.unacknowledged.length ||
-      observed.blocking.length
-    )
-      throw new BindingError('binding_mismatch');
-  }
   type RepairState = {
     owner?: 'semantic' | 'accounts';
     partition: number;
@@ -1624,6 +1596,10 @@ export function createPublicFilterSourceBinding(
         const advanced = await retainPublicFilterRepairVerification(db,chain,{
           step: row.step, predecessor: row.predecessor, state: row.state, complete: row.complete,
           inputLimit: row.input_limit, digests: row.repair_locator_digests!,
+          ...(record.input.phase === 'bridge' && record.input.bridge &&
+            record.input.bridge.position > record.input.bridge.through &&
+            record.next.phase === 'window' && record.next.partition === record.input.partition+1
+            ? { closedHome: record.input.partition } : {}),
         },{ deadline },(controls) => {
           cost.rows += controls.rows;
           cost.dependencyPoints += controls.rows;
@@ -1845,7 +1821,68 @@ export function createPublicFilterSourceBinding(
           encode(joined.covered) !== encode(cut.bootstrap.covered)
         )
           throw new BindingError('binding_mismatch');
-        await validateOriginalAndFinal(cut.bootstrap, joined, cost, { deadline });
+        const chain = repairChain(cut.bootstrap,joined);
+        cost.rows++; cost.dependencyPoints++; cost.inputKeys += 4;
+        cost.bytes += Buffer.byteLength(encode(chain));
+        const seal = await readPublicFilterRepairHomeSeal(db,chain);
+        // This is the actual independent terminal prefix, not the producer's
+        // complete flag, an exhausted enumeration or a clean serving probe.
+        if (!seal || seal.after<0 || seal.after>4096 || (seal.after<4096 && !seal.step))
+          throw new BindingError('owner_unavailable');
+        const terminal = await readPublicFilterRepairVerification(db,chain,seal.terminal);
+        if (!terminal?.complete || terminal.root !== seal.root || terminal.next !== null)
+          throw new BindingError('binding_mismatch');
+        const predecessor = seal.after===4096 ? terminal.predecessor : seal.predecessor;
+        const verify = async () => {
+          const verified = await bootstrapBinding.readRepairStep({
+            bootstrap: input.bootstrap,queried: input.queried,execution: input.execution,predecessor,
+          },{ deadline });
+          addCost(cost,verified.cost);
+          if (verified.status !== 'verified' || verified.step !== (seal.after===4096 ? seal.terminal : seal.step) ||
+            verified.complete !== (seal.after===4096)) throw new BindingError('owner_unavailable');
+        };
+        await verify();
+        const original = seal.after===4096 ? null : decode<RepairRecord>(seal.state);
+        if (original && (original.input.phase !== 'bridge' || !original.input.bridge ||
+          original.input.partition !== seal.home || original.input.bridge.position<=original.input.bridge.through ||
+          original.next.partition !== seal.home+1 || original.next.phase !== 'window'))
+          throw new BindingError('binding_mismatch');
+        const authority = async () => {
+          if (!original) return null;
+          // All six keyed native rows are charged, including the joined control
+          // rows that do not appear separately in the SQL result.
+          cost.rows += 5; cost.dependencyPoints += 5; cost.inputKeys += 14;
+          cost.bytes += Buffer.byteLength(encode([nativeId(input.bootstrap),seal.home,joined.definition.readDefinition]));
+          const row = (await db.query<{
+            registration: string; registration_partition: number; owner_epoch: number;
+            receipt: string; source_position: string; native_enqueue_revision: string;
+            native_revision: string | null; native_claim_revision: string | null;
+            current_position: string; current_creation: string; current_revision: string; current_claim: string;
+          }>(
+            `SELECT e.registration,e.registration_partition,e.owner_epoch,e.receipt,e.source_position::text,
+               e.native_enqueue_revision::text,e.native_revision::text,e.native_claim_revision::text,
+               h.position::text AS current_position,p.position::text AS current_creation,
+               a.revision::text AS current_revision,a.claim_revision::text AS current_claim
+             FROM semantic.public_filter_home_enrollment e
+             JOIN core.partition p ON p.partition_no=e.partition_no
+             JOIN semantic.public_filter_privacy_head h ON h.partition_no=e.partition_no
+             JOIN access.account_discovery_population a ON a.partition_no=e.partition_no
+             JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
+             JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,e.bootstrap)
+             WHERE (e.partition_no,e.bootstrap)=($1,$2) AND e.complete AND e.receipt=$3
+               AND e.read_definition=$4 AND p.write_state='active' AND p.epoch=e.owner_epoch
+               AND h.owner_epoch=p.epoch AND h.position>=e.source_position
+               AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
+               AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096`,
+            [seal.home,nativeId(input.bootstrap),original.input.bridge!.receipt,joined.definition.readDefinition],
+          )).rows[0];
+          if (!row || row.owner_epoch !== original.input.bridge!.epoch ||
+            row.receipt !== original.input.bridge!.receipt ||
+            BigInt(row.current_creation)<original.input.bridge!.through)
+            throw new BindingError('configuration_changed');
+          return row;
+        };
+        const before = await authority();
         const settled = await readPublicFilterRepairSettlement(
           pool,
           { queried: input.queried, execution: input.execution },
@@ -1864,7 +1901,28 @@ export function createPublicFilterSourceBinding(
           throw new BindingError('binding_mismatch');
         // Search performs staged foreign owner reads. Re-read the original Source window after it
         // releases them; the native settlement locator alone cannot preserve Source currency.
-        await validateOriginalAndFinal(cut.bootstrap, joined, cost, { deadline });
+        await verify();
+        const after = await authority();
+        if (!isDeepStrictEqual(before,after)) throw new BindingError('configuration_changed');
+        if (after) {
+          const baseline: PublicFilterRepairBaseline = {
+            bootstrap: nativeId(input.bootstrap),registration: after.registration,
+            registrationPartition: after.registration_partition,home: seal.home,
+            epoch: after.owner_epoch,receipt: after.receipt,sourcePosition: after.source_position,
+            enqueue: after.native_enqueue_revision,revision: after.native_revision,claimRevision: after.native_claim_revision,
+            observation: settled.queried.snapshot.observation,execution: settled.execution.id,
+            settlement: settled.settlement.id,
+          };
+          await acknowledgePublicFilterRepairBaseline(db,baseline,deadline);
+          // The Source frontier is adopted only after the actual registration
+          // ACK commit. A crash before this CAS repeats that same prefix safely.
+          cost.rows += 5; cost.dependencyPoints += 5; cost.inputKeys += 16;
+          cost.bytes += Buffer.byteLength(encode([chain,seal.terminal,seal.home]));
+          if (!await advancePublicFilterRepairAckFrontier(db,chain,seal.terminal,seal.home))
+            throw new BindingError('owner_unavailable');
+          cost.frontierWrites++;
+          if (seal.home !== 4095) return fail('owner_unavailable',cost);
+        }
         return { ...joined, cost };
       });
     },

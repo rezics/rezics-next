@@ -750,8 +750,8 @@ The Source cut is a persisted native `pg_snapshot`, owner epoch and source-home 
 bootstrap locator. It precedes PIT/prepared dispatch. It is neither an engine publication fence nor all-home
 privacy coverage: those remain independently required by the existing privacy readers. `begin` checks the
 real Search registration via `readGenerationPublicationCustody`, then records the cut. Mixed roots retain
-all 4096 Account/claim homes through bounded 100-home owner pages; incomplete capture is unready. Original
-heads are immutable and compared through the Accounts producer, so reduce/restore/repair ACK cannot renew them.
+all 4096 Account/claim homes through bounded retained enrollment steps; incomplete capture is unready. Original
+heads and baseline receipts are immutable, so reduce/restore/repair ACK cannot renew them.
 `adopt` requires exact canonical custody, consumer, definition, snapshot kind and original covered locator.
 The Source adoption row stores only the canonical observation locator, never a copied PIT or execution record.
 Recovery resolves real Search custody without recapturing a cut, including retain/open committed before adoption;
@@ -766,10 +766,12 @@ bigint position can precede a replacement projection. Projection completion and 
 privacy revalidation remain mandatory. A moved owner, changed Source or missing Account repair owner is
 unavailable. No whole rebuild or creation/change coverage is inferred from one page. Search's committed
 `readPublicFilterRepairSettlement` verifies actual repaired winners, dispatch, copies, writers and refresh
-custody through its staged native owner reads. Source `settle` still requires a clean served-population result
-before and after that reader, and does not yet advance native contiguous ACK. That remaining maintenance gate
-keeps settlement unavailable; the Search reader itself is present. Registration, cuts, adoption, recovery and
-bounded Source repair metadata can progress without granting repaired coverage.
+custody through its staged native owner reads. Source `settle` uses the independently verified original
+terminal chain and its indexed closed-home windows, rather than clean serving population eligibility.
+Each funded settlement step replays that exact original window before and after the genuine Search
+settlement, checking native owner, retained pin, baseline receipt and current original Source/Account
+heads around the staged foreign work. A changed owner, security witness, tuple or incomplete seal remains
+unavailable. No native connection remains held across the foreign phases.
 
 The original repair pages now retain independently verified prefix metadata in
 `semantic.public_filter_repair_step`. `readRepairStep` replays each actual native
@@ -782,9 +784,24 @@ Recovery can verify one older original
 page per funded repair invocation. The empty terminal successor binds this same
 prefix and its exact definition, queried observation, covered/start and execution;
 it does not call the served-population reader. This closes captured page replay,
-not current population eligibility or genuine receiver settlement. Native contiguous
-ACK, all-domain current window closure, population observations and response-root
-integration still require their actual maintained bodies before serving is ready.
+not current population eligibility. The same original pages now retain an indexed `verified_home` only
+when independent replay closes that exact captured window. The complete terminal retains an `ack_after`
+frontier; it advances one home only after the real registration-home ACK has committed and Source has
+adopted that native receipt. Crash recovery repeats that same home, never a newer baseline.
+
+The ACK transaction locks the same registration and home summary as change apply. Its complete original
+Subject and independent Account/claim baseline, captured successors and genuine mixed physical settlement
+cover precisely that baseline prefix. It records the actual observation, execution and native Search
+settlement locator on that summary. It never takes a maximum delivered position, changes
+`last_change_generation`, or rewrites covered/start/baseline generations. Source positions, Account enqueue
+revisions and the native revision/claimRevision stay distinct. A later position or enqueue remains behind;
+ACK never retires a Source pending key. Existing reverse-enrollment apply receipt adoption and Source
+home/key revision CAS retain responsibility for pending retirement across every captured registration.
+
+Current population reads remain unavailable, and request-time Account-head sweeps are still present.
+The sequential maintained-population/page-root work must replace those together, carry one current root
+through all refills and final projection, and finish lifecycle/drain before ordinary serving is ready.
+This captured-prefix repair/ACK implementation does not authorize old observations or default delivery.
 
 New original repair traversals include Account rows, Account intents and claim
 intents in each native home. Each arm seeks at most one raw key; all returned
@@ -803,3 +820,34 @@ it. Verification does not release that retention obligation. Native retirement
 still has to drain its actual users, writers, copies and captured obligations
 before releasing enrollment and pins; the checkpoint guard grants no retirement
 or repaired coverage.
+
+
+### Realm and board native authority identities
+
+`PublicFilterDependency` also accepts `{kind:'realm', route, realm}` and
+`{kind:'board', route, board}`; `PublicFilterDependencyKey` accepts `{kind:'realm', realm}`.
+Each UUID is canonical native identity and its route must match the original command home.
+The existing dependency impact carries these locators, and `PrivacyReduction.cause` accepts
+`realm` and `board`. A board cause checks the native Content board point in the same transaction:
+its one broad log entry includes that board and, for a Realm board, its actual immutable parent Realm.
+A global board has no invented Realm. Other genuine bounded affected keys remain supported.
+No affected-Subject enumeration occurs in a broad writer. The scoped owner supplies compiler Realm
+keys and actual Content writer/support callsites; this Source slice supplies neither an evaluator
+nor a new installed scoped API.
+
+Realm keys and authority locators share exact structural `authority/realm/route/UUID` routing in
+the existing Source key enrollment and pending B-trees. Board authority gets its own exact native
+key and its parent Realm key covers absent/new/empty-board membership. Complete immutable compiler
+closure enrollment retains negative, excluded and ordered dependencies. The existing unresolved
+routing barrier also remains conservative until genuine complete routing/apply and physical settlement;
+an empty reverse lookup cannot independently certify no effect. These are the original Source
+indexes and receipt frontiers, not a resource safety clock or permission copy.
+
+### Cost: native captured-prefix settlement
+
+- Touches: original repair predecessor/window proofs and pins, keyed current Source/Account authority,
+  actual Search physical receiver/writer/copy/refresh custody, and the same registration home summary.
+- Bound: one retained home per funded ACK step, with native verification on both sides of staged foreign
+  work; joins, control keys, failures and replay remain charged. No serving sweep or allowance reset is added.
+- Growth check: mixed ACK gap/p+1, missing-seal, old-cut, late-writer and physical no-resurrection controls
+  remain deferred native obligations. Authored regression and workspace typing do not establish their outcome.

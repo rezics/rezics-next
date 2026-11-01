@@ -4,6 +4,7 @@ import type {
   PublicFilterDependencyKey,
 } from './public-filter-source-contract.ts';
 import enqueue from './public-filter-coverage-pending.sql';
+import { routeOf } from '../route/route.ts';
 
 // These cannot collide with any compiler input. Keys preserve identity rather than a
 // growing home-level union, a hash of an input, or a list of matching subjects.
@@ -22,6 +23,11 @@ export function publicFilterCoverageKey(key: PublicFilterDependencyKey): string 
       return JSON.stringify(['field', key.field]);
     case 'function':
       return JSON.stringify(['function', key.input]);
+    case 'realm': {
+      const route = routeOf(key.realm);
+      if (route === null) throw new TypeError('A Realm dependency requires its native UUID');
+      return JSON.stringify(['authority', 'realm', route, key.realm]);
+    }
   }
 }
 
@@ -39,6 +45,10 @@ export async function enqueuePublicFilterCoverage(
     if (impact.kind === 'dependency') {
       keys.add(PUBLIC_FILTER_UNRESOLVED_SCOPE);
       const dependency = impact.locator;
+      if (dependency.kind === 'realm')
+        keys.add(publicFilterCoverageKey({ kind: 'realm', realm: dependency.realm }));
+      if (dependency.kind === 'board')
+        keys.add(JSON.stringify(['authority', 'board', dependency.route, dependency.board]));
       if (dependency.kind === 'subject' || dependency.kind === 'selection' || dependency.kind === 'consent')
         subjects.set(dependency.subject.toLowerCase(), dependency.route);
       continue;
