@@ -13,7 +13,12 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { onCheckHost, runOnCheckHost } from './stack-run.ts';
-import { ROOT, requestExecutionCancellation, type RemoteCheckSettlement } from './remote-check.ts';
+import {
+  REMOTE_TRANSPORT_FAILURE,
+  ROOT,
+  requestExecutionCancellation,
+  type RemoteCheckSettlement,
+} from './remote-check.ts';
 import { runWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
 
@@ -671,6 +676,40 @@ test('stack-run shares the estimate-derived host lifetime for ordinary, multi-sl
     fixture.env,
   );
   expect(result).toBeNull();
+  expect(fixture.events()).toEqual([]);
+});
+
+test('a refused physical run keeps its predicate primary and cannot start nested host discovery', async () => {
+  const fixture = scenario({ a: { available: 40e9, slots: 4 } });
+  const run = `${ROOT}/runs/m7v0a9-k1a2b3c4`;
+  const diagnostics: string[] = [];
+  const original = console.error;
+  let remoteAttempts = 0;
+  console.error = (...values: unknown[]) => diagnostics.push(values.map(String).join(' '));
+  let result: number | null = null;
+  try {
+    result = await runOnCheckHost(
+      {
+        label: 'kernel typecheck',
+        root: run,
+        cwd: `${run}/services/kernel`,
+        command: ['bun', 'scripts/typecheck.ts'],
+      },
+      fixture.env,
+      async () => {
+        remoteAttempts += 1;
+        return 0;
+      },
+      () => ({ outcome: 'refused', reason: 'supervisor-marker-invalid' }),
+    );
+  } finally {
+    console.error = original;
+  }
+  expect(result).toBe(REMOTE_TRANSPORT_FAILURE);
+  expect(diagnostics).toEqual([
+    'stack-run: kernel typecheck physical run recognition refused (supervisor-marker-invalid)',
+  ]);
+  expect(remoteAttempts).toBe(0);
   expect(fixture.events()).toEqual([]);
 });
 

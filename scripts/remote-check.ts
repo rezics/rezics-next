@@ -51,7 +51,12 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { stageCheckGit } from './check-git.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
-import { checkHostRunSliceUnitName, checkHostScopeUnitStem, PERFORMANCE_HOST_NAMES } from './check-placement.ts';
+import {
+  CHECK_HOST_SUPERVISOR_MARKER_SCHEMA,
+  checkHostRunSliceUnitName,
+  checkHostScopeUnitStem,
+  PERFORMANCE_HOST_NAMES,
+} from './check-placement.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
 export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
@@ -86,6 +91,7 @@ const REMOTE_CHECK_RUN_SCRATCH_PATHS = ['.temp/check-host', '.temp/node-compile-
 const REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_FILES);
 const REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON = JSON.stringify(REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES);
 const REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON = JSON.stringify(REMOTE_CHECK_RUN_SCRATCH_PATHS);
+const REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON = JSON.stringify(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA);
 
 type ExpectedSourceManifest = NonNullable<RemoteCheck['expectedSourceManifest']>;
 
@@ -1449,6 +1455,7 @@ function stopSupervisor(directory: string): string {
 
 /** Shared exact-path and owner validation used at both source and prepared-input lifecycle boundaries. */
 const producerControlValidationPython = String.raw`import math,re
+SUPERVISOR_SCHEMA=${REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON}
 CONTROL_ROOT_FILES=set(${REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON})
 CONTROL_ROOT_DIRECTORIES=set(${REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON})
 RUN_SCRATCH_PATHS=set(${REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON})
@@ -1483,8 +1490,8 @@ def read_control_bytes(root,name,maximum,required=True):
     if len(raw)>maximum: raise SystemExit('producer control exceeds its bound: '+name)
     return raw
 
-def read_control_json(root,name,required=True):
-    raw=read_control_bytes(root,name,CONTROL_MAX_JSON_BYTES,required)
+def read_control_json(root,name,required=True,maximum=CONTROL_MAX_JSON_BYTES):
+    raw=read_control_bytes(root,name,maximum,required)
     if raw is None: return None
     try: value=json.loads(raw)
     except (UnicodeDecodeError,ValueError): raise SystemExit('producer control is malformed: '+name)
@@ -1522,21 +1529,24 @@ def validate_cache_tree(root,name):
     return True
 
 def validate_producer_controls(root,run,host,stage):
-    if not re.fullmatch(r'[a-z0-9-]{1,64}',run) or not isinstance(host,str) or not host or len(host.encode())>256:
+    if not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'],run) or not isinstance(host,str) or host not in SUPERVISOR_SCHEMA['hosts']:
         raise SystemExit('producer control run identity is invalid')
     try: root_info=os.lstat(root)
     except OSError: raise SystemExit('producer control workspace is unavailable')
     if (not stat.S_ISDIR(root_info.st_mode) or root_info.st_uid!=os.getuid() or root_info.st_mode & 0o022):
         raise SystemExit('producer control workspace has an invalid owner or type')
 
-    marker=read_control_json(root,'.remote-check-supervisor')
-    if set(marker)!={'schema','host','run','pid','started','group','uid'}:
+    marker=read_control_json(root,'.remote-check-supervisor',maximum=SUPERVISOR_SCHEMA['maxBytes'])
+    if set(marker)!=set(SUPERVISOR_SCHEMA['fields']):
         raise SystemExit('producer supervisor identity has an invalid shape')
-    if (marker.get('schema')!=1 or marker.get('host')!=host or marker.get('run')!=run or
-            type(marker.get('pid')) is not int or marker['pid']<2 or
-            not isinstance(marker.get('started'),str) or not marker['started'].isdigit() or
+    if (type(marker.get('schema')) is not int or marker['schema']!=SUPERVISOR_SCHEMA['version'] or
+            marker.get('host')!=host or marker.get('run')!=run or
+            type(marker.get('pid')) is not int or marker['pid']<2 or marker['pid']>SUPERVISOR_SCHEMA['maxPid'] or
+            not isinstance(marker.get('started'),str) or
+            not re.fullmatch(r'[0-9]{1,'+str(SUPERVISOR_SCHEMA['maxStartDigits'])+r'}',marker['started']) or
             type(marker.get('group')) is not int or marker['group']!=marker['pid'] or
-            type(marker.get('uid')) is not int or marker['uid']!=os.getuid()):
+            type(marker.get('uid')) is not int or marker['uid']<0 or marker['uid']>SUPERVISOR_SCHEMA['maxPid'] or
+            marker['uid']!=os.getuid()):
         raise SystemExit('producer supervisor identity is foreign or malformed')
     if control_info(root,'.alive',0,required=True,empty=True) is None:
         raise SystemExit('producer liveness marker is missing')
@@ -1617,6 +1627,7 @@ systemctl stop "$run_slice" >/dev/null 2>&1
 
 /** Executed by the host Python 3 prerequisite, before selecting or downloading pinned Bun. */
 export const dependencyPreparationProgram = String.raw`# Linux check-host dependency preparation. The supervising process is a subreaper in the run's systemd scope.
+SUPERVISOR_SCHEMA = ${REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON}
 import ctypes
 import fcntl
 import hashlib
@@ -2268,6 +2279,8 @@ def lifetime():
     limit_ms = int(limit_ms)
     if not 0 < limit_ms <= 7200000:
         raise RuntimeError('invalid host lifetime')
+    if host not in SUPERVISOR_SCHEMA['hosts'] or not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'], run):
+        raise RuntimeError('invalid host lifetime identity')
     root = Path(directory)
     preparation_deadline = started + int(preparation_ms) / 1000
     if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
@@ -2281,9 +2294,12 @@ def lifetime():
     for sig in [signal.SIGHUP, signal.SIGTERM, signal.SIGINT]:
         signal.signal(sig, lambda number, frame: interrupted.append(number))
     fields = Path('/proc/' + str(os.getpid()) + '/stat').read_text().rsplit(')', 1)[1].split()
-    supervisor = {'schema': 1, 'host': host, 'run': run, 'pid': os.getpid(),
-                  'started': fields[19], 'group': os.getpgrp(), 'uid': os.getuid()}
-    durable(root / '.remote-check-supervisor', json.dumps(supervisor, sort_keys=True))
+    supervisor_values = [SUPERVISOR_SCHEMA['version'], host, run, os.getpid(), fields[19], os.getpgrp(), os.getuid()]
+    supervisor = dict(zip(SUPERVISOR_SCHEMA['fields'], supervisor_values))
+    supervisor_bytes = json.dumps(supervisor, sort_keys=True).encode()
+    if len(supervisor_bytes)>SUPERVISOR_SCHEMA['maxBytes']:
+        raise RuntimeError('host lifetime marker exceeds its bound')
+    durable(root / '.remote-check-supervisor', supervisor_bytes.decode())
     with os.fdopen(3) as source:
         script = source.read()
     child = subprocess.Popen(['sh', '-c', script], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1',

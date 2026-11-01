@@ -177,12 +177,14 @@ export async function runOnCheckHost(
     console.error(`stack-run: ${run.label} already on an approved remote-check run`);
     return null;
   }
-  if (isCheckHostRunCandidate(run.cwd))
+  const checkHostCandidate = isCheckHostRunCandidate(run.cwd);
+  if (checkHostCandidate)
     console.error(`stack-run: ${run.label} physical run recognition refused (${recognition.reason})`);
   const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
   const cancelled = () => executionCancellation(cancellation);
   const intent = cancelled();
   if (intent) return 128 + intent.signal;
+  if (checkHostCandidate) return REMOTE_TRANSPORT_FAILURE;
   const requestedPriority = env.REMOTE_CHECK_PRIORITY;
   if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical') {
     throw new Error(`REMOTE_CHECK_PRIORITY must be landing or critical when set, received ${requestedPriority}`);

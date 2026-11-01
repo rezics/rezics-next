@@ -2,15 +2,17 @@ import { expect, test } from 'bun:test';
 import {
   CHECK_HOST_RUNS_ROOT,
   CHECK_HOST_SUPERVISOR_MARKER,
+  CHECK_HOST_SUPERVISOR_MARKER_SCHEMA,
   checkHostScopeUnitName,
   checkHostRunSliceUnitName,
   classifyCheck,
+  isCheckHostRunCandidate,
   recognizeCheckHostRun,
   type CheckHostPathEvidence,
   type CheckHostReadEvidence,
   type CheckHostRecognitionReader,
 } from './check-placement.ts';
-import { dependencyPreparationProgram, runScript } from './remote-check.ts';
+import { dependencyPreparationProgram, runScript, sourceInputVerificationProgram } from './remote-check.ts';
 import { runOnCheckHost } from './stack-run.ts';
 
 const runId = 'm7v0a9-k1a2b3c4';
@@ -18,6 +20,7 @@ const runDirectory = `${CHECK_HOST_RUNS_ROOT}/${runId}`;
 const compilerDirectory = `${runDirectory}/services/kernel`;
 const supervisorPid = 4321;
 const supervisorStart = '912345678';
+const fixtureUid = 1000;
 
 function processStat(pid: number, group: number, started: string, state = 'S'): string {
   const fields = Array.from({ length: 20 }, () => '0');
@@ -25,6 +28,24 @@ function processStat(pid: number, group: number, started: string, state = 'S'): 
   fields[2] = String(group);
   fields[19] = started;
   return `${pid} (python3) ${fields.join(' ')}`;
+}
+
+function markerRecord(host: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const values: Record<string, unknown> = {
+    schema: CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.version,
+    host,
+    run: runId,
+    pid: supervisorPid,
+    started: supervisorStart,
+    group: supervisorPid,
+    uid: fixtureUid,
+  };
+  return {
+    ...Object.fromEntries(
+      CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.fields.map((field) => [field, values[field]] as const),
+    ),
+    ...overrides,
+  };
 }
 
 function producerFixture(host: 'a' | 'b', cwdRealPath = compilerDirectory) {
@@ -44,8 +65,19 @@ function producerFixture(host: 'a' | 'b', cwdRealPath = compilerDirectory) {
   expect(producer).toContain(`--unit=${scope.slice(0, -'.scope'.length)}`);
   expect(producer).toContain(`supervise 180000 ${host} ${runId} ${runDirectory}`);
   expect(producer).not.toContain('prepared input evidence unavailable');
+  expect(producer).toContain(Buffer.from(dependencyPreparationProgram).toString('base64'));
   expect(dependencyPreparationProgram).toContain(
-    "durable(root / '.remote-check-supervisor', json.dumps({'pid': os.getpid(), 'started': fields[19], 'group': os.getpgrp()}))",
+    `SUPERVISOR_SCHEMA = ${JSON.stringify(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA)}`,
+  );
+  expect(dependencyPreparationProgram).toContain(
+    "supervisor = dict(zip(SUPERVISOR_SCHEMA['fields'], supervisor_values))",
+  );
+  expect(sourceInputVerificationProgram).toContain(
+    `SUPERVISOR_SCHEMA=${JSON.stringify(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA)}`,
+  );
+  expect(sourceInputVerificationProgram).toContain("set(marker)!=set(SUPERVISOR_SCHEMA['fields'])");
+  expect(sourceInputVerificationProgram).toContain(
+    "read_control_json(root,'.remote-check-supervisor',maximum=SUPERVISOR_SCHEMA['maxBytes'])",
   );
   expect(dependencyPreparationProgram).toContain('start_new_session=True');
 
@@ -69,8 +101,8 @@ function producerFixture(host: 'a' | 'b', cwdRealPath = compilerDirectory) {
       {
         status: 'ok',
         kind: 'regular',
-        text: JSON.stringify({ pid: supervisorPid, started: supervisorStart, group: supervisorPid }),
-        size: Buffer.byteLength(JSON.stringify({ pid: supervisorPid, started: supervisorStart, group: supervisorPid })),
+        text: JSON.stringify(markerRecord(host)),
+        size: Buffer.byteLength(JSON.stringify(markerRecord(host))),
       },
     ],
     [
@@ -85,12 +117,37 @@ function producerFixture(host: 'a' | 'b', cwdRealPath = compilerDirectory) {
   ]);
   const reader: CheckHostRecognitionReader = {
     inspect: (path) => paths.get(path) ?? { status: 'missing' },
+    uid: () => fixtureUid,
     read: (path, maxBytes) => {
       const evidence = reads.get(path) ?? { status: 'missing' as const };
       return evidence.status === 'ok' && evidence.size > maxBytes ? { status: 'too-large' } : evidence;
     },
   };
-  return { producer, reader, paths, reads, scope, slice };
+  return {
+    producer,
+    reader,
+    paths,
+    reads,
+    markerPath: `${runDirectory}/${CHECK_HOST_SUPERVISOR_MARKER}`,
+    scope,
+    slice,
+  };
+}
+
+function setMarker(fixture: ReturnType<typeof producerFixture>, record: unknown): void {
+  const serialized = typeof record === 'string' ? record : JSON.stringify(record);
+  if (serialized === undefined) throw new Error('marker fixture must serialize to text');
+  const text = serialized;
+  fixture.reads.set(fixture.markerPath, {
+    status: 'ok',
+    kind: 'regular',
+    text,
+    size: Buffer.byteLength(text),
+  });
+}
+
+function setReadText(fixture: ReturnType<typeof producerFixture>, path: string, text: string): void {
+  fixture.reads.set(path, { status: 'ok', kind: 'regular', text, size: Buffer.byteLength(text) });
 }
 
 test('the generated a/b lifetime and systemd handoff admits an inner compiler in the matching physical scope', () => {
@@ -159,77 +216,182 @@ test('environment markers and caller run IDs cannot replace a refused physical p
     console.error = original;
   }
   expect(remoteAttempts).toBe(0);
-  expect(diagnostics).toContain('stack-run: kernel typecheck physical run recognition refused (cwd-not-confined)');
+  expect(diagnostics).toEqual([
+    'stack-run: kernel typecheck physical run recognition refused (cwd-not-confined)',
+  ]);
 });
 
-test('stale, forged and unknown supervisor identities fail closed with bounded reasons', () => {
-  const stale = producerFixture('a');
-  stale.reads.set(`/proc/${supervisorPid}/stat`, {
-    status: 'ok',
-    kind: 'regular',
-    text: processStat(supervisorPid, supervisorPid, '812345678'),
-    size: Buffer.byteLength(processStat(supervisorPid, supervisorPid, '812345678')),
-  });
-  expect(recognizeCheckHostRun(compilerDirectory, stale.reader)).toEqual({
+test('malformed run paths remain candidates and cannot enter nested placement', () => {
+  const malformed = `${CHECK_HOST_RUNS_ROOT}/UpperCase/services/kernel`;
+  expect(isCheckHostRunCandidate(malformed)).toBe(true);
+  expect(recognizeCheckHostRun(malformed, producerFixture('a').reader)).toEqual({
     outcome: 'refused',
-    reason: 'supervisor-start-mismatch',
+    reason: 'run-id-invalid',
   });
+});
 
-  const forged = producerFixture('a');
-  const markerPath = `${runDirectory}/${CHECK_HOST_SUPERVISOR_MARKER}`;
-  const marker = JSON.stringify({ pid: supervisorPid, started: supervisorStart, group: supervisorPid + 1 });
-  forged.reads.set(markerPath, { status: 'ok', kind: 'regular', text: marker, size: Buffer.byteLength(marker) });
-  expect(recognizeCheckHostRun(compilerDirectory, forged.reader)).toEqual({
-    outcome: 'refused',
-    reason: 'supervisor-group-mismatch',
-  });
+test('only exact producer markers and live process evidence are admitted', () => {
+  const cases: {
+    name: string;
+    alter: (fixture: ReturnType<typeof producerFixture>) => void;
+    reason: string;
+  }[] = [
+    {
+      name: 'the obsolete three-field marker',
+      alter: (fixture) => setMarker(fixture, { pid: supervisorPid, started: supervisorStart, group: supervisorPid }),
+      reason: 'supervisor-marker-invalid',
+    },
+    {
+      name: 'a missing field',
+      alter: (fixture) => {
+        const marker = markerRecord('a');
+        delete marker.uid;
+        setMarker(fixture, marker);
+      },
+      reason: 'supervisor-marker-invalid',
+    },
+    {
+      name: 'an extra field',
+      alter: (fixture) => setMarker(fixture, markerRecord('a', { extra: true })),
+      reason: 'supervisor-marker-invalid',
+    },
+    {
+      name: 'an unsupported schema version',
+      alter: (fixture) => setMarker(fixture, markerRecord('a', { schema: 2 })),
+      reason: 'supervisor-marker-invalid',
+    },
+    {
+      name: 'malformed marker JSON',
+      alter: (fixture) => setMarker(fixture, '{broken'),
+      reason: 'supervisor-marker-invalid',
+    },
+    {
+      name: 'a foreign host label',
+      alter: (fixture) => setMarker(fixture, markerRecord('foreign')),
+      reason: 'supervisor-host-invalid',
+    },
+    {
+      name: 'a marker for another run',
+      alter: (fixture) => setMarker(fixture, markerRecord('a', { run: 'another-run' })),
+      reason: 'supervisor-run-mismatch',
+    },
+    {
+      name: 'a marker owned by another uid',
+      alter: (fixture) => setMarker(fixture, markerRecord('a', { uid: fixtureUid + 1 })),
+      reason: 'supervisor-uid-mismatch',
+    },
+    {
+      name: 'an unsafe pid',
+      alter: (fixture) => setMarker(fixture, markerRecord('a', { pid: Number.MAX_SAFE_INTEGER + 1 })),
+      reason: 'supervisor-marker-invalid',
+    },
+    {
+      name: 'a nonleader process group',
+      alter: (fixture) => setMarker(fixture, markerRecord('a', { group: supervisorPid + 1 })),
+      reason: 'supervisor-group-mismatch',
+    },
+    {
+      name: 'a stat record naming another pid',
+      alter: (fixture) =>
+        setReadText(
+          fixture,
+          `/proc/${supervisorPid}/stat`,
+          processStat(supervisorPid + 1, supervisorPid, supervisorStart),
+        ),
+      reason: 'supervisor-stat-invalid',
+    },
+    {
+      name: 'a mismatched process start time',
+      alter: (fixture) =>
+        setReadText(
+          fixture,
+          `/proc/${supervisorPid}/stat`,
+          processStat(supervisorPid, supervisorPid, '812345678'),
+        ),
+      reason: 'supervisor-start-mismatch',
+    },
+    {
+      name: 'a mismatched process group',
+      alter: (fixture) =>
+        setReadText(
+          fixture,
+          `/proc/${supervisorPid}/stat`,
+          processStat(supervisorPid, supervisorPid + 1, supervisorStart),
+        ),
+      reason: 'supervisor-group-mismatch',
+    },
+    {
+      name: 'an unknown process state',
+      alter: (fixture) =>
+        setReadText(
+          fixture,
+          `/proc/${supervisorPid}/stat`,
+          processStat(supervisorPid, supervisorPid, supervisorStart, '?'),
+        ),
+      reason: 'supervisor-state-unknown',
+    },
+    {
+      name: 'a dead process',
+      alter: (fixture) =>
+        setReadText(
+          fixture,
+          `/proc/${supervisorPid}/stat`,
+          processStat(supervisorPid, supervisorPid, supervisorStart, 'Z'),
+        ),
+      reason: 'supervisor-not-live',
+    },
+    {
+      name: 'a foreign cgroup scope',
+      alter: (fixture) =>
+        setReadText(
+          fixture,
+          '/proc/self/cgroup',
+          `0::/system.slice/${fixture.slice}/rezics-check-another-run.scope\n`,
+        ),
+      reason: 'scope-mismatch',
+    },
+    {
+      name: 'a foreign run slice with the expected scope',
+      alter: (fixture) =>
+        setReadText(
+          fixture,
+          '/proc/self/cgroup',
+          `0::/system.slice/rezics-check-another-run.slice/${fixture.scope}\n`,
+        ),
+      reason: 'scope-mismatch',
+    },
+    {
+      name: 'a cgroup path with an escaped component',
+      alter: (fixture) =>
+        setReadText(fixture, '/proc/self/cgroup', `0::/system.slice/../${fixture.slice}/${fixture.scope}\n`),
+      reason: 'cgroup-invalid',
+    },
+    {
+      name: 'a run directory that resolves outside the runs root',
+      alter: (fixture) =>
+        fixture.paths.set(runDirectory, { status: 'ok', kind: 'symlink', realPath: '/tmp/foreign-run' }),
+      reason: 'run-directory-not-physical',
+    },
+    {
+      name: 'a symlinked marker',
+      alter: (fixture) => fixture.reads.set(fixture.markerPath, { status: 'symlink' }),
+      reason: 'supervisor-marker-not-regular',
+    },
+    {
+      name: 'an oversized marker',
+      alter: (fixture) => fixture.reads.set(fixture.markerPath, { status: 'too-large' }),
+      reason: 'supervisor-marker-oversized',
+    },
+  ];
 
-  const unknown = producerFixture('b');
-  const stat = processStat(supervisorPid, supervisorPid, supervisorStart, '?');
-  unknown.reads.set(`/proc/${supervisorPid}/stat`, {
-    status: 'ok',
-    kind: 'regular',
-    text: stat,
-    size: Buffer.byteLength(stat),
-  });
-  expect(recognizeCheckHostRun(compilerDirectory, unknown.reader)).toEqual({
-    outcome: 'refused',
-    reason: 'supervisor-state-unknown',
-  });
-
-  const dead = producerFixture('b');
-  const deadStat = processStat(supervisorPid, supervisorPid, supervisorStart, 'Z');
-  dead.reads.set(`/proc/${supervisorPid}/stat`, {
-    status: 'ok',
-    kind: 'regular',
-    text: deadStat,
-    size: Buffer.byteLength(deadStat),
-  });
-  expect(recognizeCheckHostRun(compilerDirectory, dead.reader)).toEqual({
-    outcome: 'refused',
-    reason: 'supervisor-not-live',
-  });
-
-  const wrongScope = producerFixture('a');
-  const cgroupPath = '/proc/self/cgroup';
-  const wrongCgroup = `0::/system.slice/${wrongScope.slice}/rezics-check-another-run.scope\n`;
-  wrongScope.reads.set(cgroupPath, {
-    status: 'ok',
-    kind: 'regular',
-    text: wrongCgroup,
-    size: Buffer.byteLength(wrongCgroup),
-  });
-  expect(recognizeCheckHostRun(compilerDirectory, wrongScope.reader)).toEqual({
-    outcome: 'refused',
-    reason: 'scope-mismatch',
-  });
-
-  const oversized = producerFixture('b');
-  oversized.reads.set(`${runDirectory}/${CHECK_HOST_SUPERVISOR_MARKER}`, { status: 'too-large' });
-  expect(recognizeCheckHostRun(compilerDirectory, oversized.reader)).toEqual({
-    outcome: 'refused',
-    reason: 'supervisor-marker-oversized',
-  });
+  for (const scenario of cases) {
+    const fixture = producerFixture('a');
+    scenario.alter(fixture);
+    expect(recognizeCheckHostRun(compilerDirectory, fixture.reader), scenario.name).toEqual({
+      outcome: 'refused',
+      reason: scenario.reason,
+    });
+  }
 });
 
 test('a lexical run path whose physical compiler cwd escapes its run is refused', () => {

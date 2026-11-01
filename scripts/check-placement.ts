@@ -14,10 +14,20 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 export const PERFORMANCE_HOST_NAMES = ['a', 'b'] as const;
 export const CHECK_HOST_RUNS_ROOT = '/srv/rezics-check/runs';
 export const CHECK_HOST_SUPERVISOR_MARKER = '.remote-check-supervisor';
+/** Shared producer/receiver description for the physical lifetime marker. */
+export const CHECK_HOST_SUPERVISOR_MARKER_SCHEMA = {
+  version: 1,
+  fields: ['schema', 'host', 'run', 'pid', 'started', 'group', 'uid'],
+  hosts: PERFORMANCE_HOST_NAMES,
+  runIdPattern: '^[a-z0-9-]{1,64}$',
+  maxBytes: 4096,
+  maxPid: Number.MAX_SAFE_INTEGER,
+  maxStartDigits: 20,
+} as const;
 const MAX_SMALL_UNIT_FILES = 12;
 const MAX_SMALL_UNIT_SOURCE_BYTES = 256 * 1024;
 const MAX_SMALL_UNIT_IMPORTS = 64;
-const MAX_CHECK_HOST_MARKER_BYTES = 4096;
+const MAX_CHECK_HOST_MARKER_BYTES = CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.maxBytes;
 const MAX_CHECK_HOST_PROC_BYTES = 4096;
 // Local tests understand only these harness/assertion modules plus recursively checked relative files. Other bare,
 // workspace, builtin, dynamic, or configuration routes are opaque and stay remote. The closure is bounded to 12 test
@@ -60,6 +70,9 @@ export type CheckHostRecognitionReason =
   | 'supervisor-marker-not-regular'
   | 'supervisor-marker-oversized'
   | 'supervisor-marker-invalid'
+  | 'supervisor-host-invalid'
+  | 'supervisor-run-mismatch'
+  | 'supervisor-uid-mismatch'
   | 'supervisor-stat-unavailable'
   | 'supervisor-stat-invalid'
   | 'supervisor-state-unknown'
@@ -85,10 +98,12 @@ export type CheckHostReadEvidence =
   | { status: 'ok'; kind: 'regular'; text: string; size: number }
   | { status: 'missing' | 'unavailable' | 'too-large' | 'not-regular' | 'symlink' };
 
-/** Read-only seam for a bounded, inert filesystem/proc fixture. Production callers use the host reader below. */
+/** Read-only seam for bounded, inert filesystem/proc/uid fixtures. Production callers use the fixed host reader below. */
 export type CheckHostRecognitionReader = {
   inspect(path: string): CheckHostPathEvidence;
   read(path: string, maxBytes: number): CheckHostReadEvidence;
+  /** Fixed process identity in production; inert readers provide a fixture uid. */
+  uid(): number;
 };
 
 function hostPathEvidence(path: string): CheckHostPathEvidence {
@@ -131,6 +146,7 @@ function hostReadEvidence(path: string, maxBytes: number): CheckHostReadEvidence
 const hostRecognitionReader: CheckHostRecognitionReader = {
   inspect: hostPathEvidence,
   read: hostReadEvidence,
+  uid: () => process.getuid(),
 };
 
 type EnvironmentCommand = { prefix: string[]; command: string[] };
@@ -660,7 +676,7 @@ function parseSupervisorStat(
 
 /**
  * Return a bounded, predicate-specific disposition for the physical run handoff. The injectable reader is a
- * read-only seam for inert tests; runtime callers use the fixed filesystem/proc reader and cannot supply identities.
+ * read-only seam for inert tests; runtime callers use the fixed filesystem/proc/uid reader and cannot supply identities.
  */
 export function recognizeCheckHostRun(
   cwd: string,
@@ -672,7 +688,8 @@ export function recognizeCheckHostRun(
     const inside = relative(CHECK_HOST_RUNS_ROOT, absolute);
     if (!insidePath(CHECK_HOST_RUNS_ROOT, absolute) || inside === '') return refusal('cwd-outside-runs');
     const runId = inside.split(sep)[0] ?? '';
-    if (!/^[a-z0-9-]{1,128}$/i.test(runId)) return refusal('run-id-invalid');
+    if (!new RegExp(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.runIdPattern).test(runId))
+      return refusal('run-id-invalid');
     const runDirectory = join(CHECK_HOST_RUNS_ROOT, runId);
     if (!insidePath(runDirectory, absolute)) return refusal('cwd-not-confined');
 
@@ -693,10 +710,20 @@ export function recognizeCheckHostRun(
     const cgroup = reader.read('/proc/self/cgroup', MAX_CHECK_HOST_PROC_BYTES);
     if (cgroup.status === 'missing' || cgroup.status === 'unavailable') return refusal('cgroup-unavailable');
     if (cgroup.status !== 'ok') return refusal('cgroup-invalid');
-    const entries = cgroup.text.split(/\r?\n/).filter((line) => line.startsWith('0::/'));
+    const entries = cgroup.text.split(/\r?\n/).filter((line) => line.startsWith('0::'));
     if (entries.length !== 1) return refusal('cgroup-invalid');
-    const cgroupPath = entries[0]!.slice(3);
-    if (!cgroupPath.split('/').includes(checkHostScopeUnitName(runId))) return refusal('scope-mismatch');
+    const cgroupMatch = /^0::\/(.+)$/.exec(entries[0]!);
+    if (!cgroupMatch) return refusal('cgroup-invalid');
+    const cgroupComponents = cgroupMatch[1]!.split('/');
+    if (cgroupComponents.some((component) => !component || component === '.' || component === '..'))
+      return refusal('cgroup-invalid');
+    const scope = checkHostScopeUnitName(runId);
+    const slice = checkHostRunSliceUnitName(runId);
+    if (
+      cgroupComponents.filter((component) => component === scope).length !== 1 ||
+      cgroupComponents.filter((component) => component === slice).length !== 1
+    )
+      return refusal('scope-mismatch');
 
     const markerPath = join(runDirectory, CHECK_HOST_SUPERVISOR_MARKER);
     const marker = reader.read(markerPath, MAX_CHECK_HOST_MARKER_BYTES);
@@ -707,9 +734,9 @@ export function recognizeCheckHostRun(
       return refusal('supervisor-marker-oversized');
     if (marker.status !== 'ok') return refusal('supervisor-marker-unavailable');
 
-    let owner: { pid?: unknown; started?: unknown; group?: unknown };
+    let owner: Record<string, unknown>;
     try {
-      owner = JSON.parse(marker.text) as { pid?: unknown; started?: unknown; group?: unknown };
+      owner = JSON.parse(marker.text) as Record<string, unknown>;
     } catch {
       return refusal('supervisor-marker-invalid');
     }
@@ -717,15 +744,36 @@ export function recognizeCheckHostRun(
       !owner ||
       typeof owner !== 'object' ||
       Array.isArray(owner) ||
-      Object.keys(owner).sort().join(',') !== 'group,pid,started' ||
+      Object.keys(owner).sort().join(',') !==
+        [...CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.fields].sort().join(',') ||
+      !Number.isSafeInteger(owner.schema) ||
+      owner.schema !== CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.version ||
+      typeof owner.host !== 'string' ||
+      typeof owner.run !== 'string' ||
       !Number.isSafeInteger(owner.pid) ||
-      (owner.pid as number) < 1 ||
+      (owner.pid as number) < 2 ||
+      (owner.pid as number) > CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.maxPid ||
       typeof owner.started !== 'string' ||
-      !/^\d{1,20}$/.test(owner.started) ||
+      !new RegExp(`^\\d{1,${CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.maxStartDigits}}$`).test(owner.started) ||
       !Number.isSafeInteger(owner.group) ||
-      (owner.group as number) < 1
+      (owner.group as number) < 1 ||
+      !Number.isSafeInteger(owner.uid) ||
+      (owner.uid as number) < 0 ||
+      (owner.uid as number) > CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.maxPid
     )
       return refusal('supervisor-marker-invalid');
+    if (!(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.hosts as readonly string[]).includes(owner.host))
+      return refusal('supervisor-host-invalid');
+    if (owner.run !== runId) return refusal('supervisor-run-mismatch');
+    let uid: number;
+    try {
+      uid = reader.uid();
+    } catch {
+      return refusal('evidence-unavailable');
+    }
+    if (!Number.isSafeInteger(uid) || uid < 0) return refusal('evidence-unavailable');
+    if (owner.uid !== uid) return refusal('supervisor-uid-mismatch');
+    if (owner.group !== owner.pid) return refusal('supervisor-group-mismatch');
 
     const processStat = reader.read(`/proc/${owner.pid}/stat`, MAX_CHECK_HOST_PROC_BYTES);
     if (processStat.status === 'missing' || processStat.status === 'unavailable')
@@ -759,5 +807,5 @@ export function isCheckHostRun(cwd: string): boolean {
 export function isCheckHostRunCandidate(cwd: string): boolean {
   if (!isAbsolute(cwd)) return false;
   const inside = relative(CHECK_HOST_RUNS_ROOT, resolve(cwd));
-  return insidePath(CHECK_HOST_RUNS_ROOT, resolve(cwd)) && /^[a-z0-9-]{1,128}$/i.test(inside.split(sep)[0] ?? '');
+  return insidePath(CHECK_HOST_RUNS_ROOT, resolve(cwd)) && inside !== '';
 }

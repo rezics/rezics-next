@@ -608,7 +608,7 @@ test('Original lifetime custody survives lost reference clear rejected evidence 
   expect(saturated.preparationIntent).toBeNull();
   expect(saturated.finalCustody?.privateFiles).toBe('settled');
   expect(saturated.finalCustody?.delivery).toBe('pending');
-  expect(saturated.finalCustody?.aggregate).toBe('pending');
+  expect(saturated.finalCustody?.aggregate).toBe('unknown');
   expect(saturated.finalCustody?.observations).toHaveLength(16);
   expect(saturated.finalCustody?.continuation?.count).toBeGreaterThan(0);
   expect(saturated.finalCustody?.continuation?.latest.disposition).toBe('rejected');
@@ -625,7 +625,7 @@ test('Original lifetime custody survives lost reference clear rejected evidence 
   expect(recovered.final).toEqual(original);
   expect(recovered.finalCustody?.reconciliation).toBe('settled');
   expect(recovered.finalCustody?.delivery).toBe('pending');
-  expect(recovered.finalCustody?.aggregate).toBe('pending');
+  expect(recovered.finalCustody?.aggregate).toBe('unknown');
   expect(recovered.snapshotCustody).toBe('removed');
   expect(recovered.phase).toBe('unknown');
 
