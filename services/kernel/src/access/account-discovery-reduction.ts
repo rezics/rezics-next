@@ -85,7 +85,8 @@ export type AccountDiscoveryEnrollment = AccountDiscoveryReductionHead & Readonl
 /** Enrol one bounded page of the immutable compiler closure in its writer home.
  * Account writers and enrollment take population -> Source head -> enrollment.
  * No registration-home transaction is held across this operation. The original
- * baseline survives crashes and later writer changes; retries never recapture it.
+ * baseline is sealed only after the complete key closure is enrolled. A partial
+ * key frontier is never an admitted baseline; sealed receipts are immutable.
  */
 export async function enrollAccountDiscoveryHome(
   pool: Pool,
@@ -147,10 +148,16 @@ export async function enrollAccountDiscoveryHome(
         throw new CommandUnavailableError('contention', input.partition);
       // Byte admission remains with the original definition compiler. Key writes,
       // lookahead and control rows all share this maintenance step's 1000 inputs.
-      const remaining = [...new Set(input.keys)].sort().filter((key) =>
-        original.key_after === null || key > original.key_after);
-      const admitted = remaining.slice(0, 990);
-      const complete = remaining.length <= admitted.length;
+      const keys = [...new Set(input.keys)].sort((a,b) => Buffer.compare(Buffer.from(a),Buffer.from(b)));
+      let low = 0, high = keys.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (original.key_after !== null && Buffer.compare(Buffer.from(keys[middle]!),Buffer.from(original.key_after)) <= 0)
+          low = middle + 1;
+        else high = middle;
+      }
+      const admitted = keys.slice(low, low + 990);
+      const complete = low + admitted.length === keys.length;
       if (!original.complete) {
         await client.query(
           `INSERT INTO semantic.public_filter_key_enrollment
@@ -160,18 +167,23 @@ export async function enrollAccountDiscoveryHome(
           [input.partition,input.registration.partition,input.registration.id,input.bootstrap,admitted],
         );
         await client.query(
-          `UPDATE semantic.public_filter_home_enrollment SET key_after=$3,complete=$4
-           WHERE (partition_no,bootstrap)=($1,$2)`,
-          [input.partition,input.bootstrap,admitted.at(-1) ?? original.key_after,complete],
+          `UPDATE semantic.public_filter_home_enrollment SET key_after=$3,complete=$4,
+             source_position=CASE WHEN $4 THEN $5::bigint ELSE source_position END,
+             native_revision=CASE WHEN $4 THEN $6::bigint ELSE native_revision END,
+             native_claim_revision=CASE WHEN $4 THEN $7::bigint ELSE native_claim_revision END
+           WHERE (partition_no,bootstrap)=($1,$2) AND NOT complete`,
+          [input.partition,input.bootstrap,admitted.at(-1) ?? original.key_after,complete,
+            source.position,input.accounts ? account.revision : null,input.accounts ? account.claim_revision : null],
         );
       }
       requireAccessDeadline(context.deadline);
       await client.query('COMMIT');
       return Object.freeze({
         partition: input.partition, epoch: original.owner_epoch,
-        revision: BigInt(original.native_revision ?? account.revision),
-        claimRevision: BigInt(original.native_claim_revision ?? account.claim_revision),
-        sourcePosition: BigInt(original.source_position), complete: original.complete || complete,
+        revision: BigInt(original.complete ? original.native_revision ?? account.revision : account.revision),
+        claimRevision: BigInt(original.complete ? original.native_claim_revision ?? account.claim_revision : account.claim_revision),
+        sourcePosition: BigInt(original.complete ? original.source_position : source.position),
+        complete: original.complete || complete,
       });
     } catch (error) {
       try { await client.query('ROLLBACK'); }

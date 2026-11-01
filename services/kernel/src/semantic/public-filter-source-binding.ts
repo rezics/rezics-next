@@ -1,9 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { publicFilterSource, publicFilterSourceOrigin } from './public-filter-source.ts';
-import { readOriginalPublicFilterProjectionPage } from './public-filter-projection.ts';
+import { readOriginalPublicFilterProjectionPage, readRetainedPublicFilterProjectionPage } from './public-filter-projection.ts';
 import { systemClock } from '../clock.ts';
-import { runCommand, noEffect } from '../command/command.ts';
+import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readAccountDiscoveryReductionBinding } from '../access/account-discovery-reduction.ts';
@@ -28,6 +28,7 @@ import repairSave from './public-filter-source-binding-repair-save.sql';
 import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairAdvance from './public-filter-source-binding-repair-advance.sql';
 import repairVersion from './public-filter-source-binding-repair-version.sql';
+import repairCurrent from './public-filter-source-binding-repair-current.sql';
 import type { Pool } from 'pg';
 import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, walkFilter } from '@rezics/filter';
@@ -38,7 +39,7 @@ import { compileText } from '../search/text.ts';
 import { validateSearchAfter } from '../search/query-payload.ts';
 import { compileDiscoveryConsumerCapture, type DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
 import { validatePublicSuggestionInput } from '../search/public-suggestion-input.ts';
-import { readPublicFilterConsumerCustody, readGenerationPublicationCustody } from '../search/public-filter-custody.ts';
+import { readPublicFilterConsumerCustody, readGenerationPublicationCustody, readPublicFilterRepairSettlement } from '../search/public-filter-custody.ts';
 import type {
   PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
@@ -121,6 +122,15 @@ export type PublicFilterBindingFailure = Readonly<{
   cost: PublicFilterCost;
 }>;
 export type PublicFilterSourceBinding = Readonly<{
+  /** Older basic bindings have no repair producer. Native bootstrap bindings always provide this method. */
+  readRepairStep?(
+    request: NativeSourceRepairStepRead,
+    context: PublicFilterConsumerContext,
+  ): Promise<NativeSourceRepairStepVerification>;
+  readRepairReceipt?(
+    request: NativeSourceRepairRead,
+    context: PublicFilterConsumerContext,
+  ): Promise<NativeSourceRepairVerification>;
   resolve(
     request: Readonly<{
       source: PublicFilterSource;
@@ -177,7 +187,41 @@ export type PublicSourceBootstrapRecovery =
   | Readonly<{ status: 'pending'; cost: PublicFilterCost }>
   | PublicFilterBindingFailure;
 const nativeSourceRepairReceipt: unique symbol = Symbol('native Source repair receipt');
-export type NativeSourceRepairReceipt = Readonly<{ [nativeSourceRepairReceipt]: true }>;
+/** Durable original-module locator. Its fields locate evidence; none certifies completion. */
+export type NativeSourceRepairLocator = Readonly<{
+  bootstrap: string;
+  execution: string;
+  step: string;
+  locatorDigest: string;
+}>;
+export type NativeSourceRepairReceipt = NativeSourceRepairLocator &
+  Readonly<{ [nativeSourceRepairReceipt]: true }>;
+export type NativeSourceRepairRead = Readonly<{
+  receipt: NativeSourceRepairLocator;
+  queried: PublicFilterQueriedObservation;
+  execution: string;
+}>;
+/** Exact retained native successor request. Locators identify Source evidence; they confer no authority. */
+export type NativeSourceRepairStepRead = Readonly<{
+  bootstrap: string;
+  queried: PublicFilterQueriedObservation;
+  execution: string;
+  predecessor: string | null;
+}>;
+export type NativeSourceRepairStepVerification =
+  | Readonly<{
+      status: 'verified';
+      step: string;
+      predecessor: string | null;
+      frontier: string | null;
+      complete: boolean;
+      receipts: readonly NativeSourceRepairLocator[];
+      cost: PublicFilterCost;
+    }>
+  | PublicFilterBindingFailure;
+export type NativeSourceRepairVerification =
+  | Readonly<{ status: 'verified'; repair: PublicSourceRepair; cost: PublicFilterCost }>
+  | PublicFilterBindingFailure;
 export type PublicSourceRepair = Readonly<{
   kind: 'local' | 'foreign';
   locator: PublicFilterRepairLocator;
@@ -191,6 +235,15 @@ export type PublicSourceRepairPage =
   | PublicFilterBindingFailure;
 export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
   Readonly<{
+    readRepairStep(
+      request: NativeSourceRepairStepRead,
+      context: PublicFilterConsumerContext,
+    ): Promise<NativeSourceRepairStepVerification>;
+    /** Acyclic Source verification. Reads basic Search custody, never Search settlement. */
+    readRepairReceipt(
+      request: NativeSourceRepairRead,
+      context: PublicFilterConsumerContext,
+    ): Promise<NativeSourceRepairVerification>;
     begin(
       request: Readonly<{
         source: PublicFilterSource;
@@ -296,6 +349,27 @@ function decode<T>(value: string): T {
   return unpack(JSON.parse(value)) as T;
 }
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+function packRepairLocatorDigests(locators: readonly PublicFilterRepairLocator[], inputLimit: number): Buffer {
+  if (locators.length > Math.min(256, inputLimit)) throw new BindingError('owner_unavailable');
+  const digests = locators.map((locator) => hash(encode(locator)));
+  return Buffer.concat(digests.map((digest) => Buffer.from(digest, 'hex')));
+}
+function unpackRepairLocatorDigests(value: unknown, inputLimit: number): readonly string[] {
+  const packed =
+    typeof value === 'string'
+      ? value
+      : value instanceof Uint8Array
+        ? Buffer.from(value).toString('hex')
+        : null;
+  if (
+    packed === null ||
+    packed.length % 64 !== 0 ||
+    packed.length / 64 > inputLimit ||
+    !/^(?:[0-9a-f]{64})*$/.test(packed)
+  )
+    throw new BindingError('owner_unavailable');
+  return Array.from({ length: packed.length / 64 }, (_, index) => packed.slice(index * 64, (index + 1) * 64));
+}
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 class BindingError extends Error {
   constructor(readonly reason: PublicFilterBindingFailure['reason']) {
@@ -628,8 +702,89 @@ export function createPublicFilterSourceBinding(
   type RepairRecord = {
     input: RepairState;
     next: RepairState;
-    output: { digest: string; frontier: PublicFilterProjectionFrontier } | null;
+    output: {
+      digest: string;
+      source: PublicFilterProjectionObservation;
+      frontier: PublicFilterProjectionFrontier;
+      request: { inputLimit: number; frontier: PublicFilterProjectionFrontier | null };
+    } | null;
   };
+  type Projection = Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }>;
+  function projectionDigest(page: Projection): string {
+    return hash(
+      encode({
+        status: page.status,
+        source: page.source,
+        records: page.records,
+        repairLocators: page.repairLocators,
+        frontier: page.frontier,
+        heads: page.status === 'complete' ? page.requiredHeads : undefined,
+      }),
+    );
+  }
+  function producedRepair(
+    bootstrap: string,
+    execution: string,
+    step: string,
+    projection: Projection,
+    locator: PublicFilterRepairLocator,
+  ): PublicSourceRepair {
+    const receipt = Object.freeze({
+      bootstrap,
+      execution,
+      step,
+      locatorDigest: hash(encode(locator)),
+      [nativeSourceRepairReceipt]: true as const,
+    });
+    return {
+      kind: locator.dependencies.some(
+        (dependency) => 'route' in dependency && partitionOf(dependency.route) !== projection.source.partition,
+      )
+        ? 'foreign'
+        : 'local',
+      locator,
+      source: projection.source,
+      projection,
+      receipt,
+    };
+  }
+  async function currentRepairHome(
+    bootstrap: string,
+    execution: string,
+    state: RepairState,
+    source: PublicFilterProjectionObservation,
+    db: Pool,
+  ): Promise<void> {
+    const route = routeOf(state.subject!);
+    if (
+      route === null ||
+      partitionOf(route) !== state.partition ||
+      state.phase !== 'project' ||
+      state.version === null ||
+      state.epoch === null ||
+      source.subject !== state.subject ||
+      source.partition !== state.partition ||
+      source.epoch !== state.epoch ||
+      source.position < state.version
+    )
+      throw new BindingError('binding_mismatch');
+    // A single home-local statement is the last source-home read after staged foreign projection work.
+    const current = await repairCurrent.run(db, {
+      partition_no: state.partition,
+      bootstrap: nativeId(bootstrap),
+      execution,
+      step: state.advance,
+      route,
+      subject_id: state.subject!,
+      source_position: String(source.position),
+      security_revision: source.securityRevision,
+      current_release: source.currentRelease,
+      revision: source.revision,
+      terminal: source.terminal,
+    });
+    if (!current || current.owner_epoch !== source.epoch || BigInt(current.position) !== state.version)
+      throw new BindingError('configuration_changed');
+  }
   async function repairNative(
     bootstrap: PublicSourceBootstrap,
     joined: Joined,
@@ -650,7 +805,11 @@ export function createPublicFilterSourceBinding(
       execution: request.execution,
       predecessor: request.frontier ?? '',
     });
+    if (old && (old.receipt_protocol !== 1 || old.input_limit !== request.inputLimit))
+      throw new BindingError('owner_unavailable');
+    const retainedLocatorDigests = old ? unpackRepairLocatorDigests(old.repair_locator_digests, old.input_limit!) : null;
     const replay = old ? decode<RepairRecord>(old.state) : null;
+    const step = old?.step ?? randomUUID();
     let state: RepairState;
     if (replay) state = replay.input;
     else if (request.frontier !== null) {
@@ -725,8 +884,10 @@ export function createPublicFilterSourceBinding(
           },
           async (tx) => {
             const existing = await repairVersion.run(tx, values);
+            if (existing && (existing.transaction_id === null || existing.native_xid === null))
+              throw new BindingError('owner_unavailable');
             if (existing) return noEffect(existing);
-            const result = await repairAdvance.run(tx, values);
+            const result = await repairAdvance.run(tx, { ...values, transaction_id: currentCommand(tx).transactionId });
             const inserted = Array.isArray(result) ? result[0] : result;
             if (!inserted) throw new BindingError('owner_unavailable');
             return {
@@ -748,6 +909,10 @@ export function createPublicFilterSourceBinding(
         const source = sourceReader(bootstrap.definition);
         const origin = publicFilterSourceOrigin(source);
         if (!origin) throw new BindingError('source_missing');
+        if (replay?.output && (!replay.output.request ||
+          replay.output.request.inputLimit !== request.inputLimit ||
+          encode(replay.output.request.frontier) !== encode(state.projection)))
+          throw new BindingError('binding_mismatch');
         const page = await readOriginalPublicFilterProjectionPage(origin, {
           subject: state.subject!,
           meaning: bootstrap.definition.meaning,
@@ -778,20 +943,16 @@ export function createPublicFilterSourceBinding(
           page.source.position < state.version
         )
           throw new BindingError('binding_mismatch');
-        const digest = hash(
-          encode({
-            status: page.status,
-            source: page.source,
-            records: page.records,
-            repairLocators: page.repairLocators,
-            heads: page.status === 'complete' ? page.requiredHeads : undefined,
-          }),
-        );
+        await currentRepairHome(bootstrap.id, request.execution, state, page.source, db);
+        const digest = projectionDigest(page);
+        if (retainedLocatorDigests && !isDeepStrictEqual(
+          page.repairLocators.map((locator) => hash(encode(locator))), retainedLocatorDigests))
+          throw new BindingError('binding_mismatch');
         if (replay?.output && replay.output.digest !== digest) throw new BindingError('binding_mismatch');
-        output = replay?.output ?? { digest, frontier: page.frontier };
+        output = replay?.output ?? { digest, source: page.source, frontier: page.frontier,
+          request: { inputLimit: request.inputLimit, frontier: state.projection } };
         // This frontier was emitted by the real Source. Replays revalidate the exact source/version/content.
         const projection = { ...page, frontier: output.frontier };
-        const receipt = Object.freeze({ [nativeSourceRepairReceipt]: true as const });
         repairs = page.repairLocators.map((locator) => ({
           kind: locator.dependencies.some(
             (dependency) => 'route' in dependency && partitionOf(dependency.route) !== state.partition,
@@ -801,7 +962,13 @@ export function createPublicFilterSourceBinding(
           locator,
           source: page.source,
           projection,
-          receipt,
+          receipt: Object.freeze({
+            [nativeSourceRepairReceipt]: true as const,
+            bootstrap: bootstrap.id,
+            execution: request.execution,
+            step,
+            locatorDigest: hash(encode(locator)),
+          }),
         }));
         next =
           page.status === 'complete'
@@ -810,7 +977,8 @@ export function createPublicFilterSourceBinding(
       }
     }
     checkDeadline(context);
-    const step = old?.step ?? randomUUID();
+    if (replay && encode({ input: state, next, output }) !== encode(replay))
+      throw new BindingError('binding_mismatch');
     if (!old) {
       const saved = await repairSave.run(db, {
         bootstrap: id,
@@ -819,6 +987,8 @@ export function createPublicFilterSourceBinding(
         predecessor: request.frontier ?? '',
         state: encode({ input: state, next, output } satisfies RepairRecord),
         complete,
+        input_limit: request.inputLimit,
+        repair_locator_digests: packRepairLocatorDigests(repairs.map((repair) => repair.locator), request.inputLimit),
       });
       // A concurrent successor cannot discard an independently produced Source page. Retry its retained predecessor.
       if (!(Array.isArray(saved) ? saved[0] : saved)) throw new BindingError('binding_mismatch');
@@ -920,6 +1090,209 @@ export function createPublicFilterSourceBinding(
   };
   const bootstrapBinding: PublicFilterSourceBootstrapBinding = {
     ...binding,
+    async readRepairStep(request, context) {
+      const input = structuredClone(request),
+        deadline = context.deadline;
+      return run({ deadline }, async (cost, db) => {
+        if (
+          !input.bootstrap.startsWith('0:') ||
+          !input.execution ||
+          input.execution.length > 4096 ||
+          (input.predecessor !== null && !uuid.test(input.predecessor))
+        )
+          throw new BindingError('binding_mismatch');
+        const bootstrapId = nativeId(input.bootstrap);
+        const joined = await binding.join({ queried: input.queried, execution: input.execution }, { deadline });
+        addCost(cost, joined.cost);
+        if (joined.status !== 'joined') return { ...joined, cost };
+        const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
+        if (
+          cut.row.state !== 'adopted' ||
+          cut.row.queried !== joined.queried.snapshot.observation ||
+          encode(cut.bootstrap.covered) !== encode(joined.covered)
+        )
+          throw new BindingError('binding_mismatch');
+        // Account repair is owned by its native producer; Subject evidence cannot certify it.
+        if ('representation' in cut.definition.capture) throw new BindingError('owner_unavailable');
+        const row = await repairRead.run(db, {
+          bootstrap: bootstrapId,
+          execution: input.execution,
+          predecessor: input.predecessor ?? '',
+        });
+        if (
+          !row ||
+          row.receipt_protocol !== 1 ||
+          row.input_limit === null ||
+          row.predecessor !== input.predecessor
+        )
+          throw new BindingError('owner_unavailable');
+        const record = decode<RepairRecord>(row.state);
+        const receiptDigests = unpackRepairLocatorDigests(row.repair_locator_digests, row.input_limit);
+        // A table's complete bit and an exhausted raw-key enumeration are not an original-cut proof.
+        if (row.complete) throw new BindingError('owner_unavailable');
+        if (!uuid.test(row.step)) throw new BindingError('binding_mismatch');
+        if (record.output) {
+          if (record.input.phase !== 'project' || record.input.subject === null)
+            throw new BindingError('owner_unavailable');
+          const page = await readRetainedPublicFilterProjectionPage(pool, {
+          identity: { bootstrap: nativeId(input.bootstrap), execution: input.execution, predecessor: input.predecessor },
+          subject: record.input.subject,
+          meaning: cut.definition.meaning,
+          inputLimit: row.input_limit,
+          frontier: record.input.projection,
+        }, { deadline });
+        if (!page) throw new BindingError('owner_unavailable');
+          addCost(cost, page.cost);
+          if (page.status !== 'progress' && page.status !== 'complete')
+            throw new BindingError(page.status === 'changed' ? 'binding_mismatch' : 'owner_unavailable');
+          const currentDigests = page.repairLocators.map((locator) => hash(encode(locator)));
+          if (
+            projectionDigest(page) !== record.output.digest ||
+            encode(page.source) !== encode(record.output.source) ||
+            encode(page.frontier) !== encode(record.output.frontier) ||
+            !isDeepStrictEqual(currentDigests, receiptDigests)
+          )
+            throw new BindingError('binding_mismatch');
+          await currentRepairHome(input.bootstrap, input.execution, record.input, page.source, db);
+        } else if (
+          (record.input.phase !== 'scan' && record.input.phase !== 'advance') ||
+          receiptDigests.length !== 0
+        ) {
+          throw new BindingError('owner_unavailable');
+        } else if (record.input.phase === 'advance') {
+          const route = record.input.subject === null ? null : routeOf(record.input.subject);
+          if (
+            route === null ||
+            partitionOf(route) !== record.input.partition ||
+            record.input.epoch === null ||
+            record.next.phase !== 'project' ||
+            record.next.epoch !== record.input.epoch ||
+            record.next.version === null
+          )
+            throw new BindingError('binding_mismatch');
+          const advancement = await repairVersion.run(db, {
+            partition_no: record.input.partition,
+            bootstrap: bootstrapId,
+            execution: input.execution,
+            step: record.input.advance,
+            route,
+            subject_id: record.input.subject!,
+          });
+          const owner = await readPartition(db, record.input.partition);
+          if (
+            !advancement ||
+            advancement.transaction_id === null ||
+            advancement.native_xid === null ||
+            advancement.owner_epoch !== record.input.epoch ||
+            BigInt(advancement.position) !== record.next.version ||
+            !owner ||
+            owner.writeState !== 'active' ||
+            owner.epoch !== advancement.owner_epoch
+          )
+            throw new BindingError('owner_unavailable');
+        }
+        const current = await loadBootstrap(input.bootstrap, db);
+        if (
+          current.row.state !== 'adopted' ||
+          current.row.queried !== cut.row.queried ||
+          encode(current.definition) !== encode(cut.definition)
+        )
+          throw new BindingError('configuration_changed');
+        return {
+          status: 'verified' as const,
+          step: row.step,
+          predecessor: row.predecessor,
+          frontier: row.step,
+          complete: false,
+          receipts: receiptDigests.map((locatorDigest) => ({
+            bootstrap: input.bootstrap,
+            execution: input.execution,
+            step: row.step,
+            locatorDigest,
+          })),
+          cost,
+        };
+      });
+    },
+    async readRepairReceipt(request, context) {
+      // Copy data fields only: neither an in-process brand nor its deserialized absence is evidence.
+      const receipt: NativeSourceRepairLocator = {
+        bootstrap: request.receipt.bootstrap,
+        execution: request.receipt.execution,
+        step: request.receipt.step,
+        locatorDigest: request.receipt.locatorDigest,
+      };
+      const queried = structuredClone(request.queried),
+        execution = request.execution,
+        deadline = context.deadline;
+      return run({ deadline }, async (cost, db) => {
+        if (
+          receipt.execution !== execution ||
+          !uuid.test(receipt.step) ||
+          !/^[0-9a-f]{64}$/.test(receipt.locatorDigest)
+        )
+          throw new BindingError('binding_mismatch');
+        // Preparation stays acyclic: this is basic immutable Search custody, never its settlement reader.
+        const joined = await binding.join({ queried, execution }, { deadline });
+        addCost(cost, joined.cost);
+        if (joined.status !== 'joined') return { ...joined, cost };
+        const cut = await loadBootstrap(receipt.bootstrap, db, joined.definition);
+        if (
+          cut.row.state !== 'adopted' ||
+          cut.row.queried !== joined.queried.snapshot.observation ||
+          encode(cut.bootstrap.covered) !== encode(joined.covered)
+        )
+          throw new BindingError('binding_mismatch');
+        if ('representation' in cut.definition.capture) throw new BindingError('owner_unavailable');
+        const row = await repairState.run(db, {
+          bootstrap: nativeId(receipt.bootstrap),
+          execution,
+          step: receipt.step,
+        });
+        if (!row || row.receipt_protocol !== 1 || row.input_limit === null)
+          throw new BindingError('owner_unavailable');
+        const receiptDigests = unpackRepairLocatorDigests(row.repair_locator_digests, row.input_limit);
+        const record = decode<RepairRecord>(row.state);
+        if (!record.output || record.input.phase !== 'project' || row.complete)
+          throw new BindingError('binding_mismatch');
+        // Resolve the exact original native projection input and allowance. A freshly generated build,
+        // changed continuation, newer Source position or equivalent caller body fails the digest check.
+        const page = await readRetainedPublicFilterProjectionPage(pool, {
+          identity: { bootstrap: nativeId(receipt.bootstrap), execution: execution, predecessor: row.predecessor },
+          subject: record.input.subject!,
+          meaning: cut.definition.meaning,
+          inputLimit: row.input_limit,
+          frontier: record.input.projection,
+        }, { deadline });
+        if (!page) throw new BindingError('owner_unavailable');
+        addCost(cost, page.cost);
+        if (page.status !== 'progress' && page.status !== 'complete')
+          throw new BindingError(page.status === 'changed' ? 'binding_mismatch' : 'owner_unavailable');
+        if (
+          projectionDigest(page) !== record.output.digest ||
+          encode(page.source) !== encode(record.output.source) ||
+          encode(page.frontier) !== encode(record.output.frontier) ||
+          !isDeepStrictEqual(page.repairLocators.map((locator) => hash(encode(locator))), receiptDigests)
+        )
+          throw new BindingError('binding_mismatch');
+        const locator = page.repairLocators.find((candidate) => hash(encode(candidate)) === receipt.locatorDigest);
+        if (!locator) throw new BindingError('binding_mismatch');
+        // Projection readers stage/release their foreign probes. Final local native verification follows.
+        await currentRepairHome(receipt.bootstrap, execution, record.input, page.source, db);
+        const current = await loadBootstrap(receipt.bootstrap, db);
+        if (
+          current.row.state !== 'adopted' ||
+          current.row.queried !== cut.row.queried ||
+          encode(current.definition) !== encode(cut.definition)
+        )
+          throw new BindingError('configuration_changed');
+        return {
+          status: 'verified' as const,
+          repair: producedRepair(receipt.bootstrap, execution, receipt.step, page, locator),
+          cost,
+        };
+      });
+    },
     async begin(request, context) {
       const deadline = context.deadline;
       let capture: PublicSourceCaptureInput, consumer: PublicFilterConsumer;
@@ -1101,9 +1474,26 @@ export function createPublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         await validateOriginalAndFinal(cut.bootstrap, joined, cost, { deadline });
-        // The committed Search custody primitive exposes immutable execution, NOT engine-visible repair
-        // receipts/dispatch settlement. Never turn a custody row, current ACK or Source receipt into that proof.
-        throw new BindingError('owner_unavailable');
+        const settled = await readPublicFilterRepairSettlement(
+          pool,
+          { queried: input.queried, execution: input.execution },
+          { deadline },
+        );
+        addCost(cost, settled.cost);
+        if (settled.status !== 'settled') return { ...settled, cost };
+        requireSameDefinition(cut.definition, settled.definition);
+        if (
+          !isDeepStrictEqual(settled.queried, joined.queried) ||
+          !joined.execution ||
+          settled.execution.id !== joined.execution.id ||
+          !isDeepStrictEqual(settled.execution.start, joined.execution.start) ||
+          !isDeepStrictEqual(settled.execution.ownRows, joined.execution.ownRows)
+        )
+          throw new BindingError('binding_mismatch');
+        // Search performs staged foreign owner reads. Re-read the original Source window after it
+        // releases them; the native settlement locator alone cannot preserve Source currency.
+        await validateOriginalAndFinal(cut.bootstrap, joined, cost, { deadline });
+        return { ...joined, cost };
       });
     },
   };

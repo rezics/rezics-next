@@ -92,6 +92,54 @@ export type PublicFilterProjectionReplayIdentity = Readonly<{
   predecessor: string | null;
 }>;
 
+/** Original producer request, without the caller's transient deadline. */
+export type RetainedPublicFilterProjectionRequest = Readonly<{
+  identity: PublicFilterProjectionReplayIdentity;
+  subject: string;
+  meaning: Pick<PublicFilterProjectionMeaning, 'digest' | 'type'>;
+  inputLimit: number;
+  frontier: PublicFilterProjectionFrontier | null;
+}>;
+
+function originalProjectionRequestDigest(request: RetainedPublicFilterProjectionRequest): string {
+  return replayDigest(encodeReplayValue(request));
+}
+
+/** Read an original page only. A missing page never falls back to current projection.
+ * The Source verifier separately validates the bootstrap, execution and producer step.
+ */
+export async function readRetainedPublicFilterProjectionPage(
+  pool: Pool,
+  request: RetainedPublicFilterProjectionRequest,
+  context: Readonly<{ deadline: number }>,
+): Promise<PublicFilterProjectionPage | null> {
+  requireAccessDeadline(context.deadline);
+  const routed = routePartition(request.subject);
+  if (!routed || !UUID.test(request.identity.bootstrap) ||
+    !request.identity.execution || request.identity.execution.length > 4096 ||
+    (request.identity.predecessor !== null && !UUID.test(request.identity.predecessor)) ||
+    !Number.isInteger(request.inputLimit) || request.inputLimit < 1 || request.inputLimit > 1000)
+    throw new TypeError('Invalid original projection page locator');
+  const stored = await withConnection(pool, (client) => readOriginalPage.run(client, {
+    partition_no: 0,
+    bootstrap: request.identity.bootstrap,
+    execution: request.identity.execution,
+    predecessor: request.identity.predecessor ?? '',
+    route: routed.route,
+    subject_id: request.subject,
+    request_digest: originalProjectionRequestDigest(request),
+  }));
+  requireAccessDeadline(context.deadline);
+  if (!stored) return null;
+  if (replayDigest(stored.page_data) !== stored.page_digest)
+    throw new Error('Retained projection page digest mismatch');
+  const page = decodeReplayValue<PublicFilterProjectionPage>(stored.page_data);
+  if ((page.status !== 'complete' && page.status !== 'progress') ||
+    page.source.subject !== request.subject || page.source.partition !== routed.partition)
+    throw new Error('Retained projection page identity mismatch');
+  return page;
+}
+
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -1100,15 +1148,13 @@ export async function readOriginalPublicFilterProjectionPage(
     !validMeaning(request.meaning)
   )
     throw new TypeError('Invalid retained projection request');
-  const requestKey = replayDigest(
-    encodeReplayValue({
+  const requestKey = originalProjectionRequestDigest({
       identity,
       subject: request.subject,
       meaning: { digest: request.meaning.digest, type: request.meaning.type },
       inputLimit: request.inputLimit,
       frontier: request.frontier,
-    }),
-  );
+    });
   const values = {
     partition_no: 0,
     bootstrap: identity.bootstrap,
@@ -1133,12 +1179,13 @@ export async function readOriginalPublicFilterProjectionPage(
       frontierWrites: page.cost.frontierWrites + (delta.frontierWrites ?? 0),
     },
   });
-  const lookup = async (): Promise<PublicFilterProjectionPage | null> => {
-    const stored = await withConnection(config.pool, (client) => readOriginalPage.run(client, values));
-    if (!stored) return null;
-    if (replayDigest(stored.page_data) !== stored.page_digest) throw new Error('Retained projection page digest mismatch');
-    return decodeReplayValue<PublicFilterProjectionPage>(stored.page_data);
-  };
+  const lookup = () => readRetainedPublicFilterProjectionPage(config.pool, {
+    identity,
+    subject: request.subject,
+    meaning: { digest: request.meaning.digest, type: request.meaning.type },
+    inputLimit: request.inputLimit,
+    frontier: request.frontier,
+  }, request.context);
 
   const retained = await lookup();
   if (retained) return addCost(retained, { inputKeys: 1 });
