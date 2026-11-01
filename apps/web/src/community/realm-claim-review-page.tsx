@@ -1,4 +1,4 @@
-import { useId, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useSyncExternalStore } from 'react';
 import { ArrowRight, Check, CircleHelp, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../shell/page-heading';
@@ -10,6 +10,7 @@ import {
   type RealmClaimReviewRead,
   type RealmClaimReviewRequest,
 } from './realm-claim-review';
+import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
 
 function OriginalDate({ value }: { value: string }) {
   return (
@@ -67,20 +68,50 @@ export function RealmClaimReviewView({
   initial,
   adapter,
   ready = true,
+  load = false,
+  lifetime,
+  connectionRevision = 0,
 }: {
   realmId: string;
   initial: RealmClaimReviewRead;
   adapter: RealmClaimReviewAdapter;
   ready?: boolean;
+  load?: boolean;
+  lifetime?: RealmClaimCallerLifetime;
+  connectionRevision?: number;
 }) {
   const id = useId();
-  const control = useMemo(() => createRealmClaimReview(realmId, initial, adapter), [realmId, initial, adapter]);
-  const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
+  const control = useMemo(
+    () => createRealmClaimReview(realmId, initial, adapter, undefined, lifetime),
+    [realmId, initial, adapter, lifetime],
+  );
+  const snapshot = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
+  useEffect(() => {
+    control.reconnect();
+    if (load || (lifetime && connectionRevision > 0)) {
+      const ticket = lifetime?.ticket();
+      queueMicrotask(() => {
+        if (lifetime && ticket !== undefined && !lifetime.owns(ticket)) return;
+        void control.refresh();
+      });
+    }
+    return () => control.disconnect();
+  }, [control, load, lifetime, connectionRevision]);
+  const active = ready && (!lifetime || lifetime.current());
+  const hidden: typeof snapshot = {
+    read: { kind: 'unavailable' },
+    cursor: undefined,
+    intent: null,
+    receipt: null,
+    outcome: 'refused',
+    busy: false,
+  };
+  const state = active ? snapshot : hidden;
   const page = state.read.kind === 'ready' ? state.read.page : null;
   const confirming = page && state.outcome === 'confirming' ? state.intent : null;
   const denied = state.read.kind === 'denied' || state.read.kind === 'signed-out' || state.read.kind === 'closed';
   const receipt = page && state.outcome === 'approved' ? state.receipt : null;
-  const editable = ready && !state.busy && state.outcome === 'idle';
+  const editable = active && !state.busy && state.outcome === 'idle';
   return (
     <article className="space-y-8 text-foreground" aria-busy={state.busy}>
       <header className="flex flex-wrap items-start justify-between gap-5 border-b pb-6">
@@ -92,7 +123,12 @@ export function RealmClaimReviewView({
           <PageHeading>{m.realm_review_heading()}</PageHeading>
           <p className="text-pretty leading-7 text-muted-foreground">{m.realm_review_intro()}</p>
         </div>
-        <Button variant="outline" className="min-h-10" disabled={state.busy} onClick={() => void control.refresh()}>
+        <Button
+          variant="outline"
+          className="min-h-10"
+          disabled={!active || state.busy}
+          onClick={() => void control.refresh()}
+        >
           <RefreshCw className={state.busy ? 'animate-spin' : ''} aria-hidden="true" />
           {state.busy ? m.realm_review_working() : m.realm_review_refresh()}
         </Button>
@@ -121,7 +157,7 @@ export function RealmClaimReviewView({
                 <Button
                   variant="outline"
                   className="min-h-10"
-                  disabled={!ready || state.busy}
+                  disabled={!active || state.busy}
                   onClick={() => void control.retry()}
                 >
                   {m.realm_review_retry()}
@@ -197,7 +233,7 @@ export function RealmClaimReviewView({
               </div>
               <RequestDetails request={confirming.source} />
               <div className="flex flex-wrap gap-3">
-                <Button className="min-h-11" disabled={!ready || state.busy} onClick={() => void control.confirm()}>
+                <Button className="min-h-11" disabled={!active || state.busy} onClick={() => void control.confirm()}>
                   {m.realm_review_confirm()}
                 </Button>
                 <Button variant="outline" className="min-h-11" disabled={state.busy} onClick={() => control.cancel()}>

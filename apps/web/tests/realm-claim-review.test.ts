@@ -14,6 +14,7 @@ import {
   type RealmClaimReviewEnv,
 } from '../src/community/realm-claim-review-native';
 import { RealmClaimReviewView } from '../src/community/realm-claim-review-page';
+import { createRealmClaimCallerLifetime } from '../src/community/realm-claim-caller-lifetime';
 
 const row: RealmClaimReviewRequest = {
   realmId: '01a1a000-0000-7000-8000-000000000011',
@@ -42,6 +43,13 @@ const request = () =>
     method: 'POST',
     headers: { authorization: 'Bearer current-viewer' },
   });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 describe('Platform Realm claim review and genuine native approval journey', () => {
   test('uses the actual generated approval method, explicit confirmation, exact receipt and fresh queue', async () => {
@@ -185,6 +193,91 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     await control.next();
     expect(reads).toEqual([{ realmId, cursor: 'opaque-next' }]);
     expect(control.getSnapshot().read).toEqual(pending);
+  });
+
+  test('retirement fences late prepare, uncertain retry and approval receipt refresh', async () => {
+    let current = true;
+    const prepareRead = deferred<RealmClaimReviewRead>();
+    const prepareLifetime = createRealmClaimCallerLifetime(() => current);
+    let prepareSends = 0;
+    const preparing = createRealmClaimReview(
+      realmId,
+      pending,
+      {
+        read: () => prepareRead.promise,
+        approve: async () => {
+          prepareSends++;
+          return { kind: 'approved', claim };
+        },
+      },
+      () => idempotencyKey,
+      prepareLifetime,
+    );
+    const preparingResult = preparing.prepare(requestId);
+    current = false;
+    prepareLifetime.current();
+    prepareRead.resolve(pending);
+    await preparingResult;
+    expect(prepareSends).toBe(0);
+    expect(preparing.getSnapshot()).toMatchObject({ read: { kind: 'unavailable' }, intent: null });
+
+    current = true;
+    const approval = deferred<RealmClaimApprovalResult>();
+    const approvalLifetime = createRealmClaimCallerLifetime(() => current);
+    let approvalReads = 0;
+    const approving = createRealmClaimReview(
+      realmId,
+      pending,
+      {
+        read: async () => {
+          approvalReads++;
+          return pending;
+        },
+        approve: () => approval.promise,
+      },
+      () => idempotencyKey,
+      approvalLifetime,
+    );
+    await approving.prepare(requestId);
+    const approvalResult = approving.confirm();
+    expect(approvalReads).toBe(1);
+    current = false;
+    approvalLifetime.current();
+    approval.resolve({ kind: 'approved', claim });
+    await approvalResult;
+    expect(approvalReads).toBe(1);
+    expect(approving.getSnapshot()).toMatchObject({ read: { kind: 'unavailable' }, receipt: null });
+
+    current = true;
+    const retryRead = deferred<RealmClaimReviewRead>();
+    const retryLifetime = createRealmClaimCallerLifetime(() => current);
+    let retries = 0;
+    let retryReads = 0;
+    const retrying = createRealmClaimReview(
+      realmId,
+      pending,
+      {
+        read: () => {
+          retryReads++;
+          return retryReads === 1 ? Promise.resolve(pending) : retryRead.promise;
+        },
+        approve: async () => {
+          retries++;
+          return retries === 1 ? { kind: 'unavailable' } : { kind: 'approved', claim };
+        },
+      },
+      () => idempotencyKey,
+      retryLifetime,
+    );
+    await retrying.prepare(requestId);
+    await retrying.confirm();
+    const retryResult = retrying.retry();
+    current = false;
+    retryLifetime.current();
+    retryRead.resolve(empty);
+    await retryResult;
+    expect(retries).toBe(1);
+    expect(retrying.getSnapshot()).toMatchObject({ read: { kind: 'unavailable' }, receipt: null });
   });
 
   test('closed bounded payloads reject private fields, malformed identifiers and false success', async () => {

@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
 
 /** Consumer declaration only. The native queue producer owns selection and current admission. */
 export type RealmClaimReviewPage = {
@@ -16,9 +17,18 @@ export type RealmClaimReviewPage = {
 export type RealmClaimReviewRequest = RealmClaimReviewPage['claimRequests'][number];
 type ApprovalMethod = ReturnType<ReturnType<KernelClient['realms']>['claimRequests']>['$approve']['post'];
 export type RealmClaimApprovalReceipt = NonNullable<Awaited<ReturnType<ApprovalMethod>>['data']>['claim'];
-export type RealmClaimReviewRead =
+type RealmClaimReviewReadValue =
   | { kind: 'ready'; page: RealmClaimReviewPage }
   | { kind: 'denied' | 'signed-out' | 'closed' | 'unavailable' };
+export type RealmClaimReviewRead = RealmClaimReviewReadValue & {
+  /** Private route-loader binding; the response DTO and native reader do not include these fields. */
+  callerRealmId?: string;
+  callerSessionSourceId?: number;
+  callerSessionSubject?: string;
+  callerSessionDataUpdateCount?: number;
+  callerSessionDataUpdatedAt?: number;
+};
+export type RealmClaimReviewLoaderRead = RealmClaimReviewRead;
 export type RealmClaimApprovalInput = { realmId: string; requestId: string; idempotencyKey: string };
 export type RealmClaimApprovalResult =
   | { kind: 'approved'; claim: RealmClaimApprovalReceipt }
@@ -127,9 +137,10 @@ export function createRealmClaimReview(
   initial: RealmClaimReviewRead,
   adapter: RealmClaimReviewAdapter,
   key: () => string = () => crypto.randomUUID(),
+  lifetime?: RealmClaimCallerLifetime,
 ) {
   function safe(read: RealmClaimReviewRead): RealmClaimReviewRead {
-    if (read.kind !== 'ready') return read;
+    if (read.kind !== 'ready') return { kind: read.kind };
     const page = realmClaimReviewPage(read.page, realmId);
     return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   }
@@ -141,22 +152,50 @@ export function createRealmClaimReview(
     outcome: 'idle',
     busy: false,
   };
+  const initialState = state;
   const listeners = new Set<() => void>();
+  let operationGeneration = 0;
+  let disconnected = false;
+  const hiddenState: RealmClaimReviewState = {
+    read: { kind: 'unavailable' },
+    cursor: undefined,
+    intent: null,
+    receipt: null,
+    outcome: 'refused',
+    busy: false,
+  };
   function update(change: Partial<RealmClaimReviewState>) {
     state = { ...state, ...change };
     listeners.forEach((listener) => listener());
   }
-  async function load(cursor: string | undefined): Promise<RealmClaimReviewRead> {
+  type Ticket = { operation: number; caller: number };
+  function begin(): Ticket | null {
+    if (disconnected || (lifetime && !lifetime.current())) return null;
+    return { operation: ++operationGeneration, caller: lifetime?.ticket() ?? 0 };
+  }
+  function owns(ticket: Ticket): boolean {
+    return (
+      !disconnected &&
+      operationGeneration === ticket.operation &&
+      (!lifetime || lifetime.owns(ticket.caller))
+    );
+  }
+  async function load(cursor: string | undefined, ticket: Ticket): Promise<RealmClaimReviewRead | null> {
+    if (!owns(ticket)) return null;
     try {
-      return safe(await adapter.read({ realmId, ...(cursor ? { cursor } : {}) }));
+      const read = await adapter.read({ realmId, ...(cursor !== undefined ? { cursor } : {}) });
+      return owns(ticket) ? safe(read) : null;
     } catch {
-      return { kind: 'unavailable' };
+      return owns(ticket) ? { kind: 'unavailable' } : null;
     }
   }
   async function refresh(cursor = state.cursor) {
     if (state.busy) return;
+    const ticket = begin();
+    if (!ticket) return;
     update({ busy: true, read: { kind: 'unavailable' } });
-    const read = await load(cursor);
+    const read = await load(cursor, ticket);
+    if (!read || !owns(ticket)) return;
     update({
       read,
       cursor,
@@ -164,16 +203,21 @@ export function createRealmClaimReview(
       ...(state.outcome === 'confirming' ? { intent: null, outcome: 'idle' as const } : {}),
     });
   }
-  async function send() {
-    const intent = state.intent;
-    if (!intent || state.busy || state.read.kind !== 'ready') return;
+  async function send(ticket: Ticket, intent = state.intent) {
+    if (!owns(ticket) || !intent || state.busy || state.read.kind !== 'ready') return;
     update({ busy: true, outcome: 'sending', read: { kind: 'unavailable' } });
     let result: RealmClaimApprovalResult;
     try {
-      result = await adapter.approve({ realmId, requestId: intent.requestId, idempotencyKey: intent.idempotencyKey });
+      if (!owns(ticket)) return;
+      result = await adapter.approve({
+        realmId: intent.realmId,
+        requestId: intent.requestId,
+        idempotencyKey: intent.idempotencyKey,
+      });
     } catch {
       result = { kind: 'unavailable' };
     }
+    if (!owns(ticket)) return;
     const receipt = result.kind === 'approved' ? realmClaimApprovalReceipt({ claim: result.claim }, intent) : null;
     if (
       result.kind === 'approved' &&
@@ -184,7 +228,8 @@ export function createRealmClaimReview(
       result = { kind: 'unavailable' };
     if (result.kind === 'approved' && receipt) {
       // A receipt alone never enables another approval. Re-read the first native page first.
-      const read = await load(undefined);
+      const read = await load(undefined, ticket);
+      if (!read || !owns(ticket)) return;
       update({ receipt, read, cursor: undefined, outcome: 'approved', busy: false });
     } else if (result.kind === 'unavailable') {
       update({ outcome: 'uncertain', busy: false });
@@ -199,7 +244,10 @@ export function createRealmClaimReview(
     }
   }
   return {
-    getSnapshot: () => state,
+    getSnapshot: () => {
+      if (lifetime && !lifetime.current()) return hiddenState;
+      return state;
+    },
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -220,37 +268,62 @@ export function createRealmClaimReview(
     },
     async prepare(requestId: string) {
       if (state.busy || state.intent || state.outcome !== 'idle' || state.read.kind !== 'ready') return;
+      const ticket = begin();
+      if (!ticket) return;
       const source = state.read.page.claimRequests.find((row) => row.requestId === requestId);
       if (!source) return;
       update({ busy: true, read: { kind: 'unavailable' } });
-      const read = await load(state.cursor);
+      const read = await load(state.cursor, ticket);
+      if (!read || !owns(ticket)) return;
       const current = read.kind === 'ready' ? read.page.claimRequests.find((row) => row.requestId === requestId) : null;
       if (current && sameSource(source, current)) {
+        const frozenSource = Object.freeze({ ...current });
         update({
           read,
           busy: false,
           outcome: 'confirming',
-          intent: { realmId, requestId, idempotencyKey: key(), source: { ...current } },
+          intent: Object.freeze({
+            realmId,
+            requestId,
+            idempotencyKey: key(),
+            source: frozenSource,
+          }),
         });
       } else update({ read, busy: false, outcome: read.kind === 'ready' ? 'conflict' : 'refused' });
     },
     cancel() {
+      if (lifetime && !lifetime.current()) return;
       if (!state.busy && state.outcome === 'confirming') update({ intent: null, outcome: 'idle' });
     },
     async confirm() {
-      if (state.outcome === 'confirming') await send();
+      if (state.outcome !== 'confirming') return;
+      const ticket = begin();
+      if (ticket) await send(ticket);
     },
     async retry() {
       if (state.busy || state.outcome !== 'uncertain' || !state.intent) return;
+      const ticket = begin();
+      if (!ticket) return;
       update({ busy: true, read: { kind: 'unavailable' } });
-      const read = await load(state.cursor);
+      const read = await load(state.cursor, ticket);
+      if (!read || !owns(ticket)) return;
       update({ read, busy: false });
       // Replay may recover an applied result even if its request has left the pending queue.
-      if (read.kind === 'ready') await send();
+      if (read.kind === 'ready') await send(ticket, state.intent);
     },
     reviewCurrent() {
+      if (lifetime && !lifetime.current()) return;
       if (!state.busy && state.read.kind === 'ready' && ['approved', 'conflict', 'refused'].includes(state.outcome))
         update({ intent: null, receipt: null, outcome: 'idle' });
+    },
+    disconnect() {
+      disconnected = true;
+      operationGeneration++;
+      if (!lifetime) state = { ...initialState, busy: false };
+      listeners.forEach((listener) => listener());
+    },
+    reconnect() {
+      disconnected = false;
     },
   };
 }

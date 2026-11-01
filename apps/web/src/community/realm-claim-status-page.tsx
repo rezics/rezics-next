@@ -3,6 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { createRealmClaimStatus, type RealmClaimStatusAdapter, type RealmClaimStatusRead } from './realm-claim-status';
+import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
 
 function NativeDate({ value }: { value: string }) {
   return (
@@ -23,25 +24,43 @@ export function RealmClaimStatusView({
   initial,
   adapter,
   load = false,
+  ready = true,
+  lifetime,
+  connectionRevision = 0,
 }: {
   realmId: string;
   requestId: string;
   initial: RealmClaimStatusRead;
   adapter: RealmClaimStatusAdapter;
   load?: boolean;
+  ready?: boolean;
+  lifetime?: RealmClaimCallerLifetime;
+  connectionRevision?: number;
 }) {
   const id = useId();
   const control = useMemo(
-    () => createRealmClaimStatus({ realmId, requestId }, initial, adapter),
-    [realmId, requestId, adapter],
+    () => createRealmClaimStatus({ realmId, requestId }, initial, adapter, lifetime),
+    [realmId, requestId, adapter, lifetime],
   );
-  const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
+  const snapshot = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   useEffect(() => {
+    control.reconnect();
     control.observe(initial);
+    return () => control.disconnect();
   }, [control, initial]);
   useEffect(() => {
-    if (load) void control.refresh();
-  }, [control, load]);
+    if (load || (lifetime && connectionRevision > 0)) {
+      const ticket = lifetime?.ticket();
+      queueMicrotask(() => {
+        if (lifetime && ticket !== undefined && !lifetime.owns(ticket)) return;
+        void control.refresh();
+      });
+    }
+  }, [control, load, lifetime, connectionRevision]);
+  const active = ready && (!lifetime || lifetime.current());
+  const state = active
+    ? snapshot
+    : { read: initial.kind === 'signed-out' ? initial : { kind: 'unavailable' as const }, busy: false };
   const receipt = state.read.kind === 'ready' ? state.read.claimRequest : null;
   return (
     <article className="mx-auto w-full max-w-3xl space-y-7 px-4 py-8 sm:px-6" aria-labelledby={`${id}-heading`}>
@@ -111,7 +130,12 @@ export function RealmClaimStatusView({
                     : m.realm_claim_status_unavailable()}
           </p>
         )}
-        <Button variant="outline" className="min-h-11" disabled={state.busy} onClick={() => void control.refresh()}>
+        <Button
+          variant="outline"
+          className="min-h-11"
+          disabled={!active || state.busy}
+          onClick={() => void control.refresh()}
+        >
           {state.busy ? m.realm_claim_status_checking() : m.realm_claim_status_check_again()}
         </Button>
       </section>

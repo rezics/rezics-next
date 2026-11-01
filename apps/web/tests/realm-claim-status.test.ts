@@ -18,6 +18,7 @@ import {
 } from '../src/community/realm-claim-status';
 import { readRealmClaimStatus, type RealmClaimStatusEnv } from '../src/community/realm-claim-status-native';
 import { RealmClaimStatusView } from '../src/community/realm-claim-status-page';
+import { createRealmClaimCallerLifetime } from '../src/community/realm-claim-caller-lifetime';
 import recording from '../src/kernel/recorded/realm.json';
 
 const realmId = recording.realm.realmId;
@@ -337,4 +338,26 @@ test('historical pending differs from approval and closed DTOs exclude private i
   expect(
     realmClaimStatusResponse({ claimRequest: { ...pending, currentEpisode: false } }, { realmId }),
   ).toBeUndefined();
+});
+
+test('caller retirement withholds the original status and suppresses its late point read', async () => {
+  const late = deferred<RealmClaimStatusRead>();
+  let current = true;
+  let reads = 0;
+  const lifetime = createRealmClaimCallerLifetime(() => current);
+  const control = createRealmClaimStatus({ realmId, requestId }, own, {
+    read: () => {
+      reads++;
+      return late.promise;
+    },
+  }, lifetime);
+  const refreshing = control.refresh();
+  expect(control.getSnapshot().read.kind).toBe('unavailable');
+  expect(reads).toBe(1);
+  current = false;
+  lifetime.current();
+  late.resolve(own);
+  await refreshing;
+  expect(control.getSnapshot()).toMatchObject({ read: { kind: 'unavailable' }, busy: false });
+  expect(reads).toBe(1);
 });

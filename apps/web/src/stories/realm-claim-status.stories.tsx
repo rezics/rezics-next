@@ -9,7 +9,7 @@ import type { RealmClaimStatus, RealmClaimStatusRead } from '../community/realm-
 import { orphan, receipt, eligible } from './patterns/realm-claim/example';
 import { m } from '../paraglide/messages.js';
 
-export type StatusScenario = 'pending' | 'approved' | 'unrelated' | 'unavailable' | 'reload' | 'obsolete';
+export type StatusScenario = 'pending' | 'approved' | 'unrelated' | 'unavailable' | 'reload' | 'obsolete' | 'withheld';
 export function RealmClaimStatusExample({
   scenario = 'pending',
   receiptRecovery = false,
@@ -75,6 +75,7 @@ export function RealmClaimStatusExample({
       initial={scenario === 'reload' ? reloading : fixture.read}
       adapter={fixture.adapter}
       load={scenario === 'reload'}
+      ready={scenario !== 'withheld'}
     />
   );
 }
@@ -93,7 +94,7 @@ const meta = {
   title: 'Pages/Community/Realm Claim Status',
   component: StatusPage,
   parameters: { layout: 'fullscreen' },
-  includeStories: ['Pending', 'Approved', 'Unrelated', 'Unavailable', 'Reload', 'ObsoleteEpisode'],
+  includeStories: ['Pending', 'Approved', 'Unrelated', 'Unavailable', 'Reload', 'ObsoleteEpisode', 'SessionWithheld'],
 } satisfies Meta<typeof StatusPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -121,3 +122,12 @@ export const Reload: Story = {
   },
 };
 export const ObsoleteEpisode: Story = { args: { scenario: 'obsolete' } };
+export const SessionWithheld: Story = {
+  args: { scenario: 'withheld' },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('heading', { name: m.realm_claim_status_heading() })).toBeVisible();
+    await expect(view.queryByText(receipt.requestId)).toBeNull();
+    await expect(view.queryByText('2026-10-31T10:00:00.000Z')).toBeNull();
+  },
+};

@@ -1,4 +1,5 @@
 import { validateRealmClaimRead, type RealmClaimSnapshot } from './realm-claim';
+import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
 
 /** Declared requester DTO; the original native reader owns identity and episode decisions. */
 export type RealmClaimStatus = Readonly<{
@@ -56,6 +57,7 @@ export function createRealmClaimStatus(
   input: RealmClaimStatusInput,
   initial: RealmClaimStatusRead,
   adapter: RealmClaimStatusAdapter,
+  lifetime?: RealmClaimCallerLifetime,
 ) {
   function current(read: RealmClaimStatusRead): RealmClaimStatusRead {
     if (
@@ -67,15 +69,21 @@ export function createRealmClaimStatus(
       return { kind: 'unavailable' };
     return read;
   }
-  let state = { read: current(initial), busy: false };
+  const initialRead = current(initial);
+  let state = { read: initialRead, busy: false };
   let generation = 0;
+  let disconnected = false;
   const listeners = new Set<() => void>();
+  const hiddenState = { read: { kind: 'unavailable' as const }, busy: false };
   function update(read: RealmClaimStatusRead, busy = false) {
     state = { read: current(read), busy };
     for (const listener of listeners) listener();
   }
+  function callerCurrent() {
+    return !disconnected && (!lifetime || lifetime.current());
+  }
   return {
-    getSnapshot: () => state,
+    getSnapshot: () => (callerCurrent() ? state : hiddenState),
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -83,22 +91,38 @@ export function createRealmClaimStatus(
       };
     },
     observe(read: RealmClaimStatusRead) {
+      if (!callerCurrent()) return;
       generation++;
       update(read);
     },
     async refresh() {
-      if (state.busy) return;
+      if (state.busy || !callerCurrent()) return;
       const version = ++generation;
+      const callerTicket = lifetime?.ticket() ?? 0;
+      const owns = () =>
+        !disconnected &&
+        generation === version &&
+        (!lifetime || lifetime.owns(callerTicket));
       // Never leave an old positive receipt visible while current disclosure is being checked.
       update({ kind: 'unavailable' }, true);
       let read: RealmClaimStatusRead;
       try {
+        if (!owns()) return;
         read = await adapter.read(input);
       } catch {
         read = { kind: 'unavailable' };
       }
-      if (version !== generation) return;
+      if (!owns()) return;
       update(read);
+    },
+    disconnect() {
+      disconnected = true;
+      generation++;
+      if (!lifetime) state = { read: initialRead, busy: false };
+      for (const listener of listeners) listener();
+    },
+    reconnect() {
+      disconnected = false;
     },
   };
 }
