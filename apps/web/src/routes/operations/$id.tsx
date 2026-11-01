@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { useCallback } from 'react';
 import { requireSignedIn } from '../../session/guard';
-import { useSession } from '../../session/query';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { m } from '../../paraglide/messages.js';
@@ -19,20 +19,14 @@ export const Route = createFileRoute('/operations/$id')({
   component: function OperationRoute() {
     const { id } = Route.useParams();
     const initial = Route.useLoaderData();
-    const { state: session } = useSession();
-    // Hydration must not remount the operation and replenish its refresh budget.
-    const sessionKey = session === 'unknown' ? 'signed-in' : session;
+    const location = useLocation();
+    const read = useCallback(() => readThreadAuthorErasure({ data: { id } }), [id]);
     return (
       <AuthorErasureOperationPage
-        key={`${id}:${sessionKey}`}
-        initial={
-          session === 'signed-out'
-            ? { kind: 'signed-out' }
-            : session === 'unavailable'
-              ? { kind: 'unavailable' }
-              : initial
-        }
-        read={() => readThreadAuthorErasure({ data: { id } })}
+        initial={initial}
+        operationId={id}
+        navigationKey={location.key}
+        read={read}
       />
     );
   },

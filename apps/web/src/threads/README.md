@@ -27,3 +27,26 @@ already accepted native command is neither cancelled nor undone.
 This behavior protects against accidental departure. It does not persist drafts or promise recovery after reload,
 tab closure, authentication expiry or reopening the thread. Composer copy describes writing as unsaved and does not
 claim server autosave. The guard does not create, replay or alter a write command or its authority.
+
+## Author erasure caller lifetime
+
+The mounted author-erasure entry binds its admission and command to the current thread, viewer, signed-in session,
+CSRF token and component lifetime. It reads the existing session query cache without adding a session request. Cache
+notifications record each identity transition, including away/back and same-account token replacement, before React
+can batch the visible render. Readiness loss retires the visit. Target changes and unmount do the same.
+
+Admission results are private to that visit. A queued command checks the original visit before and after its async
+server-function import and immediately before starting transport. It captures the visit's CSRF token before that
+boundary, so it cannot borrow a replacement session. Synchronous duplicate confirmation is suppressed. Confirmation
+and the immutable request/key remain available when the secondary action closes and reopens; an uncertain response
+can retry only that exact request from the same visit. A retired caller never presents late admission/progress,
+changes replacement state, calls success/navigation callbacks or claims the remote command was cancelled or not
+applied.
+
+The operation route binds loader data and displayed progress to the operation id and current authenticated viewer.
+Account, readiness, CSRF, route, source or read replacement withholds old private counters and requires an actual
+current read before they can reappear. Session hydration does not remount a valid visit or restore its four-read
+foreground budget. Automatic reads remain visible-tab-only and capped at four; terminal operations and refusals stop
+automatic refresh. Explicit manual recovery remains available for a nonterminal unavailable result, and a late read
+cannot update a replacement visit or replenish its budget. A caller read failure stays unavailable rather than
+claiming completion.

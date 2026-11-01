@@ -57,6 +57,9 @@ export const EnqueueLostResponse: Story = {
     await expect(editor).toHaveTextContent('Keep the seedlings in partial shade.');
     await expect(canvas.getByRole('button', { name: m.thread_reply_cancel_target() })).toBeVisible();
     await expect(canvas.getAllByRole('textbox', { name: m.thread_reply_label() })).toHaveLength(1);
+    await userEvent.click(canvas.getByRole('button', { name: m.thread_content_more_actions() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.thread_content_more_actions() }));
+    await expect(canvas.getByRole('alert')).toHaveTextContent(m.author_erasure_uncertain());
     await userEvent.click(canvas.getByRole('button', { name: m.author_erasure_retry() }));
     await expect(await canvas.findByRole('heading', { name: m.author_erasure_queued() })).toBeVisible();
     await expect(canvas.queryByText(m.author_erasure_completed())).toBeNull();

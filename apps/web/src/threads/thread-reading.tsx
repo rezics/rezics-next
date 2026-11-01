@@ -1,7 +1,7 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { reactionKinds } from '@rezics/ui/reactions';
-import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import { QueryClientContext } from '@tanstack/react-query';
 import {
   useCallback,
   useContext,
@@ -19,7 +19,6 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { PageAuthors } from '../identity/read';
 import type { SessionState } from '../session/state';
-import { sessionQuery, type useSession } from '../session/query';
 import { rememberThreadSlug, threadLocation } from './thread-href';
 import type { ThreadSubject } from './subjects';
 import type { LoadedThreadPage, ThreadPost } from './thread-page';
@@ -30,6 +29,7 @@ import { replyToThread } from './actions';
 import { csrfHeaders, draftFetch } from './composer';
 import { ThreadReplyComposer } from './reply-context-composer';
 import { AuthorErasureEntry } from './author-erasure-entry';
+import { authorErasureSessionSource } from './author-erasure-lifetime';
 
 export type ThreadReadingPage = LoadedThreadPage & {
   authors: PageAuthors;
@@ -38,44 +38,6 @@ export type ThreadReadingPage = LoadedThreadPage & {
   now: string;
 };
 export type ThreadReadingPersonal = Awaited<ReturnType<typeof readThreadPersonal>> & { idempotencyKey: string };
-
-/** Read the existing session cache; notifications remember transitions React may batch away. */
-function observeParentSession(client: QueryClient | undefined) {
-  const read = () => client?.getQueryData<ReturnType<typeof useSession>>(sessionQuery.queryKey);
-  const identity = () => {
-    const session = read();
-    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
-  };
-  let previous = identity();
-  let revision = 0;
-  const snapshot = () => {
-    const next = identity();
-    if (next !== previous) {
-      previous = next;
-      revision++;
-    }
-    return revision;
-  };
-  return {
-    read,
-    snapshot,
-    serverSnapshot: () => 0,
-    subscribe: (notify: () => void) => {
-      let notified = snapshot();
-      return (
-        client?.getQueryCache().subscribe(({ query }) => {
-          if (query.queryKey.length !== sessionQuery.queryKey.length || query.queryKey[0] !== sessionQuery.queryKey[0])
-            return;
-          const next = snapshot();
-          if (next !== notified) {
-            notified = next;
-            notify();
-          }
-        }) ?? (() => {})
-      );
-    },
-  };
-}
 
 /** The real reading region; native commands, one composer and immutable revision views stay together. */
 export function ThreadReading({
@@ -135,7 +97,7 @@ export function ThreadReading({
   // Private data is consumed only while the session still says signed in.
   const currentPersonal = session === 'signed-in' ? personal : undefined;
   const client = useContext(QueryClientContext);
-  const observation = useMemo(() => observeParentSession(client), [client]);
+  const observation = useMemo(() => authorErasureSessionSource(client), [client]);
   const sessionRevision = observation.snapshot();
   const parentScope = useMemo(
     () => ({}),
@@ -382,7 +344,7 @@ export function ThreadReading({
                 {/* Closing secondary actions must retain the actor's confirmation and uncertain command intent. */}
                 <CollapsibleContent id={`thread-actions-${thread.id}`} keepMounted className="pt-2">
                   <AuthorErasureEntry
-                    key={`${thread.id}:${composer.current.viewerId}`}
+                    key={`${thread.id}:${composer.current.viewerId}:${sessionRevision}`}
                     threadId={thread.id}
                     viewerId={currentPersonal?.viewerId ?? null}
                     {...authorErasure}

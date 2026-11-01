@@ -58,8 +58,8 @@ export function authorErasureAdmissionReads() {
   let version = 0;
   let value: AuthorErasureAdmission = { kind: 'unavailable' };
   return {
-    bind(threadId: string, authorId: string | null, open: boolean) {
-      const next = JSON.stringify([threadId, authorId, open]);
+    bind(threadId: string, authorId: string | null, open: boolean, sessionRevision = 0) {
+      const next = JSON.stringify([threadId, authorId, open, sessionRevision]);
       if (next !== scope) {
         scope = next;
         version++;
@@ -67,8 +67,18 @@ export function authorErasureAdmissionReads() {
       }
       return value;
     },
-    async refresh(authorId: string, read: () => Promise<AuthorErasureAdmission>) {
+    retire() {
+      version++;
+      scope = '';
+      value = { kind: 'unavailable' };
+    },
+    async refresh(
+      authorId: string,
+      read: () => Promise<AuthorErasureAdmission>,
+      isCurrent: () => boolean = () => true,
+    ) {
       const ticket = ++version;
+      const originalScope = scope;
       value = { kind: 'unavailable' };
       let result: AuthorErasureAdmission;
       try {
@@ -76,7 +86,7 @@ export function authorErasureAdmissionReads() {
       } catch {
         result = { kind: 'unavailable' };
       }
-      if (ticket !== version) return false;
+      if (ticket !== version || originalScope !== scope || !isCurrent()) return false;
       value = result.kind === 'current' && result.authorId !== authorId ? { kind: 'unavailable' } : result;
       return true;
     },

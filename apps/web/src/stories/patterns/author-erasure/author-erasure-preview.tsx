@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { parseAuthorErasureAdmission } from '../../../threads/author-erasure-admission';
 import { AuthorErasureOperationPage } from '../../../threads/author-erasure-operation';
 import { ThreadReading } from '../../../threads/thread-reading';
@@ -127,12 +127,13 @@ export function AuthorErasurePreview({
 }) {
   const [accepted, setAccepted] = useState(false);
   const entry = (state === 'lost-response' || state.endsWith('-entry')) && !accepted;
-  const operation = erasureStoryOperation(accepted ? 'queued' : state);
-  const current: ErasureRead = { kind: 'available', operation };
+  const operation = useMemo(() => erasureStoryOperation(accepted ? 'queued' : state), [accepted, state]);
+  const current: ErasureRead = useMemo(() => ({ kind: 'available', operation }), [operation]);
+  const read = useCallback(async () => current, [current]);
   const content = entry ? (
     <EntryThread state={state} onAccepted={() => setAccepted(true)} />
   ) : (
-    <AuthorErasureOperationPage initial={current} read={async () => current} />
+    <AuthorErasureOperationPage initial={current} operationId={operationId} read={read} />
   );
   return (
     <PatternStory visitor="Signed In" path={entry ? threadHref(owned.thread) : `/operations/${operationId}`}>

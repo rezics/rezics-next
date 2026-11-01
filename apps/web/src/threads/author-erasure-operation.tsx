@@ -1,11 +1,22 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { QueryClientContext } from '@tanstack/react-query';
 import { ArrowLeft, CheckCircle2, Clock3, LoaderCircle, ShieldAlert } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { threadLocation } from './thread-href';
-import { authorErasureRefreshes, erasureRefreshLimit, erasureStage, type ErasureRead } from './author-erasure';
+import {
+  authorErasureRefreshes,
+  erasureStage,
+  type ErasureOperation,
+  type ErasureRead,
+} from './author-erasure';
 import { erasureRefusal } from './author-erasure-entry';
+import {
+  authorErasureSessionIsAuthenticated,
+  authorErasureSessionSource,
+  type AuthorErasureSessionSource,
+} from './author-erasure-lifetime';
 
 function terminalError(code: number): string {
   if (code === 7 || code === 16) return m.author_erasure_terminal_permission();
@@ -14,62 +25,317 @@ function terminalError(code: number): string {
   return m.author_erasure_terminal_failed();
 }
 
-/** The authenticated route supplies only one current native operation. No workflow restoration runs here. */
+type RefreshBudget = ReturnType<typeof authorErasureRefreshes>;
+type RefreshKind = 'automatic' | 'manual' | 'validation';
+
+type OperationVisit = {
+  readonly operationId: string;
+  readonly navigationKey: string;
+  readonly read: () => Promise<ErasureRead>;
+  readonly source: AuthorErasureSessionSource;
+  readonly revision: number;
+  readonly sessionBound: boolean;
+  readonly budget: RefreshBudget;
+  state: ErasureRead;
+  pending: boolean;
+  automatic: boolean;
+  needsRead: boolean;
+  retired: boolean;
+  connected: boolean;
+  connection: number;
+  serial: number;
+  version: number;
+  listeners: Set<() => void>;
+  publish: () => void;
+  snapshot: () => number;
+  subscribe: (listener: () => void) => () => void;
+  isCurrent: (serial?: number, connection?: number) => boolean;
+  currentState: () => ErasureRead;
+  connect: () => void;
+  disconnect: () => void;
+  retire: (notify?: boolean) => void;
+  stopAutomatic: () => void;
+  remaining: () => number;
+  refresh: (kind: RefreshKind) => Promise<void>;
+};
+
+function operationFor(read: ErasureRead): ErasureOperation | null {
+  return read.kind === 'available' ? read.operation : null;
+}
+
+function operationMatches(read: ErasureRead, operationId: string, subject?: string): boolean {
+  const operation = operationFor(read);
+  return (
+    !operation ||
+    (operation.name === `operations/${operationId}` && (subject === undefined || operation.metadata.authorId === subject))
+  );
+}
+
+function unavailableFor(session: ReturnType<AuthorErasureSessionSource['read']>): ErasureRead {
+  return session?.state === 'signed-out' ? { kind: 'signed-out' } : { kind: 'unavailable' };
+}
+
+function createOperationVisit(input: {
+  operationId: string;
+  navigationKey: string;
+  read: () => Promise<ErasureRead>;
+  source: AuthorErasureSessionSource;
+  revision: number;
+  sessionBound: boolean;
+  budget: RefreshBudget;
+  state: ErasureRead;
+  needsRead: boolean;
+  automatic?: boolean;
+}): OperationVisit {
+  const visit: OperationVisit = {
+    ...input,
+    pending: false,
+    automatic: input.automatic ?? true,
+    retired: false,
+    connected: false,
+    connection: 0,
+    serial: 0,
+    version: 0,
+    listeners: new Set(),
+    publish() {
+      visit.version += 1;
+      for (const listener of visit.listeners) listener();
+    },
+    snapshot: () => visit.version,
+    subscribe(listener) {
+      visit.listeners.add(listener);
+      return () => visit.listeners.delete(listener);
+    },
+    isCurrent(serial = visit.serial, connection = visit.connection) {
+      if (
+        visit.retired ||
+        !visit.connected ||
+        serial !== visit.serial ||
+        connection !== visit.connection ||
+        (visit.sessionBound && visit.source.snapshot() !== visit.revision)
+      )
+        return false;
+      if (!visit.sessionBound) return true;
+      const session = visit.source.read();
+      if (!authorErasureSessionIsAuthenticated(session)) return false;
+      const operation = operationFor(visit.state);
+      return !operation || operation.metadata.authorId === session.subject;
+    },
+    currentState() {
+      if (visit.sessionBound && visit.source.snapshot() !== visit.revision) return { kind: 'unavailable' };
+      if (!visit.sessionBound) return visit.state;
+      const session = visit.source.read();
+      if (!authorErasureSessionIsAuthenticated(session)) return unavailableFor(session);
+      return operationMatches(visit.state, visit.operationId, session.subject) ? visit.state : { kind: 'unavailable' };
+    },
+    connect() {
+      if (visit.retired) return;
+      visit.connected = true;
+      visit.connection += 1;
+    },
+    disconnect() {
+      visit.connected = false;
+      visit.connection += 1;
+      visit.serial += 1;
+      const disconnectedAt = visit.connection;
+      queueMicrotask(() => {
+        if (!visit.connected && visit.connection === disconnectedAt) visit.retire();
+      });
+    },
+    retire(notify = true) {
+      if (visit.retired) return;
+      visit.retired = true;
+      visit.connected = false;
+      visit.connection += 1;
+      visit.serial += 1;
+      visit.pending = false;
+      visit.needsRead = false;
+      if (notify) visit.publish();
+    },
+    stopAutomatic() {
+      if (!visit.automatic) return;
+      visit.automatic = false;
+      visit.publish();
+    },
+    remaining: () => visit.budget.remaining(),
+    async refresh(kind) {
+      if (!visit.isCurrent() || visit.pending) return;
+      const currentOperation = operationFor(visit.state);
+      if (kind === 'automatic') {
+        if (
+          !visit.automatic ||
+          visit.remaining() === 0 ||
+          !currentOperation ||
+          currentOperation.done ||
+          typeof document === 'undefined' ||
+          document.visibilityState !== 'visible'
+        )
+          return;
+      }
+      if (kind === 'validation') visit.needsRead = false;
+      const serial = ++visit.serial;
+      const connection = visit.connection;
+      visit.pending = true;
+      visit.publish();
+      let next: ErasureRead | null;
+      try {
+        if (kind === 'automatic') next = await visit.budget.foreground(document.visibilityState === 'visible');
+        else next = await visit.read();
+      } catch {
+        next = { kind: 'unavailable' };
+      }
+      if (!visit.isCurrent(serial, connection)) return;
+      visit.pending = false;
+      if (next) {
+        const session = visit.sessionBound ? visit.source.read() : undefined;
+        visit.state = operationMatches(next, visit.operationId, session?.subject) ? next : { kind: 'unavailable' };
+        if (visit.state.kind !== 'available' || visit.state.operation.done) visit.automatic = false;
+      }
+      visit.publish();
+    },
+  };
+  return visit;
+}
+
+function initialState(
+  initial: ErasureRead,
+  operationId: string,
+  source: AuthorErasureSessionSource,
+  sessionBound: boolean,
+): { state: ErasureRead; needsRead: boolean } {
+  if (!sessionBound) {
+    return operationMatches(initial, operationId)
+      ? { state: initial, needsRead: false }
+      : { state: { kind: 'unavailable' }, needsRead: false };
+  }
+  const session = source.read();
+  if (!authorErasureSessionIsAuthenticated(session))
+    return { state: unavailableFor(session), needsRead: true };
+  if (!operationMatches(initial, operationId, session.subject))
+    return { state: { kind: 'unavailable' }, needsRead: true };
+  return { state: initial, needsRead: false };
+}
+
+/** The authenticated route supplies a loader read; the mounted caller owns later progress reads. */
 export function AuthorErasureOperationPage({
   initial,
   read,
+  operationId: suppliedOperationId,
+  navigationKey = '',
 }: {
   initial: ErasureRead;
   read: () => Promise<ErasureRead>;
+  operationId?: string;
+  navigationKey?: string;
 }) {
-  const [state, setState] = useState(initial);
-  const [pending, setPending] = useState(false);
-  const [remaining, setRemaining] = useState(erasureRefreshLimit);
-  const [automatic, setAutomatic] = useState(true);
+  const client = useContext(QueryClientContext);
+  const source = authorErasureSessionSource(client);
+  const revision = useSyncExternalStore(source.subscribe, source.snapshot, source.serverSnapshot);
+  const derivedOperationId =
+    suppliedOperationId ??
+    (initial.kind === 'available' ? initial.operation.name.slice('operations/'.length) : '');
+  const routeScope = JSON.stringify([derivedOperationId, navigationKey]);
+  const budget = useRef<{ scope: string; value: RefreshBudget } | null>(null);
   const reader = useRef(read);
   reader.current = read;
-  const budget = useRef<ReturnType<typeof authorErasureRefreshes> | null>(null);
-  budget.current ??= authorErasureRefreshes(() => reader.current());
-  const busy = useRef(false);
-  const alive = useRef(true);
+  if (!budget.current || budget.current.scope !== routeScope) {
+    budget.current = {
+      scope: routeScope,
+      value: authorErasureRefreshes(() => reader.current()),
+    };
+  }
+  const sessionBound = client !== undefined;
+  const visitRef = useRef<OperationVisit | null>(null);
+  const previousProps = useRef<{
+    operationId: string;
+    navigationKey: string;
+    initial: ErasureRead;
+    read: () => Promise<ErasureRead>;
+    source: AuthorErasureSessionSource;
+    revision: number;
+  } | null>(null);
+  const prior = visitRef.current;
+  const previous = previousProps.current;
+  if (!prior) {
+    const prepared = initialState(initial, derivedOperationId, source, sessionBound);
+    visitRef.current = createOperationVisit({
+      operationId: derivedOperationId,
+      navigationKey,
+      read,
+      source,
+      revision,
+      sessionBound,
+      budget: budget.current.value,
+      ...prepared,
+    });
+  } else if (previous) {
+    const routeChanged = previous.operationId !== derivedOperationId || previous.navigationKey !== navigationKey;
+    const sourceChanged = previous.source !== source;
+    const sessionChanged = previous.revision !== revision;
+    const callerChanged = previous.initial !== initial || previous.read !== read || sourceChanged;
+    if (routeChanged || callerChanged || sessionChanged) {
+      const oldState = prior.state;
+      const oldOperation = operationFor(oldState);
+      const needsCurrentRead = !!derivedOperationId && (routeChanged || callerChanged || sessionChanged);
+      const currentSession = source.read();
+      const ready = !sessionBound || authorErasureSessionIsAuthenticated(currentSession);
+      prior.retire(false);
+      const state = ready ? { kind: 'unavailable' as const } : unavailableFor(currentSession);
+      visitRef.current = createOperationVisit({
+        operationId: derivedOperationId,
+        navigationKey,
+        read,
+        source,
+        revision,
+        sessionBound,
+        budget: budget.current.value,
+        state,
+        needsRead: needsCurrentRead && ready,
+        automatic: prior.automatic && (!oldOperation || !oldOperation.done),
+      });
+    }
+  }
+  previousProps.current = { operationId: derivedOperationId, navigationKey, initial, read, source, revision };
+  const visit = visitRef.current!;
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      const offVisit = visit.subscribe(notify);
+      const offSession = source.subscribe(notify);
+      return () => {
+        offVisit();
+        offSession();
+      };
+    },
+    [source, visit],
+  );
+  const snapshot = useCallback(
+    () => JSON.stringify([source.snapshot(), visit.snapshot()]),
+    [source, visit],
+  );
+  useSyncExternalStore(subscribe, snapshot, () => '[0,0]');
+
+  useLayoutEffect(() => {
+    visit.connect();
+    return () => visit.disconnect();
+  }, [visit]);
+  useEffect(() => {
+    if (visit.needsRead) void visit.refresh('validation');
+  }, [visit]);
+
+  const state = visit.currentState();
   const available = state.kind === 'available';
   const operation = available ? state.operation : null;
   const stage = operation ? erasureStage(operation) : null;
-
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
-  async function refresh(foreground: boolean) {
-    if (busy.current) return;
-    busy.current = true;
-    setPending(true);
-    let next: ErasureRead | null;
-    try {
-      next = foreground
-        ? await budget.current!.foreground(document.visibilityState === 'visible')
-        : await reader.current();
-    } catch {
-      next = { kind: 'unavailable' };
-    }
-    busy.current = false;
-    if (!alive.current) return;
-    setPending(false);
-    setRemaining(budget.current!.remaining());
-    if (next) {
-      setState(next);
-      if (next.kind !== 'available') setAutomatic(false);
-    }
-  }
+  const remaining = visit.remaining();
+  const automatic = visit.automatic;
+  const pending = visit.pending;
 
   useEffect(() => {
     if (!operation || operation.done || !automatic || remaining === 0 || pending) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = () => {
       clearTimeout(timer);
-      if (document.visibilityState === 'visible') timer = setTimeout(() => void refresh(true), 2000);
+      if (document.visibilityState === 'visible') timer = setTimeout(() => void visit.refresh('automatic'), 2000);
     };
     schedule();
     document.addEventListener('visibilitychange', schedule);
@@ -77,7 +343,7 @@ export function AuthorErasureOperationPage({
       clearTimeout(timer);
       document.removeEventListener('visibilitychange', schedule);
     };
-  }, [operation, automatic, remaining, pending]);
+  }, [visit, operation, automatic, remaining, pending]);
 
   const title =
     stage === 'completed'
@@ -99,6 +365,7 @@ export function AuthorErasureOperationPage({
           : Clock3;
   const counters = operation?.done && operation.response ? operation.response : operation?.metadata;
   const manual = !automatic || remaining === 0 || !operation;
+  const canManuallyRead = !sessionBound || authorErasureSessionIsAuthenticated(source.read());
   return (
     <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6" data-slot="author-erasure-operation">
       <header className="space-y-2">
@@ -154,10 +421,10 @@ export function AuthorErasureOperationPage({
         {manual && !operation?.done ? (
           <Button
             variant="outline"
-            disabled={pending}
+            disabled={pending || !canManuallyRead}
             onClick={() => {
-              setAutomatic(false);
-              void refresh(false);
+              visit.stopAutomatic();
+              void visit.refresh('manual');
             }}
           >
             {pending ? m.author_erasure_checking() : m.author_erasure_check_again()}
