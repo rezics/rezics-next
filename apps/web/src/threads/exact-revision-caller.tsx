@@ -136,10 +136,7 @@ function sessionAdmissionCurrent(
   const local = visitSources.get(visit);
   if (local?.source === source) {
     if (visit.admission.credentialMode === 'session')
-      return (
-        snapshot.revision === visit.admission.session.revision &&
-        snapshot.tuple === local.capturedTuple
-      );
+      return snapshot.revision === visit.admission.session.revision && snapshot.tuple === local.capturedTuple;
     return snapshot.authorityRevision === visit.admission.session.authorityRevision;
   }
 

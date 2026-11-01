@@ -462,7 +462,9 @@ test('post, revision and locale transitions withhold the old view until the rout
     await page.settle(2, readyFor(nextPost, nextRevision));
     expect(reads[2]!.data.postId).toBe(nextPost);
     const activeMatch = page.router.state.matches.find((match) => match.routeId === '/posts/$id/revisions/$revisionId');
-    expect((activeMatch?.loaderData as { admission?: { locale?: string } } | undefined)?.admission?.locale).toBe('zh-Hant');
+    expect((activeMatch?.loaderData as { admission?: { locale?: string } } | undefined)?.admission?.locale).toBe(
+      'zh-Hant',
+    );
     expect(page.host.querySelector(`a[href^="/${getLocale()}/threads/"]`)).not.toBeNull();
     expect(reads).toHaveLength(3);
   } finally {
