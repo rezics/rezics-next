@@ -124,9 +124,7 @@ function InitialFacts({
           </section>
         );
       })}
-      <div
-        className="flex flex-wrap items-end gap-3 max-md:flex-col max-md:items-stretch pointer-coarse:flex-col pointer-coarse:items-stretch"
-      >
+      <div className="flex flex-wrap items-end gap-3 max-md:flex-col max-md:items-stretch pointer-coarse:flex-col pointer-coarse:items-stretch">
         <Field className="w-full min-w-0 flex-1">
           <FieldLabel htmlFor="literary-initial-property">{m.refinement_property({}, o)}</FieldLabel>
           <NativeSelect
@@ -325,9 +323,7 @@ export function LiteraryProfile({
         aria-label={m.literary_identity({}, o)}
         className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
       >
-        <h2 className="break-words text-xl font-semibold [overflow-wrap:anywhere]">
-          {m.literary_identity({}, o)}
-        </h2>
+        <h2 className="break-words text-xl font-semibold [overflow-wrap:anywhere]">{m.literary_identity({}, o)}</h2>
         <p className="min-w-0 break-words [overflow-wrap:anywhere]">
           <a
             lang={title.lang ?? undefined}
