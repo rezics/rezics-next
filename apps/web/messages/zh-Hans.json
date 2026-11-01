@@ -4080,5 +4080,8 @@
   "moderation_decision_read_unavailable": "无法读取当前决定。请重试以查看最新状态。",
   "moderation_decision_read_closed": "当前会话无法查看此决定。",
   "moderation_decision_read_platform_closed": "此平台目前未开放内容审核。",
-  "moderation_decision_read_retry": "重新读取当前决定"
+  "moderation_decision_read_retry": "重新读取当前决定",
+  "reporter_status_read_loading": "正在加载你的举报…",
+  "reporter_status_read_concealed": "此举报不存在，或在当前会话中不可见。",
+  "reporter_status_read_closed": "此平台暂不提供举报状态。"
 }

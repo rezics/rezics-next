@@ -4082,5 +4082,8 @@
   "moderation_decision_read_unavailable": "The current decision could not be read. Try again to check its latest state.",
   "moderation_decision_read_closed": "This decision is unavailable for your current session.",
   "moderation_decision_read_platform_closed": "Moderation is currently closed on this platform.",
-  "moderation_decision_read_retry": "Retry current decision"
+  "moderation_decision_read_retry": "Retry current decision",
+  "reporter_status_read_loading": "Loading your report…",
+  "reporter_status_read_concealed": "This report is unknown or not visible in your current session.",
+  "reporter_status_read_closed": "Report status is not available on this platform."
 }

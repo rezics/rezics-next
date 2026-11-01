@@ -227,3 +227,172 @@ test('actual submitted report page resolves its owned source and renders exactly
     else delete runtime.__rezicsStoryContext;
   }
 });
+
+// Authored for integration; intentionally UNRUN under this worker's typing-only execution policy.
+test('The default private reporter-status journey retires submitted evidence and late reads on viewer or browser-session replacement and offers explicit recovery for a transient current read', async () => {
+  const { dirname } = await import('node:path');
+  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const window = new Window({ url: 'https://site.test/en/moderation/reports/01a17a3b-0884-721b-91ef-d7ffd7bb58f3' });
+  const globals = {
+    window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
+    Element: window.Element, Node: window.Node, MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { act } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { ReporterStatusCurrent } = await import('../src/moderation/reporter-status-view');
+  const { prepareReporterStatusRead } = await import('../src/moderation/reporter-status-read-model');
+  const { sessionQuery } = await import('../src/session/query');
+  const { m } = await import('../src/paraglide/messages.js');
+  const reader = await import('../src/moderation/reporter-status-read');
+  const originalRead = reader.readReporterStatus;
+  const requestRead = reader.loadReporterStatusRequest;
+  const id = '01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
+  const report = { ...submission, id };
+  const original = { state: 'signed-in' as const, subject: submission.reporterId, csrfToken: 'first-browser-session' };
+  let browser = original;
+  let status = 200;
+  let release: (() => void) | undefined;
+  let gate: Promise<void> | undefined;
+  const calls: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      calls.push(`${request.method} ${new URL(request.url).pathname}`);
+      expect(request.headers.get('authorization')).toBe(`Bearer ${browser.subject}`);
+      const responseStatus = status;
+      const responseReport = { ...report, reporterId: browser.subject };
+      if (gate) await gate;
+      return Response.json(responseStatus === 200 ? { report: responseReport } : {
+        code: responseStatus === 404 ? 'not_found' : responseStatus === 403 ? 'forbidden' : 'dependency_unavailable',
+        detail: 'Private infrastructure diagnostics',
+      }, { status: responseStatus });
+    }) as typeof fetch,
+  });
+  const sessionEnv = {
+    AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: '{}',
+    SESSIONS: { idFromName: (name: string) => name, get: () => ({ credential: async () => ({
+      status: 'active', subject: browser.subject, accessToken: browser.subject, csrfToken: browser.csrfToken,
+    }) }) },
+  } as unknown as import('../src/session/client').SessionEnv;
+  // Replace only the server-function transport; retain real preparation, generated GET and private projection.
+  const transport = ({ data }: { data: { id: string; generation: string } }) => requestRead(
+    new Request(window.location.href, { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } }),
+    sessionEnv, data, () => client,
+  );
+  mock.module('../src/moderation/reporter-status-read', () => ({ ...reader, readReporterStatus: transport }));
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const flush = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  const setSession = async (session: typeof original | { state: 'signed-out'; subject: null; csrfToken: null }) => {
+    if (session.state === 'signed-in') browser = session;
+    await act(async () => { cache.setQueryData(sessionQuery.queryKey, session); });
+  };
+  const load = () => prepareReporterStatusRead(cache, id, (data) => transport({ data }));
+  const mount = async () => {
+    const initial = await load();
+    await act(async () => root.render(createElement(QueryClientProvider, { client: cache },
+      createElement(ReporterStatusCurrent, { key: initial.generation, initial }))));
+  };
+  const retry = async () => {
+    const button = [...host.querySelectorAll('button')].find((item) => item.textContent?.includes(m.sources_retry()));
+    expect(button).toBeDefined();
+    await act(async () => { button!.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  };
+  const absent = () => {
+    for (const bytes of [report.evidence!, report.revisionId!, report.target.id, 'Private infrastructure diagnostics'])
+      expect(host.textContent).not.toContain(bytes);
+    expect(host.querySelectorAll('a')).toHaveLength(1);
+  };
+  try {
+    await setSession(original);
+    await mount();
+    expect(host.textContent).toContain(report.evidence!);
+    expect(host.textContent).toContain(m.moderation_target_unavailable());
+    // A real cache replacement for the same account retires the loaded report and pending clipboard settlement.
+    let copied!: () => void;
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: {
+      writeText: () => new Promise<void>((resolve) => { copied = resolve; }),
+    } });
+    const copy = [...host.querySelectorAll('button')].find((item) => item.textContent?.includes(m.reporter_status_copy()));
+    await act(async () => { copy!.click(); });
+    await setSession({ ...original, csrfToken: 'replacement-browser-session' });
+    absent();
+    await setSession(original);
+    await act(async () => copied());
+    absent();
+    expect(host.textContent).not.toContain(m.reporter_status_copied());
+
+    // A current native transient failure offers exactly one explicit read per click and no automatic retry.
+    status = 503;
+    await mount();
+    expect(host.textContent).toContain(m.reporter_status_unavailable());
+    absent();
+    const before = calls.length;
+    await flush();
+    expect(calls).toHaveLength(before);
+    status = 200;
+    await retry();
+    expect(calls).toHaveLength(before + 1);
+    expect(host.textContent).toContain(report.evidence!);
+
+    // Session replacement while a route read is pending cannot be undone by returning to the old session.
+    gate = new Promise((resolve) => { release = resolve; });
+    const pending = load();
+    await flush();
+    await setSession({ ...original, csrfToken: 'pending-replacement' });
+    absent();
+    await setSession(original);
+    release!();
+    const late = await pending;
+    expect(late.result.state).toBe('concealed');
+    gate = undefined;
+
+    // The default retry path also rejects a late response across account replacement.
+    status = 503;
+    await mount();
+    status = 200;
+    gate = new Promise((resolve) => { release = resolve; });
+    await retry();
+    expect(host.textContent).toContain(m.reporter_status_read_loading());
+    await setSession({ ...original, subject: 'different-reporter' });
+    await setSession(original);
+    release!();
+    await flush();
+    absent();
+    gate = undefined;
+
+    for (const denial of [403, 404]) {
+      status = denial;
+      await mount();
+      expect(host.textContent).toContain(m.reporter_status_read_concealed());
+      expect(host.querySelector('button')).toBeNull();
+      absent();
+    }
+    status = 200;
+    await mount();
+    await setSession({ state: 'signed-out', subject: null, csrfToken: null });
+    absent();
+    await setSession(original);
+    absent();
+    await mount();
+    await act(async () => root.render(null));
+    expect(host.textContent).toBe('');
+    expect(calls.every((call) => call === `GET /v1/reports/${id}`)).toBe(true);
+  } finally {
+    release?.();
+    await act(async () => root.unmount());
+    cache.clear();
+    mock.module('../src/moderation/reporter-status-read', () => ({ ...reader, readReporterStatus: originalRead }));
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});

@@ -4079,5 +4079,8 @@
   "moderation_decision_read_unavailable": "無法讀取目前的決定。請重試以查看最新狀態。",
   "moderation_decision_read_closed": "目前的工作階段無法查看此決定。",
   "moderation_decision_read_platform_closed": "此平台目前未開放內容審核。",
-  "moderation_decision_read_retry": "重新讀取目前的決定"
+  "moderation_decision_read_retry": "重新讀取目前的決定",
+  "reporter_status_read_loading": "正在載入你的檢舉…",
+  "reporter_status_read_concealed": "此檢舉不存在，或在目前的工作階段中不可見。",
+  "reporter_status_read_closed": "此平台暫不提供檢舉狀態。"
 }

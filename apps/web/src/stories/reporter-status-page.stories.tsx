@@ -1,3 +1,8 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { useState } from 'react';
+import { AppShell } from '../shell/shell';
+import { ReporterStatusPage } from '../moderation/reporter-status-view';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
@@ -40,3 +45,36 @@ export const SubmittedReport: Story = {
     await expect(page.getAllByRole('link')).toHaveLength(1);
   },
 };
+
+/** Explicit page-state fixtures complement the actual routed SubmittedReport story above. */
+function ReadStatePage({ retired = false }: { retired?: boolean }) {
+  const [cache] = useState(() => new QueryClient());
+  const [router] = useState(() => {
+    const route = createRootRoute({
+      component: () => (
+        <AppShell>
+          {retired ? (
+            <ReporterStatusPage state="concealed" />
+          ) : (
+            <ReporterStatusPage
+              onRetry={async () => {
+                throw new Error('Report status unavailable');
+              }}
+            />
+          )}
+        </AppShell>
+      ),
+    });
+    return createRouter({
+      routeTree: route,
+      history: createMemoryHistory({ initialEntries: ['/moderation/reports/private'] }),
+    });
+  });
+  return (
+    <QueryClientProvider client={cache}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  );
+}
+export const ReadUnavailable: Story = { render: () => <ReadStatePage /> };
+export const SessionRetired: Story = { render: () => <ReadStatePage retired /> };

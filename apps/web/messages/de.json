@@ -4079,5 +4079,8 @@
   "moderation_decision_read_unavailable": "Die aktuelle Entscheidung konnte nicht gelesen werden. Versuche es erneut, um den neuesten Stand zu prüfen.",
   "moderation_decision_read_closed": "Diese Entscheidung ist für deine aktuelle Sitzung nicht verfügbar.",
   "moderation_decision_read_platform_closed": "Die Moderation ist auf dieser Plattform derzeit geschlossen.",
-  "moderation_decision_read_retry": "Aktuelle Entscheidung erneut laden"
+  "moderation_decision_read_retry": "Aktuelle Entscheidung erneut laden",
+  "reporter_status_read_loading": "Dein Bericht wird geladen…",
+  "reporter_status_read_concealed": "Dieser Bericht ist unbekannt oder in deiner aktuellen Sitzung nicht sichtbar.",
+  "reporter_status_read_closed": "Der Berichtsstatus ist auf dieser Plattform nicht verfügbar."
 }

@@ -4079,5 +4079,8 @@
   "moderation_decision_read_unavailable": "現在の判断を読み込めませんでした。再試行して最新の状態を確認してください。",
   "moderation_decision_read_closed": "現在のセッションでは、この判断を閲覧できません。",
   "moderation_decision_read_platform_closed": "このプラットフォームでは現在、モデレーションを利用できません。",
-  "moderation_decision_read_retry": "現在の判断を再読み込み"
+  "moderation_decision_read_retry": "現在の判断を再読み込み",
+  "reporter_status_read_loading": "あなたの通報を読み込み中…",
+  "reporter_status_read_concealed": "この通報は存在しないか、現在のセッションでは表示できません。",
+  "reporter_status_read_closed": "このプラットフォームでは通報状況を確認できません。"
 }

@@ -1,7 +1,14 @@
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ArrowLeft, Check, CircleCheck, CircleMinus, Clock3, Copy, LoaderCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  createReporterStatusJourney,
+  type ReporterStatusRead,
+  type ReporterStatusReader,
+  type ReporterStatusResult,
+} from './reporter-status-read-model';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import type { ReporterStatus } from './reporter-status-model';
@@ -9,7 +16,12 @@ import type { ReporterStatus } from './reporter-status-model';
 type Retry = () => void | Promise<void>;
 
 /** The served page and its stories share this composition within the site's AppShell. */
-export function ReporterStatusPage(props: { report: ReporterStatus } | { onRetry: Retry }) {
+export function ReporterStatusPage(
+  props:
+    | { report: ReporterStatus; isCurrent?: () => boolean }
+    | { onRetry: Retry }
+    | { state: 'loading' | 'concealed' | 'closed' },
+) {
   return (
     <section className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10" aria-labelledby="reporter-status-heading">
       <a
@@ -20,17 +32,62 @@ export function ReporterStatusPage(props: { report: ReporterStatus } | { onRetry
         {m.reporter_status_back()}
       </a>
       {'report' in props ? (
-        <ReporterStatusView report={props.report} />
-      ) : (
+        <ReporterStatusView report={props.report} {...(props.isCurrent ? { isCurrent: props.isCurrent } : {})} />
+      ) : 'onRetry' in props ? (
         <ReporterStatusFailure onRetry={props.onRetry} />
+      ) : (
+        <ReporterStatusReadState state={props.state} />
       )}
+    </section>
+  );
+}
+
+const readCurrent: ReporterStatusReader = async (data) =>
+  (await import('./reporter-status-read')).readReporterStatus({ data });
+
+/** Default route composition, with synchronous observation of the real browser session cache. */
+export function ReporterStatusCurrent({ initial }: { initial: ReporterStatusRead }) {
+  const cache = useQueryClient();
+  const journey = useMemo(() => createReporterStatusJourney(cache, initial, readCurrent), [cache, initial]);
+  const result = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.serverSnapshot);
+  return <ReporterStatusResultPage result={result} onRetry={() => journey.retry()} isCurrent={journey.isCurrent} />;
+}
+
+export function ReporterStatusResultPage({
+  result,
+  onRetry,
+  isCurrent,
+}: {
+  result: ReporterStatusResult;
+  onRetry: Retry;
+  isCurrent?: () => boolean;
+}) {
+  if (result.state === 'loaded')
+    return <ReporterStatusPage report={result.report} {...(isCurrent ? { isCurrent } : {})} />;
+  if (result.state === 'unavailable') return <ReporterStatusPage onRetry={onRetry} />;
+  return <ReporterStatusPage state={result.state} />;
+}
+
+export function ReporterStatusReadState({ state }: { state: 'loading' | 'concealed' | 'closed' }) {
+  return (
+    <section className="space-y-6" aria-labelledby="reporter-status-heading">
+      <h1 id="reporter-status-heading" className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+        {m.reporter_status_heading()}
+      </h1>
+      <p role="status" className="leading-7 text-muted-foreground">
+        {state === 'loading'
+          ? m.reporter_status_read_loading()
+          : state === 'closed'
+            ? m.reporter_status_read_closed()
+            : m.reporter_status_read_concealed()}
+      </p>
     </section>
   );
 }
 
 /** Own-submission presentation has no shadcn equivalent; it composes existing controls.
  * Available is an annotation, never permission or a link to the target. */
-export function ReporterStatusView({ report }: { report: ReporterStatus }) {
+export function ReporterStatusView({ report, isCurrent }: { report: ReporterStatus; isCurrent?: () => boolean }) {
   const reason = {
     off_topic: m.report_off_topic,
     inappropriate: m.report_inappropriate,
@@ -125,24 +182,36 @@ export function ReporterStatusView({ report }: { report: ReporterStatus }) {
             : m.reporter_status_saved_reference()}
         </p>
       </section>
-      <ReportReference report={report} />
+      <ReportReference key={report.id} report={report} {...(isCurrent ? { isCurrent } : {})} />
     </article>
   );
 }
 
-function ReportReference({ report }: { report: ReporterStatus }) {
+function ReportReference({ report, isCurrent = () => true }: { report: ReporterStatus; isCurrent?: () => boolean }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const lifetime = useRef(0);
+  const copyGeneration = useRef(0);
+  useEffect(() => {
+    lifetime.current++;
+    return () => {
+      lifetime.current++;
+    };
+  }, [report]);
   const reference = [
     { label: m.reporter_status_report_id(), value: report.id },
     { label: m.reporter_status_target(), value: `${report.target.kind} ${report.target.id}` },
     ...(report.revisionId ? [{ label: m.reporter_status_revision(), value: report.revisionId }] : []),
   ];
   async function copy() {
+    if (!isCurrent()) return;
+    const mounted = lifetime.current;
+    const attempt = ++copyGeneration.current;
+    const current = () => mounted === lifetime.current && attempt === copyGeneration.current && isCurrent();
     try {
       await navigator.clipboard.writeText(reference.map(({ label, value }) => `${label}: ${value}`).join('\n'));
-      setCopyState('copied');
+      if (current()) setCopyState('copied');
     } catch {
-      setCopyState('failed');
+      if (current()) setCopyState('failed');
     }
   }
   return (

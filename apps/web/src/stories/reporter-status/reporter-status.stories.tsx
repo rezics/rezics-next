@@ -1,6 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { ReporterStatusFailure, ReporterStatusView } from '../../moderation/reporter-status-view';
+import { useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReporterStatusRead, ReporterStatusResult } from '../../moderation/reporter-status-read-model';
+import {
+  ReporterStatusCurrent,
+  ReporterStatusFailure,
+  ReporterStatusReadState,
+  ReporterStatusResultPage,
+  ReporterStatusView,
+} from '../../moderation/reporter-status-view';
 import { reporterStatusViewports, submittedReport } from './fixture';
 import { m } from '../../paraglide/messages.js';
 
@@ -114,5 +123,81 @@ export const Retry: Story = {
     await expect(retry).toHaveBeenCalled();
     await waitFor(() => expect(button).toBeEnabled());
     await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(m.reporter_status_unavailable());
+  },
+};
+
+export const Loading: Story = {
+  render: () => <ReporterStatusReadState state="loading" />,
+};
+export const Concealed: Story = {
+  render: () => <ReporterStatusReadState state="concealed" />,
+};
+export const PlatformClosed: Story = {
+  render: () => <ReporterStatusReadState state="closed" />,
+};
+
+function RecoveryExample() {
+  const [result, setResult] = useState<ReporterStatusResult>({ state: 'unavailable' });
+  return (
+    <ReporterStatusResultPage
+      result={result}
+      onRetry={async () => {
+        setResult({ state: 'loading' });
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        setResult({ state: 'loaded', report: { ...submittedReport, targetAvailability: 'unavailable' } });
+      }}
+    />
+  );
+}
+export const Recovery: Story = {
+  render: () => <RecoveryExample />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText(evidence)).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.sources_retry() }));
+    await expect(await canvas.findByText(evidence)).toBeVisible();
+    await expect(canvas.getByText(m.moderation_target_unavailable())).toBeVisible();
+  },
+};
+
+/** Explicit presenter fixture; session replacement itself uses the production cache subscription. */
+function SessionRetirementExample() {
+  const [cache] = useState(() => {
+    const client = new QueryClient();
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reporter', csrfToken: 'fixture-session' });
+    return client;
+  });
+  const [initial] = useState<ReporterStatusRead>(() => ({
+    id: submittedReport.id,
+    generation: 'fixture-read',
+    viewer: { subject: 'reporter', csrfToken: 'fixture-session' },
+    result: { state: 'loaded', report: { ...submittedReport, targetAvailability: 'unavailable' } },
+  }));
+  return (
+    <QueryClientProvider client={cache}>
+      <button
+        type="button"
+        onClick={() =>
+          cache.setQueryData(['session'], {
+            state: 'signed-in',
+            subject: 'reporter',
+            csrfToken: 'replacement-fixture-session',
+          })
+        }
+      >
+        Replace browser session
+      </button>
+      <ReporterStatusCurrent initial={initial} />
+    </QueryClientProvider>
+  );
+}
+export const SessionRetirement: Story = {
+  render: () => <SessionRetirementExample />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(evidence)).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace browser session' }));
+    await expect(await canvas.findByText(m.reporter_status_read_concealed())).toBeVisible();
+    await expect(canvas.queryByText(evidence)).toBeNull();
   },
 };

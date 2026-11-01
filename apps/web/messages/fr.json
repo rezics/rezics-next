@@ -4079,5 +4079,8 @@
   "moderation_decision_read_unavailable": "La décision actuelle n’a pas pu être lue. Réessayez pour consulter son dernier état.",
   "moderation_decision_read_closed": "Cette décision n’est pas disponible pour votre session actuelle.",
   "moderation_decision_read_platform_closed": "La modération est actuellement fermée sur cette plateforme.",
-  "moderation_decision_read_retry": "Réessayer de lire la décision"
+  "moderation_decision_read_retry": "Réessayer de lire la décision",
+  "reporter_status_read_loading": "Chargement de votre signalement…",
+  "reporter_status_read_concealed": "Ce signalement est inconnu ou invisible dans votre session actuelle.",
+  "reporter_status_read_closed": "Le statut des signalements est indisponible sur cette plateforme."
 }
