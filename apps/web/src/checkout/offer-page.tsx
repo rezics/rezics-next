@@ -2,7 +2,7 @@ import { useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { OfferPageData } from './offer';
 import { PageHeading } from '../shell/page-heading';
@@ -15,22 +15,58 @@ import { createOfferRequest, type AcquisitionProblem } from './offer-recovery';
 type Phase = 'ready' | 'submitting' | 'retry' | 'terms-changed' | 'unavailable' | 'closed' | 'existing';
 
 export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
+  const { state: session, csrfToken, subject } = useSession();
+  const admitted = useOperation('order.create');
+  return (
+    <OfferPurchase
+      key={JSON.stringify([observedOffer.id, session, subject ?? null, admitted, Boolean(csrfToken)])}
+      observedOffer={observedOffer}
+      session={session}
+      csrf={csrfToken}
+      admitted={admitted}
+    />
+  );
+}
+
+function OfferPurchase({
+  observedOffer,
+  session,
+  csrf,
+  admitted,
+}: {
+  observedOffer: OfferPageData;
+  session: ReturnType<typeof useSession>['state'];
+  csrf: string | null;
+  admitted: boolean;
+}) {
   const submittedOffer = useRef<OfferPageData | null>(null);
   const submission = useRef<ReturnType<typeof createOfferRequest> | null>(null);
   const offer = submittedOffer.current ?? observedOffer;
-  const { state: session, csrfToken: csrf } = useSession();
   const csrfToken = useRef(csrf);
-  csrfToken.current = csrf;
-  const admitted = useOperation('order.create');
-  const [phase, setPhase] = useState<Phase>(offer.state === 'delisted' ? 'unavailable' : 'ready');
+  const lifetime = useRef({ active: false });
+  // Retire completions at commit, including route replacement and observed authority loss.
+  useLayoutEffect(() => {
+    const current = { active: true };
+    lifetime.current = current;
+    return () => {
+      current.active = false;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    csrfToken.current = csrf;
+  }, [csrf]);
+  const [submissionPhase, setPhase] = useState<Phase>('ready');
+  const phase = submittedOffer.current ? submissionPhase : offer.state === 'delisted' ? 'unavailable' : 'ready';
   const [existing, setExisting] = useState<AcquisitionProblem | null>(null);
   const [fullTitlesOpen, setFullTitlesOpen] = useState(false);
   const termsKnown =
     isMoneyUnit(offer.moneyUnit) && offer.taxBehavior === 'exclusive' && offer.benefit?.kind === 'mapped';
+  const canStart = admitted && (session === 'signed-out' || (session === 'signed-in' && Boolean(csrf)));
 
   async function start() {
-    if (!termsKnown || (phase !== 'ready' && phase !== 'retry')) return;
-    if (!csrf) {
+    const current = lifetime.current;
+    if (!current.active || !canStart || !termsKnown || (phase !== 'ready' && phase !== 'retry')) return;
+    if (session === 'signed-out') {
       const returnTo = `${window.location.pathname}${window.location.search}`;
       window.location.assign(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
       return;
@@ -49,7 +85,8 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
     );
     setPhase('submitting');
     const result = await submission.current();
-    if (!result) return;
+    // Dispatched writes can still commit; only their originating UI may consume the result.
+    if (!current.active || !result) return;
     if (result.kind === 'checkout') {
       window.location.assign(result.url);
       return;
@@ -72,7 +109,7 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
             : phase === 'closed'
               ? m.offer_start_closed()
               : null;
-  const buyDisabled = !admitted || !termsKnown || phase !== 'ready' || session === 'unknown';
+  const buyDisabled = !canStart || !termsKnown || phase !== 'ready';
 
   return (
     <article className="max-w-3xl min-w-0 space-y-6 text-foreground" data-idempotency-key={offer.idempotencyKey}>
@@ -143,7 +180,7 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
             variant="outline"
             size="lg"
             className="min-h-11 w-full disabled:opacity-100 sm:w-auto"
-            disabled={!admitted || !termsKnown || session === 'unknown'}
+            disabled={!canStart || !termsKnown}
             onClick={() => void start()}
           >
             {m.offer_retry()}
