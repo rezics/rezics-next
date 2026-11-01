@@ -8,7 +8,7 @@ policy. This documentation change has no changed workspace requiring typing.
 ## Recommendation and adoption boundary
 
 Adopt a transactionally maintained, rebuildable **Work compatibility locator** in the
-DBOS system database. It must represent the best *eligible parent/reservation group*,
+DBOS system database. It must represent the best _eligible parent/reservation group_,
 not merely the latest parent or last enqueued child. Keep ordered parent and child
 candidates so deletion can expose the next candidate by an indexed first-row seek.
 Install maintenance at the actual SDK status/input write boundary, covering old
@@ -42,14 +42,14 @@ not an inference from a main checkout or an older research report. Repository co
 is AGPL-3.0-only. Links below pin that snapshot; last-change revisions help distinguish
 the relevant source generations.
 
-| Source | Last change at inspected snapshot | Evidence |
-| --- | --- | --- |
-| `services/kernel/src/work/client.ts` | `0ce2fe8f17cad0fd9dcca565c579b24f42772424` | Wrapper, exact fallback SQL, options, pool ownership |
-| `services/kernel/src/community/join.ts` | `5166d62f59e4ee00fe509bd3d69848e6c00b4b2e` | Production admission, input and parent IDs |
-| `services/kernel/src/community/work.ts` | `03b9dcee089a1e9c6090789c4444fc4c603da087` | Child ID derivation and enqueue step |
-| `services/kernel/src/access/membership-work.ts` | `0ed0729970c197fb080f63f148bc45fe5c66777f` | Exact child input validation and reuse checks |
-| `services/kernel/test/work/growth-work-client.test.ts` | `c5c5631257b6e7358684f88e025ddf07311f3ca9` | Existing linear fallback allowance, UNRUN |
-| `docs/architecture.md` | `4736cfd8a3c3fb1aa86ce7d07691fd9af1ecb62f` | Logical work bound excludes invisible MVCC maintenance |
+| Source                                                 | Last change at inspected snapshot          | Evidence                                               |
+| ------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------ |
+| `services/kernel/src/work/client.ts`                   | `0ce2fe8f17cad0fd9dcca565c579b24f42772424` | Wrapper, exact fallback SQL, options, pool ownership   |
+| `services/kernel/src/community/join.ts`                | `5166d62f59e4ee00fe509bd3d69848e6c00b4b2e` | Production admission, input and parent IDs             |
+| `services/kernel/src/community/work.ts`                | `03b9dcee089a1e9c6090789c4444fc4c603da087` | Child ID derivation and enqueue step                   |
+| `services/kernel/src/access/membership-work.ts`        | `0ed0729970c197fb080f63f148bc45fe5c66777f` | Exact child input validation and reuse checks          |
+| `services/kernel/test/work/growth-work-client.test.ts` | `c5c5631257b6e7358684f88e025ddf07311f3ca9` | Existing linear fallback allowance, UNRUN              |
+| `docs/architecture.md`                                 | `4736cfd8a3c3fb1aa86ce7d07691fd9af1ecb62f` | Logical work bound excludes invisible MVCC maintenance |
 
 The installed read-only artifact is
 `services/kernel/node_modules/@dbos-inc/dbos-sdk/`, version **5.5.3-preview**, MIT.
@@ -57,20 +57,20 @@ It is locally patched through
 `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch` (last change
 `19bdf93297c05a87fe70c737fcf88717738ef3d3`). Artifact identity, SHA-256:
 
-| File | SHA-256 |
-| --- | --- |
-| `dist/src/client.js` | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
+| File                          | SHA-256                                                            |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `dist/src/client.js`          | `9031a6d260650e4e39f225e366e43eac8d7646fb799ab8270d7117ad0826a971` |
 | `dist/src/system_database.js` | `7f8acb0c80120ad0afa59e7848bbebbfcae5d3f0754d459764b923c1b0343f2b` |
-| Repository patch | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
+| Repository patch              | `16f393956300e03b04794ec58058c98f6398bcac7d55fdbd68a6f8b84c359806` |
 
 Reused reference clones under the explicitly permitted main-checkout `.reference/`:
 
-* `search-worker-outcome-harness/dbos-transact-ts`, commit
+- `search-worker-outcome-harness/dbos-transact-ts`, commit
   `980dc55095f445b189aecb59e7f3334345179f65`, MIT (`LICENSE`). Its
   [client source](https://github.com/dbos-inc/dbos-transact-ts/blob/980dc55095f445b189aecb59e7f3334345179f65/src/client.ts)
   corroborates caller-owned transactional enqueue. It is an older upstream baseline,
   **not** the identity of the installed patched artifact.
-* `library-shelf-maintenance/postgres`, commit
+- `library-shelf-maintenance/postgres`, commit
   `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`, PostgreSQL License (`COPYRIGHT`).
   Read `src/backend/access/nbtree/nbtsearch.c`: `_bt_search`, `_bt_binsrch`,
   `_bt_first` and subsequent-item traversal distinguish index descent from scanning
@@ -91,15 +91,15 @@ UUID validation would change the compatibility boundary.
 For a recognized key, a successful `client.getWorkflow(id)` takes precedence over
 every alias candidate, regardless of status, name, queue or step count. Nonlegacy
 IDs go directly to the original bound SDK method. If the exact status is absent,
-the SQL defines these sets from *retained* rows:
+the SQL defines these sets from _retained_ rows:
 
-* Parent: status name `community.leave`, plus its exact-ID `workflow_input` row.
+- Parent: status name `community.leave`, plus its exact-ID `workflow_input` row.
   Extract realm, member and reservation using `inputs::jsonb #>>` at
   `{json,0,realmId}`, `{json,0,memberAccountId}`, `{json,0,reservationId}`.
-* Child: status name `accounts.membership`, plus its exact-ID input row.
+- Child: status name `accounts.membership`, plus its exact-ID input row.
   Extract realm at `{json,0,principal,id}`, member and reservation at the same
   latter paths. A matching child shares all three extracted text values.
-* Among joined matches choose a row with greatest **parent** `created_at`.
+- Among joined matches choose a row with greatest **parent** `created_at`.
   A newer parent without a matching child is ineligible. Child creation time,
   completion, role and native parent linkage do not participate.
 
@@ -195,13 +195,13 @@ Installed migration definitions add the JSONB column and partial GIN index. No
 inspected API maintains a unique legacy alias, a retained eligible-pair head or an
 ordered composite parent/child eligibility index automatically.
 
-| Approach | Unique uncomplicated match | Repeated pair history and miss | Verdict |
-| --- | --- | --- | --- |
-| Current join plus indexes on extracted parent/child input keys | Can reduce unrelated-row work | May test every newer parent whose reservation has no child; miss may test all parents; duplicate joins may multiply candidates | Insufficient |
-| Attributes on parent/child, `listWorkflows` with limit | Can find an attributed workflow | GIN finds a posting set, not the ordered best joined match; attributes absent on legacy rows; no inherited linkage | Insufficient |
-| B-tree expression keys on native status/input | Can seek a specified key/reservation | Timestamp/name are in status, actual input in a separate table; an expression index cannot express cross-table existence; ordered status candidates can still all fail the child join | Insufficient alone |
-| Single latest alias maintained by enqueue | Fast hit while present | Wrong when latest parent has no child, replay changes write order, winner is deleted, old writers bypass the hook, or another child remains | Insufficient |
-| Ordered candidates plus one eligible row per reservation group, maintained atomically | One ordered seek | Same seek for empty/nonempty eligible range; deletion takes indexed successors, without scanning pair history | Recommended |
+| Approach                                                                              | Unique uncomplicated match           | Repeated pair history and miss                                                                                                                                                        | Verdict            |
+| ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Current join plus indexes on extracted parent/child input keys                        | Can reduce unrelated-row work        | May test every newer parent whose reservation has no child; miss may test all parents; duplicate joins may multiply candidates                                                        | Insufficient       |
+| Attributes on parent/child, `listWorkflows` with limit                                | Can find an attributed workflow      | GIN finds a posting set, not the ordered best joined match; attributes absent on legacy rows; no inherited linkage                                                                    | Insufficient       |
+| B-tree expression keys on native status/input                                         | Can seek a specified key/reservation | Timestamp/name are in status, actual input in a separate table; an expression index cannot express cross-table existence; ordered status candidates can still all fail the child join | Insufficient alone |
+| Single latest alias maintained by enqueue                                             | Fast hit while present               | Wrong when latest parent has no child, replay changes write order, winner is deleted, old writers bypass the hook, or another child remains                                           | Insufficient       |
+| Ordered candidates plus one eligible row per reservation group, maintained atomically | One ordered seek                     | Same seek for empty/nonempty eligible range; deletion takes indexed successors, without scanning pair history                                                                         | Recommended        |
 
 PostgreSQL [expression indexes](https://www.postgresql.org/docs/18/indexes-expressional.html)
 move expression computation into index maintenance; they do not materialize an
@@ -268,26 +268,26 @@ finds the next parent. Do not repair a stale head by walking history on a read.
 
 These invariants need native write-boundary coverage, not trust in new callers:
 
-* Source insert/update/delete and its projection delta commit or roll back together
+- Source insert/update/delete and its projection delta commit or roll back together
   on the **same database connection and transaction**. Status-only updates that do
   not change candidate facts require no group work. Payload minimization/removal,
   restore/import, SQL enqueue, fork, rewind, old executors and retention must be
   included. Reuse reads the stored facts; it must not publish the attempted input
   or a newer timestamp when the SDK returned an existing execution.
-* Serialize each actual-ID source state with a native versioned row upsert/lock;
+- Serialize each actual-ID source state with a native versioned row upsert/lock;
   merge the changed half from `NEW`/`OLD`, not two unconstrained snapshot reads.
   Under older repeatable-read snapshots a conflicting version must abort/retry,
   not merge an obsolete counterpart. Never rely on an advisory lock alone to make
   an old MVCC snapshot fresh. Status/input arrival in either order and independently
   retained orphan copies must be represented until the second half appears.
-* Lock affected reservation groups in deterministic full-key order before candidate
+- Lock affected reservation groups in deterministic full-key order before candidate
   and eligible maintenance, including the group with no eligible row yet. An
   existing group-state row or transaction advisory lock can serialize that absent
   key; a stale repeatable-read transaction must still conflict through versioned
   state. Use current locked candidate state for recomputation. Multi-ID bulk
   mutations may deadlock; the **whole native transaction** retries, not a detached
   index update. Lock wait time is not evidence of history traversal.
-* Native row triggers are the practical exhaustive hook for supported old writers.
+- Native row triggers are the practical exhaustive hook for supported old writers.
   PostgreSQL executes triggers in the source transaction
   ([trigger behavior](https://www.postgresql.org/docs/18/trigger-definition.html)).
   SDK owners must install compatible hooks for both status and input and all three
@@ -383,14 +383,14 @@ Let N be retained source/projection/index size, H repeated history for the selec
 realm/member, d source rows changed by a native transaction, S their input bytes,
 L requested step limit and O requested offset. At a fixed number of retries:
 
-| Operation | Logical examined/changed rows | Indexed work |
-| --- | --- | --- |
-| Nonlegacy or exact existing status | Original SDK keyed reads and requested steps | O(log N + O + L), unchanged |
-| Legacy alias hit | One coverage point, exact original status probe, at most one eligible row, original SDK reads/steps | O(log N + O + L); no H term |
-| Legacy alias miss, including H unmatched parents | Same fixed keyed probes, zero eligible rows, original-ID SDK fallback | O(log N); no H term |
-| One source mutation | One source state, old/new candidate, at most two group states, four top-candidate results and two eligible-row changes | O(log N) indexed work plus changed input bytes |
-| d mutations/retention batch | O(d) logical rows, constant seeks per mutation | O(d log N + S), not a parent×child expansion |
-| Backfill batch b | O(b) identities and constant reconciliation per identity | O(b log N + S); finite total migration may follow N |
+| Operation                                        | Logical examined/changed rows                                                                                          | Indexed work                                        |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Nonlegacy or exact existing status               | Original SDK keyed reads and requested steps                                                                           | O(log N + O + L), unchanged                         |
+| Legacy alias hit                                 | One coverage point, exact original status probe, at most one eligible row, original SDK reads/steps                    | O(log N + O + L); no H term                         |
+| Legacy alias miss, including H unmatched parents | Same fixed keyed probes, zero eligible rows, original-ID SDK fallback                                                  | O(log N); no H term                                 |
+| One source mutation                              | One source state, old/new candidate, at most two group states, four top-candidate results and two eligible-row changes | O(log N) indexed work plus changed input bytes      |
+| d mutations/retention batch                      | O(d) logical rows, constant seeks per mutation                                                                         | O(d log N + S), not a parent×child expansion        |
+| Backfill batch b                                 | O(b) identities and constant reconciliation per identity                                                               | O(b log N + S); finite total migration may follow N |
 
 Each listed seek has all equality-prefix keys and consumes at most one visible
 logical candidate. Empty groups/ranges end at the B-tree boundary; they do not
@@ -430,23 +430,23 @@ contract in a new group instead of weakening or rewriting old acceptance.
 
 Adoption should authorize the following together; names for new files are proposed.
 
-| Path/group | Required change or regression obligation |
-| --- | --- |
-| `services/kernel/src/work/client.ts` | Replace only post-exact-miss legacy resolver; preserve bound SDK method, arguments/options, errors and close semantics |
-| `services/kernel/src/work/legacy-leave-lookup.ts` and SQL companions | Coverage point read and equality-prefix ordered eligible seek; no history fallback after cutover |
-| `services/kernel/db/migrations/<UTC>_legacy_leave_lookup.sql` | Derived schema, source/candidate/group/eligible state, explicit indexes and versioned coverage; use real implementation UTC timestamp |
-| `services/kernel/src/work/legacy-leave-backfill.ts` | Resumable installation/backfill/reconciliation/cutover protocol and exact-source removal |
-| `services/kernel/scripts/database.ts` | Order Work installer after supported SDK migration; do not depend on client construction to migrate |
-| `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch` | SDK-owned exhaustive transactional source hooks and upgrade integration, alongside existing fence guards; never edit installed node_modules |
-| `src/community/join.ts`, `src/community/work.ts`, `src/access/membership-work.ts` under kernel | Audit production enqueue/reuse paths; preserve inputs/IDs and authorization checks; no API or lifecycle changes required |
-| Kernel `src/work/retention.ts`, `src/history/durable.ts`, history registry/locator owner files | Integrate projection-copy inventory/removal with existing native custody; no new readiness inference |
-| Kernel `src/work/sdk-retirement-fence.ts` and owning Source dispatch derivations | Include added hook work in existing retirement/deletion reservations; preserve lifecycle permissions and execution bounds |
-| `services/kernel/src/server.ts`, `src/worker.ts`, `src/http/kernel.ts` and other WorkClient constructors | Regress existing lazy construction, borrowed-pool ownership and shutdown; avoid new caller-specific lookup routes |
-| `services/kernel/README.md`, `src/work/README.md` | Adopt compatibility order, maintenance/coverage ownership and derived Cost after owner agreement |
-| `services/kernel/test/work/legacy-leave-lookup.test.ts` | New exact compatibility and resource-ownership regression group |
-| `services/kernel/test/work/legacy-leave-lookup-migration.test.ts` | New backfill, atomicity, replay, old/native write, retention and upgrade group |
-| `services/kernel/test/work/growth-work-client-bounded-legacy.test.ts` | New frozen bounded assertions, including trigger/deletion work and complete misses |
-| Existing kernel `test/community/join.test.ts`, `test/community/ban.test.ts`, `test/work/growth-work-client.test.ts`, `test/work/retention.test.ts`, `test/work/sdk-retirement-fence.test.ts`; `services/auth/test/membership-workflows.test.ts` | Preserve existing acceptance; run through supported placement after integration, without editing frozen tests |
+| Path/group                                                                                                                                                                                                                                      | Required change or regression obligation                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `services/kernel/src/work/client.ts`                                                                                                                                                                                                            | Replace only post-exact-miss legacy resolver; preserve bound SDK method, arguments/options, errors and close semantics                      |
+| `services/kernel/src/work/legacy-leave-lookup.ts` and SQL companions                                                                                                                                                                            | Coverage point read and equality-prefix ordered eligible seek; no history fallback after cutover                                            |
+| `services/kernel/db/migrations/<UTC>_legacy_leave_lookup.sql`                                                                                                                                                                                   | Derived schema, source/candidate/group/eligible state, explicit indexes and versioned coverage; use real implementation UTC timestamp       |
+| `services/kernel/src/work/legacy-leave-backfill.ts`                                                                                                                                                                                             | Resumable installation/backfill/reconciliation/cutover protocol and exact-source removal                                                    |
+| `services/kernel/scripts/database.ts`                                                                                                                                                                                                           | Order Work installer after supported SDK migration; do not depend on client construction to migrate                                         |
+| `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch`                                                                                                                                                                                              | SDK-owned exhaustive transactional source hooks and upgrade integration, alongside existing fence guards; never edit installed node_modules |
+| `src/community/join.ts`, `src/community/work.ts`, `src/access/membership-work.ts` under kernel                                                                                                                                                  | Audit production enqueue/reuse paths; preserve inputs/IDs and authorization checks; no API or lifecycle changes required                    |
+| Kernel `src/work/retention.ts`, `src/history/durable.ts`, history registry/locator owner files                                                                                                                                                  | Integrate projection-copy inventory/removal with existing native custody; no new readiness inference                                        |
+| Kernel `src/work/sdk-retirement-fence.ts` and owning Source dispatch derivations                                                                                                                                                                | Include added hook work in existing retirement/deletion reservations; preserve lifecycle permissions and execution bounds                   |
+| `services/kernel/src/server.ts`, `src/worker.ts`, `src/http/kernel.ts` and other WorkClient constructors                                                                                                                                        | Regress existing lazy construction, borrowed-pool ownership and shutdown; avoid new caller-specific lookup routes                           |
+| `services/kernel/README.md`, `src/work/README.md`                                                                                                                                                                                               | Adopt compatibility order, maintenance/coverage ownership and derived Cost after owner agreement                                            |
+| `services/kernel/test/work/legacy-leave-lookup.test.ts`                                                                                                                                                                                         | New exact compatibility and resource-ownership regression group                                                                             |
+| `services/kernel/test/work/legacy-leave-lookup-migration.test.ts`                                                                                                                                                                               | New backfill, atomicity, replay, old/native write, retention and upgrade group                                                              |
+| `services/kernel/test/work/growth-work-client-bounded-legacy.test.ts`                                                                                                                                                                           | New frozen bounded assertions, including trigger/deletion work and complete misses                                                          |
+| Existing kernel `test/community/join.test.ts`, `test/community/ban.test.ts`, `test/work/growth-work-client.test.ts`, `test/work/retention.test.ts`, `test/work/sdk-retirement-fence.test.ts`; `services/auth/test/membership-workflows.test.ts` | Preserve existing acceptance; run through supported placement after integration, without editing frozen tests                               |
 
 Use a production-shaped fixture with real routed realm/member/reservation IDs,
 parent/child hashes and complete input envelopes including space, role, kind and
