@@ -196,7 +196,7 @@ if (script.includes('MemAvailable')) {
 } else if (script.includes('REMOTE_CHECK_PHYSICAL_RESOURCES')) {
   // This fixture has no owned native cgroup counters.
 } else if (script.includes('CLEANED')) {
-  const run = script.match(/^run_id='([^']+)'/m)?.[1] ?? 'unknown';
+  const run = script.match(/^run_id='?([^'\\r\\n]+)'?/m)?.[1] ?? 'unknown';
   log({ kind: 'cleanup', script, slotHeld: slotHeld() });
   console.log('CLEANED ' + run);
 } else {
@@ -585,7 +585,8 @@ test('ordinary remote transport keeps the native outcome and declared returns/cl
   assertMockProbeReady(fixture);
   const directory = workspace();
   const result = await stackWithFixtureDeadline(fixture, ['true'], ['--returns', 'missing-output.txt'], directory);
-  expect(result.code, `${result.stderr} ${JSON.stringify(fixture.events())}`).toBe(7);
+  const eventSummary = fixture.events().map(({ kind, address, granted, reason }) => ({ kind, address, granted, reason }));
+  expect(result.code, `${result.stderr} ${JSON.stringify(eventSummary)}`).toBe(7);
   const events = fixture.events();
   expect(events.some((event) => event.kind === 'prepared-inputs')).toBe(false);
   const runIndex = events.findIndex((event) => event.kind === 'run');
