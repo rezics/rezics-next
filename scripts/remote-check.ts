@@ -41,6 +41,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   unlinkSync,
@@ -489,7 +490,7 @@ function configuredTimeout(value: number | undefined, envName: string, fallback:
   return timeout;
 }
 
-function transferTimeout(options: RemoteCheck): number {
+function transferTimeout(options: Pick<RemoteCheck, 'transferTimeoutMs'>): number {
   return configuredTimeout(options.transferTimeoutMs, 'REMOTE_CHECK_TRANSFER_TIMEOUT_MS', DEFAULT_TRANSFER_TIMEOUT_MS);
 }
 
@@ -4193,7 +4194,7 @@ async function copyReturns(
   host: Host,
   directory: string,
   connectionId: string,
-  options: RemoteCheck,
+  options: Pick<RemoteCheck, 'workspace' | 'returns' | 'transferTimeoutMs'>,
   signal: AbortSignal,
 ): Promise<RemoteReturnManifest> {
   const paths = options.returns ?? [];
@@ -4619,7 +4620,7 @@ export async function reconcileRemoteRun(
   signal: AbortSignal = new AbortController().signal,
 ): Promise<RemoteCheckSettlement> {
   const { host: hostName, run: runId } = options.physical;
-  if (!PERFORMANCE_HOST_NAMES.includes(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
+  if (!(PERFORMANCE_HOST_NAMES as readonly string[]).includes(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
     throw new Error('remote-check: reconciliation requires a known original host and run identity');
   if (options.allowedHosts && !options.allowedHosts.includes(hostName))
     throw new Error('remote-check: reconciliation host is outside the approved host set');
@@ -4736,7 +4737,7 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
         host,
         prepared.directory,
         prepared.connectionId,
-        { workspace: options.workspace, command: [], returns: options.returns },
+        { workspace: options.workspace, returns: options.returns, transferTimeoutMs: options.transferTimeoutMs },
         signal,
       );
     } catch (error) {
