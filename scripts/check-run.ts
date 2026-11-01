@@ -1513,7 +1513,9 @@ async function runCheckWithFinalSettlement(
         receiptChannel.nonce !== claimedPrepared.record.nonce ||
         checkRunBindingHash(claimedPrepared.record.binding) !== checkRunBindingHash(binding)
       )
-        throw new CheckRunUnavailable('check-run: prepared descriptor differs from the caller-established FD3 identity');
+        throw new CheckRunUnavailable(
+          'check-run: prepared descriptor differs from the caller-established FD3 identity',
+        );
     } else if (callerInvocationId) {
       const record = await getCheckRunStatus(callerInvocationId, stateOptions);
       if (record.nonce !== receiptChannel?.nonce)
@@ -2015,7 +2017,8 @@ function preparedStateFromUnknown(value: unknown, record: CheckRunInvocationReco
   const state = value as PreparedCheckRunState;
   const hashJson = (value: unknown) => {
     const encoded = JSON.stringify(value);
-    if (encoded === undefined) throw new CheckRunUnavailable('check-run: durable prepared execution is not serializable');
+    if (encoded === undefined)
+      throw new CheckRunUnavailable('check-run: durable prepared execution is not serializable');
     return createHash('sha256').update(encoded).digest('hex');
   };
   const hashEnvironment = (values: Record<string, string>) =>
@@ -2026,9 +2029,9 @@ function preparedStateFromUnknown(value: unknown, record: CheckRunInvocationReco
   const isStringRecord = (item: unknown): item is Record<string, string> =>
     Boolean(
       item &&
-        typeof item === 'object' &&
-        !Array.isArray(item) &&
-        Object.values(item).every((entry) => typeof entry === 'string'),
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      Object.values(item).every((entry) => typeof entry === 'string'),
     );
   if (
     state.schema !== 1 ||
@@ -2061,7 +2064,11 @@ function preparedStateFromUnknown(value: unknown, record: CheckRunInvocationReco
     hashEnvironment(state.overlay) !== record.binding.relocatedEnvironmentSha256
   )
     throw new CheckRunUnavailable('check-run: durable prepared execution differs from its registered binding');
-  if (state.requestedPriority !== null && state.requestedPriority !== 'landing' && state.requestedPriority !== 'critical')
+  if (
+    state.requestedPriority !== null &&
+    state.requestedPriority !== 'landing' &&
+    state.requestedPriority !== 'critical'
+  )
     throw new CheckRunUnavailable('check-run: durable prepared priority is invalid');
   if (
     !state.args ||
@@ -2069,9 +2076,8 @@ function preparedStateFromUnknown(value: unknown, record: CheckRunInvocationReco
     state.args.hosts !== state.hostsFile ||
     state.args.sourceRevision !== state.sourceRevision ||
     JSON.stringify(state.args.command) !== JSON.stringify(state.frozenArgs) ||
-    JSON.stringify(state.returns) !== JSON.stringify(
-      state.args.returns.map((path) => workspaceRelative(state.candidateRoot, path, '--returns')),
-    )
+    JSON.stringify(state.returns) !==
+      JSON.stringify(state.args.returns.map((path) => workspaceRelative(state.candidateRoot, path, '--returns')))
   )
     throw new CheckRunUnavailable('check-run: durable prepared arguments differ from their binding');
   return state;
@@ -2141,12 +2147,13 @@ async function abandonClaimedPreparedInvocation(
   try {
     await cancelCheckRunInvocation(record.invocationId, record.nonce, 15, stateOptions);
     const reconciled = await reconcileCheckRunInvocation(record.invocationId, { ...stateOptions, force: true });
-    if (!reconciled.physical && reconciled.phase === 'cancelled' && reconciled.snapshot && reconciled.candidateWorkspace) {
-      cleanupWorktree(
-        reconciled.candidateWorkspace,
-        reconciled.snapshot.workspace,
-        reconciled.snapshot.scratch,
-      );
+    if (
+      !reconciled.physical &&
+      reconciled.phase === 'cancelled' &&
+      reconciled.snapshot &&
+      reconciled.candidateWorkspace
+    ) {
+      cleanupWorktree(reconciled.candidateWorkspace, reconciled.snapshot.workspace, reconciled.snapshot.scratch);
       if (existsSync(reconciled.snapshot.workspace) || existsSync(reconciled.snapshot.scratch))
         throw new CheckRunUnavailable('check-run: abandoned prepared snapshot removal was not verified');
       await markCheckRunPreparedSnapshotCustody(record.invocationId, record.nonce, 'removed', stateOptions);
@@ -2191,7 +2198,10 @@ export async function prepareCheckRunInvocation(
     throw new Error('--descriptor parent must be an owner-private real directory');
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
   const descriptorInside = relative(realpathSync(candidateRoot), realpathSync(descriptorDirectory));
-  if (descriptorInside === '' || (!descriptorInside.startsWith(`..${sep}`) && descriptorInside !== '..' && !isAbsolute(descriptorInside)))
+  if (
+    descriptorInside === '' ||
+    (!descriptorInside.startsWith(`..${sep}`) && descriptorInside !== '..' && !isAbsolute(descriptorInside))
+  )
     throw new CheckRunUnavailable('--descriptor must be outside the candidate workspace');
   try {
     lstatSync(absoluteDescriptor);
@@ -2296,12 +2306,17 @@ export async function runPreparedCheckRunInvocation(
     if (realpathSync(descriptorDirectory) !== descriptorDirectory)
       throw new CheckRunUnavailable('check-run: prepared descriptor parent became a symlinked directory');
     const descriptorInside = relative(realpathSync(state.candidateRoot), realpathSync(descriptorDirectory));
-    if (descriptorInside === '' || (!descriptorInside.startsWith(`..${sep}`) && descriptorInside !== '..' && !isAbsolute(descriptorInside)))
+    if (
+      descriptorInside === '' ||
+      (!descriptorInside.startsWith(`..${sep}`) && descriptorInside !== '..' && !isAbsolute(descriptorInside))
+    )
       throw new CheckRunUnavailable('check-run: prepared descriptor is inside the candidate workspace');
     context = await validatePreparedAuthorities(state, claimed.record, processEnvironment);
   } catch (error) {
     await abandonClaimedPreparedInvocation(claimed.record, stateOptions);
-    await discardCheckRunPreparedExecution(claimed.record.invocationId, claimed.record.nonce, stateOptions).catch(() => undefined);
+    await discardCheckRunPreparedExecution(claimed.record.invocationId, claimed.record.nonce, stateOptions).catch(
+      () => undefined,
+    );
     throw error;
   }
   try {
@@ -2336,12 +2351,7 @@ export async function reconcileRegisteredCheckRun(
         cleanupWorktree(cancelled.candidateWorkspace, cancelled.snapshot.workspace, cancelled.snapshot.scratch);
         if (existsSync(cancelled.snapshot.workspace) || existsSync(cancelled.snapshot.scratch))
           throw new CheckRunUnavailable('check-run: abandoned frozen workspace removal was not verified');
-        return await markCheckRunPreparedSnapshotCustody(
-          invocationId,
-          cancelled.nonce,
-          'removed',
-          stateOptions,
-        );
+        return await markCheckRunPreparedSnapshotCustody(invocationId, cancelled.nonce, 'removed', stateOptions);
       } catch (error) {
         await setCheckRunUnknown(
           invocationId,

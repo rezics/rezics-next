@@ -214,7 +214,9 @@ function closedObjectWithOptional(
     typeof value !== 'object' ||
     Array.isArray(value) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
-    Reflect.ownKeys(value).some((key) => typeof key !== 'string' || (!required.includes(key) && !optional.includes(key))) ||
+    Reflect.ownKeys(value).some(
+      (key) => typeof key !== 'string' || (!required.includes(key) && !optional.includes(key)),
+    ) ||
     required.some((key) => !Object.hasOwn(value, key))
   ) {
     throw new Error(`check-run-settlement: invalid ${label}`);
@@ -1236,7 +1238,12 @@ export async function persistCheckRunPreparedInvocation(
       snapshotCustody: 'owned',
     });
     if (next.phase !== 'prepared') throw new Error('check-run-settlement: prepared invocation was not persisted');
-    writeNewPrivateFile(descriptorFile, descriptorBytes, CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES, 'prepared descriptor');
+    writeNewPrivateFile(
+      descriptorFile,
+      descriptorBytes,
+      CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES,
+      'prepared descriptor',
+    );
     return descriptor;
   });
 }
@@ -1263,7 +1270,8 @@ export async function claimCheckRunPreparedInvocation(
   const directory = checkRunSettlementStateDirectory(options);
   const absoluteDescriptorFile = resolve(descriptorFile);
   const recordPathForInvocation = recordPath(directory, first.invocationId);
-  if (!existsSync(recordPathForInvocation)) throw new Error('check-run-settlement: prepared invocation is not registered');
+  if (!existsSync(recordPathForInvocation))
+    throw new Error('check-run-settlement: prepared invocation is not registered');
   return withCheckFence(directory, first.invocationId, async () => {
     const record = readRecord(directory, first.invocationId);
     assertCanonicalParent(absoluteDescriptorFile, 'prepared descriptor');
@@ -1290,7 +1298,10 @@ export async function claimCheckRunPreparedInvocation(
       throw new Error('check-run-settlement: prepared descriptor does not match its durable invocation');
     if (record.phase !== 'prepared' || cancellationWasRequested(directory, record) || record.final)
       throw new Error(`check-run-settlement: prepared invocation cannot be claimed from ${record.phase}`);
-    if (!record.preparedExecution || record.preparedExecution.file !== preparedExecutionFile(directory, record.invocationId))
+    if (
+      !record.preparedExecution ||
+      record.preparedExecution.file !== preparedExecutionFile(directory, record.invocationId)
+    )
       throw new Error('check-run-settlement: prepared execution state is unavailable');
     const rawExecution = readPrivateFile(
       record.preparedExecution.file,
@@ -1347,7 +1358,8 @@ export async function markCheckRunQueued(
         'check-run-settlement: frozen snapshot or return declarations do not match the registered binding',
       );
     if (record.phase === 'prepared' || record.phase === 'claimed') {
-      if (record.phase !== 'claimed') throw new Error('check-run-settlement: prepared invocation must be claimed before queueing');
+      if (record.phase !== 'claimed')
+        throw new Error('check-run-settlement: prepared invocation must be claimed before queueing');
       const candidateWorkspace = options.candidateWorkspace ? resolve(options.candidateWorkspace) : null;
       const paths = options.returns ? validatePathList([...options.returns], 'declared return path', true) : [];
       const snapshot = options.snapshot
@@ -1653,7 +1665,8 @@ export async function markCheckRunPreparedSnapshotCustody(
   return mutateRecord(invocationId, options, async (directory, record) => {
     if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
     if (record.final) throw new Error('check-run-settlement: final invocation custody is immutable');
-    if (record.physical) throw new Error('check-run-settlement: physical invocation custody needs remote reconciliation');
+    if (record.physical)
+      throw new Error('check-run-settlement: physical invocation custody needs remote reconciliation');
     if (disposition === 'removed' && !['cancelled', 'unknown'].includes(record.phase))
       throw new Error('check-run-settlement: snapshot removal needs a terminal pre-physical invocation');
     const next = await updateRecord(directory, record, {

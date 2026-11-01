@@ -11,11 +11,7 @@ import {
   type CandidateSnapshot,
   type CheckRunArguments,
 } from './check-run.ts';
-import {
-  cancelCheckRunInvocation,
-  getCheckRunStatus,
-  readCheckRunPreparedDescriptor,
-} from './check-run-settlement.ts';
+import { cancelCheckRunInvocation, getCheckRunStatus, readCheckRunPreparedDescriptor } from './check-run-settlement.ts';
 import type { RemoteCheck, RemotePhysicalRunReceipt } from './remote-check.ts';
 import type { RemoteCheckSettlement } from './remote-check.ts';
 
@@ -847,11 +843,10 @@ test('separate prepare and run-prepared CLI processes consume one authenticated 
   expect(prepared.binding).toEqual(descriptor.binding);
   expect(JSON.stringify(prepared)).not.toContain('prepared-secret');
 
-  const execution = runSeparateCli(
-    ['run-prepared', '--descriptor', descriptorFile],
-    fixture,
-    { invocationId: descriptor.invocationId, nonce: descriptor.nonce },
-  );
+  const execution = runSeparateCli(['run-prepared', '--descriptor', descriptorFile], fixture, {
+    invocationId: descriptor.invocationId,
+    nonce: descriptor.nonce,
+  });
   expect(execution.status).toBe(0);
   const observed = JSON.parse(execution.stdout.trim()) as {
     code: number;
@@ -876,11 +871,10 @@ test('separate prepare and run-prepared CLI processes consume one authenticated 
   expect(settled.snapshot?.workspace).toBe(originalSnapshot);
   expect(settled.snapshotCustody).toBe('removed');
 
-  const replay = runSeparateCli(
-    ['run-prepared', '--descriptor', descriptorFile],
-    fixture,
-    { invocationId: descriptor.invocationId, nonce: descriptor.nonce },
-  );
+  const replay = runSeparateCli(['run-prepared', '--descriptor', descriptorFile], fixture, {
+    invocationId: descriptor.invocationId,
+    nonce: descriptor.nonce,
+  });
   expect(replay.status).not.toBe(0);
   expect(JSON.parse(replay.stdout.trim()).events).toEqual([]);
   expect((await getCheckRunStatus(descriptor.invocationId, { stateDirectory })).final).toEqual(settled.final);
@@ -920,21 +914,22 @@ test('descriptor tampering and foreign identity fail closed before transport', a
   expect(secondResult.status).toBe(0);
   const first = JSON.parse(firstResult.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
   const second = JSON.parse(secondResult.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
-  const foreign = runSeparateCli(
-    ['run-prepared', '--descriptor', secondFile],
-    fixture,
-    { invocationId: first.invocationId, nonce: first.nonce },
-  );
+  const foreign = runSeparateCli(['run-prepared', '--descriptor', secondFile], fixture, {
+    invocationId: first.invocationId,
+    nonce: first.nonce,
+  });
   expect(foreign.status).not.toBe(0);
   expect(JSON.parse(foreign.stdout.trim()).events).toEqual([]);
 
-  writeFileSync(firstFile, `${JSON.stringify({ ...first, binding: { ...first.binding, argvSha256: '9'.repeat(64) } })}\n`);
-  chmodSync(firstFile, 0o600);
-  const tampered = runSeparateCli(
-    ['run-prepared', '--descriptor', firstFile],
-    fixture,
-    { invocationId: first.invocationId, nonce: first.nonce },
+  writeFileSync(
+    firstFile,
+    `${JSON.stringify({ ...first, binding: { ...first.binding, argvSha256: '9'.repeat(64) } })}\n`,
   );
+  chmodSync(firstFile, 0o600);
+  const tampered = runSeparateCli(['run-prepared', '--descriptor', firstFile], fixture, {
+    invocationId: first.invocationId,
+    nonce: first.nonce,
+  });
   expect(tampered.status).not.toBe(0);
   expect(JSON.parse(tampered.stdout.trim()).events).toEqual([]);
   expect((await getCheckRunStatus(first.invocationId, { stateDirectory })).phase).toBe('prepared');
@@ -971,13 +966,13 @@ test('changed candidate inputs and cancellation cannot spawn late or replace the
   const changedPrepare = runSeparateCli(prepareArgs(changedDescriptorFile, args), changedFixture);
   expect(changedPrepare.status).toBe(0);
   const changed = JSON.parse(changedPrepare.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
-  const original = (await getCheckRunStatus(changed.invocationId, { stateDirectory: changedState })).snapshot?.workspace;
+  const original = (await getCheckRunStatus(changed.invocationId, { stateDirectory: changedState })).snapshot
+    ?.workspace;
   writeFileSync(join(changedFixture.root, 'src/input.ts'), 'export const value = 8;\n');
-  const rejected = runSeparateCli(
-    ['run-prepared', '--descriptor', changedDescriptorFile],
-    changedFixture,
-    { invocationId: changed.invocationId, nonce: changed.nonce },
-  );
+  const rejected = runSeparateCli(['run-prepared', '--descriptor', changedDescriptorFile], changedFixture, {
+    invocationId: changed.invocationId,
+    nonce: changed.nonce,
+  });
   expect(rejected.status).toBe(75);
   expect(JSON.parse(rejected.stdout.trim()).events).toEqual([]);
   const changedRecord = await getCheckRunStatus(changed.invocationId, { stateDirectory: changedState });
@@ -991,18 +986,16 @@ test('changed candidate inputs and cancellation cannot spawn late or replace the
   const queuedState = join(queuedFixture.parent, 'state');
   const queuedDescriptorFile = join(queuedState, 'queued.json');
   const queuedArgs = argsFor(queuedFixture, ['bun', 'test', 'queued-prepared']);
-  const queuedPrepare = runSeparateCli(
-    prepareArgs(queuedDescriptorFile, queuedArgs),
-    queuedFixture,
-  );
+  const queuedPrepare = runSeparateCli(prepareArgs(queuedDescriptorFile, queuedArgs), queuedFixture);
   expect(queuedPrepare.status).toBe(0);
   const queued = JSON.parse(queuedPrepare.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
-  const queuedSnapshot = (await getCheckRunStatus(queued.invocationId, { stateDirectory: queuedState })).snapshot?.workspace;
-  const cancelled = runSeparateCli(
-    ['run-prepared', '--descriptor', queuedDescriptorFile],
-    queuedFixture,
-    { cancelQueued: true, invocationId: queued.invocationId, nonce: queued.nonce },
-  );
+  const queuedSnapshot = (await getCheckRunStatus(queued.invocationId, { stateDirectory: queuedState })).snapshot
+    ?.workspace;
+  const cancelled = runSeparateCli(['run-prepared', '--descriptor', queuedDescriptorFile], queuedFixture, {
+    cancelQueued: true,
+    invocationId: queued.invocationId,
+    nonce: queued.nonce,
+  });
   expect(cancelled.status).toBe(75);
   const queuedResult = JSON.parse(cancelled.stdout.trim()) as { code: number; events: string[] };
   expect(queuedResult.events).toContain('allocation-fenced');
@@ -1023,20 +1016,16 @@ test('changed candidate inputs and cancellation cannot spawn late or replace the
   const abandonedState = join(abandonedFixture.parent, 'state');
   const abandonedDescriptorFile = join(abandonedState, 'abandoned.json');
   const abandonedArgs = argsFor(abandonedFixture, ['bun', 'test', 'abandoned-prepared']);
-  const abandonedPrepare = runSeparateCli(
-    prepareArgs(abandonedDescriptorFile, abandonedArgs),
-    abandonedFixture,
-  );
+  const abandonedPrepare = runSeparateCli(prepareArgs(abandonedDescriptorFile, abandonedArgs), abandonedFixture);
   expect(abandonedPrepare.status).toBe(0);
   const abandoned = JSON.parse(abandonedPrepare.stdout.trim()) as ReturnType<typeof readCheckRunPreparedDescriptor>;
-  const abandonedSnapshot = (await getCheckRunStatus(abandoned.invocationId, { stateDirectory: abandonedState })).snapshot
-    ?.workspace;
+  const abandonedSnapshot = (await getCheckRunStatus(abandoned.invocationId, { stateDirectory: abandonedState }))
+    .snapshot?.workspace;
   await cancelCheckRunInvocation(abandoned.invocationId, abandoned.nonce, 15, { stateDirectory: abandonedState });
-  const noClaim = runSeparateCli(
-    ['run-prepared', '--descriptor', abandonedDescriptorFile],
-    abandonedFixture,
-    { invocationId: abandoned.invocationId, nonce: abandoned.nonce },
-  );
+  const noClaim = runSeparateCli(['run-prepared', '--descriptor', abandonedDescriptorFile], abandonedFixture, {
+    invocationId: abandoned.invocationId,
+    nonce: abandoned.nonce,
+  });
   expect(noClaim.status).not.toBe(0);
   expect(JSON.parse(noClaim.stdout.trim()).events).toEqual([]);
   const abandonedResult = await reconcileRegisteredCheckRun(abandoned.invocationId, undefined, {
