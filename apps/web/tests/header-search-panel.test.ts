@@ -97,7 +97,9 @@ test('the phone trigger name keeps its exact visible localized brand, query or s
           expect(trigger).toContain('>Ctrl/⌘ K</kbd>');
           expect(trigger).toContain('aria-describedby="header-keyboard-help"');
           expect(trigger).toContain('aria-keyshortcuts="Control+k Meta+k"');
-          expect(markup).toContain(`id="header-keyboard-help" class="sr-only">${m.header_search_keyboard_help()}</span>`);
+          expect(markup).toContain(
+            `id="header-keyboard-help" class="sr-only">${m.header_search_keyboard_help()}</span>`,
+          );
         } else {
           expect(trigger).not.toContain('aria-describedby=');
         }

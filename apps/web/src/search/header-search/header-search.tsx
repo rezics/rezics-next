@@ -176,9 +176,7 @@ export function HeaderSearchView({
       >
         <RezicsMark />
         <span className="truncate">{triggerLabel}</span>
-        {keyboardShortcut && (
-          <Kbd className="ms-auto shrink-0">{shortcutLabel}</Kbd>
-        )}
+        {keyboardShortcut && <Kbd className="ms-auto shrink-0">{shortcutLabel}</Kbd>}
       </button>
       <form
         {...formProps}
