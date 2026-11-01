@@ -199,6 +199,7 @@ export async function reportOutcomePage(
       target_id: target.id,
       created_at: after?.createdAt ?? 'infinity',
       report_id: after?.reportId ?? '00000000-0000-0000-0000-000000000000',
+      oldest: false,
       limit,
     }),
   );

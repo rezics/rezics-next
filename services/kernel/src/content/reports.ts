@@ -609,6 +609,17 @@ export async function listTargetReports(
   context: ReadContext,
   cursor?: string,
   limit = 100,
+): Promise<Page<ReportView>> {
+  return listSelectedTargetReports(dependencies, target, context, cursor, limit);
+}
+
+/** Additive selection adapter; the original native list contract retains its defaults. */
+export async function listSelectedTargetReports(
+  dependencies: ReportDependencies,
+  target: ReportTarget,
+  context: ReadContext,
+  cursor?: string,
+  limit = 100,
   selection: ReportSelection = {},
 ): Promise<Page<ReportView>> {
   validateTarget(target);

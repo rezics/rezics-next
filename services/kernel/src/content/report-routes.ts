@@ -14,7 +14,7 @@ import { dismissReport, ReportResolvedError } from './report-outcomes.ts';
 import { parseReportBody, reportRequestContext, requireReportInspection } from './report-admission.ts';
 import {
   createReport,
-  listTargetReports,
+  listSelectedTargetReports,
   readReport,
   reportReadView,
   ReportProofRequiredError,
@@ -277,7 +277,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
 
   function list(
     target: ReportTarget,
-    context: Parameters<typeof listTargetReports>[2],
+    context: Parameters<typeof listSelectedTargetReports>[2],
     query: { cursor?: string; limit?: number } & import('./reports.ts').ReportSelection,
     admit: <T>(operation: () => Promise<T>) => Promise<T>,
     session: { record: (value: ReturnType<typeof component>) => void },
@@ -289,7 +289,14 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
           await requireReportInspection(dependencies, target.id, context);
           let page;
           try {
-            page = await listTargetReports(dependencies, target, context, query.cursor, query.limit ?? 20, query);
+            page = await listSelectedTargetReports(
+              dependencies,
+              target,
+              context,
+              query.cursor,
+              query.limit ?? 20,
+              query,
+            );
           } catch (error) {
             if (query.cursor !== undefined && error instanceof TypeError) throw new ProblemError('invalid_cursor');
             throw error;
