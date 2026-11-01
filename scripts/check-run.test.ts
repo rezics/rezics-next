@@ -233,7 +233,7 @@ test('source mismatch, c-only hosts, forbidden env values, and missing generated
   ).rejects.toThrow('original env prefix changes remote runtime');
   expect(transports).toBe(0);
   const generated = argsFor(fixture, ['bun', 'run', '--cwd', 'apps/web', 'check']);
-  await expect(runCheck(generated, dependencies)).rejects.toThrow('required generated-input package is missing');
+  expect(await runCheck(generated, dependencies)).toBe(75);
   expect(transports).toBe(0);
 
   const credential = candidate();

@@ -296,6 +296,15 @@ function smallUnitFile(root: string, file: string, seen: Set<string>): boolean {
   return true;
 }
 
+function hasExplicitTestHarness(file: string): boolean {
+  try {
+    const source = readFileSync(file, 'utf8');
+    return /\b(?:from\s*|import\s*\(|require\s*\()\s*['"](?:bun:test|node:test)['"]/.test(source);
+  } catch {
+    return false;
+  }
+}
+
 function testFilesAreSmall(args: readonly string[], cwd: string, root: string): boolean {
   let directory = cwd;
   const files: string[] = [];
@@ -345,7 +354,7 @@ function testFilesAreSmall(args: readonly string[], cwd: string, root: string): 
   }
   if (files.length === 0 || files.length > MAX_SMALL_UNIT_FILES || isNativeStackPath(directory)) return false;
   const seen = new Set<string>();
-  return files.every((file) => smallUnitFile(root, file, seen));
+  return files.every((file) => hasExplicitTestHarness(file) && smallUnitFile(root, file, seen));
 }
 
 function classifyCommand(argv: readonly string[], cwd: string, root: string, depth = 0): CheckPlacement {

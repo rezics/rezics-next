@@ -8,7 +8,7 @@ import type { spawn } from 'node:child_process';
 import { onCheckHost, stackRun } from './stack-run.ts';
 import { classifyCheck, performanceHosts } from './check-placement.ts';
 import { RemoteTransportError } from './remote-check.ts';
-import { workerCheckNeedsStack } from './worker-check.ts';
+import { runWorkerCheck, workerCheckNeedsStack } from './worker-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const temporary: string[] = [];
@@ -29,7 +29,7 @@ function fixture(): string {
   writeFileSync(join(root, 'packages/util/add.ts'), 'export const add = (a: number, b: number) => a + b;\n');
   writeFileSync(
     join(root, 'packages/util/test/unit.test.ts'),
-    "import { add } from '../add.ts';\nif (add(1, 2) !== 3) throw new Error('bad sum');\n",
+    "import { test, expect } from 'bun:test';\nimport { add } from '../add.ts';\ntest('adds', () => expect(add(1, 2)).toBe(3));\n",
   );
   writeFileSync(
     join(root, 'packages/util/package.json'),
