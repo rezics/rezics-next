@@ -127,7 +127,7 @@ export async function publishCatalogueArtifact(
   return result(
     await runCommand(
       pool,
-      commandOptions(options, 'definitions.catalogue.artifact', 'definitions:publish'),
+      commandOptions(options, 'definition_catalogues.publish_artifact', 'definitions:publish'),
       async (tx, { transactionId }) => {
         // Decode/check inside authorized command, preserving denial-before-receipt semantics.
         const value = await readCatalogueArtifact({ read: async () => bytes }, digest, maximum);
@@ -166,7 +166,7 @@ export async function startCatalogueBuild(pool: Pool, options: WriteOptions & { 
   return result(
     await runCommand(
       pool,
-      commandOptions(options, 'definitions.catalogue.build', 'definitions:publish'),
+      commandOptions(options, 'definition_catalogues.build', 'definitions:publish'),
       async (tx, { transactionId }) => {
         const root = parseCatalogueRoot(
           await readCatalogueArtifact(catalogueArtifactReader(tx), pin.rootDigest, CATALOGUE_LIMITS.nodeBytes),
@@ -367,7 +367,10 @@ export async function advanceCatalogueBuild(
     )
   ).rows[0];
   if (!build) throw new DefinitionNotFoundError();
-  if (build.state === 'ready' || build.state === 'refused') return build;
+  if (build.state === 'ready' || build.state === 'refused') {
+    const { next_node, ...status } = build;
+    return status;
+  }
   await tx.query('SAVEPOINT catalogue_step');
   let examined = 0;
   try {
@@ -451,7 +454,7 @@ export async function advanceCatalogueBuild(
 export async function stepCatalogueBuild(pool: Pool, options: WriteOptions & { pin: KindCataloguePin }) {
   const pin = parseCataloguePin(options.pin);
   return result(
-    await runCommand(pool, commandOptions(options, 'definitions.catalogue.step', 'definitions:publish'), async (tx) => {
+    await runCommand(pool, commandOptions(options, 'definition_catalogues.step', 'definitions:publish'), async (tx) => {
       const value = await advanceCatalogueBuild(tx, pin);
       return {
         value,
@@ -479,7 +482,7 @@ export async function activateCatalogue(
   return result(
     await runCommand(
       pool,
-      commandOptions(options, 'definitions.catalogue.activate', 'definitions:activate'),
+      commandOptions(options, 'definition_catalogues.activate', 'definitions:activate'),
       async (tx, { transactionId }) => {
         const build = await readCatalogueBuild(tx, pin);
         if (!build) throw new DefinitionNotFoundError();

@@ -181,7 +181,7 @@ export function definitionRoutes(
           ...catalogueWriteResponses,
         },
         detail: {
-          ...catalogueWriteDetail('definitions.catalogue.publish_artifact', 'definitions:publish'),
+          ...catalogueWriteDetail('definition_catalogues.publish_artifact', 'definitions:publish'),
           'x-body-limit': MAX_BODY_LIMIT,
         },
       },
@@ -195,7 +195,7 @@ export function definitionRoutes(
               kind: body.kind,
               artifact: body.artifact,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-              digest: requestDigest('definitions.catalogue.publish_artifact', actor, { params: {}, body }),
+              digest: requestDigest('definition_catalogues.publish_artifact', actor, { params: {}, body }),
               authorize: authorization.check,
               authorization,
               deadline: job.deadline,
@@ -216,7 +216,7 @@ export function definitionRoutes(
         headers: writeHeaders,
         body: t.Object({ pin: cataloguePinSchema }, { additionalProperties: false }),
         response: { 200: withHeaders(catalogueStatusSchema, sessionHeaders), ...catalogueWriteResponses },
-        detail: catalogueWriteDetail('definitions.catalogue.build', 'definitions:publish'),
+        detail: catalogueWriteDetail('definition_catalogues.build', 'definitions:publish'),
       },
       async ({ body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -227,7 +227,7 @@ export function definitionRoutes(
               actor,
               pin: body.pin,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-              digest: requestDigest('definitions.catalogue.build', actor, { params: {}, body }),
+              digest: requestDigest('definition_catalogues.build', actor, { params: {}, body }),
               authorize: authorization.check,
               authorization,
               deadline: job.deadline,
@@ -249,7 +249,7 @@ export function definitionRoutes(
         headers: writeHeaders,
         body: t.Object({}, { additionalProperties: false }),
         response: { 200: withHeaders(catalogueStatusSchema, sessionHeaders), ...catalogueWriteResponses },
-        detail: catalogueWriteDetail('definitions.catalogue.step', 'definitions:publish'),
+        detail: catalogueWriteDetail('definition_catalogues.step', 'definitions:publish'),
       },
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -260,7 +260,7 @@ export function definitionRoutes(
               actor,
               pin: cataloguePin(params.root),
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-              digest: requestDigest('definitions.catalogue.step', actor, { params, body }),
+              digest: requestDigest('definition_catalogues.step', actor, { params, body }),
               authorize: authorization.check,
               authorization,
               deadline: job.deadline,
@@ -288,7 +288,7 @@ export function definitionRoutes(
           200: withHeaders(t.Object({ pin: cataloguePinSchema, head: t.Integer() }), sessionHeaders),
           ...catalogueWriteResponses,
         },
-        detail: catalogueWriteDetail('definitions.catalogue.activate', 'definitions:activate'),
+        detail: catalogueWriteDetail('definition_catalogues.activate', 'definitions:activate'),
       },
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -300,7 +300,7 @@ export function definitionRoutes(
               pin: cataloguePin(params.root),
               expectedHead: body.expected_head,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-              digest: requestDigest('definitions.catalogue.activate', actor, { params, body }),
+              digest: requestDigest('definition_catalogues.activate', actor, { params, body }),
               authorize: authorization.check,
               authorization,
               deadline: job.deadline,
@@ -321,7 +321,7 @@ export function definitionRoutes(
           200: t.Union([t.Object({ pin: cataloguePinSchema, head: t.Integer() }), t.Null()]),
           ...catalogueReadResponses,
         },
-        detail: catalogueReadDetail('definitions.catalogue.head'),
+        detail: catalogueReadDetail('definition_catalogues.head'),
       },
       async ({ actor, admission, job }) => {
         try {
@@ -336,7 +336,7 @@ export function definitionRoutes(
       {
         params: t.Object({ root: t.String() }),
         response: { 200: catalogueStatusSchema, ...catalogueReadResponses },
-        detail: catalogueReadDetail('definitions.catalogue.status'),
+        detail: catalogueReadDetail('definition_catalogues.status'),
       },
       async ({ params, actor, admission, job }) => {
         try {
@@ -364,7 +364,7 @@ export function definitionRoutes(
           ),
           ...catalogueReadResponses,
         },
-        detail: catalogueReadDetail('definitions.catalogue.resolve_kinds'),
+        detail: catalogueReadDetail('definition_catalogues.resolve_kinds'),
       },
       async ({ params, body, actor, admission, job }) => {
         try {
@@ -395,7 +395,7 @@ export function definitionRoutes(
           ),
           ...catalogueReadResponses,
         },
-        detail: catalogueReadDetail('definitions.catalogue.kind_page'),
+        detail: catalogueReadDetail('definition_catalogues.kind_page'),
       },
       async ({ params, query, actor, admission, job }) => {
         try {
@@ -431,7 +431,7 @@ export function definitionRoutes(
           ),
           ...catalogueReadResponses,
         },
-        detail: catalogueReadDetail('definitions.catalogue.candidates'),
+        detail: catalogueReadDetail('definition_catalogues.candidates'),
       },
       async ({ params, query, actor, admission, job }) => {
         try {
