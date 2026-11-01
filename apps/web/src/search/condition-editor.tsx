@@ -36,11 +36,19 @@ export type ConditionExtension = {
   render(value: FilterDocument, onChange: (value: FilterDocument) => void): ReactNode;
 };
 
-function errorText(code: string) {
-  if (code === 'required') return m.condition_required();
-  if (code === 'out_of_range') return m.condition_bounds();
-  if (code === 'unsupported' || code === 'unknown_field') return m.condition_unsupported();
-  return m.condition_invalid();
+function fieldErrorText(code: string, field: string) {
+  if (code === 'required') return m.search_reader_condition_required({ field });
+  if (code === 'unsupported' || code === 'unknown_field') return m.search_reader_condition_unsupported({ field });
+  if (code === 'invalid_type') return m.search_reader_condition_type({ field });
+  if (code === 'invalid_format') return m.search_reader_condition_format({ field });
+  return m.search_reader_condition_invalid({ field });
+}
+
+function summaryErrorText(issue: ConditionIssue) {
+  if (issue.pointer.startsWith('/text')) return m.condition_text_error();
+  if (issue.pointer.startsWith('/cursor')) return m.condition_cursor_error();
+  if (issue.code === 'out_of_range') return m.search_reader_condition_filter_review();
+  return m.search_reader_condition_fields_review();
 }
 
 /** The existing Filters form composes shared fields; shadcn has no FilterDocument tree editor. */
@@ -93,6 +101,14 @@ export function ConditionEditor({
     <div ref={root} className="min-w-0 space-y-3 border-t border-border/60 pt-4" data-condition-editor>
       <h2 className="font-medium">{m.condition_heading()}</h2>
       <p className="text-sm text-muted-foreground">{embedded ? m.library_rule_hint() : m.condition_hint()}</p>
+      {!embedded && (
+        <details className="text-sm">
+          <summary className="min-h-10 cursor-pointer content-center rounded-lg px-2 text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+            {m.search_reader_condition_limits_title()}
+          </summary>
+          <p className="mt-1 text-muted-foreground">{m.search_reader_condition_limits()}</p>
+        </details>
+      )}
       <p role="status" aria-live="polite" className="sr-only">
         <span key={announcement.version}>{announcement.text}</span>
       </p>
@@ -119,12 +135,12 @@ export function ConditionEditor({
       {issues.length > 0 && (
         <div role="alert" tabIndex={-1} data-condition-errors className="space-y-1 text-sm text-destructive">
           {issues.map((issue, index) => (
-            <p key={`${issue.pointer}:${issue.code}:${index}`} data-error-pointer={issue.pointer}>
-              {issue.pointer.startsWith('/text')
-                ? m.condition_text_error()
-                : issue.pointer.startsWith('/cursor')
-                  ? m.condition_cursor_error()
-                  : errorText(issue.code)}
+            <p
+              key={`${issue.pointer}:${issue.code}:${index}`}
+              data-error-pointer={issue.pointer}
+              data-error-code={issue.code}
+            >
+              {summaryErrorText(issue)}
             </p>
           ))}
         </div>
@@ -181,6 +197,8 @@ function EditorField({
   const errors = conditionFieldIssues(context.issues, pointer).filter(
     (issue) => !exact || issue.pointer === pointer || pointer.startsWith(`${issue.pointer}/`),
   );
+  const firstError = errors[0];
+  const fieldSpecific = firstError && !exact && firstError.pointer === pointer && firstError.code !== 'out_of_range';
   return (
     <Field data-invalid={errors.length > 0 || undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -191,7 +209,7 @@ function EditorField({
       })}
       {errors.length > 0 && (
         <p id={`${id}-error`} className="text-sm text-destructive">
-          {errorText(errors[0]!.code)}
+          {fieldSpecific ? fieldErrorText(firstError!.code, label) : m.search_reader_condition_filter_review()}
         </p>
       )}
     </Field>

@@ -4102,5 +4102,18 @@
   "moderation_decision_read_retry": "Retry current decision",
   "reporter_status_read_loading": "Loading your report…",
   "reporter_status_read_concealed": "This report is unknown or not visible in your current session.",
+  "search_reader_rating_help_title": "About rating order",
+  "search_reader_condition_limits_title": "Filter limits",
+  "search_reader_condition_limits": "Limits: 32 conditions including qualifiers, nesting depth 4, 16 branches per OR group, 64 values per list, and 4 qualifiers per condition.",
+  "search_reader_condition_required": "Choose or enter a value for {field}.",
+  "search_reader_condition_invalid": "Correct the value for {field}.",
+  "search_reader_condition_type": "Enter a value of the expected type for {field}.",
+  "search_reader_condition_format": "Use a supported format for {field}.",
+  "search_reader_condition_unsupported": "Choose a supported value for {field}.",
+  "search_reader_condition_filter_review": "Review this filter group or simplify the filter.",
+  "search_reader_condition_fields_review": "Review the filter controls and groups marked below.",
+  "search_reader_facets_not_ready": "Some filter choices are unavailable right now. Your selected filters remain applied.",
+  "search_reader_facets_unavailable": "Some filter choices could not be loaded. Your selected filters remain applied.",
+  "search_reader_results_unavailable": "Search results are unavailable right now. Your query and filters are kept.",
   "reporter_status_read_closed": "Report status is not available on this platform."
 }

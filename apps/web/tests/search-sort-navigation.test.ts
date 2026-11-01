@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import * as v from 'valibot';
 import { searchLoaderDeps, searchParams, type SearchLoaderDeps } from '../src/search/search-params';
 import { searchSortHref, SearchSort } from '../src/search/sort';
+import { m } from '../src/paraglide/messages.js';
 
 const state: SearchLoaderDeps = {
   query: '  "Mira" | 星 -old + / =  ',
@@ -60,6 +61,11 @@ test('sort keeps an ordinary localized GET form with all supported inputs and no
   );
   expect(html).toMatch(/<form\b[^>]*method="get"/);
   expect(html).toMatch(/<form\b[^>]*action="\/zh-Hant\/search"/);
+  const ratingHelp = html.match(/<details\b[^>]*>[\s\S]*?<\/details>/)?.[0];
+  expect(ratingHelp).toBeDefined();
+  expect(ratingHelp).not.toMatch(/\sopen(?:=|\s|>)/);
+  expect(ratingHelp).toContain(m.search_reader_rating_help_title({}, { locale: 'zh-Hant' as never }));
+  expect(ratingHelp).toContain(m.rating_public_ordering({}, { locale: 'zh-Hant' as never }));
   for (const name of [
     'q',
     'type',

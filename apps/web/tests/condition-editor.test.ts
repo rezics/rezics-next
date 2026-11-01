@@ -40,10 +40,23 @@ test('Distinct released condition choices with identical localized labels are di
   expect(invalid).toContain('value="wd:Q20631656" selected="">版本 (wd:Q20631656)</option>');
   expect(invalid).toContain('value="schema:Book">书籍</option>');
   expect(invalid).toContain('aria-describedby=');
+  const errorId = invalid.match(/aria-describedby="([^"]+)"/)?.[1];
+  expect(errorId).toBeDefined();
+  const expectedError = m.search_reader_condition_unsupported({ field: m.condition_value({ number: 1 }) });
+  expect(html).toContain(
+    `id="${errorId}" class="text-sm text-destructive">${expectedError}</p>`,
+  );
   expect(html).toContain('value="bf:Instance" selected="">版本 (bf:Instance)</option>');
   expect(html).toContain('value="retired:Type" selected="">retired:Type</option>');
   expect(html).toContain(`data-error-pointer="${pointer}"`);
-  expect(html).toContain(m.condition_unsupported());
+  expect(html).toContain('data-error-code="unsupported"');
+  expect(html).not.toContain(m.condition_bounds());
+  const limits = html.match(/<details\b[^>]*>[\s\S]*?<\/details>/)?.[0];
+  expect(limits).toBeDefined();
+  expect(limits).not.toMatch(/\sopen(?:=|\s|>)/);
+  expect(limits).toContain('<summary');
+  expect(limits).toContain(m.search_reader_condition_limits_title());
+  expect(limits).toContain(m.search_reader_condition_limits());
   const actualValues = [...invalid.matchAll(/<option\b[^>]*\bvalue="([^"]*)"/g)].map(([, value]) => value);
   expect(actualValues).toEqual(['', ...Object.keys(metadata.types)]);
   expect(JSON.stringify(metadata)).toBe(before);

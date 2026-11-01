@@ -8,6 +8,7 @@ import { discoverySearchHref, searchLoaderDeps } from '../src/search/search-para
 import { SearchRecovery } from '../src/search/search-recovery-view';
 import { Refinement } from '../src/search/refinement/refinement';
 import { readFacetPage } from '../src/search/refinement/request';
+import { m } from '../src/paraglide/messages.js';
 import {
   facetSearchInvalidation,
   readSearchOutcome,
@@ -180,6 +181,8 @@ test('recovery offers appropriate manual actions, honors Retry-After, and never 
   const render = (recovery: SearchRecoveryState) =>
     renderToStaticMarkup(createElement(SearchRecovery, { state: recovery, retryHref, restartHref, onRetry() {} }));
   const waiting = render({ status: 'index-not-ready', retryAt: Date.now() + 60_000 });
+  expect(waiting).toContain(m.search_reader_results_unavailable());
+  expect(waiting).toContain(m.search_facet_retry());
   expect(waiting).toContain('disabled');
   expect(waiting).toContain('Wait a moment');
   const restart = render({ status: 'restart' });
@@ -192,7 +195,8 @@ test('recovery offers appropriate manual actions, honors Retry-After, and never 
     expect(html).not.toContain('href=');
     expect(html).not.toContain('<button');
   }
-  expect(render({ status: 'source-not-ready' })).not.toBe(waiting);
+  expect(render({ status: 'source-not-ready' })).toContain(m.search_reader_results_unavailable());
+  expect(render({ status: 'unavailable' })).toContain(m.search_reader_results_unavailable());
   expect(render({ status: 'unavailable' })).not.toMatch(/0 results|No results|progressbar|%/);
   expect(searchRetryAt('1', 1000)).toBe(2000);
   expect(searchRetryAt('Thu, 01 Jan 1970 00:00:03 GMT', 1000)).toBe(3000);

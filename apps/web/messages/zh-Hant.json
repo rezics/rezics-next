@@ -4099,5 +4099,18 @@
   "moderation_decision_read_retry": "重新讀取目前的決定",
   "reporter_status_read_loading": "正在載入你的檢舉…",
   "reporter_status_read_concealed": "此檢舉不存在，或在目前的工作階段中不可見。",
+  "search_reader_rating_help_title": "關於依評分排序",
+  "search_reader_condition_limits_title": "篩選條件上限",
+  "search_reader_condition_limits": "上限：條件最多 32 項（含限定條件），巢狀深度 4，OR 群組最多 16 個分支，每個值清單最多 64 項，每條條件最多 4 個限定條件。",
+  "search_reader_condition_required": "請選擇或輸入 {field} 的值。",
+  "search_reader_condition_invalid": "請更正 {field} 的值。",
+  "search_reader_condition_type": "請為 {field} 輸入符合預期型別的值。",
+  "search_reader_condition_format": "請為 {field} 使用支援的格式。",
+  "search_reader_condition_unsupported": "請為 {field} 選擇支援的值。",
+  "search_reader_condition_filter_review": "請檢查此篩選群組，或簡化篩選條件。",
+  "search_reader_condition_fields_review": "請檢查下方標示的篩選欄位與群組。",
+  "search_reader_facets_not_ready": "部分篩選選項目前無法使用。已選取的篩選條件仍會套用。",
+  "search_reader_facets_unavailable": "部分篩選選項無法載入。已選取的篩選條件仍會套用。",
+  "search_reader_results_unavailable": "搜尋結果目前無法使用。你的搜尋內容和篩選條件會保留。",
   "reporter_status_read_closed": "此平台暫不提供檢舉狀態。"
 }

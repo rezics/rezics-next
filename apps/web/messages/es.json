@@ -4099,5 +4099,18 @@
   "moderation_decision_read_retry": "Reintentar la lectura de la decisión",
   "reporter_status_read_loading": "Cargando tu denuncia…",
   "reporter_status_read_concealed": "Esta denuncia es desconocida o no es visible en tu sesión actual.",
+  "search_reader_rating_help_title": "Acerca del orden por valoración",
+  "search_reader_condition_limits_title": "Límites del filtro",
+  "search_reader_condition_limits": "Límites: 32 condiciones, incluidos los calificadores; profundidad 4; 16 ramas por grupo OR; 64 valores por lista y 4 calificadores por condición.",
+  "search_reader_condition_required": "Elige o escribe un valor para {field}.",
+  "search_reader_condition_invalid": "Corrige el valor de {field}.",
+  "search_reader_condition_type": "Introduce para {field} un valor del tipo esperado.",
+  "search_reader_condition_format": "Usa un formato admitido para {field}.",
+  "search_reader_condition_unsupported": "Elige un valor admitido para {field}.",
+  "search_reader_condition_filter_review": "Revisa este grupo de filtros o simplifica el filtro.",
+  "search_reader_condition_fields_review": "Revisa los campos y grupos de filtros marcados abajo.",
+  "search_reader_facets_not_ready": "Algunas opciones de filtro no están disponibles ahora. Los filtros seleccionados siguen aplicándose.",
+  "search_reader_facets_unavailable": "No se pudieron cargar algunas opciones de filtro. Los filtros seleccionados siguen aplicándose.",
+  "search_reader_results_unavailable": "Los resultados de búsqueda no están disponibles ahora. Se conservan tu búsqueda y tus filtros.",
   "reporter_status_read_closed": "El estado de las denuncias no está disponible en esta plataforma."
 }

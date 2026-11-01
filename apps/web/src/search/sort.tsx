@@ -36,7 +36,11 @@ export function SearchSort({
   // The selector also supports static form rendering outside the connected application.
   const router = useRouter({ warn: false });
   return (
-    <form method="get" action={`/${locale}/search`} className="flex max-w-full items-center justify-end gap-2">
+    <form
+      method="get"
+      action={`/${locale}/search`}
+      className="flex max-w-full flex-wrap items-center justify-end gap-2"
+    >
       <Field orientation="horizontal" className="w-auto flex-wrap justify-end gap-2">
         <FieldLabel htmlFor="search-sort" className="text-sm text-muted-foreground">
           {m.search_sort_label()}
@@ -60,6 +64,14 @@ export function SearchSort({
           <NativeSelectOption value="rating">{m.search_sort_rating()}</NativeSelectOption>
         </NativeSelect>
       </Field>
+      <details className="min-w-0 max-w-full text-sm text-muted-foreground">
+        <summary className="min-h-10 cursor-pointer content-center rounded-lg px-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+          {m.search_reader_rating_help_title({}, { locale: locale as never })}
+        </summary>
+        <p className="mt-1 px-2 text-muted-foreground">
+          {m.rating_public_ordering({}, { locale: locale as never })}
+        </p>
+      </details>
       {sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {state &&
         searchFormFields({

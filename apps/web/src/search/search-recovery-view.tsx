@@ -21,11 +21,10 @@ export function searchRecoveryMessage(state: SearchRecoveryState): string {
     case 'restart':
       return m.discovery_restart();
     case 'index-not-ready':
-      return m.discovery_not_ready();
     case 'source-not-ready':
-      return m.search_recovery_source();
+      return m.search_reader_results_unavailable();
     default:
-      return m.search_failed();
+      return m.search_reader_results_unavailable();
   }
 }
 

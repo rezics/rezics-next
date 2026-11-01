@@ -4099,5 +4099,18 @@
   "moderation_decision_read_retry": "現在の判断を再読み込み",
   "reporter_status_read_loading": "あなたの通報を読み込み中…",
   "reporter_status_read_concealed": "この通報は存在しないか、現在のセッションでは表示できません。",
+  "search_reader_rating_help_title": "評価順について",
+  "search_reader_condition_limits_title": "フィルターの上限",
+  "search_reader_condition_limits": "上限：修飾条件を含む条件は32件、入れ子の深さは4、ORグループは16項目、値リストは64件、条件ごとの修飾条件は4件までです。",
+  "search_reader_condition_required": "{field}の値を選択または入力してください。",
+  "search_reader_condition_invalid": "{field}の値を修正してください。",
+  "search_reader_condition_type": "{field}には想定される型の値を入力してください。",
+  "search_reader_condition_format": "{field}には対応している形式を使ってください。",
+  "search_reader_condition_unsupported": "{field}には対応している値を選択してください。",
+  "search_reader_condition_filter_review": "このフィルターグループを確認するか、条件や値を減らしてください。",
+  "search_reader_condition_fields_review": "印の付いたフィルター項目とグループを確認してください。",
+  "search_reader_facets_not_ready": "一部のフィルター候補を現在利用できません。選択済みのフィルターは適用されたままです。",
+  "search_reader_facets_unavailable": "一部のフィルター候補を読み込めませんでした。選択済みのフィルターは適用されたままです。",
+  "search_reader_results_unavailable": "検索結果を現在利用できません。検索内容とフィルターは保持されています。",
   "reporter_status_read_closed": "このプラットフォームでは通報状況を確認できません。"
 }

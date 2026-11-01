@@ -4099,5 +4099,18 @@
   "moderation_decision_read_retry": "Réessayer de lire la décision",
   "reporter_status_read_loading": "Chargement de votre signalement…",
   "reporter_status_read_concealed": "Ce signalement est inconnu ou invisible dans votre session actuelle.",
+  "search_reader_rating_help_title": "À propos du classement par note",
+  "search_reader_condition_limits_title": "Limites du filtre",
+  "search_reader_condition_limits": "Limites : 32 conditions, qualificatifs compris ; profondeur 4 ; 16 branches par groupe OU ; 64 valeurs par liste et 4 qualificatifs par condition.",
+  "search_reader_condition_required": "Choisissez ou saisissez une valeur pour {field}.",
+  "search_reader_condition_invalid": "Corrigez la valeur de {field}.",
+  "search_reader_condition_type": "Saisissez pour {field} une valeur du type attendu.",
+  "search_reader_condition_format": "Utilisez un format pris en charge pour {field}.",
+  "search_reader_condition_unsupported": "Choisissez une valeur prise en charge pour {field}.",
+  "search_reader_condition_filter_review": "Vérifiez ce groupe de filtres ou simplifiez le filtre.",
+  "search_reader_condition_fields_review": "Vérifiez ci-dessous les champs et groupes de filtres signalés.",
+  "search_reader_facets_not_ready": "Certaines options de filtre sont indisponibles pour le moment. Les filtres sélectionnés restent appliqués.",
+  "search_reader_facets_unavailable": "Certaines options de filtre n’ont pas pu être chargées. Les filtres sélectionnés restent appliqués.",
+  "search_reader_results_unavailable": "Les résultats de recherche sont indisponibles pour le moment. Votre recherche et vos filtres sont conservés.",
   "reporter_status_read_closed": "Le statut des signalements est indisponible sur cette plateforme."
 }

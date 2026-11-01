@@ -4099,5 +4099,18 @@
   "moderation_decision_read_retry": "현재 결정 다시 불러오기",
   "reporter_status_read_loading": "신고를 불러오는 중…",
   "reporter_status_read_concealed": "알 수 없는 신고이거나 현재 세션에서 볼 수 없습니다.",
+  "search_reader_rating_help_title": "평점순 정렬 안내",
+  "search_reader_condition_limits_title": "필터 제한",
+  "search_reader_condition_limits": "제한: 한정자를 포함한 조건 32개, 중첩 깊이 4, OR 그룹당 분기 16개, 값 목록당 값 64개, 조건당 한정자 4개입니다.",
+  "search_reader_condition_required": "{field} 값을 선택하거나 입력하세요.",
+  "search_reader_condition_invalid": "{field} 값을 수정하세요.",
+  "search_reader_condition_type": "{field}에 예상된 유형의 값을 입력하세요.",
+  "search_reader_condition_format": "{field}에 지원되는 형식을 사용하세요.",
+  "search_reader_condition_unsupported": "{field}에 지원되는 값을 선택하세요.",
+  "search_reader_condition_filter_review": "이 필터 그룹을 확인하거나 조건 또는 값을 줄이세요.",
+  "search_reader_condition_fields_review": "표시된 필터 항목과 그룹을 확인하세요.",
+  "search_reader_facets_not_ready": "일부 필터 옵션을 지금 사용할 수 없습니다. 선택한 필터는 계속 적용됩니다.",
+  "search_reader_facets_unavailable": "일부 필터 옵션을 불러오지 못했습니다. 선택한 필터는 계속 적용됩니다.",
+  "search_reader_results_unavailable": "검색 결과를 지금 사용할 수 없습니다. 검색어와 필터는 유지됩니다.",
   "reporter_status_read_closed": "이 플랫폼에서는 신고 상태를 확인할 수 없습니다."
 }

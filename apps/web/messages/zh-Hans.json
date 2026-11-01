@@ -4100,5 +4100,18 @@
   "moderation_decision_read_retry": "重新读取当前决定",
   "reporter_status_read_loading": "正在加载你的举报…",
   "reporter_status_read_concealed": "此举报不存在，或在当前会话中不可见。",
+  "search_reader_rating_help_title": "关于按评分排序",
+  "search_reader_condition_limits_title": "筛选条件上限",
+  "search_reader_condition_limits": "上限：条件最多 32 项（含限定条件），嵌套深度 4，OR 组最多 16 个分支，每个值列表最多 64 项，每条条件最多 4 个限定条件。",
+  "search_reader_condition_required": "请选择或输入 {field} 的值。",
+  "search_reader_condition_invalid": "请更正 {field} 的值。",
+  "search_reader_condition_type": "请为 {field} 输入符合预期类型的值。",
+  "search_reader_condition_format": "请为 {field} 使用受支持的格式。",
+  "search_reader_condition_unsupported": "请为 {field} 选择受支持的值。",
+  "search_reader_condition_filter_review": "请检查此筛选组，或简化筛选条件。",
+  "search_reader_condition_fields_review": "请检查下方标记的筛选字段和分组。",
+  "search_reader_facets_not_ready": "部分筛选选项目前不可用。已选筛选条件仍会应用。",
+  "search_reader_facets_unavailable": "部分筛选选项无法加载。已选筛选条件仍会应用。",
+  "search_reader_results_unavailable": "搜索结果目前不可用。你的搜索内容和筛选条件已保留。",
   "reporter_status_read_closed": "此平台暂不提供举报状态。"
 }

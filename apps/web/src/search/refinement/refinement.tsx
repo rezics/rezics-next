@@ -242,12 +242,10 @@ export function Refinement({
             {state.status === 'refused'
               ? m.refinement_refused()
               : state.status === 'preparing'
-                ? m.search_facet_index_not_ready()
+                ? m.search_reader_facets_not_ready()
                 : state.status === 'restart'
                   ? m.refinement_restart()
-                  : state.code === 'semantic_not_ready'
-                    ? m.search_recovery_source()
-                    : m.search_facet_unavailable()}
+                  : m.search_reader_facets_unavailable()}
           </p>
           {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait()}</p>}
           {state.status === 'restart' ? (

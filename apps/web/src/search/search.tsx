@@ -876,9 +876,6 @@ function renderResults(
     : undefined;
   return (
     <>
-      {data?.sort === 'rating' && (
-        <p className="text-sm text-muted-foreground">{m.rating_public_ordering({}, { locale: locale as never })}</p>
-      )}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{m.search_results()}</p>
@@ -908,7 +905,7 @@ function renderResults(
       )}
       {data?.facetRetry && (
         <p role="status" className="text-sm text-muted-foreground">
-          {data.facetIndexNotReady ? m.search_facet_index_not_ready() : m.search_facet_unavailable()}{' '}
+          {data.facetIndexNotReady ? m.search_reader_facets_not_ready() : m.search_reader_facets_unavailable()}{' '}
           <a
             className={linkClass}
             href={searchHref(

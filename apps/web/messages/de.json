@@ -4099,5 +4099,18 @@
   "moderation_decision_read_retry": "Aktuelle Entscheidung erneut laden",
   "reporter_status_read_loading": "Dein Bericht wird geladen…",
   "reporter_status_read_concealed": "Dieser Bericht ist unbekannt oder in deiner aktuellen Sitzung nicht sichtbar.",
+  "search_reader_rating_help_title": "Zur Sortierung nach Bewertung",
+  "search_reader_condition_limits_title": "Filtergrenzen",
+  "search_reader_condition_limits": "Grenzen: 32 Bedingungen einschließlich Qualifikatoren, Verschachtelungstiefe 4, 16 Zweige pro ODER-Gruppe, 64 Werte pro Liste und 4 Qualifikatoren pro Bedingung.",
+  "search_reader_condition_required": "Wähle einen Wert für {field} aus oder gib ihn ein.",
+  "search_reader_condition_invalid": "Korrigiere den Wert für {field}.",
+  "search_reader_condition_type": "Gib für {field} einen Wert des erwarteten Typs ein.",
+  "search_reader_condition_format": "Verwende für {field} ein unterstütztes Format.",
+  "search_reader_condition_unsupported": "Wähle einen unterstützten Wert für {field}.",
+  "search_reader_condition_filter_review": "Prüfe diese Filtergruppe oder vereinfache den Filter.",
+  "search_reader_condition_fields_review": "Prüfe die unten markierten Filterfelder und Gruppen.",
+  "search_reader_facets_not_ready": "Einige Filteroptionen sind momentan nicht verfügbar. Deine ausgewählten Filter bleiben angewendet.",
+  "search_reader_facets_unavailable": "Einige Filteroptionen konnten nicht geladen werden. Deine ausgewählten Filter bleiben angewendet.",
+  "search_reader_results_unavailable": "Suchergebnisse sind momentan nicht verfügbar. Deine Suchanfrage und Filter bleiben erhalten.",
   "reporter_status_read_closed": "Der Berichtsstatus ist auf dieser Plattform nicht verfügbar."
 }

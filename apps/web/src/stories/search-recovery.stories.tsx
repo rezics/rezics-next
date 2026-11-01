@@ -124,10 +124,10 @@ export const IndexNotReady: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const retry = await canvas.findByRole('button', { name: m.search_facet_retry() });
-    await expect(await canvas.findByText(m.discovery_not_ready())).toBeVisible();
+    await expect(await canvas.findByText(m.search_reader_results_unavailable())).toBeVisible();
     await waitFor(() => expect(retry).toBeEnabled());
     await userEvent.click(retry);
-    await waitFor(() => expect(canvas.queryByText(m.discovery_not_ready())).toBeNull());
+    await waitFor(() => expect(canvas.queryByText(m.search_reader_results_unavailable())).toBeNull());
     await expect(canvasElement.querySelector('[data-slot="discovery-results"]')).not.toBeNull();
   },
 };
