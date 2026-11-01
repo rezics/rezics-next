@@ -237,7 +237,7 @@ export class BoardPageCaller {
   private binding: () => LiveBinding;
   private queryKey?: readonly unknown[];
   private pageQuery: object | undefined;
-  private queryDataUpdateCount?: number;
+  private queryDataUpdateCount: number | undefined;
   private stopQueryWatching: (() => void) | undefined;
   private result?: BoardPageLoadResult;
   private retired = false;
@@ -545,7 +545,13 @@ export class BoardPageCaller {
       const expected = this.transferReceipt.expectedReader;
       const origin = this.transferReceipt.readerOrigin;
       const current = this.source.read();
-      if (!expected || !sameReader(origin, expected) || current?.state !== 'signed-in' || !current.subject) {
+      if (
+        !expected ||
+        origin.kind !== 'session' ||
+        !sameReader(origin, expected) ||
+        current?.state !== 'signed-in' ||
+        !current.subject
+      ) {
         this.retire('session');
         return;
       }
@@ -571,7 +577,7 @@ export class BoardPageCaller {
     this.stopQueryWatching = this.client.getQueryCache().subscribe((event) => {
       if (
         event.query.queryKey.length !== queryKey.length ||
-        event.query.queryKey.some((part, index) => part !== queryKey[index])
+        event.query.queryKey.some((part: unknown, index: number) => part !== queryKey[index])
       )
         return;
       if (event.type === 'added') {
