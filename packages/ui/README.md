@@ -59,6 +59,16 @@ Selecting a radio value closes the menu once. Escape closes either form, and foc
 Custom menu content with client-side links can set `closeOnNavigation` so following a link closes the menu without
 adding a sheet-history entry.
 
+Caller-supplied content remains a form or link panel; `Menu` does not convert it to menu entries. On desktop, the
+panel uses the shared anchored Popover, sizes to its content between a 16rem minimum and 32rem maximum, and clamps
+both limits to the available viewport width. It flips or shifts around its trigger and bounds its height to the
+available space. The Popover owns vertical scrolling and repositions when its trigger, viewport or content changes.
+Native inputs, selects and textareas remain keyboard reachable; initial focus moves to the first tabbable control.
+Escape restores focus to the trigger. An outside press closes the panel while leaving focus on the clicked control,
+and a primary-navigation link remains exempt from outside dismissal. On phone, custom
+content stays in the BottomSheet and its body owns scrolling. Avoid adding a second viewport-height scroller inside
+custom content.
+
 Callers use `Menu` or a component built on it; they never import shadcn's dropdown primitive to implement a
 menu. `editor-selection-menu.tsx` is a floating formatting toolbar over a text selection, not a menu. `cover.tsx`'s
 credit control is not a menu.

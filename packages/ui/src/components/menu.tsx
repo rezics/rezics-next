@@ -4,15 +4,14 @@ import {
   useContext,
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
 import * as D from '../shadcn/dropdown-menu.tsx';
+import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
 import { BottomSheet } from './bottom-sheet.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { Field, FieldLabel } from '../shadcn/field.tsx';
@@ -190,10 +189,8 @@ export function Menu({
   const [form, setForm] = useState<'sheet' | 'dropdown' | null>(null);
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<{ label: string; entries: MenuEntry[] }[]>([]);
-  const [customContentPosition, setCustomContentPosition] = useState<{ top: number; left: number; width: number }>();
   const radioName = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
-  const customContentRef = useRef<HTMLDivElement | null>(null);
   const historyDepth = useRef(0);
   const page = stack.at(-1);
   const customContent = content !== undefined;
@@ -225,41 +222,6 @@ export function Menu({
     window.addEventListener('popstate', back);
     return () => window.removeEventListener('popstate', back);
   }, [open, form, stack]);
-  useEffect(() => {
-    if (!customContent || !open || form !== 'dropdown') return;
-    const dismissOutside = (event: PointerEvent) => {
-      const target = event.target;
-      const primaryNavigationLink = target instanceof Element && target.closest('nav a[href]') !== null;
-      if (
-        target instanceof Node &&
-        !customContentRef.current?.contains(target) &&
-        !triggerRef.current?.contains(target) &&
-        !primaryNavigationLink
-      )
-        close(false, false);
-    };
-    const dismissWithEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-      triggerRef.current?.focus();
-    };
-    document.addEventListener('pointerdown', dismissOutside, true);
-    document.addEventListener('keydown', dismissWithEscape, true);
-    return () => {
-      document.removeEventListener('pointerdown', dismissOutside, true);
-      document.removeEventListener('keydown', dismissWithEscape, true);
-    };
-  }, [customContent, form, open]);
-  useLayoutEffect(() => {
-    if (!customContent || !open || form !== 'dropdown' || !customContentPosition) return;
-    customContentRef.current
-      ?.querySelector<HTMLElement>(
-        '[autofocus], a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      )
-      ?.focus();
-  }, [customContent, customContentPosition, form, open]);
   const select = (entry: MenuEntry) => {
     if (entry.type === 'item' || entry.type === 'destructive') {
       if (!entry.keepOpen) close();
@@ -276,35 +238,6 @@ export function Menu({
         triggerRef.current = node?.querySelector('button, [role=button]') ?? node;
       }}
       onClick={openMenu}
-    >
-      {trigger}
-    </span>
-  );
-  const customContentTrigger = (
-    <span
-      ref={(node) => {
-        const control = node?.querySelector<HTMLElement>('button, [role=button]') ?? node;
-        triggerRef.current = control;
-        control?.setAttribute('aria-haspopup', 'dialog');
-        control?.setAttribute('aria-expanded', String(open && form === 'dropdown'));
-      }}
-      onClick={(event) => {
-        if (open && form === 'dropdown') {
-          close();
-          return;
-        }
-        const button = triggerRef.current;
-        if (button) {
-          const rect = button.getBoundingClientRect();
-          const width = Math.max(rect.width, 128);
-          setCustomContentPosition({
-            top: rect.bottom + 4,
-            left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
-            width,
-          });
-        }
-        openMenu(event);
-      }}
     >
       {trigger}
     </span>
@@ -332,28 +265,46 @@ export function Menu({
       {children}
       {!triggerSlot &&
         (customContent ? (
-          <>
-            {customContentTrigger}
-            {open && form === 'dropdown' && customContentPosition
-              ? createPortal(
-                  <div
-                    ref={customContentRef}
-                    role="dialog"
-                    aria-label={title}
-                    className="fixed z-50 grid gap-1 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
-                    onClickCapture={closeAfterNavigation}
-                    style={{
-                      top: customContentPosition.top,
-                      left: customContentPosition.left,
-                      width: customContentPosition.width,
-                    }}
-                  >
-                    {content}
-                  </div>,
-                  document.body,
-                )
-              : null}
-          </>
+          <Popover
+            open={open && form === 'dropdown'}
+            onOpenChange={(value, details) => {
+              if (value) {
+                openMenu();
+                return;
+              }
+              const target = details.event.target;
+              if (
+                details.reason === 'outside-press' &&
+                target instanceof Element &&
+                target.closest('nav a[href]')
+              ) {
+                details.cancel();
+                return;
+              }
+              if (details.reason === 'outside-press') close(false, false);
+              else close();
+            }}
+          >
+            <PopoverTrigger
+              render={trigger}
+              onClick={(event) => {
+                triggerRef.current = event.currentTarget as HTMLElement;
+              }}
+            />
+            <PopoverContent
+              side="bottom"
+              align="start"
+              sideOffset={4}
+              role="dialog"
+              aria-label={title}
+              initialFocus
+              finalFocus={false}
+              onClickCapture={closeAfterNavigation}
+              className="max-h-[var(--available-height)] w-max min-w-[min(16rem,var(--available-width))] max-w-[min(32rem,var(--available-width))] overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl gap-1 p-2 text-popover-foreground ring-1 ring-foreground/5 dark:ring-foreground/10"
+            >
+              {content}
+            </PopoverContent>
+          </Popover>
         ) : (
           <D.DropdownMenu open={open && form === 'dropdown'} onOpenChange={(value) => (value ? openMenu() : close())}>
             <D.DropdownMenuTrigger
@@ -383,7 +334,7 @@ export function Menu({
             ) : undefined
           }
         >
-          <div className="mt-2 flex flex-col" onClickCapture={closeAfterNavigation}>
+          <div className="mt-2 flex min-w-0 max-w-full flex-col" onClickCapture={closeAfterNavigation}>
             {content && entries.length === 0 && !page
               ? content
               : (page?.entries ?? entries).map((entry, index) => {

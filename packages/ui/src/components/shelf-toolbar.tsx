@@ -118,11 +118,11 @@ type Props = {
 export function ShelfToolbar(p: Props) {
   const { labels: l } = p;
   const sort = (
-    <div className="grid gap-3">
-      <label className="grid gap-1 text-sm">
-        {l.sort}
+    <div className="grid min-w-0 gap-3">
+      <label className="grid min-w-0 gap-1 break-words text-sm">
+        <span>{l.sort}</span>
         <select
-          className="rounded-md border bg-background p-2"
+          className="w-full min-w-0 max-w-full rounded-md border bg-background p-2"
           value={p.sort}
           onChange={(e) => p.onSortChange(e.target.value, p.direction)}
         >
@@ -133,10 +133,10 @@ export function ShelfToolbar(p: Props) {
           ))}
         </select>
       </label>
-      <label className="grid gap-1 text-sm">
-        {l.direction}
+      <label className="grid min-w-0 gap-1 break-words text-sm">
+        <span>{l.direction}</span>
         <select
-          className="rounded-md border bg-background p-2"
+          className="w-full min-w-0 max-w-full rounded-md border bg-background p-2"
           value={p.direction}
           onChange={(e) => p.onSortChange(p.sort, e.target.value as 'asc' | 'desc')}
         >
@@ -147,15 +147,16 @@ export function ShelfToolbar(p: Props) {
     </div>
   );
   const filter = (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {p.filters}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2">
         {p.active.map((f) => (
           <Button
             key={f.key}
             variant="secondary"
             size="sm"
             aria-label={`${l.removeFilter}: ${f.label}`}
+            className="min-w-0 max-w-full whitespace-normal break-words text-left"
             onClick={() => p.onRemoveFilter(f.key)}
           >
             {f.label} ×
@@ -170,7 +171,7 @@ export function ShelfToolbar(p: Props) {
     </div>
   );
   const display = (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       <div className="sm:hidden">
         <ToggleGroup
           aria-label={l.layout}
@@ -179,6 +180,7 @@ export function ShelfToolbar(p: Props) {
             if (v[0]) p.onLayoutChange(v[0] as Layout);
           }}
           variant="outline"
+          className="max-w-full flex-wrap"
         >
           {(['grid', 'list'] as const).map((v) => (
             <ToggleGroupItem key={v} value={v}>
@@ -195,6 +197,7 @@ export function ShelfToolbar(p: Props) {
           if (v[0]) p.onDensityChange(v[0] as Density);
         }}
         variant="outline"
+        className="max-w-full flex-wrap"
       >
         {(['small', 'medium', 'large'] as const).map((v) => (
           <ToggleGroupItem key={v} value={v}>
@@ -212,31 +215,46 @@ export function ShelfToolbar(p: Props) {
         <Menu
           title={l.view}
           trigger={
-            <Button variant="outline" className="sm:hidden">
+            <Button
+              variant="outline"
+              className="min-w-0 max-w-full whitespace-normal break-words text-left sm:hidden"
+            >
               {l.view} {badge}
             </Button>
           }
           content={
-            <Tabs defaultValue="sort" className="p-4">
-              <TabsList>
-                <TabsTrigger value="sort">{l.sort}</TabsTrigger>
-                <TabsTrigger value="filter">
+            <Tabs defaultValue="sort" className="min-w-0 p-4">
+              <TabsList className="h-auto min-h-8 w-full">
+                <TabsTrigger value="sort" className="min-w-0 whitespace-normal break-words">
+                  {l.sort}
+                </TabsTrigger>
+                <TabsTrigger value="filter" className="min-w-0 whitespace-normal break-words">
                   {l.filter} {badge}
                 </TabsTrigger>
-                <TabsTrigger value="display">{l.display}</TabsTrigger>
+                <TabsTrigger value="display" className="min-w-0 whitespace-normal break-words">
+                  {l.display}
+                </TabsTrigger>
               </TabsList>
-              <TabsContent value="sort">{sort}</TabsContent>
-              <TabsContent value="filter">{filter}</TabsContent>
-              <TabsContent value="display">{display}</TabsContent>
+              <TabsContent value="sort" className="min-w-0">{sort}</TabsContent>
+              <TabsContent value="filter" className="min-w-0">{filter}</TabsContent>
+              <TabsContent value="display" className="min-w-0">{display}</TabsContent>
             </Tabs>
           }
         />
         <div className="hidden items-center gap-2 sm:flex">
-          <Menu title={l.sort} trigger={<Button variant="outline">{l.sort}</Button>} content={sort} />
+          <Menu
+            title={l.sort}
+            trigger={
+              <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left">
+                {l.sort}
+              </Button>
+            }
+            content={sort}
+          />
           <Menu
             title={l.filter}
             trigger={
-              <Button variant="outline">
+              <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left">
                 {l.filter} {badge}
               </Button>
             }
@@ -257,7 +275,15 @@ export function ShelfToolbar(p: Props) {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <Menu title={l.display} trigger={<Button variant="outline">{l.display}</Button>} content={display} />
+          <Menu
+            title={l.display}
+            trigger={
+              <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left">
+                {l.display}
+              </Button>
+            }
+            content={display}
+          />
         </div>
         <Button variant="outline" onClick={p.onSelect}>
           {l.select}
