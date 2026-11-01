@@ -367,3 +367,97 @@ test('Native public Source repair step and complete original cut are durably rev
     }
   }
 });
+
+test('native Source retains and replays a durable empty repair-step locator list', async () => {
+  const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
+  const { createOpenSearch } = await import('../../src/search/opensearch.ts');
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const index = `source-empty-step-${crypto.randomUUID()}`;
+  const custody = createPublicFilterCustody(f.db.pool);
+  let created = false;
+  try {
+    const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    const source = publicFilterSource(f.config);
+    const capture = { sort: 'id' as const, size: 10, filterDocument: undefined, text: undefined };
+    const resolved = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());
+    if (resolved.status !== 'resolved') throw new Error(resolved.reason);
+    await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
+    created = true;
+    const registered = await custody.register(
+      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
+      search,
+      readContext(),
+    );
+    if (registered.status !== 'registered') throw new Error(registered.reason);
+    const begun = await binding.begin(
+      { source, meaning: f.meaning, capture, consumer: registered.consumer, snapshot: 'prepared' },
+      readContext(),
+    );
+    if (begun.status !== 'begun') throw new Error(begun.reason);
+    const retained = await custody.retainPrepared(
+      {
+        registration: registered.registration,
+        covered: begun.bootstrap.covered,
+        build: crypto.randomUUID(),
+        generation: 1n,
+        rows: [],
+        expiresAt: Date.now() + 600000,
+      },
+      readContext(),
+    );
+    if (retained.status !== 'retained') throw new Error(retained.reason);
+    expect(
+      (await binding.adopt({ bootstrap: begun.bootstrap.id, queried: retained.queried }, readContext())).status,
+    ).toBe('adopted');
+    const acquired = await custody.acquire(retained.queried, readContext());
+    if (acquired.status !== 'acquired') throw new Error(acquired.reason);
+    const execution = crypto.randomUUID();
+    try {
+      expect(
+        (
+          await custody.appendExecution(
+            { use: acquired.use, execution: { id: execution, start: begun.bootstrap.covered, ownRows: [] } },
+            readContext(),
+          )
+        ).status,
+      ).toBe('appended');
+    } finally {
+      await custody.release(acquired.use, readContext());
+    }
+    const request = {
+      bootstrap: begun.bootstrap.id,
+      queried: retained.queried,
+      execution,
+      frontier: null,
+      inputLimit: 256,
+    };
+    const page = await binding.repairPage(request, readContext());
+    expect(page.status).toBe('progress');
+    if (page.status !== 'progress') throw new Error('Native Source step did not persist');
+    const read = { bootstrap: begun.bootstrap.id, queried: retained.queried, execution, predecessor: null };
+    expect(await binding.readRepairStep(read, readContext())).toMatchObject({
+      status: 'verified',
+      step: page.frontier,
+      predecessor: null,
+      frontier: page.frontier,
+      complete: false,
+      receipts: [],
+    });
+    const recovered = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    const replay = await recovered.repairPage(request, readContext());
+    expect(replay.status).toBe('progress');
+    if (replay.status !== 'progress') throw new Error('Lost-response replay did not resolve the stored step');
+    expect(replay.frontier).toBe(page.frontier);
+    expect(await recovered.readRepairStep(read, readContext())).toMatchObject({
+      status: 'verified',
+      step: page.frontier,
+      receipts: [],
+    });
+  } finally {
+    await custody.close();
+    if (created) await search.request('DELETE', `/${index}`);
+    await f.close();
+  }
+});
