@@ -361,6 +361,159 @@ test('rename checks the actual asynchronous import boundary and original token, 
   }
 });
 
+for (const late of ['success', 'failure'] as const) {
+  test(`both inventory and detail feed requests discard delayed ${late} after session retirement, preserving independent original cursors`, async () => {
+    const client = new QueryClient();
+    client.setQueryData(sessionQuery.queryKey, session());
+    const owner = new ManagedSessionReader(client, viewerId, targetId);
+    const leave = owner.attach();
+    const inventoryReplies = [deferred<ManagedAccountsResult>(), deferred<ManagedAccountsResult>()];
+    const detailReplies = [deferred<DetailResult>(), deferred<DetailResult>()];
+    const inventoryCalls: object[] = [];
+    const detailCalls: object[] = [];
+    const inv = new ManagedAccountsInventory(
+      viewerId,
+      (input) => {
+        inventoryCalls.push(input);
+        if (!input.organizationsCursor && !input.operatorsCursor)
+          return Promise.resolve({ ok: true, page: inventory() });
+        return inventoryReplies[input.organizationsCursor ? 0 : 1]!.promise;
+      },
+      owner.isCurrent,
+    );
+    const det = new ManagedAccountReader(
+      viewerId,
+      targetId,
+      (input) => {
+        detailCalls.push(input);
+        if (!input.section) return Promise.resolve({ ok: true, viewerId, value: detail() });
+        return detailReplies[input.section === 'members' ? 0 : 1]!.promise;
+      },
+      token,
+      owner.isCurrent,
+    );
+    await inv.load();
+    await det.load();
+    const reads = [
+      inv.more('organizations'),
+      inv.more('responsibilities'),
+      det.load('members', 'members/+=='),
+      det.load('responsibilities', 'ops/+=='),
+    ];
+    expect(inventoryCalls).toEqual([{}, { organizationsCursor: 'org/+==' }, { operatorsCursor: 'ops/+==' }]);
+    expect(detailCalls).toEqual([
+      { viewerId, accountId: targetId },
+      { viewerId, accountId: targetId, section: 'members', cursor: 'members/+==' },
+      { viewerId, accountId: targetId, section: 'responsibilities', cursor: 'ops/+==' },
+    ]);
+    lose(client, 'error');
+    client.setQueryData(sessionQuery.queryKey, session());
+    for (const reply of inventoryReplies)
+      reply.resolve(
+        late === 'success'
+          ? { ok: true, page: inventory() }
+          : { ok: false, kind: 'unavailable', status: 409, code: 'stale_cursor', retryAfter: '7' },
+      );
+    for (const reply of detailReplies)
+      reply.resolve(
+        late === 'success'
+          ? { ok: true, viewerId, value: detail() }
+          : { ok: false, failure: { status: 503, code: 'dependency_unavailable', retryAfter: '7', transient: true } },
+      );
+    await Promise.all(reads);
+    expect(inv.snapshot().account).toBeNull();
+    expect(inv.snapshot().organizations).toMatchObject({ items: [], next: null, failure: null, busy: false });
+    expect(inv.snapshot().responsibilities).toMatchObject({ items: [], next: null, failure: null, busy: false });
+    expect(det.snapshot()).toEqual({
+      pending: false,
+      members: { page: undefined, pending: false },
+      responsibilities: { page: undefined, pending: false },
+    });
+    await Promise.all([
+      inv.load(),
+      inv.more('organizations'),
+      inv.more('responsibilities'),
+      inv.firstPage('organizations'),
+      inv.firstPage('responsibilities'),
+      det.load(),
+      det.load('members'),
+      det.load('members', 'members/+=='),
+      det.load('responsibilities'),
+      det.load('responsibilities', 'ops/+=='),
+    ]);
+    expect(inventoryCalls).toHaveLength(3);
+    expect(detailCalls).toHaveLength(3);
+    leave();
+    client.clear();
+  });
+}
+
+test('synchronous loss and recovery during pending publication refuses actual IO, including deferred action and rename dispatch', async () => {
+  for (const surface of ['inventory', 'detail', 'actions', 'safety'] as const) {
+    const client = new QueryClient();
+    client.setQueryData(sessionQuery.queryKey, session());
+    const owner = new ManagedSessionReader(client, viewerId, targetId, token);
+    const leave = owner.attach();
+    let calls = 0;
+    let lost = false;
+    const retire = () => {
+      if (lost) return;
+      lost = true;
+      lose(client, 'error');
+      client.setQueryData(sessionQuery.queryKey, session());
+    };
+    const inv = new ManagedAccountsInventory(
+      viewerId,
+      async () => {
+        calls++;
+        return { ok: true, page: inventory() };
+      },
+      owner.isCurrent,
+    );
+    const det = new ManagedAccountReader(
+      viewerId,
+      targetId,
+      async () => {
+        calls++;
+        return { ok: true, viewerId, value: detail() };
+      },
+      token,
+      owner.isCurrent,
+    );
+    const actions = new ManagedAccountActionsRead(
+      { viewerId, accountId: targetId },
+      async () => {
+        calls++;
+        return actionResult();
+      },
+      owner.isCurrent,
+    );
+    const rename = new AccountRenameRegion(
+      async () => {
+        calls++;
+        return renameResult;
+      },
+      viewerId,
+      owner.isCurrent,
+    );
+    const reader =
+      surface === 'inventory' ? inv : surface === 'detail' ? det : surface === 'actions' ? actions : rename;
+    const unsubscribe = reader.subscribe(retire);
+    if (surface === 'inventory') await inv.load();
+    if (surface === 'detail') await det.load();
+    if (surface === 'actions') await actions.load();
+    if (surface === 'safety') {
+      rename.mount();
+      await rename.reload();
+    }
+    expect(calls).toBe(0);
+    expect(owner.isCurrent()).toBe(false);
+    unsubscribe();
+    leave();
+    client.clear();
+  }
+});
+
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
