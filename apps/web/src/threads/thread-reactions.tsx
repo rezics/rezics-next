@@ -1,11 +1,22 @@
 import { Reactions, type ReactionKind } from '@rezics/ui/reactions';
-import { useEffect, useState, type ReactNode } from 'react';
+import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { csrfHeaders } from './composer';
 import { changeReaction } from './reactions';
 import { subjectReactionKinds, type ReactionFailure } from './reaction-request';
+import { sessionQuery } from '../session/query';
 
 function reactionLabels(failed: string | null) {
   return {
@@ -64,15 +75,7 @@ function installSingleReactionMenu() {
   });
 }
 
-export function ThreadReactions({
-  target,
-  counts,
-  value,
-  signedIn,
-  returnTo,
-  onMutation,
-  personalReady = true,
-}: {
+type ThreadReactionsProps = {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   counts: Partial<Record<ReactionKind, number>>;
   value: ReactionKind | null;
@@ -80,38 +83,139 @@ export function ThreadReactions({
   returnTo: string;
   onMutation?: () => Promise<void>;
   personalReady?: boolean;
-}) {
-  const [failed, setFailed] = useState<string | null>(null);
+};
+
+/** Observe the existing cache only. Remember transitions even when React batches away/back into one render. */
+function observeReactionSession(client: QueryClient | undefined) {
+  const read = () => client?.getQueryData(sessionQuery.queryKey);
+  const identity = () => {
+    const session = read();
+    return JSON.stringify([session?.state, session?.subject ?? null, session?.csrfToken ?? null]);
+  };
+  let previous = identity();
+  let revision = 0;
+  const snapshot = () => {
+    const next = identity();
+    if (next !== previous) {
+      previous = next;
+      revision++;
+    }
+    return revision;
+  };
+  return {
+    read,
+    snapshot,
+    serverSnapshot: () => 0,
+    subscribe: (notify: () => void) =>
+      client?.getQueryCache().subscribe(({ query }) => {
+        if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        const before = revision;
+        if (snapshot() !== before) notify();
+      }) ?? (() => {}),
+  };
+}
+
+export function ThreadReactions(props: ThreadReactionsProps) {
+  const client = useContext(QueryClientContext);
+  const observation = useMemo(() => observeReactionSession(client), [client]);
+  const revision = useSyncExternalStore(observation.subscribe, observation.snapshot, observation.serverSnapshot);
+  // A provider replacement is also a new caller, even if its initial session fields happen to match.
+  const [provider, setProvider] = useState({ observation, visit: 0 });
+  if (provider.observation !== observation) setProvider({ observation, visit: provider.visit + 1 });
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     setHydrated(true);
-    if (signedIn) installSingleReactionMenu();
-  }, [signedIn]);
+    if (props.signedIn) installSingleReactionMenu();
+  }, [props.signedIn]);
+
+  const session = observation.read();
+  // Standalone prepared views keep their explicit admission; a real client must have a known browser session.
+  const sessionReady = !client || Boolean(session?.state === 'signed-in' && session.subject && session.csrfToken);
+  const admitted = hydrated && props.signedIn && (props.personalReady ?? true) && sessionReady;
+  const key = JSON.stringify([
+    provider.visit,
+    revision,
+    props.target.kind,
+    props.target.id,
+    props.signedIn,
+    props.personalReady ?? true,
+    hydrated,
+  ]);
+  return (
+    <ReactionCaller
+      key={key}
+      {...props}
+      admitted={admitted}
+      disabled={!hydrated || !(props.personalReady ?? true) || (props.signedIn && !sessionReady)}
+      observation={observation}
+      revision={revision}
+      csrfToken={client ? (session?.csrfToken ?? '') : null}
+    />
+  );
+}
+
+function ReactionCaller({
+  target,
+  counts,
+  value,
+  signedIn,
+  returnTo,
+  onMutation,
+  admitted,
+  disabled,
+  observation,
+  revision,
+  csrfToken,
+}: ThreadReactionsProps & {
+  admitted: boolean;
+  disabled: boolean;
+  observation: ReturnType<typeof observeReactionSession>;
+  revision: number;
+  csrfToken: string | null;
+}) {
+  const [failed, setFailed] = useState<string | null>(null);
+  const live = useRef(false);
+  const [headers] = useState(() => (csrfToken === null ? csrfHeaders() : { 'X-CSRF-Token': csrfToken }));
+  useLayoutEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+  const current = () => live.current && admitted && observation.snapshot() === revision;
 
   async function onChange(kind: ReactionKind | null) {
+    if (!current()) return;
     let result: { ok: true } | ReactionFailure;
     try {
       result = await changeReaction({
         data: { target: target.kind, id: target.id, kind },
-        headers: csrfHeaders(),
+        headers,
       });
     } catch {
+      if (!current()) return;
       const message = m.reaction_unavailable();
       flushSync(() => setFailed(message));
       throw new Error(message);
     }
+    if (!current()) return;
     if (!result.ok) {
       const message = refusalText(result);
       flushSync(() => setFailed(message));
       throw new Error(message);
     }
-    await onMutation?.();
+    try {
+      await onMutation?.();
+    } catch (error) {
+      if (current()) throw error;
+    }
+    if (!current()) return;
   }
 
   return (
     <Reactions
       counts={counts}
-      disabled={!hydrated || !personalReady}
+      disabled={disabled}
       {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
       labels={reactionLabels(failed)}
       locale={getLocale()}
