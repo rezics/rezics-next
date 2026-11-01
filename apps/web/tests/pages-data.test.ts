@@ -1,10 +1,14 @@
 import { expect, test } from 'bun:test';
 import { slug } from '@rezics/definitions/slug';
-import { createElement } from 'react';
+import { createElement, useContext } from 'react';
 import { renderToString } from 'react-dom/server';
+import type { CompositionDocument } from '@rezics/composition';
 import { dataComponents, PageData, SubjectSources, type PageMessages } from '../src/features/pages/data.tsx';
 import { layoutComponents, pageDefinitions, PageRoot } from '../src/features/pages/layout.tsx';
 import { CompositionRender } from '../src/features/pages/render.tsx';
+import { memberContinuationPlan } from '../src/features/pages/member-list-query';
+import { memberContinuationDocument } from '../src/kernel/fake/composed-member-list';
+import { OverviewContext } from '../src/features/pages/overview';
 
 const subjectId = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const author = '01a1740d-7480-71e4-841f-66c04022d7d1';
@@ -210,4 +214,45 @@ test('values are text and links stay safe', () => {
   expect(linked).toMatch(new RegExp(`<a href="/ja/subjects/${work}/${slug('Vol de nuit')}"[^>]*data-router="yes"`));
   expect(linked).toMatch(/<h1[^>]*>星の王子さま<\/h1>/);
   expect(linked).toMatch(/>Vol de nuit</);
+});
+
+test('member continuations plan account descriptors from the resolved page account', () => {
+  const document = {
+    ...memberContinuationDocument,
+    content: [
+      node('AccountCollections', 'collections', { limit: 12 }),
+      ...memberContinuationDocument.content,
+    ],
+  } as CompositionDocument;
+  const account = { id: '01a1740d-7480-71e4-841f-66c04022d7d3', handle: 'resolved-account' };
+  const plan = memberContinuationPlan(
+    { subject: null, account },
+    document,
+    { node: 'members', cursor: 'opaque:account-continuation==' },
+  );
+  expect(plan.reads[plan.nodes.collections!]).toEqual({
+    kind: 'accountCollections',
+    id: account.id,
+    limit: 12,
+  });
+  expect(plan.reads[plan.nodes.members!]).toMatchObject({
+    kind: 'members',
+    source: { kind: 'everything' },
+    cursor: 'opaque:account-continuation==',
+  });
+});
+
+test('a public page keeps an explicit anonymous reader partition for its continuations', () => {
+  function ReaderPartition() {
+    const value = useContext(OverviewContext);
+    return createElement('output', { 'data-reader': value?.cacheReader === null ? 'anonymous' : 'missing' });
+  }
+  const html = renderToString(
+    createElement(
+      PageData,
+      { locale: 'en', subject: subjectId, document, reads: {}, messages } as never,
+      createElement(ReaderPartition),
+    ),
+  );
+  expect(html).toContain('data-reader="anonymous"');
 });

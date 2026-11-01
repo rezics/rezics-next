@@ -834,7 +834,8 @@ export function PageData({
       : undefined;
   const overviewValue: overview.OverviewValue = {
     locale,
-    cacheReader,
+    // Public pages intentionally use a null reader partition; do not interpret that as a missing page identity.
+    cacheReader: cacheReader ?? null,
     pageTarget: pageTarget ?? listTarget,
     subject,
     ...(overviewSubjectLabel !== undefined ? { subjectLabel: overviewSubjectLabel } : {}),

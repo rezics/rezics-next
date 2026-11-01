@@ -4,6 +4,8 @@ import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { slug } from '@rezics/definitions/slug';
 import platform from '@rezics/composition/profiles/platform.json';
+import { readMemberList, type MemberListRequest } from '../src/features/pages/member-list-query';
+import { memberContinuationDocument } from '../src/kernel/fake/composed-member-list';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { loadSubjectPage, SubjectPage, subjectPageTitle } from '../src/features/pages/subject.tsx';
@@ -80,4 +82,53 @@ test('merged and missing subjects are told apart', async () => {
   sent.length = 0;
   expect(await loadSubjectPage(client, 'not-a-uuid')).toEqual({ kind: 'missing' });
   expect(sent).toEqual([]);
+});
+
+test('member continuation refuses a replacement Context on its native page read', async () => {
+  const originalContext = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000111',
+    population: { kind: 'realm' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000112', title: 'Original' },
+  };
+  const replacementContext = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000121',
+    population: { kind: 'realm' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000122', title: 'Replacement' },
+  };
+  const request: MemberListRequest = {
+    target: { account: 'member-continuation' },
+    locale: 'en',
+    node: 'members',
+    cursor: 'opaque:member-next==',
+    expectedReader: 'reader-a',
+    representation: {
+      context: originalContext.id,
+      population: 'realm',
+      populationId: originalContext.population.id,
+    },
+  };
+  const calls: { body: unknown; authorization: string | null }[] = [];
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      const call = new Request(input, init);
+      calls.push({ body: await call.json(), authorization: call.headers.get('authorization') });
+      return Response.json({
+        subject: null,
+        account: { id: '0192f3a0-6c1e-7b2a-9d4e-000000000131', handle: 'member-continuation' },
+        context: replacementContext,
+        document: memberContinuationDocument,
+        reads: {},
+      });
+    }) as typeof fetch,
+  });
+
+  expect(await readMemberList(client, request, 'Bearer current-reader')).toEqual({ ok: false, status: 409 });
+  expect(calls).toEqual([
+    {
+      body: {
+        target: { account: 'member-continuation' },
+        languages: ['en'],
+        continuation: { node: 'members', cursor: 'opaque:member-next==' },
+      },
+      authorization: 'Bearer current-reader',
+    },
+  ]);
 });

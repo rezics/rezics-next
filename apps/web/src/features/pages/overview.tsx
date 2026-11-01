@@ -1,6 +1,6 @@
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import type { SelectedContext } from '@rezics/composition';
+import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
@@ -50,6 +50,19 @@ export type { Count } from '../count';
 export type Section =
   | { ok: false; status?: number | undefined }
   | { ok: true; read: PageRead; body: Record<string, unknown>; sources?: Sources };
+
+/** The page representation a continuation must retain while extending one native stream. */
+export type PageRepresentation = {
+  context: string;
+  population: 'global' | 'realm';
+  populationId?: string;
+};
+
+export function pageRepresentation(context?: SelectedContext): PageRepresentation {
+  if (context?.population.kind === 'realm')
+    return { context: context.id, population: 'realm', populationId: context.population.id };
+  return { context: context?.id ?? PAGE_GLOBAL_CONTEXT, population: 'global' };
+}
 
 export type OverviewValue = {
   locale: string;

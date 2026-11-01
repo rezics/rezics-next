@@ -1,16 +1,75 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
 import { useSession } from '../../session/query';
-import { useContext, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useContext, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
 import type { SubjectSummary } from '../../media/summary';
 import type { Fact } from '../../search/results';
 import { CoverList } from './cover-list';
-import { OverviewContext, type Item, type OverviewValue, type Section } from './overview';
+import {
+  OverviewContext,
+  pageRepresentation,
+  type Item,
+  type OverviewValue,
+  type Section,
+} from './overview';
 import { isRecord, pageText } from './shared';
 import { loadMemberList, type MemberListRequest, type MemberPageTarget } from './member-list-query';
+
+let nextMemberIncarnation = 0;
+let nextSectionIncarnation = 0;
+const sectionIncarnations = new WeakMap<object, number>();
+const emptySection: Section = { ok: false };
+
+function sectionIncarnation(section: Section): number {
+  let incarnation = sectionIncarnations.get(section);
+  if (incarnation === undefined) {
+    incarnation = ++nextSectionIncarnation;
+    sectionIncarnations.set(section, incarnation);
+  }
+  return incarnation;
+}
+
+function useMemberIncarnation(): string {
+  const [incarnation] = useState(() => `members-${++nextMemberIncarnation}`);
+  return incarnation;
+}
+
+function useReadingLifetime(onRetire?: () => void) {
+  const lifetime = useRef({ generation: 0, mounted: false });
+  const onRetireRef = useRef(onRetire);
+  onRetireRef.current = onRetire;
+  useLayoutEffect(() => {
+    const generation = ++lifetime.current.generation;
+    lifetime.current.mounted = true;
+    return () => {
+      if (lifetime.current.generation === generation) {
+        lifetime.current.mounted = false;
+        lifetime.current.generation += 1;
+        onRetireRef.current?.();
+      }
+    };
+  }, []);
+  return useMemo(
+    () => ({
+      current(generation: number) {
+        return lifetime.current.mounted && lifetime.current.generation === generation;
+      },
+      generation() {
+        return lifetime.current.generation;
+      },
+      retire(generation: number) {
+        if (!lifetime.current.mounted || lifetime.current.generation !== generation) return false;
+        lifetime.current.generation += 1;
+        onRetireRef.current?.();
+        return true;
+      },
+    }),
+    [],
+  );
+}
 
 /** Preserve native member order and fields. Common-members already canonicalizes; no per-row reads. */
 export function memberItems(section: Section, value: OverviewValue): Item[] {
@@ -51,33 +110,119 @@ export function Members(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
   const viewer = useSession();
   const node = typeof props.id === 'string' ? props.id : '';
-  const initial = value?.sections.get(node) ?? { ok: false as const };
+  const initial = value?.sections.get(node) ?? emptySection;
+  if (!value || !node) return null;
   const target = value?.pageTarget;
-  // The public shell can conceal self sources or a private curated source. Recheck with the current session BFF.
-  const needsViewer = isRecord(props.source) && !initial.ok && initial.status === 404 && viewer.state === 'signed-in';
-  const request = { target: target!, locale: value?.locale ?? 'en', node };
+  const representation = pageRepresentation(value.context);
+  const viewerRecovery = isRecord(props.source) && !initial.ok && initial.status === 404;
+  const key = JSON.stringify([
+    target,
+    value.subject,
+    value.account ?? null,
+    props,
+    sectionIncarnation(initial),
+    value.cacheReader == null && !viewerRecovery ? null : [viewer.state, viewer.subject ?? null],
+    value.locale,
+    value.cacheReader ?? null,
+    representation,
+    value.reader,
+  ]);
+  return (
+    <MemberReader
+      key={key}
+      value={value}
+      viewer={viewer}
+      props={props}
+      initial={initial}
+      node={node}
+      target={target}
+      representation={representation}
+    />
+  );
+}
+
+function MemberReader({
+  value,
+  viewer,
+  props,
+  initial,
+  node,
+  target,
+  representation,
+}: {
+  value: OverviewValue;
+  viewer: ReturnType<typeof useSession>;
+  props: Record<string, unknown>;
+  initial: Section;
+  node: string;
+  target?: MemberPageTarget | undefined;
+  representation: ReturnType<typeof pageRepresentation>;
+}) {
+  const queryClient = useQueryClient();
+  const incarnation = useMemberIncarnation();
+  // The public shell can conceal self sources or a private curated source. Recheck only for an observed viewer.
+  const needsViewer =
+    isRecord(props.source) &&
+    !initial.ok &&
+    initial.status === 404 &&
+    viewer.state === 'signed-in' &&
+    typeof viewer.subject === 'string' &&
+    viewer.subject.length > 0;
+  const recoveryReader = needsViewer ? viewer.subject! : (value.cacheReader ?? null);
+  const queryKey = ['composed-members-viewer', {
+    target,
+    locale: value.locale,
+    node,
+    expectedReader: recoveryReader,
+    representation,
+  }, incarnation] as const;
+  const lifetime = useReadingLifetime(() => {
+    void queryClient.cancelQueries({ queryKey, exact: true });
+  });
+  const readingGeneration = lifetime.generation();
+  const request: MemberListRequest = {
+    target: target!,
+    locale: value.locale,
+    node,
+    expectedReader: recoveryReader,
+    representation,
+  };
   const current = useQuery({
     ...personalRead,
-    queryKey: ['composed-members-viewer', viewer.subject, request],
+    queryKey,
     enabled: personalRead.enabled && needsViewer && !!target && !!node,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    queryFn: () => loadMemberList({ data: request }),
+    queryFn: async ({ signal }) => {
+      const result = await loadMemberList({ data: request });
+      if (signal.aborted || !lifetime.current(readingGeneration)) throw new Error('Retired member recovery');
+      return result;
+    },
   });
-  if (!value || !node) return null;
   if (needsViewer && target && current.isPending)
     return <p role="status">{m.subject_relation_loading({}, { locale: value.locale as never })}</p>;
   const section = needsViewer ? (current.isError ? { ok: false as const } : (current.data ?? initial)) : initial;
+  const continuationEnabled =
+    value.cacheReader == null || (viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
+  // An anonymous public page has no viewer provenance by design. A known private page cannot outlive its reader.
+  if (
+    value.cacheReader &&
+    viewer.state !== 'unknown' &&
+    !(viewer.state === 'signed-in' && viewer.subject === value.cacheReader)
+  )
+    return <p role="alert">{m.subject_relation_unavailable({}, { locale: value.locale as never })}</p>;
   return (
     <MemberList
-      key={JSON.stringify([target, props, section, viewer.state, viewer.subject, value.locale])}
       value={value}
       section={section}
       node={node}
       title={pageText(props.title, value.locale).text}
       target={target}
+      expectedReader={recoveryReader}
+      continuationEnabled={continuationEnabled}
+      viewerIdentity={JSON.stringify([viewer.state, viewer.subject ?? null])}
       paged={props.paged === true}
     />
   );
@@ -90,6 +235,9 @@ export function MemberList({
   node,
   title,
   target,
+  expectedReader,
+  continuationEnabled = true,
+  viewerIdentity = '',
   paged = true,
 }: {
   value: OverviewValue;
@@ -97,6 +245,9 @@ export function MemberList({
   node: string;
   title: string;
   target?: MemberPageTarget | undefined;
+  expectedReader?: string | null | undefined;
+  continuationEnabled?: boolean;
+  viewerIdentity?: string;
   paged?: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -109,26 +260,38 @@ export function MemberList({
     trigger: HTMLButtonElement | null;
   }>();
   const active = useRef(false);
-  const alive = useRef(true);
   const instance = useId();
-  const end = useRef<HTMLParagraphElement>(null);
+  const incarnation = useMemberIncarnation();
+  const activeQueryKey = useRef<readonly unknown[] | undefined>(undefined);
+  const lifetime = useReadingLifetime(() => {
+    const key = activeQueryKey.current;
+    activeQueryKey.current = undefined;
+    if (key) void queryClient.cancelQueries({ queryKey: key, exact: true });
+  });
+  const readingGeneration = lifetime.generation();
   useLayoutEffect(() => {
-    alive.current = true;
+    const generation = lifetime.generation();
+    if (active.current) {
+      active.current = false;
+      setPending(false);
+    }
     return () => {
-      alive.current = false;
+      lifetime.retire(generation);
     };
-  }, []);
+  }, [lifetime, viewerIdentity]);
+  const end = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
     const trigger = completion?.trigger;
     // Replace only the requesting reader's removed trigger, after the exhausted page has rendered.
     if (
+      lifetime.current(readingGeneration) &&
       completion?.exhausted &&
       trigger &&
       (trigger.ownerDocument.activeElement === trigger ||
         trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
     )
       end.current?.focus({ preventScroll: true });
-  }, [completion]);
+  }, [completion, lifetime, readingGeneration]);
   const latest = pages.at(-1)!;
   const cursor = latest.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
   const failed = error && !error.ok ? error : !latest.ok ? latest : undefined;
@@ -150,41 +313,66 @@ export function MemberList({
   const unique = new Map<string, Item>();
   for (const item of items) if (!unique.has(item.id)) unique.set(item.id, item);
   async function more(event: MouseEvent<HTMLButtonElement>) {
-    if (!target || active.current) return;
+    if (!continuationEnabled || !target || active.current) return;
+    const generation = lifetime.generation();
+    if (!lifetime.current(generation)) return;
     const trigger = event.currentTarget;
     active.current = true;
     setPending(true);
     setError(undefined);
     setCompletion(undefined);
-    const request: MemberListRequest = { target, locale: value.locale, node, ...(cursor ? { cursor } : {}) };
+    const request: MemberListRequest = {
+      target,
+      locale: value.locale,
+      node,
+      ...(cursor ? { cursor } : {}),
+      expectedReader: expectedReader ?? value.cacheReader ?? null,
+      representation: pageRepresentation(value.context),
+    };
+    const queryKey = ['composed-members', request, incarnation, generation] as const;
+    activeQueryKey.current = queryKey;
     try {
       const next = await queryClient.fetchQuery({
         // A retired node/viewer reading must not share an in-flight response with its replacement.
-        queryKey: ['composed-members', request, instance],
+        queryKey,
         staleTime: 0,
         gcTime: 0,
         retry: false,
-        queryFn: () => loadMemberList({ data: request }),
+        queryFn: async ({ signal }) => {
+          const result = await loadMemberList({ data: request });
+          if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired member continuation');
+          return result;
+        },
       });
-      if (!alive.current) return;
+      if (!lifetime.current(generation)) return;
       if (!next.ok) {
-        setError(next);
-        if ([401, 403, 404, 409].includes(next.status ?? 0)) setPages([next]);
+        setError((previous) => (lifetime.current(generation) ? next : previous));
+        if ([401, 403, 404, 409].includes(next.status ?? 0))
+          setPages((previous) => (lifetime.current(generation) ? [next] : previous));
       } else {
         const visible = new Set(unique.keys());
         for (const item of memberItems(next, value)) visible.add(item.id);
-        setPages((previous) => (cursor ? [...previous, next] : [next]));
-        setCompletion({
-          added: visible.size - unique.size,
-          exhausted: !paged || typeof next.body.next !== 'string' || !next.body.next,
-          trigger: trigger.ownerDocument.activeElement === trigger ? trigger : null,
-        });
+        setPages((previous) =>
+          lifetime.current(generation) ? (cursor ? [...previous, next] : [next]) : previous,
+        );
+        setCompletion((previous) =>
+          lifetime.current(generation)
+            ? {
+                added: visible.size - unique.size,
+                exhausted: !paged || typeof next.body.next !== 'string' || !next.body.next,
+                trigger: trigger.ownerDocument.activeElement === trigger ? trigger : null,
+              }
+            : previous,
+        );
       }
     } catch {
-      if (alive.current) setError({ ok: false });
+      setError((previous) => (lifetime.current(generation) ? { ok: false } : previous));
     } finally {
-      active.current = false;
-      if (alive.current) setPending(false);
+      if (lifetime.current(generation)) {
+        if (activeQueryKey.current === queryKey) activeQueryKey.current = undefined;
+        active.current = false;
+        setPending((previous) => (lifetime.current(generation) ? false : previous));
+      }
     }
   }
   if (failed?.status === 404) return null;
@@ -240,7 +428,7 @@ export function MemberList({
           {m.subject_relation_end({ label: title }, options)}
         </p>
       )}
-      {target && (failed || (paged && cursor)) && (
+      {target && continuationEnabled && (failed || (paged && cursor)) && (
         <button
           type="button"
           onClick={more}

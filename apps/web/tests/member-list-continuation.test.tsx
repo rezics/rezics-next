@@ -55,7 +55,7 @@ test('Default composed member continuation announces actual unique additions and
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { userEvent } = await import('storybook/test');
-  const { planReads, platformRegistry } = await import('@rezics/composition');
+  const { PAGE_GLOBAL_CONTEXT, planReads, platformRegistry } = await import('@rezics/composition');
   const { PageData, dataComponents } = await import('../src/features/pages/data');
   const { CompositionRender } = await import('../src/features/pages/render');
   const { layoutComponents, PageRoot, pageDefinitions } = await import('../src/features/pages/layout');
@@ -72,6 +72,10 @@ test('Default composed member continuation announces actual unique additions and
   let document = memberContinuationDocument;
   let target = { account: 'member-continuation' };
   let locale = 'en';
+  let cacheReader: string | null = null;
+  let context:
+    | { id: string; population: { kind: 'global' } | { kind: 'realm'; id: string; title: string } }
+    | undefined;
   let initial = { members: recording.members.slice(0, 1), next: 'opaque:next/==' };
   const read = Object.values(planReads(platformRegistry, document, { subject: null }).reads)[0]!;
   const page = (members: typeof recording.members, next: string | null): Section => ({
@@ -88,6 +92,8 @@ test('Default composed member continuation announces actual unique additions and
             locale={locale}
             document={document}
             pageTarget={target}
+            cacheReader={cacheReader}
+            context={context}
             reads={Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: initial }]))}
             messages={{ unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' }}
           >
@@ -128,6 +134,15 @@ test('Default composed member continuation announces actual unique additions and
     );
     return release;
   };
+  const holdFailure = () => {
+    let reject!: (error: Error) => void;
+    responses.push(
+      new Promise<Section>((_resolve, rejectPromise) => {
+        reject = rejectPromise;
+      }),
+    );
+    return reject;
+  };
   try {
     await render();
     expect(requests).toHaveLength(0);
@@ -146,7 +161,16 @@ test('Default composed member continuation announces actual unique additions and
     expect(trigger.getAttribute('aria-disabled')).toBe('true');
     expect(window.document.activeElement).toBe(trigger);
     await press(trigger); // Repeated activation cannot issue another read.
-    expect(requests).toEqual([{ target, locale: 'en', node: 'members', cursor: 'opaque:next/==' }]);
+    expect(requests).toEqual([
+      {
+        target,
+        locale: 'en',
+        node: 'members',
+        cursor: 'opaque:next/==',
+        expectedReader: null,
+        representation: { context: PAGE_GLOBAL_CONTEXT, population: 'global' },
+      },
+    ]);
     await act(async () => {
       release(page([recording.members[0]!, recording.members[1]!, recording.members[1]!], 'duplicates'));
     });
@@ -157,6 +181,13 @@ test('Default composed member continuation announces actual unique additions and
     expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(2);
     expect(list().textContent!.indexOf('Snow Country')).toBeLessThan(list().textContent!.indexOf('The Tale of Genji'));
     expect(status('other-members').textContent).toBe('');
+
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
+    });
+    await flush();
+    expect(list().textContent).toContain('The Tale of Genji');
+    expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
 
     responses.push(page([recording.members[1]!], 'empty-end'));
     await press();
@@ -193,8 +224,15 @@ test('Default composed member continuation announces actual unique additions and
     ]);
 
     // Each existing reading boundary retires status and ignores its late response, without moving focus.
-    for (const boundary of ['target', 'node', 'section', 'viewer', 'locale']) {
+    for (const boundary of ['target', 'node', 'section', 'reader', 'viewer', 'context', 'locale']) {
       initial = { ...initial, next: `before-${boundary}` };
+      if (boundary === 'reader') {
+        cacheReader = 'reader-one';
+        await act(async () => {
+          client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
+        });
+      }
+      if (boundary === 'viewer') cacheReader = null;
       await render();
       const late = hold();
       await press();
@@ -207,10 +245,21 @@ test('Default composed member continuation announces actual unique additions and
           ),
         };
       if (boundary === 'section') initial = { ...initial, next: 'fresh-section' };
+      if (boundary === 'reader') {
+        cacheReader = 'reader-two';
+        await act(async () => {
+          client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
+        });
+      }
       if (boundary === 'viewer')
         await act(async () => {
           client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
         });
+      if (boundary === 'context')
+        context = {
+          id: '00000000-0000-8000-8000-000000000001',
+          population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000002', title: 'First context' },
+        };
       if (boundary === 'locale') locale = 'fr';
       await render();
       expect(status().textContent).toBe('');
@@ -224,6 +273,125 @@ test('Default composed member continuation announces actual unique additions and
       expect(list().textContent).not.toContain('The Little Prince');
       expect(list().querySelector('[data-slot="member-list-end"]')).toBeNull();
       expect(window.document.activeElement).toBe(freshTrigger);
+    }
+
+    // A→B→A is a new reading incarnation. The first A failure cannot change the replacement A while it continues.
+    locale = 'en';
+    cacheReader = 'reader-one';
+    context = {
+      id: '00000000-0000-8000-8000-000000000011',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
+    };
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
+    });
+    initial = { ...initial, next: 'aba-cursor' };
+    await render();
+    const retiredA = holdFailure();
+    await press();
+    context = {
+      id: '00000000-0000-8000-8000-000000000021',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000022', title: 'Context B' },
+    };
+    cacheReader = 'reader-two';
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
+    });
+    await render();
+    context = {
+      id: '00000000-0000-8000-8000-000000000011',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
+    };
+    cacheReader = 'reader-one';
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
+    });
+    await render();
+    const replacementTrigger = button();
+    replacementTrigger.focus();
+    const currentA = hold();
+    await press(replacementTrigger);
+    expect(requests.slice(-2).map(({ expectedReader, representation, cursor }) => ({ expectedReader, representation, cursor }))).toEqual([
+      {
+        expectedReader: 'reader-one',
+        representation: {
+          context: '00000000-0000-8000-8000-000000000011',
+          population: 'realm',
+          populationId: '00000000-0000-8000-8000-000000000012',
+        },
+        cursor: 'aba-cursor',
+      },
+      {
+        expectedReader: 'reader-one',
+        representation: {
+          context: '00000000-0000-8000-8000-000000000011',
+          population: 'realm',
+          populationId: '00000000-0000-8000-8000-000000000012',
+        },
+        cursor: 'aba-cursor',
+      },
+    ]);
+    await act(async () => {
+      retiredA(new Error('Retired reader failed'));
+    });
+    await flush();
+    expect(status().textContent).toBe('Loading more…');
+    expect(list().textContent).not.toContain('The Little Prince');
+    expect(window.document.activeElement).toBe(replacementTrigger);
+    await act(async () => {
+      currentA(page([recording.members[0]!, recording.members[2]!], 'current-a-next'));
+    });
+    await flush();
+    expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
+    expect(list().textContent).toContain('The Little Prince');
+    expect(window.document.activeElement).toBe(replacementTrigger);
+
+    for (const boundary of ['reader', 'context', 'node']) {
+      cacheReader = 'reader-one';
+      context = {
+        id: '00000000-0000-8000-8000-000000000031',
+        population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000032', title: 'Failure context A' },
+      };
+      await act(async () => {
+        client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
+      });
+      initial = { ...initial, next: `failure-${boundary}` };
+      await render();
+      const retiredFailure = holdFailure();
+      await press();
+      if (boundary === 'reader') {
+        cacheReader = 'reader-two';
+        await act(async () => {
+          client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
+        });
+      }
+      if (boundary === 'context')
+        context = {
+          id: '00000000-0000-8000-8000-000000000041',
+          population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000042', title: 'Failure context B' },
+        };
+      if (boundary === 'node')
+        document = {
+          ...document,
+          content: document.content.map((node, index) =>
+            index ? node : { ...node, props: { ...node.props, id: 'failure-node' } },
+          ),
+        };
+      await render();
+      const currentTrigger = button();
+      currentTrigger.focus();
+      await act(async () => {
+        retiredFailure(new Error(`Retired ${boundary} continuation failed`));
+      });
+      await flush();
+      expect(status().textContent).toBe('');
+      expect(list().textContent).not.toContain('The Little Prince');
+      expect(list().querySelector('[data-slot="member-list-end"]')).toBeNull();
+      expect(window.document.activeElement).toBe(currentTrigger);
+      responses.push(page([recording.members[0]!, recording.members[2]!], `current-${boundary}`));
+      await press(currentTrigger);
+      expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
+      expect(list().textContent).toContain('The Little Prince');
     }
 
     // Native refusal semantics: transient/invalid responses keep rows/cursor; retired readings restart.

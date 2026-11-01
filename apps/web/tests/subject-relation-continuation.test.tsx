@@ -1,8 +1,10 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
+import { act } from 'react';
 import { chromium, type Browser, type Page } from 'playwright';
 import { cleanupAll, ownBunProcess, type ProcessCustody } from './support/server-custody.ts';
+import type { OverviewValue, Section } from '../src/features/pages/overview';
 
 // Authored for controller execution. This exercises the real PageStory route/composition and its local page fixtures.
 let child: ReturnType<typeof Bun.spawn> | undefined;
@@ -195,3 +197,292 @@ test('Make independent Subject relation continuation usable with keyboard and as
     await page.close();
   }
 }, 120_000);
+
+test('Retired composed continuations cannot alter or invalidate a replacement reading', async () => {
+  const { dirname } = await import('node:path');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://rezics.test/en/subjects/continuation' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLAnchorElement: window.HTMLAnchorElement,
+    Element: window.Element,
+    Node: window.Node,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Event: window.Event,
+    KeyboardEvent: window.KeyboardEvent,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+
+  type Reading = {
+    value: OverviewValue;
+    section: Section;
+    node: string;
+    view: string;
+    title: string;
+  };
+  type Deferred = {
+    request: unknown;
+    resolve: (section: Section) => void;
+    reject: (error: Error) => void;
+  };
+  const pending: Deferred[] = [];
+  mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
+  mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
+  mock.module('../src/features/pages/relation-stream-query', () => ({
+    relationGroupKey: (request: unknown, incarnation?: string) => ['test-relation-stream', request, incarnation],
+    loadRelationGroup: ({ data }: { data: unknown }) =>
+      new Promise<Section>((resolve, reject) => pending.push({ request: data, resolve, reject })),
+  }));
+
+  const { createElement, useState } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { userEvent } = await import('storybook/test');
+  const { defaultReader } = await import('../src/subject/reader');
+  const { RelationStream } = await import('../src/features/pages/relation-stream');
+  const { sessionQuery } = await import('../src/session/query');
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  setLocale('en', { reload: false });
+
+  const idA = '0192f3a0-6c1e-7b2a-9d4e-000000000101';
+  const idB = '0192f3a0-6c1e-7b2a-9d4e-000000000102';
+  const contextA = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000201',
+    population: { kind: 'realm' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000301', title: 'Context A' },
+  };
+  const contextB = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000202',
+    population: { kind: 'realm' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000302', title: 'Context B' },
+  };
+  const makeReading = (
+    subject: string,
+    reader: string,
+    context: typeof contextA,
+    node: string,
+    firstLabel: string,
+    cursor: string,
+  ): Reading => {
+    const value = {
+      locale: 'en',
+      pageTarget: { subject },
+      context,
+      realm: context.population.id,
+      cacheReader: reader,
+      subject,
+      subjectLabel: firstLabel,
+      link: ({ href, children, ...props }: { href: string; children?: unknown; [key: string]: unknown }) =>
+        createElement('a', { ...props, href }, children as never),
+      reader: defaultReader,
+      labels: { spoilerShow: 'Show spoilers', cover: { withheld: '', reveal: '', credit: '', via: '' } },
+      unlabelled: 'Untitled',
+      spoilerShow: 'Show spoilers',
+      details: 'Details',
+      cover: 'Cover credit',
+      coverVia: 'via',
+      licence: 'Licence',
+      source: 'Source',
+      sources: 'Sources',
+      sections: new Map(),
+      relations: {},
+      relationNodes: [],
+    } as unknown as OverviewValue;
+    const section: Section = {
+      ok: true,
+      read: { kind: 'links', id: subject, context: context.id, property: 'schema:author', limit: 12 },
+      body: {
+        links: [
+          {
+            subject: node === 'side-stories' ? idA : idB,
+            label: firstLabel,
+            type: 'schema:Book',
+            property: 'schema:author',
+            statement: `${node}-${firstLabel}`,
+          },
+        ],
+        next: cursor,
+      },
+    };
+    return { value, section, node, view: 'relations', title: firstLabel };
+  };
+  const addition = (subject: string, context: typeof contextA, label: string, next: string | null): Section => ({
+    ok: true,
+    read: { kind: 'links', id: subject, context: context.id, property: 'schema:author', limit: 12 },
+    body: {
+      links: [
+        {
+          subject: idB,
+          label,
+          type: 'schema:Book',
+          property: 'schema:author',
+          statement: `statement-${label}`,
+        },
+      ],
+      next,
+    },
+  });
+
+  const firstA = makeReading(idA, 'reader-A', contextA, 'side-stories', 'First A', 'cursor-A');
+  const readerB = makeReading(idA, 'reader-B', contextA, 'side-stories', 'Reader B', 'cursor-reader-B');
+  const contextBReading = makeReading(idA, 'reader-B', contextB, 'side-stories', 'Context B', 'cursor-context-B');
+  const nodeBReading = makeReading(idA, 'reader-B', contextB, 'adaptations', 'Adaptations', 'cursor-node-B');
+  let replaceReading: (reading: Reading) => void = () => {};
+  let invalidations = 0;
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reader-A', csrfToken: null });
+  function Screen() {
+    const [reading, setReading] = useState(firstA);
+    replaceReading = setReading;
+    return createElement(
+      'main',
+      null,
+      createElement(RelationStream, reading),
+      createElement('button', { id: 'outside-reading' }, 'Outside reading'),
+    );
+  }
+  const route = createRootRoute({ component: Screen });
+  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  const originalInvalidate = router.invalidate.bind(router);
+  Object.defineProperty(router, 'invalidate', {
+    configurable: true,
+    value: (...args: Parameters<typeof router.invalidate>) => {
+      invalidations += 1;
+      return originalInvalidate(...args);
+    },
+  });
+  await router.load();
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const flush = async () => {
+    await act(async () => {
+      await Bun.sleep(0);
+    });
+  };
+  const stream = (node: string) => host.querySelector(`[data-slot="relation-stream"][data-node="${node}"]`)!;
+  const status = (node: string) => stream(node).querySelector('[aria-live="polite"]')!;
+  const trigger = (node: string) => stream(node).querySelector<HTMLAnchorElement>('[data-slot="continue-group"]')!;
+  const start = async (node: string) => {
+    const action = trigger(node);
+    action.focus();
+    await act(async () => {
+      await userEvent.keyboard('{Enter}');
+    });
+    await flush();
+    return action;
+  };
+  const replace = async (reading: Reading) => {
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: reading.value.cacheReader ?? null,
+        csrfToken: null,
+      });
+      replaceReading(reading);
+    });
+    await flush();
+  };
+
+  try {
+    await act(async () => {
+      root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+    });
+    const retiredReaderTrigger = await start('side-stories');
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.request).toMatchObject({ reader: 'reader-A', context: contextA.id, populationId: contextA.population.id });
+    await replace(readerB);
+    const currentReaderTrigger = trigger('side-stories');
+    currentReaderTrigger.focus();
+    pending[0]!.resolve(addition(idA, contextA, 'Retired reader row', null));
+    await flush();
+    expect(status('side-stories').textContent).toBe('');
+    expect(stream('side-stories').textContent).toContain('Reader B');
+    expect(stream('side-stories').textContent).not.toContain('Retired reader row');
+    expect(window.document.activeElement).toBe(currentReaderTrigger);
+    expect(invalidations).toBe(0);
+    expect(retiredReaderTrigger.isConnected).toBe(false);
+
+    const retiredContextTrigger = await start('side-stories');
+    expect(pending).toHaveLength(2);
+    await replace(contextBReading);
+    const currentContextTrigger = trigger('side-stories');
+    currentContextTrigger.focus();
+    pending[1]!.reject(new Error('Retired Context request failed'));
+    await flush();
+    expect(status('side-stories').textContent).toBe('');
+    expect(stream('side-stories').textContent).toContain('Context B');
+    expect(stream('side-stories').querySelector('[role="alert"]')).toBeNull();
+    expect(window.document.activeElement).toBe(currentContextTrigger);
+    expect(invalidations).toBe(0);
+    expect(retiredContextTrigger.isConnected).toBe(false);
+
+    const retiredNodeTrigger = await start('side-stories');
+    expect(pending).toHaveLength(3);
+    await replace(nodeBReading);
+    const currentNodeTrigger = trigger('adaptations');
+    currentNodeTrigger.focus();
+    pending[2]!.resolve({ ok: false, status: 503 });
+    await flush();
+    expect(status('adaptations').textContent).toBe('');
+    expect(stream('adaptations').textContent).toContain('Adaptations');
+    expect(stream('adaptations').querySelector('[role="alert"]')).toBeNull();
+    expect(window.document.activeElement).toBe(currentNodeTrigger);
+    expect(invalidations).toBe(0);
+    expect(retiredNodeTrigger.isConnected).toBe(false);
+
+    // A to B to A returns to the same serialized reader, Context, node and cursor, but gets a new incarnation.
+    await replace(firstA);
+    const firstARequest = await start('side-stories');
+    expect(pending).toHaveLength(4);
+    await replace(nodeBReading);
+    await replace(firstA);
+    const replacementATrigger = trigger('side-stories');
+    replacementATrigger.focus();
+    await start('side-stories');
+    expect(pending).toHaveLength(5);
+    pending[3]!.resolve(addition(idA, contextA, 'Retired A row', null));
+    await flush();
+    expect(status('side-stories').textContent).toContain('Loading more');
+    expect(stream('side-stories').textContent).not.toContain('Retired A row');
+    expect(window.document.activeElement).toBe(replacementATrigger);
+    expect(invalidations).toBe(0);
+    pending[4]!.resolve(addition(idA, contextA, 'Current A row', 'current-a-next'));
+    await flush();
+    expect(status('side-stories').textContent).toContain('New visible items');
+    expect(status('side-stories').textContent).toContain(': 1. You can load more.');
+    expect(stream('side-stories').textContent).toContain('Current A row');
+    expect(stream('side-stories').textContent).not.toContain('Retired A row');
+    expect(trigger('side-stories').getAttribute('href')).toContain('cursor=current-a-next');
+    expect(window.document.activeElement).toBe(replacementATrigger);
+    expect(invalidations).toBe(0);
+    expect(firstARequest.isConnected).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+    mock.restore();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.close();
+  }
+}, 30_000);

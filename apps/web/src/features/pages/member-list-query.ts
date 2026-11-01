@@ -1,10 +1,12 @@
 import type { KernelClient } from '@rezics/client';
 import {
+  PAGE_GLOBAL_CONTEXT,
   planReads,
   platformRegistry,
   PROFILE_ROUTE_PATTERN,
   isView,
   type CompositionDocument,
+  type SelectedContext,
   type View,
 } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
@@ -12,13 +14,39 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { requestLanguages } from '../../kernel/languages';
 import { isRecord } from './shared';
-import { validatePageNode, validateViewCursor } from './view-cursor';
-import type { Section } from './overview';
+import { validatePageNode, validatePageRealm, validateViewCursor } from './view-cursor';
+import type { PageRepresentation, Section } from './overview';
 
 export type MemberPageTarget = ({ subject: string; realm?: string } | { account: string } | { route: string }) & {
   view?: View;
 };
-export type MemberListRequest = { target: MemberPageTarget; locale: string; node: string; cursor?: string };
+export type MemberListRequest = {
+  target: MemberPageTarget;
+  locale: string;
+  node: string;
+  cursor?: string;
+  /** A mismatch check only; the BFF derives authorization from the prepared request credential. */
+  expectedReader: string | null;
+  representation: PageRepresentation;
+};
+
+/** Plan against the resolved page account and representation returned by this same native read. */
+export function memberContinuationPlan(
+  page: {
+    subject?: string | null;
+    account?: { id: string; handle: string } | null;
+    context?: SelectedContext;
+  },
+  document: CompositionDocument,
+  input: Pick<MemberListRequest, 'node' | 'cursor'>,
+) {
+  return planReads(platformRegistry, document, {
+    subject: page.subject ?? null,
+    account: page.account ?? null,
+    ...(page.context ? { context: page.context } : {}),
+    ...(input.cursor ? { continuation: { node: input.node, cursor: input.cursor } } : {}),
+  });
+}
 
 /** Reload the current native composition, retaining its exact source and predicate on every continuation. */
 export async function readMemberList(
@@ -36,11 +64,17 @@ export async function readMemberList(
   );
   if (response.status !== 200 || !response.data) return { ok: false, status: response.status };
   const page = response.data;
-  const plan = planReads(platformRegistry, page.document as CompositionDocument, {
-    subject: page.subject ?? null,
-    ...(page.context ? { context: page.context } : {}),
-    ...(input.cursor ? { continuation: { node: input.node, cursor: input.cursor } } : {}),
-  });
+  const contextId = page.context?.id ?? PAGE_GLOBAL_CONTEXT;
+  const population = page.context?.population;
+  const populationKind = population?.kind ?? 'global';
+  const populationId = populationKind === 'realm' ? population.id : undefined;
+  if (
+    input.representation.context !== contextId ||
+    input.representation.population !== populationKind ||
+    input.representation.populationId !== populationId
+  )
+    return { ok: false, status: 409 };
+  const plan = memberContinuationPlan(page, page.document as CompositionDocument, input);
   const key = plan.nodes[input.node];
   const read = key ? plan.reads[key] : undefined;
   const result = key ? page.reads[key] : undefined;
@@ -76,18 +110,70 @@ function targetOf(value: unknown): MemberPageTarget {
 
 export const loadMemberList = createServerFn({ method: 'GET', strict: false })
   .validator((value: unknown): MemberListRequest => {
-    if (!isRecord(value) || typeof value.locale !== 'string' || !value.locale || value.locale.length > 35)
+    if (
+      !isRecord(value) ||
+      Object.keys(value).some(
+        (key) => !['target', 'locale', 'node', 'cursor', 'expectedReader', 'representation'].includes(key),
+      ) ||
+      typeof value.locale !== 'string' ||
+      !value.locale ||
+      value.locale.length > 35 ||
+      (value.expectedReader !== null &&
+        (typeof value.expectedReader !== 'string' || !value.expectedReader || value.expectedReader.length > 128))
+    )
       throw new Error('Invalid list request');
     const node = validatePageNode(value.node);
     const cursor = value.cursor === undefined ? undefined : validateViewCursor(value.cursor);
     if (!node || (value.cursor !== undefined && !cursor)) throw new Error('Invalid continuation');
-    return { target: targetOf(value.target), locale: value.locale, node, ...(cursor ? { cursor } : {}) };
+    const representation = value.representation;
+    const representationContext = isRecord(representation)
+      ? validatePageRealm(representation.context)
+      : undefined;
+    const populationId =
+      isRecord(representation) && representation.population === 'realm'
+        ? validatePageRealm(representation.populationId)
+        : undefined;
+    if (
+      !isRecord(representation) ||
+      Object.keys(representation).some((key) => !['context', 'population', 'populationId'].includes(key)) ||
+      !representationContext ||
+      (representation.population !== 'global' && representation.population !== 'realm') ||
+      (representation.population === 'global' && representation.populationId !== undefined) ||
+      (representation.population === 'realm' && !populationId)
+    )
+      throw new Error('Invalid page representation');
+    return {
+      target: targetOf(value.target),
+      locale: value.locale,
+      node,
+      ...(cursor ? { cursor } : {}),
+      expectedReader: value.expectedReader as string | null,
+      representation: {
+        context: representationContext,
+        population: representation.population as 'global' | 'realm',
+        ...(populationId ? { populationId } : {}),
+      },
+    };
   })
   .handler(async ({ data }) => {
-    const { env } = await import('cloudflare:workers');
-    const { prepareSession, viewerCredential } = await import('../../session/request');
-    const { kernelClient } = await import('../../kernel/client');
     setResponseHeader('cache-control', 'private, no-store');
-    await prepareSession(getRequest(), env as Partial<SessionEnv>);
-    return readMemberList(kernelClient(data.locale), data, viewerCredential(getRequest()) ?? undefined);
+    let authorization: string | undefined;
+    if (data.expectedReader !== null) {
+      const { env } = await import('cloudflare:workers');
+      const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      const credential = viewerCredential(request);
+      const reader = credential
+        ? (sessionSubject(request) ??
+          `credential:${Array.from(
+            new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(credential))),
+            (byte) => byte.toString(16).padStart(2, '0'),
+          ).join('')}`)
+        : null;
+      if (reader !== data.expectedReader) return { ok: false, status: 409 };
+      authorization = credential ?? undefined;
+    }
+    const { kernelClient } = await import('../../kernel/client');
+    return readMemberList(kernelClient(data.locale), data, authorization);
   });

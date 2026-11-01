@@ -1,15 +1,65 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { PAGE_GLOBAL_CONTEXT, isView } from '@rezics/composition';
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { isView } from '@rezics/composition';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
 import { subjectViewHref } from '../../subject/subject-href';
+import { useSession } from '../../session/query';
 import { CoverList } from './cover-list';
-import { holderItems, statementItems, type Item, type OverviewValue, type Section } from './overview';
+import {
+  holderItems,
+  pageRepresentation,
+  statementItems,
+  type Item,
+  type OverviewValue,
+  type Section,
+} from './overview';
 import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from './relation-stream-query';
-import { subjectRequestReader } from './subject-queries';
+
+let nextRelationIncarnation = 0;
+let nextSectionIncarnation = 0;
+const sectionIncarnations = new WeakMap<object, number>();
+
+function sectionIncarnation(section: Section): number {
+  let incarnation = sectionIncarnations.get(section);
+  if (incarnation === undefined) {
+    incarnation = ++nextSectionIncarnation;
+    sectionIncarnations.set(section, incarnation);
+  }
+  return incarnation;
+}
+
+function useRelationIncarnation(): string {
+  const [incarnation] = useState(() => `relations-${++nextRelationIncarnation}`);
+  return incarnation;
+}
+
+function useReadingLifetime(onRetire: () => void) {
+  const lifetime = useRef({ generation: 0, mounted: false });
+  const onRetireRef = useRef(onRetire);
+  onRetireRef.current = onRetire;
+  useLayoutEffect(() => {
+    const generation = ++lifetime.current.generation;
+    lifetime.current.mounted = true;
+    return () => {
+      if (lifetime.current.generation === generation) {
+        lifetime.current.mounted = false;
+        lifetime.current.generation += 1;
+        onRetireRef.current();
+      }
+    };
+  }, []);
+  return useMemo(() => ({
+    current(generation: number) {
+      return lifetime.current.mounted && lifetime.current.generation === generation;
+    },
+    generation() {
+      return lifetime.current.generation;
+    },
+  }), []);
+}
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -42,9 +92,27 @@ export function RelationStream(props: {
   titleLang?: string | undefined;
 }) {
   const { value, node, view } = props;
+  const viewer = useSession();
+  const hasReader = value.cacheReader != null;
+  const representation = pageRepresentation(value.context);
+  const identity = JSON.stringify([
+    value.subject,
+    value.pageTarget,
+    value.account ?? null,
+    value.realm,
+    value.cacheReader ?? null,
+    hasReader ? [viewer.state, viewer.subject ?? null] : null,
+    representation,
+    value.locale,
+    value.reader,
+    node,
+    view,
+    sectionIncarnation(props.section),
+  ]);
   return (
     <StreamState
-      key={`${value.subject}/${value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : '')}/${value.cacheReader ?? ''}/${value.context?.id ?? 'global'}/${value.context?.population.kind ?? 'global'}/${value.locale}/${value.reader.spoilerLevel}/${value.reader.suitability}/${node}/${view}`}
+      key={identity}
+      viewer={viewer}
       {...props}
     />
   );
@@ -52,6 +120,7 @@ export function RelationStream(props: {
 
 function StreamState({
   value,
+  viewer,
   section,
   node,
   view,
@@ -59,6 +128,7 @@ function StreamState({
   titleLang,
 }: {
   value: OverviewValue;
+  viewer: ReturnType<typeof useSession>;
   section: Section;
   node: string;
   view: string;
@@ -68,36 +138,46 @@ function StreamState({
   const queryClient = useQueryClient();
   const router = useRouter({ warn: false });
   type State = {
-    section: Section;
     pages: Section[];
     pending: boolean;
     error?: { status?: number | undefined } | undefined;
     completion?: { added: number; exhausted: boolean; trigger: HTMLAnchorElement | null } | undefined;
   };
-  const initial = (): State => ({ section, pages: [section], pending: false });
-  const [state, setState] = useState<State>(initial);
-  // A refreshed native aggregate retires accumulated rows before they can render under its new reading.
-  const current = state.section === section ? state : initial();
-  if (current !== state) setState(current);
-  const { pages, pending, error, completion } = current;
+  const [state, setState] = useState<State>(() => ({ pages: [section], pending: false }));
+  const { pages, pending, error, completion } = state;
   const end = useRef<HTMLParagraphElement>(null);
+  const incarnation = useRelationIncarnation();
+  const activeQueryKey = useRef<readonly unknown[] | undefined>(undefined);
+  const lifetime = useReadingLifetime(() => {
+    const key = activeQueryKey.current;
+    activeQueryKey.current = undefined;
+    if (key) void queryClient.cancelQueries({ queryKey: key, exact: true });
+  });
+  const readingGeneration = lifetime.generation();
   useLayoutEffect(() => {
     const trigger = completion?.trigger;
     // Only replace focus lost with the activated anchor. A reader may have moved to another stream.
     if (
+      lifetime.current(readingGeneration) &&
       completion?.exhausted &&
       trigger &&
       (trigger.ownerDocument.activeElement === trigger ||
         trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
     )
       end.current?.focus({ preventScroll: true });
-  }, [completion]);
-  const active = useRef<Section | null>(null);
+  }, [completion, lifetime, readingGeneration]);
+  const active = useRef(false);
   const latest = pages[pages.length - 1];
   const cursor = latest?.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
   const items = pages.flatMap((page) => relationStreamItems(page, value)?.items ?? []);
   const unique = new Map<string, Item>();
   for (const item of items) unique.set(item.statement ?? item.id, item);
+  const readerUnavailable =
+    value.cacheReader != null &&
+    viewer.state !== 'unknown' &&
+    !(viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
+  const continuationEnabled =
+    value.cacheReader == null || (viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
   const currentView = isView(view) ? view : 'relations';
   const base = value.subject
     ? subjectViewHref({ id: value.subject, label: value.subjectLabel ?? '' }, value.locale, currentView)
@@ -117,14 +197,18 @@ function StreamState({
       !value.subject
     )
       return;
+    // Keep native navigation available until this page has observed its authenticated reader.
+    if (!continuationEnabled) return;
     event.preventDefault();
-    if (active.current === section) return;
-    active.current = section;
+    if (active.current) return;
+    const generation = lifetime.generation();
+    if (!lifetime.current(generation)) return;
+    active.current = true;
     const trigger = event.currentTarget;
     setState((previous) => ({ ...previous, pending: true, error: undefined, completion: undefined }));
     try {
-      const reader = await subjectRequestReader({ data: { realm } });
-      if (reader !== (value.cacheReader ?? null)) throw new Error('Reading account changed');
+      if (!lifetime.current(generation)) return;
+      const representation = pageRepresentation(value.context);
       const request: RelationGroupRequest = {
         subject: value.subject,
         locale: value.locale,
@@ -132,20 +216,28 @@ function StreamState({
         node,
         cursor,
         realm,
-        reader,
-        context: value.context?.id ?? PAGE_GLOBAL_CONTEXT,
-        population: value.context?.population.kind ?? 'global',
+        reader: value.cacheReader ?? null,
+        context: representation.context,
+        population: representation.population,
+        ...(representation.populationId ? { populationId: representation.populationId } : {}),
       };
+      const queryKey = relationGroupKey(request, incarnation);
+      activeQueryKey.current = queryKey;
       const next = await queryClient.fetchQuery({
-        queryKey: relationGroupKey(request),
+        queryKey,
         staleTime: 0,
         gcTime: 0,
         retry: false,
-        queryFn: () => loadRelationGroup({ data: request }),
+        queryFn: async ({ signal }) => {
+          const result = await loadRelationGroup({ data: request });
+          if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired relation continuation');
+          return result;
+        },
       });
+      if (!lifetime.current(generation)) return;
       const focusTrigger = trigger.ownerDocument.activeElement === trigger ? trigger : null;
       setState((previous) => {
-        if (previous.section !== section) return previous;
+        if (!lifetime.current(generation)) return previous;
         const visible = new Set(
           previous.pages.flatMap((page) =>
             (relationStreamItems(page, value)?.items ?? []).map((item) => item.statement ?? item.id),
@@ -167,15 +259,22 @@ function StreamState({
             : undefined,
         };
       });
-      if (!next.ok) void router?.invalidate();
+      if (!next.ok && lifetime.current(generation)) void router?.invalidate();
     } catch {
-      setState((previous) =>
-        previous.section !== section ? previous : { ...previous, pages: [], error: {}, completion: undefined },
-      );
-      void router?.invalidate();
+      if (lifetime.current(generation)) {
+        setState((previous) =>
+          lifetime.current(generation) ? { ...previous, pages: [], error: {}, completion: undefined } : previous,
+        );
+        if (lifetime.current(generation)) void router?.invalidate();
+      }
     } finally {
-      if (active.current === section) active.current = null;
-      setState((previous) => (previous.section !== section ? previous : { ...previous, pending: false }));
+      if (lifetime.current(generation)) {
+        if (activeQueryKey.current?.at(-1) === incarnation) activeQueryKey.current = undefined;
+        active.current = false;
+        setState((previous) =>
+          lifetime.current(generation) ? { ...previous, pending: false } : previous,
+        );
+      }
     }
   }
   return (
@@ -189,9 +288,11 @@ function StreamState({
       <h2 id={`${node}-title`} lang={titleLang} className="text-2xl font-semibold tracking-tight">
         {title}
       </h2>
-      {unique.size ? (
+      {readerUnavailable ? (
+        <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
+      ) : unique.size ? (
         <CoverList items={[...unique.values()]} value={value} label={title} />
-      ) : !error ? (
+      ) : !readerUnavailable && !error ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}
         </p>

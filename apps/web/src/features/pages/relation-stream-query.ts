@@ -26,8 +26,9 @@ export type RelationGroupRequest = {
   /** Expected current representation, never a Context override or a grant. */
   context?: string;
   population?: 'global' | 'realm';
+  populationId?: string;
 };
-export const relationGroupKey = (input: RelationGroupRequest) =>
+export const relationGroupKey = (input: RelationGroupRequest, incarnation?: string) =>
   [
     'subject-relation-group',
     input.subject,
@@ -39,6 +40,8 @@ export const relationGroupKey = (input: RelationGroupRequest) =>
     input.reader ?? null,
     input.context ?? null,
     input.population ?? null,
+    input.populationId ?? null,
+    incarnation ?? null,
   ] as const;
 
 /** The native page resolver selects the current template, Context and one continued stream. */
@@ -59,9 +62,12 @@ export async function readRelationGroup(
     throw error;
   }
   if (loaded.kind !== 'page') return { ok: false, status: loaded.kind === 'missing' ? 404 : 409 };
+  const actualPopulation = loaded.page.context?.population;
   if (
     (input.context !== undefined && input.context !== (loaded.page.context?.id ?? PAGE_GLOBAL_CONTEXT)) ||
-    (input.population !== undefined && input.population !== (loaded.page.context?.population.kind ?? 'global'))
+    (input.population !== undefined && input.population !== (actualPopulation?.kind ?? 'global')) ||
+    (input.populationId !== undefined &&
+      (actualPopulation?.kind !== 'realm' || input.populationId !== actualPopulation.id))
   )
     return { ok: false, status: 409 };
   const plan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
@@ -78,6 +84,10 @@ export const loadRelationGroup = createServerFn({ method: 'GET', strict: false }
   .validator((value: unknown): RelationGroupRequest => {
     if (
       !isRecord(value) ||
+      Object.keys(value).some(
+        (key) =>
+          !['subject', 'locale', 'view', 'node', 'cursor', 'realm', 'reader', 'context', 'population', 'populationId'].includes(key),
+      ) ||
       typeof value.subject !== 'string' ||
       !/^[0-9a-f-]{36}$/.test(value.subject) ||
       typeof value.locale !== 'string' ||
@@ -89,12 +99,16 @@ export const loadRelationGroup = createServerFn({ method: 'GET', strict: false }
       (value.reader !== undefined &&
         value.reader !== null &&
         (typeof value.reader !== 'string' || !value.reader || value.reader.length > 128)) ||
-      (value.population !== undefined && value.population !== 'global' && value.population !== 'realm')
+      (value.population !== undefined && value.population !== 'global' && value.population !== 'realm') ||
+      (value.populationId !== undefined &&
+        (typeof value.populationId !== 'string' || !/^[0-9a-f-]{36}$/.test(value.populationId))) ||
+      (value.populationId !== undefined && value.population !== 'realm')
     )
       throw notFound();
     const node = validatePageNode(value.node);
     const cursor = validateViewCursor(value.cursor);
-    if (!node || !cursor) throw notFound();
+    const context = value.context === undefined ? undefined : validatePageRealm(value.context);
+    if (!node || !cursor || (value.context !== undefined && !context)) throw notFound();
     return {
       subject: value.subject,
       locale: value.locale,
@@ -103,13 +117,17 @@ export const loadRelationGroup = createServerFn({ method: 'GET', strict: false }
       cursor,
       realm: validatePageRealm(value.realm),
       ...(value.reader !== undefined ? { reader: value.reader as string | null } : {}),
-      ...(value.context !== undefined ? { context: validatePageRealm(value.context)! } : {}),
+      ...(context ? { context } : {}),
       ...(value.population !== undefined ? { population: value.population } : {}),
+      ...(value.populationId !== undefined ? { populationId: validatePageRealm(value.populationId)! } : {}),
     };
   })
   .handler(async ({ data }) => {
     const { subjectKernelClient } = await import('./subject-queries');
     setResponseHeader('cache-control', 'private, no-store');
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    const { client, authorization } =
+      data.reader === null
+        ? { client: (await import('../../kernel/client')).kernelClient(data.locale), authorization: undefined }
+        : await subjectKernelClient(data.locale, data.realm, data.reader);
     return readRelationGroup(client, data, authorization);
   });
