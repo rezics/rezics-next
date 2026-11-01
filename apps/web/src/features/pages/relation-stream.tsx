@@ -58,10 +58,7 @@ function sessionReading(client: QueryClient, expectedReader: string) {
   const session = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : undefined;
   return {
     query: query ?? null,
-    admitted:
-      query?.state.status === 'success' &&
-      session?.state === 'signed-in' &&
-      session.subject === expectedReader,
+    admitted: query?.state.status === 'success' && session?.state === 'signed-in' && session.subject === expectedReader,
   };
 }
 
@@ -195,9 +192,7 @@ export function RelationStream(props: {
     routeHref,
     queryClientIncarnation(queryClient),
   ]);
-  const control = useRef<
-    { identity: string; retire?: ((updateState?: boolean) => void) | undefined } | null
-  >(null);
+  const control = useRef<{ identity: string; retire?: ((updateState?: boolean) => void) | undefined } | null>(null);
   if (control.current?.identity !== identity) {
     control.current?.retire?.(false);
     control.current = { identity };
@@ -273,8 +268,7 @@ function StreamState({
       queries: new Map<string, OwnedQuery>(),
       stopObserving: undefined,
     } as StreamOwner;
-    if (unavailable && expectedReader !== null && !sectionState?.suspensions)
-      permanentlyRetirePrivateSection(section);
+    if (unavailable && expectedReader !== null && !sectionState?.suspensions) permanentlyRetirePrivateSection(section);
     owner.matches = (generation) =>
       !owner.retired && !owner.suspended && owner.mounted && owner.generation === generation;
     owner.current = (generation) => {
@@ -330,9 +324,7 @@ function StreamState({
     if (owner.retired) return;
     if (owner.suspended) {
       const current =
-        owner.expectedReader === null
-          ? undefined
-          : sessionReading(owner.queryClient, owner.expectedReader);
+        owner.expectedReader === null ? undefined : sessionReading(owner.queryClient, owner.expectedReader);
       const sectionState = owner.expectedReader === null ? undefined : privateSectionState(section);
       if (
         owner.expectedReader !== null &&
@@ -404,9 +396,7 @@ function StreamState({
   const items = visiblePages.flatMap((page) => relationStreamItems(page, value)?.items ?? []);
   const unique = new Map<string, Item>();
   for (const item of items) unique.set(item.statement ?? item.id, item);
-  const continuationEnabled =
-    owner.expectedReader === null ||
-    (currentSession && owner.matches(readingGeneration));
+  const continuationEnabled = owner.expectedReader === null || (currentSession && owner.matches(readingGeneration));
   const currentView = isView(view) ? view : 'relations';
   const base = value.subject
     ? subjectViewHref({ id: value.subject, label: value.subjectLabel ?? '' }, value.locale, currentView)

@@ -30,13 +30,7 @@ type HeldRelation = {
 let heldRelations: HeldRelation[] = [];
 
 function relationRequest(value: unknown): value is RelationGroupRequest {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'subject' in value &&
-    'node' in value &&
-    'cursor' in value
-  );
+  return typeof value === 'object' && value !== null && 'subject' in value && 'node' in value && 'cursor' in value;
 }
 
 // The existing loadRelationGroup BFF call is the only gate. Its validator, key function,
@@ -249,13 +243,16 @@ function continuation(
 }
 
 function cacheKeyFor(client: import('@tanstack/react-query').QueryClient, request: RelationGroupRequest) {
-  return client.getQueryCache().getAll().find(
-    (query) =>
-      query.queryKey[0] === 'subject-relation-group' &&
-      query.queryKey[1] === request.subject &&
-      query.queryKey[5] === request.node &&
-      query.queryKey[6] === request.cursor,
-  )?.queryKey;
+  return client
+    .getQueryCache()
+    .getAll()
+    .find(
+      (query) =>
+        query.queryKey[0] === 'subject-relation-group' &&
+        query.queryKey[1] === request.subject &&
+        query.queryKey[5] === request.node &&
+        query.queryKey[6] === request.cursor,
+    )?.queryKey;
 }
 
 async function settle() {
@@ -401,7 +398,8 @@ test('composed relation streams retire unhealthy reader visits and admit only fr
     window.document.body.append(host);
     const root = createRoot(host as unknown as HTMLElement);
     let rootMounted = true;
-    const stream = (node: string) => host.querySelector<HTMLElement>(`[data-slot="relation-stream"][data-node="${node}"]`)!;
+    const stream = (node: string) =>
+      host.querySelector<HTMLElement>(`[data-slot="relation-stream"][data-node="${node}"]`)!;
     const trigger = (node: string) => stream(node).querySelector<HTMLAnchorElement>('[data-slot="continue-group"]')!;
     const status = (node: string) => stream(node).querySelector<HTMLElement>('[aria-live="polite"]')!;
     const outside = () => host.querySelector<HTMLButtonElement>('#outside-reading')!;
@@ -779,7 +777,9 @@ test('composed relation streams retire unhealthy reader visits and admit only fr
       expect(status(afterRoute.node).textContent).toContain(': 0. End of this list.');
       expect(stream(afterRoute.node).querySelector('[data-slot="continue-group"]')).toBeNull();
       expect(stream(afterRoute.node).querySelector('[data-slot="relation-stream-end"]')).not.toBeNull();
-      expect(window.document.activeElement).toBe(stream(afterRoute.node).querySelector('[data-slot="relation-stream-end"]'));
+      expect(window.document.activeElement).toBe(
+        stream(afterRoute.node).querySelector('[data-slot="relation-stream-end"]'),
+      );
       expect(invalidations).toBe(0);
       void duplicateAction;
 
