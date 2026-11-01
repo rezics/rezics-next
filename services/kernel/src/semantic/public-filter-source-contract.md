@@ -765,16 +765,19 @@ Native Source advancement commits at the subject's own home through the command 
 bigint position can precede a replacement projection. Projection completion and final original/start/cut
 privacy revalidation remain mandatory. A moved owner, changed Source or missing Account repair owner is
 unavailable. No whole rebuild or creation/change coverage is inferred from one page. Search's committed
-`readPublicFilterConsumerCustody` exposes immutable executions but no visible-winner repair/dispatch settlement
-reader; `settle` therefore preserves that exact foreign absence as `owner_unavailable`, after Source validation.
-This does not prevent Source registration, cuts, adoption, recovery or bounded Source repair metadata progress.
+`readPublicFilterRepairSettlement` verifies actual repaired winners, dispatch, copies, writers and refresh
+custody through its staged native owner reads. Source `settle` still requires a clean served-population result
+before and after that reader, and does not yet advance native contiguous ACK. That remaining maintenance gate
+keeps settlement unavailable; the Search reader itself is present. Registration, cuts, adoption, recovery and
+bounded Source repair metadata can progress without granting repaired coverage.
 
 The original repair pages now retain independently verified prefix metadata in
 `semantic.public_filter_repair_step`. `readRepairStep` replays each actual native
 key, advancement, projection, Account tuple or creation-event successor before
 adopting it. Payloads, limits, locators and existing proof roots stay immutable;
 only the exact original successor can extend the prefix. A partial unique index
-locates its tip without walking prior pages. Recovery can verify one older original
+locates its tip without walking prior pages. Trigger metadata and successor-FK
+keyed reads are charged alongside the submitted native statements. Recovery can verify one older original
 page per funded repair invocation. The empty terminal successor binds this same
 prefix and its exact definition, queried observation, covered/start and execution;
 it does not call the served-population reader. This closes captured page replay,

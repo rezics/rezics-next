@@ -12486,7 +12486,9 @@ BEGIN
         RAISE EXCEPTION 'Repair verification must begin at its original root' USING ERRCODE='23514';
       END IF;
     ELSE
-      SELECT * INTO parent FROM semantic.public_filter_repair_step
+      SELECT complete,verified_root,verified_binding,verified_next,verified_ordinal
+      INTO parent.complete,parent.verified_root,parent.verified_binding,parent.verified_next,parent.verified_ordinal
+      FROM semantic.public_filter_repair_step
       WHERE (partition_no,bootstrap,execution,step)=
         (NEW.partition_no,NEW.bootstrap,NEW.execution,NEW.predecessor);
       IF NOT FOUND OR parent.complete OR parent.verified_root IS NULL OR

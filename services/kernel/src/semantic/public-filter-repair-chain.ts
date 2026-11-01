@@ -49,7 +49,7 @@ export async function readPublicFilterRepairVerification(pool: Pool, chain: Chai
  */
 export async function retainPublicFilterRepairVerification(
   pool: Pool, chain: Chain, page: Page, context: Readonly<{ deadline: number }>,
-): Promise<boolean> {
+) {
   requireAccessDeadline(context.deadline);
   return withConnection(pool,async (client) => {
     await client.query('BEGIN');
@@ -110,7 +110,25 @@ export async function retainPublicFilterRepairVerification(
       }
       requireAccessDeadline(context.deadline);
       await client.query('COMMIT');
-      return current.root === null;
+      // measuredPool charges the submitted statements and their own rows. The
+      // immutable-page trigger also seeks the parent metadata; linking a parent
+      // seeks its persisted child and performs the successor FK point check.
+      // These are design-visible keyed reads, not MVCC visibility work. They
+      // must travel with the adoption result rather than becoming free controls.
+      const advanced = current.root === null;
+      const parentRead = advanced && parent ? 1 : 0;
+      const childReads = advanced && parent?.next === null ? 2 : 0;
+      const triggerRows = parentRead + childReads;
+      const triggerBytes = parentRead ? Buffer.byteLength(JSON.stringify({
+        key: [0,chain.bootstrap,chain.execution,page.predecessor],
+        complete: parent!.complete,root: parent!.root,binding: parent!.binding,
+        next: page.step,ordinal: parent!.ordinal,
+      })) : 0;
+      const childBytes = childReads * Buffer.byteLength(JSON.stringify({
+        key: [0,chain.bootstrap,chain.execution,page.step],predecessor: page.predecessor,
+      }));
+      return { advanced, triggerRows, triggerBytes: triggerBytes + childBytes,
+        triggerKeys: parentRead * 4 + (childReads ? 9 : 0) };
     } catch (error) {
       try { await client.query('ROLLBACK'); }
       catch (rollbackError) { discardConnection(client,rollbackError as Error); }

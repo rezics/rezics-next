@@ -1583,11 +1583,15 @@ export function createPublicFilterSourceBinding(
           encode(current.definition) !== encode(cut.definition)
         )
           throw new BindingError('configuration_changed');
-        const advanced = await retainPublicFilterRepairVerification(db,chain,{
+        const verification = await retainPublicFilterRepairVerification(db,chain,{
           step: row.step, predecessor: row.predecessor, state: row.state, complete: row.complete,
           inputLimit: row.input_limit, digests: row.repair_locator_digests!,
         },{ deadline });
-        if (advanced) cost.frontierWrites++;
+        cost.rows += verification.triggerRows;
+        cost.dependencyPoints += verification.triggerRows;
+        cost.inputKeys += verification.triggerKeys;
+        cost.bytes += verification.triggerBytes;
+        if (verification.advanced) cost.frontierWrites++;
         return {
           status: 'verified' as const,
           step: row.step,
