@@ -22,6 +22,7 @@ class ManagementCurrentOrigin {
   private listeners = new Set<() => void>();
   private read?: { key: QueryKey; matches: (value: unknown) => boolean };
   private accepted = { retired: false };
+  private acceptedValue: unknown;
   private rejectedAt = -1;
   private rejectedQuery: unknown;
   private operations = new Map<GatedOperation, { retired: boolean; version: number | undefined }>();
@@ -82,6 +83,12 @@ class ManagementCurrentOrigin {
     if (this.read) {
       const query = this.client.getQueryState(this.read.key);
       if (!query || query.status !== 'success' || !this.read.matches(query.data)) this.rejectRead();
+      else if (!this.accepted.retired && this.acceptedValue !== undefined && this.acceptedValue !== query.data) {
+        this.accepted.retired = true;
+        this.rejectedQuery = undefined;
+        this.rejectedAt = -1;
+        this.changed();
+      }
     }
   };
   hasAuthority = () => this.browser && !!this.credential() && this.admitted(this.operation);
@@ -138,6 +145,7 @@ class ManagementCurrentOrigin {
     )
       return null;
     if (this.accepted.retired) this.accepted = { retired: false };
+    this.acceptedValue = query.data;
     for (const operation of operations) {
       if (!this.operations.has(operation) || this.operations.get(operation)!.retired) {
         this.operations.set(operation, { retired: false, version: this.admission.dispatchVersion(operation) });

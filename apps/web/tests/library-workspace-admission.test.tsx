@@ -227,6 +227,32 @@ test('Healthy actual scoped admission enables Library workspace journeys while f
     expect(label.originating!.isCurrent('library_label.rename')).toBe(true);
     expect(new Headers(copy.originating!.headers('copy.create')!).get('x-csrf-token')).toBe('rotated-A');
     expect(lists).toHaveLength(0);
+    const beforeRead = label.originating!;
+    const labelsKey = client.getQueryCache().findAll({ queryKey: ['labels-current'] })[0]!.queryKey;
+    const previousRead = client.getQueryData(labelsKey);
+    await act(async () => {
+      const fresh = labelResponse('A');
+      fresh.page.labels[0]!.revision++;
+      client.setQueryData(labelsKey, fresh);
+      expect(beforeRead.isCurrent('library_label.rename')).toBe(false);
+      client.setQueryData(labelsKey, previousRead);
+      expect(beforeRead.isCurrent('library_label.rename')).toBe(false);
+    });
+    await tick();
+    expect(label.originating!.isCurrent('library_label.rename')).toBe(true);
+    const beforeError = label.originating!;
+    await act(async () => {
+      const enrolled = viewerExposureLifetime(client).getSnapshot();
+      if (enrolled.state !== 'signed-in') throw new Error('Expected enrolled viewer');
+      client
+        .getQueryCache()
+        .find({ queryKey: viewerExposureQuery(enrolled.observation).queryKey, exact: true })!
+        .setState({ status: 'error', error: new Error('Exposure unavailable') });
+      expect(beforeError.isCurrent('library_label.rename')).toBe(false);
+      settle(client, 'A');
+      expect(beforeError.isCurrent('library_label.rename')).toBe(false);
+    });
+    await tick();
     const original = label.originating!;
     await act(async () => {
       client.setQueryData(['exposure', 'viewer'], groups);

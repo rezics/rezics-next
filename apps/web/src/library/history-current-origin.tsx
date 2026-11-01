@@ -170,14 +170,15 @@ export function useHistoryReadOrigin(client: QueryClient, key: QueryKey, matches
   const predicate = useRef(matches);
   predicate.current = matches;
   const observation = useMemo(() => {
-    let snapshot = { valid: false, generation: 0 };
+    let snapshot = { valid: false, generation: 0, data: undefined as unknown };
     const read = () => {
       const state = client.getQueryState(key);
       const valid = state?.status === 'success' && predicate.current(state.data);
-      if (valid !== snapshot.valid)
+      if (valid !== snapshot.valid || state?.data !== snapshot.data)
         snapshot = {
           valid,
-          generation: snapshot.generation + Number(snapshot.valid && !valid),
+          generation: snapshot.generation + Number(snapshot.valid && (!valid || state?.data !== snapshot.data)),
+          data: state?.data,
         };
       return snapshot;
     };
@@ -195,5 +196,8 @@ export function useHistoryReadOrigin(client: QueryClient, key: QueryKey, matches
     };
   }, [client, signature]);
   const snapshot = useSyncExternalStore(observation.subscribe, observation.read, observation.read);
-  return () => observation.read().valid && observation.read().generation === snapshot.generation;
+  return () => {
+    const actual = observation.read();
+    return actual.valid && actual.generation === snapshot.generation && actual.data === snapshot.data;
+  };
 }

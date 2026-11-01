@@ -283,6 +283,8 @@ function PersonalLibraryRead({
       : undefined;
   const readLifetime = useMemo(() => {
     let generation = 0;
+    let token = {};
+    let previousValue: unknown;
     let invalid = false;
     let seen = false;
     const listeners = new Set<() => void>();
@@ -290,6 +292,8 @@ function PersonalLibraryRead({
       const actual = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
       const valid = actual?.status === 'success' && matches(actual.data?.value, subject, address);
       const next = actual?.status === 'error' || (seen && !valid) || (actual?.status === 'success' && !valid);
+      if (seen && actual?.data !== previousValue) token = {};
+      previousValue = actual?.data;
       seen ||= valid;
       if (next && !invalid) generation++;
       invalid = next;
@@ -297,6 +301,10 @@ function PersonalLibraryRead({
     };
     return {
       read,
+      token: () => {
+        read();
+        return token;
+      },
       server: () => 0,
       watch: (listener: () => void) => {
         listeners.add(listener);
@@ -309,8 +317,9 @@ function PersonalLibraryRead({
         const unsubscribe = client.getQueryCache().subscribe(({ query }) => {
           if (query.queryKey[0] !== 'personal-library-current' || query.queryKey.at(-1) !== lifetime) return;
           const before = generation;
+          const beforeToken = token;
           read();
-          if (generation !== before) listeners.forEach((listener) => listener());
+          if (generation !== before || token !== beforeToken) listeners.forEach((listener) => listener());
         });
         return () => {
           listeners.delete(notify);
@@ -320,17 +329,20 @@ function PersonalLibraryRead({
     };
   }, [client, origin]);
   const readGeneration = useSyncExternalStore(readLifetime.subscribe, readLifetime.read, readLifetime.server);
+  const readToken = readLifetime.token();
   const isCurrent = useMemo(
     () => () => {
       const actual = client.getQueryState<ReturnType<typeof envelope>>(queryKey);
       return (
         origin.current() &&
         readLifetime.read() === readGeneration &&
+        readLifetime.token() === readToken &&
         actual?.status === 'success' &&
+        actual.data === accepted &&
         matches(actual.data?.value, subject, address)
       );
     },
-    [origin, readGeneration],
+    [origin, readGeneration, readToken, accepted],
   );
   const pageOrigin = useMemo<ShelfOrigin>(
     () => ({

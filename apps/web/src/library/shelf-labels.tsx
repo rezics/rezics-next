@@ -40,9 +40,12 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
   const selected = controls.selected.join(':');
   const searchScope = useMemo(
     () => ({}),
-    [open, query, session.state, session.subject, controls.labelVersion, selected, origin],
+    [open, query, session.state, session.subject, controls.labelVersion, selected],
   );
-  const scope = useMemo(() => ({ active: true, current: controls.captureLabel() }), [searchScope, controls.labelEpoch]);
+  const scope = useMemo(
+    () => ({ active: true, current: controls.captureLabel() }),
+    [searchScope, controls.labelEpoch, origin],
+  );
   const previous = useRef({ scope, searchScope });
   const cancelTimer = () => {
     clearTimeout(timer.current);
