@@ -51,6 +51,23 @@ CREATE FUNCTION rating.nonnegative_histogram(histogram_values bigint[]) RETURNS 
 $$;
 
 
+--
+-- Name: require_population_total_delivery(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.require_population_total_delivery() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (TG_OP = 'INSERT' OR (NEW.count, NEW.sum) IS DISTINCT FROM (OLD.count, OLD.sum))
+     AND current_setting('rating.population_total_writer', true) IS DISTINCT FROM 'population-home-v1' THEN
+    RAISE EXCEPTION 'Rating population totals require population-home delivery';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -136,6 +153,20 @@ CREATE TABLE rating.population_prior_republish (
 
 
 --
+-- Name: population_total_clock; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_total_clock (
+    partition_no integer NOT NULL,
+    generation bigint NOT NULL,
+    pending bigint NOT NULL,
+    CONSTRAINT population_total_clock_generation_check CHECK ((generation > 0)),
+    CONSTRAINT population_total_clock_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT population_total_clock_pending_check CHECK ((pending >= 0))
+);
+
+
+--
 -- Name: population_total_component; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -153,6 +184,72 @@ CREATE TABLE rating.population_total_component (
     CONSTRAINT population_total_component_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT population_total_component_shard_check CHECK (((shard >= 0) AND (shard <= 15))),
     CONSTRAINT population_total_component_sum_check CHECK ((sum >= 0))
+);
+
+
+--
+-- Name: population_total_delivery; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_total_delivery (
+    partition_no integer NOT NULL,
+    population_id uuid NOT NULL,
+    serial bigint NOT NULL,
+    payload jsonb NOT NULL,
+    pending boolean DEFAULT true NOT NULL,
+    CONSTRAINT population_total_delivery_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT population_total_delivery_payload_check CHECK (((jsonb_typeof(payload) = 'object'::text) AND (octet_length((payload)::text) <= 65536))),
+    CONSTRAINT population_total_delivery_serial_check CHECK ((serial > 0))
+);
+
+
+--
+-- Name: population_total_inbox; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_total_inbox (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    population_id uuid NOT NULL,
+    source_partition integer NOT NULL,
+    serial bigint NOT NULL,
+    payload jsonb NOT NULL,
+    applied boolean DEFAULT false NOT NULL,
+    CONSTRAINT population_total_inbox_check CHECK ((route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
+    CONSTRAINT population_total_inbox_payload_check CHECK (((jsonb_typeof(payload) = 'object'::text) AND (octet_length((payload)::text) <= 65536))),
+    CONSTRAINT population_total_inbox_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT population_total_inbox_serial_check CHECK ((serial > 0)),
+    CONSTRAINT population_total_inbox_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
+);
+
+
+--
+-- Name: population_total_received; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_total_received (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    population_id uuid NOT NULL,
+    source_partition integer NOT NULL,
+    serial bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT population_total_received_check CHECK ((route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
+    CONSTRAINT population_total_received_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT population_total_received_serial_check CHECK ((serial >= 0)),
+    CONSTRAINT population_total_received_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
+);
+
+
+--
+-- Name: population_total_source; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_total_source (
+    partition_no integer NOT NULL,
+    population_id uuid NOT NULL,
+    serial bigint NOT NULL,
+    CONSTRAINT population_total_source_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT population_total_source_serial_check CHECK ((serial > 0))
 );
 
 
@@ -399,11 +496,51 @@ ALTER TABLE ONLY rating.population_prior_republish
 
 
 --
+-- Name: population_total_clock population_total_clock_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_total_clock
+    ADD CONSTRAINT population_total_clock_pkey PRIMARY KEY (partition_no);
+
+
+--
 -- Name: population_total_component population_total_component_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
 ALTER TABLE ONLY rating.population_total_component
     ADD CONSTRAINT population_total_component_pkey PRIMARY KEY (route, question_id, population_id, shard);
+
+
+--
+-- Name: population_total_delivery population_total_delivery_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_total_delivery
+    ADD CONSTRAINT population_total_delivery_pkey PRIMARY KEY (partition_no, population_id, serial);
+
+
+--
+-- Name: population_total_inbox population_total_inbox_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_total_inbox
+    ADD CONSTRAINT population_total_inbox_pkey PRIMARY KEY (route, population_id, source_partition, serial);
+
+
+--
+-- Name: population_total_received population_total_received_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_total_received
+    ADD CONSTRAINT population_total_received_pkey PRIMARY KEY (route, population_id, source_partition);
+
+
+--
+-- Name: population_total_source population_total_source_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_total_source
+    ADD CONSTRAINT population_total_source_pkey PRIMARY KEY (partition_no, population_id);
 
 
 --
@@ -485,6 +622,13 @@ CREATE INDEX aggregate_component_target_population_idx ON rating.aggregate_compo
 
 
 --
+-- Name: population_total_delivery_pending_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX population_total_delivery_pending_idx ON rating.population_total_delivery USING btree (partition_no, population_id, serial) WHERE pending;
+
+
+--
 -- Name: population_total_epoch_check_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -552,6 +696,15 @@ CREATE INDEX voter_realm_capped_idx ON rating.voter_realm USING btree (route, vo
 --
 
 CREATE INDEX voter_realm_waiting_idx ON rating.voter_realm USING btree (route, voter_id, joined_at, realm_id) WHERE (state = 'uncounted'::text);
+
+
+--
+-- Name: population_total_component population_total_delivery_writer; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER population_total_delivery_writer BEFORE INSERT OR UPDATE ON rating.population_total_component FOR EACH ROW EXECUTE FUNCTION rating.require_population_total_delivery();
+
+ALTER TABLE rating.population_total_component ENABLE ALWAYS TRIGGER population_total_delivery_writer;
 
 
 --
@@ -637,67 +790,4 @@ ALTER TABLE ONLY rating.vote
 -- PostgreSQL database dump complete
 --
 
-
-
-CREATE FUNCTION rating.require_population_total_delivery() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF (TG_OP = 'INSERT' OR (NEW.count, NEW.sum) IS DISTINCT FROM (OLD.count, OLD.sum))
-     AND current_setting('rating.population_total_writer', true) IS DISTINCT FROM 'population-home-v1' THEN
-    RAISE EXCEPTION 'Rating population totals require population-home delivery';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-CREATE TRIGGER population_total_delivery_writer
-  BEFORE INSERT OR UPDATE ON rating.population_total_component
-  FOR EACH ROW EXECUTE FUNCTION rating.require_population_total_delivery();
-ALTER TABLE rating.population_total_component ENABLE ALWAYS TRIGGER population_total_delivery_writer;
-
-CREATE TABLE rating.population_total_clock (
-  partition_no integer PRIMARY KEY CHECK (partition_no BETWEEN 0 AND 4095),
-  generation bigint NOT NULL CHECK (generation > 0),
-  pending bigint NOT NULL CHECK (pending >= 0)
-);
-
--- Target-local, one ordered stream per destination population. No target baseline is needed.
-CREATE TABLE rating.population_total_source (
-  partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-  population_id uuid NOT NULL,
-  serial bigint NOT NULL CHECK (serial > 0),
-  PRIMARY KEY (partition_no, population_id)
-);
-CREATE TABLE rating.population_total_delivery (
-  partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-  population_id uuid NOT NULL,
-  serial bigint NOT NULL CHECK (serial > 0),
-  payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object' AND octet_length(payload::text) <= 65536),
-  pending boolean NOT NULL DEFAULT true,
-  PRIMARY KEY (partition_no, population_id, serial)
-);
-CREATE INDEX population_total_delivery_pending_idx
-  ON rating.population_total_delivery (partition_no, population_id, serial) WHERE pending;
-
--- Destination-local contiguous receipt frontier. A missing stream starts at serial 1 by protocol,
--- never by interpreting a missing predecessor's contribution as zero.
-CREATE TABLE rating.population_total_received (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  partition_no integer GENERATED ALWAYS AS (route >> 4) STORED,
-  population_id uuid NOT NULL,
-  source_partition integer NOT NULL CHECK (source_partition BETWEEN 0 AND 4095),
-  serial bigint NOT NULL DEFAULT 0 CHECK (serial >= 0),
-  PRIMARY KEY (route, population_id, source_partition),
-  CHECK (route = get_byte(uuid_send(population_id), 10) * 256 + get_byte(uuid_send(population_id), 11))
-);
-CREATE TABLE rating.population_total_inbox (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  partition_no integer GENERATED ALWAYS AS (route >> 4) STORED,
-  population_id uuid NOT NULL,
-  source_partition integer NOT NULL CHECK (source_partition BETWEEN 0 AND 4095),
-  serial bigint NOT NULL CHECK (serial > 0),
-  payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object' AND octet_length(payload::text) <= 65536),
-  applied boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (route, population_id, source_partition, serial),
-  CHECK (route = get_byte(uuid_send(population_id), 10) * 256 + get_byte(uuid_send(population_id), 11))
-);
 

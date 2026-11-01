@@ -330,7 +330,27 @@ test('source pages, destination statements and exact replay stay bounded as unre
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([8, 64, 512]);
   const many = Array.from({ length: 205 }, () => vote(newId(populationRoute)));
+  statements.length = 0;
   await applyRatingChanges(pool, many);
+  const captures = statements.filter(({ text }) => /INSERT INTO rating\.population_total_delivery/.test(text));
+  const updates = statements.filter(({ text }) => /UPDATE rating\.population_total_component/.test(text));
+  expect(captures).toHaveLength(205);
+  expect(updates).toHaveLength(205);
+  expect(new Set(captures.map(({ checkout }) => checkout)).size).toBe(3);
+  for (const checkout of new Set(captures.map(({ checkout }) => checkout))) {
+    const destinations = captures.filter((item) => item.checkout === checkout).length;
+    expect(destinations).toBeLessThanOrEqual(100);
+    const writes = statements.filter((item) => item.checkout === checkout &&
+      /rating\.population_total_(?:source|delivery|clock)/.test(item.text));
+    expect(writes.length).toBeLessThanOrEqual(2 * destinations + 1);
+  }
+  for (const checkout of new Set(updates.map(({ checkout }) => checkout))) {
+    const deltas = updates.filter((item) => item.checkout === checkout).length;
+    expect(deltas).toBeLessThanOrEqual(200);
+    const destination = statements.filter((item) => item.checkout === checkout &&
+      /rating\.population_total_(?:component|inbox|received)/.test(item.text));
+    expect(destination.length).toBeLessThanOrEqual(2 * deltas + 6);
+  }
   const payloads = await database.admin.query<{ data: PopulationTotalDelivery; event_count: number }>(
     `SELECT data,event_count FROM core.outbox WHERE type=$1 AND data->>'action'='deliver'
      AND data->>'populationId'=ANY($2::text[])`, [POPULATION_TOTAL_DELIVERY, many.map((change) => change.populationId)]);
