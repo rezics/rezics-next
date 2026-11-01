@@ -44,13 +44,17 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
   .validator(validateQuery)
   .handler(async ({ data }): Promise<CopiesPageData> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const page = await loadCopiesPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const request = getRequest();
+    const page = await loadCopiesPage(kernelClient(), request, env as Partial<SessionEnv>, data);
+    if (!page.signedIn) return page;
+    // The list and its summary share the one successful preparation for this request.
+    const authorization = viewerCredential(request);
     await nameSubjectTypes(page.copies.map((copy) => copy.subject));
     const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
     const locale = getLocale();
     const pageSubject = page.subjectId
       ? (page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject ??
-        (await readCopySubjectSummary(page.subjectId)))
+        (await readCopySubjectSummary(page.subjectId, authorization)))
       : null;
     if (pageSubject) await nameSubjectTypes([pageSubject]);
     for (const copy of page.copies) {
@@ -60,7 +64,7 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
     if (page.subjectId) {
       page.profile = pageSubject ? resolveCopyProfile(release, pageSubject.type, locale) : { kinds: [] };
     }
-    page.csrfToken = (await readSessionIdentity(getRequest(), env as Partial<SessionEnv>)).csrfToken;
+    page.csrfToken = (await readSessionIdentity(request, env as Partial<SessionEnv>)).csrfToken;
     return page;
   });
 
@@ -99,14 +103,13 @@ export const undoCopy = createServerFn({ method: 'POST' })
     return restoreCopy(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
-async function readCopySubjectSummary(id: string): Promise<LibrarySubject | null> {
-  if (!copiesSubjectId(id)) return null;
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  const authorization = viewerCredential(request);
-  if (!authorization) return null;
-  const result = await kernelClient().subjects({ id }).get({ headers: { authorization } });
-  if (result.error || !result.data?.subject) return null;
+async function readCopySubjectSummary(id: string, authorization: string | null): Promise<LibrarySubject | null> {
+  if (!copiesSubjectId(id) || !authorization) return null;
+  const result = await kernelClient().subjects({ id }).get({
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (result.error || result.data?.subject?.id !== id) return null;
   const subject = result.data.subject;
   const locale = getLocale();
   return presentSubject({
@@ -121,10 +124,13 @@ async function resolveSubject(id: string): Promise<CopySubjectResult> {
   if (!copiesSubjectId(id)) return { state: 'unavailable' };
   try {
     const request = getRequest();
-    const stale = await prepareSession(request, env as Partial<SessionEnv>);
+    if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'forbidden' };
     const authorization = viewerCredential(request);
-    if (stale || !authorization) return { state: 'forbidden' };
-    const result = await kernelClient().subjects({ id }).get({ headers: { authorization } });
+    if (!authorization) return { state: 'forbidden' };
+    const result = await kernelClient().subjects({ id }).get({
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
     if ([401, 403, 404].includes(result.status)) return { state: 'forbidden' };
     if (result.error || result.data?.subject?.id !== id) return { state: 'unavailable' };

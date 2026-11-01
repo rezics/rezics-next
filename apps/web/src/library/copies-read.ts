@@ -290,7 +290,7 @@ function writeHeaders(authorization: string, idempotencyKey: string): { 'idempot
 }
 
 async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promise<string | CopyWriteFailure> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { ok: false, reason: 'forbidden' };
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   return authorization;
@@ -301,6 +301,7 @@ async function readCopyPage(client: KernelClient, authorization: string, subject
     const result = await client.copies.get({
       query: { ...libraryListQuery(pageCursor), ...(subjectId ? { subjectId } : {}) },
       headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     const body = problemBody(result.error);
     if (result.status === 400 && isRecord(body) && body.code === 'invalid_cursor') throw new StaleCursorError();
@@ -321,8 +322,8 @@ export async function loadCopiesPage(
   sessionEnv: Partial<SessionEnv>,
   input: { subjectId?: string; cursor?: string },
 ): Promise<CopiesPageData> {
-  await prepareSession(request, sessionEnv);
-  const authorization = viewerCredential(request);
+  const refused = await prepareSession(request, sessionEnv);
+  const authorization = refused ? null : viewerCredential(request);
   const subjectId = copiesSubjectId(input.subjectId) ?? null;
   if (!authorization) return { signedIn: false, subjectId, copies: [], next: null, addKey: crypto.randomUUID() };
   const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor);
@@ -351,6 +352,7 @@ export async function loadCopyDetail(
     const result = await client.copies({ copyId: id }).get({
       query: { view: 'FULL', ...nativeCopyPresentationQuery() },
       headers: { authorization, ...(language ? { 'accept-language': language } : {}) },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     // The native point read also conceals denied rows as 404. It is no deletion evidence.
     if ([401, 403, 404].includes(result.status)) return { ok: false, reason: 'forbidden' };
