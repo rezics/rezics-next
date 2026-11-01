@@ -450,9 +450,7 @@ export function ViewerInboxPage({
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">{m.inbox_triage_scope()}</p>
-              {hasUnreadLoaded &&
-              !seenFailure &&
-              readable.items[0]?.id !== markedThrough.current ? (
+              {hasUnreadLoaded && !seenFailure && readable.items[0]?.id !== markedThrough.current ? (
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">{m.inbox_triage_mark_help()}</p>
                   <Button
@@ -487,13 +485,9 @@ export function ViewerInboxPage({
             ) : unreadOnly && !hasUnreadLoaded ? (
               <section className="mt-6 space-y-3">
                 <p role="status" className="text-muted-foreground">
-                  {readable.items.length === 0 && !readable.next
-                    ? m.inbox_empty()
-                    : m.inbox_triage_no_unread_loaded()}
+                  {readable.items.length === 0 && !readable.next ? m.inbox_empty() : m.inbox_triage_no_unread_loaded()}
                 </p>
-                {readable.next ? (
-                  <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p>
-                ) : null}
+                {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
                 {readable.next ? (
                   <Button
                     type="button"
@@ -511,9 +505,7 @@ export function ViewerInboxPage({
                 <p role="status" className="text-muted-foreground">
                   {m.inbox_triage_no_loaded()}
                 </p>
-                {readable.next ? (
-                  <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p>
-                ) : null}
+                {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
                 {readable.next ? (
                   <Button
                     type="button"
