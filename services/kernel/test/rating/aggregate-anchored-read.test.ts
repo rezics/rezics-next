@@ -65,14 +65,7 @@ function resetTrace() {
   lifetimes.length = 0;
 }
 
-async function component(
-  target: string,
-  shard: number,
-  count: bigint,
-  sum: bigint,
-  histogram: bigint[],
-  at = earlier,
-) {
+async function component(target: string, shard: number, count: bigint, sum: bigint, histogram: bigint[], at = earlier) {
   await database.admin.query(
     `INSERT INTO rating.aggregate_component
        (route, question_id, population_id, target_id, shard, count, sum, histogram, applied_at)
@@ -115,9 +108,7 @@ test('The default rating aggregate read obtains question scale, population fresh
   expectAnchors();
   const acquisitions = statements.filter((_, index) => index % 2 === 0).map((row) => row.checkout);
   expect(new Set(acquisitions).size).toBe(3);
-  expect(lifetimes).toEqual(
-    acquisitions.flatMap((id) => [`acquire:${id}`, 'BEGIN', 'COMMIT', `release:${id}`]),
-  );
+  expect(lifetimes).toEqual(acquisitions.flatMap((id) => [`acquire:${id}`, 'BEGIN', 'COMMIT', `release:${id}`]));
 });
 
 test('unknown questions return null before foreign preparation, and empty targets retain their question scale and observed freshness', async () => {
