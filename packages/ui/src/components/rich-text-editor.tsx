@@ -462,16 +462,14 @@ export function RichTextEditor({
         latest.current.onBlur?.();
       },
       onFocus: ({ editor: current }) => {
-        if (mounted.current && renderedEditor.current === current && !current.isDestroyed)
-          latest.current.onFocus?.();
+        if (mounted.current && renderedEditor.current === current && !current.isDestroyed) latest.current.onFocus?.();
       },
     },
     [value.profile, placeholder, maxLength],
   );
   renderedEditor.current = editor;
 
-  const schemaMatchesProfile =
-    editor !== null && Boolean(editor.schema.nodes.image) === (value.profile === 'blocks');
+  const schemaMatchesProfile = editor !== null && Boolean(editor.schema.nodes.image) === (value.profile === 'blocks');
   const previousControlled = controlled.current;
   const renderedProfileChanged = previousControlled.profile !== value.profile;
   const renderedIncomingChanged = previousControlled.key !== controlledKey || renderedProfileChanged;
@@ -490,7 +488,12 @@ export function RichTextEditor({
   const currentMentionGeneration = mentionSourceState.current.generation;
 
   const ownsVisit = useCallback(
-    (owner: number, ownerProfile: DocumentSnapshot['profile'], ownerMentionGeneration: number, target: TiptapEditor | null) =>
+    (
+      owner: number,
+      ownerProfile: DocumentSnapshot['profile'],
+      ownerMentionGeneration: number,
+      target: TiptapEditor | null,
+    ) =>
       mounted.current &&
       !renderedExternalReplacement &&
       !renderedEditorReplacement &&
@@ -515,12 +518,12 @@ export function RichTextEditor({
       const current = linkRangeRef.current;
       return Boolean(
         isCurrent() &&
-          current &&
-          current.id === range.id &&
-          current.visit === range.visit &&
-          current.from === range.from &&
-          current.to === range.to &&
-          current.url === range.url,
+        current &&
+        current.id === range.id &&
+        current.visit === range.visit &&
+        current.from === range.from &&
+        current.to === range.to &&
+        current.url === range.url,
       );
     },
     [isCurrent],
@@ -730,12 +733,7 @@ export function RichTextEditor({
     if (!editor) return;
     const mapRange = ({ transaction }: { transaction: Transaction }) => {
       const range = linkRangeRef.current;
-      if (
-        renderedEditor.current !== editor ||
-        !editableRef.current ||
-        editor.isDestroyed
-      )
-        return;
+      if (renderedEditor.current !== editor || !editableRef.current || editor.isDestroyed) return;
       if (range && range.visit === visitRef.current) {
         const mapped = mapSavedLinkRange(editor, range, transaction);
         if (mapped) setOwnedLinkRange(mapped);

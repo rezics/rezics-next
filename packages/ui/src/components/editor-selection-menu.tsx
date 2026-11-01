@@ -24,13 +24,15 @@ export const bubbleOptions = { placement: 'top' as const, offset: 8, flip: true,
 export const pressedTone = 'aria-pressed:bg-primary/10 aria-pressed:text-primary';
 
 /** Focus goes back to the editor on Tiptap's next frame, which restores its own selection. */
-export const returnFocus = (editor: Editor, isCurrent: () => boolean = () => true) => () => {
-  if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return false;
-  requestAnimationFrame(() => {
-    if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
-  });
-  return false;
-};
+export const returnFocus =
+  (editor: Editor, isCurrent: () => boolean = () => true) =>
+  () => {
+    if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return false;
+    requestAnimationFrame(() => {
+      if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
+    });
+    return false;
+  };
 
 /**
  * Formatting for the selected text. shadcn has no toolbar, so the bar is a `toolbar` role over `toggle` and `button`

@@ -218,10 +218,10 @@ export const SlashMenu = memo(function SlashMenu({
     const previous = latest.current.open;
     const sameAdmission = Boolean(
       previous &&
-        previous.visit === visit &&
-        previous.query === query &&
-        previous.range.from === range.from &&
-        previous.range.to === range.to,
+      previous.visit === visit &&
+      previous.query === query &&
+      previous.range.from === range.from &&
+      previous.range.to === range.to,
     );
     const next = { id: sameAdmission ? previous!.id : ++nextOpenId.current, query, range, rect, visit };
     latest.current.open = next;
@@ -242,8 +242,7 @@ export const SlashMenu = memo(function SlashMenu({
     }
   };
   const currentHandlers: SlashHandlers = {
-    filter: (query) =>
-      isCurrent() ? matchCommands(latest.current.commands, latest.current.labels, query) : [],
+    filter: (query) => (isCurrent() ? matchCommands(latest.current.commands, latest.current.labels, query) : []),
     start: (query, range, rect) => publish(query, range, rect, true),
     update: (query, range, rect) =>
       publish(query, range, rect, !latest.current.open || latest.current.open.query !== query),

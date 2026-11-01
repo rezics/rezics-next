@@ -177,16 +177,14 @@ function inlineJourney() {
     // visit, not to function allocation.
     const lookupMention = sourceEnabled
       ? (query: string, signal: AbortSignal) =>
-          new Promise<JourneyAccount | null>(
-            (resolve, reject) => {
-              evidence.requests.push({
-                query,
-                signal,
-                resolve: resolve as PendingLookup['resolve'],
-                reject,
-              });
-            },
-          )
+          new Promise<JourneyAccount | null>((resolve, reject) => {
+            evidence.requests.push({
+              query,
+              signal,
+              resolve: resolve as PendingLookup['resolve'],
+              reject,
+            });
+          })
       : undefined;
 
     const external = (text: string, profile?: DocumentProfile) => replace(setValue, text, profile ?? value.profile);
@@ -194,32 +192,80 @@ function inlineJourney() {
     return (
       <section className="space-y-3">
         <div className="flex flex-wrap gap-2" aria-label="Document controls">
-          <button type="button" onClick={() => external('Fresh document')}>Replace with fresh document</button>
-          <button type="button" onClick={() => external('@same')}>Replace with same query</button>
-          <button type="button" onClick={() => external('@a')}>Replace with A</button>
-          <button type="button" onClick={() => external('@b')}>Replace with B</button>
-          <button type="button" onClick={() => external('@remove')}>Replace with source-removal query</button>
-          <button type="button" onClick={() => external('@locked')}>Replace with locked query</button>
-          <button type="button" onClick={() => external('@fresh')}>Replace with fresh query</button>
-          <button type="button" onClick={() => external('@profile', 'blocks')}>Replace with profile pending query</button>
-          <button type="button" onClick={() => external('@profile', 'text')}>Replace profile query</button>
-          <button type="button" onClick={() => external('@unmount')}>Replace with unmount query</button>
-          <button type="button" onClick={() => external('Touch target')}>Replace with touch target</button>
-          <button type="button" onClick={() => external('Selection target')}>Replace with selection target</button>
-          <button type="button" onClick={() => external('First line\nTarget line')}>Replace with two paragraphs</button>
-          <button type="button" onClick={() => external('')}>Replace with empty document</button>
-          <button type="button" onClick={() => setValue(structuredClone(evidence.latest))}>Echo current document</button>
-          <button type="button" onClick={() => setToolbar('always')}>Use touch toolbar</button>
-          <button type="button" onClick={() => setToolbar('auto')}>Use selection toolbar</button>
-          <button type="button" onClick={() => setSourceEnabled(false)}>Remove mention source</button>
-          <button type="button" onClick={() => setSourceEnabled(true)}>Restore mention source</button>
-          <button type="button" onClick={() => setMode('disabled')}>Disable editor</button>
-          <button type="button" onClick={() => setMode('readOnly')}>Make editor read only</button>
-          <button type="button" onClick={() => setMode('editable')}>Enable editor</button>
+          <button type="button" onClick={() => external('Fresh document')}>
+            Replace with fresh document
+          </button>
+          <button type="button" onClick={() => external('@same')}>
+            Replace with same query
+          </button>
+          <button type="button" onClick={() => external('@a')}>
+            Replace with A
+          </button>
+          <button type="button" onClick={() => external('@b')}>
+            Replace with B
+          </button>
+          <button type="button" onClick={() => external('@remove')}>
+            Replace with source-removal query
+          </button>
+          <button type="button" onClick={() => external('@locked')}>
+            Replace with locked query
+          </button>
+          <button type="button" onClick={() => external('@fresh')}>
+            Replace with fresh query
+          </button>
+          <button type="button" onClick={() => external('@profile', 'blocks')}>
+            Replace with profile pending query
+          </button>
+          <button type="button" onClick={() => external('@profile', 'text')}>
+            Replace profile query
+          </button>
+          <button type="button" onClick={() => external('@unmount')}>
+            Replace with unmount query
+          </button>
+          <button type="button" onClick={() => external('Touch target')}>
+            Replace with touch target
+          </button>
+          <button type="button" onClick={() => external('Selection target')}>
+            Replace with selection target
+          </button>
+          <button type="button" onClick={() => external('First line\nTarget line')}>
+            Replace with two paragraphs
+          </button>
+          <button type="button" onClick={() => external('')}>
+            Replace with empty document
+          </button>
+          <button type="button" onClick={() => setValue(structuredClone(evidence.latest))}>
+            Echo current document
+          </button>
+          <button type="button" onClick={() => setToolbar('always')}>
+            Use touch toolbar
+          </button>
+          <button type="button" onClick={() => setToolbar('auto')}>
+            Use selection toolbar
+          </button>
+          <button type="button" onClick={() => setSourceEnabled(false)}>
+            Remove mention source
+          </button>
+          <button type="button" onClick={() => setSourceEnabled(true)}>
+            Restore mention source
+          </button>
+          <button type="button" onClick={() => setMode('disabled')}>
+            Disable editor
+          </button>
+          <button type="button" onClick={() => setMode('readOnly')}>
+            Make editor read only
+          </button>
+          <button type="button" onClick={() => setMode('editable')}>
+            Enable editor
+          </button>
           {mounted ? (
-            <button type="button" onClick={() => setMounted(false)}>Unmount editor</button>
+            <button type="button" onClick={() => setMounted(false)}>
+              Unmount editor
+            </button>
           ) : (
-            <button type="button" onClick={() => setMounted(true)}>Mount editor</button>
+            <button type="button" onClick={() => setMounted(true)}>
+              Mount editor
+            </button>
           )}
         </div>
         {mounted ? (
@@ -303,7 +349,9 @@ function reactCallback(element: Element, name: string): (...args: never[]) => un
   let current: Element | null = element;
   while (current) {
     const fiberName = Object.getOwnPropertyNames(current).find((key) => key.startsWith('__reactFiber$'));
-    let fiber = fiberName ? (current as unknown as Record<string, unknown>)[fiberName] as JourneyFiber | undefined : undefined;
+    let fiber = fiberName
+      ? ((current as unknown as Record<string, unknown>)[fiberName] as JourneyFiber | undefined)
+      : undefined;
     while (fiber) {
       const callback = fiber.memoizedProps?.[name];
       if (typeof callback === 'function') return callback as (...args: never[]) => unknown;

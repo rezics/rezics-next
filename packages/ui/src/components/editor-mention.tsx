@@ -151,9 +151,7 @@ type LookupAttempt = {
 };
 
 function sameRange(left: MentionRange | null | undefined, right: MentionRange | null | undefined): boolean {
-  return Boolean(
-    left && right && left.from === right.from && left.to === right.to && left.query === right.query,
-  );
+  return Boolean(left && right && left.from === right.from && left.to === right.to && left.query === right.query);
 }
 
 export function MentionMenu({

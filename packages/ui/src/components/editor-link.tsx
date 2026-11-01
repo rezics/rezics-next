@@ -284,7 +284,11 @@ export function LinkMenu({
             <Button
               variant="ghost"
               onClick={() => {
-                if (!isCurrent() || editor.state.selection.from !== state.from || editor.state.selection.to !== state.to)
+                if (
+                  !isCurrent() ||
+                  editor.state.selection.from !== state.from ||
+                  editor.state.selection.to !== state.to
+                )
                   return;
                 if (applyLink(editor, { from: state.from, to: state.to }, null, isCurrent)) focusEditor();
               }}
