@@ -115,7 +115,9 @@ export const FullEvidence: Story = {
     await expect(canvas.getByText(m.reporter_status_report_id(), { exact: true })).toBeVisible();
     await expect(canvas.getByText(m.reporter_status_revision(), { exact: true })).toBeVisible();
     await expect(canvas.getByText(submittedReport.id, { exact: true })).toBeVisible();
-    await expect(canvas.getByText(`${submittedReport.target.kind} ${submittedReport.target.id}`, { exact: true })).toBeVisible();
+    await expect(
+      canvas.getByText(`${submittedReport.target.kind} ${submittedReport.target.id}`, { exact: true }),
+    ).toBeVisible();
     await expect(canvas.getByText(revisionId, { exact: true })).toBeVisible();
     await expect(canvas.queryByRole('link')).toBeNull();
   },

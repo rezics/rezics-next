@@ -217,9 +217,7 @@ test('reporter cases keep full submitted evidence, UTC timeline and identifiers 
               : m.moderation_dismissed(),
         );
         expect(host.textContent).toContain(
-          targetAvailability === 'available'
-            ? m.reporter_status_available()
-            : m.moderation_target_unavailable(),
+          targetAvailability === 'available' ? m.reporter_status_available() : m.moderation_target_unavailable(),
         );
         expect(host.textContent).toContain('UTC');
         expect(host.querySelector(`time[datetime="${submittedAt}"]`)).not.toBeNull();

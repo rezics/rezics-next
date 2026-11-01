@@ -1,10 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, mocked, userEvent, within } from 'storybook/test';
-import {
-  DecisionPageView,
-  DecisionReadStatus,
-  type DecisionAppealAction,
-} from '../../../moderation/decision-page';
+import { DecisionPageView, DecisionReadStatus, type DecisionAppealAction } from '../../../moderation/decision-page';
 import type { DecisionPage } from '../../../moderation/decision-read';
 import { m } from '../../../paraglide/messages.js';
 import {

@@ -412,7 +412,11 @@ function DecisionVisit({
       </header>
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <section className="min-w-0 space-y-4" aria-labelledby="decision-reasons">
-          <ContentItemHeading id="decision-reasons" level={2} className="flex items-center gap-2 text-base font-semibold">
+          <ContentItemHeading
+            id="decision-reasons"
+            level={2}
+            className="flex items-center gap-2 text-base font-semibold"
+          >
             <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
             {m.decision_original_heading()}
           </ContentItemHeading>
