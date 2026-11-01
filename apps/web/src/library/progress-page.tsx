@@ -9,7 +9,8 @@ import { EllipsisIcon } from 'lucide-react';
 import { progressIndexSubjects } from './progress-subjects';
 import { ProgressPicker, pickerSubject, type ProgressPickerSubject } from './progress-picker';
 import { ProgressRow } from '@rezics/ui/progress-row';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
@@ -32,7 +33,7 @@ import {
   type CurrentViewerProgressIndex,
 } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
-import { displayLibraryTitle, LibraryTitle } from './title';
+import { displayLibraryTitle } from './title';
 
 const modeChoices: { value: ProgressMode; label: () => string }[] = [
   { value: 'scalar_amount', label: () => m.library_progress_mode_amount() },
@@ -526,130 +527,113 @@ function SessionRow({
       }
     }
   }
+  const title = session.subject
+    ? displayLibraryTitle(session.subject.label, getLocale())
+    : { text: m.library_subject_unavailable(), lang: undefined };
   return (
-    <ListRow className="flex items-start gap-4 py-5 sm:gap-5">
-      <div className="w-[72px] shrink-0 sm:w-24">
-        <SubjectCover subject={session.subject} ratio={ratio} size="fill" />
-      </div>
-      <div className="min-w-0 flex-1 space-y-2">
-        <div>
-          {readable ? (
-            <>
-              <ListRowLink href={`/${getLocale()}/library/progress/${encodeURIComponent(session.id)}`}>
-                {session.subject ? (
-                  <LibraryTitle label={session.subject.label} locale={getLocale()} />
-                ) : (
-                  m.library_subject_unavailable()
-                )}
-              </ListRowLink>
-              <span className="line-clamp-2 text-lg font-medium">
-                {session.subject ? (
-                  <LibraryTitle label={session.subject.label} locale={getLocale()} />
-                ) : (
-                  m.library_subject_unavailable()
-                )}
-              </span>
-            </>
-          ) : (
-            <span className="line-clamp-2 text-lg font-medium">
-              {session.subject ? (
-                <LibraryTitle label={session.subject.label} locale={getLocale()} />
-              ) : (
-                m.library_subject_unavailable()
-              )}
-            </span>
-          )}
-          {session.subject?.typeLabel ? (
-            <p className="text-sm text-muted-foreground">{session.subject.typeLabel}</p>
-          ) : null}
+    <ContentItem
+      title={title.text}
+      {...(title.lang ? { titleLang: title.lang } : {})}
+      headingLevel={2}
+      {...(readable ? { href: `/${getLocale()}/library/progress/${encodeURIComponent(session.id)}` } : {})}
+      visual={
+        <div className="w-[72px] shrink-0 sm:w-24">
+          <SubjectCover subject={session.subject} ratio={ratio} size="fill" />
         </div>
-        <p className="text-sm text-muted-foreground">{stateLabel(session.state)}</p>
-        <ProgressRow
-          value={progress?.percent == null ? null : progress.percent / 100}
-          label={progress?.text ?? m.home_continue_in_progress()}
-          menu={
-            <Exposure operation="progress_session.complete">
-              <ListRowControl>
-                <Menu
-                  title={m.library_collection_actions()}
-                  trigger={
-                    <Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()}>
-                      <EllipsisIcon aria-hidden="true" />
-                    </Button>
-                  }
-                  entries={[
-                    ...(session.subject
-                      ? [
-                          {
-                            type: 'link' as const,
-                            label: m.library_progress_open_subject(),
-                            href: subjectHref(
+      }
+      metadata={session.subject?.typeLabel}
+      state={<span className="text-sm text-muted-foreground">{stateLabel(session.state)}</span>}
+      preview={
+        <div className="space-y-2">
+          <ListRowControl>
+            <ProgressRow
+              value={progress?.percent == null ? null : progress.percent / 100}
+              label={progress?.text ?? m.home_continue_in_progress()}
+              menu={
+                <Exposure operation="progress_session.complete">
+                  <ListRowControl>
+                    <Menu
+                      title={m.library_collection_actions()}
+                      trigger={
+                        <Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()}>
+                          <EllipsisIcon aria-hidden="true" />
+                        </Button>
+                      }
+                      entries={[
+                        ...(session.subject
+                          ? [
                               {
-                                id: session.subject.id,
-                                label: displayLibraryTitle(session.subject.label, getLocale()).text,
+                                type: 'link' as const,
+                                label: m.library_progress_open_subject(),
+                                href: subjectHref(
+                                  {
+                                    id: session.subject.id,
+                                    label: displayLibraryTitle(session.subject.label, getLocale()).text,
+                                  },
+                                  getLocale(),
+                                ).href,
                               },
-                              getLocale(),
-                            ).href,
-                          },
-                        ]
-                      : []),
-                    ...(session.state === 'active'
-                      ? [
-                          {
-                            type: 'item' as const,
-                            label: m.library_progress_complete(),
-                            onSelect: () => {
-                              if (current(lifetime.current, 'complete')) setConfirming('complete');
-                            },
-                          },
-                          {
-                            type: 'item' as const,
-                            label: m.library_progress_abandon(),
-                            onSelect: () => {
-                              if (current(lifetime.current, 'abandon')) setConfirming('abandon');
-                            },
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
+                            ]
+                          : []),
+                        ...(session.state === 'active'
+                          ? [
+                              {
+                                type: 'item' as const,
+                                label: m.library_progress_complete(),
+                                onSelect: () => {
+                                  if (current(lifetime.current, 'complete')) setConfirming('complete');
+                                },
+                              },
+                              {
+                                type: 'item' as const,
+                                label: m.library_progress_abandon(),
+                                onSelect: () => {
+                                  if (current(lifetime.current, 'abandon')) setConfirming('abandon');
+                                },
+                              },
+                            ]
+                          : []),
+                      ]}
+                    />
+                  </ListRowControl>
+                </Exposure>
+              }
+            />
+          </ListRowControl>
+          {!session.unitLabel ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_history_unavailable()}{' '}
+              <code>
+                {session.mode} / {session.unit}
+              </code>
+            </p>
+          ) : null}
+          {confirming ? (
+            <Exposure operation="progress_session.complete">
+              <ListRowControl className="flex flex-wrap gap-2">
+                <Button disabled={pending} onClick={() => void finish(confirming)}>
+                  {confirming === 'complete'
+                    ? m.library_progress_confirm_complete()
+                    : m.library_progress_confirm_abandon()}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (current(lifetime.current)) setConfirming(null);
+                  }}
+                >
+                  {m.library_progress_cancel()}
+                </Button>
               </ListRowControl>
             </Exposure>
-          }
-        />
-        {!session.unitLabel ? (
-          <p className="text-sm text-muted-foreground">
-            {m.library_history_unavailable()}{' '}
-            <code>
-              {session.mode} / {session.unit}
-            </code>
-          </p>
-        ) : null}
-        {confirming ? (
-          <Exposure operation="progress_session.complete">
-            <div className="relative z-10 flex flex-wrap gap-2">
-              <Button disabled={pending} onClick={() => void finish(confirming)}>
-                {confirming === 'complete'
-                  ? m.library_progress_confirm_complete()
-                  : m.library_progress_confirm_abandon()}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (current(lifetime.current)) setConfirming(null);
-                }}
-              >
-                {m.library_progress_cancel()}
-              </Button>
-            </div>
-          </Exposure>
-        ) : null}
-        {error ? (
-          <p role="alert" className="relative text-sm">
-            {m.library_progress_conflict()}
-          </p>
-        ) : null}
-      </div>
-    </ListRow>
+          ) : null}
+          {error ? (
+            <p role="alert" className="relative text-sm">
+              {m.library_progress_conflict()}
+            </p>
+          ) : null}
+        </div>
+      }
+    />
   );
 }
