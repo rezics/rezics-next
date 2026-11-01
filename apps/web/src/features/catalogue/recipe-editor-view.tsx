@@ -26,6 +26,9 @@ import { statementInput, type ProposalCommand, type ProposalResult, type Stateme
 import { EditorFailure, ScalarControl } from './statement-editor-view';
 
 type Ready = Extract<RecipeRead, { ok: true }>;
+const recipeActionClassName =
+  'h-auto min-h-8 min-w-11 max-w-full whitespace-normal break-words py-1.5 max-md:min-h-11 pointer-coarse:min-h-11';
+const recipeInputClassName = 'min-w-0 max-md:min-h-11 pointer-coarse:min-h-11';
 type Row = {
   id: string;
   statement: StatementInput;
@@ -133,7 +136,7 @@ export function RecipeEditor({
       <PageHeading>{id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}</PageHeading>
       {!id && (
         <a
-          className={buttonVariants({ variant: 'outline' })}
+          className={buttonVariants({ variant: 'outline', className: recipeActionClassName })}
           href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
         >
           {m.catalogue_create_search({}, o)}
@@ -152,7 +155,7 @@ export function RecipeEditor({
           ) : (
             <EditorFailure locale={locale} reason="unavailable" />
           )}
-          <Button type="button" onClick={() => void query.refetch()}>
+          <Button className={recipeActionClassName} type="button" onClick={() => void query.refetch()}>
             {m.correction_retry({}, o)}
           </Button>
         </div>
@@ -162,7 +165,7 @@ export function RecipeEditor({
         <section className="space-y-4">
           <p role="status">{m.recipe_created({}, o)}</p>
           {created.reader.state === 'ready' ? (
-            <a className={buttonVariants()} href={created.reader.href}>
+            <a className={buttonVariants({ className: recipeActionClassName })} href={created.reader.href}>
               {m.candidate_view_public({}, o)}
             </a>
           ) : (
@@ -173,6 +176,7 @@ export function RecipeEditor({
                   : m.catalogue_create_reader_unavailable({}, o)}
               </p>
               <Button
+                className={recipeActionClassName}
                 type="button"
                 disabled={busy}
                 onClick={async () => {
@@ -399,6 +403,7 @@ export function RecipeEditor({
                     ))}
                     {failure.reason === 'conflict' && (
                       <Button
+                        className={recipeActionClassName}
                         type="button"
                         onClick={() => {
                           pending.current = null;
@@ -498,13 +503,18 @@ function RecipeField({
     }
   }
   return (
-    <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+    <section className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
       <h2 className="font-semibold">{label}</h2>
       <fieldset disabled={frozen} className="min-w-0 space-y-4">
         {definition.datatype === 'document' ? (
           <>
             {!authored ? (
-              <Button type="button" variant="outline" onClick={() => updateAuthored(newAuthoredField())}>
+              <Button
+                className={recipeActionClassName}
+                type="button"
+                variant="outline"
+                onClick={() => updateAuthored(newAuthoredField())}
+              >
                 {m.recipe_replace_method({}, o)}
               </Button>
             ) : (
@@ -513,6 +523,7 @@ function RecipeField({
                 <Field>
                   <FieldLabel>{m.catalogue_create_language({}, o)}</FieldLabel>
                   <Input
+                    className={recipeInputClassName}
                     aria-label={m.catalogue_create_language({}, o)}
                     value={authored.language}
                     onChange={(event) => updateAuthored({ ...authored, language: event.target.value })}
@@ -521,6 +532,7 @@ function RecipeField({
                 <Field>
                   <FieldLabel>{m.subject_source_licence({}, o)}</FieldLabel>
                   <Input
+                    className={recipeInputClassName}
                     aria-label={m.subject_source_licence({}, o)}
                     value={authored.licence}
                     onChange={(event) => updateAuthored({ ...authored, licence: event.target.value })}
@@ -591,6 +603,7 @@ function RecipeField({
         <Field>
           <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
           <Input
+            className={recipeInputClassName}
             id={`citation-${row.id}`}
             type="url"
             value={citation}
@@ -617,33 +630,23 @@ function RecipeField({
             }}
           />
         </Field>
-        <Button type="button" variant="ghost" onClick={onRemove}>
-          {m.recipe_remove_field({}, o)}
-        </Button>
+        <div className="flex min-w-0 flex-wrap gap-3">
+          <Button className={recipeActionClassName} type="button" variant="ghost" onClick={onRemove}>
+            {m.recipe_remove_field({}, o)}
+          </Button>
+        </div>
       </fieldset>
       {result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />}
-      {result &&
-        !result.ok &&
-        (result.reason === 'stale' || result.reason === 'invalid' || result.reason === 'denied') && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              command.current = null;
-              setResult(undefined);
-            }}
-          >
-            {m.catalogue_create_review_new({}, o)}
-          </Button>
-        )}
       {result?.ok ? (
         <div className="space-y-3">
-          <p role="status">{m.correction_proposed({}, o)}</p>
-          {review && (
-            <Button type="button" onClick={() => setReviewing(true)}>
-              {m.correction_review({}, o)}
-            </Button>
-          )}
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <p role="status">{m.correction_proposed({}, o)}</p>
+            {review && (
+              <Button className={recipeActionClassName} type="button" onClick={() => setReviewing(true)}>
+                {m.correction_review({}, o)}
+              </Button>
+            )}
+          </div>
           {reviewing && review && read.public && (
             <CandidateReview
               id={read.public.subject.id}
@@ -656,21 +659,39 @@ function RecipeField({
           )}
         </div>
       ) : (
-        read.public && (
-          <Button
-            type="button"
-            disabled={
-              disabled ||
-              busy ||
-              (definition.datatype === 'document' &&
-                (!authored || !row.original || !hasDocumentContent(authored.document))) ||
-              (result && !result.ok && result.reason === 'stale')
-            }
-            onClick={() => void submit()}
-          >
-            {command.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
-          </Button>
-        )
+        <div className="flex min-w-0 flex-wrap gap-3">
+          {result &&
+            !result.ok &&
+            (result.reason === 'stale' || result.reason === 'invalid' || result.reason === 'denied') && (
+              <Button
+                className={recipeActionClassName}
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  command.current = null;
+                  setResult(undefined);
+                }}
+              >
+                {m.catalogue_create_review_new({}, o)}
+              </Button>
+            )}
+          {read.public && (
+            <Button
+              className={recipeActionClassName}
+              type="button"
+              disabled={
+                disabled ||
+                busy ||
+                (definition.datatype === 'document' &&
+                  (!authored || !row.original || !hasDocumentContent(authored.document))) ||
+                (result && !result.ok && result.reason === 'stale')
+              }
+              onClick={() => void submit()}
+            >
+              {command.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
+            </Button>
+          )}
+        </div>
       )}
     </section>
   );

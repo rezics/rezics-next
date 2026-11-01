@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
-import { useMemo } from 'react';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { useEffect, useMemo } from 'react';
 import { pickText } from '@rezics/composition';
 import { RecipeEditor } from '../features/catalogue/recipe-editor-view';
 import {
@@ -28,14 +28,17 @@ function RecipeStory({
   correction = false,
   signedOut = false,
   onCreate,
+  onFixture,
 }: {
   scenario?: RecipeScenario;
   correction?: boolean;
   signedOut?: boolean;
   onCreate?: ObserveCreate;
+  onFixture?: (fixture: ReturnType<typeof recipeFixture>) => void;
 }) {
   const locale = getLocale();
   const fixture = useMemo(() => recipeFixture(correction ? 'ready' : scenario, locale), [scenario, locale, correction]);
+  useEffect(() => onFixture?.(fixture), [fixture, onFixture]);
   const transport = useMemo(
     () =>
       correction
@@ -97,6 +100,7 @@ const meta = {
 } satisfies Meta<typeof RecipeStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+const observeRecipe = () => fn<(fixture: ReturnType<typeof recipeFixture>) => void>();
 function fieldName(property: string) {
   const definition = definitions.release.properties[property as keyof typeof definitions.release.properties];
   return pickText(definition.labels, getLocale()).text;
@@ -291,17 +295,151 @@ export const ExactCurrentValue: Story = {
 };
 export const Concealed: Story = { args: { correction: true, scenario: 'concealed' } };
 export const Proposed: Story = {
-  args: { correction: true },
-  play: async ({ canvasElement }) => {
+  args: { correction: true, onFixture: observeRecipe() },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
+    const observed = args.onFixture as ReturnType<typeof observeRecipe>;
+    await waitFor(() => expect(observed).toHaveBeenCalled());
+    const fixture = observed.mock.calls.at(-1)![0];
+    // Assert rendered targets and containment, independently of their implementation classes.
+    const phoneControl = async (control: HTMLElement, region: HTMLElement) => {
+      const rect = control.getBoundingClientRect();
+      const bounds = region.getBoundingClientRect();
+      await expect(control).toBeVisible();
+      await expect(rect.height).toBeGreaterThanOrEqual(44);
+      await expect(rect.width).toBeGreaterThanOrEqual(44);
+      await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+      await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+      await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+    };
     const heading = await canvas.findByRole('heading', { name: fieldName('schema:cookTime') });
-    await userEvent.click(within(heading.closest('section')!).getByRole('button', { name: m.recipe_correct() }));
+    const current = within(heading.closest('section')!);
+    const correct = current.getByRole('button', { name: m.recipe_correct() });
+    await phoneControl(correct, canvasElement);
+    await userEvent.click(correct);
     const replacement = canvas.getAllByRole('heading', { name: fieldName('schema:cookTime') }).at(-1)!;
-    const field = within(replacement.closest('section')!);
+    const region = replacement.closest('section')!;
+    const field = within(region);
     const amount = field.getByRole('textbox', { name: m.correction_amount() });
+    await expect(amount).toHaveValue('+25');
+    await expect(field.getByRole('combobox', { name: m.correction_unit() })).toHaveValue(
+      'http://www.wikidata.org/entity/Q7727',
+    );
     await userEvent.clear(amount);
     await userEvent.type(amount, '+30');
+    const citation = field.getByRole('textbox', { name: m.relation_citation() });
+    await userEvent.type(citation, 'https://cook.example/revised-time');
+    const remove = field.getByRole('button', { name: m.recipe_remove_field() });
+    const submit = field.getByRole('button', { name: m.correction_submit() });
+    for (const control of [amount, citation, remove, submit]) await phoneControl(control, region);
+    citation.focus();
+    await userEvent.tab();
+    await expect(remove).toHaveFocus();
+    await userEvent.tab();
+    await expect(submit).toHaveFocus();
+
+    fixture.setScenario('conflict');
+    await userEvent.keyboard('{Enter}');
+    await expect(await field.findByText(m.correction_stale())).toBeVisible();
+    const reviewNew = field.getByRole('button', { name: m.catalogue_create_review_new() });
+    const staleRetry = field.getByRole('button', { name: m.correction_retry() });
+    for (const control of [reviewNew, staleRetry]) await phoneControl(control, region);
+    const a = reviewNew.getBoundingClientRect();
+    const b = staleRetry.getBoundingClientRect();
+    await expect(Math.max(b.top - a.bottom, b.left - a.right)).toBeGreaterThanOrEqual(8);
+    await expect(staleRetry).toBeDisabled();
+    await expect(amount).toBeDisabled();
+    await expect(remove).toBeDisabled();
+    reviewNew.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(amount).toBeEnabled();
+    await expect(amount).toHaveValue('+30');
+    await expect(citation).toHaveValue('https://cook.example/revised-time');
+
+    fixture.setScenario('uncertain');
     await userEvent.click(field.getByRole('button', { name: m.correction_submit() }));
+    await expect(await field.findByText(m.correction_unavailable())).toBeVisible();
+    const retry = field.getByRole('button', { name: m.correction_retry() });
+    await phoneControl(retry, region);
+    await expect(amount).toBeDisabled();
+    await expect(citation).toBeDisabled();
+    await expect(remove).toBeDisabled();
+    await userEvent.click(retry);
     await expect(await field.findByText(m.correction_proposed())).toBeVisible();
+    const writes = fixture.calls.filter(
+      (call) => call.method === 'POST' && call.path === `/v1/subjects/${recipeId}/candidates`,
+    );
+    await expect(writes).toHaveLength(3);
+    const original = recipeExample().statements['schema:cookTime']![0]!;
+    await expect(writes[1]!.body).toEqual({
+      statement: {
+        ...original,
+        value: { type: 'value', content: { amount: '+30', unit: 'http://www.wikidata.org/entity/Q7727' } },
+        references: [
+          ...original.references,
+          {
+            parts: [
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value', content: 'https://cook.example/revised-time' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    await expect(writes[1]!.key).toBeTruthy();
+    await expect(writes[1]!.key).not.toBe(writes[0]!.key);
+    await expect(writes[2]!.key).toBe(writes[1]!.key);
+    await expect(writes[2]!.body).toEqual(writes[1]!.body);
+    await expect(amount).toBeDisabled();
+    await expect(correct).toBeDisabled();
+    const review = field.getByRole('button', { name: m.correction_review() });
+    await phoneControl(review, region);
+    await userEvent.click(review);
+    const candidates = within(await field.findByRole('region', { name: m.candidate_title() }));
+    await expect(await candidates.findByRole('button', { name: m.candidate_accept() })).toBeEnabled();
+    await expect(candidates.getByRole('combobox', { name: m.candidate_field() })).toHaveValue('schema:cookTime');
+    await expect(candidates.getByRole('combobox', { name: m.candidate_field() })).toBeDisabled();
+    const exact = [...fixture.candidates.keys()][0]!;
+    await userEvent.click(candidates.getByRole('button', { name: m.candidate_accept() }));
+    const confirmation = within(
+      candidates.getByRole('region', {
+        name: m.candidate_confirm_title({ action: m.candidate_accept() }),
+      }),
+    );
+    await userEvent.click(confirmation.getByRole('button', { name: m.candidate_accept() }));
+    await expect(await candidates.findByText(m.candidate_accepted())).toBeVisible();
+    await expect(fixture.calls.filter((call) => call.method === 'POST' && call.path.endsWith(':accept'))).toEqual([
+      expect.objectContaining({ path: `/v1/subjects/${recipeId}/candidates/${exact}:accept` }),
+    ]);
+    await expect(fixture.publicRead.subject.statements['schema:cookTime']![0]!.value).toEqual(original.value);
+
+    // The authored replacement remains explicit, and removing its draft preserves the completed correction.
+    const method = await addField(canvasElement, 'schema:recipeInstructions');
+    const methodRegion = method
+      .getByRole('heading', { name: fieldName('schema:recipeInstructions') })
+      .closest('section')!;
+    const replace = method.getByRole('button', { name: m.recipe_replace_method() });
+    await phoneControl(replace, methodRegion);
+    await userEvent.click(replace);
+    const language = method.getByRole('textbox', { name: m.catalogue_create_language() });
+    const licence = method.getByRole('textbox', { name: m.subject_source_licence() });
+    const methodCitation = method.getByRole('textbox', { name: m.relation_citation() });
+    for (const control of [language, licence, methodCitation]) await phoneControl(control, methodRegion);
+    await userEvent.type(language, 'en');
+    await userEvent.type(licence, 'CC-BY-4.0');
+    await userEvent.type(
+      await method.findByRole('textbox', { name: fieldName('schema:recipeInstructions') }),
+      'Simmer my lentils gently, then serve the soup.',
+    );
+    await userEvent.type(methodCitation, 'https://cook.example/my-lentil-soup');
+    await expect(method.getByRole('button', { name: m.correction_submit() })).toBeDisabled();
+    await userEvent.click(method.getByRole('checkbox', { name: m.recipe_original() }));
+    await expect(method.getByRole('button', { name: m.correction_submit() })).toBeEnabled();
+    await userEvent.click(method.getByRole('button', { name: m.recipe_remove_field() }));
+    await expect(methodRegion).not.toBeInTheDocument();
+    await expect(field.getByText(m.correction_proposed())).toBeVisible();
   },
 };
