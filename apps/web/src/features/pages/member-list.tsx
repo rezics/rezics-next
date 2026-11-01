@@ -177,7 +177,6 @@ function MemberReader({
   const lifetime = useReadingLifetime(() => {
     void queryClient.cancelQueries({ queryKey, exact: true });
   });
-  const readingGeneration = lifetime.generation();
   const request: MemberListRequest = {
     target: target!,
     locale: value.locale,
@@ -194,8 +193,13 @@ function MemberReader({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: async ({ signal }) => {
+      // QueryObserver subscribes during commit. Let layout setup and StrictMode effect replay finish before
+      // admitting transport, then bind this request to the generation that actually started it.
+      const generation = lifetime.generation();
+      await Promise.resolve();
+      if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired member recovery');
       const result = await loadMemberList({ data: request });
-      if (signal.aborted || !lifetime.current(readingGeneration)) throw new Error('Retired member recovery');
+      if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired member recovery');
       return result;
     },
   });
@@ -253,6 +257,7 @@ export function MemberList({
   const [error, setError] = useState<Section>();
   const [pending, setPending] = useState(false);
   const [completion, setCompletion] = useState<{
+    generation: number;
     added: number;
     exhausted: boolean;
     trigger: HTMLButtonElement | null;
@@ -266,7 +271,6 @@ export function MemberList({
     activeQueryKey.current = undefined;
     if (key) void queryClient.cancelQueries({ queryKey: key, exact: true });
   });
-  const readingGeneration = lifetime.generation();
   useLayoutEffect(() => {
     const generation = lifetime.generation();
     if (active.current) {
@@ -282,14 +286,15 @@ export function MemberList({
     const trigger = completion?.trigger;
     // Replace only the requesting reader's removed trigger, after the exhausted page has rendered.
     if (
-      lifetime.current(readingGeneration) &&
+      completion &&
+      lifetime.current(completion.generation) &&
       completion?.exhausted &&
       trigger &&
       (trigger.ownerDocument.activeElement === trigger ||
         trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
     )
       end.current?.focus({ preventScroll: true });
-  }, [completion, lifetime, readingGeneration]);
+  }, [completion, lifetime]);
   const latest = pages.at(-1)!;
   const cursor = latest.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
   const failed = error && !error.ok ? error : !latest.ok ? latest : undefined;
@@ -354,6 +359,7 @@ export function MemberList({
         setCompletion((previous) =>
           lifetime.current(generation)
             ? {
+                generation,
                 added: visible.size - unique.size,
                 exhausted: !paged || typeof next.body.next !== 'string' || !next.body.next,
                 trigger: trigger.ownerDocument.activeElement === trigger ? trigger : null,

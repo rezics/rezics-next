@@ -1,12 +1,14 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import type { Section } from '../src/features/pages/overview';
-import type { MemberListRequest } from '../src/features/pages/member-list-query';
+import type { MemberPageTarget } from '../src/features/pages/member-list-query';
+import type { KernelClient } from '@rezics/client';
+import type { CompositionDocument, SelectedContext } from '@rezics/composition';
 import recording from '../src/kernel/recorded/library-collection-members.json';
 
-// Authored for integration execution; uses the real default composition, not a replacement Members renderer.
-test('Default composed member continuation announces actual unique additions and retains local keyboard navigation', async () => {
+// Authored UNRUN for integration execution; uses the real QueryClient and default Members reader.
+test('Default composed member recovery admits only its live reader and preserves usable continuation behavior', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -38,44 +40,147 @@ test('Default composed member continuation announces actual unique additions and
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  const requests: MemberListRequest[] = [];
   const responses: Array<Section | Promise<Section> | Error> = [];
-  mock.module('cloudflare:workers', () => ({ env: {} }));
-  mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
-  mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
-  mock.module('../src/features/pages/member-list-query', () => ({
-    loadMemberList: async ({ data }: { data: MemberListRequest }) => {
-      requests.push(data);
-      const answer = responses.shift();
-      if (!answer) throw new Error('Unexpected member read');
-      if (answer instanceof Error) throw answer;
-      return answer;
+  const responseHeaders = new Map<string, string>();
+  const sessionIds = new Map([
+    ['reader-one', 'a'.repeat(43)],
+    ['reader-two', 'b'.repeat(43)],
+  ]);
+  const credentials = new Map([
+    ['a'.repeat(43), { status: 'active', subject: 'reader-one', accessToken: 'native-reader-one' }],
+    ['b'.repeat(43), { status: 'active', subject: 'reader-two', accessToken: 'native-reader-two' }],
+  ]);
+  const requestForReader = (reader: string | null) => {
+    const id = reader ? sessionIds.get(reader) : undefined;
+    return new Request('https://rezics.test/en/library', {
+      ...(id ? { headers: { cookie: `__Host-rezics_session=${id}` } } : {}),
+    });
+  };
+  let currentRequest = requestForReader('reader-one');
+  const env = {
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'member-list-continuation',
+    WEBSITE_CLIENT_KEY: 'test-key',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: (id: string) => ({ credential: async () => credentials.get(id) ?? { status: 'absent' } }),
     },
+  };
+  mock.module('cloudflare:workers', () => ({ env }));
+  const start = await import('../.storybook/react-start');
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => ({
+    ...start,
+    getRequest: () => currentRequest,
+    setResponseHeader: (name: string, value: string) => responseHeaders.set(name.toLowerCase(), value),
   }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { userEvent } = await import('storybook/test');
-  const { PAGE_GLOBAL_CONTEXT, planReads, platformRegistry } = await import('@rezics/composition');
+  const { planReads, platformRegistry } = await import('@rezics/composition');
+  const { memberContinuationDocument } = await import('../src/kernel/fake/composed-member-list');
+  let document: CompositionDocument = {
+    ...memberContinuationDocument,
+    content: memberContinuationDocument.content.map((node, index) =>
+      index === 1
+        ? {
+            ...node,
+            props: {
+              ...node.props,
+              source: { kind: 'collection', id: '00000000-0000-8000-8000-000000000019' },
+            },
+          }
+        : node,
+    ),
+  };
+  let context: SelectedContext | undefined;
+  type NativeInput = {
+    target: MemberPageTarget;
+    languages: string[];
+    continuation?: { node: string; cursor: string };
+  };
+  type NativeCall = {
+    input: NativeInput;
+    authorization: string | null;
+    document: CompositionDocument;
+    context?: SelectedContext;
+  };
+  const nativeCalls: NativeCall[] = [];
+  const native = {
+    pages: {
+      $read: {
+        post: async (input: NativeInput, options?: { headers?: HeadersInit }) => {
+          const call: NativeCall = {
+            input,
+            authorization: options?.headers ? new Headers(options.headers).get('authorization') : null,
+            document,
+            ...(context ? { context } : {}),
+          };
+          nativeCalls.push(call);
+          const answer = responses.shift();
+          if (!answer) throw new Error('Unexpected native page read');
+          if (answer instanceof Error) throw answer;
+          const section = await answer;
+          const continuation = call.input.continuation;
+          const pagePlan = planReads(platformRegistry, call.document, {
+            subject: null,
+            account: {
+              id: 'resolved-member-account',
+              handle: 'account' in call.input.target ? call.input.target.account : 'member-continuation',
+            },
+            ...(call.context ? { context: call.context } : {}),
+            ...(continuation ? { continuation } : {}),
+          });
+          const reads = Object.fromEntries(
+            Object.keys(pagePlan.reads).map((key) => [
+              key,
+              section.ok ? { status: 200, body: section.body } : { status: section.status ?? 503 },
+            ]),
+          );
+          return {
+            status: 200,
+            data: {
+              document: call.document,
+              account: 'resolved-member-account',
+              ...(call.context ? { context: call.context } : {}),
+              reads,
+            },
+          };
+        },
+      },
+    },
+  } as unknown as KernelClient;
+  const originalKernel = await import('../src/kernel/client');
+  mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => native }));
   const { PageData, dataComponents } = await import('../src/features/pages/data');
   const { CompositionRender } = await import('../src/features/pages/render');
   const { layoutComponents, PageRoot, pageDefinitions } = await import('../src/features/pages/layout');
-  const { memberContinuationDocument } = await import('../src/kernel/fake/composed-member-list');
   const { sessionQuery } = await import('../src/session/query');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
-  const viewer = { state: 'signed-in', subject: 'reader-one', csrfToken: null };
-  client.setQueryData(sessionQuery.queryKey, viewer);
+  const viewer = (subject: string | null) => ({
+    state: subject ? ('signed-in' as const) : ('signed-out' as const),
+    subject,
+    csrfToken: null,
+  });
+  client.setQueryData(sessionQuery.queryKey, viewer('reader-one'));
+  const setReader = async (subject: string | null, credentialReader = subject) => {
+    await act(async () => {
+      currentRequest = requestForReader(credentialReader);
+      client.setQueryData(sessionQuery.queryKey, viewer(subject));
+    });
+  };
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  let document = memberContinuationDocument;
-  let target = { account: 'member-continuation' };
+  let target: MemberPageTarget = { account: 'member-continuation' };
   let locale = 'en';
   let cacheReader: string | null = null;
-  let context:
-    | { id: string; population: { kind: 'global' } | { kind: 'realm'; id: string; title: string } }
-    | undefined;
+  let recoverSource = true;
+  let recoveryNode = 'members';
   let initial = { members: recording.members.slice(0, 1), next: 'opaque:next/==' };
   const read = Object.values(planReads(platformRegistry, document, { subject: null }).reads)[0]!;
   const page = (members: typeof recording.members, next: string | null): Section => ({
@@ -85,27 +190,35 @@ test('Default composed member continuation announces actual unique additions and
   });
   const render = async () => {
     const plan = planReads(platformRegistry, document, { subject: null });
+    const reads = Object.fromEntries(
+      Object.keys(plan.reads).map((key) => [
+        key,
+        recoverSource && key === plan.nodes[recoveryNode] ? { status: 404 } : { status: 200, body: initial },
+      ]),
+    );
     await act(async () => {
       root.render(
-        <QueryClientProvider client={client}>
-          <PageData
-            locale={locale}
-            document={document}
-            pageTarget={target}
-            cacheReader={cacheReader}
-            context={context}
-            reads={Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: initial }]))}
-            messages={{ unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' }}
-          >
-            <CompositionRender
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <PageData
+              locale={locale}
               document={document}
-              definitions={pageDefinitions}
-              components={{ ...layoutComponents, ...dataComponents }}
-              root={PageRoot}
-            />
-          </PageData>
-          <a href="#after">After the lists</a>
-        </QueryClientProvider>,
+              pageTarget={target}
+              cacheReader={cacheReader}
+              context={context}
+              reads={reads}
+              messages={{ unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' }}
+            >
+              <CompositionRender
+                document={document}
+                definitions={pageDefinitions}
+                components={{ ...layoutComponents, ...dataComponents }}
+                root={PageRoot}
+              />
+            </PageData>
+            <a href="#after">After the lists</a>
+          </QueryClientProvider>
+        </StrictMode>,
       );
     });
   };
@@ -144,11 +257,166 @@ test('Default composed member continuation announces actual unique additions and
     return reject;
   };
   try {
+    // The first public composition result conceals the source. Seed the signed-in reader before
+    // mounting, then keep the native page response pending until QueryClient and layout effects commit.
+    const firstRecovery = hold();
     await render();
-    expect(requests).toHaveLength(0);
-    expect(status().textContent).toBe('');
-    expect(status('other-members').textContent).toBe('');
-    expect(list().getAttribute('aria-live')).toBeNull();
+    await flush();
+    expect(nativeCalls).toHaveLength(1);
+    expect(nativeCalls[0]?.input.target).toEqual(target);
+    expect(nativeCalls[0]?.input.continuation).toBeUndefined();
+    expect(nativeCalls[0]?.authorization).toBe('Bearer native-reader-one');
+    expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+    expect(host.querySelector('[data-slot="member-list"][data-node="members"]')).toBeNull();
+    expect(list('other-members').textContent).toContain('Snow Country');
+    await act(async () => {
+      firstRecovery(page([recording.members[0]!], 'opaque:next/=='));
+    });
+    await flush();
+    expect(list().textContent).toContain('Snow Country');
+    expect(list().textContent).not.toContain('The Tale of Genji');
+
+    // A current recovery's rows are real Members rows and use the normal continuation reader.
+    const recoveredTrigger = button();
+    const recoveredNext = hold();
+    await press(recoveredTrigger);
+    expect(nativeCalls.at(-1)?.input.continuation).toEqual({ node: 'members', cursor: 'opaque:next/==' });
+    expect(nativeCalls.at(-1)?.authorization).toBe('Bearer native-reader-one');
+    await act(async () => {
+      recoveredNext(page([recording.members[0]!, recording.members[1]!, recording.members[1]!], 'recovered-next'));
+    });
+    await flush();
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(2);
+    expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
+
+    // Context replacement retires a delayed success, while the replacement representation can recover.
+    context = {
+      id: '00000000-0000-8000-8000-000000000011',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Recovery A' },
+    };
+    const retiredContext = hold();
+    await render();
+    await flush();
+    context = {
+      id: '00000000-0000-8000-8000-000000000021',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000022', title: 'Recovery B' },
+    };
+    const currentContext = hold();
+    await render();
+    await flush();
+    expect(nativeCalls.at(-2)?.context?.id).toBe('00000000-0000-8000-8000-000000000011');
+    expect(nativeCalls.at(-1)?.context?.id).toBe('00000000-0000-8000-8000-000000000021');
+    expect(nativeCalls.at(-1)?.context?.population).toEqual({
+      kind: 'realm',
+      id: '00000000-0000-8000-8000-000000000022',
+      title: 'Recovery B',
+    });
+    await act(async () => {
+      retiredContext(page([recording.members[2]!], null));
+    });
+    await flush();
+    expect(host.querySelector('[data-slot="member-list"][data-node="members"]')).toBeNull();
+    await act(async () => {
+      currentContext(page([recording.members[0]!], 'context-next'));
+    });
+    await flush();
+    expect(list().textContent).toContain('Snow Country');
+
+    // A changed node cannot reuse the old pending read or its query result.
+    const retiredNode = holdFailure();
+    await render();
+    await flush();
+    document = {
+      ...document,
+      content: document.content.map((node, index) =>
+        index ? node : { ...node, props: { ...node.props, id: 'replacement-members' } },
+      ),
+    };
+    recoveryNode = 'replacement-members';
+    const currentNode = hold();
+    await render();
+    await flush();
+    await act(async () => {
+      retiredNode(new Error('Retired node recovery failed'));
+    });
+    await flush();
+    expect(host.querySelector('[data-slot="member-list"][data-node="replacement-members"]')).toBeNull();
+    await act(async () => {
+      currentNode(page([recording.members[2]!], 'node-next'));
+    });
+    await flush();
+    expect(list('replacement-members').textContent).toContain('The Little Prince');
+
+    // A→B→A creates a new admission incarnation; retired failure and success leave it pending.
+    document = {
+      ...document,
+      content: document.content.map((node, index) =>
+        index ? node : { ...node, props: { ...node.props, id: 'members' } },
+      ),
+    };
+    recoveryNode = 'members';
+    context = {
+      id: '00000000-0000-8000-8000-000000000031',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000032', title: 'ABA context' },
+    };
+    const retiredA = holdFailure();
+    await render();
+    await flush();
+    const retiredB = hold();
+    await setReader('reader-two');
+    await flush();
+    const currentA = hold();
+    await setReader('reader-one');
+    await flush();
+    expect(nativeCalls.slice(-3).map(({ authorization }) => authorization)).toEqual([
+      'Bearer native-reader-one',
+      'Bearer native-reader-two',
+      'Bearer native-reader-one',
+    ]);
+    await act(async () => {
+      retiredA(new Error('Retired A recovery failed'));
+    });
+    await act(async () => {
+      retiredB(page([recording.members[2]!], null));
+    });
+    await flush();
+    expect(host.querySelector('[data-slot="member-list"][data-node="members"]')).toBeNull();
+    await act(async () => {
+      currentA(page([recording.members[0]!, recording.members[1]!], 'current-a-next'));
+    });
+    await flush();
+    expect(list().textContent).toContain('The Tale of Genji');
+
+    // The server still compares the expected reader with the prepared credential before native access.
+    const beforeMismatch = nativeCalls.length;
+    await setReader('reader-two', 'reader-one');
+    await flush();
+    expect(nativeCalls).toHaveLength(beforeMismatch);
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+
+    // Unknown session state cannot admit authenticated recovery. Public rows remain readable anonymously.
+    for (const state of ['unknown', 'unavailable'] as const) {
+      const beforeNonFreshSession = nativeCalls.length;
+      await act(async () => {
+        currentRequest = requestForReader(null);
+        client.setQueryData(sessionQuery.queryKey, { state, subject: null, csrfToken: null });
+      });
+      await flush();
+      expect(nativeCalls).toHaveLength(beforeNonFreshSession);
+    }
+    recoverSource = false;
+    context = undefined;
+    target = { account: 'member-continuation' };
+    locale = 'en';
+    cacheReader = null;
+    recoveryNode = 'members';
+    initial = { members: recording.members.slice(0, 1), next: 'opaque:next/==' };
+    await setReader(null);
+    await render();
+    expect(host.querySelector('[data-slot="member-list"][data-node="members"]')).not.toBeNull();
+    expect(list().textContent).toContain('Snow Country');
+    const continuationStart = nativeCalls.length;
     const trigger = button();
     expect(trigger.className).toContain('min-h-11');
     expect(trigger.className).toContain('min-w-11');
@@ -161,16 +429,10 @@ test('Default composed member continuation announces actual unique additions and
     expect(trigger.getAttribute('aria-disabled')).toBe('true');
     expect(window.document.activeElement).toBe(trigger);
     await press(trigger); // Repeated activation cannot issue another read.
-    expect(requests).toEqual([
-      {
-        target,
-        locale: 'en',
-        node: 'members',
-        cursor: 'opaque:next/==',
-        expectedReader: null,
-        representation: { context: PAGE_GLOBAL_CONTEXT, population: 'global' },
-      },
-    ]);
+    expect(nativeCalls).toHaveLength(continuationStart + 1);
+    expect(nativeCalls.at(-1)?.input.target).toEqual(target);
+    expect(nativeCalls.at(-1)?.input.continuation).toEqual({ node: 'members', cursor: 'opaque:next/==' });
+    expect(nativeCalls.at(-1)?.authorization).toBeNull();
     await act(async () => {
       release(page([recording.members[0]!, recording.members[1]!, recording.members[1]!], 'duplicates'));
     });
@@ -182,9 +444,7 @@ test('Default composed member continuation announces actual unique additions and
     expect(list().textContent!.indexOf('Snow Country')).toBeLessThan(list().textContent!.indexOf('The Tale of Genji'));
     expect(status('other-members').textContent).toBe('');
 
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
-    });
+    await setReader('reader-two');
     await flush();
     expect(list().textContent).toContain('The Tale of Genji');
     expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
@@ -215,7 +475,12 @@ test('Default composed member continuation announces actual unique additions and
       await userEvent.tab();
     });
     expect(window.document.activeElement?.textContent).toBe('After the lists');
-    expect(requests.map(({ node, cursor }) => ({ node, cursor }))).toEqual([
+    expect(
+      nativeCalls.slice(continuationStart).map(({ input }) => ({
+        node: input.continuation?.node,
+        cursor: input.continuation?.cursor,
+      })),
+    ).toEqual([
       { node: 'members', cursor: 'opaque:next/==' },
       { node: 'members', cursor: 'duplicates' },
       { node: 'other-members', cursor: 'opaque:next/==' },
@@ -228,9 +493,7 @@ test('Default composed member continuation announces actual unique additions and
       initial = { ...initial, next: `before-${boundary}` };
       if (boundary === 'reader') {
         cacheReader = 'reader-one';
-        await act(async () => {
-          client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
-        });
+        await setReader('reader-one');
       }
       if (boundary === 'viewer') cacheReader = null;
       await render();
@@ -247,14 +510,10 @@ test('Default composed member continuation announces actual unique additions and
       if (boundary === 'section') initial = { ...initial, next: 'fresh-section' };
       if (boundary === 'reader') {
         cacheReader = 'reader-two';
-        await act(async () => {
-          client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
-        });
+        await setReader('reader-two');
       }
       if (boundary === 'viewer')
-        await act(async () => {
-          client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
-        });
+        await setReader('reader-two');
       if (boundary === 'context')
         context = {
           id: '00000000-0000-8000-8000-000000000001',
@@ -282,9 +541,7 @@ test('Default composed member continuation announces actual unique additions and
       id: '00000000-0000-8000-8000-000000000011',
       population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
     };
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
-    });
+    await setReader('reader-one');
     initial = { ...initial, next: 'aba-cursor' };
     await render();
     const retiredA = holdFailure();
@@ -294,45 +551,43 @@ test('Default composed member continuation announces actual unique additions and
       population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000022', title: 'Context B' },
     };
     cacheReader = 'reader-two';
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
-    });
+    await setReader('reader-two');
     await render();
     context = {
       id: '00000000-0000-8000-8000-000000000011',
       population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
     };
     cacheReader = 'reader-one';
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
-    });
+    await setReader('reader-one');
     await render();
     const replacementTrigger = button();
     replacementTrigger.focus();
     const currentA = hold();
     await press(replacementTrigger);
     expect(
-      requests
+      nativeCalls
         .slice(-2)
-        .map(({ expectedReader, representation, cursor }) => ({ expectedReader, representation, cursor })),
+        .map(({ input, authorization, context: currentContext }) => ({
+          node: input.continuation?.node,
+          cursor: input.continuation?.cursor,
+          authorization,
+          context: currentContext?.id,
+          populationId: currentContext?.population.kind === 'realm' ? currentContext.population.id : undefined,
+        })),
     ).toEqual([
       {
-        expectedReader: 'reader-one',
-        representation: {
-          context: '00000000-0000-8000-8000-000000000011',
-          population: 'realm',
-          populationId: '00000000-0000-8000-8000-000000000012',
-        },
+        node: 'members',
         cursor: 'aba-cursor',
+        authorization: 'Bearer native-reader-one',
+        context: '00000000-0000-8000-8000-000000000011',
+        populationId: '00000000-0000-8000-8000-000000000012',
       },
       {
-        expectedReader: 'reader-one',
-        representation: {
-          context: '00000000-0000-8000-8000-000000000011',
-          population: 'realm',
-          populationId: '00000000-0000-8000-8000-000000000012',
-        },
+        node: 'members',
         cursor: 'aba-cursor',
+        authorization: 'Bearer native-reader-one',
+        context: '00000000-0000-8000-8000-000000000011',
+        populationId: '00000000-0000-8000-8000-000000000012',
       },
     ]);
     await act(async () => {
@@ -356,18 +611,14 @@ test('Default composed member continuation announces actual unique additions and
         id: '00000000-0000-8000-8000-000000000031',
         population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000032', title: 'Failure context A' },
       };
-      await act(async () => {
-        client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-one' });
-      });
+      await setReader('reader-one');
       initial = { ...initial, next: `failure-${boundary}` };
       await render();
       const retiredFailure = holdFailure();
       await press();
       if (boundary === 'reader') {
         cacheReader = 'reader-two';
-        await act(async () => {
-          client.setQueryData(sessionQuery.queryKey, { ...viewer, subject: 'reader-two' });
-        });
+        await setReader('reader-two');
       }
       if (boundary === 'context')
         context = {
@@ -413,7 +664,9 @@ test('Default composed member continuation announces actual unique additions and
       expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength([401, 403, 409].includes(code) ? 0 : 1);
       responses.push(page([], null));
       await press();
-      expect(requests.at(-1)?.cursor).toBe([401, 403, 409].includes(code) ? undefined : `refusal-${code}`);
+      expect(nativeCalls.at(-1)?.input.continuation?.cursor).toBe(
+        [401, 403, 409].includes(code) ? undefined : `refusal-${code}`,
+      );
       expect(status().textContent).toContain('0. End of this list.');
     }
   } finally {
