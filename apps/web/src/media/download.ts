@@ -140,7 +140,8 @@ export async function download(request: Request, id: string, variant: string, en
   if (decision.allowed !== true) throw notFound();
   const etag = `"${decision.sha256}"`;
   const headers = new Headers({ etag, 'cache-control': decision.cacheControl });
-  if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers });
+  if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag))
+    return new Response(null, { status: 304, headers });
 
   const metadata = await env.MEDIA.head(decision.key);
   if (!metadata) throw notFound();

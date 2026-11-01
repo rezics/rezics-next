@@ -33,7 +33,12 @@ function stream(value: Uint8Array): ReadableStream<Uint8Array> {
 }
 
 function fixture(options: FixtureOptions = {}) {
-  const authorizationCalls: Array<{ method: string; path: string; variant: string | null; authorization: string | null }> = [];
+  const authorizationCalls: Array<{
+    method: string;
+    path: string;
+    variant: string | null;
+    authorization: string | null;
+  }> = [];
   const headCalls: string[] = [];
   const getCalls: GetCall[] = [];
   const decisions = new Map<string, DownloadDecision>([['original', allowedDecision()]]);
@@ -73,9 +78,9 @@ function fixture(options: FixtureOptions = {}) {
           ? (requested as { offset?: number; length?: number; suffix?: number })
           : undefined;
       const offset =
-        selected?.offset ??
-        (selected?.suffix !== undefined ? Math.max(bytes.length - selected.suffix, 0) : 0);
-      const length = selected?.length ?? (selected?.suffix !== undefined ? Math.min(selected.suffix, bytes.length) : bytes.length);
+        selected?.offset ?? (selected?.suffix !== undefined ? Math.max(bytes.length - selected.suffix, 0) : 0);
+      const length =
+        selected?.length ?? (selected?.suffix !== undefined ? Math.min(selected.suffix, bytes.length) : bytes.length);
       const bodyBytes = bytes.slice(offset, offset + length);
       return {
         size: bytes.length,
@@ -275,9 +280,7 @@ test('If-Range only admits an exact strong entity tag and otherwise ignores even
     for (const [index, item] of cases.entries()) {
       const response = await value.send({ headers: { range: item.range, 'if-range': item.ifRange } });
       expect(response.status).toBe(item.status);
-      expect(new Uint8Array(await response.arrayBuffer())).toEqual(
-        item.status === 206 ? bytes.slice(2, 5) : bytes,
-      );
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(item.status === 206 ? bytes.slice(2, 5) : bytes);
       expect(value.getCalls.at(-1)).toEqual({ key, range: item.expectedRange });
       expect(value.headCalls).toHaveLength(index + 1);
       expect(value.getCalls).toHaveLength(index + 1);
@@ -362,12 +365,15 @@ test('single byte ranges cover closed, open, suffix, clamped, huge, malformed, m
     expectOneFreshAuthorization(value, cases.length + 1);
   });
 
-  await withFixture(async (value) => {
-    const empty = await value.send({ headers: { range: 'bytes=0-' } });
-    expect(empty.status).toBe(416);
-    expect(empty.headers.get('content-range')).toBe('bytes */0');
-    expect(value.headCalls).toEqual([key]);
-    expect(value.getCalls).toHaveLength(0);
-    expectOneFreshAuthorization(value, 1);
-  }, { headMissing: false, headSize: 0 });
+  await withFixture(
+    async (value) => {
+      const empty = await value.send({ headers: { range: 'bytes=0-' } });
+      expect(empty.status).toBe(416);
+      expect(empty.headers.get('content-range')).toBe('bytes */0');
+      expect(value.headCalls).toEqual([key]);
+      expect(value.getCalls).toHaveLength(0);
+      expectOneFreshAuthorization(value, 1);
+    },
+    { headMissing: false, headSize: 0 },
+  );
 });
