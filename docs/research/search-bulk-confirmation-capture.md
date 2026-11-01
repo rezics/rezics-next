@@ -145,6 +145,8 @@ It requires new owner producers. It cannot be assembled by calling current `curr
 
 The lock/index domain must be precise enough for unrelated work to proceed and writer lookup bounded by affected dependencies.
 An account-wide/global mutex, a scan of every live preview, or holding all home connections would violate the contract.
+Both reservation and writer must conflict on the same stable native domain row or a proved unique-key creation handshake; a snapshot SELECT of an arm table is insufficient.
+In a writer whose SERIALIZABLE/RR snapshot predates enrollment, the final shared-row write/lock must force current serialization or a native retry, never accept that old snapshot's apparent absence of an arm.
 Predicate-range/dependency registration, phantom/new-key handling, index-maintenance costs and committed enrollment of already-running writers are missing native producer work.
 Per-home SERIALIZABLE reads without writer reservations do not satisfy step 3.
 
@@ -290,6 +292,7 @@ Operational preparation has its own body and cannot borrow this skeleton as its 
 - Shared preparation: input<=1000/result writes<=1000/frontier writes<=1/P<=8 per input/rows<=64+16input/SQL<=16 per backend/engine<=4/response<=4MiB/one connection. The stronger applicable native **100 raw-key** step remains; lookahead/rejects count. A body requesting 101 raw keys cannot hide the extra key behind a 100-result limit.
 - Explicit admission stays <=100 IDs and 16KiB; checkpoint segments stay <=100 pages. Segment continuation is not atomicity, a fresh Source frame or proof renewal. Manifest writes use the producer's **same** remaining allowance.
 - Four local output guards alone reserve 2,124,544+ΣQ bytes and 14 points, before nested native work. This is a literal subtotal, not proof that the full composition fits any particular original frame. Source's recorded pre-candidate 53>TOTAL 24 is an exact failed bound, not permission to select a larger one.
+- If a proposed placement needs two such guard sequences in one compatibility 4MiB frame, their known subtotal is 4,249,088+ΣQ bytes: already 54,784 bytes above 4,194,304 before nested work. Repeated start/final validation cannot be priced as one guard or hidden by legacy counters; this conditional conflict does not establish the actual missing whole producer's price.
 - Preparation 32/24h-idle, proposed execution 24h/results 48h and shared proof expiry remain distinct. Unknown receipts/armed decisions/retired rows also consume finite outstanding bytes. Their admission numbers and indexed draining bodies remain unavailable; selecting a new population/epoch cap would not resolve them.
 
 ## Primary upstream evidence and its consequence
