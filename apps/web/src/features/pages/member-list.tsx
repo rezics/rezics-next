@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
-import { useSession } from '../../session/query';
+import { AnonymousSessionContext, useSession } from '../../session/query';
 import { useContext, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -11,24 +11,16 @@ import { CoverList } from './cover-list';
 import { OverviewContext, pageRepresentation, type Item, type OverviewValue, type Section } from './overview';
 import { isRecord, pageText } from './shared';
 import { loadMemberList, type MemberListRequest, type MemberPageTarget } from './member-list-query';
+import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
 
-let nextMemberIncarnation = 0;
-let nextSectionIncarnation = 0;
-const sectionIncarnations = new WeakMap<object, number>();
 const emptySection: Section = { ok: false };
 
-function sectionIncarnation(section: Section): number {
-  let incarnation = sectionIncarnations.get(section);
-  if (incarnation === undefined) {
-    incarnation = ++nextSectionIncarnation;
-    sectionIncarnations.set(section, incarnation);
+function sectionFingerprint(section: Section): string {
+  try {
+    return JSON.stringify(section);
+  } catch {
+    return `${section.ok}:${section.ok ? 'ready' : (section.status ?? 'unavailable')}`;
   }
-  return incarnation;
-}
-
-function useMemberIncarnation(): string {
-  const [incarnation] = useState(() => `members-${++nextMemberIncarnation}`);
-  return incarnation;
 }
 
 function useReadingLifetime(onRetire?: () => void) {
@@ -103,29 +95,39 @@ export function memberItems(section: Section, value: OverviewValue): Item[] {
 export function Members(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
   const viewer = useSession();
+  const anonymous = useContext(AnonymousSessionContext);
+  const queryClient = useQueryClient();
   const node = typeof props.id === 'string' ? props.id : '';
   const initial = value?.sections.get(node) ?? emptySection;
-  if (!value || !node) return null;
   const target = value?.pageTarget;
-  const representation = pageRepresentation(value.context);
+  const representation = pageRepresentation(value?.context);
   const viewerRecovery = isRecord(props.source) && !initial.ok && initial.status === 404;
-  const key = JSON.stringify([
+  const privateReading = !!value && (value.cacheReader != null || viewerRecovery);
+  const scope = JSON.stringify([
     target,
-    value.subject,
-    value.account ?? null,
+    value?.subject,
+    value?.account ?? null,
     props,
-    sectionIncarnation(initial),
-    value.cacheReader == null && !viewerRecovery ? null : [viewer.state, viewer.subject ?? null],
-    value.locale,
-    value.cacheReader ?? null,
+    sectionFingerprint(initial),
+    value?.locale,
+    value?.cacheReader ?? null,
     representation,
-    value.reader,
+    value?.reader,
   ]);
+  const admission = useListReaderAdmission(queryClient, scope, {
+    sourceFingerprint: sectionFingerprint(initial),
+    privateReading,
+    observeSession: privateReading && !anonymous,
+    fallbackSession: viewer,
+  });
+  if (!value || !node) return null;
+  const key = JSON.stringify([scope, admission.incarnation]);
   return (
     <MemberReader
       key={key}
       value={value}
-      viewer={viewer}
+      viewer={admission.session}
+      admission={admission}
       props={props}
       initial={initial}
       node={node}
@@ -138,6 +140,7 @@ export function Members(props: Record<string, unknown>) {
 function MemberReader({
   value,
   viewer,
+  admission,
   props,
   initial,
   node,
@@ -145,15 +148,15 @@ function MemberReader({
   representation,
 }: {
   value: OverviewValue;
-  viewer: ReturnType<typeof useSession>;
+  viewer: ListReaderSession;
+  admission: ReturnType<typeof useListReaderAdmission>;
   props: Record<string, unknown>;
   initial: Section;
   node: string;
   target?: MemberPageTarget | undefined;
   representation: ReturnType<typeof pageRepresentation>;
 }) {
-  const queryClient = useQueryClient();
-  const incarnation = useMemberIncarnation();
+  const incarnation = admission.incarnation;
   // The public shell can conceal self sources or a private curated source. Recheck only for an observed viewer.
   const needsViewer =
     isRecord(props.source) &&
@@ -162,6 +165,13 @@ function MemberReader({
     viewer.state === 'signed-in' &&
     typeof viewer.subject === 'string' &&
     viewer.subject.length > 0;
+  const initialAllowed = admission.initialAllowed(value.cacheReader);
+  const needsFreshPrivate =
+    value.cacheReader != null &&
+    !initialAllowed &&
+    admission.canRead &&
+    viewer.state === 'signed-in' &&
+    viewer.subject === value.cacheReader;
   const recoveryReader = needsViewer ? viewer.subject! : (value.cacheReader ?? null);
   const queryKey = [
     'composed-members-viewer',
@@ -174,9 +184,7 @@ function MemberReader({
     },
     incarnation,
   ] as const;
-  const lifetime = useReadingLifetime(() => {
-    void queryClient.cancelQueries({ queryKey, exact: true });
-  });
+  admission.registerQuery('member-recovery', queryKey);
   const request: MemberListRequest = {
     target: target!,
     locale: value.locale,
@@ -187,7 +195,8 @@ function MemberReader({
   const current = useQuery({
     ...personalRead,
     queryKey,
-    enabled: personalRead.enabled && needsViewer && !!target && !!node,
+    enabled:
+      personalRead.enabled && admission.canRead && (needsViewer || needsFreshPrivate) && !!target && !!node,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
@@ -195,25 +204,39 @@ function MemberReader({
     queryFn: async ({ signal }) => {
       // QueryObserver subscribes during commit. Let layout setup and StrictMode effect replay finish before
       // admitting transport, then bind this request to the generation that actually started it.
-      const generation = lifetime.generation();
+      const requestIncarnation = incarnation;
+      if (signal.aborted || !admission.current(requestIncarnation)) throw new Error('Retired member reading');
       await Promise.resolve();
-      if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired member recovery');
-      const result = await loadMemberList({ data: request });
-      if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired member recovery');
+      if (signal.aborted || !admission.current(requestIncarnation)) throw new Error('Retired member reading');
+      let result: Section;
+      try {
+        result = await loadMemberList({ data: request });
+      } catch (error) {
+        if (signal.aborted || !admission.current(requestIncarnation)) throw new Error('Retired member reading');
+        throw error;
+      }
+      if (signal.aborted || !admission.current(requestIncarnation)) throw new Error('Retired member reading');
       return result;
     },
   });
-  if (needsViewer && target && current.isPending)
+  if ((needsViewer || needsFreshPrivate) && target && current.isPending)
     return <p role="status">{m.subject_relation_loading({}, { locale: value.locale as never })}</p>;
-  const section: Section = needsViewer ? (current.isError ? { ok: false } : (current.data ?? initial)) : initial;
+  const section: Section = needsViewer || needsFreshPrivate
+    ? current.isError
+      ? { ok: false }
+      : (current.data ?? { ok: false })
+    : initialAllowed
+      ? initial
+      : { ok: false };
   const continuationEnabled =
-    value.cacheReader == null || (viewer.state === 'signed-in' && viewer.subject === value.cacheReader);
+    value.cacheReader == null ||
+    ((needsFreshPrivate || initialAllowed) &&
+      admission.canRead &&
+      viewer.state === 'signed-in' &&
+      viewer.subject === value.cacheReader);
+  if (viewerRecovery && !needsViewer && !initialAllowed) return null;
   // An anonymous public page has no viewer provenance by design. A known private page cannot outlive its reader.
-  if (
-    value.cacheReader &&
-    viewer.state !== 'unknown' &&
-    !(viewer.state === 'signed-in' && viewer.subject === value.cacheReader)
-  )
+  if (value.cacheReader && !initialAllowed && !needsFreshPrivate)
     return <p role="alert">{m.subject_relation_unavailable({}, { locale: value.locale as never })}</p>;
   return (
     <MemberList
@@ -223,8 +246,8 @@ function MemberReader({
       title={pageText(props.title, value.locale).text}
       target={target}
       expectedReader={recoveryReader}
+      admission={admission}
       continuationEnabled={continuationEnabled}
-      viewerIdentity={JSON.stringify([viewer.state, viewer.subject ?? null])}
       paged={props.paged === true}
     />
   );
@@ -238,8 +261,8 @@ export function MemberList({
   title,
   target,
   expectedReader,
+  admission,
   continuationEnabled = true,
-  viewerIdentity = '',
   paged = true,
 }: {
   value: OverviewValue;
@@ -248,8 +271,8 @@ export function MemberList({
   title: string;
   target?: MemberPageTarget | undefined;
   expectedReader?: string | null | undefined;
+  admission: ReturnType<typeof useListReaderAdmission>;
   continuationEnabled?: boolean;
-  viewerIdentity?: string;
   paged?: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -264,7 +287,7 @@ export function MemberList({
   }>();
   const active = useRef(false);
   const instance = useId();
-  const incarnation = useMemberIncarnation();
+  const incarnation = admission.incarnation;
   const activeQueryKey = useRef<readonly unknown[] | undefined>(undefined);
   const lifetime = useReadingLifetime(() => {
     const key = activeQueryKey.current;
@@ -280,7 +303,7 @@ export function MemberList({
     return () => {
       lifetime.retire(generation);
     };
-  }, [lifetime, viewerIdentity]);
+  }, [lifetime]);
   const end = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
     const trigger = completion?.trigger;
@@ -288,13 +311,14 @@ export function MemberList({
     if (
       completion &&
       lifetime.current(completion.generation) &&
+      admission.current(incarnation) &&
       completion?.exhausted &&
       trigger &&
       (trigger.ownerDocument.activeElement === trigger ||
         trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
     )
       end.current?.focus({ preventScroll: true });
-  }, [completion, lifetime]);
+  }, [completion, lifetime, admission, incarnation]);
   const latest = pages.at(-1)!;
   const cursor = latest.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
   const failed = error && !error.ok ? error : !latest.ok ? latest : undefined;
@@ -316,9 +340,10 @@ export function MemberList({
   const unique = new Map<string, Item>();
   for (const item of items) if (!unique.has(item.id)) unique.set(item.id, item);
   async function more(event: MouseEvent<HTMLButtonElement>) {
-    if (!continuationEnabled || !target || active.current) return;
+    if (!continuationEnabled || !target || active.current || !admission.current(incarnation)) return;
     const generation = lifetime.generation();
-    if (!lifetime.current(generation)) return;
+    const isCurrent = () => lifetime.current(generation) && admission.current(incarnation);
+    if (!isCurrent()) return;
     const trigger = event.currentTarget;
     active.current = true;
     setPending(true);
@@ -333,6 +358,7 @@ export function MemberList({
       representation: pageRepresentation(value.context),
     };
     const queryKey = ['composed-members', request, incarnation, generation] as const;
+    admission.registerQuery('member-continuation', queryKey);
     activeQueryKey.current = queryKey;
     try {
       const next = await queryClient.fetchQuery({
@@ -342,22 +368,25 @@ export function MemberList({
         gcTime: 0,
         retry: false,
         queryFn: async ({ signal }) => {
+          if (signal.aborted || !isCurrent()) throw new Error('Retired member continuation');
+          await Promise.resolve();
+          if (signal.aborted || !isCurrent()) throw new Error('Retired member continuation');
           const result = await loadMemberList({ data: request });
-          if (signal.aborted || !lifetime.current(generation)) throw new Error('Retired member continuation');
+          if (signal.aborted || !isCurrent()) throw new Error('Retired member continuation');
           return result;
         },
       });
-      if (!lifetime.current(generation)) return;
+      if (!isCurrent()) return;
       if (!next.ok) {
-        setError((previous) => (lifetime.current(generation) ? next : previous));
+        setError((previous) => (isCurrent() ? next : previous));
         if ([401, 403, 404, 409].includes(next.status ?? 0))
-          setPages((previous) => (lifetime.current(generation) ? [next] : previous));
+          setPages((previous) => (isCurrent() ? [next] : previous));
       } else {
         const visible = new Set(unique.keys());
         for (const item of memberItems(next, value)) visible.add(item.id);
-        setPages((previous) => (lifetime.current(generation) ? (cursor ? [...previous, next] : [next]) : previous));
+        setPages((previous) => (isCurrent() ? (cursor ? [...previous, next] : [next]) : previous));
         setCompletion((previous) =>
-          lifetime.current(generation)
+          isCurrent()
             ? {
                 generation,
                 added: visible.size - unique.size,
@@ -368,12 +397,13 @@ export function MemberList({
         );
       }
     } catch {
-      setError((previous) => (lifetime.current(generation) ? { ok: false as const } : previous));
+      setError((previous) => (isCurrent() ? { ok: false as const } : previous));
     } finally {
-      if (lifetime.current(generation)) {
+      if (isCurrent()) {
         if (activeQueryKey.current === queryKey) activeQueryKey.current = undefined;
+        admission.releaseQuery('member-continuation', queryKey);
         active.current = false;
-        setPending((previous) => (lifetime.current(generation) ? false : previous));
+        setPending((previous) => (isCurrent() ? false : previous));
       }
     }
   }

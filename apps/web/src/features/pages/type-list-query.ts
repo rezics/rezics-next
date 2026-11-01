@@ -49,6 +49,8 @@ export type TypeListQueryResult =
   | { kind: 'ready'; page: SubjectPageData; target: TypeListTarget; node: string; admission: TypeListReadAdmission }
   | { kind: 'admission-mismatch'; node: string; admission: { request: TypeListReadRequest } };
 
+type TypeListQueryLifetime = { isCurrent: () => boolean };
+
 function selectedRealmReader(value: unknown): value is string | null | undefined {
   return (
     value === undefined || value === null || (typeof value === 'string' && value.length > 0 && value.length <= 128)
@@ -218,6 +220,7 @@ export const typeListQuery = (
   page: string,
   cursor: string | undefined,
   admission: TypeListAdmissionInput,
+  lifetime?: TypeListQueryLifetime,
 ) => {
   const target = typeListTargetFromPage(page);
   const selectedRealm = hasSelectedRealmTarget(target);
@@ -240,18 +243,30 @@ export const typeListQuery = (
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     enabled: mode !== 'initial-hydration',
-    queryFn: () =>
-      readTypeList({
-        data: {
-          locale,
-          node,
-          page,
-          ...(cursor !== undefined ? { cursor } : {}),
-          state,
-          ...(expectedReader !== undefined ? { expectedReader } : {}),
-          incarnation,
-          mode,
-        },
-      }),
+    queryFn: async ({ signal }) => {
+      if (lifetime && !lifetime.isCurrent()) throw new Error('Retired configured list');
+      await Promise.resolve();
+      if (signal.aborted || (lifetime && !lifetime.isCurrent())) throw new Error('Retired configured list');
+      let result: TypeListQueryResult;
+      try {
+        result = await readTypeList({
+          data: {
+            locale,
+            node,
+            page,
+            ...(cursor !== undefined ? { cursor } : {}),
+            state,
+            ...(expectedReader !== undefined ? { expectedReader } : {}),
+            incarnation,
+            mode,
+          },
+        });
+      } catch (error) {
+        if (signal.aborted || (lifetime && !lifetime.isCurrent())) throw new Error('Retired configured list');
+        throw error;
+      }
+      if (signal.aborted || (lifetime && !lifetime.isCurrent())) throw new Error('Retired configured list');
+      return result;
+    },
   });
 };

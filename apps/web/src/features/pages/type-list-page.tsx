@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useContext } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from '../../session/query';
+import { AnonymousSessionContext, useSession } from '../../session/query';
+import { useListReaderAdmission } from './list-reader-admission';
 import { hasSelectedRealmTarget, typeListTargetFromPage } from './type-list-model';
 import { typeListQuery, type TypeListAdmissionInput, type TypeListQueryResult } from './type-list-query';
 import type { TypeListTarget } from './type-list-model';
@@ -39,19 +40,25 @@ function sameReaderRequest(
   );
 }
 
-function freshIncarnation(): string {
-  return crypto.randomUUID();
-}
-
 /** A route list observes the current session before admitting rows or continuation controls. */
 export function ConfiguredList({ list, page, cursor, locale, initialData }: ConfiguredListProps) {
   const session = useSession();
+  const anonymous = useContext(AnonymousSessionContext);
   const queryClient = useQueryClient();
   const target = typeListTargetFromPage(page);
   const selectedRealm = hasSelectedRealmTarget(target);
-  const state: TypeListAdmissionInput['state'] = selectedRealm ? session.state : 'public';
+  const reader = useListReaderAdmission(queryClient, JSON.stringify([locale, list, page, cursor ?? null]), {
+    sourceFingerprint: initialData
+      ? JSON.stringify([initialData.kind, initialData.admission.request])
+      : 'no-loader-data',
+    privateReading: selectedRealm,
+    observeSession: selectedRealm && !anonymous,
+    fallbackSession: session,
+  });
+  const currentSession = selectedRealm ? reader.session : session;
+  const state: TypeListAdmissionInput['state'] = selectedRealm ? currentSession.state : 'public';
   const expectedReader =
-    !selectedRealm || state === 'unknown' ? undefined : state === 'signed-in' ? (session.subject ?? null) : null;
+    !selectedRealm || state === 'unknown' ? undefined : state === 'signed-in' ? (currentSession.subject ?? null) : null;
   const requestMatches = sameReaderRequest(
     initialData?.admission.request,
     { state, expectedReader },
@@ -65,77 +72,46 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     : state === 'unknown' && requestMatches && initialData.admission.request.mode === 'initial-hydration'
       ? 'initial-hydration'
       : 'current';
-  const readerScope = JSON.stringify([
-    locale,
-    list,
-    page,
-    cursor ?? null,
-    state,
-    expectedReader === undefined
-      ? ['unobserved']
-      : expectedReader === null
-        ? ['anonymous']
-        : ['reader', expectedReader],
-    mode,
-  ]);
-  type TrackedAdmission = {
-    readerScope: string;
-    incarnation: string;
-    sourceToken: string | null;
-    usedLoaderTokens: Set<string>;
-  };
-  const sourceToken = initialData?.admission.request.incarnation ?? null;
-  const matchingLoaderToken = requestMatches ? sourceToken : null;
-  const [tracked, setTracked] = useState<TrackedAdmission>(() => {
-    const incarnation = matchingLoaderToken ?? (selectedRealm ? freshIncarnation() : 'public');
-    return {
-      readerScope,
-      incarnation,
-      sourceToken,
-      usedLoaderTokens: new Set(matchingLoaderToken ? [matchingLoaderToken] : []),
-    };
-  });
-  let current = tracked;
-  if (tracked.readerScope !== readerScope || tracked.sourceToken !== sourceToken) {
-    const usedLoaderTokens = new Set(tracked.usedLoaderTokens);
-    const incarnation = !selectedRealm
-      ? 'public'
-      : matchingLoaderToken && !usedLoaderTokens.has(matchingLoaderToken)
-        ? matchingLoaderToken
-        : freshIncarnation();
-    if (matchingLoaderToken) usedLoaderTokens.add(matchingLoaderToken);
-    current = { readerScope, incarnation, sourceToken, usedLoaderTokens };
-    setTracked(current);
-  }
-  const incarnation = current.incarnation;
+  const incarnation = selectedRealm ? reader.incarnation : 'public';
   const admission: TypeListAdmissionInput = {
     state,
     ...(expectedReader !== undefined ? { expectedReader } : {}),
     incarnation,
     mode,
   };
-  const options = typeListQuery(locale, list, page, cursor, admission);
+  const options = typeListQuery(
+    locale,
+    list,
+    page,
+    cursor,
+    admission,
+    selectedRealm ? { isCurrent: () => reader.current(incarnation) } : undefined,
+  );
   const loaderResult =
     requestMatches &&
-    initialData?.admission.request.incarnation === incarnation &&
-    initialData.admission.request.mode === mode
-      ? initialData
+    initialData?.admission.request.mode === mode &&
+    (!selectedRealm || reader.initialAllowed(expectedReader))
+      ? selectedRealm
+        ? {
+            ...initialData,
+            admission: {
+              ...initialData.admission,
+              request: { ...initialData.admission.request, incarnation },
+            },
+          }
+        : initialData
       : undefined;
+  const queryKey = options.queryKey;
+  if (selectedRealm) reader.registerQuery('configured-list', queryKey);
   const query = useQuery({
     ...options,
+    enabled:
+      mode !== 'initial-hydration' &&
+      (!selectedRealm || (reader.canRead && state !== 'unknown')),
     ...(loaderResult ? { initialData: loaderResult, initialDataUpdatedAt: Date.now() } : {}),
   });
-  const queryKey = options.queryKey;
-  const queryKeyHash = JSON.stringify(queryKey);
-  useEffect(() => {
-    if (!selectedRealm) return;
-    const retiredKey = queryKey;
-    return () => {
-      void queryClient.cancelQueries({ queryKey: retiredKey, exact: true });
-      queryClient.removeQueries({ queryKey: retiredKey, exact: true });
-    };
-  }, [queryClient, queryKeyHash, selectedRealm]);
 
+  if (selectedRealm && !reader.current(incarnation)) return null;
   if (query.isError) throw query.error;
   const result = query.data;
   if (!result || result.kind !== 'ready') return null;
