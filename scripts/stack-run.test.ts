@@ -482,17 +482,17 @@ async function stackWithFixtureDeadline(
       stderr: 'pipe',
     },
   );
-  const result = Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]).then(([code, stdout, stderr]) => ({ code, stdout, stderr, directory }));
+  const result = Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]).then(
+    ([code, stdout, stderr]) => ({ code, stdout, stderr, directory }),
+  );
   const deadline = Date.now() + 2000;
   while (Date.now() < deadline && !fixture.events().some((event) => event.kind === 'run')) await Bun.sleep(10);
   if (!fixture.events().some((event) => event.kind === 'run')) {
     child.kill('SIGTERM');
     const stopped = await result;
-    throw new Error(`mock did not reach its native run; events=${JSON.stringify(fixture.events())}; stderr=${stopped.stderr}`);
+    throw new Error(
+      `mock did not reach its native run; events=${JSON.stringify(fixture.events())}; stderr=${stopped.stderr}`,
+    );
   }
   return result;
 }
@@ -533,11 +533,7 @@ process.stdout.write(JSON.stringify({ outcome, settlement }) + '\\n');
     exited = true;
     return code;
   });
-  const result = Promise.all([
-    childExit,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  const result = Promise.all([childExit, new Response(child.stdout).text(), new Response(child.stderr).text()]);
   const deadline = Date.now() + 2000;
   while (Date.now() < deadline && !exited && !events().some((event) => event.kind === 'run')) await Bun.sleep(10);
   if (!exited && !events().some((event) => event.kind === 'run')) {
@@ -547,7 +543,9 @@ process.stdout.write(JSON.stringify({ outcome, settlement }) + '\\n');
   const eventSummary = events().map(({ kind, address, granted, reason }) => ({ kind, address, granted, reason }));
   expect(code, `${stderr} events=${JSON.stringify(eventSummary)}`).toBe(0);
   if (!events().some((event) => event.kind === 'run')) {
-    throw new Error(`mock exited without reaching its native run; stdout=${stdout}; events=${JSON.stringify(eventSummary)}`);
+    throw new Error(
+      `mock exited without reaching its native run; stdout=${stdout}; events=${JSON.stringify(eventSummary)}`,
+    );
   }
   return {
     ...(JSON.parse(stdout.trim()) as {
@@ -592,7 +590,9 @@ test('ordinary remote transport keeps the native outcome and declared returns/cl
   assertMockProbeReady(fixture);
   const directory = workspace();
   const result = await stackWithFixtureDeadline(fixture, ['true'], ['--returns', 'missing-output.txt'], directory);
-  const eventSummary = fixture.events().map(({ kind, address, granted, reason }) => ({ kind, address, granted, reason }));
+  const eventSummary = fixture
+    .events()
+    .map(({ kind, address, granted, reason }) => ({ kind, address, granted, reason }));
   expect(result.code, `${result.stderr} ${JSON.stringify(eventSummary)}`).toBe(7);
   const events = fixture.events();
   expect(events.some((event) => event.kind === 'prepared-inputs')).toBe(false);

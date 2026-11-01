@@ -103,9 +103,7 @@ function hostPathEvidence(path: string): CheckHostPathEvidence {
           : 'other';
     return { status: 'ok', kind, realPath: realpathSync(path) };
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'ENOENT'
-      ? { status: 'missing' }
-      : { status: 'unavailable' };
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? { status: 'missing' } : { status: 'unavailable' };
   }
 }
 
@@ -650,7 +648,10 @@ function parseSupervisorStat(
 ): { state: string; group: number; started: string } | null {
   const close = contents.lastIndexOf(')');
   if (close < 0 || !new RegExp(`^${expectedPid} \\(`).test(contents)) return null;
-  const fields = contents.slice(close + 1).trim().split(/\s+/);
+  const fields = contents
+    .slice(close + 1)
+    .trim()
+    .split(/\s+/);
   if (fields.length <= 19 || !/^\d+$/.test(fields[2]!) || !/^\d+$/.test(fields[19]!)) return null;
   const group = Number(fields[2]);
   if (!Number.isSafeInteger(group) || group < 1) return null;
@@ -701,8 +702,7 @@ export function recognizeCheckHostRun(
     const marker = reader.read(markerPath, MAX_CHECK_HOST_MARKER_BYTES);
     if (marker.status === 'missing') return refusal('supervisor-marker-missing');
     if (marker.status === 'unavailable') return refusal('supervisor-marker-unavailable');
-    if (marker.status === 'symlink' || marker.status === 'not-regular')
-      return refusal('supervisor-marker-not-regular');
+    if (marker.status === 'symlink' || marker.status === 'not-regular') return refusal('supervisor-marker-not-regular');
     if (marker.status === 'too-large' || (marker.status === 'ok' && marker.size > MAX_CHECK_HOST_MARKER_BYTES))
       return refusal('supervisor-marker-oversized');
     if (marker.status !== 'ok') return refusal('supervisor-marker-unavailable');

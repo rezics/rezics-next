@@ -47,7 +47,7 @@ function producerFixture(host: 'a' | 'b', cwdRealPath = compilerDirectory) {
   expect(dependencyPreparationProgram).toContain(
     "durable(root / '.remote-check-supervisor', json.dumps({'pid': os.getpid(), 'started': fields[19], 'group': os.getpgrp()}))",
   );
-  expect(dependencyPreparationProgram).toContain("start_new_session=True");
+  expect(dependencyPreparationProgram).toContain('start_new_session=True');
 
   const paths = new Map<string, CheckHostPathEvidence>([
     [CHECK_HOST_RUNS_ROOT, { status: 'ok', kind: 'directory', realPath: CHECK_HOST_RUNS_ROOT }],
@@ -159,9 +159,7 @@ test('environment markers and caller run IDs cannot replace a refused physical p
     console.error = original;
   }
   expect(remoteAttempts).toBe(0);
-  expect(diagnostics).toContain(
-    'stack-run: kernel typecheck physical run recognition refused (cwd-not-confined)',
-  );
+  expect(diagnostics).toContain('stack-run: kernel typecheck physical run recognition refused (cwd-not-confined)');
 });
 
 test('stale, forged and unknown supervisor identities fail closed with bounded reasons', () => {

@@ -51,11 +51,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { stageCheckGit } from './check-git.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
-import {
-  checkHostRunSliceUnitName,
-  checkHostScopeUnitStem,
-  PERFORMANCE_HOST_NAMES,
-} from './check-placement.ts';
+import { checkHostRunSliceUnitName, checkHostScopeUnitStem, PERFORMANCE_HOST_NAMES } from './check-placement.ts';
 
 export type Host = {
   name: string;
@@ -4979,8 +4975,7 @@ async function runLeased(
       resources,
     };
     native = physical;
-    preparedInputs =
-      options.expectedSourceSha256 === undefined ? null : await recoverPreparedInputs(prepared);
+    preparedInputs = options.expectedSourceSha256 === undefined ? null : await recoverPreparedInputs(prepared);
     if (options.expectedSourceSha256 !== undefined && !preparedInputs) {
       primaryFailure ??= new Error('remote-check: prepared source/generated input evidence is unavailable');
     }
