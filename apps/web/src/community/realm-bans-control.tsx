@@ -123,7 +123,7 @@ export function RealmBansControl(props: RealmBansControlProps) {
   const visit = useRef<{
     props: RealmBansControlProps;
     gate: RealmBanLifetime;
-    initial?: BanReadState;
+    initial: BanReadState | undefined;
   } | null>(null);
   const old = visit.current;
   if (
@@ -165,7 +165,7 @@ function RealmBansVisit({
   write,
   resolve = unavailableTarget,
   gate,
-}: RealmBansControlProps & { gate: RealmBanLifetime }) {
+}: Omit<RealmBansControlProps, 'initial'> & { initial: BanReadState | undefined; gate: RealmBanLifetime }) {
   const id = useId();
   const [view, setView] = useState<BanReadState>(initial ?? { state: 'loading' });
   const [query, setQuery] = useState('');
