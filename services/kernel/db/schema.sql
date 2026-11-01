@@ -2565,6 +2565,13 @@ CREATE TRIGGER identity_epoch_prearm_owner_gate BEFORE DELETE OR UPDATE ON core.
 
 
 --
+-- Name: consumer_checkpoint public_filter_creation_checkpoint_retained; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER public_filter_creation_checkpoint_retained BEFORE DELETE OR UPDATE ON core.consumer_checkpoint FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_creation_checkpoint();
+
+
+--
 -- Name: record_history_locator record_history_preserve_copy; Type: TRIGGER; Schema: core; Owner: -
 --
 
