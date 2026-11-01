@@ -471,8 +471,10 @@ export async function observeNativePublicCollectionOutput(
   work: NativeCollectionWork,
 ): Promise<NativeCollectionMetadata | null> {
   const metadata = await observe(client, ref, work);
-  return metadata?.state === 'active' && metadata.membershipKind === 'dynamic' &&
-    metadata.visibility !== 'private' && metadata.authority === 'activated_output'
+  return metadata?.state === 'active' &&
+    metadata.membershipKind === 'dynamic' &&
+    metadata.visibility !== 'private' &&
+    metadata.authority === 'activated_output'
     ? metadata
     : null;
 }
