@@ -63,11 +63,7 @@ export function RemovedPost({
   if (post.availability === 'withheld') {
     return (
       <li {...common}>
-        <ContentItemFrame
-          as="div"
-          data-slot="content-item-frame"
-          className="min-w-0 rounded-xl px-4 py-5 sm:px-6"
-        >
+        <ContentItemFrame as="div" data-slot="content-item-frame" className="min-w-0 rounded-xl px-4 py-5 sm:px-6">
           <div className="mb-3 flex items-start justify-between gap-3">
             <Byline
               author={author}

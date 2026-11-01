@@ -29,7 +29,10 @@ const { ThreadReadingHeader, ThreadReadingPost } = await import('../src/routes/t
 const finalParagraph = 'The final canonical paragraph remains visible in the complete discussion document.';
 const longBody = fromPlainText(
   [
-    ...Array.from({ length: 40 }, (_, index) => `Canonical paragraph ${index + 1}: the complete supplied text remains readable.`),
+    ...Array.from(
+      { length: 40 },
+      (_, index) => `Canonical paragraph ${index + 1}: the complete supplied text remains readable.`,
+    ),
     finalParagraph,
   ].join('\n\n'),
   'blocks',
@@ -100,7 +103,10 @@ function withImageBody() {
         ...selected.body.doc,
         content: [
           ...(selected.body.doc.content ?? []),
-          { type: 'image', attrs: { id: 'immutable-image', src: mediaId, alt: 'A still lake in the original edition' } },
+          {
+            type: 'image',
+            attrs: { id: 'immutable-image', src: mediaId, alt: 'A still lake in the original edition' },
+          },
         ],
       },
     },

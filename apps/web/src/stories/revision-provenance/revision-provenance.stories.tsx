@@ -14,11 +14,7 @@ const meta = {
   decorators: [
     (Story) => (
       <div className="mx-auto max-w-3xl p-4 sm:p-8">
-        <ContentItemFrame
-          as="article"
-          data-slot="content-item-frame"
-          className="space-y-4 rounded-xl"
-        >
+        <ContentItemFrame as="article" data-slot="content-item-frame" className="space-y-4 rounded-xl">
           <ContentItemHeading level={2} className="text-lg font-semibold">
             {m.thread_provenance_heading()}
           </ContentItemHeading>
@@ -47,7 +43,9 @@ type Story = StoryObj<typeof meta>;
 
 export const Recorded: Story = {
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getByRole('heading', { level: 2, name: m.thread_provenance_heading() })).toBeVisible();
+    await expect(
+      within(canvasElement).getByRole('heading', { level: 2, name: m.thread_provenance_heading() }),
+    ).toBeVisible();
     await expect(canvasElement.querySelector('[data-slot="content-item-frame"]')).not.toBeNull();
     const link = within(canvasElement).getByRole('link', { name: 'The first edition' });
     await userEvent.tab();

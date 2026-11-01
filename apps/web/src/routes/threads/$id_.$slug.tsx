@@ -520,12 +520,7 @@ export function ThreadReadingPost({
 
   const authorId = 'authorId' in post ? post.authorId : undefined;
   return (
-    <li
-      id={anchorId}
-      ref={itemElement}
-      tabIndex={-1}
-      className="min-w-0 scroll-mt-24 target:ring-2 target:ring-ring"
-    >
+    <li id={anchorId} ref={itemElement} tabIndex={-1} className="min-w-0 scroll-mt-24 target:ring-2 target:ring-ring">
       <ContentItemFrame
         as="article"
         data-slot="content-item-frame"
