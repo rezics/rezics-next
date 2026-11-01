@@ -108,76 +108,51 @@ export function ShelfListRow({
           </div>
         </div>
       }
-      metadata={
-        meta != null && <div className="hidden truncate text-[13px] text-muted-foreground sm:block">{meta}</div>
-      }
+      metadata={meta}
       state={
-        <>
-          <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground sm:hidden">
-            {chip}
-            <span className="whitespace-nowrap">{progress?.label}</span>
-            <span>{date}</span>
-          </div>
-          {progress?.value != null && (
-            <div className="mt-1 h-1 overflow-hidden rounded bg-muted sm:hidden">
-              <div
-                className="h-full bg-primary"
-                style={{ width: `${Math.max(0, Math.min(1, progress.value)) * 100}%` }}
-              />
+        <div
+          data-slot="shelf-list-row-state"
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground"
+        >
+          {chip != null && <div data-slot="shelf-list-row-status">{chip}</div>}
+          {chip != null && progress != null && (
+            <span data-slot="shelf-list-row-separator" aria-hidden="true" className="sm:hidden">
+              ·
+            </span>
+          )}
+          {progress != null && (
+            <div data-slot="shelf-list-row-progress" className="w-24 min-w-0 text-xs">
+              <ProgressRow {...progress} />
             </div>
           )}
-          <div className="hidden items-center gap-3 sm:flex">
-            {chip}
-            {progress && (
-              <div className="w-24 text-xs">
-                <ProgressRow {...progress} />
-              </div>
-            )}
-            {stepper && (
-              <div className="flex">
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={stepper.decreaseLabel}
-                  onClick={() => stepper.onStep(-1)}
-                >
-                  −
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={stepper.increaseLabel}
-                  onClick={() => stepper.onStep(1)}
-                >
-                  +
-                </Button>
-              </div>
-            )}
-            <span className="text-xs text-muted-foreground">{date}</span>
-          </div>
-          {stepper && (
-            <div className="flex justify-end sm:hidden">
-              <ListRowControl className="flex">
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={stepper.decreaseLabel}
-                  onClick={() => stepper.onStep(-1)}
-                >
-                  −
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={stepper.increaseLabel}
-                  onClick={() => stepper.onStep(1)}
-                >
-                  +
-                </Button>
-              </ListRowControl>
+          {stepper != null && (
+            <div data-slot="shelf-list-row-stepper" className="flex shrink-0">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={stepper.decreaseLabel}
+                onClick={() => stepper.onStep(-1)}
+                className="min-h-11 min-w-11"
+              >
+                −
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={stepper.increaseLabel}
+                onClick={() => stepper.onStep(1)}
+                className="min-h-11 min-w-11"
+              >
+                +
+              </Button>
             </div>
           )}
-        </>
+          {date != null && (
+            <span data-slot="shelf-list-row-date" className="text-xs text-muted-foreground">
+              {date}
+            </span>
+          )}
+        </div>
       }
       trailing={
         (menu != null || menuEntries != null) && (

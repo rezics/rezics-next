@@ -52,6 +52,68 @@ test('list row renders its cover, one title link, state, actions and mobile layo
   expect(html).not.toContain('sm:h-24');
 });
 
+test('ShelfListRow keeps one responsive state control and supplied metadata for known and unknown progress', () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ShelfList,
+      null,
+      createElement(ShelfListRow, {
+        href: '/book/unknown',
+        title: 'Unknown progress book',
+        cover,
+        meta: createElement('a', { href: '/people/author' }, 'A. Author'),
+        status: 'Reading',
+        statusMenuEntries: [{ type: 'item', label: 'Mark complete', onSelect: () => {} }],
+        progress: { value: null, label: 'Position unavailable' },
+        stepper: { onStep: () => {}, decreaseLabel: 'Decrease', increaseLabel: 'Increase' },
+        date: 'Today',
+        menuEntries: [{ type: 'item', label: 'Remove', onSelect: () => {} }],
+        labels,
+        selectable: true,
+        selected: true,
+      }),
+      createElement(ShelfListRow, {
+        href: '/book/known',
+        title: 'Known progress book',
+        cover,
+        meta: 'Studio edition',
+        status: 'Planned',
+        progress: { value: 0.5, label: 'Ep 6/12' },
+        stepper: { onStep: () => {}, decreaseLabel: 'Decrease', increaseLabel: 'Increase' },
+        date: 'Yesterday',
+        labels,
+      }),
+    ),
+  );
+  const rows = [...html.matchAll(/<li\b[^>]*data-slot="list-row"[\s\S]*?<\/li>/gu)].map(([row]) => row!);
+  expect(rows).toHaveLength(2);
+  const [unknown, known] = rows;
+  for (const row of rows) {
+    expect(row.match(/data-slot="shelf-list-row-state"/g)).toHaveLength(1);
+    expect(row.match(/data-slot="shelf-list-row-status"/g)).toHaveLength(1);
+    expect(row.match(/data-slot="shelf-list-row-progress"/g)).toHaveLength(1);
+    expect(row.match(/data-slot="shelf-list-row-stepper"/g)).toHaveLength(1);
+    expect(row.match(/data-slot="shelf-list-row-date"/g)).toHaveLength(1);
+    expect(row.match(/data-slot="shelf-list-row-separator"/g)).toHaveLength(1);
+    expect(row).not.toContain('hidden items-center');
+    expect(row).not.toContain('hidden truncate');
+  }
+  expect(unknown).toContain('href="/people/author"');
+  expect(unknown).toContain('A. Author');
+  expect(unknown).toContain('Position unavailable');
+  expect(unknown).not.toContain('role="progressbar"');
+  expect(unknown.match(/aria-label="Decrease"/g)).toHaveLength(1);
+  expect(unknown.match(/aria-label="Increase"/g)).toHaveLength(1);
+  expect(unknown.match(/Today/g)).toHaveLength(1);
+  expect(unknown).toContain('aria-checked="true"');
+  expect(known).toContain('Studio edition');
+  expect(known).toContain('Ep 6/12');
+  expect(known.match(/role="progressbar"/g)).toHaveLength(1);
+  expect(known.match(/aria-label="Decrease"/g)).toHaveLength(1);
+  expect(known.match(/aria-label="Increase"/g)).toHaveLength(1);
+  expect(known.match(/Yesterday/g)).toHaveLength(1);
+});
+
 test('table renders visible columns, sticky sortable header and caller supplied editors', () => {
   const html = renderToStaticMarkup(
     createElement(ShelfTable, {

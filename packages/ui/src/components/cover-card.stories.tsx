@@ -150,22 +150,34 @@ export const Shelf: Story = {
 function SelectionExample() {
   const [selectable, setSelectable] = useState(false);
   const [selected, setSelected] = useState(false);
+  const [destinationCount, setDestinationCount] = useState(0);
+  const [selectionCount, setSelectionCount] = useState(0);
   return (
-    <CoverGrid ratio="2:3" density="medium">
-      <CoverCard
-        href="/book"
-        title="A book"
-        cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
-        status={{ label: 'Reading' }}
-        selectable={selectable}
-        selected={selected}
-        onSelect={() => {
-          setSelectable(true);
-          setSelected(true);
-        }}
-        onSelectedChange={setSelected}
-      />
-    </CoverGrid>
+    <div className="space-y-3">
+      <CoverGrid ratio="2:3" density="medium">
+        <CoverCard
+          href="/book"
+          title="A book"
+          cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
+          status={{ label: 'Reading' }}
+          selectable={selectable}
+          selected={selected}
+          onSelect={() => {
+            setSelectionCount((count) => count + 1);
+            setSelectable(true);
+            setSelected(true);
+          }}
+          onSelectedChange={setSelected}
+          onClick={(event) => {
+            event.preventDefault();
+            setDestinationCount((count) => count + 1);
+          }}
+        />
+      </CoverGrid>
+      <p role="status">
+        Primary destinations: {destinationCount}; selection actions: {selectionCount}
+      </p>
+    </div>
   );
 }
 export const Selection: Story = {
@@ -174,8 +186,11 @@ export const Selection: Story = {
     const canvas = within(canvasElement);
     const article = canvasElement.querySelector('article')!;
     await userEvent.hover(article);
+    await userEvent.click(canvas.getByRole('link', { name: 'A book' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('Primary destinations: 1; selection actions: 0');
     await userEvent.click(canvas.getByRole('checkbox', { name: 'A book' }));
     const control = canvas.getByRole('button', { name: 'A book' });
+    await expect(canvas.getByRole('status')).toHaveTextContent('Primary destinations: 1; selection actions: 1');
     await expect(control).toHaveAttribute('aria-pressed', 'true');
     await userEvent.keyboard('{Tab}');
     control.focus();
@@ -263,6 +278,122 @@ export const Status: Story = {
       await expect([...rows.values()].every((heights) => Math.max(...heights) - Math.min(...heights) < 1)).toBe(true);
     }
     container.style.width = '';
+  },
+};
+
+function IndependentControlsExample() {
+  const [followed, setFollowed] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [metadataChecks, setMetadataChecks] = useState(0);
+  const [selectionActionCount, setSelectionActionCount] = useState(0);
+  return (
+    <div className="space-y-3">
+      <CoverGrid ratio="2:3" density="small">
+        <CoverCard
+          href="/works/independent"
+          title="A work with independent controls"
+          cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
+          secondary={
+            <>
+              <a href="/series/stars" onClick={(event) => event.preventDefault()}>
+                The Stars series
+              </a>{' '}
+              <button type="button" onClick={() => setFollowed((value) => !value)}>
+                Follow series
+              </button>
+              <details>
+                <summary>Read supplied note</summary>
+                <p>The full supplied note stays available after opening this disclosure.</p>
+              </details>
+            </>
+          }
+          state={
+            <div className="flex min-w-0 flex-col items-start gap-1">
+              <label>
+                <input type="checkbox" /> Keep this note private
+              </label>
+              <select aria-label="Note visibility" defaultValue="private">
+                <option value="private">Private</option>
+                <option value="shared">Shared</option>
+              </select>
+              <textarea aria-label="Personal note" defaultValue="" />
+              <button type="button" onClick={() => setSaved(true)}>
+                Save note
+              </button>
+            </div>
+          }
+        />
+        <CoverCard
+          href="/works/metadata"
+          title="A work with supplied metadata"
+          cover={{ subject: subjects[1]!, cover: null, src: () => '' }}
+          meta={
+            <>
+              <a href="/people/editor" onClick={(event) => event.preventDefault()}>
+                Editor profile
+              </a>{' '}
+              <button type="button" onClick={() => setMetadataChecks((count) => count + 1)}>
+                Check metadata
+              </button>
+            </>
+          }
+          state={<button type="button">Refresh supplied status</button>}
+        />
+        <CoverCard
+          href="/works/selection"
+          title="Selection keeps controls available"
+          cover={{ subject: subjects[2]!, cover: null, src: () => '' }}
+          selectable
+          selected
+          onSelectedChange={() => setSelectionActionCount((count) => count + 1)}
+          secondary={<button type="button">Open independent action</button>}
+        />
+        <CoverCard
+          title="No destination is available"
+          cover={{ subject: subjects[3]!, cover: null, src: () => '' }}
+        />
+      </CoverGrid>
+      <p role="status">
+        Followed: {String(followed)}; saved: {String(saved)}; metadata checks: {metadataChecks}; selection actions:{' '}
+        {selectionActionCount}
+      </p>
+    </div>
+  );
+}
+
+export const IndependentControls: Story = {
+  render: () => <IndependentControlsExample />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const independent = canvas.getByRole('heading', { name: 'A work with independent controls' }).closest('article')!;
+    const note = within(independent).getByText('Read supplied note');
+    await userEvent.click(within(independent).getByRole('link', { name: 'The Stars series' }));
+    await expect(within(independent).getByRole('link', { name: 'The Stars series' })).toHaveAttribute(
+      'href',
+      '/series/stars',
+    );
+    await userEvent.click(within(independent).getByRole('button', { name: 'Follow series' }));
+    await userEvent.click(note);
+    await expect(note.closest('details')).toHaveProperty('open', true);
+    const privacy = within(independent).getByRole('checkbox', { name: 'Keep this note private' });
+    await userEvent.click(privacy);
+    await expect(privacy).toBeChecked();
+    await userEvent.selectOptions(within(independent).getByRole('combobox', { name: 'Note visibility' }), 'shared');
+    await userEvent.type(within(independent).getByRole('textbox', { name: 'Personal note' }), 'One personal note');
+    await userEvent.click(within(independent).getByRole('button', { name: 'Save note' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('Followed: true; saved: true');
+
+    const metadata = canvas.getByRole('heading', { name: 'A work with supplied metadata' }).closest('article')!;
+    await userEvent.click(within(metadata).getByRole('link', { name: 'Editor profile' }));
+    await userEvent.click(within(metadata).getByRole('button', { name: 'Check metadata' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('metadata checks: 1');
+
+    const selected = canvas.getByRole('heading', { name: 'Selection keeps controls available' }).closest('article')!;
+    await userEvent.click(within(selected).getByRole('button', { name: 'Open independent action' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('selection actions: 0');
+    const unavailable = canvas.getByRole('heading', { name: 'No destination is available' }).closest('article')!;
+    await expect(within(unavailable).queryByRole('link')).toBeNull();
+    await expect(within(unavailable).getByText('No destination is available')).toBeVisible();
   },
 };
 

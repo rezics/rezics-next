@@ -50,6 +50,44 @@ test('progress is a single row, with a bar only when progress is known', () => {
   );
 });
 
+test('CoverCard keeps supplied metadata and exactly one known or unknown progress row with its missing-cover frame', () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      'div',
+      null,
+      createElement(CoverCard, {
+        href: '/works/known',
+        title: 'Known progress',
+        cover,
+        secondary: createElement('a', { href: '/people/author' }, 'A. Author'),
+        progress: { value: 0.5, label: 'Ep 6/12' },
+      }),
+      createElement(CoverCard, {
+        href: '/works/unknown',
+        title: 'Unknown progress',
+        cover,
+        meta: 'Finished yesterday',
+        progress: { value: null, label: 'Position unavailable' },
+      }),
+    ),
+  );
+  const cards = [...html.matchAll(/<article\b[^>]*data-slot="cover-card"[\s\S]*?<\/article>/gu)].map(
+    ([card]) => card!,
+  );
+  expect(cards).toHaveLength(2);
+  expect(cards[0]!.match(/data-slot="cover-card-state"/g)).toHaveLength(1);
+  expect(cards[0]!.match(/data-slot="progress-row"/g)).toHaveLength(1);
+  expect(cards[0]!.match(/role="progressbar"/g)).toHaveLength(1);
+  expect(cards[0]).toContain('href="/people/author"');
+  expect(cards[0]).toContain('data-slot="cover-placeholder-title"');
+  expect(cards[1]!.match(/data-slot="cover-card-state"/g)).toHaveLength(1);
+  expect(cards[1]!.match(/data-slot="progress-row"/g)).toHaveLength(1);
+  expect(cards[1]!).not.toContain('role="progressbar"');
+  expect(cards[1]!.match(/Position unavailable/g)).toHaveLength(1);
+  expect(cards[1]).toContain('Finished yesterday');
+  expect(cards[1]).toContain('data-slot="cover-placeholder-title"');
+});
+
 test('card and progress stories pass accessible browser tests', async () => {
   const run = Bun.spawn(
     ['bun', 'x', 'vitest', 'run', 'src/components/cover-card.stories.tsx', 'src/components/progress-row.stories.tsx'],

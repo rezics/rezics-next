@@ -213,3 +213,123 @@ test('CoverCard keeps selectable and destination-free qualified titles out of th
   expect(noDestination).toContain('Credit without a destination');
   expect(noDestination).not.toMatch(/<a\b[^>]*data-slot="cover-card-title"/);
 });
+
+test('CoverCard layers each supplied native control above the stretched link without raising plain slot content', () => {
+  const secondary = createElement(
+    'div',
+    null,
+    createElement('a', { href: '/series/stars' }, 'The Stars series'),
+    createElement('button', { type: 'button' }, 'Follow series'),
+    createElement(
+      'details',
+      null,
+      createElement('summary', null, 'Read supplied note'),
+      createElement('label', null, createElement('input', { type: 'checkbox' }), ' Keep this private'),
+      createElement(
+        'select',
+        { 'aria-label': 'Note visibility', defaultValue: 'private' },
+        createElement('option', { value: 'private' }, 'Private'),
+      ),
+      createElement('textarea', { 'aria-label': 'Personal note' }),
+    ),
+    createElement('p', null, 'Plain supplied context remains in ordinary flow.'),
+  );
+  const metadata = createElement(
+    'div',
+    null,
+    createElement('a', { href: '/people/editor' }, 'Editor profile'),
+    createElement('button', { type: 'button' }, 'Check metadata'),
+  );
+  const state = createElement(
+    'div',
+    null,
+    createElement('details', null, createElement('summary', null, 'Expand status'), createElement('p', null, 'Current')),
+    createElement('button', { type: 'button' }, 'Refresh status'),
+  );
+  const html = renderToStaticMarkup(
+    createElement(
+      'main',
+      null,
+      createElement(CoverCard, {
+        href: '/works/secondary',
+        link: RouterLink,
+        title: 'Secondary controls',
+        cover,
+        secondary,
+        state,
+      }),
+      createElement(CoverCard, {
+        href: '/works/metadata',
+        title: 'Metadata controls',
+        cover,
+        meta: metadata,
+        state: createElement('a', { href: '/status' }, 'Reading'),
+      }),
+      createElement(CoverCard, {
+        href: '/works/selected',
+        title: 'Selected controls',
+        cover,
+        selectable: true,
+        selected: true,
+        secondary: createElement('button', { type: 'button' }, 'Independent selection action'),
+      }),
+      createElement(CoverCard, { title: 'Unavailable destination', cover }),
+    ),
+  );
+  const cards = [...html.matchAll(/<article\b[^>]*data-slot="cover-card"[\s\S]*?<\/article>/gu)].map(
+    ([card]) => card!,
+  );
+  expect(cards).toHaveLength(4);
+
+  const controlSelectors = [
+    '[&_a]:relative [&_a]:z-20',
+    '[&_button]:relative [&_button]:z-20',
+    '[&_summary]:relative [&_summary]:z-20',
+    '[&_label]:relative [&_label]:z-20',
+    '[&_input]:relative [&_input]:z-20',
+    '[&_select]:relative [&_select]:z-20',
+    '[&_textarea]:relative [&_textarea]:z-20',
+    '[&_a:focus-visible]:outline-ring',
+    '[&_button:focus-visible]:outline-ring',
+    '[&_summary:focus-visible]:outline-ring',
+    '[&_input:focus-visible]:outline-ring',
+    '[&_select:focus-visible]:outline-ring',
+    '[&_textarea:focus-visible]:outline-ring',
+  ];
+  const opening = (card: string, slot: string) =>
+    card.match(new RegExp(`<div\\b(?=[^>]*data-slot="${slot}")[^>]*>`))?.[0];
+  for (const [index, slot] of [
+    [0, 'cover-card-secondary'],
+    [0, 'cover-card-state-content'],
+    [1, 'cover-card-secondary'],
+    [1, 'cover-card-state-content'],
+    [2, 'cover-card-secondary'],
+  ] as const) {
+    const slotOpening = opening(cards[index]!, slot);
+    expect(slotOpening).toBeDefined();
+    for (const selector of controlSelectors) expect(slotOpening).toContain(selector);
+    expect(slotOpening).not.toContain('class="relative z-20');
+  }
+
+  for (const [card, destination] of [[cards[0]!, '/works/secondary'], [cards[1]!, '/works/metadata']] as const) {
+    const primary = card.match(/<a\b[^>]*data-slot="cover-card-title"[^>]*>[\s\S]*?<\/a>/)?.[0];
+    expect(primary).toContain(`href="${destination}"`);
+    assertPrimaryAnchorHasNoInteractiveDescendants(primary!, 'cover-card-title');
+  }
+  expect(cards[0]).toContain('href="/series/stars"');
+  expect(cards[0]).toContain('Follow series');
+  expect(cards[0]).toContain('Read supplied note');
+  expect(cards[0]).toContain('Keep this private');
+  expect(cards[0]).toContain('Note visibility');
+  expect(cards[0]).toContain('Personal note');
+  expect(cards[0]).toContain('Plain supplied context remains in ordinary flow.');
+  expect(cards[1]).toContain('href="/people/editor"');
+  expect(cards[1]).toContain('href="/status"');
+
+  expect(cards[2]).toContain('aria-pressed="true"');
+  expect(cards[2]).toContain('Independent selection action');
+  expect(cards[2]).not.toContain('href="/works/selected"');
+  expect(cards[3]).toContain('data-slot="cover-placeholder-title"');
+  expect(cards[3]).toContain('Unavailable destination');
+  expect(cards[3]).not.toMatch(/<a\b[^>]*data-slot="cover-card-title"/);
+});

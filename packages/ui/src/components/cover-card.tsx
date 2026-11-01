@@ -19,6 +19,22 @@ const DensityContext = createContext<CoverDensity | undefined>(undefined);
 
 const RatioContext = createContext<CoverRatio | undefined>(undefined);
 
+const independentControlsClassName = [
+  '[&_a]:relative [&_a]:z-20',
+  '[&_button]:relative [&_button]:z-20',
+  '[&_summary]:relative [&_summary]:z-20',
+  '[&_label]:relative [&_label]:z-20',
+  '[&_input]:relative [&_input]:z-20',
+  '[&_select]:relative [&_select]:z-20',
+  '[&_textarea]:relative [&_textarea]:z-20',
+  '[&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring',
+  '[&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring',
+  '[&_summary:focus-visible]:outline-2 [&_summary:focus-visible]:outline-offset-2 [&_summary:focus-visible]:outline-ring',
+  '[&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring',
+  '[&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring',
+  '[&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring',
+].join(' ');
+
 /** The frame shared by cards and tombstones in a cover collection. */
 export function useCoverRatio() {
   return useContext(RatioContext);
@@ -103,6 +119,8 @@ export function CoverCard({
   const listPresentation = listPresentationForCover(cover.subject, cover.listPresentation);
   const Link = link ?? 'a';
   const credit = essentialCredit != null;
+  const secondaryContent = meta ?? secondary;
+  const compactSecondary = typeof secondaryContent === 'string' || typeof secondaryContent === 'number';
   const titleClass = credit
     ? 'text-base leading-snug font-semibold wrap-anywhere'
     : 'line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere';
@@ -220,12 +238,12 @@ export function CoverCard({
             </ContentItemTitleLink>
           )}
         </ContentItemHeading>
-        {(meta ?? secondary) != null && (
+        {secondaryContent != null && (
           <div
             data-slot="cover-card-secondary"
-            className="line-clamp-1 text-center text-[11px] leading-4 text-muted-foreground"
+            className={`min-w-0 text-center text-[11px] leading-4 text-muted-foreground ${compactSecondary ? 'line-clamp-1' : ''} ${independentControlsClassName}`}
           >
-            {meta ?? secondary}
+            {secondaryContent}
           </div>
         )}
         {credit && (
@@ -270,7 +288,7 @@ export function CoverCard({
         >
           {(progress != null || state != null) && (
             <div data-slot="cover-card-state" className="min-w-0 flex-1 pt-0.5">
-              <div data-slot="cover-card-state-content">
+              <div data-slot="cover-card-state-content" className={independentControlsClassName}>
                 {progress != null ? <ProgressRow value={progress.value} label={progress.label} /> : state}
               </div>
             </div>

@@ -190,8 +190,10 @@ mode, relation, edition and character tiles) follows one pattern:
   the subject page. The last row places state or progress first and the menu at the end, aligned with the cover’s right edge. It sits at the bottom of the full-height tile so tiles in a grid row line up. A menu alone stays at the end; with neither state, progress nor menu, no last row is rendered.
 - Every card defaults to the shared portrait frame and honors its actual member Type's configured list aspect. Its title and metadata remain attached beneath that image;
   a grid's composition ratio is only the fallback when the member has no known list presentation.
-- The whole card is one link to the subject; a site passes its client-side router link as `link`. Actions on the item (change status, remove, add to collection) live
-  in the card's ⋯ menu, never as a button or select on the card.
+- The title link stretches across plain card areas to the subject; a site passes its client-side router link as
+  `link`. Supplied secondary/meta and state content can keep independent links, disclosures and form controls above
+  that target. Each native control is raised and receives a visible focus outline; plain slot content stays under the
+  title target. Item actions such as changing status, removing or adding to a Collection belong in the card's ⋯ menu.
 - Grid columns follow the container width (two on a phone, more on wider screens), with the same gap between
   cards in both directions.
 
@@ -221,9 +223,14 @@ The optional slots render in this order: `visual`, `context`, `metadata`, `previ
 
 Within `visual`, `context` and `preview`, the row raises each native link, button, disclosure summary, form label and form field individually and supplies a visible focus outline. Those slot wrappers stay in normal flow, so plain preview content keeps the primary row hit area. Do not put an entire preview inside `ListRowControl`; reserve that wrapper for the existing `metadata`, `state`, `actions` and `trailing` layers. See [the supported content-item composition](src/components/content-item.md) for a disclosure and form example.
 
+`ContentItem` is also the supported composition for feed and post summaries. Put community or author links and age in
+`context`, the supplied title and destination in `title`/`href`, supplied media or text in `visual`/`preview`, and
+independent reactions, comments or sharing controls in `actions` or `trailing`. The same item family reflows on
+phones; the retired `MobileFeedCard` is no longer a package export.
+
 Titles are 17–18 px on phones and 18–20 px on desktop; metadata is 13–14 px. Rows use 12–16 px vertical breathing room and 12–16 px phone / 16–20 px desktop gaps. The component forwards ordinary `li` attributes, including `data-*`, and uses the `ListRow` overlay for hover, focus and press, with a visible focus outline and reduced-motion transition handling. Native forced-colors behavior is retained by using ordinary headings, links, controls and list semantics.
 
-`ShelfListRow` from `@rezics/ui/shelf-list` remains the compatibility adapter for library callers. It composes the shared item while preserving selection callbacks, status and overflow menus, progress labels (including unknown values), cover presentation, date and progress controls. Use `ShelfTable` for tabular data rather than changing table semantics. The shared row keeps the established `ListRow` hover, focus and press overlay as its sole surface feedback.
+`ShelfListRow` from `@rezics/ui/shelf-list` remains the compatibility adapter for library callers. It composes the shared item while preserving selection callbacks, status and overflow menus, progress labels (including unknown values), cover presentation, date and progress controls. Metadata remains visible on narrow screens. Status, progress, stepper and date each render once and reflow with the same responsive state composition; unknown progress keeps its position label without a bar. Use `ShelfTable` for tabular data rather than changing table semantics. The shared row keeps the established `ListRow` hover, focus and press overlay as its sole surface feedback.
 
 ### List presentation
 
