@@ -108,6 +108,7 @@ function MineCollectionsViewerRead({
 }) {
   // A retired admission/address cannot reuse a previous lifetime's private cache, including ABA returns.
   const [lifetime] = useState(() => crypto.randomUUID());
+  const [initialData] = useState(() => (seed && matchesViewer(initial, subject, address) ? initial : undefined));
   const queryKey = ['mine-collections-current-viewer', subject, locale, address.cursor, address.layout, lifetime];
   const query = useQuery({
     ...personalRead,
@@ -115,7 +116,7 @@ function MineCollectionsViewerRead({
     enabled: hydrated && personalRead.enabled,
     queryFn: () =>
       readMineCollectionsViewerPage({ data: { cursor: address.cursor ?? undefined, layout: address.layout } }),
-    initialData: seed && matchesViewer(initial, subject, address) ? initial : undefined,
+    initialData,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
