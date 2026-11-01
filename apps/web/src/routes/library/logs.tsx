@@ -1,7 +1,7 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { MyLogsPageView } from '../../library/my-logs-page';
+import { createFileRoute } from '@tanstack/react-router';
+import { MyLogsCurrentViewer } from '../../library/my-logs-page';
 import { myLogsSearch } from '../../library/my-logs';
-import { readMyPublishedLogHistory } from '../../library/logs-server';
+import { readMyPublishedLogHistoryForViewer } from '../../library/logs-server';
 import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
@@ -11,7 +11,7 @@ export const Route = createFileRoute('/library/logs')({
   beforeLoad: requireSignedIn,
   validateSearch: myLogsSearch,
   loaderDeps: ({ search }) => myLogsSearch(search),
-  loader: ({ deps }) => readMyPublishedLogHistory({ data: deps }),
+  loader: ({ deps }) => readMyPublishedLogHistoryForViewer({ data: deps }),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -20,12 +20,5 @@ export const Route = createFileRoute('/library/logs')({
 });
 
 function MyLogsRoute() {
-  const router = useRouter();
-  return (
-    <MyLogsPageView
-      page={Route.useLoaderData()}
-      cursor={Route.useSearch().cursor}
-      onRetry={() => void router.invalidate()}
-    />
-  );
+  return <MyLogsCurrentViewer initial={Route.useLoaderData()} cursor={Route.useSearch().cursor} />;
 }

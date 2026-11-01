@@ -2,9 +2,10 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
-import { kernelClient } from '../kernel/client';
+import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { myLogsResult, myLogsSearch } from './my-logs';
+import { sessionSubject, viewerCredential } from '../session/request';
+import { myLogsResult, myLogsSearch, PublishedLogListError, type MyLogsPage } from './my-logs';
 import {
   deletePublishedLog as deleteLog,
   restorePublishedLog as restoreLog,
@@ -111,6 +112,36 @@ export const readMyPublishedLogHistory = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return myLogsResult(() => readMyPublishedLogs({ data }));
+  });
+
+export type MyLogsViewerHistory = {
+  sessionSubject: string | null;
+  /** Retain the requested address even when a stale cursor restarts at the newest page. */
+  cursor: string | null;
+  locale: string;
+  page: MyLogsPage;
+};
+
+/** The list and its owner provenance must come from the same reader preparation. */
+export const readMyPublishedLogHistoryForViewer = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => myLogsSearch(validateListInput(input)))
+  .handler(async ({ data }): Promise<MyLogsViewerHistory> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    const page = await myLogsResult(async () => {
+      // GET preparation cannot associate an explicit bearer with a session subject. In
+      // particular, a subject left by an earlier preparation is not that bearer's owner.
+      if (request.headers.has('authorization')) throw new PublishedLogListError('denied');
+      const loaded = await loadMyPublishedLogs(kernelClient(), request, env as Partial<SessionEnv>, data);
+      if (loaded.signedIn && (!sessionSubject(request) || !viewerCredential(request)))
+        throw new PublishedLogListError('unavailable');
+      await nameSubjectTypes(loaded.logs.map((log) => log.subject));
+      return loaded;
+    });
+    // Refusal can leave old Request WeakMap entries behind. Only the actual successful
+    // owner reader permits an asserted viewer; failure states carry no owner payload.
+    const subject = page.state === 'loaded' ? (sessionSubject(request) ?? null) : null;
+    return { sessionSubject: subject, cursor: data.cursor ?? null, locale: requestLocale(request) ?? 'en', page };
   });
 
 export const publishProgressLog = createServerFn({ method: 'POST' })
