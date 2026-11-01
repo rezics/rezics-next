@@ -8,6 +8,7 @@ import type { Pool } from 'pg';
 import { readAgentIdentityCopyReceiving, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import {
   readAgentIdentityInventory,
+  readAgentIdentityRecoveryInventoryInTransaction,
   readAgentIdentityRecoveryInventory,
   verifyAgentIdentityInventory,
   verifyAgentIdentityRecoveryInventory,
@@ -16,7 +17,7 @@ import {
 } from '../history/agent-identity-inventory.ts';
 import { readAgentIdentitySDKRetirementGap } from '../history/agent-identity-retirement.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
-import type { CommandTransaction } from '../command/command.ts';
+import { currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import { verifyHistoryReceivingReceipt } from '../history/receiving.ts';
 
 export type AgentIdentityCopyRetention =
@@ -86,7 +87,7 @@ export async function prepareAgentIdentityCopyRetention(
   }>,
 ): Promise<PreparedAgentIdentityCopy> {
   const context = receiving?.context ?? { deadline };
-  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(270, 270, 12, 90112));
+  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(270, 270, 12, 90112), receiving.context);
   const point = await readAgentIdentityCopyReceiving({ pool }, barrier, [key], {
     deadline,
   });
@@ -108,7 +109,7 @@ export async function prepareAgentIdentityCopyRetention(
         },
         context,
       );
-  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(80, 80, 12, 32768));
+  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(80, 80, 12, 32768), receiving.context);
   const [lookup] = await lookupAgentIdentityReceivingCopies(pool, [
     { kind: key.direction, account: key.accountId, receipt: key.receiptId },
   ]);
@@ -128,8 +129,22 @@ export async function verifyAgentIdentityRecoveryCopyInventory(
   key: AgentIdentitySourceKey,
   copy: PreparedAgentIdentityCopy,
 ): Promise<AgentIdentityRecoveryInventoryVerification> {
-  if (copy.recoveryInventory.state === 'absent')
-    return { state: 'verified', native: 'verified', gap: null };
+  if (copy.recoveryInventory.state === 'absent') {
+    // A released absence snapshot is not final authority. The source/root transaction
+    // re-reads the exact recovery key while holding its native source locks through COMMIT.
+    const resources = currentCommandResources(tx);
+    await reserveIdentityHistoryWork(resources.pool, nativeWork(2, 2, 1, 512), {
+      deadline: resources.deadline,
+    });
+    const current = await readAgentIdentityRecoveryInventoryInTransaction(tx, key);
+    return current.state === 'absent'
+      ? { state: 'verified', native: 'verified', gap: null }
+      : {
+          state: 'pending',
+          native: current.native === 'sealed' ? 'verified' : 'pending',
+          gap: current.gap ?? 'agent-identity-recovery-copy-cut-changed',
+        };
+  }
   if (copy.recoveryInventory.state !== 'sealed' || !copy.recoveryInventory.proof)
     return {
       state: 'pending',

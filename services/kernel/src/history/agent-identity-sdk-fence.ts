@@ -238,10 +238,10 @@ async function receivingBinding(
 ): Promise<AgentIdentitySDKReceivingObservation> {
   historyDeadline(context, 0);
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
+  const { identityHistoryCommand, reserveIdentityHistoryWork, nativeWork } =
+    await import('./agent-identity-inventory-work.ts');
+  await reserveIdentityHistoryWork(pool, nativeWork(160, 80, 6, 131072), context);
   if (owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline)) {
-    const { identityHistoryCommand, reserveIdentityHistoryWork, nativeWork } =
-      await import('./agent-identity-inventory-work.ts');
-    await reserveIdentityHistoryWork(pool, nativeWork(160, 80, 6, 131072));
     return identityHistoryCommand(pool, context, (tx) =>
       readAgentIdentitySDKReceivingBinding(
         tx,
@@ -329,15 +329,12 @@ export async function retireAgentIdentitySDKWork(
   const { maintainSdkWorkflowOnce, supportsBoundedSdkMaintenance } = await import('../work/sdk-retirement-fence.ts');
   // Preserve native source/role refusal before SDK dispatch, including legacy callers.
   const { verifyAgentIdentityRetirementStage } = await import('./agent-identity-retirement.ts');
-  const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const live = owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline);
-  if (live) {
-    const { IDENTITY_HISTORY_COMMAND_CONTROL } = await import('./agent-identity-inventory-work.ts');
-    await reserveIdentityHistoryWork(
-      pool,
-      addNativeWork(nativeWork(71, 71, 19, 82048), IDENTITY_HISTORY_COMMAND_CONTROL),
-    );
-  }
+  const { IDENTITY_HISTORY_COMMAND_CONTROL } = await import('./agent-identity-inventory-work.ts');
+  await reserveIdentityHistoryWork(
+    pool,
+    addNativeWork(nativeWork(71, 71, 19, 82048), IDENTITY_HISTORY_COMMAND_CONTROL),
+    context,
+  );
   const check = (
     await runCommand(pool, { partition: stage.reference.source.partition, deadline: context.deadline }, async (tx) =>
       noEffect(await verifyAgentIdentityRetirementStage(tx, stage)),
@@ -347,7 +344,7 @@ export async function retireAgentIdentitySDKWork(
   if (!nativeClient(client) || !supportsBoundedSdkMaintenance(client))
     return pending('identity-sdk-bounded-maintenance-not-installed');
   const receiver = await identityHistoryCommand(pool, context, async (tx) => {
-    await reserveIdentityHistoryWork(pool, nativeWork(160, 80, 6, 131072));
+    await reserveIdentityHistoryWork(pool, nativeWork(160, 80, 6, 131072), context);
     return readAgentIdentitySDKReceivingBinding(
       tx,
       {
@@ -367,7 +364,7 @@ export async function retireAgentIdentitySDKWork(
   const observed = await readAgentIdentitySDKWriterState(pool, client, receiver.binding.workflowId, context);
   if (observed.state === 'pending') return observed;
   const recorded = await identityHistoryCommand(pool, context, async (tx) => {
-    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 106496));
+    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 106496), context);
     const saved = (
       await tx.query<{
         history_authority: AgentIdentityHistoryAuthority | null;
@@ -392,7 +389,11 @@ export async function retireAgentIdentitySDKWork(
       return { state: 'recorded', readiness: saved.sdk_readiness } as const;
     }
     const readiness = { binding: held.handoff.binding, writer: held.handoff.writer };
-    await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(1, 1, 1, 0), AGENT_IDENTITY_HISTORY_GUARD_COST));
+    await reserveIdentityHistoryWork(
+      pool,
+      addNativeWork(nativeWork(1, 1, 1, 0), AGENT_IDENTITY_HISTORY_GUARD_COST),
+      context,
+    );
     await tx.query(`UPDATE core.agent_identity_work SET history_authority=$2,sdk_readiness=$3 WHERE custody_id=$1`, [
       stage.handoff.custodyId,
       held.handoff.sourceAuthority,
@@ -406,6 +407,7 @@ export async function retireAgentIdentitySDKWork(
         HISTORY_WORK_INVALIDATION,
         HISTORY_WORK_WAKE,
       ),
+      context,
     );
     await tx.query(
       `UPDATE core.history_work SET owner_ready=true,state='ready' WHERE partition_no=0 AND work_id=$1 AND state='pending'`,
@@ -416,7 +418,7 @@ export async function retireAgentIdentitySDKWork(
   if (recorded.state === 'pending') return recorded;
   // Read the actual committed readiness after releasing the Source transaction.
   const durable = await identityHistoryCommand(pool, context, async (tx) => {
-    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 65536));
+    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 65536), context);
     return (
       await tx.query<{ sdk_readiness: AgentIdentityHistoryReadiness | null }>(
         `SELECT sdk_readiness FROM core.agent_identity_work WHERE custody_id=$1 FOR SHARE`,
@@ -429,7 +431,7 @@ export async function retireAgentIdentitySDKWork(
   if (observed.writer.generation === '1') {
     if (!same(observed.writer, durable.sdk_readiness.writer)) return pending('identity-sdk-readiness-writer-changed');
     await maintainSdkWorkflowOnce(pool, client, durable.sdk_readiness.writer, 'retire', context.deadline, (cost) =>
-      reserveIdentityHistoryWork(pool, cost),
+      reserveIdentityHistoryWork(pool, cost, context),
     );
   }
   const closed = await readAgentIdentitySDKWriterState(pool, client, receiver.binding.workflowId, context);
@@ -451,7 +453,11 @@ export async function retireAgentIdentitySDKWork(
         closedAt: closed.writer.closedAt!,
       },
     };
-    await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(3, 3, 2, 0), AGENT_IDENTITY_HISTORY_GUARD_COST));
+    await reserveIdentityHistoryWork(
+      pool,
+      addNativeWork(nativeWork(3, 3, 2, 0), AGENT_IDENTITY_HISTORY_GUARD_COST),
+      context,
+    );
     await tx.query(`UPDATE core.agent_identity_work SET sdk_closure=$2,sdk_retirement_receipt=$3 WHERE custody_id=$1`, [
       stage.handoff.custodyId,
       closed.writer,
@@ -535,8 +541,8 @@ export async function lockRecordedAgentIdentityHistory(
   Pending | Readonly<{ state: 'guarded'; receipt: AgentIdentitySDKRetirementReceipt; writer: SdkWriterState }>
 > {
   const { reserveIdentityHistoryWork, nativeWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
-  const { pool } = currentCommandResources(tx);
-  await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 122880));
+  const { pool, deadline } = currentCommandResources(tx);
+  await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 122880), { deadline });
   const row = (
     await tx.query<{
       history_authority: AgentIdentityHistoryAuthority | null;
@@ -562,7 +568,11 @@ export async function lockRecordedAgentIdentityHistory(
   if (held.state === 'pending') return held;
   if (!same(held.handoff.sourceAuthority, row.history_authority) || !same(held.handoff.writer, row.sdk_closure))
     return pending('identity-history-current-authority-changed');
-  await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_GUARD_COST));
+  await reserveIdentityHistoryWork(
+    pool,
+    addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_GUARD_COST),
+    { deadline },
+  );
   await tx.query(`SELECT core.check_agent_identity_history($1,$2,$3,$4,'closure')`, [
     stage.handoff.custodyId,
     row.sdk_readiness.binding,

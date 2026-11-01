@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { noEffect, runCommand, withSingleCommandAttempt, type CommandTransaction } from '../command/command.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { HistoryReceivingContext } from './receiving.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
 
 export class IdentityHistoryWorkUnavailable extends Error {
   constructor() {
@@ -12,11 +13,23 @@ export class IdentityHistoryWorkUnavailable extends Error {
 export const nativeWork = (rows: number, points: number, statements: number, bytes: number): NativeStepWork =>
   Object.freeze({ rows, points, statements, bytes, engineRequests: 0 });
 
-/** Existing Source balance only. Failure and rollback never refund a reservation. */
-export async function reserveIdentityHistoryWork(pool: Pool, amount: NativeStepWork): Promise<void> {
+/** Existing Source balance only. Failure and rollback never refund a reservation.
+ * Outside that frame the installed History/Work owner remains responsible for its own
+ * allocation. An explicit Source token or an active Source frame may never silently skip. */
+export async function reserveIdentityHistoryWork(
+  pool: Pool,
+  amount: NativeStepWork,
+  invocation?: Pick<HistoryReceivingContext, 'deadline' | 'identityConsumerWork'> | IdentitySourceConsumerMaintenanceContext,
+): Promise<void> {
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const work = owner.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1);
-  if (!work || !owner.reserveIdentitySourceConsumerNativeWork(pool, work, amount))
+  const active = invocation?.identityConsumerWork ? invocation : owner.activeIdentitySourceConsumerMaintenance(pool);
+  if (!active) return;
+  const deadline = invocation?.deadline ?? active.deadline;
+  if (
+    deadline <= Date.now() ||
+    !owner.isLiveIdentitySourceConsumerMaintenance(pool, active.identityConsumerWork, deadline) ||
+    !owner.reserveIdentitySourceConsumerNativeWork(pool, active.identityConsumerWork, amount)
+  )
     throw new IdentityHistoryWorkUnavailable();
 }
 
@@ -31,7 +44,7 @@ export async function identityHistoryCommand<T>(
   context: HistoryReceivingContext,
   body: (tx: CommandTransaction) => Promise<T>,
 ): Promise<T> {
-  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_COMMAND_CONTROL);
+  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_COMMAND_CONTROL, context);
   return withSingleCommandAttempt(
     async () =>
       (await runCommand(pool, { partition: 0, deadline: context.deadline }, async (tx) => noEffect(await body(tx))))

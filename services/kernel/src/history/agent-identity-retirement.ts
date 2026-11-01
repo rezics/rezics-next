@@ -194,7 +194,7 @@ async function advanceInFrame(
   funded: HistoryReceivingContext,
 ): Promise<string | null> {
   historyDeadline(funded, artifact.partition);
-  await reserveIdentityHistoryWork(deps.pool, nativeWork(72, 72, 6, 32768));
+  await reserveIdentityHistoryWork(deps.pool, nativeWork(72, 72, 6, 32768), funded);
   const receiving = await identityHistoryCommand(deps.pool, funded, (tx) =>
     readAgentIdentitySDKReceivingBinding(tx, artifact, barrier),
   );
@@ -203,7 +203,7 @@ async function advanceInFrame(
   const receipt = sourceReceipt(source);
   if (!receipt) return 'identity-sdk-source-native-binding-changed';
   const { readAccountIdentitySource } = await import('../access/agent-verification-identity.ts');
-  await reserveIdentityHistoryWork(deps.pool, nativeWork(70, 68, 25, 73984));
+  await reserveIdentityHistoryWork(deps.pool, nativeWork(70, 68, 25, 73984), funded);
   const native = (
     await runCommand(deps.pool, { partition: source.partition, deadline: funded.deadline }, async (tx) =>
       noEffect(await readAccountIdentitySource(tx, receipt, undefined, true)),
@@ -228,7 +228,7 @@ async function advanceInFrame(
   const { readOriginalAccountAgentIdentity } = await import('../semantic/account-agent-identity-recovery.ts');
   // The original accepted lookup has at most three command attempts and six RR
   // snapshots on unmerge; all SQL/control/failure slots are reserved before entry.
-  await reserveIdentityHistoryWork(deps.pool, nativeWork(86, 80, 59, 205920));
+  await reserveIdentityHistoryWork(deps.pool, nativeWork(86, 80, 59, 205920), funded);
   const accepted = await readOriginalAccountAgentIdentity(deps.pool, {
     account: receipt.account,
     direction: receipt.kind,
@@ -312,7 +312,8 @@ export async function readAgentIdentityRetirementStage(
 ): Promise<AgentIdentityRetirementStage | null> {
   const fixed = structuredClone(reference);
   historyDeadline(context, fixed.source.partition);
-  if (maintenanceCallbacks.has(context)) await reserveIdentityHistoryWork(pool, nativeWork(73, 71, 26, 82176));
+  if (maintenanceCallbacks.has(context))
+    await reserveIdentityHistoryWork(pool, nativeWork(73, 71, 26, 82176), context);
   const handoff = (
     await runCommand(pool, { partition: fixed.source.partition, deadline: context.deadline }, async (tx) =>
       noEffect(await sourceHandoff(tx, fixed)),
@@ -369,7 +370,7 @@ export async function agentIdentityRetirementReadiness(
   const active = currentAgentIdentityHistoryUnit();
   if (active) {
     const { pool } = currentCommandResources(tx);
-    await reserveIdentityHistoryWork(pool, nativeWork(74, 74, 7, 49152));
+    await reserveIdentityHistoryWork(pool, nativeWork(74, 74, 7, 49152), active.context);
   }
   const receiving = await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier);
   if (receiving.state === 'pending') return { ready: false, gap: receiving.gap };
@@ -427,9 +428,7 @@ export async function readAgentIdentitySDKRetirementGap(
     );
     return result.state === 'pending' ? result.gap : null;
   }
-  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (maintenance.currentIdentitySourceConsumerMaintenance(pool, context.deadline))
-    await reserveIdentityHistoryWork(pool, nativeWork(6, 5, 8, 16640));
+  await reserveIdentityHistoryWork(pool, nativeWork(6, 5, 8, 16640), context);
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -476,9 +475,7 @@ export async function readAgentIdentitySDKRetirement(
   const receipt = { kind: fixed.key.direction, account: fixed.key.accountId, receipt: fixed.key.receiptId };
   const sourceKey = agentIdentityWorkSourceKey(receipt);
   historyDeadline(context, 0);
-  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (maintenance.currentIdentitySourceConsumerMaintenance(pool, context.deadline))
-    await reserveIdentityHistoryWork(pool, nativeWork(7, 6, 8, 33024));
+  await reserveIdentityHistoryWork(pool, nativeWork(7, 6, 8, 33024), context);
   const saved = await withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {

@@ -225,6 +225,7 @@ export async function recoverMissingAccountIdentitySource(
   pool: Pool,
   receipt: Receipt,
   error: unknown,
+  deadline: number,
 ): Promise<boolean> {
   if (
     !(error instanceof Error) ||
@@ -234,6 +235,14 @@ export async function recoverMissingAccountIdentitySource(
       `Accounts source: missing original ${keyOf(receipt)}; owner must recover native decision/pending or reversal custody`
   )
     return false;
+  // The complete Source/History aggregate has not funded the extra foreign probes and
+  // recovery writer. Do not dispatch them from a Source frame on the earlier partial
+  // allocation; ordinary Access recovery keeps its own command owner and deadline.
+  const sourceMaintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+  if (sourceMaintenance.activeIdentitySourceConsumerMaintenance(pool)) {
+    const { IdentityHistoryWorkUnavailable } = await import('../history/agent-identity-inventory-work.ts');
+    throw new IdentityHistoryWorkUnavailable();
+  }
   const partition = partitionOf(routeOf(receipt.account)!);
   // The failed read has released its checkout. All cross-home proofs are collected before reacquiring it.
   const decision = receipt.kind === 'account-agent.verify' ? await verificationDecision(pool, receipt) : null;
@@ -243,10 +252,12 @@ export async function recoverMissingAccountIdentitySource(
     receipt: receipt.receipt,
   });
   if (decision || source) {
-    await recoverOriginalSource(pool, receipt, source, decision);
+    await recoverOriginalSource(pool, receipt, source, decision, deadline);
     return true;
   }
-  const original = (await runCommand(pool, { partition }, async (tx) => noEffect(await reversal(tx, receipt)))).value;
+  const original = (
+    await runCommand(pool, { partition, deadline }, async (tx) => noEffect(await reversal(tx, receipt)))
+  ).value;
   let undo: Awaited<ReturnType<typeof publishedAccountIdentityUndo>>;
   try {
     undo = await publishedAccountIdentityUndo(pool, receipt.account, original.response.verificationReceiptId);
@@ -281,6 +292,7 @@ export async function recoverMissingAccountIdentitySource(
     pool,
     {
       partition,
+      deadline,
       receipt: {
         actorAccountId: original.principal_id,
         kind: 'access.agent-identity.recover',
@@ -441,13 +453,14 @@ async function recoverOriginalSource(
   receipt: Receipt,
   source: OriginalAccountAgentIdentity | null,
   decision: Decision | null,
+  deadline: number,
 ): Promise<void> {
   const selection = { account: receipt.account, direction: receipt.kind, receipt: receipt.receipt };
   const partition = partitionOf(routeOf(receipt.account)!);
   // This checkout independently stages the original Accounts command. All Source
   // foreign reads have already finished, including the prior fixed-three publication.
   const staged = (
-    await runCommand(pool, { partition }, async (tx) =>
+    await runCommand(pool, { partition, deadline }, async (tx) =>
       noEffect({
         pending: decision ? await pending(tx, receipt, decision) : null,
         reversal: decision ? null : await reversal(tx, receipt),
@@ -501,6 +514,7 @@ async function recoverOriginalSource(
     pool,
     {
       partition,
+      deadline,
       receipt: {
         actorAccountId: original.principal_id,
         kind: 'access.agent-identity.recover',

@@ -715,10 +715,11 @@ async function consumerReference(
   }
 }
 
-// The original source closure retains its established bound. A sealed recovery cut adds the
-// exact two-copy/effect/Search current verifier twice because its two native UPDATE guards each
-// re-enter the original Source closure before the shared COMMIT.
-export const AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST = nativeWork(239, 239, 45, 65536);
+// Exact recovery guard SQL: six fixed point reads, the 33-row consumer sentinel, the
+// three-copy sentinel, and two successful locator/proof pairs of at most 65+1 rows each.
+// Its 12 SQL statements are the six fixed reads, consumer/copy scans and two locator/proof
+// pairs. Search enrollment is intentionally absent: no current Search owner seam is installed.
+export const AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST = nativeWork(174, 174, 12, 65536);
 export const AGENT_IDENTITY_ROLE_TRANSITION_COST = addNativeWork(
   nativeWork(460, 460, 50, 180224),
   AGENT_IDENTITY_HISTORY_GUARD_COST,

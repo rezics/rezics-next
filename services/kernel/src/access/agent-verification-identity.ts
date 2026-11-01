@@ -18,6 +18,7 @@ import {
   runCommand,
   currentCommandResources,
   currentCommandReceipt,
+  DEFAULT_REQUEST_DEADLINE_MS,
   type CommandTransaction,
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -416,18 +417,21 @@ export function assertAccountIdentitySource(
 }
 
 export async function loadAccountIdentitySource(pool: Pool, receipt: AccountReceipt): Promise<AccountIdentitySource> {
-  const load = async () =>
-    (
-      await runCommand(pool, { partition: partitionOf(accountRoute(receipt)) }, async (tx) =>
-        noEffect(await readAccountIdentitySource(tx, receipt)),
-      )
-    ).value;
-  try {
-    return await load();
-  } catch (error) {
-    if (!(await recoverMissingAccountIdentitySource(pool, receipt, error))) throw error;
-    return load();
-  }
+  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  return withRequestDeadline(deadline, async () => {
+    const load = async () =>
+      (
+        await runCommand(pool, { partition: partitionOf(accountRoute(receipt)), deadline }, async (tx) =>
+          noEffect(await readAccountIdentitySource(tx, receipt)),
+        )
+      ).value;
+    try {
+      return await load();
+    } catch (error) {
+      if (!(await recoverMissingAccountIdentitySource(pool, receipt, error, deadline))) throw error;
+      return load();
+    }
+  });
 }
 
 /** Typed adapter for the delivered coordinator ABI. Absence is durable retryable unavailability. */

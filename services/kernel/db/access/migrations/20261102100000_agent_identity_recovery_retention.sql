@@ -293,8 +293,8 @@ CREATE FUNCTION access.check_agent_identity_recovery_retention(
 ) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE a record; c core.agent_identity_recovery_inventory;
  h core.agent_identity_history_copy; role_hash bytea; actual_accounts jsonb; role_count integer;
- supported_roles boolean; n integer:=0; generation record; receiver record; receiver_count integer:=0;
- effects_position bigint; checkpoint bigint; expected_workflow text;
+ supported_roles boolean; n integer:=0; receiver record; receiver_count integer:=0;
+ effects_position bigint; expected_workflow text;
 BEGIN
  SELECT recovery_epoch,recovery_position,recovery_transaction_id,recovery_receipt_key,intent_digest,
    source_partition,source_epoch,source_position,source_transaction_id,requested_by,decided_by,
@@ -387,18 +387,10 @@ BEGIN
    IF NOT FOUND THEN RAISE EXCEPTION 'identity retention recovery receiving copy pending' USING ERRCODE='23514'; END IF;
  END LOOP;
  IF n<>2 THEN RAISE EXCEPTION 'identity retention recovery cut incomplete' USING ERRCODE='23514'; END IF;
- receiver_count:=0;
- FOR generation IN SELECT prefix,generation::text AS generation FROM search.discovery_generation
-   WHERE partition_no=0 AND state='active' ORDER BY prefix,generation LIMIT 33 FOR SHARE
- LOOP
-   receiver_count:=receiver_count+1;
-   IF receiver_count>32 THEN RAISE EXCEPTION 'identity retention recovery Search consumer overflow' USING ERRCODE='23514'; END IF;
-   PERFORM 1 FROM core.consumer_checkpoint WHERE partition_no=c.partition_no
-     AND consumer='search_'||replace(generation.prefix,'-','_')||'discovery_g'||generation.generation
-     AND position>=c.recovery_position FOR SHARE;
-   IF NOT FOUND THEN RAISE EXCEPTION 'identity retention recovery Search consumer pending' USING ERRCODE='23514'; END IF;
- END LOOP;
- IF receiver_count=0 THEN RAISE EXCEPTION 'identity retention recovery Search consumer unavailable' USING ERRCODE='23514'; END IF;
+ -- Search owns current discovery enrollment. A checkpoint or a population scan does
+ -- not prove its current generation set or same-home closure; keep this transition pending
+ -- until History/Work supplies that released-owner observation and final verification.
+ RAISE EXCEPTION 'identity retention recovery discovery owner unavailable' USING ERRCODE='23514';
 END $$;
 
 CREATE OR REPLACE FUNCTION access.check_agent_identity_retention(i access.agent_identity_intent,p_role text)

@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { IdentitySourceConsumerMaintenanceWork } from '../semantic/identity-source-consumer-maintenance.ts';
-import { currentCommand, CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  currentCommandResources,
+  CommandUnavailableError,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { commandHistoryKind } from './record.ts';
@@ -180,6 +185,8 @@ export async function historyReceivingGap(
   barrier?: HistoryBarrier,
   pool?: Pool,
 ): Promise<string | null> {
+  const resources = currentCommandResources(tx);
+  if (pool && pool !== resources.pool) throw new TypeError('History receiving pool differs from its command');
   let mapping: Awaited<ReturnType<typeof import('./agent-identity-work.ts').resolveAgentIdentitySDKWork>> = null;
   if (locator.artifactType === 'durable-work/v1') {
     const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
@@ -219,7 +226,7 @@ export async function historyReceivingGap(
       tx,
       { partition, locator, accounts: [] },
       barrier,
-      pool,
+      resources.pool,
     );
     if (recovery.state === 'pending') return recovery.gap;
     if (recovery.state === 'ready') return null;
@@ -227,12 +234,10 @@ export async function historyReceivingGap(
   if (locator.artifactType === 'durable-work/v1') return mapping?.gap ?? null;
   if (locator.artifactType !== 'outbox-event/v1') return null;
   const charge = async (rows: number, points: number, statements: number, bytes: number) => {
-    if (!pool) return;
-    const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-    if (owner.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1)) {
-      const { reserveIdentityHistoryWork, nativeWork } = await import('./agent-identity-inventory-work.ts');
-      await reserveIdentityHistoryWork(pool, nativeWork(rows, points, statements, bytes));
-    }
+    const { reserveIdentityHistoryWork, nativeWork } = await import('./agent-identity-inventory-work.ts');
+    await reserveIdentityHistoryWork(resources.pool, nativeWork(rows, points, statements, bytes), {
+      deadline: resources.deadline,
+    });
   };
   await charge(33, 33, 1, 65536);
   // Enumerate the closed runtime fanout (32 plus overflow). A completed effect can
@@ -284,22 +289,20 @@ export async function historyReceivingGap(
     await charge(69, 69, 4, 24576);
     const artifact = await lockAgentIdentityReceivingArtifact(tx, association[0]!.custody_id);
     if (!artifact) return 'outbox-receiving-custody-unavailable';
-    if (pool) {
-      const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-      if (owner.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1)) {
-        const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
-          await import('./agent-identity-inventory-work.ts');
-        const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-          await import('./agent-identity-sdk-fence.ts');
-        await reserveIdentityHistoryWork(
-          pool,
-          addNativeWork(
-            nativeWork(76, 75, 13, 131872),
-            AGENT_IDENTITY_HISTORY_GUARD_COST,
-            AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-          ),
-        );
-      }
+    {
+      const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
+        await import('./agent-identity-inventory-work.ts');
+      const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
+        await import('./agent-identity-sdk-fence.ts');
+      await reserveIdentityHistoryWork(
+        resources.pool,
+        addNativeWork(
+          nativeWork(76, 75, 13, 131872),
+          AGENT_IDENTITY_HISTORY_GUARD_COST,
+          AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+        ),
+        { deadline: resources.deadline },
+      );
     }
     if (!(await nativeReceipt(tx, barrier, artifact, pool))) return 'outbox-receiving-custody-unavailable';
   }
@@ -421,23 +424,21 @@ export async function readHistoryReceivingReceipt(
   // Do not expose a capability retaining caller-owned mutable arrays or buffers.
   const fixedArtifact = structuredClone(artifact);
   const fixedBarrier = Object.freeze({ ...barrier });
-  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (maintenance.currentIdentitySourceConsumerMaintenance(deps.pool, context.deadline)) {
-    const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
-      await import('./agent-identity-inventory-work.ts');
-    const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-      await import('./agent-identity-sdk-fence.ts');
-    await reserveIdentityHistoryWork(
-      deps.pool,
-      fixedArtifact.locator.artifactType === 'durable-work/v1'
-        ? addNativeWork(
-            nativeWork(76, 75, 17, 132000),
-            AGENT_IDENTITY_HISTORY_GUARD_COST,
-            AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-          )
-        : nativeWork(76, 75, 12, 24576),
-    );
-  }
+  const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
+    await import('./agent-identity-inventory-work.ts');
+  const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
+    await import('./agent-identity-sdk-fence.ts');
+  await reserveIdentityHistoryWork(
+    deps.pool,
+    fixedArtifact.locator.artifactType === 'durable-work/v1'
+      ? addNativeWork(
+          nativeWork(76, 75, 17, 132000),
+          AGENT_IDENTITY_HISTORY_GUARD_COST,
+          AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+        )
+      : nativeWork(76, 75, 12, 24576),
+    context,
+  );
   return withConnection(deps.pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -476,25 +477,22 @@ export async function verifyHistoryReceivingReceipt(
   )
     return false;
   if (artifact.locator.artifactType === 'durable-work/v1') {
-    const { currentCommandResources } = await import('../command/command.ts');
     const { pool, deadline } = currentCommandResources(tx);
-    const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-    if (maintenance.currentIdentitySourceConsumerMaintenance(pool, deadline)) {
-      const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
-        await import('./agent-identity-inventory-work.ts');
-      const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-        await import('./agent-identity-sdk-fence.ts');
-      await reserveIdentityHistoryWork(
-        pool,
-        addNativeWork(
-          nativeWork(76, 75, 13, 131872),
-          AGENT_IDENTITY_HISTORY_GUARD_COST,
-          AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-        ),
-      );
-    }
+    const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
+      await import('./agent-identity-inventory-work.ts');
+    const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
+      await import('./agent-identity-sdk-fence.ts');
+    await reserveIdentityHistoryWork(
+      pool,
+      addNativeWork(
+        nativeWork(76, 75, 13, 131872),
+        AGENT_IDENTITY_HISTORY_GUARD_COST,
+        AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+      ),
+      { deadline },
+    );
   }
-  const { pool } = (await import('../command/command.ts')).currentCommandResources(tx);
+  const { pool, deadline } = currentCommandResources(tx);
   const current = await nativeReceipt(tx, barrier, artifact, pool);
   return current !== null && current.epoch === bound.epoch && current.roleDigest.equals(bound.roleDigest);
 }
@@ -600,14 +598,18 @@ async function recordIdentityReceivingProof(
     await import('./agent-identity-inventory-work.ts');
   const unit = currentAgentIdentityHistoryUnit();
   if (!unit?.stage || !unit.client || partition !== 0) return 'identity-history-current-unit-unavailable';
-  const { pool } = currentCommandResources(tx);
+  const { pool, deadline } = currentCommandResources(tx);
   const held = await lockRecordedAgentIdentityHistory(tx, unit.client, unit.stage, unit.context);
   if (held.state === 'pending') return held.gap;
   if (!sameBarrier(barrier, held.receipt.binding.barrier)) return 'identity-sdk-retirement-barrier-changed';
-  await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_ABSENCE_COST));
+  await reserveIdentityHistoryWork(
+    pool,
+    addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_ABSENCE_COST),
+    { deadline },
+  );
   await tx.query(`SELECT core.check_agent_identity_history_absence($1)`, [locator.workId]);
   const encoded = Buffer.from(encodeLocator(locator));
-  await reserveIdentityHistoryWork(pool, nativeWork(65, 65, 1, 8192));
+  await reserveIdentityHistoryWork(pool, nativeWork(65, 65, 1, 8192), { deadline });
   const rows = await nativeScope(tx, partition, locator.artifactType, encoded);
   const own = rows?.find((r) => r.account_route === barrier.accountRoute && r.account_id === barrier.accountId);
   if (!own || own.state !== 'minimized' || own.proof_barrier !== barrier.accountId)
@@ -631,6 +633,7 @@ async function recordIdentityReceivingProof(
       AGENT_IDENTITY_HISTORY_ABSENCE_COST,
       HISTORY_RECEIVING_INVALIDATION,
     ),
+    { deadline },
   );
   await tx.query(
     `INSERT INTO core.history_receiving_proof(partition_no,account_route,account_id,artifact_type,locator,

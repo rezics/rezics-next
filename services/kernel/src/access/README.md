@@ -676,7 +676,9 @@ undo job. Native source reads check the account fence before looking up the rece
 private to the existing Semantic binding bridge; mutable pending markers and raw receipt JSON grant no authority.
 An initially deferred native constraint checks the executor's exact stored receipt key, transaction and component
 in the same database transaction. Reversal insertion also rechecks its immutable prior source at the current owner
-epoch. The source guard currently refuses updates and deletion while consumer-aware minimization is unfinished.
+epoch. The source guard accepts only the role-scoped transition after the independent source, copy, root, owner,
+restore and receiving proofs are current in the same transaction; missing source or receiving custody still refuses
+the update or deletion.
 
 The original SDK enqueue now records two-stage native receiving custody. Initial verification binds the genuine
 committed Global request, approval receipt and native write basis before the SDK input commits. The receiver uses
@@ -857,18 +859,52 @@ reversal payloads, invalid principal/key/digest and moved epochs remain pending 
 Source publication alone supplies data, never permission or Account completion. The existing workflow still waits
 for mapping, Search and ALL Library publication before page, finish and result steps.
 
-The existing erasure inventory includes the source and recovery account, requester and decider with role-first
-indexes and typed primary keys. Receiving Semantic claims/jobs bind these same subject/actor/editor roles from
-the recovered source. The recovery writer declares its actual receipt and outbox through the existing original
-source declaration/serializer ports, with the account, requester, decider and retained undo roles. The Source native
-transaction is a reference, never a History artifact. Recovery declarations have no original SDK handoff;
-they enroll only the new recovery receipt and account wakeup. The copy guard independently verifies the genuine
-original Account and Source evidence, recovery command and exact native codec. It does not insert or reopen an
-original finite inventory or SDK obligation. Recovered sources therefore retain their original inventory/SDK gaps.
-Recovery metadata retains its receiving obligation alongside
-the original source; its guard does not permit early removal. Consumer-aware source minimization and shared
-receipt/outbox/DBOS transfer remain unfinished: the new inventory is no erasure ACK, and original proof cannot be
-purged while delivery still needs it. Native workflow, cutover, erasure and physical growth acceptance remains due.
+The erasure inventory includes original and recovery source/account/requester/decider roles with role-first indexes.
+The new recovery command uses the existing History executor hooks: Access declares its genuine original source,
+History captures the two expected locators before response/event serialization, associates the actual receipt and
+outbox rows after serialization, then seals the recovery cut after the command fence in that same transaction.
+The separate `core.agent_identity_recovery_inventory` row is keyed by the exact original source key and binds the
+source digest to the recovery partition, epoch, position, transaction, receipt key/request digest, current owner
+epoch and restore domain. Its finite cut has exactly two slots: that recovery command receipt and its one
+`com.rezics.access.account-updated.v1` event. Each slot retains the actual all-role locator set, capped at 64.
+Replay reuses the single recovery row and creates no second serializer cut or recovery event. The original
+`core.agent_identity_inventory` (2..3 slots) and original SDK obligation are never inserted, overwritten or
+retro-certified by recovery. A historical recovery without this sealed discriminator remains unknown.
+
+Recovery receipt and event retirement reuses the existing History/Work engine and original receiving receipts.
+It checks the exact `account_discovery_redrive` consumer, its derived workflow identity and completed native state,
+the effects checkpoint, the physical serializer rows, role digest, receiving proof, seal, owner epoch and restore
+domain. The recovery wakeup is not the original SDK verification/reversal handoff and creates no SDK workflow
+obligation. `verifyAgentIdentityRecoveryArtifactReadiness` keeps the event pending with
+`agent-identity-recovery-discovery-owner-unavailable`: installed composition has no Search owner capability that
+can return a released current-enrollment observation and verify it again in the source-home transaction. The
+former direct `search.discovery_generation` list and checkpoint scan were removed; neither an arbitrary active
+generation list nor a relay checkpoint can settle Search custody. The native trigger has the same precise
+fail-closed result, so a completed account-discovery effect alone cannot retire the recovery bytes.
+
+The role transition is wired to require the original Source discharge/technical-transfer proof, actual original
+and recovery receiving copies, native erasure root, current owner/restore fences and all writer guards in the same
+command through COMMIT. It minimizes only the erased role: subject erasure skeletonizes
+`agent_identity_recovery.original_source` while keeping its immutable digest/native/job/claim binding; requester
+and decider erasure clears only their own identifiers, and decider erasure also clears the decision reason. Live
+subject intent, undo and the other roles remain. Native INSERT guards reject a pre-minimized recovery, and UPDATE/
+DELETE guards do not accept caller flags, payload overrides or deletion as a substitute for the transition.
+
+Literal recovery costs are in the table below. The recovery SQL guard is 174/174/12/65536/0 per invocation:
+six fixed one-row reads, a 33-row event-consumer sentinel, a three-row copy sentinel, and two successful
+65-role-plus-one-proof pairs; statements are six fixed reads, the consumer and copy scans, and two locator/proof
+pairs. The two guarded updates therefore add 348/348/24/131072/0. Combining that with two original transition
+guards gives the exact recovery role-transition reservation 1470/1460/164/573440/0. The original 2..3-slot cut,
+SDK gap and unrecognized old receiving obligations stay independently pending. This SQL does not search history,
+personal JSON, role prefixes or populations.
+
+The Semantic final-frame owner still cannot fund whole Source completion: five existing current-verifier entries
+alone need 696320 bytes against the unchanged 630784-byte native allowance. The Source recovery branch therefore
+refuses before its foreign probes or writer with `identity-history-native-funding-unavailable`; it does not borrow
+the earlier 11588/9856/2731/6843136/0 consumer-body expansion, change limits/prices, or report aggregate success.
+Source/History native acceptance, Search currentness and final Semantic funding remain deferred to their owning
+integration. The local regression at `test/access/agent-identity-recovery-retention.test.ts` is authored and
+UNRUN; workspace typing proves neither receiving completion nor final retention.
 
 ## Operator responsibility pages
 
@@ -4253,14 +4289,18 @@ ledger is permitted. SQL recognition and smaller configured/remainder caps stay 
 | `lockAgentIdentityReceivingArtifact`                                             | original mapping/work/partition/domain then native LIMIT65 role union                                                                                                         | 69/69/4/24576/0 per associated consumer                                             |
 | Associated consumer `nativeReceipt`                                              | full durable receiving validation, never a completion flag                                                                                                                    | Rcurrent per actual consumer invocation                                             |
 | Recovery preflight SELECT                                                        | exact original key FOR SHARE in final command                                                                                                                                 | 1/1/1/0/0                                                                           |
+| `check_agent_identity_recovery_retention`                                         | six fixed reads, LIMIT33 effect consumer, LIMIT3 serializer copies, two LIMIT65 role unions and receiving proofs; no Search population query                                  | 174/174/12/65536/0 per guard                                                        |
 | Role UPDATE and native retention trigger                                         | fixed original key; complete SQL in the forward migration, four LIMIT65 unions, two LIMIT33 outbox consumer sets, native physical points, G and A                             | M = 460/460/50/180224/0 + G + A = 561/556/70/221184/0                               |
 
-The role-trigger base includes the UPDATE and both trigger/function mapping reads, root/Account join, recovery,
-inventory, obligation, domain and four copy cuts, per-copy aggregate/digest and receiving/seal/locator joins, durable
-work and original receipt, original outbox LIMIT3 and its two LIMIT33 consumer loops. The 33rd consumer and 65th role
-are refusal sentinels; the reservation includes them. It performs no locator/receiving writes or invalidation fanout.
-The migration is the complete literal SQL body; the linked TypeScript function names above identify the complete
-literal query strings at their dispatch sites. No additional caller setting or privileged SQL exemption is added.
+The original role-trigger base includes the UPDATE and both trigger/function mapping reads, root/Account join,
+recovery, inventory, obligation, domain and four copy cuts, per-copy aggregate/digest and receiving/seal/locator
+joins, durable work and original receipt, original outbox LIMIT3 and its two LIMIT33 consumer loops. The 33rd
+consumer and 65th role are refusal sentinels; the reservation includes them. It performs no locator/receiving writes
+or invalidation fanout. For a recovery row the trigger calls the separate recovery checker above on both guarded
+updates, so the exact addition is 2*(174/174/12/65536/0); full transition reservation is
+2*(561/556/70/221184/0)+2*(174/174/12/65536/0)=1470/1460/164/573440/0. The migration is the complete literal SQL
+body; linked TypeScript function names identify the dispatch sites. No caller setting or privileged SQL exemption
+is added.
 
 The reused full `readAgentIdentitySDKRetirementGap` additionally spends its original mapped RR observation,
 pre/post actual SDK fence observations and released durable receiving Rread = 76/75/17/132000/0 + G + A; its existing
@@ -4277,11 +4317,12 @@ For k <= 8 keys the two native commands spend 2*C + 2*B(k); each staged key then
 A refusal before staging still spends its command/root prefix. Staging refusal, SQL failure and rollback spend all
 reservations already made; another delivery spends again. The per-key Source stage, original SDK observation,
 current point/cut verification, H, Rcurrent, recovery point and M are separate reached calls, not alternative
-budgets. There is no aggregate final funding claim: 11588/9856/2731/6843136/0 is the earlier selected consumer body
-only; 577, 585 and 1198 are not final funding. Preserve directory parent100/200/36/229376 and effective child
-50/100/18/114688, smaller remainder/configuration caps and the native 100-row ceiling. The original Source owner
-must reconcile this composition, repeated H/current Account and Library's literal nested/fence costs before final
-funding. Unknown-SQL refusal stays enabled.
+budgets. Five existing current-verifier entries alone require 696320 bytes, exceeding the unchanged 630784-byte
+Source allowance before new recovery receiving calls. The Source recovery branch refuses before foreign recovery
+probes or writing. The old 11588/9856/2731/6843136/0 consumer body, 577, 585 and 1198 do not fund the complete
+Source/History composition. Preserve directory parent100/200/36/229376 and effective child 50/100/18/114688,
+smaller remainder/configuration caps and the native 100-row ceiling. Semantic must reconcile the repeated H/current
+Account and Library's literal nested/fence costs before final funding; unknown-SQL refusal stays enabled.
 
 The focused default positive/refusal regression is authored in `agent-verification-reversal.test.ts` and is UNRUN.
 It requires genuine lifecycle T, accepted verify/reversal, actual same-Pool SDK admission, the installed selected

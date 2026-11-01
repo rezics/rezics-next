@@ -1346,6 +1346,7 @@ CREATE TABLE core.agent_identity_recovery_inventory (
        AND expected_event_types IS NOT NULL AND expected_event_types=ARRAY['com.rezics.access.account-updated.v1']
        AND native_writer_state='closed')),
   CONSTRAINT agent_identity_recovery_inventory_state_check CHECK (state IN ('declared','sealed'))
+);
 
 
 CREATE TABLE core.agent_identity_sdk_obligation (

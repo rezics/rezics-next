@@ -744,9 +744,133 @@ END; $$;
 -- Name: check_agent_identity_retention(access.agent_identity_intent, text); Type: FUNCTION; Schema: access; Owner: -
 --
 
-CREATE FUNCTION access.check_agent_identity_retention(i access.agent_identity_intent, p_role text) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
+CREATE FUNCTION access.agent_identity_recovery_skeleton(s jsonb) RETURNS jsonb
+LANGUAGE sql IMMUTABLE STRICT AS $$
+ SELECT jsonb_build_object(
+   'digest',s->'digest',
+   'native',jsonb_build_object('partition',s->'native'->'partition','epoch',s->'native'->'epoch',
+     'position',s->'native'->'position','transactionId',s->'native'->'transactionId'),
+   'job',jsonb_build_object('jobId',s->'job'->'jobId','epoch',s->'job'->'epoch'),
+   'claim',jsonb_build_object('partition',s->'claim'->'partition','generation',s->'claim'->'generation',
+     'transactionId',s->'claim'->'transactionId','home',s->'claim'->'home','scope',s->'claim'->'scope'));
+$$;
+
+CREATE FUNCTION access.guard_agent_identity_recovery_insert() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.original_source_minimized THEN
+   RAISE EXCEPTION 'New recovery source cannot claim prior minimization' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+
+CREATE FUNCTION access.check_agent_identity_recovery_retention(
+  i access.agent_identity_intent,p_role text,b jsonb,erased uuid
+) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE a record; c core.agent_identity_recovery_inventory;
+ h core.agent_identity_history_copy; role_hash bytea; actual_accounts jsonb; role_count integer;
+ supported_roles boolean; n integer:=0; receiver record; receiver_count integer:=0;
+ effects_position bigint; checkpoint bigint; expected_workflow text;
+BEGIN
+ SELECT recovery_epoch,recovery_position,recovery_transaction_id,recovery_receipt_key,intent_digest,
+   source_partition,source_epoch,source_position,source_transaction_id,requested_by,decided_by,
+   original_source_minimized,
+   CASE WHEN original_source_minimized THEN original_source ELSE NULL END AS original_source
+   INTO a FROM access.agent_identity_recovery WHERE route=i.route AND account_id=i.account_id
+     AND direction=i.direction AND receipt_id=i.receipt_id FOR SHARE;
+ IF NOT FOUND THEN RETURN; END IF;
+ SELECT * INTO c FROM core.agent_identity_recovery_inventory WHERE partition_no=i.source_partition
+   AND source_route=i.route AND source_account_id=i.account_id AND source_direction=i.direction
+   AND source_receipt_id=i.receipt_id FOR SHARE;
+ IF NOT FOUND OR c.state<>'sealed' OR c.native_writer_state<>'closed' OR
+    c.producer_version<>1 OR c.conversion_coverage<>'native-receipt-outbox/v1' OR
+    cardinality(c.expected_locators)<>2 OR
+    c.expected_event_types IS DISTINCT FROM ARRAY['com.rezics.access.account-updated.v1'] OR
+    c.native_command_kind<>'access.agent-identity.recover' OR c.native_principal_kind<>'account' OR
+    c.native_receipt_key IS DISTINCT FROM a.recovery_receipt_key OR
+    c.source_digest IS DISTINCT FROM a.intent_digest OR
+    (c.recovery_epoch,c.recovery_position,c.recovery_transaction_id)
+      IS DISTINCT FROM (a.recovery_epoch,a.recovery_position,a.recovery_transaction_id) OR
+    (a.source_partition,a.source_epoch,a.source_position,a.source_transaction_id,a.intent_digest)
+      IS DISTINCT FROM (i.source_partition,i.source_epoch,i.source_position,i.source_transaction_id,i.intent_digest) OR
+    c.receiver_epoch<>c.recovery_epoch OR
+    NOT (a.requested_by IS NOT DISTINCT FROM i.requested_by OR
+      (p_role='requester' AND a.requested_by IS NULL AND i.requested_by IS NOT NULL)) OR
+    NOT (a.decided_by IS NOT DISTINCT FROM i.decided_by OR
+      (p_role='decider' AND a.decided_by IS NULL AND i.decided_by IS NOT NULL)) OR
+    (a.original_source_minimized AND
+      (a.original_source IS NULL OR a.original_source IS DISTINCT FROM access.agent_identity_recovery_skeleton(a.original_source))) THEN
+   RAISE EXCEPTION 'identity retention recovery cut changed' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.partition p JOIN core.history_family_domain d ON d.singleton
+   WHERE p.partition_no=c.partition_no AND p.write_state='active' AND p.epoch=c.receiver_epoch
+     AND d.generation=c.domain_generation AND p.position>=c.recovery_position FOR SHARE OF p,d;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity retention recovery restore changed' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.receipt r WHERE r.partition_no=c.partition_no AND r.principal_kind=c.native_principal_kind
+   AND r.principal_id=c.native_principal_id AND r.command_kind=c.native_command_kind
+   AND r.idempotency_key=c.native_receipt_key AND r.transaction_id=c.recovery_transaction_id
+   AND r.epoch=c.recovery_epoch AND r.position=c.recovery_position AND r.request_digest=c.native_request_digest
+   AND r.payload_state='minimized' AND r.response='null'::jsonb FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity retention recovery receipt remains' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.outbox o WHERE o.partition_no=c.partition_no AND o.epoch=c.recovery_epoch
+   AND o.position=c.recovery_position AND o.event_seq=0 AND o.event_count=1
+   AND o.type=c.expected_event_types[1] AND o.payload_state='minimized' AND o.data='{}'::jsonb AND o.subject IS NULL FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity retention recovery event remains' USING ERRCODE='23514'; END IF;
+ SELECT position INTO effects_position FROM core.consumer_checkpoint WHERE partition_no=c.partition_no
+   AND consumer='effects' AND position>=c.recovery_position FOR SHARE;
+ IF effects_position IS NULL THEN RAISE EXCEPTION 'identity retention recovery effects pending' USING ERRCODE='23514'; END IF;
+ expected_workflow:='fx:'||c.recovery_epoch||':'||c.partition_no||':'||c.recovery_position||':0:account_discovery_redrive';
+ FOR receiver IN SELECT consumer,workflow_id,state FROM core.history_event_consumer
+   WHERE partition_no=c.partition_no AND position=c.recovery_position AND event_seq=0
+   ORDER BY consumer LIMIT 33 FOR SHARE
+ LOOP
+   receiver_count:=receiver_count+1;
+   IF receiver_count>32 OR receiver.consumer<>'account_discovery_redrive' OR
+      receiver.workflow_id<>expected_workflow OR receiver.state<>'completed' THEN
+     RAISE EXCEPTION 'identity retention recovery effect consumer unknown' USING ERRCODE='23514'; END IF;
+ END LOOP;
+ IF receiver_count<>1 THEN RAISE EXCEPTION 'identity retention recovery effect consumer unavailable' USING ERRCODE='23514'; END IF;
+ FOR h IN SELECT * FROM core.agent_identity_history_copy WHERE partition_no=c.partition_no
+   AND source_route=c.source_route AND source_account_id=c.source_account_id AND source_direction=c.source_direction
+   AND source_receipt_id=c.source_receipt_id AND source_digest=c.source_digest
+   AND source_epoch=c.recovery_epoch AND source_position=c.recovery_position
+   AND source_transaction_id=c.recovery_transaction_id ORDER BY artifact_type,locator LIMIT 3 FOR SHARE
+ LOOP
+   n:=n+1;
+   IF n>2 OR h.receiver_epoch<>c.receiver_epoch OR h.domain_generation<>c.domain_generation OR
+      NOT h.locator=ANY(c.expected_locators) THEN
+     RAISE EXCEPTION 'identity retention recovery serializer cut changed' USING ERRCODE='23514'; END IF;
+   SELECT jsonb_agg(jsonb_build_array(account_route,account_id::text,roles) ORDER BY account_route,account_id),
+     count(*),bool_and(minimizer_version=1),
+     sha256(convert_to(replace(json_agg(json_build_array(account_route,account_id,roles)
+       ORDER BY account_route,account_id)::text,' ',''),'UTF8'))
+     INTO actual_accounts,role_count,supported_roles,role_hash FROM (
+       SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
+       WHERE partition_no=c.partition_no AND artifact_type=h.artifact_type AND locator=h.locator
+       ORDER BY account_route,account_id LIMIT 65 FOR SHARE
+     ) scope;
+   IF role_count NOT BETWEEN 1 AND 64 OR supported_roles IS DISTINCT FROM true OR
+      actual_accounts IS DISTINCT FROM c.expected_accounts THEN
+     RAISE EXCEPTION 'identity retention recovery roles changed' USING ERRCODE='23514'; END IF;
+   PERFORM 1 FROM core.history_receiving_proof p JOIN core.history_locator l
+     ON l.partition_no=p.partition_no AND l.account_route=p.account_route AND l.account_id=p.account_id
+       AND l.artifact_type=p.artifact_type AND l.locator=p.locator
+     JOIN core.history_seal s ON s.partition_no=l.partition_no AND s.account_route=l.account_route AND s.account_id=l.account_id
+     WHERE p.partition_no=c.partition_no AND p.account_route=(b->>'accountRoute')::integer
+       AND p.account_id=erased AND p.artifact_type=h.artifact_type AND p.locator=h.locator
+       AND p.role_digest=role_hash AND p.barrier_version=(b->>'version')::integer AND p.barrier_at=b->>'at'
+       AND p.partition_epoch=c.receiver_epoch AND l.state='minimized' AND l.proof_barrier=erased
+       AND l.minimizer_version=1 AND s.phase<>'open' AND s.barrier_id=erased FOR SHARE OF p,l,s;
+   IF NOT FOUND THEN RAISE EXCEPTION 'identity retention recovery receiving copy pending' USING ERRCODE='23514'; END IF;
+ END LOOP;
+ IF n<>2 THEN RAISE EXCEPTION 'identity retention recovery cut incomplete' USING ERRCODE='23514'; END IF;
+ -- Search owns current discovery enrollment. A checkpoint or a population scan does
+ -- not prove its current generation set or same-home closure; keep this transition pending
+ -- until History/Work supplies that released-owner observation and final verification.
+ RAISE EXCEPTION 'identity retention recovery discovery owner unavailable' USING ERRCODE='23514';
+END $$;
+
+CREATE OR REPLACE FUNCTION access.check_agent_identity_retention(i access.agent_identity_intent,p_role text)
+RETURNS void LANGUAGE plpgsql AS $$
 DECLARE m core.agent_identity_work; inv core.agent_identity_inventory;
  o core.agent_identity_sdk_obligation; b jsonb; ref jsonb; erased uuid; c record;
  l record; role_hash bytea; supported_roles boolean; n integer:=0; k integer; r record;
@@ -774,11 +898,6 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'identity retention root changed' USING ERRCODE='23514'; END IF;
  PERFORM core.check_agent_identity_history(m.custody_id,m.sdk_readiness->'binding',m.history_authority,m.sdk_closure,'closure');
  PERFORM core.check_agent_identity_history_absence(m.custody_id);
- -- Recovered originals have additional native serializers. Their missing finite
- -- cut stays unknown; this migration does not invent historical associations.
- PERFORM 1 FROM access.agent_identity_recovery WHERE route=i.route AND account_id=i.account_id
-   AND direction=i.direction AND receipt_id=i.receipt_id FOR SHARE;
- IF FOUND THEN RAISE EXCEPTION 'identity retention recovery copies unavailable' USING ERRCODE='23514'; END IF;
  SELECT * INTO STRICT inv FROM core.agent_identity_inventory WHERE partition_no=i.source_partition
    AND source_route=i.route AND source_account_id=i.account_id AND source_direction=i.direction
    AND source_receipt_id=i.receipt_id FOR SHARE;
@@ -793,8 +912,6 @@ BEGIN
    RAISE EXCEPTION 'identity retention native cut changed' USING ERRCODE='23514'; END IF;
  PERFORM 1 FROM core.history_family_domain WHERE singleton AND generation=inv.domain_generation FOR SHARE;
  IF NOT FOUND THEN RAISE EXCEPTION 'identity retention restore changed' USING ERRCODE='23514'; END IF;
- -- The actual durable receiving row has its own full role digest, later proof,
- -- physical absence and current generation-2 locks; an SDK receipt alone cannot pass.
  FOR c IN SELECT 'durable-work/v1'::text AS artifact_type,
      decode('0103','hex')||convert_to(m.custody_id::text,'UTF8') AS locator,
      m.receiver_epoch AS receiver_epoch
@@ -810,7 +927,8 @@ BEGIN
    IF n>4 OR (c.artifact_type<>'durable-work/v1' AND NOT c.locator=ANY(inv.expected_locators)) THEN
      RAISE EXCEPTION 'identity retention copy cut changed' USING ERRCODE='23514'; END IF;
    SELECT sha256(convert_to(replace(json_agg(json_build_array(account_route,account_id,roles)
-       ORDER BY account_route,account_id)::text,' ',''),'UTF8')),count(*),bool_and(minimizer_version=1) INTO role_hash,k,supported_roles FROM (
+       ORDER BY account_route,account_id)::text,' ',''),'UTF8')),count(*),bool_and(minimizer_version=1)
+       INTO role_hash,k,supported_roles FROM (
      SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator WHERE partition_no=0
        AND artifact_type=c.artifact_type AND locator=c.locator ORDER BY account_route,account_id LIMIT 65 FOR SHARE
    ) scope;
@@ -845,9 +963,6 @@ BEGIN
    IF k>2 OR r.epoch<>i.source_epoch OR r.payload_state<>'minimized' OR r.data<>'{}'::jsonb OR r.subject IS NOT NULL
      OR r.type IS DISTINCT FROM inv.expected_event_types[k] THEN
      RAISE EXCEPTION 'identity retention outbox physical copy remains' USING ERRCODE='23514'; END IF;
-   -- Never delete consumer rows to obtain absence. Only an exact original mapped
-   -- execution may reuse the already locked receiving closure. Wrapper/foreign
-   -- executions retain their independent byte/writer obligations.
    n:=0;
    FOR l IN SELECT * FROM core.history_event_consumer WHERE partition_no=0 AND position=r.position
      AND event_seq=r.event_seq ORDER BY consumer LIMIT 33 FOR SHARE
@@ -862,6 +977,7 @@ BEGIN
  END LOOP;
  IF k<>cardinality(inv.expected_event_types) THEN
    RAISE EXCEPTION 'identity retention original outbox incomplete' USING ERRCODE='23514'; END IF;
+ PERFORM access.check_agent_identity_recovery_retention(i,p_role,b,erased);
 END $$;
 
 
@@ -1072,12 +1188,29 @@ $$;
 -- Name: guard_agent_identity_intent(); Type: FUNCTION; Schema: access; Owner: -
 --
 
-CREATE FUNCTION access.guard_agent_identity_intent() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE role text; erased uuid;
+CREATE OR REPLACE FUNCTION access.guard_agent_identity_intent() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE role text; erased uuid; i access.agent_identity_intent; a access.agent_identity_recovery;
 BEGIN
- IF TG_OP<>'UPDATE' OR TG_TABLE_NAME<>'agent_identity_intent' THEN
+ IF TG_OP<>'UPDATE' THEN RAISE EXCEPTION 'Account identity source requires receiving erasure custody' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='agent_identity_recovery' THEN
+   SELECT * INTO STRICT i FROM access.agent_identity_intent WHERE route=OLD.route AND account_id=OLD.account_id
+     AND direction=OLD.direction AND receipt_id=OLD.receipt_id FOR SHARE;
+   SELECT history_authority->'reference'->>'erasedRole',
+     (history_authority->'reference'->'barrier'->>'accountId')::uuid INTO role,erased
+     FROM core.agent_identity_work WHERE source_key=i.delivery_key FOR SHARE;
+   PERFORM access.check_agent_identity_retention(i,role);
+   IF (to_jsonb(NEW)-ARRAY['requested_by','decided_by','original_source','original_source_minimized']) IS DISTINCT FROM
+      (to_jsonb(OLD)-ARRAY['requested_by','decided_by','original_source','original_source_minimized']) OR
+      NEW.requested_by IS DISTINCT FROM (CASE WHEN OLD.requested_by=erased THEN NULL ELSE OLD.requested_by END) OR
+      NEW.decided_by IS DISTINCT FROM (CASE WHEN OLD.decided_by=erased THEN NULL ELSE OLD.decided_by END) OR
+      NEW.original_source IS DISTINCT FROM (CASE WHEN role='subject' AND OLD.original_source IS NOT NULL
+        THEN access.agent_identity_recovery_skeleton(OLD.original_source) ELSE OLD.original_source END) OR
+      NEW.original_source_minimized IS DISTINCT FROM
+        (OLD.original_source_minimized OR (role='subject' AND OLD.original_source IS NOT NULL)) THEN
+     RAISE EXCEPTION 'identity recovery may minimize only the erased role' USING ERRCODE='23514'; END IF;
+   RETURN NEW;
+ END IF;
+ IF TG_TABLE_NAME<>'agent_identity_intent' THEN
    RAISE EXCEPTION 'Account identity source requires receiving erasure custody' USING ERRCODE='23514'; END IF;
  IF (to_jsonb(NEW)-ARRAY['requested_by','decided_by','reason','intent','minimized']) IS DISTINCT FROM
     (to_jsonb(OLD)-ARRAY['requested_by','decided_by','reason','intent','minimized']) THEN
@@ -1086,6 +1219,11 @@ BEGIN
    (history_authority->'reference'->'barrier'->>'accountId')::uuid INTO role,erased
    FROM core.agent_identity_work WHERE source_key=OLD.delivery_key FOR SHARE;
  PERFORM access.check_agent_identity_retention(OLD,role);
+ SELECT * INTO a FROM access.agent_identity_recovery WHERE route=OLD.route AND account_id=OLD.account_id
+   AND direction=OLD.direction AND receipt_id=OLD.receipt_id FOR SHARE;
+ IF FOUND AND ((role='subject' AND a.original_source IS NOT NULL AND NOT a.original_source_minimized) OR
+    (role='requester' AND a.requested_by IS NOT NULL) OR (role='decider' AND a.decided_by IS NOT NULL)) THEN
+   RAISE EXCEPTION 'identity recovery role transition is incomplete' USING ERRCODE='23514'; END IF;
  IF NEW.requested_by IS DISTINCT FROM (CASE WHEN OLD.requested_by=erased THEN NULL ELSE OLD.requested_by END) OR
     NEW.decided_by IS DISTINCT FROM (CASE WHEN OLD.decided_by=erased THEN NULL ELSE OLD.decided_by END) OR
     NEW.reason IS DISTINCT FROM (CASE WHEN OLD.decided_by=erased THEN NULL ELSE OLD.reason END) OR
@@ -2134,7 +2272,7 @@ CREATE TABLE access.agent_identity_recovery (
     account_id uuid NOT NULL,
     direction text NOT NULL,
     receipt_id uuid NOT NULL,
-    requested_by uuid NOT NULL,
+    requested_by uuid,
     decided_by uuid,
     source_partition integer NOT NULL,
     source_epoch integer NOT NULL,
@@ -2147,6 +2285,7 @@ CREATE TABLE access.agent_identity_recovery (
     recovery_position bigint NOT NULL,
     recovery_receipt_key text NOT NULL,
     original_source jsonb,
+    original_source_minimized boolean DEFAULT false NOT NULL,
     recovery_digest text,
     CONSTRAINT agent_identity_recovery_check CHECK ((source_partition = (route / 16))),
     CONSTRAINT agent_identity_recovery_check1 CHECK (((direction <> 'account-agent.unverify'::text) OR (source_transaction_id = receipt_id))),
@@ -5103,6 +5242,12 @@ CREATE CONSTRAINT TRIGGER agent_identity_intent_native_commit AFTER INSERT ON ac
 
 
 --
+-- Name: agent_identity_recovery agent_identity_recovery_insert_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER agent_identity_recovery_insert_guard BEFORE INSERT ON access.agent_identity_recovery FOR EACH ROW EXECUTE FUNCTION access.guard_agent_identity_recovery_insert();
+ALTER TABLE access.agent_identity_recovery ENABLE ALWAYS TRIGGER agent_identity_recovery_insert_guard;
+
 -- Name: agent_identity_recovery agent_identity_recovery_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 

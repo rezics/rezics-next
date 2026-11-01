@@ -780,11 +780,11 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
     artifact.partition !== artifact.locator.partitionNo
   )
     return absent;
-  if (pool) {
-    const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-    if (maintenance.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1))
-      await reserveIdentityHistoryWork(pool, nativeWork(2, 2, 1, 512));
-  }
+  const resources = currentCommandResources(tx);
+  if (pool && pool !== resources.pool) throw new TypeError('Recovery artifact pool differs from its command');
+  await reserveIdentityHistoryWork(resources.pool, nativeWork(2, 2, 1, 512), {
+    deadline: resources.deadline,
+  });
   const matches = (
     await tx.query<{
       source_route: number;
@@ -813,11 +813,9 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
   ).rows;
   if (!matches.length) return absent;
   if (matches.length !== 1) return pending('agent-identity-recovery-copy-fanout-unavailable');
-  if (pool) {
-    const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-    if (maintenance.currentIdentitySourceConsumerMaintenance(pool, Date.now() + 1))
-      await reserveIdentityHistoryWork(pool, nativeWork(135, 135, 6, 32768));
-  }
+  await reserveIdentityHistoryWork(resources.pool, nativeWork(135, 135, 6, 32768), {
+    deadline: resources.deadline,
+  });
   const key: AgentIdentitySourceKey = {
     route: matches[0]!.source_route,
     accountId: matches[0]!.source_account_id,
@@ -855,9 +853,7 @@ export async function readAgentIdentityRecoveryInventory(
   const fixedKey = structuredClone(key);
   const partition = params(fixedKey)[0];
   historyDeadline(context, partition);
-  const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (owner.currentIdentitySourceConsumerMaintenance(deps.pool, context.deadline))
-    await reserveIdentityHistoryWork(deps.pool, nativeWork(135, 135, 6, 32768));
+  await reserveIdentityHistoryWork(deps.pool, nativeWork(135, 135, 6, 32768), context);
   const inventory = await withConnection(deps.pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -908,9 +904,7 @@ export async function verifyAgentIdentityRecoveryInventory(
   if (!proof || proof[recoveryInventoryProof] !== true || receipts.length !== 2)
     return pending('agent-identity-recovery-native-cut-stale');
   const { pool, deadline } = currentCommandResources(tx);
-  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (maintenance.currentIdentitySourceConsumerMaintenance(pool, deadline))
-    await reserveIdentityHistoryWork(pool, nativeWork(275, 275, 18, 49152));
+  await reserveIdentityHistoryWork(pool, nativeWork(275, 275, 18, 49152), { deadline });
   const current = await readAgentIdentityRecoveryInventoryInTransaction(tx, key);
   if (
     current.state !== 'sealed' ||
@@ -938,10 +932,7 @@ export async function readAgentIdentityNativeInventory(
   const fixed = structuredClone(key);
   const partition = params(fixed)[0];
   historyDeadline(context, partition);
-  const { currentIdentitySourceConsumerMaintenance } =
-    await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (currentIdentitySourceConsumerMaintenance(pool, context.deadline))
-    await reserveIdentityHistoryWork(pool, nativeWork(203, 202, 9, 65664));
+  await reserveIdentityHistoryWork(pool, nativeWork(203, 202, 9, 65664), context);
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -1030,8 +1021,8 @@ export async function verifyAgentIdentityInventory(
   });
   if (currentCommand(tx).partition !== params(key)[0])
     throw new TypeError('Identity inventory requires its SAME source home');
-  const { pool } = currentCommandResources(tx);
-  if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(202, 202, 5, 65536));
+  const { pool, deadline } = currentCommandResources(tx);
+  if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(202, 202, 5, 65536), { deadline });
   const current = await readAgentIdentityInventoryInTransaction(tx, key);
   if (
     current.state !== 'sealed' ||
@@ -1050,7 +1041,7 @@ export async function verifyAgentIdentityInventory(
   // Receiving rows bind the exact barrier below. Current native barrier revalidation
   // belongs to the optional Source owner stage and its existing funding reservation.
   for (const artifact of current.proof.artifacts) {
-    if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 1024));
+    if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 1024), { deadline });
     const locator = artifact.locator;
     const encoded = Buffer.from(encodeLocator(locator));
     const received = (
@@ -1104,7 +1095,7 @@ export async function verifyAgentIdentityInventory(
     }
     if (physical?.rows.length !== 1) return pending(`agent-identity-physical-copy-pending:${locator.artifactType}`);
   }
-  if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 1024));
+  if (sdkStage) await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 1024), { deadline });
   const obligation = (
     await tx.query(
       `SELECT generation,future_writer_state FROM core.agent_identity_sdk_obligation
