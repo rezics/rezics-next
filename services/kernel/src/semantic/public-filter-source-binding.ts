@@ -93,6 +93,7 @@ type PublicFilterRepairBaseline = Readonly<{
   epoch: number; receipt: string; sourcePosition: string; enqueue: string;
   revision: string | null; claimRevision: string | null;
   observation: string; execution: string; settlement: string;
+  consumer: string; physicalTarget: string; incarnation: string;
 }>;
 
 /** ACK only this original baseline's complete prefix. Subsequent Source positions
@@ -115,12 +116,20 @@ async function acknowledgePublicFilterRepairBaseline(
          FOR SHARE OF p,e`,
         [baseline.registrationPartition,baseline.bootstrap],
       )).rows[0];
-      const registration = (await client.query<{ state: string }>(
-        `SELECT state FROM search.public_filter_registration
+      const registration = (await client.query<{ state: string; consumer: string; physical_target: string }>(
+        `SELECT state,consumer,physical_target FROM search.public_filter_registration
          WHERE (partition_no,id)=($1,$2) FOR UPDATE`,
         [baseline.registrationPartition,baseline.registration],
       )).rows[0];
-      if (!owner || owner.write_state !== 'active' || registration?.state !== 'active')
+      if (!owner || owner.write_state !== 'active' || registration?.state !== 'active' ||
+        registration.consumer !== baseline.consumer || registration.physical_target !== baseline.physicalTarget)
+        throw new CommandUnavailableError('fenced',baseline.registrationPartition);
+      const target = (await client.query<{ incarnation: string }>(
+        `SELECT incarnation FROM search.public_filter_target
+         WHERE (partition_no,physical_target)=($1,$2) FOR SHARE`,
+        [baseline.registrationPartition,baseline.physicalTarget],
+      )).rows[0];
+      if (target?.incarnation !== baseline.incarnation)
         throw new CommandUnavailableError('fenced',baseline.registrationPartition);
       const summary = (await client.query<{
         source_epoch: number; baseline_bootstrap: string; acknowledged_position: string;
@@ -2004,6 +2013,8 @@ export function createPublicFilterSourceBinding(
             enqueue: after.native_enqueue_revision,revision: after.native_revision,claimRevision: after.native_claim_revision,
             observation: settled.queried.snapshot.observation,execution: settled.execution.id,
             settlement: settled.settlement.id,
+            consumer: encodePublicFilterNativeState(settled.queried.consumer),
+            physicalTarget: settled.queried.consumer.physicalTarget,incarnation: settled.queried.consumer.incarnation,
           };
           await acknowledgePublicFilterRepairBaseline(db,baseline,deadline);
           // The Source frontier is adopted only after the actual registration

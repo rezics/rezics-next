@@ -792,7 +792,8 @@ when independent replay closes that exact captured window. The complete terminal
 frontier; it advances one home only after the real registration-home ACK has committed and Source has
 adopted that native receipt. Crash recovery repeats that same home, never a newer baseline.
 
-The ACK transaction locks the same registration and home summary as change apply. Its complete original
+The ACK transaction locks the same registration and home summary as change apply, checks the exact native
+consumer and holds the original physical target/incarnation point through commit. Its complete original
 Subject and independent Account/claim baseline, captured successors and genuine mixed physical settlement
 cover precisely that baseline prefix. It records the actual observation, execution and native Search
 settlement locator on that summary. It never takes a maximum delivered position, changes
