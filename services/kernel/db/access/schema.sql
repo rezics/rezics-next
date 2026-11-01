@@ -165,6 +165,8 @@ BEGIN
   -- A table reset has no Account row identity. Each original native home remains
   -- independently dirty; no event delivery or clearing of intents retires it.
   FOR home IN SELECT partition_no FROM access.account_discovery_population ORDER BY partition_no LOOP
+    PERFORM 1 FROM core.partition WHERE partition_no=home AND write_state='active' FOR SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter owner is unavailable'; END IF;
     PERFORM 1 FROM access.account_discovery_population WHERE partition_no=home FOR UPDATE;
     PERFORM 1 FROM semantic.public_filter_privacy_head WHERE partition_no=home FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter Source head is missing'; END IF;

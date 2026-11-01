@@ -120,10 +120,12 @@ function originalProjectionRequestDigest(request: RetainedPublicFilterProjection
  */
 export async function readRetainedPublicFilterProjectionPage(
   pool: Pool,
-  request: RetainedPublicFilterProjectionRequest,
+  input: RetainedPublicFilterProjectionRequest,
   context: Readonly<{ deadline: number }>,
 ): Promise<PublicFilterProjectionPage | null> {
-  requireAccessDeadline(context.deadline);
+  const deadline = context.deadline;
+  const request = structuredClone(input);
+  requireAccessDeadline(deadline);
   const routed = routePartition(request.subject);
   if (!routed || !UUID.test(request.identity.bootstrap) ||
     !request.identity.execution || request.identity.execution.length > 4096 ||
@@ -139,7 +141,7 @@ export async function readRetainedPublicFilterProjectionPage(
     subject_id: request.subject,
     request_digest: originalProjectionRequestDigest(request),
   }));
-  requireAccessDeadline(context.deadline);
+  requireAccessDeadline(deadline);
   if (!stored) return null;
   if (replayDigest(stored.page_data) !== stored.page_digest)
     throw new Error('Retained projection page digest mismatch');
