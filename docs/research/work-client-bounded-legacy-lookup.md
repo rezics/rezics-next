@@ -238,11 +238,14 @@ filter: current fallback ranges across all matching rows in this database.
    not just winners. Parent index: `(realm,member,reservation,created_at DESC,
    actual_id COLLATE "C") WHERE kind='parent'`. Child index:
    `(realm,member,reservation,actual_id COLLATE "C") WHERE kind='child'`.
-3. `leave_eligible`: unique `(realm,member,reservation)`. It exists iff that group
+3. `leave_group`: versioned synchronization state keyed by
+   `(realm,member,reservation)`, present while candidates exist. Lock/upsert this
+   key before group changes, including creation of the first eligible row.
+4. `leave_eligible`: unique `(realm,member,reservation)`. It exists iff that group
    has a parent and a child, carrying its best parent rank and first child ID.
    Its lookup index is `(realm,member,parent_created_at DESC,parent_id COLLATE "C",
    child_id COLLATE "C",reservation)`; include any returned fields as necessary.
-4. A singleton versioned coverage record for installed-maintainer identity,
+5. A singleton versioned coverage record for installed-maintainer identity,
    backfill progress and cutover, read by full key. Operational progress is not
    native lifecycle completion. Do not mark it complete by row count or elapsed time.
 
@@ -397,6 +400,14 @@ Storage is O(N), not O(parent×child). Extra write amplification and contention 
 real tradeoffs; the derivation does not predict milliseconds, buffer counts or
 planner selection. Validate actual plans after implementation.
 
+Include the added nested trigger statements in native dispatch accounting.
+`src/work/sdk-retirement-fence.ts` currently prices deletion through
+`SDK_MAINTENANCE_DISPATCH` and native locking through `SDK_TRANSACTION_FENCE_COST`;
+these cannot silently keep their old costs when new hooks execute. Re-derive the
+affected prices with the SDK/Source owners and reserve the work in the existing
+frames. This is accounting for actual operations, not a new product budget or an
+increase in permission to retire. Measure the failure/rollback path as well.
+
 The architecture revision `4736cfd8a3c3fb1aa86ce7d07691fd9af1ecb62f` excludes
 invisible concurrent/unvacuumed MVCC versions from product logical bounds. This
 does not excuse visible rejected candidates, JSON filters, join expansion, sorting,
@@ -429,12 +440,13 @@ Adoption should authorize the following together; names for new files are propos
 | `patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch` | SDK-owned exhaustive transactional source hooks and upgrade integration, alongside existing fence guards; never edit installed node_modules |
 | `src/community/join.ts`, `src/community/work.ts`, `src/access/membership-work.ts` under kernel | Audit production enqueue/reuse paths; preserve inputs/IDs and authorization checks; no API or lifecycle changes required |
 | Kernel `src/work/retention.ts`, `src/history/durable.ts`, history registry/locator owner files | Integrate projection-copy inventory/removal with existing native custody; no new readiness inference |
+| Kernel `src/work/sdk-retirement-fence.ts` and owning Source dispatch derivations | Include added hook work in existing retirement/deletion reservations; preserve lifecycle permissions and execution bounds |
 | `services/kernel/src/server.ts`, `src/worker.ts`, `src/http/kernel.ts` and other WorkClient constructors | Regress existing lazy construction, borrowed-pool ownership and shutdown; avoid new caller-specific lookup routes |
 | `services/kernel/README.md`, `src/work/README.md` | Adopt compatibility order, maintenance/coverage ownership and derived Cost after owner agreement |
 | `services/kernel/test/work/legacy-leave-lookup.test.ts` | New exact compatibility and resource-ownership regression group |
 | `services/kernel/test/work/legacy-leave-lookup-migration.test.ts` | New backfill, atomicity, replay, old/native write, retention and upgrade group |
 | `services/kernel/test/work/growth-work-client-bounded-legacy.test.ts` | New frozen bounded assertions, including trigger/deletion work and complete misses |
-| Existing kernel `test/community/join.test.ts`, `test/community/ban.test.ts`, `test/work/growth-work-client.test.ts`, `test/work/retention.test.ts`, `test/work/sdk-retirement-fence.test.ts`; Auth membership tests | Preserve existing acceptance; run through supported placement after integration, without editing frozen tests |
+| Existing kernel `test/community/join.test.ts`, `test/community/ban.test.ts`, `test/work/growth-work-client.test.ts`, `test/work/retention.test.ts`, `test/work/sdk-retirement-fence.test.ts`; `services/auth/test/membership-workflows.test.ts` | Preserve existing acceptance; run through supported placement after integration, without editing frozen tests |
 
 Use a production-shaped fixture with real routed realm/member/reservation IDs,
 parent/child hashes and complete input envelopes including space, role, kind and
