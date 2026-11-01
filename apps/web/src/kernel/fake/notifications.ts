@@ -116,6 +116,17 @@ const fixtures = {
 export const inboxReadRecoveryStory = { reads: 0 };
 export const inboxSeenRecoveryStory = { commands: [] as { through: unknown; key: string | null }[] };
 export const inboxSeenAccessStory = { pageReads: 0, sessionReads: 0 };
+export const inboxTriageStory = {
+  pageReads: 0,
+  writes: [] as { through: unknown; key: string | null; body: unknown }[],
+  denyNextRead: false,
+};
+
+export function resetInboxTriageStory() {
+  inboxTriageStory.pageReads = 0;
+  inboxTriageStory.writes = [];
+  inboxTriageStory.denyNextRead = false;
+}
 
 const list: FakeRoute = {
   method: 'GET',
@@ -137,6 +148,20 @@ const list: FakeRoute = {
         status: 200,
         items: inboxSeenAccessStory.pageReads === 1 ? fixtures.mixed : [fixtures.many[0], ...fixtures.mixed],
         next: null,
+      };
+    }
+    if (fixture === 'triage-journey') {
+      inboxTriageStory.pageReads++;
+      if (inboxTriageStory.denyNextRead) {
+        inboxTriageStory.denyNextRead = false;
+        return { status: 403, code: 'forbidden', retryable: false, request_id: 'story-inbox-triage-read-denied' };
+      }
+      if (url.searchParams.get('cursor') === 'story-triage-older')
+        return { status: 200, items: [fixtures.mixed[1], fixtures.mixed[2]], next: null };
+      return {
+        status: 200,
+        items: [{ ...fixtures.mixed[0], unread: false }],
+        next: 'story-triage-older',
       };
     }
     if (fixture?.startsWith('seen-'))
@@ -233,6 +258,22 @@ const seen: FakeRoute = {
   path: /^\/v1\/accounts\/[^/]+\/notifications:markSeen$/,
   story: async ({ request }) => {
     const fixture = storyFixture(request);
+    if (fixture === 'triage-journey') {
+      const body = (await request.json()) as { through?: unknown };
+      inboxTriageStory.writes.push({
+        through: body.through,
+        key: request.headers.get('idempotency-key'),
+        body,
+      });
+      return inboxTriageStory.writes.length === 1
+        ? {
+            status: 503,
+            code: 'deadline_exceeded',
+            retryable: true,
+            request_id: 'story-inbox-triage-marker-unknown',
+          }
+        : { status: 204 };
+    }
     if (!fixture?.startsWith('seen-')) return { status: 204 };
     const body = (await request.json()) as { through?: unknown };
     inboxSeenRecoveryStory.commands.push({ through: body.through, key: request.headers.get('idempotency-key') });

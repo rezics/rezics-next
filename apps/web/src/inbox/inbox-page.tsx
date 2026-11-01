@@ -114,7 +114,12 @@ export function InboxRows({
         })}
       </ol>
       {page.next && onLoadMore ? (
-        <Button variant="outline" className="mt-5" onClick={onLoadMore} disabled={loading}>
+        <Button
+          variant="outline"
+          className="mt-5 h-auto min-h-11 max-w-full whitespace-normal py-2"
+          onClick={onLoadMore}
+          disabled={loading}
+        >
           {m.inbox_load_more()}
         </Button>
       ) : null}
@@ -153,12 +158,14 @@ export function ViewerInboxPage({
 }) {
   const queryClient = useQueryClient();
   const [pagination, setPagination] = useState(emptyInboxPagination);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const { cursor } = pagination;
-  const marked = useRef<string | null>(null);
+  const markedThrough = useRef<string | null>(null);
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
   const marking = useRef(false);
   const active = useRef(false);
   const [seenFailure, setSeenFailure] = useState<NativeInboxFailure>();
+  const [seenConfirmed, setSeenConfirmed] = useState(false);
   const [markingPending, setMarkingPending] = useState(false);
   const accessPending = useRef(false);
   const [checkingAccess, setCheckingAccess] = useState(false);
@@ -168,6 +175,9 @@ export function ViewerInboxPage({
   // Reconcile in this render so a native denial cannot commit even one frame of retained rows.
   if (received !== pagination) setPagination(received);
   const readable = readableInboxPage(received);
+  const unreadItems = readable?.items.filter((item) => item.unread) ?? [];
+  const hasUnreadLoaded = unreadItems.length > 0;
+  const visibleItems = unreadOnly ? unreadItems : (readable?.items ?? []);
   const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
   const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
   const waiting = usePreferenceRetry(operationState?.failure);
@@ -177,7 +187,8 @@ export function ViewerInboxPage({
   // A successful page read only establishes read access; the separate marker retry can still be refused.
   const offerSeenRetry =
     seenFailure?.code !== 'platform_closed' &&
-    (accessRefused(seenFailure) ? accessCheck === 'checked' && page !== null : seenFailure?.retryable !== false);
+    page !== null &&
+    (accessRefused(seenFailure) ? accessCheck === 'checked' : seenFailure?.retryable !== false);
 
   useEffect(() => {
     active.current = true;
@@ -188,15 +199,16 @@ export function ViewerInboxPage({
 
   const sendSeenAttempt = useCallback(
     async (attempt: InboxSeenAttempt) => {
-      if (!csrfToken || marking.current || !viewer.isCurrent()) return;
+      if (!csrfToken || marking.current || seenAttempt.current !== attempt || !viewer.isCurrent()) return;
       marking.current = true;
       setMarkingPending(true);
       try {
         await markInboxViewerSeen(queryClient, viewer, attempt, csrfToken);
         if (!active.current || !viewer.isCurrent()) return;
-        marked.current = attempt.through;
+        markedThrough.current = attempt.through;
         seenAttempt.current = null;
         setSeenFailure(undefined);
+        setSeenConfirmed(true);
       } catch (error: unknown) {
         if (active.current && viewer.isCurrent()) setSeenFailure(inboxSeenFailure(error).failure);
       } finally {
@@ -209,23 +221,29 @@ export function ViewerInboxPage({
     [queryClient, viewer, csrfToken],
   );
 
-  useEffect(() => {
+  const markLoadedThroughLatest = () => {
     if (
-      !viewer.isCurrent() ||
-      (cursor !== undefined && !seenAttempt.current) ||
       !csrfToken ||
+      !viewer.isCurrent() ||
+      !page ||
+      !readable?.items.length ||
+      !hasUnreadLoaded ||
+      seenAttempt.current ||
+      seenFailure ||
       marking.current ||
-      marked.current ||
-      seenFailure
+      accessPending.current ||
+      pageQuery.isFetching ||
+      waiting ||
+      seenWaiting
     )
       return;
-    const newest = page?.items[0];
-    if (!seenAttempt.current) {
-      if (!newest?.unread) return;
-      seenAttempt.current = { through: newest.id, idempotencyKey: crypto.randomUUID() };
-    }
-    void sendSeenAttempt(seenAttempt.current);
-  }, [cursor, page?.items, viewer, csrfToken, seenFailure, sendSeenAttempt]);
+    const latest = readable.items[0];
+    if (!latest || markedThrough.current === latest.id) return;
+    const attempt: InboxSeenAttempt = { through: latest.id, idempotencyKey: crypto.randomUUID() };
+    seenAttempt.current = attempt;
+    setSeenConfirmed(false);
+    void sendSeenAttempt(attempt);
+  };
 
   const checkAccess = async () => {
     if (
@@ -296,6 +314,7 @@ export function ViewerInboxPage({
         {!seenNeedsAccess ? (
           <Button
             variant="outline"
+            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
             onClick={() => void pageQuery.refetch({ cancelRefetch: false })}
             disabled={pageQuery.isFetching || checkingAccess || waiting}
           >
@@ -305,6 +324,7 @@ export function ViewerInboxPage({
         {cursor !== undefined ? (
           <Button
             variant="outline"
+            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
             onClick={startAtFirstPage}
             disabled={pageQuery.isFetching || checkingAccess || waiting}
           >
@@ -342,7 +362,7 @@ export function ViewerInboxPage({
           <div className="flex flex-wrap items-start gap-3">
             <Button
               variant="outline"
-              className="h-auto min-h-10 max-w-full whitespace-normal py-2"
+              className="h-auto min-h-11 max-w-full whitespace-normal py-2"
               disabled={
                 seenWaiting ||
                 waiting ||
@@ -362,7 +382,7 @@ export function ViewerInboxPage({
                 </legend>
                 <Button
                   variant="outline"
-                  className="h-auto min-h-10 max-w-full whitespace-normal py-2"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
                   disabled={
                     seenWaiting ||
                     waiting ||
@@ -395,7 +415,7 @@ export function ViewerInboxPage({
           {!seenFailure ? (
             <Button
               variant="outline"
-              className="h-auto min-h-10 max-w-full whitespace-normal py-2"
+              className="h-auto min-h-11 max-w-full whitespace-normal py-2"
               disabled={checkingAccess || waiting || seenWaiting}
               onClick={() => void checkAccess()}
             >
@@ -408,13 +428,110 @@ export function ViewerInboxPage({
       ) : (
         <>
           {readable ? (
+            <section className="mt-5 space-y-3">
+              <div role="group" aria-label={m.inbox_triage_filter_group()} className="flex min-w-0 flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-pressed={!unreadOnly}
+                  className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+                  onClick={() => setUnreadOnly(false)}
+                >
+                  {m.inbox_triage_filter_all()}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-pressed={unreadOnly}
+                  className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+                  onClick={() => setUnreadOnly(true)}
+                >
+                  {m.inbox_triage_filter_unread()}
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">{m.inbox_triage_scope()}</p>
+              {hasUnreadLoaded &&
+              !seenFailure &&
+              readable.items[0]?.id !== markedThrough.current ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">{m.inbox_triage_mark_help()}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                    disabled={
+                      markingPending ||
+                      checkingAccess ||
+                      pageQuery.isFetching ||
+                      waiting ||
+                      seenWaiting ||
+                      !csrfToken ||
+                      !viewer.isCurrent() ||
+                      page === null ||
+                      seenAttempt.current !== null
+                    }
+                    onClick={markLoadedThroughLatest}
+                  >
+                    {m.inbox_triage_mark()}
+                  </Button>
+                </div>
+              ) : null}
+              {seenConfirmed ? <p role="status">{m.inbox_triage_marked()}</p> : null}
+            </section>
+          ) : null}
+          {readable ? (
             readable.items.length === 0 && !readable.next ? (
               !failed && !pageQuery.isFetching ? (
                 <p className="mt-6 text-muted-foreground">{m.inbox_empty()}</p>
               ) : null
+            ) : unreadOnly && !hasUnreadLoaded ? (
+              <section className="mt-6 space-y-3">
+                <p role="status" className="text-muted-foreground">
+                  {readable.items.length === 0 && !readable.next
+                    ? m.inbox_empty()
+                    : m.inbox_triage_no_unread_loaded()}
+                </p>
+                {readable.next ? (
+                  <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p>
+                ) : null}
+                {readable.next ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                    onClick={loadMore}
+                    disabled={pageQuery.isFetching || checkingAccess}
+                  >
+                    {m.inbox_load_more()}
+                  </Button>
+                ) : null}
+              </section>
+            ) : !unreadOnly && readable.items.length === 0 ? (
+              <section className="mt-6 space-y-3">
+                <p role="status" className="text-muted-foreground">
+                  {m.inbox_triage_no_loaded()}
+                </p>
+                {readable.next ? (
+                  <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p>
+                ) : null}
+                {readable.next ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                    onClick={loadMore}
+                    disabled={pageQuery.isFetching || checkingAccess}
+                  >
+                    {m.inbox_load_more()}
+                  </Button>
+                ) : null}
+              </section>
             ) : (
               <InboxRows
-                page={readable}
+                page={{
+                  ...readable,
+                  items: visibleItems,
+                }}
                 {...(!failed && readable.next ? { onLoadMore: loadMore } : {})}
                 loading={pageQuery.isFetching || checkingAccess}
               />

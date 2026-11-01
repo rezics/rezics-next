@@ -337,6 +337,8 @@ export const SeenRetryAfterRecovery: Story = {
   render: () => <SeenInboxStory fixture="seen-wait" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
+    await inboxNoticeList(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.inbox_triage_mark() }));
     const status = (await view.findByText(m.inbox_seen_unavailable())).closest('section')!;
     await expect(status).toHaveAttribute('data-response-status', '429');
     await expect(status).toHaveAttribute('data-response-code', 'rate_limited');
@@ -366,6 +368,8 @@ export const SeenUnavailable: Story = {
   render: () => <SeenInboxStory fixture="seen-unavailable" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
+    await inboxNoticeList(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.inbox_triage_mark() }));
     const status = (await view.findByText(m.inbox_seen_unavailable())).closest('section')!;
     await expect(status).toHaveAttribute('data-response-status', '503');
     await expect(status).toHaveAttribute('data-response-code', 'deadline_exceeded');
@@ -382,6 +386,8 @@ export const SeenClosed: Story = {
   render: () => <SeenInboxStory fixture="seen-closed" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
+    await inboxNoticeList(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.inbox_triage_mark() }));
     const status = (await view.findByText(m.inbox_seen_closed())).closest('section')!;
     await expect(status).toHaveAttribute('data-response-code', 'platform_closed');
     await expect(await inboxNoticeList(canvasElement)).toBeVisible();
@@ -394,6 +400,8 @@ export const SeenDenied: Story = {
   render: () => <SeenInboxStory fixture="seen-denied" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
+    await inboxNoticeList(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.inbox_triage_mark() }));
     const status = (await view.findByText(m.inbox_seen_denied())).closest('section')!;
     await expect(status).toHaveAttribute('data-response-status', '403');
     await expect(status).toHaveAttribute('data-response-code', 'forbidden');
@@ -408,6 +416,8 @@ export const SeenViewerBecomesUnknown: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     const main = within(await inboxMain(canvasElement));
+    await main.findByRole('list', { name: m.inbox_heading() });
+    await userEvent.click(main.getByRole('button', { name: m.inbox_triage_mark() }));
     await main.findByText(m.inbox_seen_rate_limited());
     await userEvent.click(view.getByRole('button', { name: 'Session becomes unknown' }));
     await main.findByText(m.inbox_loading());
@@ -453,6 +463,8 @@ export const SeenDeniedAccessRecovery: Story = {
   render: () => <InboxStory fixture="seen-access-recovery" />,
   play: async ({ canvasElement }) => {
     const main = within(await inboxMain(canvasElement));
+    await main.findByRole('list', { name: m.inbox_heading() });
+    await userEvent.click(main.getByRole('button', { name: m.inbox_triage_mark() }));
     const status = (await main.findByText(m.inbox_seen_denied())).closest('section')!;
     await expect(status).toHaveAttribute('data-response-status', '403');
     await expect(status).toHaveAttribute('data-response-code', 'forbidden');
