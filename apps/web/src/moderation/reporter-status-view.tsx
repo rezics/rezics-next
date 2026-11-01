@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   createReporterStatusJourney,
   type ReporterStatusRead,
+  type ReporterStatusNavigation,
   type ReporterStatusReader,
   type ReporterStatusResult,
 } from './reporter-status-read-model';
@@ -46,9 +47,18 @@ const readCurrent: ReporterStatusReader = async (data) =>
   (await import('./reporter-status-read')).readReporterStatus({ data });
 
 /** Default route composition, with synchronous observation of the real browser session cache. */
-export function ReporterStatusCurrent({ initial }: { initial: ReporterStatusRead }) {
+export function ReporterStatusCurrent({
+  initial,
+  navigation,
+}: {
+  initial: ReporterStatusRead;
+  navigation?: ReporterStatusNavigation;
+}) {
   const cache = useQueryClient();
-  const journey = useMemo(() => createReporterStatusJourney(cache, initial, readCurrent), [cache, initial]);
+  const journey = useMemo(
+    () => createReporterStatusJourney(cache, initial, readCurrent, navigation),
+    [cache, initial, navigation],
+  );
   const result = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.serverSnapshot);
   return <ReporterStatusResultPage result={result} onRetry={() => journey.retry()} isCurrent={journey.isCurrent} />;
 }

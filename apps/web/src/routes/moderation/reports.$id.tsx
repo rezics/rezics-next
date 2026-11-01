@@ -1,4 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { useMemo } from 'react';
+import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { readReporterStatus } from '../../moderation/reporter-status-read';
 import { prepareReporterStatusRead } from '../../moderation/reporter-status-read-model';
 import { ReporterStatusCurrent, ReporterStatusPage } from '../../moderation/reporter-status-view';
@@ -9,13 +10,17 @@ import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/moderation/reports/$id')({
   beforeLoad: requireSignedIn,
-  loader: ({ params, context, abortController }) =>
-    prepareReporterStatusRead(
+  loader: async ({ params, context, abortController, location }) => ({
+    ...(await prepareReporterStatusRead(
       context.queryClient,
       params.id,
       (data) => readReporterStatus({ data }),
       abortController.signal,
-    ),
+    )),
+    navigationKey: location.state.__TSR_key ?? location.href,
+  }),
+  pendingMs: 0,
+  pendingMinMs: 0,
   staleTime: 0,
   gcTime: 0,
   pendingComponent: () => <ReporterStatusPage state="loading" />,
@@ -27,5 +32,23 @@ export const Route = createFileRoute('/moderation/reports/$id')({
 
 function ReporterStatusRoute() {
   const initial = Route.useLoaderData();
-  return <ReporterStatusCurrent key={initial.generation} initial={initial} />;
+  const router = useRouter();
+  const navigation = useMemo(
+    () => ({
+      isCurrent: () => (router.state.location.state.__TSR_key ?? router.state.location.href) === initial.navigationKey,
+      subscribe: (retire: () => void) => {
+        const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+          if ((toLocation.state.__TSR_key ?? toLocation.href) !== initial.navigationKey) retire();
+        });
+        // An explicit route reload replaces the read generation even at the same URL.
+        const reload = router.subscribe('onBeforeLoad', retire);
+        return () => {
+          leave();
+          reload();
+        };
+      },
+    }),
+    [router, initial.navigationKey],
+  );
+  return <ReporterStatusCurrent key={initial.generation} initial={initial} navigation={navigation} />;
 }

@@ -13,6 +13,7 @@ export type ReporterStatusRead = {
   result: { state: 'loaded'; report: ReporterStatus } | { state: 'unavailable' | 'concealed' | 'closed' };
 };
 export type ReporterStatusReader = (input: { id: string; generation: string }) => Promise<ReporterStatusRead>;
+export type ReporterStatusNavigation = { isCurrent: () => boolean; subscribe: (retire: () => void) => () => void };
 type BrowserSession = { state: string; subject?: string | null; csrfToken: string | null };
 const concealed = { state: 'concealed' } as const;
 const retired = new WeakSet<ReporterStatusRead>();
@@ -93,6 +94,7 @@ export function createReporterStatusJourney(
   cache: QueryClient,
   initial: ReporterStatusRead,
   read: ReporterStatusReader,
+  navigation?: ReporterStatusNavigation,
 ) {
   let result: ReporterStatusResult = retired.has(initial) ? concealed : initial.result;
   let viewer = initial.viewer;
@@ -112,7 +114,7 @@ export function createReporterStatusJourney(
     if (result !== concealed) publish(concealed);
   };
   const observe = () => {
-    if (!sameViewer(viewer, currentViewer(cache))) retire();
+    if (!sameViewer(viewer, currentViewer(cache)) || navigation?.isCurrent() === false) retire();
   };
   const snapshot = () => {
     observe();
@@ -125,10 +127,12 @@ export function createReporterStatusJourney(
     subscribe(listener: () => void) {
       listeners.add(listener);
       const unsubscribe = cache.getQueryCache().subscribe(observe);
+      const unsubscribeNavigation = navigation?.subscribe(retire);
       handovers.get(initial)?.();
       observe();
       return () => {
         unsubscribe();
+        unsubscribeNavigation?.();
         listeners.delete(listener);
         retired.add(initial);
         // React may replay a subscription synchronously. A real unmount still closes settlement immediately.
@@ -140,7 +144,8 @@ export function createReporterStatusJourney(
         });
       };
     },
-    isCurrent: () => !disposed && listeners.size > 0 && sameViewer(viewer, currentViewer(cache)),
+    isCurrent: () =>
+      !disposed && listeners.size > 0 && sameViewer(viewer, currentViewer(cache)) && navigation?.isCurrent() !== false,
     async retry() {
       observe();
       if (disposed || !listeners.size || result.state !== 'unavailable') return;
