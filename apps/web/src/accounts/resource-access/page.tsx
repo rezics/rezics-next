@@ -2,7 +2,7 @@ import { OwnerTransferForm } from './owner-transfer.tsx';
 import { transferableOwner } from './owner-transfer.ts';
 import { Menu } from '@rezics/ui/menu';
 import { Tombstone } from '@rezics/ui/tombstone';
-import { ListRow, ListRowControl } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -37,6 +37,15 @@ import { AccessRecovery } from './recovery';
 function identityName(identity: Identity | undefined, fallback?: string) {
   if (identity?.state === 'deleted') return m.access_deleted_account();
   return identity?.displayName || (identity?.handle ? `@${identity.handle}` : fallback) || m.access_unknown_account();
+}
+function subjectTitle(subject: Subject, identity: Identity | undefined) {
+  if (subject.kind === 'active_accounts') return m.access_active_accounts();
+  if (subject.kind === 'realm')
+    return `${subject.id} · ${subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members()}`;
+  const name = identityName(identity, subject.id);
+  return subject.kind === 'organization' && identity?.state !== 'deleted'
+    ? `${name} · ${subject.role === 'owner' ? m.access_org_owners() : m.access_org_members()}`
+    : name;
 }
 function SubjectName({ subject, page }: { subject: Subject; page: AccessSnapshot }) {
   if (subject.kind === 'active_accounts') return <>{m.access_active_accounts()}</>;
@@ -496,68 +505,85 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
             </p>
           ) : (
             <ul className="space-y-2">
-              {page.grants.map((grant, index) => (
-                <ListRow key={index} className="flex items-start gap-3 rounded-xl p-3 sm:p-4">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="break-words font-medium">
-                      <SubjectName subject={grant.subject} page={page} />
-                    </div>
-                    <p className="text-sm">
-                      {grant.kind === 'role' ? roleName(grant.role!) : m.access_direct_action()}
-                      {grant.state === 'scheduled' ? <> · {m.access_scheduled()}</> : null}
-                    </p>
-                    <p className="break-words text-sm text-muted-foreground">
-                      {grant.actions.map(actionName).join(', ') || m.access_role_unavailable()}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {m.access_valid_interval({
-                        start: dateLabel(grant.startsAt, m.access_no_start()),
-                        end: dateLabel(grant.endsAt, m.access_no_end()),
-                      })}
-                    </p>
-                  </div>
-                  {grant.manageable ? (
-                    <ListRowControl>
-                      <Menu
-                        title={m.access_grant_actions()}
-                        trigger={
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={m.access_grant_actions()}
-                            disabled={state.busy || !!state.pending}
-                          >
-                            <EllipsisIcon aria-hidden="true" />
-                          </Button>
-                        }
-                        entries={[
-                          {
-                            type: 'item',
-                            label: m.access_edit_grant(),
-                            onSelect: () => {
-                              setTransfer(null);
-                              setForm(grant);
+              {page.grants.map((grant, index) => {
+                const subject = grant.subject;
+                const identity =
+                  subject.kind === 'account' || subject.kind === 'organization'
+                    ? page.identities.find((identity) => identity.id === subject.id)
+                    : undefined;
+                return (
+                  <ContentItem
+                    key={index}
+                    className="p-3 sm:p-4"
+                    title={subjectTitle(subject, identity)}
+                    headingLevel={3}
+                    metadata={grant.kind === 'role' ? roleName(grant.role!) : m.access_direct_action()}
+                    preview={
+                      <>
+                        <p className="break-words text-muted-foreground">
+                          {grant.actions.map(actionName).join(', ') || m.access_role_unavailable()}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {m.access_valid_interval({
+                            start: dateLabel(grant.startsAt, m.access_no_start()),
+                            end: dateLabel(grant.endsAt, m.access_no_end()),
+                          })}
+                        </p>
+                      </>
+                    }
+                    state={
+                      identity?.state === 'deleted' || grant.state === 'scheduled' ? (
+                        <>
+                          {identity?.state === 'deleted' ? (
+                            <Tombstone shape="row" reason="deleted" labels={{ deleted: m.access_deleted_account() }} />
+                          ) : null}
+                          {grant.state === 'scheduled' ? <p>{m.access_scheduled()}</p> : null}
+                        </>
+                      ) : null
+                    }
+                    actions={
+                      grant.manageable ? (
+                        <Menu
+                          title={m.access_grant_actions()}
+                          trigger={
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label={m.access_grant_actions()}
+                              disabled={state.busy || !!state.pending}
+                            >
+                              <EllipsisIcon aria-hidden="true" />
+                            </Button>
+                          }
+                          entries={[
+                            {
+                              type: 'item',
+                              label: m.access_edit_grant(),
+                              onSelect: () => {
+                                setTransfer(null);
+                                setForm(grant);
+                              },
                             },
-                          },
-                          ...(io.transfer && transferableOwner(page, grant)
-                            ? [
-                                {
-                                  type: 'item' as const,
-                                  label: m.access_transfer_owner(),
-                                  onSelect: () => {
-                                    setForm(null);
-                                    setTransfer(grant);
+                            ...(io.transfer && transferableOwner(page, grant)
+                              ? [
+                                  {
+                                    type: 'item' as const,
+                                    label: m.access_transfer_owner(),
+                                    onSelect: () => {
+                                      setForm(null);
+                                      setTransfer(grant);
+                                    },
                                   },
-                                },
-                              ]
-                            : []),
-                          { type: 'destructive', label: m.access_revoke(), onSelect: () => setRevoke(grant) },
-                        ]}
-                      />
-                    </ListRowControl>
-                  ) : null}
-                </ListRow>
-              ))}
+                                ]
+                              : []),
+                            { type: 'destructive', label: m.access_revoke(), onSelect: () => setRevoke(grant) },
+                          ]}
+                        />
+                      ) : null
+                    }
+                  />
+                );
+              })}
             </ul>
           )}
           {page.next ? (

@@ -1,6 +1,6 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../../paraglide/messages.js';
 import { accountHref } from '../../subject/subject-href';
 import type { PublicReadState, PublicRealms } from './read';
@@ -90,18 +90,13 @@ export function PublicRealmsPage({
           {result.realms.length ? (
             <ul aria-label={m.public_account_realms()}>
               {result.realms.map((realm) => (
-                <ListRow key={realm.id} className="space-y-1 py-4">
-                  <ListRowLink href={`/${encodeURIComponent(locale)}/realms/${encodeURIComponent(realm.id)}`}>
-                    {realm.title}
-                  </ListRowLink>
-                  <p aria-hidden="true" className="font-medium">
-                    {realm.title}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {realm.role === 'owner' ? m.public_account_realm_owner() : m.public_account_realm_member()}
-                  </p>
-                  {realm.summary && <p className="line-clamp-3 text-sm text-muted-foreground">{realm.summary}</p>}
-                </ListRow>
+                <ContentItem
+                  key={realm.id}
+                  title={realm.title}
+                  href={`/${encodeURIComponent(locale)}/realms/${encodeURIComponent(realm.id)}`}
+                  metadata={realm.role === 'owner' ? m.public_account_realm_owner() : m.public_account_realm_member()}
+                  preview={realm.summary ? <p className="line-clamp-3 text-muted-foreground">{realm.summary}</p> : null}
+                />
               ))}
             </ul>
           ) : (
