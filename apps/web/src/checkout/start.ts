@@ -57,7 +57,7 @@ async function jsonBody(request: Request): Promise<unknown> {
 }
 
 export async function startCheckout(request: Request, sessionEnv: Partial<SessionEnv>): Promise<Response> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return problemResponse(problem(401, 'unauthorized', 'Unauthorized'));
   const credential = viewerCredential(request);
   if (!credential) return problemResponse(problem(401, 'unauthorized', 'Unauthorized'));
   const body = await jsonBody(request);
@@ -85,7 +85,7 @@ export async function startCheckout(request: Request, sessionEnv: Partial<Sessio
       'idempotency-key': fields.idempotencyKey,
     };
     const input = { offerId: fields.offerId, expectedOfferRevision: fields.expectedOfferRevision };
-    result = await kernelClient().orders.post(input, { headers });
+    result = await kernelClient().orders.post(input, { headers, fetch: { cache: 'no-store', redirect: 'manual' } });
   } catch (error) {
     if (isPlatformClosedError(error))
       return Response.json(error.problem, {

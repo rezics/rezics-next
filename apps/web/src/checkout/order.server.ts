@@ -13,10 +13,36 @@ import { benefitCreatorName, capturedBenefit, sameCapturedBenefit, type Captured
 type OrderRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['orders']>['get']>>['data']>;
 type BuyerOrder = { kind: 'order'; order: OrderPageData } | { kind: 'missing' } | { kind: 'unavailable' };
 
-const reads = new WeakMap<Request, Map<string, Promise<BuyerOrder>>>();
 type CurrentAccess = { entitlement: CurrentEntitlement; canUseBenefit: boolean };
-const entitlementReads = new WeakMap<Request, Map<string, Promise<CurrentAccess>>>();
+type BuyerReader = {
+  credential: string;
+  subject: string | undefined;
+  orders: Map<string, Promise<BuyerOrder>>;
+  entitlements: Map<string, Promise<CurrentAccess>>;
+};
+const readers = new WeakMap<Request, BuyerReader>();
 const settlements = new Set<Settlement>(['pending', 'paid', 'failed', 'unknown']);
+
+async function prepareReader(request: Request): Promise<BuyerReader | undefined> {
+  // Renew admission before consulting either private cache, including status-only reads.
+  if (await prepareSession(request, env as Partial<SessionEnv>)) {
+    readers.delete(request);
+    return;
+  }
+  const credential = viewerCredential(request);
+  if (!credential) {
+    readers.delete(request);
+    return;
+  }
+  // Explicit Authorization does not establish the subject retained by cookie preparation.
+  const subject = request.headers.has('authorization') ? undefined : sessionSubject(request);
+  let reader = readers.get(request);
+  if (!reader || reader.credential !== credential || reader.subject !== subject) {
+    reader = { credential, subject, orders: new Map(), entitlements: new Map() };
+    readers.set(request, reader);
+  }
+  return reader;
+}
 
 async function currentEntitlement(
   client: KernelClient,
@@ -28,7 +54,10 @@ async function currentEntitlement(
   const unavailable = { entitlement: { kind: 'unavailable' as const }, canUseBenefit: false };
   if (!UUID.test(entitlementId)) return unavailable;
   try {
-    const result = await client.entitlements({ entitlementId }).get({ headers: { authorization: credential } });
+    const result = await client.entitlements({ entitlementId }).get({
+      headers: { authorization: credential },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
     const entitlement = result.data?.entitlement;
     if (
       result.error ||
@@ -51,9 +80,8 @@ async function currentEntitlement(
 }
 
 function entitlementOnce(
-  request: Request,
+  reader: BuyerReader,
   client: KernelClient,
-  credential: string,
   orderId: string,
   entitlementId: string | null,
   benefit: CapturedBenefit | undefined,
@@ -61,29 +89,24 @@ function entitlementOnce(
   if (entitlementId === null) return Promise.resolve({ entitlement: { kind: 'none' }, canUseBenefit: false });
   if (typeof entitlementId !== 'string')
     return Promise.resolve({ entitlement: { kind: 'unavailable' }, canUseBenefit: false });
-  let pending = entitlementReads.get(request);
-  if (!pending) {
-    pending = new Map();
-    entitlementReads.set(request, pending);
-  }
+  const pending = reader.entitlements;
   const key = `${orderId}\n${entitlementId}`;
   let entitlement = pending.get(key);
   if (!entitlement) {
-    entitlement = currentEntitlement(client, credential, orderId, entitlementId, benefit);
+    entitlement = currentEntitlement(client, reader.credential, orderId, entitlementId, benefit);
     pending.set(key, entitlement);
   }
   return entitlement;
 }
 
 // Status rechecks read without a locale and never read current entitlement.
-async function readOnce(request: Request, id: string, locale: string | undefined): Promise<BuyerOrder> {
-  if (locale !== undefined) await prepareSession(request, env as Partial<SessionEnv>);
-  const credential = viewerCredential(request);
-  if (!credential) return { kind: 'missing' };
+async function readOnce(credential: string, id: string, locale: string | undefined): Promise<BuyerOrder> {
   const client = kernelClient();
-  const result = await client
-    .orders({ orderId: id })
-    .get({ headers: { authorization: credential }, ...(locale === undefined ? {} : { query: { languages: locale } }) });
+  const result = await client.orders({ orderId: id }).get({
+    headers: { authorization: credential },
+    ...(locale === undefined ? {} : { query: { languages: locale } }),
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
   if (result.error) {
     const status = result.status || result.error.status;
     if (status === 404) return { kind: 'missing' };
@@ -117,43 +140,39 @@ async function readOnce(request: Request, id: string, locale: string | undefined
   };
 }
 
-function buyerOrder(request: Request, id: string, locale?: string): Promise<BuyerOrder> {
-  let pending = reads.get(request);
-  if (!pending) {
-    pending = new Map();
-    reads.set(request, pending);
-  }
+function buyerOrder(reader: BuyerReader, id: string, locale?: string): Promise<BuyerOrder> {
+  const pending = reader.orders;
   const key = `${locale ?? ''}\n${id}`;
   let order = pending.get(key);
   if (!order) {
-    order = readOnce(request, id, locale);
+    order = readOnce(reader.credential, id, locale);
     pending.set(key, order);
   }
   return order;
 }
 
-async function loadRequestOrder(request: Request, id: string, locale: string): Promise<OrderPageData> {
+async function loadRequestOrder(request: Request, id: string, locale: string) {
   setResponseHeader('cache-control', 'private, no-store');
-  const outcome = await buyerOrder(request, id, locale);
+  const reader = await prepareReader(request);
+  if (!reader) throw notFound();
+  const outcome = await buyerOrder(reader, id, locale);
   if (outcome.kind === 'missing') throw notFound();
   if (outcome.kind === 'unavailable') throw new Error('Kernel order read failed');
-  return outcome.order;
+  return { order: outcome.order, reader };
 }
 
 export async function loadOrder(id: string, locale: string): Promise<OrderPageData> {
-  return loadRequestOrder(getRequest(), id, locale);
+  return (await loadRequestOrder(getRequest(), id, locale)).order;
 }
 
 /** Compose current access only for the detail page, sharing its prepared order and credential. */
 export async function loadOrderPage(id: string, locale: string): Promise<OrderPageData> {
   const request = getRequest();
-  const order = await loadRequestOrder(request, id, locale);
-  const credential = viewerCredential(request);
-  const access = credential
-    ? await entitlementOnce(request, kernelClient(), credential, id, order.entitlementId, order.benefit)
-    : { entitlement: { kind: 'unavailable' as const }, canUseBenefit: false };
+  const { order, reader } = await loadRequestOrder(request, id, locale);
+  const credential = reader.credential;
+  const access = await entitlementOnce(reader, kernelClient(), id, order.entitlementId, order.benefit);
   let canReconcile = false;
-  const accountId = sessionSubject(request);
+  const accountId = reader.subject;
   if (credential && accountId && UUID.test(accountId)) {
     try {
       const result = await kernelClient().viewerActions.post(
@@ -185,7 +204,8 @@ export async function loadOrderPage(id: string, locale: string): Promise<OrderPa
 
 export async function orderStatusResponse(request: Request, id: string): Promise<Response> {
   if (!UUID.test(id)) return new Response(null, { status: 404, headers: { 'cache-control': 'private, no-store' } });
-  const outcome = await buyerOrder(request, id);
+  const reader = await prepareReader(request);
+  const outcome = reader ? await buyerOrder(reader, id) : { kind: 'missing' as const };
   if (outcome.kind === 'missing')
     return new Response(null, { status: 404, headers: { 'cache-control': 'private, no-store' } });
   if (outcome.kind === 'unavailable') throw new Error('Kernel order read failed');
