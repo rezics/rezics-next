@@ -6,6 +6,7 @@ import { sessionQuery } from '../session/query';
 import type { CreatorOfferGuard } from './creator-offers';
 
 type Operation = 'offer.list' | 'payout_statement.list';
+export const creatorPreviewGuard: CreatorOfferGuard = { isCurrent: () => false, csrfToken: () => null };
 type Observation = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   subject: string | null;

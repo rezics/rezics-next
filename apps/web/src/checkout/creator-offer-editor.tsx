@@ -1,10 +1,11 @@
-import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useContext, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
+import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { parseCreatorPrice } from './creator-price';
 import { formatMinorAmount } from './money';
 import type { ConfiguredSaleCurrencyRule } from './money-schema';
@@ -165,6 +166,12 @@ export function CreatorOfferEditor({
 }
 
 function StandaloneCreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
+  const client = useContext(QueryClientContext);
+  return client ? <ObservedCreatorOfferEditor data={data} locale={locale} />
+    : <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={creatorPreviewGuard} />;
+}
+
+function ObservedCreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
   const edition = data.editor.kind === 'ready' ? data.editor.edition : undefined;
   const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, edition?.editionId ?? data.editor.kind]),
     edition?.creatorAccountId);
@@ -223,7 +230,7 @@ function CreatorOfferForm({
   const amount = parsedPrice(text, rule);
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
-  const canSubmit = guard.isCurrent() && !!guard.csrfToken();
+  const canSubmit = data.selling && guard.isCurrent() && !!guard.csrfToken();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -233,6 +240,7 @@ function CreatorOfferForm({
       !current.active ||
       locked.current ||
       !guard.isCurrent() ||
+      !data.selling ||
       !csrfToken ||
       editor.kind !== 'ready' ||
       result?.kind === 'saved'

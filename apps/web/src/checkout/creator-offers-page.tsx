@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
+import { useContext, useLayoutEffect, useRef, useState } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -33,6 +34,14 @@ function OwnedOfferControls({
 }
 
 function StandaloneOfferCommands({ offer, data, locale }: {
+  offer: CreatorOffer; data: CreatorOffersPageData; locale: string;
+}) {
+  const client = useContext(QueryClientContext);
+  return client ? <ObservedOfferCommands offer={offer} data={data} locale={locale} />
+    : <OfferCommands offer={offer} data={data} locale={locale} guard={creatorPreviewGuard} />;
+}
+
+function ObservedOfferCommands({ offer, data, locale }: {
   offer: CreatorOffer; data: CreatorOffersPageData; locale: string;
 }) {
   const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, offer.id]),

@@ -37,11 +37,14 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
+const { renderToStaticMarkup } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { sessionQuery } = await import('../src/session/query');
 const offers = await import('../src/checkout/creator-offers');
 const statements = await import('../src/checkout/creator-statements');
+const { CreatorOfferEditor } = await import('../src/checkout/creator-offer-editor');
+const { CreatorOffersPage } = await import('../src/checkout/creator-offers-page');
 const { CreatorOffersCurrent, CreatorOfferEditorCurrent } = await import('../src/checkout/creator-offers-current');
 const { CreatorStatementsCurrent, CreatorStatementCurrent } = await import('../src/checkout/creator-statements-current');
 const { m } = await import('../src/paraglide/messages.js');
@@ -234,6 +237,9 @@ describe('Creator workspace retires observed stale read and command origins befo
   }));
 
   test('create and reprice preserve exact uncertain operands through rotation, authority gaps and equivalent refresh', async () => workspace(async (p) => {
+    expect(renderToStaticMarkup(<CreatorOfferEditor data={editor().data} locale="en" />)).toContain('a'.repeat(64));
+    expect(renderToStaticMarkup(<CreatorOffersPage data={list().data} locale="en" />)).toContain(`Private offer ${A}`);
+    expect(p.writes).toHaveLength(0);
     await p.show('editor'); await p.createDraft(); const oldCreate = p.submitCallback();
     await p.submit(); await p.settle(p.writes[0]!.work, { kind: 'retry' });
     const refreshed = editor(); refreshed.data.createKey = id(75);
