@@ -199,7 +199,7 @@ export function ContextDirectoryView({
               <ContentItem
                 key={entry.id}
                 title={title.text || m.context_unnamed({}, o)}
-                titleLang={title.lang ?? undefined}
+                {...(title.lang ? { titleLang: title.lang } : {})}
                 href={detailHref(locale, entry.id)}
                 metadata={
                   <>

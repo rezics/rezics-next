@@ -205,12 +205,13 @@ export function WorkPartsPage({
                           ? row.summary.label?.value || m.subject_value_unlabelled({}, o)
                           : m.work_parts_unresolved({}, o)
                       }
-                      titleLang={row.summary?.label?.language}
-                      href={
-                        row.summary
-                          ? subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href
-                          : undefined
-                      }
+                      {...(row.summary?.label ? { titleLang: row.summary.label.language } : {})}
+                      {...(row.summary
+                        ? {
+                            href: subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale)
+                              .href,
+                          }
+                        : {})}
                       preview={
                         <ListRowControl className="space-y-3">
                           {row.statement ? (
