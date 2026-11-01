@@ -693,20 +693,20 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
 
 // UNRUN: both production consumers, the real session Query, own-query registry and shared queue are connected.
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
-async function paintOrdinary() {
-  const outcome = zoneOutcome(subjectId);
+async function paintOrdinary(id = subjectId, queryClient = client) {
+  const outcome = zoneOutcome(id);
   const page = outcome.common!.page!;
   const type = subjectPageType(page);
   // Recorded public loader payload, without substituting the admission, own query or UI under test.
-  client.setQueryData(subjectFrameQuery(type ?? '', 'en').queryKey, {});
-  client.setQueryData(subjectRelationsQuery(pageRelationProperties(page), 'en').queryKey, {});
-  client.setQueryData(subjectRatingQuery(subjectId, 'en').queryKey, null);
+  queryClient.setQueryData(subjectFrameQuery(type ?? '', 'en').queryKey, {});
+  queryClient.setQueryData(subjectRelationsQuery(pageRelationProperties(page), 'en').queryKey, {});
+  queryClient.setQueryData(subjectRatingQuery(id, 'en').queryKey, null);
   const data = {
     page, tabs: [], reader: null, frame: {}, relations: {}, ratings: null,
     verification: { sitekey: '', scriptUrl: '' },
   } as unknown as ComponentProps<typeof SubjectOverview>['data'];
   await act(async () => {
-    root.render(<StrictMode><QueryClientProvider client={client}>
+    root.render(<StrictMode><QueryClientProvider client={queryClient}>
       <RouterContextProvider router={router}>
         <Suspense fallback={<p>Loading</p>}><SubjectOverview data={data} search={{}} /></Suspense>
       </RouterContextProvider>
@@ -973,4 +973,46 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') independentZone(1, 1);
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
+  });
+
+
+for (const boundary of ['target', 'provider', 'unmount', 'observed ABA'] as const)
+  test(`actual ordinary Subject ${boundary} retirement rejects old own responses and admits only a fresh one`, async () => {
+    client.setQueryData(sessionQuery.queryKey, sessionData());
+    const oldOwn = deferred<NativeReactionRead>();
+    const freshOwn = deferred<NativeReactionRead>();
+    queueNativeRead(oldOwn);
+    queueNativeRead(freshOwn);
+    await paintOrdinary();
+    await until(() => ownReads.length === 1 && chips().length > 0);
+    if (boundary === 'target') {
+      await paintOrdinary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06');
+    } else if (boundary === 'provider') {
+      replacementClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      replacementClient.setQueryData(sessionQuery.queryKey, sessionData());
+      await paintOrdinary(subjectId, replacementClient);
+    } else if (boundary === 'unmount') {
+      await act(async () => root.render(null));
+      await paintOrdinary();
+    } else {
+      await flush(() => {
+        client.setQueryData(sessionQuery.queryKey, sessionData('reader-two'));
+        client.setQueryData(sessionQuery.queryKey, sessionData());
+        oldOwn.resolve({ status: 200, data: { kind: 'love' } });
+      });
+    }
+    await until(() => ownReads.length === 2);
+    await flush(() => oldOwn.resolve({ status: 200, data: { kind: 'love' } }));
+    noSelection();
+    expect(chips().every((button) => button.disabled)).toBe(true);
+    expect(nativeWrites).toHaveLength(0);
+    await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
+    await until(() => chips().some((button) => !button.disabled));
+    expect(ownReads).toHaveLength(2);
+    await clickKind('like');
+    await until(() => nativeWrites.length === 1);
+    expect(nativeWrites[0]).toMatchObject({
+      id: boundary === 'target' ? '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06' : subjectId,
+      method: 'put', kind: 'like', authorization: 'Bearer token-reader-one',
+    });
   });
