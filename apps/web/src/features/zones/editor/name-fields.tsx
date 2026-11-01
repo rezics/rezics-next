@@ -36,7 +36,7 @@ export function ZoneNameFields({
   useEffect(() => {
     // An invalid translation must be reachable even when its optional section was closed.
     if (translationErrors && translations.current) translations.current.open = true;
-  }, [translationErrors]);
+  }, [translationErrors, errors]);
   const describedBy = (language: string) => `zone-name-help${invalid(language) ? ` zone-label-${language}-error` : ''}`;
   const error = (language: string) =>
     invalid(language) ? (
