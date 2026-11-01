@@ -131,14 +131,24 @@ test('zero and fractional work remain valid model evidence', () => {
 
 test('series arithmetic preserves a representable large regression and a negative diagnostic intercept', () => {
   const maximum = Number.MAX_VALUE;
-  const large = classifySeries(series([1, 2, 3], [maximum / 4, maximum / 2, (maximum * 3) / 4]), 'linear');
+  const largeValues = [maximum / 4, maximum / 2, (maximum / 4) * 3];
+  expect(largeValues.every(Number.isFinite)).toBe(true);
+  const large = classifySeries(series([1, 2, 3], largeValues), 'linear');
   expect(large.outcome).toBe('compatible');
+  expect(large.medians).toEqual(largeValues);
   expect(Number.isFinite(large.families.linear.a)).toBe(true);
   expect(Number.isFinite(large.families.linear.b)).toBe(true);
 
   const negativeIntercept = classifySeries(series([1, 4, 16], [0, 1, 100]), 'linear');
   expect(negativeIntercept.families.linear.a).toBeLessThan(0);
   expect(Number.isFinite(negativeIntercept.families.linear.a)).toBe(true);
+});
+
+test('series classification rejects non-finite measurements before fitting', () => {
+  const maximum = Number.MAX_VALUE;
+  expect(() =>
+    classifySeries(series([1, 2, 3], [maximum / 4, maximum / 2, Number.POSITIVE_INFINITY]), 'linear'),
+  ).toThrow(/finite number/);
 });
 
 test('series classification refuses overflowed intervals, coordinates and regression fits', () => {
