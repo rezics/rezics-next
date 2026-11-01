@@ -167,9 +167,11 @@ function OfferPurchase({
     setPhase(result.kind);
   }
 
+  // A local child render may run before a queued authority replacement commits.
+  const currentExisting = phase === 'existing' && origin.isCurrent() ? existing : null;
   const note =
-    phase === 'existing' && existing
-      ? existing.code === 'benefit_already_owned'
+    currentExisting
+      ? currentExisting.code === 'benefit_already_owned'
         ? m.offer_already_owned()
         : m.offer_acquisition_pending()
       : phase === 'terms-changed'
@@ -218,7 +220,7 @@ function OfferPurchase({
             <AlertDescription className="text-foreground">{note}</AlertDescription>
           </Alert>
         )}
-        {phase === 'existing' && existing ? (
+        {currentExisting ? (
           <Button
             variant="outline"
             size="lg"
@@ -230,14 +232,14 @@ function OfferPurchase({
                   if (!origin.isCurrent()) event.preventDefault();
                 }}
                 href={localizeHref(
-                  existing.code === 'benefit_already_owned' && existing.entitlementId
-                    ? `/entitlements/${encodeURIComponent(existing.entitlementId)}`
-                    : `/orders/${encodeURIComponent(existing.orderId!)}`,
+                  currentExisting.code === 'benefit_already_owned' && currentExisting.entitlementId
+                    ? `/entitlements/${encodeURIComponent(currentExisting.entitlementId)}`
+                    : `/orders/${encodeURIComponent(currentExisting.orderId!)}`,
                 )}
               />
             }
           >
-            {existing.code === 'benefit_already_owned' && existing.entitlementId
+            {currentExisting.code === 'benefit_already_owned' && currentExisting.entitlementId
               ? m.offer_open_entitlement()
               : m.offer_open_order()}
           </Button>
