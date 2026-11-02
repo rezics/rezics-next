@@ -2,19 +2,29 @@ import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState, type ComponentProps } from 'react';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/zh-Hant/boards/reading' });
 const globals = {
-  window, document: window.document, navigator: window.navigator,
-  HTMLElement: window.HTMLElement, Element: window.Element, Node: window.Node,
-  Document: window.Document, DocumentFragment: window.DocumentFragment,
-  MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  Element: window.Element,
+  Node: window.Node,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { createKernelClient } = await import('@rezics/client');
@@ -32,18 +42,24 @@ const thread = page.threads.threads[0]!;
 type Props = ComponentProps<typeof BoardFeed>;
 let props: Props, update: (next: Props) => void, root: ReturnType<typeof createRoot>;
 const writes: ReturnType<typeof Promise.withResolvers<void>>[] = [];
-Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: (url: string) => {
-  calls.push(url);
-  const pending = Promise.withResolvers<void>();
-  writes.push(pending);
-  return pending.promise;
-} } });
+Object.defineProperty(window.navigator, 'clipboard', {
+  configurable: true,
+  value: {
+    writeText: (url: string) => {
+      calls.push(url);
+      const pending = Promise.withResolvers<void>();
+      writes.push(pending);
+      return pending.promise;
+    },
+  },
+});
 const host = document.createElement('main');
 document.body.append(host);
 const settle = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 function button(text: string) {
-  const node = [...document.querySelectorAll<HTMLButtonElement>('button, [role="menuitem"]')]
-    .find((node) => node.textContent === text || node.getAttribute('aria-label') === text);
+  const node = [...document.querySelectorAll<HTMLButtonElement>('button, [role="menuitem"]')].find(
+    (node) => node.textContent === text || node.getAttribute('aria-label') === text,
+  );
   expect(node).toBeDefined();
   return node!;
 }
@@ -58,7 +74,13 @@ async function replace(patch: Partial<Props>) {
 beforeEach(async () => {
   calls.length = writes.length = 0;
   setLocale('zh-Hant', { reload: false });
-  props = { boardId: page.board.id, sort: 'active', page: { ...page.threads, threads: [thread], next: null }, authors: page.authors, now: '2026-11-01T00:00:00Z' };
+  props = {
+    boardId: page.board.id,
+    sort: 'active',
+    page: { ...page.threads, threads: [thread], next: null },
+    authors: page.authors,
+    now: '2026-11-01T00:00:00Z',
+  };
   function Feed() {
     const [value, setValue] = useState(props);
     update = setValue;
@@ -70,7 +92,9 @@ beforeEach(async () => {
   root = createRoot(host);
   await act(async () => root.render(<RouterProvider router={router} />));
 });
-afterEach(async () => { await act(async () => root.unmount()); });
+afterEach(async () => {
+  await act(async () => root.unmount());
+});
 afterAll(() => {
   setLocale('en', { reload: false });
   window.happyDOM.abort();
@@ -123,7 +147,9 @@ test('replaced destinations, boards, erased rows and removed rows retire pending
   expect(host.querySelector('input, [role="status"]')).toBeNull();
   await copy();
   await act(async () => writes[3]!.reject(new Error('Denied')));
-  expect(host.querySelector('input')?.value).toBe(new URL(threadLocation('zh-Hant', { id: thread.id, title: null }), window.location.origin).href);
+  expect(host.querySelector('input')?.value).toBe(
+    new URL(threadLocation('zh-Hant', { id: thread.id, title: null }), window.location.origin).href,
+  );
   expect(host.textContent).not.toContain(changed.title);
   await replace({ page: { ...props.page, threads: [] } });
   expect(host.querySelector('input, [role="status"]')).toBeNull();
