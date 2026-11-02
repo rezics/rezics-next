@@ -170,7 +170,7 @@ function Heading(props: Record<string, unknown>) {
   return (
     <Tag
       lang={level === 1 ? (text.lang ?? locale) : text.lang}
-      className={`m-0 font-semibold tracking-tight text-balance text-foreground ${headingClass[level]}`}
+      className={`m-0 min-w-0 max-w-full font-semibold tracking-tight text-balance wrap-anywhere text-foreground ${headingClass[level]}`}
     >
       {text.text}
     </Tag>
@@ -191,7 +191,7 @@ function Text(props: Record<string, unknown>) {
   const blocks = paragraphs(text.text);
   if (blocks.length === 0) return null;
   return (
-    <div lang={text.lang} className={textClass}>
+    <div lang={text.lang} className={`min-w-0 w-full wrap-anywhere ${textClass}`}>
       {blocks.map((lines, index) => (
         <p className="text-pretty" key={index}>
           {lines.reduce<ReactNode[]>((nodes, line, lineIndex) => {
@@ -214,7 +214,7 @@ function SearchBox(props: Record<string, unknown>) {
       role="search"
       method="get"
       action={`/${encodeURIComponent(locale)}/search`}
-      className="flex w-full max-w-3xl gap-2"
+      className="flex min-w-0 w-full max-w-3xl flex-wrap items-start gap-2"
     >
       <Input
         type="search"
@@ -222,10 +222,14 @@ function SearchBox(props: Record<string, unknown>) {
         placeholder={placeholder.text}
         aria-label={placeholder.text}
         lang={placeholder.lang}
-        className="h-12 min-w-0 flex-1 rounded-xl px-4 text-base"
+        className="h-12 min-w-0 max-w-full flex-[1_1_16rem] rounded-xl px-4 text-base"
       />
-      <Button type="submit" size="lg" className="h-12 shrink-0 rounded-xl px-5 text-base">
-        {messages.search}
+      <Button
+        type="submit"
+        size="lg"
+        className="h-auto min-h-12 min-w-11 max-w-full shrink rounded-xl px-5 py-3 text-base whitespace-normal"
+      >
+        <span className="min-w-0 wrap-anywhere">{messages.search}</span>
       </Button>
     </form>
   );
@@ -235,19 +239,19 @@ function LinkGrid(props: Record<string, unknown>) {
   const locale = usePageLocale();
   const links = Array.isArray(props.links) ? props.links : [];
   return (
-    <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
+    <ul className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
       {links.map((item, index) => {
         if (!isRecord(item) || typeof item.href !== 'string') return null;
         const label = pageText(item.label, locale);
         const href = item.href.startsWith('/') ? `/${encodeURIComponent(locale)}${item.href}` : item.href;
         return (
-          <li key={`${item.href}:${index}`}>
+          <li className="min-w-0" key={`${item.href}:${index}`}>
             <a
               href={href}
               lang={label.lang}
-              className="flex min-h-14 items-center justify-center rounded-xl border border-border/70 bg-card px-4 py-3 text-center font-semibold text-card-foreground shadow-sm transition-colors hover:border-link/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-14 min-w-0 w-full items-center justify-center rounded-xl border border-border/70 bg-card px-4 py-3 text-center font-semibold text-card-foreground shadow-sm transition-colors hover:border-link/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {label.text}
+              <span className="min-w-0 wrap-anywhere">{label.text}</span>
             </a>
           </li>
         );
