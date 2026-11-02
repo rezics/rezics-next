@@ -1589,7 +1589,8 @@ Account and claim partitions with the native witness and use current owner hydra
 ## Private recent Search
 
 `/v1/recentSearches` provides own-account GET/POST, DELETE by ID and POST `:clear`, with observed revisions and
-native receipts. Signed keyset pages default/cap at 20; current owner reads hydrate scope display without retained
+native receipts. A fresh use, remove or clear at the last representable revision 2147483646 conflicts without entry,
+state, event or receipt effects; the last valid transition and ordinary receipt replay remain. Signed keyset pages default/cap at 20; current owner reads hydrate scope display without retained
 labels or links for unavailable scopes. PostgreSQL retains at most 100 entries/account for 90 days. Erasure and
 indexed 100-row retention batches install independently of OpenSearch; strings never enter public indexes or events.
 Query entries optionally carry exactly the existing Realm/Collection/Library scope union. The closed query schema

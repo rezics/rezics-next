@@ -19,7 +19,8 @@ import { CoverSummarySchema } from '../semantic/http/summaries.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
-const revision = t.Integer({ minimum: 0, maximum: 2147483646 });
+const revisionMax = 2147483646;
+const revision = t.Integer({ minimum: 0, maximum: revisionMax });
 const recentScopeSchema = t.Union([
   t.Object({ kind: t.Literal('realm'), id }, closed),
   t.Object({ kind: t.Literal('collection'), id }, closed),
@@ -270,7 +271,8 @@ export async function changeRecentSearches(
         `SELECT revision FROM search.recent_search_state WHERE partition_no=$1 AND route=$2 AND account_id=$3 FOR UPDATE`,
         keys(actor),
       );
-      if (state.rows[0].revision !== expectedRevision) throw new ProblemError('conflict');
+      if (state.rows[0].revision !== expectedRevision || expectedRevision >= revisionMax)
+        throw new ProblemError('conflict');
       const revision = expectedRevision + 1,
         lastUsed = authoritativeTimeValue(time);
       await tx.query(
