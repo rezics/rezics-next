@@ -4802,5 +4802,9 @@
   "library_collection_text_input_required": "Saisissez un titre.",
   "library_collection_text_input_limit": "Utilisez au maximum {limit} caractères Unicode.",
   "library_collection_text_input_nul": "Supprimez le caractère NUL.",
-  "library_entry_restore_retry_action": "Réessayer la restauration"
+  "library_entry_restore_retry_action": "Réessayer la restauration",
+  "payment_attestation_correction_available": "La première demande a été refusée avant l’enregistrement de la preuve de paiement. Modifiez cette référence exacte et envoyez une nouvelle demande.",
+  "payment_attestation_correction_edit": "Corriger la référence refusée",
+  "payment_attestation_correction_submit": "Envoyer la référence corrigée",
+  "payment_attestation_correction_rejected": "La demande capturée reste inchangée. Réessayez la demande originale pour la résoudre."
 }

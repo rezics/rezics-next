@@ -4802,5 +4802,9 @@
   "library_collection_text_input_required": "請輸入標題。",
   "library_collection_text_input_limit": "請使用不超過 {limit} 個 Unicode 字元。",
   "library_collection_text_input_nul": "請移除 NUL 字元。",
-  "library_entry_restore_retry_action": "重試還原"
+  "library_entry_restore_retry_action": "重試還原",
+  "payment_attestation_correction_available": "首次請求在付款憑證記錄前遭拒。請編輯這筆參考資料，再送出新請求。",
+  "payment_attestation_correction_edit": "修改遭拒的參考資料",
+  "payment_attestation_correction_submit": "送出修改後的參考資料",
+  "payment_attestation_correction_rejected": "已擷取的請求維持不變。請重試原始請求以確認結果。"
 }

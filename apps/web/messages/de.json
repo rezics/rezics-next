@@ -4802,5 +4802,9 @@
   "library_collection_text_input_required": "Gib einen Titel ein.",
   "library_collection_text_input_limit": "Verwende höchstens {limit} Unicode-Zeichen.",
   "library_collection_text_input_nul": "Entferne das NUL-Zeichen.",
-  "library_entry_restore_retry_action": "Wiederherstellung erneut versuchen"
+  "library_entry_restore_retry_action": "Wiederherstellung erneut versuchen",
+  "payment_attestation_correction_available": "Die erste Anfrage wurde abgelehnt, bevor ein Zahlungsnachweis erfasst wurde. Bearbeite diese genaue Referenz und sende eine neue Anfrage.",
+  "payment_attestation_correction_edit": "Abgelehnte Referenz korrigieren",
+  "payment_attestation_correction_submit": "Korrigierte Referenz senden",
+  "payment_attestation_correction_rejected": "Die erfasste Anfrage bleibt unverändert. Wiederhole die ursprüngliche Anfrage, um sie zu klären."
 }

@@ -913,11 +913,12 @@ sender and CSRF token with those same operands; native replay reauthorizes the c
 subject cannot execute the old original.
 The form shares the statement reader's viewer/address lifetime and retains its captured original in that workspace.
 
-Decision: once submitted, keep the reference and command identity locked; uncertainty and restored authority offer an
-explicit identical replay, while a conflict offers evidence refresh without generating a replacement command.
-A successful read, including a paid statement, never resolves an uncertain command. Only a valid markPaid response
-matching the captured statement and exact reference confirms that command. The result remains distinct from current
-statement evidence, which the existing reader refreshes, and from provider payouts, payability or editable earnings.
+Decision: only a definitive validation rejection on the first dispatch permits an explicit editor initialized with the
+exact rejected reference; submitting a changed valid reference starts a fresh request/key. Retries retain the original
+sender, headers, operands and key after uncertainty or any other outcome, saved evidence is terminal, and conflicts
+offer evidence refresh without replacement; reads never resolve uncertainty. Only a valid markPaid response matching
+the captured statement and exact reference confirms the command; refreshed statement evidence remains separate from
+that result and from provider payouts or payability.
 
 The form's static native HTTP ceiling is **3**: one `markPaid` call plus the existing reader's one full-ID statement
 read and one line-page read. Each explicit retry repeats that finite operation; no automatic write retry, cursor walk,

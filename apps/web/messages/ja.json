@@ -4802,5 +4802,9 @@
   "library_collection_text_input_required": "タイトルを入力してください。",
   "library_collection_text_input_limit": "{limit} Unicode文字以内で入力してください。",
   "library_collection_text_input_nul": "NUL文字を削除してください。",
-  "library_entry_restore_retry_action": "復元を再試行"
+  "library_entry_restore_retry_action": "復元を再試行",
+  "payment_attestation_correction_available": "最初のリクエストは支払いの証拠が記録される前に拒否されました。この参照情報を編集して、新しいリクエストを送信してください。",
+  "payment_attestation_correction_edit": "拒否された参照情報を修正",
+  "payment_attestation_correction_submit": "修正した参照情報を送信",
+  "payment_attestation_correction_rejected": "記録済みのリクエストは変更されていません。元のリクエストを再試行して結果を確認してください。"
 }

@@ -53,8 +53,8 @@ export function CreatorPaymentAttestation({
   const fieldId = useId();
   const result = attempt.result;
   const admitted = guard.isCurrent() && !!guard.csrfToken();
-  const locked = !!attempt.request;
-  const canRetry = result && !['saved', 'conflict'].includes(result.kind);
+  const locked = !!attempt.request && !attempt.correctionEditing;
+  const canRetry = attempt.canRetry;
 
   async function refreshEvidence() {
     if (!current() || refreshing) return;
@@ -71,9 +71,12 @@ export function CreatorPaymentAttestation({
   }
 
   async function submit() {
+    if (attempt.result?.kind === 'saved' || attempt.result?.kind === 'conflict') return;
     const csrfToken = guard.csrfToken();
     if (!current() || !csrfToken || (!attempt.request && statement.state !== 'open')) return;
-    if (!attempt.request) {
+    const startsFreshRequest = !attempt.request || attempt.correctionEditing;
+    if (startsFreshRequest) {
+      if (!validPaymentReference(reference) || (attempt.correctionEditing && !attempt.canSubmitCorrection(reference))) return;
       const execute = attestCreatorPayment;
       sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
     }
@@ -115,7 +118,10 @@ export function CreatorPaymentAttestation({
               aria-describedby={`${fieldId}-help ${fieldId}-validation`}
               aria-invalid={!!reference && !validPaymentReference(reference)}
               className="min-h-11"
-              onChange={(event) => setReference(event.target.value)}
+              onChange={(event) => {
+                setReference(event.target.value);
+                attempt.setCorrectionDraft(event.target.value);
+              }}
             />
             <p id={`${fieldId}-validation`} className="text-sm text-muted-foreground">
               {m.payment_attestation_validation()}
@@ -145,7 +151,9 @@ export function CreatorPaymentAttestation({
                     : result?.kind === 'denied'
                       ? m.creator_denied()
                       : result?.kind === 'rejected'
-                        ? m.creator_rejected()
+                        ? attempt.correctionAvailable
+                          ? m.payment_attestation_correction_available()
+                          : m.payment_attestation_correction_rejected()
                         : ''}
           </p>
           {result?.kind === 'saved' && (
@@ -162,7 +170,30 @@ export function CreatorPaymentAttestation({
               </div>
             </dl>
           )}
-          {(!locked || canRetry) && (
+          {attempt.correctionAvailable && !attempt.correctionEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={!admitted || attempt.busy}
+              onClick={() => {
+                if (!current() || !attempt.beginCorrection()) return;
+                setReference(attempt.correctionDraft);
+                referenceField.current?.focus();
+              }}
+            >
+              {m.payment_attestation_correction_edit()}
+            </Button>
+          )}
+          {attempt.correctionEditing ? (
+            <Button
+              type="submit"
+              className="min-h-11"
+              disabled={!admitted || attempt.busy || !attempt.canSubmitCorrection(reference)}
+            >
+              {m.payment_attestation_correction_submit()}
+            </Button>
+          ) : (!locked || canRetry) && (
             <Button
               type="submit"
               className="min-h-11"
@@ -187,7 +218,11 @@ export function CreatorPaymentAttestation({
       )}
       {(statement.state === 'open' || attempt.request) && (
         <PaymentReferenceDraftNavigation
-          active={hasUnsentPaymentReference(reference, !!attempt.request)}
+          active={
+            attempt.correctionEditing
+              ? reference !== attempt.request?.paidReference && hasUnsentPaymentReference(reference, false)
+              : hasUnsentPaymentReference(reference, !!attempt.request)
+          }
           isCurrent={() => guard.isCurrent()}
           focus={() => referenceField.current}
         />

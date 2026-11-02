@@ -4802,5 +4802,9 @@
   "library_collection_text_input_required": "제목을 입력하세요.",
   "library_collection_text_input_limit": "유니코드 문자 {limit}자 이내로 입력하세요.",
   "library_collection_text_input_nul": "NUL 문자를 삭제하세요.",
-  "library_entry_restore_retry_action": "복원 다시 시도"
+  "library_entry_restore_retry_action": "복원 다시 시도",
+  "payment_attestation_correction_available": "첫 요청은 결제 증빙이 기록되기 전에 거부되었습니다. 이 참조값을 수정한 뒤 새 요청을 보내세요.",
+  "payment_attestation_correction_edit": "거부된 참조값 수정",
+  "payment_attestation_correction_submit": "수정된 참조값 보내기",
+  "payment_attestation_correction_rejected": "기존 요청은 그대로 유지됩니다. 결과를 확인하려면 원래 요청을 다시 시도하세요."
 }
