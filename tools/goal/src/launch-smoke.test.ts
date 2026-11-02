@@ -231,7 +231,7 @@ test('generated smoke brief keeps its real acceptance command and WorkerTasks se
     expect(launched?.attempt.profile).toEqual(configured);
     expect(launched?.prompt).toContain(JSON.stringify([...SMOKE_ACCEPTANCE_COMMAND]));
     expect(launched?.prompt).toContain('{"status":"waiting","checks":["<bare UUID>"]}');
-    expect(launched?.prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
+    expect(launched?.prompt).toContain('Never wait for it yourself: no `--wait`');
     const pollingInstructions = (launched?.prompt ?? '')
       .split(/(?<=[.!?])\s+/)
       .filter(

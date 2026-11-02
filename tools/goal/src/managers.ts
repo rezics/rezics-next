@@ -419,7 +419,7 @@ export class ManagerSessions {
           managerId: state.id,
           kind: 'instruction',
           summary:
-            'Do not call clock.sleep. When no decision is pending, end the turn; the controller starts a new turn on this thread when an inbox event arrives.',
+            'Do not call clock.sleep: when no decision is pending, end the turn; the next inbox event starts a new one.',
         });
       })
       .immediate();
@@ -463,19 +463,19 @@ export class ManagerSessions {
     return (row?.last_written_at ?? -1) >= since;
   }
   private opening(spec: ManagerSpec, continuationFile?: string): string {
+    const command = this.services.command.join(' ');
     return (
-      `${spec.brief}\n\nYou manage Goal ${spec.goal}. Make decisions through the control plane. ` +
-      `Export GOAL_MANAGER=${spec.id} for control-plane commands. Completion is a proposal: run ` +
-      `${this.services.command.join(' ')} manager complete ${spec.id}; the control plane verifies every scoped task is merged and the main gate passes. ` +
-      `Your outputs are ready briefs in ${this.backlogPath(spec)} and decisions. The controller dispatches the oldest brief whenever worker slots are free; keep at least eight there. ` +
-      'Act on each stopped task within an hour: retry it with a rewritten brief, split it or cancel it; after an hour the controller cancels it and returns its brief to the failed directory. ' +
+      `${spec.brief}\n\nYou manage Goal ${spec.goal}; export GOAL_MANAGER=${spec.id} for control-plane commands. ` +
+      "Synthesize your workers' reports (results, decisions, conflicts, duplicated or missing work across tasks) into decisions and the next briefs. " +
+      `Your outputs are decisions and ready briefs in ${this.backlogPath(spec)}; keep at least eight there. ` +
+      'Act on each stopped task within an hour: retry it with a rewritten brief, split it or cancel it; leave mechanical gates, retries and merges to the controller. ' +
+      `Completion is a proposal the control plane verifies: ${command} manager complete ${spec.id}. ` +
       'Send only decisions, blocking questions and handoffs, at most 60 words each. Do not write receipts, status snapshots or lists of actions not taken. ' +
-      (continuationFile ? `Read the continuation file at ${continuationFile} once, then continue from it. ` : '') +
-      'Read your brief and continuation once per session. ' +
+      `Read your brief and ${continuationFile ? `the continuation ${continuationFile}` : 'continuation'} once per session; keep .temp/goal/${spec.id}/CONTINUATION.md under 8,000 characters, replaced, not appended. ` +
+      'Read and acknowledge inbox events. ' +
       (spec.engine === 'codex'
-        ? 'When no decision is pending, end the turn; do not use clock.sleep or poll. The controller resumes this thread with a new turn when an inbox event arrives. '
-        : `When no decision is pending, run ${this.services.command.join(' ')} inbox wait ${spec.id} as a background command and end the turn. `) +
-      'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.'
+        ? 'When no decision is pending, end the turn; do not use clock.sleep or poll: the controller resumes this thread when an inbox event arrives.'
+        : `When no decision is pending, run ${command} inbox wait ${spec.id} in the background and end the turn.`)
     );
   }
   private claudeArgv(spec: ManagerSpec, session: string[], prompt: string): string[] {
@@ -541,7 +541,7 @@ export class ManagerSessions {
         this.claudeArgv(
           state,
           ['--resume', state.threadId],
-          'Your session exited and the control plane resumed it. Read and acknowledge your inbox, then continue.',
+          'The control plane resumed your exited session. Read and acknowledge your inbox, then continue.',
         ),
         state.cwd,
       );
@@ -553,7 +553,7 @@ export class ManagerSessions {
     if (!waking.length || !this.services.windows.prompt) return;
     this.services.windows.prompt(
       state.id,
-      `You have ${waking.length} new inbox event(s). Read them with bun tools/goal/src/cli.ts inbox read ${state.id}, act on them and acknowledge them; keep bun tools/goal/src/cli.ts inbox wait ${state.id} running in the background before you end a turn.`,
+      `${waking.length} new inbox event(s): read them with bun tools/goal/src/cli.ts inbox read ${state.id}, act and acknowledge; start bun tools/goal/src/cli.ts inbox wait ${state.id} in the background before you end the turn.`,
     );
     for (const event of waking) this.inbox.notified(event.id);
   }

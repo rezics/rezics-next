@@ -142,7 +142,8 @@
       "turnsWithoutDecision": 10,
       "wallMs": 43200000
     },
-    "termspacesCommand": "termspaces"
+    "termspacesCommand": "termspaces",
+    "devPrelandingTypecheck": false
   },
   "codex": {
     "serviceTier": "default",
