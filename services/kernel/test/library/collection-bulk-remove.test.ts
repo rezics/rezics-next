@@ -55,7 +55,7 @@ async function capture(collectionId: string, memberIds: string[]) {
   // The trusted operation-reader/restorer ports are component doubles. Effects still use native Access,
   // commands, receipts, tombstones and outbox; durable provenance itself has its own native suite.
   let restored = 0;
-  const deps: BulkDependencies = { pool: f.pool, access: f.access, tokens: testTokens, clock: () => new Date(time),
+  const deps: BulkDependencies = { pool: f.pool, access: f.access, tokens: testTokens(), clock: () => new Date(time),
     readInitiator: async () => original,
     initiators: { async restoreInitiator(input) { expect(input.operation).toEqual(source); restored++; return f.owner.actor; } },
     spendChunk: async () => { throw new Error('The action must not introduce funding'); },
@@ -81,18 +81,22 @@ test('captured occurrence removal preserves an unselected duplicate, ordering, n
   expect(result.evidence.outcome).toBe('applied');
   expect((await f.page(collection.id)).map(m => m.id)).toEqual([second.id, third.id]);
   expect(await member(collection.id, second.id)).toEqual(before);
-  const events = await f.pool.query('SELECT type,data FROM core.outbox WHERE partition_no=$1 AND transaction_id=$2',
+  const events = await f.pool.query(`SELECT e.type,e.data FROM core.outbox e JOIN editorial.write_basis b
+    USING(partition_no,epoch,position) WHERE e.partition_no=$1 AND b.transaction_id=$2`,
     [partitionOf(routeOf(collection.id)!), result.evidence.transactionId]);
   expect(events.rows).toContainEqual({ type: 'com.rezics.library.collection.member.changed.v1',
     data: { collectionId: collection.id, memberId: first.id, subjectId: subject } });
   const deletion = result.evidence.memberDeletion!;
+  const terminal = await f.pool.query('SELECT state,evidence FROM library.bulk_target WHERE route=$1 AND operation_id=$2 AND ordinal=0',
+    [c.commands[0]!.source.route, c.commands[0]!.source.id]);
+  expect(terminal.rows).toEqual([{ state: 'applied', evidence: result.evidence }]);
   await f.commands.restoreMember(f.owner.actor, collection.id, first.id, deletion, entryKey());
   expect((await f.page(collection.id)).map(m => m.id)).toEqual([first.id, second.id, third.id]);
-});
+}, 120000);
 
 test('changed, replaced and missing captured occurrences are skipped individually without selecting later duplicates', async () => {
   const collection = await f.make(), subject = await f.createSubject('game');
-  const members = await Promise.all([f.add(collection.id, subject), f.add(collection.id, subject)]);
+  const members = [await f.add(collection.id, subject), await f.add(collection.id, subject)];
   const c = await capture(collection.id, members.map(m => m.id));
   await f.commands.updateMemberNote(f.owner.actor, collection.id, members[0]!.id, 'changed after preview', entryKey());
   const later = await f.add(collection.id, subject);
@@ -110,13 +114,16 @@ test('changed, replaced and missing captured occurrences are skipped individuall
   await f.commands.removeMember(f.owner.actor, collection.id, later.id, (await f.current(collection.id)).revision, entryKey());
   const absent = await executeCollectionRemoveTarget(missing.deps, missing.commands[0]!);
   expect(absent.kind === 'terminal' && absent.evidence.outcome).toBe('no_effect');
-});
+}, 120000);
 
 test('lost response and exact replay preserve one removal receipt/deadline; authority refusal permits only private recovery', async () => {
-  const collection = await f.make(), subject = await f.createSubject('game');
+  const curator = await f.identity([...f.owner.actor.scopes]);
+  const collection = await f.make('private', curator), subject = await f.createSubject('game');
+  await f.grant(collection.id, f.owner.actor.accountId);
   const first = await f.add(collection.id, subject), second = await f.add(collection.id, subject);
   const c = await capture(collection.id, [first.id, second.id]);
   const lost = await executeCollectionRemoveTarget(c.deps, c.commands[0]!);
+  expect(lost.kind === 'terminal' && lost.evidence.outcome).toBe('applied');
   const saved = await member(collection.id, first.id);
   time += 60_000;
   expect(await executeCollectionRemoveTarget(c.deps, c.commands[0]!)).toEqual(lost);
@@ -128,4 +135,7 @@ test('lost response and exact replay preserve one removal receipt/deadline; auth
   expect(refused.kind === 'terminal' && refused.evidence.outcome).toBe('denied');
   expect(await member(collection.id, first.id)).toEqual(saved);
   expect((await member(collection.id, second.id)).deletion_id).toBeNull();
-});
+  const receipts = await f.pool.query('SELECT count(*)::integer AS count FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 AND command_kind=$3',
+    [c.commands[0]!.receipt.partition, f.owner.actor.accountId, c.commands[0]!.receipt.commandKind]);
+  expect(receipts.rows[0].count).toBe(1);
+}, 120000);

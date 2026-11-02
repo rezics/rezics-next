@@ -17,9 +17,10 @@ export const COLLECTION_BULK_TARGET_LIMIT = 1_000;
 export const COLLECTION_BULK_PAGE_LIMIT = 100;
 const JSON_BYTES = 131_072;
 const TARGET_BYTES = 4_096;
+type ManifestTarget<T> = T extends unknown ? Omit<T, 'operationId' | 'ordinal'> : never;
 export type CollectionBulkTarget =
   | Omit<SubjectTarget, 'operationId' | 'ordinal'>
-  | (Omit<OccurrenceTarget, 'operationId' | 'ordinal'> & { revision: number });
+  | (ManifestTarget<OccurrenceTarget> & { revision: number });
 export type CollectionBulkIntent = (
   | { action: 'set_status'; state: EntryState }
   | { action: 'add_to_collection' | 'remove_from_collection'; collectionId: string }
@@ -94,12 +95,17 @@ function targetKey(target: CollectionBulkTarget): string {
   if (
     routeOf(target.collectionId) === null ||
     routeOf(target.collectionId) !== routeOf(target.memberId) ||
-    routeOf(target.incarnation) === null ||
     !Number.isSafeInteger(target.revision) ||
-    target.revision < 1 ||
-    !/^(0|[1-9][0-9]*)$/.test(target.admissionSequence)
+    target.revision < 1
   )
     throw new TypeError('Invalid occurrence expectation');
+  if (target.expected) {
+    if (!/^[1-9][0-9]*$/.test(target.expected.memberRevision) ||
+      routeOf(target.expected.transactionId) === null || !Number.isFinite(Date.parse(target.expected.addedAt)))
+      throw new TypeError('Invalid native occurrence expectation');
+  } else if (routeOf(target.incarnation!) === null || !/^(0|[1-9][0-9]*)$/.test(target.admissionSequence!)) {
+    throw new TypeError('Invalid occurrence expectation');
+  }
   return `${target.collectionId}:${target.memberId}`;
 }
 
@@ -206,7 +212,10 @@ export async function previewCollectionBulk(
         source_digest,receipt,created_transaction_id,state,chunk_index)
       SELECT $1,$2::uuid,(n-1),$3::uuid,(target->>'subjectId')::uuid,target->>'kind',
         (target->>'collectionId')::uuid,(target->>'memberId')::uuid,target,$5,
-        jsonb_build_object('partition',$7::integer,'principalKind','account','principalId',($3::uuid)::text,
+        jsonb_build_object('partition',CASE WHEN target->>'kind'='occurrence' THEN
+          (get_byte(uuid_send((target->>'collectionId')::uuid),10)*256+
+           get_byte(uuid_send((target->>'collectionId')::uuid),11)) >> 4 ELSE $7::integer END,
+          'principalKind','account','principalId',($3::uuid)::text,
           'commandKind','library.collectionBulk.target','key',($2::uuid)::text||':'||(n-1)::text,
           'digest',encode(sha256(convert_to($5::text||':'||target::text,'UTF8')),'hex')),$6,'pending',(n-1)/100
       FROM jsonb_array_elements($4::jsonb) WITH ORDINALITY AS manifest(target,n) WHERE n <= 1000`,

@@ -41,7 +41,24 @@ The operation header has full-key owner, due and expiry indexes. The installed m
 occurrence uniqueness, state and pending indexes; no second manifest or scheduler is added. Existing
 `pageBulkOutcomes` remains the bounded reader for wire outcomes after native authorization and cursor validation.
 
-The older factories in `bulk-contract.ts` remain unimplemented scaffolding, rather than a mounted API. Their
+Decision: captured native occurrence expectations bind `member_revision`, `transaction_id` and `added_at` together;
+the older incarnation/sequence-only scaffold cannot authorize removal and fails with `evidence_missing`.
+
+`executeCollectionRemoveTarget` delegates to `collection-bulk-remove.ts`. It restores the initiating actor during
+each native command attempt, checks current Collection and Subject access, locks the exact member and compares
+those stamps before calling the existing retained batch-removal producer with the current parent CAS. No Subject
+population is scanned. Native member events, ordering and explicit Undo are preserved. The receipt response retains
+the original deletion identity, revision and Undo deadline. Same-home applied state/evidence commits with the removal;
+no-effect/conflict receipts contain terminal results without another personal write. The operation owner acknowledges
+those results and all cross-home results. Occurrence receipt locators use the actual Collection home.
+
+Current authority refusal creates no command receipt or effect and returns denied evidence with a null transaction
+identity. Only private source-bound accounting may recover an earlier exact receipt after refusal. This internal
+accounting result grants neither another effect nor public disclosure. Missing original receipt evidence on an
+already terminal target fails closed. The operation owner still installs its durable source reader/restorer and
+owns lifecycle, result authorization, retention and Accounts erasure composition.
+
+The other factories in `bulk-contract.ts` remain unimplemented scaffolding, rather than a mounted API. Their
 funding/cut descriptions are superseded by this contract. The store seam does not make those factories functional.
 
 ## Remaining native composition

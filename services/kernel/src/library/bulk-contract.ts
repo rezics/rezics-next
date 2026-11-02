@@ -1,4 +1,5 @@
-/** Proposed independent bulk ports. No function in this file implements product behavior. */
+/** Bulk integration ports; Collection occurrence removal delegates to its native executor. */
+import { executeCollectionRemoveTarget as removeCapturedOccurrence } from './collection-bulk-remove.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
@@ -123,6 +124,12 @@ export type SubjectTarget = Readonly<{
   requestedSubjectId: string | null;
   expected: EntryExpectation;
 }>;
+/** Exact native row stamps, captured together. member_revision alone does not cover note/order edits. */
+export type OccurrenceExpectation = Readonly<{
+  memberRevision: DecimalSequence;
+  transactionId: string;
+  addedAt: string;
+}>;
 export type OccurrenceTarget = Readonly<{
   kind: 'occurrence';
   operationId: string;
@@ -130,9 +137,10 @@ export type OccurrenceTarget = Readonly<{
   subjectId: string;
   collectionId: string;
   memberId: string;
-  incarnation: string;
-  admissionSequence: DecimalSequence;
-}>;
+} & (
+  | { expected: OccurrenceExpectation; incarnation?: never; admissionSequence?: never }
+  | { expected?: never; incarnation: string; admissionSequence: DecimalSequence }
+)>;
 export type ImmutableTarget = SubjectTarget | OccurrenceTarget;
 export type ReceiptLocator = Readonly<{
   partition: number;
@@ -196,10 +204,13 @@ export type TargetEvidence = Readonly<{
   ordinal: DecimalSequence;
   sourceDigest: string;
   receipt: ReceiptLocator;
-  transactionId: string;
+  /** Null for a current authority refusal with no native command receipt. */
+  transactionId: string | null;
   outcome: TerminalOutcome;
   reason: BulkReason | null;
   resultingMemberId: string | null;
+  /** Original native removal episode, never renewed by processing or replay. */
+  memberDeletion?: Readonly<{ deletionId: string; revision: number; purgeAfter: string }>;
 }>;
 export type AttemptResult =
   | { kind: 'terminal'; evidence: TargetEvidence }
@@ -360,10 +371,10 @@ export async function executeCollectionAddTarget(
   throw new Error('Library bulk Collection add is not implemented');
 }
 export async function executeCollectionRemoveTarget(
-  _dependencies: BulkDependencies,
-  _command: TargetCommand,
+  dependencies: BulkDependencies,
+  command: TargetCommand,
 ): Promise<AttemptResult> {
-  throw new Error('Library bulk Collection remove is not implemented');
+  return removeCapturedOccurrence(dependencies, command);
 }
 /** Private source-bound accounting; can recover prior commits after revocation,
  * cannot restore an initiator, issue personal effects or disclose target data.

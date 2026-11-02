@@ -223,7 +223,7 @@ function collectionEvents(kind: 'updated' | 'deleted', collectionId: string, lis
   return events;
 }
 
-async function recordPublicCollectionReduction(
+export async function recordPublicCollectionReduction(
   tx: CommandTransaction,
   route: number,
   collectionId: string,
