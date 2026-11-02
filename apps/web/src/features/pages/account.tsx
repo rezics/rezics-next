@@ -44,8 +44,7 @@ function AccountManagementLinks({ id, value }: { id: string; value: OverviewValu
   const scope = useRef({ snapshot, revision: 0 });
   // A successful refresh of the same reader also replaces the permission observation.
   // Query state identity covers removal/recreation and batched account changes.
-  if (scope.current.snapshot !== snapshot)
-    scope.current = { snapshot, revision: scope.current.revision + 1 };
+  if (scope.current.snapshot !== snapshot) scope.current = { snapshot, revision: scope.current.revision + 1 };
   const observation = scope.current;
   const enabled =
     personalRead.enabled &&
@@ -55,14 +54,7 @@ function AccountManagementLinks({ id, value }: { id: string; value: OverviewValu
     snapshot.fetchStatus === 'idle' &&
     !snapshot.isInvalidated;
   const currentReader = () => enabled && scope.current === observation && getSnapshot() === snapshot;
-  const queryKey = [
-    'account-viewer-actions',
-    id,
-    session.subject,
-    session.csrfToken,
-    mount,
-    observation.revision,
-  ];
+  const queryKey = ['account-viewer-actions', id, session.subject, session.csrfToken, mount, observation.revision];
   const query = useQuery({
     ...personalRead,
     queryKey,
