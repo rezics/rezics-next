@@ -363,6 +363,80 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(within(b!).getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(1);
     expect(independent.every((item) => writes(item).length === 0)).toBe(true);
 
+    // Whole-field removal retains private values and sibling correction addresses.
+    const removal = albumFixture();
+    const delivery = deferred<Awaited<ReturnType<typeof removal.transport.create>>>();
+    const commands: Parameters<typeof removal.transport.create>[0][] = [];
+    const removalPanel = await ready(removal, {
+      transport: {
+        ...removal.transport,
+        create: (command) => {
+          commands.push(command);
+          return delivery.promise;
+        },
+      },
+    });
+    await fillTerms(removalPanel);
+    const empty = await add(removalPanel, 'schema:contributor');
+    await click(empty, m.recipe_remove_field());
+    expect(empty.isConnected).toBe(false);
+    expect(window.document.activeElement?.id).toBe('album-field');
+    const complete = await add(removalPanel, 'schema:contributor');
+    await chooseTarget(complete, name(removal, 'schema:contributor'), 'Harbour', /Harbour Ensemble/);
+    await select(complete, m.relation_qualifier(), 'wdt:P1932');
+    await replace(textbox(complete, name(removal, 'wdt:P1932')), 'Credited name');
+    await replace(textbox(complete, m.relation_citation()), citation);
+    const cited = await add(removalPanel, 'schema:contributor');
+    await replace(textbox(cited, m.relation_citation()), citation);
+    const qualified = await add(removalPanel, 'schema:contributor');
+    await select(qualified, m.relation_qualifier(), 'wdt:P1932');
+    await replace(textbox(qualified, name(removal, 'wdt:P1932')), 'Qualifier only');
+    await click(removalPanel, m.album_create());
+    const correctionLinks = () =>
+      [...removalPanel.querySelectorAll<HTMLAnchorElement>('a[href^="#album-row-"]')].map((link) => link.hash);
+    const correctionTargets = correctionLinks();
+    expect(correctionTargets.some((hash) => hash.startsWith(`#${cited.id}`))).toBe(true);
+    const values = (row: HTMLElement) =>
+      [...row.querySelectorAll<HTMLInputElement>('input')].map((input) => [input.id, input.value]);
+    for (const row of [complete, cited, qualified]) {
+      const snapshot = values(row);
+      await click(row, m.recipe_remove_field());
+      expect(window.document.activeElement).toBe(within(row).getByRole('button', { name: m.candidate_cancel() }));
+      await click(row, m.candidate_cancel());
+      expect(values(row)).toEqual(snapshot);
+      expect(window.document.activeElement).toBe(within(row).getByRole('button', { name: m.recipe_remove_field() }));
+    }
+    expect(complete.textContent).toContain('Harbour Ensemble');
+    await click(complete, m.recipe_remove_field());
+    await act(async () => user.keyboard('{Escape}'));
+    expect(window.document.activeElement).toBe(within(complete).getByRole('button', { name: m.recipe_remove_field() }));
+    await click(complete, m.recipe_remove_field());
+    await click(complete, m.recipe_remove_field());
+    expect(complete.isConnected).toBe(false);
+    expect(cited.isConnected && qualified.isConnected).toBe(true);
+    expect(cited.contains(window.document.activeElement as unknown as Node)).toBe(true);
+    expect(correctionLinks()).toEqual(correctionTargets);
+    expect(textbox(removalPanel, m.catalogue_create_label()).value).toBe(longName);
+    for (const row of [cited, qualified]) {
+      await click(row, m.recipe_remove_field());
+      await click(row, m.recipe_remove_field());
+      expect(row.isConnected).toBe(false);
+    }
+    expect(window.document.activeElement?.id).toBe('album-field');
+    const sealed = await add(removalPanel, 'schema:contributor');
+    await chooseTarget(sealed, name(removal, 'schema:contributor'), 'Harbour', /Harbour Ensemble/);
+    await click(sealed, m.recipe_remove_field());
+    await click(removalPanel, m.album_create());
+    expect(commands).toHaveLength(1);
+    await click(sealed, m.recipe_remove_field());
+    expect(sealed.isConnected).toBe(true);
+    expect(within(sealed).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled')).toBe(true);
+    await act(async () => delivery.resolve({ ok: false, reason: 'unavailable' }));
+    await click(sealed, m.recipe_remove_field());
+    expect(sealed.isConnected).toBe(true);
+    await click(removalPanel, m.catalogue_create_retry());
+    expect(commands[1]).toBe(commands[0]);
+
     for (const scenario of ['denied', 'conflict', 'invalid', 'stale-metadata'] as const) {
       const failed = albumFixture(scenario);
       const panel = await ready(failed);
