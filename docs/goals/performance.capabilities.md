@@ -153,6 +153,58 @@ only. These are capability commands for future verification, not a claim that th
 coverage has no recorded user-case acceptance or promotion. Inventory presence alone cannot prove every operation
 has a sound derivation or that its native driver passes.
 
+### Imports and lifecycle operation coverage
+
+These obligations refine Done when 1, 3 and 4. The inventory below is supporting coverage, not a substitute for
+the operation's derivation or measured native scenario. Importer and conversion suites live in `tests/`, not `test/`.
+
+Decision: retain separate evidence for pure conversion, SQLite coordination and native public writes; retain Rating's
+existing repair owner and pending producer boundary rather than supplying another implementation.
+
+| Operation and authority | Existing check | Remaining acceptance obligation |
+| --- | --- | --- |
+| Four pure converters: [conversion Cost](../../packages/conversion/README.md#cost-derivation-and-verification) and [importer operation bounds](../../services/importer/README.md#operation-bounds) | `packages/conversion/tests/{bangumi,vndb,wikidata,open-library}-growth.test.ts` and `logical-growth.test.ts`; fixed-input I/O interception, actual unrelated conversions and whole-return UTF-8 byte slopes | Preserve all four actual exports, independent unrelated-input and payload axes, supported field/byte boundaries and complete returns. Logical bytes and zero external I/O do not measure CPU or heap allocation. |
+| Acquisition, reconciliation, retained run history and public dispatch: [importer Cost](../../services/importer/README.md#cost) | `services/importer/tests/dumps-growth.test.ts`, `record-cpu-growth.test.ts`, `importer-reconciliation-growth.test.ts`, `run-store-growth.test.ts`, `run-store-empty-growth.test.ts`, `importer-growth.test.ts`, `import-fetch-growth.test.ts` | SQLite statement/returned-row counts and bound query plans retain their own units. Transport fixtures do not establish native Auth, Access or PostgreSQL work. Prove the connected flow through the root native driver. |
+| Connected conversion/import: `specs/imports-growth-driver.ts` | Frozen `specs/imports-growth.test.ts`; `specs/support/verify-import-growth.ts` validates missing-driver refusal only | Supply the real `createImportGrowthDriver` binding. Preserve independently seeded catalogue/history scales 32/128/512 and field scales 1/8/64, parser accounting, indexed SQLite evidence, canonical PostgreSQL capture, actual envelopes and independent background attribution. Driver absence is unavailable native evidence. |
+| Work retention: [Work cleanup contract](../../services/kernel/src/work/README.md#installed-queue-controls-and-cleanup-replay) | `test/work/growth-retention.test.ts`: short and full retention batches; `test/work/retention.test.ts`: deletion and retained nonterminal controls | The owner explicitly leaves indexed retention traversal outstanding. Short/full captures alone do not prove empty selection, interrupted checkpoint replay or cancellation/cleanup. Retain those bounds and add the missing native scenarios with the Work owner. |
+| Workflow discovery and reads: Work client | `test/work/growth-work-client.test.ts`: `Workflow step listing with the legacy leave fallback stays within its bound as workflow history grows`; `Work client status and step reads stay within their bound as workflow history grows` | The legacy fallback explicitly admits linear rows/blocks in unrelated history. That diagnostic cannot prove a bounded neighbourhood. Coordinate an indexed owner fix and its derived constant/logarithmic acceptance; include missing workflow and exhausted step pages. |
+| Rating job continuation: [Rating Cost](../../services/kernel/src/rating/README.md#cost) | `test/rating/growth-segment-job.test.ts`: segment, eligibility and re-key pages; `test/rating/segment-job.test.ts`: registered workflow, cursor replay and join/leave reversal | Measure each delivered page at three scales, including interruption, replay and empty completion. Existing outcome checks and page size caps do not replace examined-work evidence. |
+| Rating identity repair: [owner contract](../../services/kernel/src/rating/README.md#identity-repair) | `test/rating/identity-repair.test.ts`: pending/resume/empty terminal receipt, atomic rollback/lost-response replay, changed-vote fencing and cancellation/withdrawal | Verify delivered operations and add focused page growth evidence. Keep the unavailable Semantic hold/complete producer explicit; an injected producer outcome test cannot establish production producer authority. |
+
+Use these explicit groups through their existing workspace runners; each group contains at most twelve files.
+These commands specify future acceptance, with no execution or promotion claim:
+
+```sh
+bun run --cwd packages/conversion check tests/bangumi-growth.test.ts tests/vndb-growth.test.ts tests/wikidata-growth.test.ts tests/open-library-growth.test.ts tests/logical-growth.test.ts
+bun run --cwd services/importer check tests/dumps-growth.test.ts tests/record-cpu-growth.test.ts tests/importer-reconciliation-growth.test.ts tests/run-store-growth.test.ts tests/run-store-empty-growth.test.ts tests/importer-growth.test.ts tests/import-fetch-growth.test.ts
+bun run --cwd services/kernel check test/work/growth-retention.test.ts test/work/growth-work-client.test.ts test/work/retention.test.ts
+bun run --cwd services/kernel check test/rating/growth-segment-job.test.ts test/rating/segment-job.test.ts test/rating/identity-repair.test.ts
+```
+
+The root native command above remains a separate acceptance group and requires the producer binding before launch.
+Any additional scenario suite belongs in its narrow owner's group, rather than an omnibus benchmark. Reuse a clean
+successful result only when it covers the bound revision and exact scenario; preparation errors remain unavailable,
+and assertion failures retain their native diagnostics. Broader acceptance runs after integration under the current
+worker validation policy.
+
+### Control-plane operation coverage
+
+[Delivery](../../tools/goal/README.md) retains implementation and process/container cleanup authority. Its current
+Cost derivations approve the following mappings. Do not infer a new runtime feature from missing measurement.
+
+| Operation and owner derivation | Exact existing check | Evidence limit and required owner scenario |
+| --- | --- | --- |
+| [Running-attempt count](../../tools/goal/README.md#cost-running-attempt-count): one indexed count, proportional to running entries rather than settled history | `tools/goal/src/capacity-wait.test.ts`: `a start waiting for host capacity counts running attempts with one indexed query, without reading every attempt body` | Checks the state index and correct counts at 10/100/1000 total attempts, while running entries also grow. Add independently seeded settled-history growth with a fixed running set and actual examined-work evidence; count correctness and EQP alone are partial evidence. |
+| [Backlog run](../../tools/goal/README.md#cost-backlog-run): indexed active counts, stopped-task/latest-event reads and directory entries; at most four dispatches and twenty cancellations per Goal | `tools/goal/src/backlog.test.ts`: dispatch cap, interrupted claims, replay and cancellation-cap outcomes | The Cost subsection names no growth scenario. Owner must adopt an exact operation-to-growth-check mapping and measure settled history independently from stopped tasks, Goals and ready directory entries. Allowed directory/stopped work remains change-proportional, not constant. |
+| [Manager-host reads](../../tools/goal/README.md#manager-host-database-reads): indexed active state and decoded snapshot reuse | `tools/goal/src/host-db-reads.test.ts`: `host sweep decodes only active tasks and attempts from a large settled history`; `tools/goal/src/orphan-sweep-growth.test.ts`: `command and host sweeps read and lease a constant live candidate set as settled history grows` | Host decoding has one large fixture; orphan sweeps have 100/1000/5000 settled entries, result-row counts and index evidence. Neither returned rows nor decoded bytes are examined SQLite work. Adopt the operation derivation and native work scenario before claiming complete coverage. |
+| [Attempt container cleanup](../../tools/goal/README.md#worker-container-cleanup): one label-filtered listing and removal of returned attempt-owned IDs | `tools/goal/src/worker-containers.test.ts`: `attempt cleanup lists by the exact attempt label and removes only returned containers` | Uses a Docker executable fixture. Preserve wrapper/ownership assertions and add owner-controlled native evidence for foreign population, empty/replayed cleanup and interrupted removal. Never manipulate resources belonging to another attempt. |
+
+The existing supporting group is `bun test tools/goal/src/capacity-wait.test.ts tools/goal/src/backlog.test.ts
+tools/goal/src/host-db-reads.test.ts tools/goal/src/orphan-sweep-growth.test.ts tools/goal/src/worker-containers.test.ts`.
+Delivery must submit applicable evidence through its owning runner and normal shared admission. This group neither
+fills the missing native scenarios nor establishes a successful run. The owner must identify any conditional skips;
+complete capability acceptance requires zero skips and honest unavailable-counter attribution.
+
 ### Existing tracked Cost-table and growth inventory
 
 Discovered with `git ls-files '*cost-table.test.ts' '*growth*.test.ts'`; filenames below are relative to the named
