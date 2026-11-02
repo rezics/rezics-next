@@ -235,7 +235,7 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect((await sweepBacklog(f.runtime)).expired).toEqual([]);
 });
 
-test('a running manager with fewer than four ready briefs is woken at most once an hour', async () => {
+test('a running manager below eight ready briefs is woken at most once an hour', async () => {
   const f = fixture({ workerCap: 0 });
   manager(f.db, 'web', { kind: 'managed', status: 'running', goal: 'web', goalState: { status: 'active' } });
   manager(f.db, 'search', { kind: 'managed', status: 'running', goal: 'search', goalState: { status: 'active' } });
@@ -247,13 +247,15 @@ test('a running manager with fewer than four ready briefs is woken at most once 
     goalState: { status: 'budgetLimited' },
   });
   manager(f.db, 'supermanager', { kind: 'resident-supermanager', status: 'running', threadId: 'session' });
-  for (const name of ['1.md', '2.md', '3.md', '4.md']) brief(f.state, 'search', name, 60_000);
-  brief(f.state, 'web', 'only.md', 60_000);
+  for (const [goal, count] of [['web', 7], ['search', 8]] as const)
+    for (let i = 0; i < count; i++) brief(f.state, goal, `${i}.md`, 60_000);
+  for (const name of ['ignored.txt', '.hidden.md']) writeFileSync(join(f.state, 'backlog', 'web', name), 'ignored\n');
 
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
   const events = f.inbox.pending('web');
   expect(events).toHaveLength(1);
-  expect(events[0]!.event.summary).toContain('Backlog low: 1 ready brief(s)');
+  expect(events[0]!.event.summary).toContain('Backlog low: 7 ready brief(s)');
+  expect(events[0]!.event.summary).toContain('keep at least 8');
   expect(events[0]!.event.summary).toContain(join(f.state, 'backlog', 'web'));
   for (const id of ['search', 'paused', 'limited', 'supermanager']) expect(f.inbox.pending(id)).toHaveLength(0);
 

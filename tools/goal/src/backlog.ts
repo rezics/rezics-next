@@ -6,7 +6,7 @@ import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 
 /** A manager is woken when its Goal has fewer ready briefs than this. */
-export const BACKLOG_LOW_WATER = 4;
+export const BACKLOG_LOW_WATER = 8;
 /** At most one low-backlog wake per Goal in this interval. */
 export const BACKLOG_WAKE_INTERVAL_MS = 60 * 60_000;
 /** A product task stopped this long without a manager action is cancelled into its Goal's failed backlog. */
@@ -438,7 +438,7 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
 
 type ManagerRow = { id: string; state: string };
 
-/** Wake each running Goal manager whose backlog holds fewer than four ready briefs, at most once an hour. */
+/** Wake each running Goal manager below the low-water mark, at most once an hour. */
 function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
   const { db } = runtime;
   if (!tableExists(db, 'manager_sessions')) return [];
@@ -471,7 +471,7 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
           goalId: goal,
           kind: 'instruction',
           summary:
-            `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep at least eight; ` +
+            `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep at least ${BACKLOG_LOW_WATER}; ` +
             'the controller dispatches the oldest whenever worker slots are free.',
         });
         return true;
