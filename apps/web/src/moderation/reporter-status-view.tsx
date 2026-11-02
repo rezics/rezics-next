@@ -357,12 +357,29 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
   const copyGeneration = useRef(0);
   const manualReferenceRef = useRef<HTMLTextAreaElement>(null);
   const copyButtonRef = useRef<HTMLButtonElement>(null);
+  const manualFocus = useRef<{
+    source: HTMLButtonElement;
+    details: HTMLDetailsElement;
+    report: ReporterStatus;
+    isCurrent: () => boolean;
+    referenceText: string;
+    lifetime: number;
+    generation: number;
+  } | null>(null);
+  const manualFocusCleanup = useRef<(() => void) | null>(null);
+  function cancelManualFocus(generation?: number) {
+    if (generation !== undefined && manualFocus.current?.generation !== generation) return;
+    manualFocus.current = null;
+    manualFocusCleanup.current?.();
+    manualFocusCleanup.current = null;
+  }
   useEffect(() => {
     lifetime.current++;
     return () => {
       lifetime.current++;
     };
   }, [report]);
+  useEffect(() => () => cancelManualFocus(), [report, isCurrent]);
   const reference = [
     { label: m.reporter_status_report_id(), value: report.id },
     { label: m.reporter_status_target(), value: `${report.target.kind} ${report.target.id}` },
@@ -370,21 +387,69 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
   ];
   const referenceText = reference.map(({ label, value }) => `${label}: ${value}`).join('\n');
   useEffect(() => {
-    if (copyState !== 'failed' || !isCurrent()) return;
-    manualReferenceRef.current?.focus();
-    manualReferenceRef.current?.select();
-  }, [copyState, isCurrent]);
-  async function copy() {
+    const activation = manualFocus.current;
+    if (copyState !== 'failed' || !activation) return;
+    const textarea = manualReferenceRef.current;
+    if (
+      activation.report !== report ||
+      activation.isCurrent !== isCurrent ||
+      activation.referenceText !== referenceText ||
+      activation.lifetime !== lifetime.current ||
+      activation.generation !== copyGeneration.current ||
+      !isCurrent() ||
+      !activation.details.isConnected ||
+      !activation.details.open ||
+      !activation.source.isConnected ||
+      activation.source.ownerDocument.activeElement !== activation.source ||
+      !textarea
+    ) {
+      cancelManualFocus();
+      return;
+    }
+    cancelManualFocus();
+    textarea.focus();
+    textarea.select();
+  }, [copyState, isCurrent, referenceText, report]);
+  async function copy(keyboard: boolean, source: HTMLButtonElement) {
+    cancelManualFocus();
     if (!isCurrent()) return;
     const mounted = lifetime.current;
     const attempt = ++copyGeneration.current;
+    const details = source.closest('details');
+    if (keyboard && details) {
+      manualFocus.current = { source, details, report, isCurrent, referenceText, lifetime: mounted, generation: attempt };
+      const document = source.ownerDocument;
+      const retire = () => cancelManualFocus();
+      const focusMoved = (event: FocusEvent) => {
+        if (event.target !== source) retire();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') retire();
+      };
+      const collapsed = () => {
+        if (!details.open) retire();
+      };
+      document.addEventListener('focusin', focusMoved, true);
+      document.addEventListener('pointerdown', retire, true);
+      document.addEventListener('keydown', tabbed, true);
+      details.addEventListener('toggle', collapsed);
+      manualFocusCleanup.current = () => {
+        document.removeEventListener('focusin', focusMoved, true);
+        document.removeEventListener('pointerdown', retire, true);
+        document.removeEventListener('keydown', tabbed, true);
+        details.removeEventListener('toggle', collapsed);
+      };
+    }
     const current = () => mounted === lifetime.current && attempt === copyGeneration.current && isCurrent();
     setCopyState('idle');
     try {
       await navigator.clipboard.writeText(referenceText);
-      if (current()) setCopyState('copied');
+      const accepted = current();
+      cancelManualFocus(attempt);
+      if (accepted) setCopyState('copied');
     } catch {
       if (current()) setCopyState('failed');
+      else cancelManualFocus(attempt);
     }
   }
   return (
@@ -399,7 +464,17 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
             </div>
           ))}
         </dl>
-        <Button ref={copyButtonRef} variant="outline" className="min-h-11" onClick={() => void copy()}>
+        <Button
+          ref={copyButtonRef}
+          variant="outline"
+          className="min-h-11"
+          onClick={(event) =>
+            void copy(
+              event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget,
+              event.currentTarget,
+            )
+          }
+        >
           <Copy className="size-4" aria-hidden="true" />
           {m.reporter_status_copy()}
         </Button>
@@ -419,6 +494,7 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
               variant="outline"
               className="min-h-11"
               onClick={() => {
+                cancelManualFocus();
                 setCopyState('idle');
                 copyButtonRef.current?.focus();
               }}

@@ -63,6 +63,7 @@ test('clipboard denial selects the exact current reference and retirement hides 
     details.open = true;
     const copy = host.querySelector('button')!;
     await act(async () => {
+      copy.focus();
       copy.click();
       await tick();
     });
@@ -100,5 +101,78 @@ test('clipboard denial selects the exact current reference and retirement hides 
   const writeCount = writes.length;
   await act(() => host.querySelector('button')!.click());
   expect(writes).toHaveLength(writeCount);
+
+  admitted = true;
+  const focusReport = { ...report, id: 'report-focus' };
+  const deferredRejections: Array<(reason: Error) => void> = [];
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: (text: string) => {
+        writes.push(text);
+        return new Promise<void>((_, reject) => deferredRejections.push(reject));
+      },
+    },
+  });
+  await act(() => root.render(createElement(ReporterStatusPage, { report: focusReport, isCurrent })));
+  const details = host.querySelector('details')!;
+  details.open = true;
+  const elsewhere = window.document.createElement('button');
+  window.document.body.append(elsewhere);
+  const keyboardCopy = async () => {
+    const button = host.querySelector('button')!;
+    await act(() => {
+      button.focus();
+      button.click();
+    });
+    return button;
+  };
+  const rejectCopy = async () =>
+    act(async () => {
+      deferredRejections.shift()!(new Error('Clipboard denied'));
+      await tick();
+    });
+
+  await keyboardCopy();
+  await act(() => elsewhere.focus());
+  await rejectCopy();
+  expect(host.querySelector('textarea')).not.toBeNull();
+  expect(host.querySelector('[role="status"]')?.textContent).toContain(m.reporter_status_copy_failed());
+  expect(document.activeElement).toBe(elsewhere);
+
+  await keyboardCopy();
+  await rejectCopy();
+  expect(document.activeElement).toBe(host.querySelector('textarea'));
+  await act(() => elsewhere.focus());
+  const rerenderedAdmission = () => admitted;
+  await act(() => root.render(createElement(ReporterStatusPage, { report: focusReport, isCurrent: rerenderedAdmission })));
+  expect(document.activeElement).toBe(elsewhere);
+
+  const copyButton = await keyboardCopy();
+  const changedCaller = () => admitted;
+  await act(() => root.render(createElement(ReporterStatusPage, { report: focusReport, isCurrent: changedCaller })));
+  await rejectCopy();
+  expect(host.querySelector('textarea')).not.toBeNull();
+  expect(document.activeElement).toBe(copyButton);
+
+  await keyboardCopy();
+  const pointerClick = new window.MouseEvent('click', { bubbles: true, detail: 1 });
+  await act(() => copyButton.dispatchEvent(pointerClick));
+  await rejectCopy();
+  expect(host.querySelector('textarea')).toBeNull();
+  await rejectCopy();
+  expect(host.querySelector('textarea')).not.toBeNull();
+  expect(document.activeElement).toBe(copyButton);
+
+  await keyboardCopy();
+  details.open = false;
+  details.dispatchEvent(new window.Event('toggle'));
+  await rejectCopy();
+  details.open = true;
+  expect(host.querySelector('textarea')).not.toBeNull();
+
+  await keyboardCopy();
   await act(() => root.unmount());
+  await rejectCopy();
+  expect(host.querySelector('textarea')).toBeNull();
 });
