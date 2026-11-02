@@ -611,6 +611,8 @@ acceptance remain separate; Web owns normal captures.
 catalogue creation. Existing work headers and compact view frames offer the profile in their Contribute menu at
 `/{locale}/subjects/{id}/{slug}/screen` for corrections. The private, noindex routes use the existing shell,
 session BFF and current canonical subject reader.
+Complete Screen creation, recovery and long review examples render that shell with the
+production editor; independent field examples stay supplementary.
 The entry follows the existing contribution menu's Realm restrictions.
 
 The active emitted release decides the four available Types and their effective properties, labels, targets,

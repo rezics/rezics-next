@@ -11,10 +11,11 @@ import { screenProfileFixture, type ScreenScenario } from '../kernel/fake/catalo
 import definitions from '../kernel/recorded/definitions-release.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime';
+import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-// Authored UNRUN. All examples mount the production fields/profile and existing typed request fixtures.
-// Run the same IDs at phone390/desktop1280, all locale globals and both themes after integration.
+// Authored UNRUN. Complete creation, recovery and long examples mount AppShell plus ScreenProfile.
+// Independent field examples stay supplementary. Run the same IDs at phone390/desktop1280 with locale and theme globals.
 const person = '00000000-0000-4000-8000-000000000302';
 const parent = '00000000-0000-4000-8000-000000000301';
 const citation = `https://example.org/credits/${'complete-original-source-'.repeat(12)}?page=24#director`;
@@ -100,10 +101,12 @@ function Journey({
   scenario = 'ready',
   retirement = false,
   stale = false,
+  long = false,
 }: {
   scenario?: ScreenScenario;
   retirement?: boolean;
   stale?: boolean;
+  long?: boolean;
 }) {
   const locale = getLocale();
   const [reader, setReader] = useState('original-reader');
@@ -117,6 +120,18 @@ function Journey({
       load: async () => {
         run.loads++;
         const read = await run.fixture.transport.load();
+        if (long && read.ok) {
+          const release = structuredClone(read.release);
+          for (const id of [
+            'schema:director',
+            'schema:duration',
+            'schema:episodeNumber',
+            'schema:isPartOf',
+            'schema:position',
+          ])
+            release.properties[id]!.labels = { [locale]: longName(id) };
+          return { ...read, release };
+        }
         if (stale && run.loads > 1 && read.ok) {
           const release = structuredClone(read.release);
           delete release.properties['schema:episodeNumber'];
@@ -136,7 +151,7 @@ function Journey({
         return result;
       },
     }),
-    [run, retirement, stale],
+    [run, retirement, stale, long, locale],
   );
   return (
     <div
@@ -174,24 +189,36 @@ function Family({
   scenario?: ScreenScenario;
   rtl?: boolean;
 }) {
+  const supplementary = mode === 'independent' || mode === 'missing' || mode === 'disabled';
+  const body = (
+    <div
+      dir={rtl ? 'rtl' : undefined}
+      className={supplementary ? 'mx-auto w-full max-w-4xl min-w-0 space-y-6 p-4 sm:p-6' : 'min-w-0'}
+    >
+      {mode === 'independent' ? (
+        <>
+          <div data-independent="first">
+            <Fields />
+          </div>
+          <div data-independent="second">
+            <Fields />
+          </div>
+        </>
+      ) : mode === 'missing' || mode === 'disabled' ? (
+        <Fields populated missing={mode === 'missing'} disabled={mode === 'disabled'} />
+      ) : (
+        <Journey
+          scenario={scenario}
+          retirement={mode === 'retirement'}
+          stale={mode === 'stale'}
+          long={mode === 'long'}
+        />
+      )}
+    </div>
+  );
   return (
     <PatternStory path="/catalogue/screen" visitor={scenario === 'signed-out' ? 'Signed Out' : 'Signed In'}>
-      <div dir={rtl ? 'rtl' : undefined} className="mx-auto w-full max-w-4xl min-w-0 space-y-6 p-4 sm:p-6">
-        {mode === 'independent' ? (
-          <>
-            <div data-independent="first">
-              <Fields />
-            </div>
-            <div data-independent="second">
-              <Fields />
-            </div>
-          </>
-        ) : mode === 'long' || mode === 'missing' || mode === 'disabled' ? (
-          <Fields populated missing={mode === 'missing'} disabled={mode === 'disabled'} />
-        ) : (
-          <Journey scenario={scenario} retirement={mode === 'retirement'} stale={mode === 'stale'} />
-        )}
-      </div>
+      {supplementary ? body : <AppShell>{body}</AppShell>}
     </PatternStory>
   );
 }
@@ -209,7 +236,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Connected creation, independent fields, full supplied localized text, missing definitions, exact uncertain replay and current-reader retirement. Assertions are authored UNRUN. Native, SSR, backend growth and geometry proof remain separate integration obligations.',
+          'Complete creation, recovery and long examples render AppShell plus the production Screen editor. Independent field examples stay supplementary. Assertions are authored UNRUN. Native, SSR, backend growth and geometry proof remain separate integration obligations.',
       },
     },
   },
@@ -242,8 +269,16 @@ async function focused(control: HTMLElement) {
     style.boxShadow !== 'none' || (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0),
   ).toBe(true);
 }
-async function fill(canvasElement: HTMLElement) {
+async function page(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
+  await expect(await canvas.findByRole('heading', { level: 1, name: m.screen_title() })).toBeVisible();
+  await expect(canvasElement.querySelectorAll('main#main-content')).toHaveLength(1);
+  await expect(canvasElement.querySelectorAll('[data-screen-family]')).toHaveLength(1);
+  return canvas;
+}
+async function fill(canvasElement: HTMLElement, long = false) {
+  const canvas = within(canvasElement);
+  const name = (property: string) => (long ? longName(property) : field(property));
   await userEvent.selectOptions(
     await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
     'schema:Episode',
@@ -259,7 +294,7 @@ async function fill(canvasElement: HTMLElement) {
     await userEvent.tab();
     await focused(add);
     await userEvent.keyboard('{Enter}');
-    const region = factSection(canvas, field(property));
+    const region = factSection(canvas, name(property));
     const section = within(region);
     await expect(region.id).toBe(screenFactId(property));
     await expect(region.closest('fieldset')?.querySelector('legend')).toHaveTextContent(m.screen_initial_facts());
@@ -270,10 +305,10 @@ async function fill(canvasElement: HTMLElement) {
         'http://www.wikidata.org/entity/Q11574',
       );
     } else if (property === 'schema:episodeNumber') {
-      await userEvent.type(section.getByRole('textbox', { name: m.correction_value() }), '0.5');
+      await userEvent.type(section.getByRole('textbox', { name: m.correction_value() }), long ? scalar : '0.5');
     } else {
       await userEvent.type(
-        section.getByRole('combobox', { name: field(property) }),
+        section.getByRole('combobox', { name: name(property) }),
         property === 'schema:director' ? 'Observer' : 'Observatory',
       );
       const body = within(canvasElement.ownerDocument.body);
@@ -288,6 +323,7 @@ async function fill(canvasElement: HTMLElement) {
           section.getByRole('combobox', { name: m.correction_add_qualifier() }),
           'schema:position',
         );
+        await userEvent.click(section.getByRole('button', { name: m.relation_add_qualifier() }));
         await userEvent.type(section.getByRole('textbox', { name: m.correction_value() }), '2');
         await userEvent.type(section.getByRole('textbox', { name: m.relation_citation() }), citation);
         for (const action of section.getAllByRole('button', { name: m.relation_remove() }))
@@ -297,7 +333,7 @@ async function fill(canvasElement: HTMLElement) {
       }
     }
   }
-  const duration = within(factSection(canvas, field('schema:duration')));
+  const duration = within(factSection(canvas, name('schema:duration')));
   await expect(duration.getByRole('textbox', { name: m.correction_amount() })).toHaveValue('+1440');
   await expect(duration.getByRole('combobox', { name: m.correction_unit() })).toHaveValue(
     'http://www.wikidata.org/entity/Q11574',
@@ -308,6 +344,7 @@ async function fill(canvasElement: HTMLElement) {
 export const IndependentSelectors: Story = {
   args: { mode: 'independent' },
   play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('main#main-content')).toBeNull();
     const [first, second] = ['first', 'second'].map((id) =>
       within(canvasElement.querySelector<HTMLElement>(`[data-independent="${id}"]`)!),
     );
@@ -337,7 +374,8 @@ export const IndependentSelectors: Story = {
   },
 };
 const longPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
-  const canvas = within(canvasElement);
+  await page(canvasElement);
+  const canvas = await fill(canvasElement, true);
   for (const property of ['schema:director', 'schema:duration', 'schema:episodeNumber', 'schema:isPartOf']) {
     const heading = canvas.getByRole('heading', { name: longName(property), level: 3 });
     const section = heading.closest('section')!;
@@ -375,6 +413,7 @@ export const Disabled: Story = {
 };
 export const CompleteCreation: Story = {
   play: async ({ canvasElement }) => {
+    await page(canvasElement);
     const canvas = await fill(canvasElement);
     const run = runFor(canvasElement);
     await expect(run.commands).toHaveLength(0);
@@ -392,12 +431,14 @@ export const CompleteCreation: Story = {
 export const ExactUncertainReplay: Story = {
   args: { scenario: 'uncertain' },
   play: async ({ canvasElement }) => {
+    await page(canvasElement);
     const canvas = await fill(canvasElement);
     const run = runFor(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByText(m.catalogue_create_uncertain())).toBeVisible();
     const frozen = structuredClone(run.commands[0]!);
-    for (const control of canvasElement.querySelectorAll('fieldset input, fieldset select, fieldset button'))
+    const family = canvasElement.querySelector<HTMLElement>('[data-screen-family]')!;
+    for (const control of family.querySelectorAll('fieldset input, fieldset select, fieldset button'))
       await expect(control).toBeDisabled();
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
     await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
@@ -411,6 +452,7 @@ export const ExactUncertainReplay: Story = {
 export const DeniedCreation: Story = {
   args: { scenario: 'denied' },
   play: async ({ canvasElement }) => {
+    await page(canvasElement);
     const canvas = await fill(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByText(m.catalogue_create_denied())).toBeVisible();
@@ -421,6 +463,7 @@ export const DeniedCreation: Story = {
 export const CurrentReaderRetirement: Story = {
   args: { mode: 'retirement' },
   play: async ({ canvasElement }) => {
+    await page(canvasElement);
     const canvas = await fill(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     const run = runFor(canvasElement);
@@ -436,6 +479,7 @@ export const CurrentReaderRetirement: Story = {
 export const StaleDefinitionRefresh: Story = {
   args: { mode: 'stale', scenario: 'invalid' },
   play: async ({ canvasElement }) => {
+    await page(canvasElement);
     const canvas = await fill(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByText(m.correction_preserved())).toBeVisible();
@@ -471,6 +515,30 @@ export const MultiplicityAndExplicitRemoval: Story = {
     await expect(scope.getAllByRole('heading', { name: field('schema:director'), level: 3 })).toHaveLength(1);
   },
 };
-export const EmptyDefinitions: Story = { args: { scenario: 'empty' } };
-export const UnavailableDefinitions: Story = { args: { scenario: 'definitions-unavailable' } };
-export const SignedOut: Story = { args: { scenario: 'signed-out' } };
+export const CreatedReaderRecovery: Story = {
+  args: { scenario: 'reader-unavailable' },
+  play: async ({ canvasElement }) => {
+    await page(canvasElement);
+    const canvas = await fill(canvasElement);
+    const run = runFor(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    await expect(await canvas.findByText(m.catalogue_create_reader_unavailable())).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
+    run.fixture.creation.setScenario('concealed');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    await expect(await canvas.findByText(m.catalogue_create_concealed())).toBeVisible();
+    run.fixture.creation.setScenario('ready');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    await expect(await canvas.findByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('00000000-0000-4000-8000-00000000c001'),
+    );
+    await expect(run.fixture.creation.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+  },
+};
+const pagePlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  await page(canvasElement);
+};
+export const EmptyDefinitions: Story = { args: { scenario: 'empty' }, play: pagePlay };
+export const UnavailableDefinitions: Story = { args: { scenario: 'definitions-unavailable' }, play: pagePlay };
+export const SignedOut: Story = { args: { scenario: 'signed-out' }, play: pagePlay };
