@@ -772,6 +772,27 @@ report's recommendations, not hidden adopted economics. Reserve duration, clawba
 payment, correction states and FX netting remain unchosen. Existing mark-paid records an authorized external reference
 on a statement; it sends no Stripe transfer and does not prove payability or external finality.
 
+### External payment evidence form
+
+The Web statement inspector records only the existing `paidReference` through native `markPaid`; native authorization
+decides whether the current creator or operator may attest. It captures the exact non-blank reference (at most 256
+characters), statement ID, submitting session subject and UUID command key before sending. Replays use the current
+credential and CSRF token with those same operands; a different session subject cannot execute the old original.
+The form shares the statement reader's viewer/address lifetime and retains its captured original in that workspace.
+
+Decision: once submitted, keep the reference and command identity locked; uncertainty and restored authority offer an
+explicit identical replay, while a conflict offers evidence refresh without generating a replacement command.
+A successful read, including a paid statement, never resolves an uncertain command. Only a valid markPaid response
+matching the captured statement and exact reference confirms that command. The result remains distinct from current
+statement evidence, which the existing reader refreshes, and from provider payouts, payability or editable earnings.
+
+The form's static native HTTP ceiling is **3**: one `markPaid` call plus the existing reader's one full-ID statement
+read and one line-page read. Each explicit retry repeats that finite operation; no automatic write retry, cursor walk,
+per-line fan-out or new producer query is added. The producer uses full `(route, statement_id)` seeks; its line page
+uses the full owner/statement prefix, an exclusive transaction key and `limit + 1` (Web limit 20, at most 21 raw rows).
+Thus refresh examines at most one selected statement and 21 selected line rows independent of unrelated history.
+The producer's existing Access/session and command-receipt bounds remain inside each native operation.
+
 ### Provider money observations
 
 [Money](money.ts) exports the closed `StripeMoneyUnit = Readonly<{system:'stripe-api'; exponent:0|2;

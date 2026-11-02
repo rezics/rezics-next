@@ -4434,5 +4434,17 @@
   "authored_discard": "Discard draft",
   "authored_discard_warning": "Discard the unsent replacement for this field? Its text, language, licence, citation and original-work declaration will be cleared. Other field drafts and public text are kept.",
   "authored_keep_draft": "Keep editing",
-  "authored_discard_confirm": "Discard and start again"
+  "authored_discard_confirm": "Discard and start again",
+  "payment_attestation_heading": "Record external payment evidence",
+  "payment_attestation_help": "Record the reference for a payment made outside REZICS. This does not send money, confirm receipt, or establish whether royalties are payable. Once submitted, the reference and request are kept together for recovery.",
+  "payment_attestation_validation": "Enter a non-blank reference of at most 256 characters. Spaces and capitalization are preserved exactly.",
+  "payment_attestation_statement": "Statement",
+  "payment_attestation_request": "Original request",
+  "payment_attestation_submitting": "Submitting the captured payment reference…",
+  "payment_attestation_uncertain": "The response is unknown. Retry the original request to resolve it without recording another payment. Refreshing the statement does not resolve this request.",
+  "payment_attestation_saved": "The external payment reference was recorded. Current statement evidence is refreshed separately; this does not confirm receipt of funds.",
+  "payment_attestation_conflict": "This request conflicts with the recorded statement or an existing request. Refresh the evidence and review it. No replacement request has been created.",
+  "payment_attestation_retry": "Retry original request",
+  "payment_attestation_submit": "Record payment reference",
+  "payment_attestation_refresh_failed": "The command result is retained, but current statement evidence could not be refreshed. Retry the refresh."
 }
