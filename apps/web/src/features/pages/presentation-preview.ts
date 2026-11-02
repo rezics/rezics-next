@@ -167,7 +167,9 @@ export async function loadPresentationPreview(client: KernelClient, value: unkno
     }
     if ('subject' in input.target) {
       const requestedSubject = input.target.subject;
-      const entry = Object.entries(plan.reads).find(([, read]) => read.kind === 'subject' && read.id === requestedSubject);
+      const entry = Object.entries(plan.reads).find(
+        ([, read]) => read.kind === 'subject' && read.id === requestedSubject,
+      );
       // Native pages.read already probes the target even when its configured template needs no subject body.
       if (entry) {
         const body: unknown = page.reads[entry[0]]?.body;
