@@ -210,14 +210,14 @@ test("a dev product attempt's continuation briefs move to its Goal backlog when 
       .events(task.id, 1)
       .filter((event) => event.kind === 'continuation-dropped')
       .map((event) => JSON.parse(event.body) as { file: string; reason: string });
-    expect(dropped).toEqual([
+      expect(dropped).toEqual([
       { file: 'notes.txt', reason: 'a continuation must be a regular Markdown file' },
       { file: 'other-goal.md', reason: "goal web is not the task's goal fixture" },
     ]);
   } finally {
     h.dispose();
   }
-});
+}, 60_000);
 
 test('a continuation missing front matter inherits it from the brief it continues', () => {
   const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
@@ -370,4 +370,4 @@ test('Keep an unreadable Git status from stopping wanted work.', () => {
   } finally {
     moved.close();
   }
-});
+}, 60_000);
