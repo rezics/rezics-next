@@ -677,7 +677,9 @@ test('Public figure pages preserve start, strict cursor, end and exact published
   expect(await pagePublicFigures(database.pool, { ...input, after: null, limit: 500 })).toEqual(expected);
   expect(await pagePublicFigures(database.pool, { ...input, after: null, limit: 1 })).toEqual(expected.slice(0, 1));
   expect(await pagePublicFigures(database.pool, { ...input, after: first, limit: 1 })).toEqual(expected.slice(1));
-  expect(await pagePublicFigures(database.pool, { ...input, after: unpublished, limit: 500 })).toEqual(expected.slice(1));
+  expect(await pagePublicFigures(database.pool, { ...input, after: unpublished, limit: 500 })).toEqual(
+    expected.slice(1),
+  );
   expect(await pagePublicFigures(database.pool, { ...input, after: second, limit: 500 })).toEqual([]);
   expect(
     await pagePublicFigures(database.pool, {
