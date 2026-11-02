@@ -296,7 +296,7 @@ must replace that adapter with the actual generated binding. Stories `pages-comm
 `--second-page`, `--empty`, `--denied`, `--unavailable`, `--error`, `--stale`, `--preparing`, `--long-title`,
 `--mobile390` and `--desktop1280` describe contract-shaped source states, not recorded native evidence.
 390/1280 browser visual review, native acceptance and promoted-main proof remain controller work under minimal
-verification. The native private-sales producer, target use and native sale/use proof remain open.
+verification. The private-sales source producer is described above; target use and native sale/use proof remain open.
 
 ### Served creator sales
 
