@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef, useState } from 'react';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Label } from '@rezics/ui/shadcn/label';
@@ -10,6 +10,8 @@ import { KindContinuationLedger } from './kind-continuation';
 import type { SearchRecoveryState } from './search-recovery';
 import { searchRecoveryMessage } from './search-recovery-view';
 import { useSearchRetryWait } from './search-recovery-retry';
+
+const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
 /** Registry pages are explicit bounded reads; rows and initial count evidence remain in place. */
 export function DiscoveryKinds({
@@ -34,19 +36,68 @@ export function DiscoveryKinds({
   const [recovery, setRecovery] = useState<SearchRecoveryState>();
   const waiting = useSearchRetryWait(recovery && recovery.status !== 'ready' ? recovery.retryAt : undefined);
   const pending = useRef<AbortController | undefined>(undefined);
-  useEffect(() => () => pending.current?.abort(), []);
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const restartButton = useRef<HTMLButtonElement>(null);
+  const recoveryRegion = useRef<HTMLElement>(null);
+  const focusAction = useRef<{
+    source: HTMLButtonElement;
+    document: Document;
+    moved: boolean;
+    complete: boolean;
+    onFocusIn: (event: FocusEvent) => void;
+  }>();
+  function clearFocusAction(action: NonNullable<typeof focusAction.current>) {
+    action.document.removeEventListener('focusin', action.onFocusIn, true);
+    if (focusAction.current === action) focusAction.current = undefined;
+  }
+  function beginFocusAction(source: HTMLButtonElement) {
+    const document = source.ownerDocument;
+    if (document.activeElement !== source) return undefined;
+    const action: NonNullable<typeof focusAction.current> = {
+      source,
+      document,
+      moved: false,
+      complete: false,
+      onFocusIn: (event) => {
+        if (event.target !== source) action.moved = true;
+      },
+    };
+    document.addEventListener('focusin', action.onFocusIn, true);
+    focusAction.current = action;
+    return action;
+  }
+  useEffect(
+    () => () => {
+      pending.current?.abort();
+      if (focusAction.current) clearFocusAction(focusAction.current);
+    },
+    [],
+  );
+  useFocusLayoutEffect(() => {
+    const action = focusAction.current;
+    if (!action?.complete) return;
+    clearFocusAction(action);
+    if (action.moved) return;
+    const target = action.source.isConnected
+      ? action.source
+      : moreButton.current ?? restartButton.current ?? recoveryRegion.current;
+    if (target?.isConnected) target.focus();
+  });
   const values = refused ? [] : [...initial.values, ...(continuation?.values ?? [])];
   const next = continuation ? continuation.next : initial.next;
   const restartable = !refused && (stopped || continuations.limited || next === null);
-  function restart() {
+  function restart(source: HTMLButtonElement) {
+    const action = beginFocusAction(source);
     continuations.restart();
     setContinuation(undefined);
     setStopped(false);
     setStatus(undefined);
     setRecovery(undefined);
+    if (action) action.complete = true;
   }
-  async function more() {
+  async function more(source: HTMLButtonElement) {
     if (!next || pending.current || waiting || stopped || continuations.limited || refused) return;
+    const action = beginFocusAction(source);
     const controller = new AbortController();
     pending.current = controller;
     setStatus('loading');
@@ -81,10 +132,14 @@ export function DiscoveryKinds({
       if (!controller.signal.aborted) setStatus('unavailable');
     } finally {
       if (pending.current === controller) pending.current = undefined;
+      if (action) {
+        if (controller.signal.aborted) clearFocusAction(action);
+        else action.complete = true;
+      }
     }
   }
   return (
-    <section className="space-y-3" aria-label={m.search_result_kinds()}>
+    <section ref={recoveryRegion} className="space-y-3" aria-label={m.search_result_kinds()} tabIndex={-1}>
       <h2 className="font-medium">{m.search_result_kinds()}</h2>
       <p className="text-sm text-muted-foreground">{m.search_result_kinds_help()}</p>
       {chosen.size === 0 && (
@@ -150,13 +205,25 @@ export function DiscoveryKinds({
                 ? m.result_kind_window_limit()
                 : m.result_kind_window_end()}
           </p>
-          <Button type="button" variant="outline" disabled={!hydrated || status === 'loading'} onClick={restart}>
+          <Button
+            ref={restartButton}
+            type="button"
+            variant="outline"
+            disabled={!hydrated || status === 'loading'}
+            onClick={(event) => restart(event.currentTarget)}
+          >
             {m.result_kind_window_restart()}
           </Button>
         </>
       )}
       {next && !restartable && !refused && (
-        <Button type="button" variant="outline" disabled={!hydrated || status === 'loading' || waiting} onClick={more}>
+        <Button
+          ref={moreButton}
+          type="button"
+          variant="outline"
+          disabled={!hydrated || status === 'loading' || waiting}
+          onClick={(event) => void more(event.currentTarget)}
+        >
           {m.discovery_more_kinds()}
         </Button>
       )}
