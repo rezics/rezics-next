@@ -44,7 +44,7 @@ function normalizeStatement(statement: string): string {
     pendingSpace = false;
   };
 
-  for (let index = 0; index < statement.length; ) {
+  for (let index = 0; index < statement.length;) {
     const character = statement[index]!;
     if (/\s/.test(character)) {
       pendingSpace = true;
