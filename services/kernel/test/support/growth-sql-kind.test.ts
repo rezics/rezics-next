@@ -4,7 +4,12 @@ import { classifyGrowthSql } from './growth-sql-kind.ts';
 import { readAttemptLedger } from './growth.ts';
 
 function captured(statements: string[], errors?: (string | null)[]): Capture {
-  return { statements, plans: [], statementBackends: statements.map(() => 71), statementErrors: errors };
+  return {
+    statements,
+    plans: [],
+    statementBackends: statements.map(() => 71),
+    ...(errors === undefined ? {} : { statementErrors: errors }),
+  };
 }
 
 test('classifies supported controls after SQL comments without matching lookalikes', () => {
