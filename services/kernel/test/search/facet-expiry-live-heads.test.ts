@@ -106,7 +106,7 @@ test('facet preparation expires only indexed live heads across retired history',
         meaning: { digest } as never,
       },
       {
-        consumer,
+        consumer: consumer as never,
         snapshot: { kind: 'prepared', observation, build: 'build', generation: 1n },
       },
       { deadline },
