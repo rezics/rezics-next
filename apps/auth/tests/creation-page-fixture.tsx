@@ -1,0 +1,44 @@
+import { afterAll, afterEach } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, type ReactNode } from 'react';
+export { fill, button, session } from '../src/stories/accounts-operations/story';
+const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`))));
+export const dom = new Window({ url: 'https://auth.test/organizations/new' });
+const previous = new Map<string, PropertyDescriptor | undefined>();
+for (const [key, value] of Object.entries({ window: dom, document: dom.document, navigator: dom.navigator,
+  HTMLElement: dom.HTMLElement, Event: dom.Event, HTMLInputElement: dom.HTMLInputElement, Element: dom.Element, Node: dom.Node,
+  IS_REACT_ACT_ENVIRONMENT: true, fetch: globalThis.fetch })) {
+  previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+  Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+}
+const { createRoot } = await import('react-dom/client');
+const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+overwriteGetLocale(() => 'en');
+export const flush = (action: () => void) => act(async () => { action(); });
+let close: () => Promise<void>;
+afterEach(async () => { await close?.(); window.sessionStorage.clear(); });
+afterAll(async () => {
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  await dom.happyDOM.close();
+});
+export async function open(page: ReactNode, sessionBody: object) {
+  const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
+  globalThis.fetch = ((path, init) => {
+    if (String(path) === '/session') return Promise.resolve(Response.json(sessionBody));
+    const request = Promise.withResolvers<Response>();
+    calls.push({ path: String(path), body: JSON.parse(String(init?.body)), resolve: request.resolve });
+    return request.promise;
+  }) as typeof fetch;
+  const host = document.body.appendChild(document.createElement('div'));
+  const root = createRoot(host);
+  const render = (next: ReactNode) => flush(() => root.render(next));
+  close = async () => { await flush(() => root.unmount()); host.remove(); };
+  await render(page);
+  return { host, calls, render, close, sessionBody };
+}
+export const send = (host: HTMLElement) => host.querySelector('form')!.dispatchEvent(new dom.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+export const leave = () => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
+export const approval = () => Response.json({ reference: 'native-approval', expiresAt: new Date(Date.now() + 60000).toISOString() });

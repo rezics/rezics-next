@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
@@ -53,14 +53,30 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [createdAccountId, setCreatedAccountId] = useState('');
   const [loadMessage, setLoadMessage] = useState('');
   const submitting = useRef(false);
+  const lifetime = useRef<object | null>(null);
+  const [reload, setReload] = useState(0);
   const handleInput = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    let active = true;
-    setHandle(readPendingOrganizationHandle());
-    void (initial ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
-      if (!active) return;
+  useLayoutEffect(() => {
+    const current = {};
+    lifetime.current = current;
+    submitting.current = false;
+    setPending(false);
+    setLoadState('loading');
+    setCreatedHandle('');
+    setMessage('');
+    setReturned(false);
+    const retire = () => {
+      lifetime.current = null;
+    };
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) setReload((value) => value + 1);
+    };
+    window.addEventListener('pagehide', retire);
+    window.addEventListener('pageshow', restore);
+    void (initial && reload === 0 ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
+      if (lifetime.current !== current) return;
       if (result.kind === 'ready') {
         const pendingState = pendingAccountOperationStepUpState();
         const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
@@ -75,6 +91,11 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
           setLoadState('failure');
           return;
         }
+        if (pendingOperation?.operation.kind === 'organization') {
+          setHandle(pendingOperation.operation.handle);
+          storePendingOrganizationHandle(pendingOperation.operation.handle);
+        } else setHandle(readPendingOrganizationHandle());
+        setUnknown(Boolean(pendingOperation));
         setAccountId(result.accountId);
         setReturned(Boolean(pendingOperation));
         const expected = accountOperationProfile('organization');
@@ -92,9 +113,11 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       }
     });
     return () => {
-      active = false;
+      retire();
+      window.removeEventListener('pagehide', retire);
+      window.removeEventListener('pageshow', restore);
     };
-  }, [initial]);
+  }, [initial, reload]);
 
   useLayoutEffect(() => {
     if (handleError) handleInput.current?.focus();
@@ -105,7 +128,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   }, [handleError, message]);
 
   async function createOrganization() {
-    if (submitting.current || pending) return;
+    if (!lifetime.current || loadState !== 'ready' || submitting.current || pending) return;
     const normalizedHandle = normalizeSignupHandle(handle);
     if (!normalizedHandle) {
       setMessage('');
@@ -119,9 +142,9 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     setMessage('');
     setShowRetry(false);
     const operation = { kind: 'organization' as const, handle: normalizedHandle };
-    const operationKey = operationKeyFor(operation, accountId);
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+    const operationKey = pendingOperation?.operationKey ?? operationKeyFor(operation, accountId);
     if (
       pendingState.kind === 'invalid' ||
       (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))
@@ -131,7 +154,43 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       setPending(false);
       return;
     }
+    const current = lifetime.current;
+    let continuation = JSON.stringify(pendingState);
+    const draft = readPendingOrganizationHandle();
+    const isCurrent = () =>
+      lifetime.current === current &&
+      JSON.stringify(pendingAccountOperationStepUpState()) === continuation &&
+      readPendingOrganizationHandle() === draft;
+    const before = await loadAccountSession();
+    if (!isCurrent()) return;
+    if (before.kind !== 'ready' || before.accountId !== accountId) {
+      setMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
+    // Retain the exact command before sending it: losing this page cannot unlock another creation.
+    if (!storePendingAccountOperationStepUp({ kind: 'organization', accountId, operationKey, operation })) {
+      setMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
+    continuation = JSON.stringify(pendingAccountOperationStepUpState());
+    setUnknown(true);
     let result = await runAccountOperation(operationKey, operation);
+    if (!isCurrent()) return;
+    const after = await loadAccountSession();
+    if (!isCurrent()) return;
+    if (
+      after.kind !== 'ready' || after.accountId !== accountId ||
+      after.clientId !== before.clientId || JSON.stringify(after.scopes) !== JSON.stringify(before.scopes)
+    ) {
+      setMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
     if (!result.ok && result.reason === 'denied' && needsProfile) result = { ok: false, reason: 'step-up' };
     if (result.ok) {
       forgetOperationKey(operation, accountId);
@@ -155,11 +214,16 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     }
     submitting.current = false;
     setPending(false);
+    if (result.reason === 'platform-closed' || result.reason === 'denied') {
+      clearPendingAccountOperationStepUp();
+      setUnknown(false);
+    }
     if (result.reason === 'platform-closed') {
       setMessage(m.auth_organization_not_open());
     } else if (result.reason === 'denied') {
       setMessage(m.auth_organization_refused());
     } else if (result.reason === 'unknown') {
+      storePendingAccountOperationStepUp({ kind: 'organization', accountId, operationKey, operation });
       setUnknown(true);
       setMessage(m.auth_account_operation_unknown());
       setShowRetry(true);
@@ -191,6 +255,9 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         <ErrorAlert>{loadMessage}</ErrorAlert>
+        <Button type="button" onClick={() => setReload((value) => value + 1)}>
+          {m.auth_account_delete_retry()}
+        </Button>
       </AuthPage>
     );
 

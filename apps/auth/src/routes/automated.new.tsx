@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { AuthButton as Button } from '../button';
@@ -7,7 +7,7 @@ import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
-import { loadManagementSession } from '../management-operations';
+import { loadManagementSession, type ManagementSessionResult } from '../management-operations';
 import { normalizeSignupHandle } from '../signup';
 import {
   createAutomatedAttempt,
@@ -32,7 +32,7 @@ function notice(kind: string): string {
   if (kind === 'signed-out') return m.auth_account_operation_sign_in_required();
   return m.auth_automated_unavailable();
 }
-export function AutomatedAccountCreatePage() {
+export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSessionResult } = {}) {
   const [accountId, setAccountId] = useState('');
   const [operatorId, setOperatorId] = useState('');
   const [handle, setHandle] = useState('');
@@ -46,13 +46,33 @@ export function AutomatedAccountCreatePage() {
   const [password, setPassword] = useState('');
   const [created, setCreated] = useState('');
   const lock = useRef(false);
+  const lifetime = useRef<object | null>(null);
+  const [reload, setReload] = useState(0);
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
 
-  useEffect(() => {
-    let active = true;
-    void loadManagementSession().then((session) => {
-      if (!active) return;
+  useLayoutEffect(() => {
+    const current = {};
+    lifetime.current = current;
+    lock.current = false;
+    setBusy(false);
+    setReady(false);
+    setStatus('');
+    setConfirmed(false);
+    setReauth(false);
+    setPassword('');
+    setCreated('');
+    const retire = () => {
+      lifetime.current = null;
+      setPassword('');
+    };
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) setReload((value) => value + 1);
+    };
+    window.addEventListener('pagehide', retire);
+    window.addEventListener('pageshow', restore);
+    void (initial && reload === 0 ? Promise.resolve(initial) : loadManagementSession()).then((session) => {
+      if (lifetime.current !== current) return;
       if (session.kind !== 'ready') {
         setStatus(session.kind);
         return;
@@ -67,9 +87,11 @@ export function AutomatedAccountCreatePage() {
       setReady(true);
     });
     return () => {
-      active = false;
+      retire();
+      window.removeEventListener('pagehide', retire);
+      window.removeEventListener('pageshow', restore);
     };
-  }, []);
+  }, [initial, reload]);
   useEffect(() => {
     if (status) feedback.current?.focus();
   }, [status]);
@@ -77,9 +99,22 @@ export function AutomatedAccountCreatePage() {
     if (attempt) confirmation.current?.focus();
   }, [attempt]);
 
+  // Approval references may change during this command; its parties and business body cannot.
+  function currentWork() {
+    const current = lifetime.current;
+    const binding = () => {
+      const saved = restoreAutomatedAttempt();
+      return saved && saved !== 'invalid' ? JSON.stringify({ ...saved, reference: undefined }) : saved;
+    };
+    const saved = binding();
+    return () => current !== null && lifetime.current === current && binding() === saved;
+  }
+
   async function review(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || attempt) return;
+    if (!lifetime.current || !ready || lock.current || attempt) return;
+    const isCurrent = currentWork();
+    const current = lifetime.current;
     const normalized = normalizeSignupHandle(handle);
     if (!normalized) {
       setStatus('refused');
@@ -90,6 +125,7 @@ export function AutomatedAccountCreatePage() {
     setStatus('');
     try {
       const target = await loadAutomatedOperator(accountId, operatorId);
+      if (!isCurrent()) return;
       if (target.kind !== 'ready') {
         setStatus('unavailable');
         return;
@@ -102,19 +138,29 @@ export function AutomatedAccountCreatePage() {
       setAttempt(next);
       setConfirmed(false);
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (lifetime.current === current) {
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || !attempt || !confirmed) return;
+    if (!lifetime.current || lock.current || !attempt || !confirmed) return;
+    const isCurrent = currentWork();
     lock.current = true;
     setBusy(true);
     setStatus('');
     setConfirmed(false);
     try {
-      const result: AutomatedOutcome = await submitAutomatedAttempt(attempt);
+      const result: AutomatedOutcome = await submitAutomatedAttempt(attempt, isCurrent);
+      if (!isCurrent()) return;
+      const session = await loadManagementSession();
+      if (!isCurrent()) return;
+      if (session.kind !== 'ready' || session.accountId !== accountId) {
+        setStatus(session.kind === 'unavailable' ? 'unavailable' : 'refused');
+        return;
+      }
       const saved = restoreAutomatedAttempt();
       if (saved && saved !== 'invalid') setAttempt(saved);
       if (result.kind === 'complete') setCreated(result.accountId);
@@ -123,28 +169,34 @@ export function AutomatedAccountCreatePage() {
         setReauth(result.kind === 'step-up');
       }
     } finally {
-      lock.current = false;
-      setBusy(false);
-      setPassword('');
+      if (isCurrent()) {
+        lock.current = false;
+        setBusy(false);
+        setPassword('');
+      }
     }
   }
   async function authenticate(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || !attempt) return;
+    if (!lifetime.current || lock.current || !attempt) return;
+    const isCurrent = currentWork();
     lock.current = true;
     setBusy(true);
     setConfirmed(false);
     try {
-      const result = await reauthenticateAutomated(accountId, email, password);
+      const result = await reauthenticateAutomated(accountId, email, password, isCurrent);
+      if (!isCurrent()) return;
       if (result) setStatus(result.kind);
       else {
         setReauth(false);
         setStatus('step-up');
       }
     } finally {
-      setPassword('');
-      lock.current = false;
-      setBusy(false);
+      if (isCurrent()) {
+        setPassword('');
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   return (
@@ -157,7 +209,14 @@ export function AutomatedAccountCreatePage() {
           </ErrorAlert>
         ) : null}
         {!ready ? (
-          <p role="status">{status ? notice(status) : m.auth_inventory_loading()}</p>
+          <div className="space-y-3">
+            <p role="status">{status ? notice(status) : m.auth_inventory_loading()}</p>
+            {status === 'unavailable' ? (
+              <Button type="button" onClick={() => setReload((value) => value + 1)}>
+                {m.auth_account_delete_retry()}
+              </Button>
+            ) : null}
+          </div>
         ) : created ? (
           <div role="status" className="space-y-3">
             <p>{m.auth_automated_created({ account: created })}</p>

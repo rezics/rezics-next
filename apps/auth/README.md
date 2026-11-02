@@ -199,15 +199,16 @@ organizations or operated accounts.
 
 ## Create organization
 
-`/organizations/new` reads the current session once and asks for one handle. It applies the same claim rule and
+`/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers Retry without discarding the saved draft. It applies the same claim rule and
 lowercase normalization as sign-up. Creation uses one operation key for the
 approve and execute requests. The `organizations` gate is checked by Auth; a closed gate keeps the handle and shows a
 localized message without exposing gate details. A 409 says the handle may be taken, leaves it in the field and focuses
 it. Handle format guidance appears before entry. Success names `@<handle>` and links to the created organization's
 membership page using the native result's account ID and the existing membership-ID validator. A result that cannot
 represent that destination keeps the Security fallback. Navigation grants no membership authority; the destination
-retains its own current-session and permission checks. The page uses at most three Auth requests regardless of the
-person's existing sessions or organizations.
+retains its own current-session and permission checks. Each explicit submission rechecks the initiating session before and after the native command; the ordinary flow uses five Auth requests regardless of the person's existing sessions or organizations, excluding bounded protocol retries.
+
+Both creation pages retire browser callbacks on departure, cached-page restoration and session replacement. Retry restores the exact saved operation and initiating account; organization review uses its saved handle and original key. Automated review keeps the exact selected operator. Leaving never clears an unresolved attempt or reverses native creation; uncertain results require explicit confirmation of the same command.
 
 Deletion, creation, rename and operator-transfer pages provide a fixed local return to `/security`, including their
 loading and refusal states. Query parameters and response text cannot replace that return target. Leaving performs

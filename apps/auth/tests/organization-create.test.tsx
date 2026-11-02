@@ -1,0 +1,51 @@
+import { expect, spyOn, test } from 'bun:test';
+import { approval, button, fill, flush, leave, open, send, session } from './creation-page-fixture';
+import { NewOrganizationPage } from '../src/routes/organizations.new';
+import { readPendingAccountOperationStepUp, storePendingAccountOperationStepUp } from '../src/account-operation-step-up';
+import { readPendingOrganizationHandle, storePendingOrganizationHandle } from '../src/account-operations';
+const initial = session('organization');
+const body = { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes };
+
+test('initial read retries the saved draft; uncertain creation requires the same handle and command', async () => {
+  storePendingOrganizationHandle('Team-Alpha');
+  const page = await open(<NewOrganizationPage initial={{ kind: 'failure', message: 'Unavailable' }} />, body);
+  await flush(() => button(page.host, 'Retry')!.click());
+  expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('Team-Alpha');
+  await flush(() => send(page.host));
+  await flush(() => page.calls[0]!.resolve(approval()));
+  await flush(() => page.calls[1]!.resolve(Response.json({ error: 'uncertain' }, { status: 503 })));
+  // An explicit retry keeps the original key even after the page is reloaded.
+  const saved = readPendingAccountOperationStepUp()!;
+  storePendingOrganizationHandle('another-draft');
+  await page.render(<NewOrganizationPage key="restored" initial={initial} />);
+  expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('team-alpha');
+  expect(page.host.querySelector<HTMLInputElement>('input')!.readOnly).toBe(true);
+  expect(page.calls).toHaveLength(2);
+  await flush(() => send(page.host));
+  expect(page.calls[2]!.body.operationKey).toBe(saved.operationKey);
+  expect(page.calls[2]!.body.operation).toEqual(saved.operation);
+  await flush(() => page.calls[2]!.resolve(approval()));
+  await flush(() => page.calls[3]!.resolve(Response.json({ accountId: 'created-organization' })));
+  expect(page.host.textContent).toContain('@team-alpha');
+  expect(readPendingOrganizationHandle()).toBe('');
+  expect(readPendingAccountOperationStepUp()).toBeNull();
+});
+
+for (const result of ['success', 'step-up'] as const) test(`departed ${result} cannot clear or redirect a replacement creation`, async () => {
+  const page = await open(<NewOrganizationPage initial={initial} />, { ...body });
+  const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
+  try {
+    await flush(() => fill(page.host.querySelector('input')!, 'old-team'));
+    await flush(() => send(page.host));
+    await flush(() => page.calls[0]!.resolve(approval()));
+    await flush(leave);
+    storePendingOrganizationHandle('new-team');
+    expect(storePendingAccountOperationStepUp({ kind: 'organization', accountId: 'replacement', operationKey: 'b'.repeat(32), operation: { kind: 'organization', handle: 'new-team' } })).toBe(true);
+    await page.render(<NewOrganizationPage initial={{ ...initial, accountId: 'replacement' }} />);
+    await flush(() => page.calls[1]!.resolve(result === 'success' ? Response.json({ accountId: 'old-created' }) : Response.json({ error: 'step_up_required' }, { status: 401 })));
+    expect(readPendingOrganizationHandle()).toBe('new-team');
+    expect(readPendingAccountOperationStepUp()!.accountId).toBe('replacement');
+    expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('new-team');
+    expect(assign).not.toHaveBeenCalled();
+  } finally { assign.mockRestore(); }
+});

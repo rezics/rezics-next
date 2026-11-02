@@ -212,14 +212,19 @@ function failure(result: Exclude<AuthPostResult, { ok: true }>): AutomatedOutcom
 }
 
 /** Only explicit confirmation calls this. Return/navigation never invokes it. */
-export async function submitAutomatedAttempt(input: AutomatedAttempt): Promise<AutomatedOutcome> {
+export async function submitAutomatedAttempt(
+  input: AutomatedAttempt,
+  isCurrent: () => boolean = () => true,
+): Promise<AutomatedOutcome> {
   let attempt = parseAutomatedAttempt(input);
-  if (!attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
+  if (!isCurrent() || !attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
   const denied = await boundSession(attempt.accountId);
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (denied) return denied;
   const { operation, operationKey, accountId } = attempt;
   {
     const approval = await authPost('/account-operations/approve', { operation, operationKey, accountId });
+    if (!isCurrent()) return { kind: 'unavailable' };
     if (!approval.ok) return failure(approval);
     if (
       !record(approval.body) ||
@@ -233,6 +238,7 @@ export async function submitAutomatedAttempt(input: AutomatedAttempt): Promise<A
     if (!saveAutomatedAttempt(attempt)) return { kind: 'unknown' };
   }
   const current = await boundSession(accountId);
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (current) return current;
   const result = await authPost('/account-operations/execute', {
     operation,
@@ -253,10 +259,13 @@ export async function reauthenticateAutomated(
   accountId: string,
   email: string,
   password: string,
+  isCurrent: () => boolean = () => true,
 ): Promise<AutomatedOutcome | null> {
   const before = await loadManagementSession();
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (before.kind !== 'ready' || before.accountId !== accountId) return { kind: 'refused' };
   const result = await authPost('/signin', { email, password, ...AUTOMATED_PROFILE });
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (!result.ok) return { kind: 'unavailable' };
   return boundSession(accountId);
 }
