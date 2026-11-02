@@ -19,7 +19,7 @@ import { DefinitionGuideLink } from './definition-guide-view';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import { EditorFailure } from './statement-editor-view';
-import { MangaInitialField, type MangaRow } from './manga-profile-field';
+import { MangaInitialField, MangaRowRemove, type MangaRow } from './manga-profile-field';
 import { mangaCreateFeedback } from './manga-create-feedback';
 import { MangaCorrections, type MangaCorrectionPorts } from './manga-profile-corrections';
 import {
@@ -86,7 +86,10 @@ function MangaProfileEditorLive({
   const read = !query.isError && (!id || !query.isFetching) && matches ? candidate : undefined;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
-      <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
+      <ViewHeadingActions
+        headingClassName="font-sans"
+        label={id ? m.manga_edit({}, o) : m.manga_title({}, o)}
+      />
       <p className="max-w-prose text-muted-foreground">{m.manga_intro({}, o)}</p>
       {session !== 'signed-in' &&
         (session === 'unavailable' ? (
@@ -110,7 +113,10 @@ function MangaProfileEditorLive({
           {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
             <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
           ) : (
-            <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+            <EditorFailure
+              locale={locale}
+              reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
+            />
           )}
           <Button onClick={() => void query.refetch()}>{m.correction_reload({}, o)}</Button>
         </div>
@@ -208,14 +214,19 @@ function MangaCreate({
   const groups = read ? mangaGroups(read.release, type, locale) : undefined;
   const labels = mangaGroupLabels(locale);
   const feedback = mangaCreateFeedback(failure?.errors ?? [], rows, terms, read, locale, termsId, type);
+  const removalEpoch = useRef(0);
+  const epoch = removalEpoch.current;
+  const removalAllowed = () =>
+    lifetime.active() && epoch === removalEpoch.current && !locked && !running.current && !request.current;
   function changeRows(next: MangaRow[]) {
-    if (!locked) {
+    if (removalAllowed()) {
       setDrafts({ ...drafts, [type]: next });
       setFailure(undefined);
     }
   }
   async function submit() {
     if (!lifetime.active()) return;
+    removalEpoch.current++;
     if (!read || disabled || running.current || created || failure?.reason === 'conflict') return;
     if (!request.current) {
       const draft = mangaDraft(
@@ -237,7 +248,11 @@ function MangaCreate({
         setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
-      request.current = { key: crypto.randomUUID(), item: draft.item, independent };
+      request.current = {
+        key: crypto.randomUUID(),
+        item: draft.item,
+        independent,
+      };
     }
     running.current = true;
     setBusy(true);
@@ -275,7 +290,9 @@ function MangaCreate({
           <p className="break-all font-mono text-sm">{created.id}</p>
           {created.reader.state === 'ready' ? (
             <MangaNavigationLink
-              className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
+              className={buttonVariants({
+                className: 'h-auto min-h-11 max-w-full whitespace-normal text-start',
+              })}
               href={created.reader.href}
             >
               {m.candidate_view_public({}, o)}
@@ -301,7 +318,10 @@ function MangaCreate({
                     setCreated({ ...created, reader });
                   } catch {
                     if (!lifetime.active()) return;
-                    setCreated({ ...created, reader: { state: 'unavailable' } });
+                    setCreated({
+                      ...created,
+                      reader: { state: 'unavailable' },
+                    });
                   } finally {
                     if (!lifetime.active()) return;
                     running.current = false;
@@ -338,7 +358,9 @@ function MangaCreate({
       >
         <fieldset disabled={locked} className="min-w-0 space-y-4">
           <legend className="mb-3 max-w-full">
-            <ContentItemHeading className="font-sans text-xl font-semibold">{m.manga_grain({}, o)}</ContentItemHeading>
+            <ContentItemHeading className="font-sans text-xl font-semibold">
+              {m.manga_grain({}, o)}
+            </ContentItemHeading>
           </legend>
           <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
             <Field className="min-w-0">
@@ -371,7 +393,10 @@ function MangaCreate({
             </Field>
             <p className="text-sm text-muted-foreground">{m.manga_grain_help({}, o)}</p>
             {read?.release.types[type] && (
-              <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/manga` }} />
+              <DefinitionGuideLink
+                locale={locale}
+                address={{ type, returnTo: `/${locale}/catalogue/manga` }}
+              />
             )}
             {type === 'schema:PublicationVolume' && (
               <Field orientation="horizontal">
@@ -427,7 +452,9 @@ function MangaCreate({
                       .join(' ') || undefined,
                   onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
                     setTerms((previous) =>
-                      previous.map((item) => (item.id === term.id ? { ...item, [field]: event.target.value } : item)),
+                      previous.map((item) =>
+                        item.id === term.id ? { ...item, [field]: event.target.value } : item,
+                      ),
                     );
                     setFailure(undefined);
                   },
@@ -444,7 +471,11 @@ function MangaCreate({
                   locale={locale}
                   populated={!!(term.language || term.label || term.description || term.aliases)}
                   rowId={`${termsId}-row-${term.id}`}
-                  focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add-language`}
+                  focusId={
+                    terms[index + 1]
+                      ? `${termsId}-language-${terms[index + 1]!.id}`
+                      : `${termsId}-add-language`
+                  }
                   disabled={locked}
                   onRemove={() => {
                     if (locked || running.current || request.current) return false;
@@ -466,7 +497,13 @@ function MangaCreate({
               if (locked || running.current || request.current) return;
               setTerms((previous) => [
                 ...previous,
-                { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
+                {
+                  id: nextTermId.current++,
+                  language: '',
+                  label: '',
+                  description: '',
+                  aliases: '',
+                },
               ]);
             }}
           >
@@ -503,11 +540,14 @@ function MangaCreate({
                             locale={locale}
                             search={search}
                             disabled={locked}
+                            removalAllowed={removalAllowed}
                             feedback={{
                               id: `manga-row-${row.id}`,
                               errors: feedback,
                             }}
-                            onChange={(next) => changeRows(rows.map((item) => (item.id === row.id ? next : item)))}
+                            onChange={(next) =>
+                              changeRows(rows.map((item) => (item.id === row.id ? next : item)))
+                            }
                             onRemove={() => changeRows(rows.filter((item) => item.id !== row.id))}
                           />
                         ))}
@@ -556,15 +596,13 @@ function MangaCreate({
                       {row.label?.text || m.correction_invalid_part({}, o)}
                     </ContentItemHeading>
                     <p role="alert">{m.correction_stale({}, o)}</p>
-                    <Button
-                      className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-                      type="button"
-                      variant="outline"
+                    <MangaRowRemove
+                      row={row}
+                      locale={locale}
                       disabled={locked}
-                      onClick={() => changeRows(rows.filter((item) => item.id !== row.id))}
-                    >
-                      {m.recipe_remove_field({}, o)}
-                    </Button>
+                      removalAllowed={removalAllowed}
+                      onRemove={() => changeRows(rows.filter((item) => item !== row))}
+                    />
                   </ContentItemFrame>
                 </section>
               ))}
@@ -626,7 +664,11 @@ function MangaCreate({
           type="submit"
           disabled={busy || disabled || !read?.release.types[type] || failure?.reason === 'conflict'}
         >
-          {busy ? m.catalogue_create_saving({}, o) : request.current ? m.correction_retry({}, o) : m.manga_title({}, o)}
+          {busy
+            ? m.catalogue_create_saving({}, o)
+            : request.current
+              ? m.correction_retry({}, o)
+              : m.manga_title({}, o)}
         </Button>
       </form>
     </>
@@ -634,7 +676,15 @@ function MangaCreate({
 }
 
 /** Use router navigation in the page and ordinary links in isolated editor compositions. */
-function MangaNavigationLink({ href, children, className }: { href: string; children: ReactNode; className: string }) {
+function MangaNavigationLink({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className: string;
+}) {
   const router = useRouter({ warn: false });
   return router ? (
     <Link to={href} className={className}>

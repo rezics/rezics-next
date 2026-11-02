@@ -8,7 +8,11 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/en/catalogue/manga' });
-  const globals: Record<string, unknown> = { IS_REACT_ACT_ENVIRONMENT: true, window, document: window.document };
+  const globals: Record<string, unknown> = {
+    IS_REACT_ACT_ENVIRONMENT: true,
+    window,
+    document: window.document,
+  };
   for (const key of [
     'navigator',
     'HTMLElement',
@@ -37,9 +41,15 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
     globals[key] = Reflect.get(window, key);
   for (const key of ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'])
     globals[key] = Reflect.get(window, key).bind(window);
-  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const previous = new Map(
+    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
   for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value,
+    });
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { MangaInitialField } = await import('../src/features/catalogue/manga-profile-field');
@@ -101,20 +111,37 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
   const variants: MangaRow[] = [
     {
       ...blank('scalar'),
-      statement: { ...blankMangaStatement('schema:inLanguage'), value: { type: 'value', content: 'ja' } },
+      statement: {
+        ...blankMangaStatement('schema:inLanguage'),
+        value: { type: 'value', content: 'ja' },
+      },
     },
     {
       ...blank('text', 'schema:abstract'),
-      authored: { ...newAuthoredField(), document: fromPlainText('Original text') },
+      authored: {
+        ...newAuthoredField(),
+        document: fromPlainText('Original text'),
+      },
     },
-    { ...blank('language', 'schema:abstract'), authored: { ...newAuthoredField(), language: 'ja' } },
-    { ...blank('licence', 'schema:abstract'), authored: { ...newAuthoredField(), licence: 'CC-BY-4.0' } },
+    {
+      ...blank('language', 'schema:abstract'),
+      authored: { ...newAuthoredField(), language: 'ja' },
+    },
+    {
+      ...blank('licence', 'schema:abstract'),
+      authored: { ...newAuthoredField(), licence: 'CC-BY-4.0' },
+    },
     { ...blank('original', 'schema:abstract'), original: true },
     {
       ...blank('qualifier'),
       statement: {
         ...blankMangaStatement('schema:inLanguage'),
-        qualifiers: [{ property: { id: 'schema:position' }, value: { type: 'value', content: '' } }],
+        qualifiers: [
+          {
+            property: { id: 'schema:position' },
+            value: { type: 'value', content: '' },
+          },
+        ],
       },
     },
     {
@@ -124,7 +151,10 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
         references: [
           {
             parts: [
-              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } },
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value', content: 'https://example.org/source' },
+              },
             ],
           },
         ],
@@ -139,18 +169,26 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
       await render();
       const sibling = region('sibling');
       await click(region(selected.id), m.recipe_remove_field());
-      const cancel = within(region(selected.id)).getByRole('button', { name: m.candidate_cancel() });
+      const cancel = within(region(selected.id)).getByRole('button', {
+        name: m.candidate_cancel(),
+      });
       expect(window.document.activeElement).toBe(cancel);
       await click(region(selected.id), m.candidate_cancel());
       expect(rows).toEqual(snapshot);
       expect(window.document.activeElement).toBe(
-        within(region(selected.id)).getByRole('button', { name: m.recipe_remove_field() }),
+        within(region(selected.id)).getByRole('button', {
+          name: m.recipe_remove_field(),
+        }),
       );
       await click(region(selected.id), m.recipe_remove_field());
       rows = [rows[1]!, rows[0]!];
       await render();
       expect(region('sibling')).toBe(sibling);
-      expect(within(region(selected.id)).getByRole('button', { name: m.candidate_cancel() })).toBeDefined();
+      expect(
+        within(region(selected.id)).getByRole('button', {
+          name: m.candidate_cancel(),
+        }),
+      ).toBeDefined();
       await click(region(selected.id), m.recipe_remove_field());
       expect(rows).toEqual([snapshot[1]!]);
       expect(window.document.activeElement).toBe(within(host).getByRole('button', { name: 'Add field' }));
@@ -164,17 +202,56 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
     const sealed = structuredClone(rows);
     await click(region('scalar'), m.recipe_remove_field());
     await act(async () =>
-      user.type(within(region('scalar')).getByRole('textbox', { name: m.correction_value() }), 'en'),
+      user.type(
+        within(region('scalar')).getByRole('textbox', {
+          name: m.correction_value(),
+        }),
+        'en',
+      ),
     );
     expect(rows).toEqual(sealed);
     expect(changes).toBe(0);
-    expect(within(region('scalar')).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled')).toBe(
-      true,
-    );
+    expect(
+      within(region('scalar')).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled'),
+    ).toBe(true);
     disabled = false;
     await render();
     await act(async () => user.keyboard('{Escape}'));
-    expect(within(region('scalar')).queryByRole('button', { name: m.candidate_cancel() })).toBeNull();
+    expect(
+      within(region('scalar')).queryByRole('button', {
+        name: m.candidate_cancel(),
+      }),
+    ).toBeNull();
+    rows = [variants[0]!];
+    await render();
+    await click(region('scalar'), m.recipe_remove_field());
+    const button = within(region('scalar')).getByRole('button', {
+      name: m.recipe_remove_field(),
+    });
+    const oldRemoval = Reflect.get(
+      button,
+      Object.keys(button).find((key) => key.startsWith('__reactProps$'))!,
+    ).onClick;
+    rows = [
+      {
+        ...variants[0]!,
+        statement: {
+          ...variants[0]!.statement,
+          value: { type: 'value', content: 'en' },
+        },
+      },
+    ];
+    const replacement = structuredClone(rows);
+    await render();
+    const focus = window.document.activeElement;
+    await act(async () => oldRemoval());
+    expect(rows).toEqual(replacement);
+    expect(window.document.activeElement).toBe(focus);
+    expect(
+      within(region('scalar')).queryByRole('button', {
+        name: m.candidate_cancel(),
+      }),
+    ).toBeNull();
     rows = [blank('empty', 'schema:abstract')];
     await render();
     await click(region('empty'), m.recipe_remove_field());

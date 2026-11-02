@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { hasDocumentContent } from '@rezics/document';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -39,6 +40,7 @@ export function MangaInitialField({
   onChange,
   onRemove,
   feedback,
+  removalAllowed,
 }: {
   row: MangaRow;
   read: MangaReady;
@@ -49,6 +51,7 @@ export function MangaInitialField({
   onChange: (row: MangaRow) => void;
   onRemove: () => void;
   feedback: StatementFeedback;
+  removalAllowed?: () => boolean;
 }) {
   const o = { locale: locale as never };
   const property = read.release.properties[row.statement.property.id]!;
@@ -65,49 +68,11 @@ export function MangaInitialField({
   const [removingQualifier, setRemovingQualifier] = useState<string>();
   const qualifierId = useId();
   const section = useRef<HTMLElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const cancel = useRef<HTMLButtonElement>(null);
-  const restoreFocus = useRef(false);
-  const [confirmingRow, setConfirmingRow] = useState<string | null>(null);
-  const confirming = confirmingRow === row.id;
-  // Late editor emissions and an already-open confirmation must obey the current lock.
-  const current = useRef({ disabled, id: row.id });
-  current.current = { disabled, id: row.id };
-  const editable = () => !current.current.disabled && current.current.id === row.id;
+  const current = useRef({ disabled, row });
+  current.current = { disabled, row };
+  const editable = () => !current.current.disabled && current.current.row === row;
   const change = (next: MangaRow) => {
     if (editable()) onChange(next);
-  };
-  useLayoutEffect(() => {
-    if (disabled) return;
-    if (confirming) cancel.current?.focus();
-    else if (restoreFocus.current) {
-      trigger.current?.focus();
-      restoreFocus.current = false;
-    }
-  }, [confirming, disabled]);
-  const cancelRemoval = () => {
-    restoreFocus.current = true;
-    setConfirmingRow(null);
-  };
-  const remove = () => {
-    if (!editable() || !section.current?.isConnected) return;
-    const root = section.current;
-    const controls = [
-      ...((root.closest('form') ?? root.parentElement)?.querySelectorAll<HTMLElement>(
-        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
-      ) ?? []),
-    ];
-    const first = controls.findIndex((control) => root.contains(control));
-    const last = controls.findLastIndex((control) => root.contains(control));
-    const surviving = [...controls.slice(last + 1), ...controls.slice(0, first).reverse()];
-    surviving
-      .find(
-        (control) =>
-          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
-          !control.closest('[hidden], [inert]'),
-      )
-      ?.focus();
-    onRemove();
   };
   const qualifiers = row.statement.qualifiers ?? [];
   const qualifierIds = qualifiers.map((_, index) => row.qualifierIds?.[index] ?? String(index));
@@ -134,13 +99,20 @@ export function MangaInitialField({
     !!Object.values(row.targets ?? {}).some((targets) => targets.length);
   const update = (statement: StatementInput) => change({ ...row, statement });
   const updateAuthored = (next: AuthoredField) =>
-    change({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
+    change({
+      ...row,
+      authored: next,
+      statement: { ...row.statement, value: authoredFieldValue(next) },
+    });
   const removeQualifier = (index: number) => {
     if (!editable() || !section.current?.isConnected) return;
     const next = {
       ...row,
       qualifierIds: qualifierIds.filter((_, at) => at !== index),
-      statement: { ...row.statement, qualifiers: qualifiers.filter((_, at) => at !== index) },
+      statement: {
+        ...row.statement,
+        qualifiers: qualifiers.filter((_, at) => at !== index),
+      },
     };
     const propertyId = qualifiers[index]!.property.id;
     if (
@@ -161,7 +133,11 @@ export function MangaInitialField({
     )?.focus();
   };
   const name = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale).text;
-  const control = (part: SnakInput, address: string, statement: (value: SnakInput['value']) => StatementInput) => {
+  const control = (
+    part: SnakInput,
+    address: string,
+    statement: (value: SnakInput['value']) => StatementInput,
+  ) => {
     const definition = read.release.properties[part.property.id];
     return definition?.datatype === 'wikibase-item' ? (
       <PickedTarget
@@ -173,14 +149,21 @@ export function MangaInitialField({
         picked={row.targets?.[part.property.id] ?? []}
         mangaWork={type === 'schema:PublicationVolume' && part.property.id === 'wdt:P179'}
         onChange={(value, items) =>
-          change({ ...row, statement: statement(value), targets: { ...row.targets, [part.property.id]: items } })
+          change({
+            ...row,
+            statement: statement(value),
+            targets: { ...row.targets, [part.property.id]: items },
+          })
         }
       />
     ) : (
       <ScalarControl
         part={part}
         definition={definition}
-        read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
+        read={{
+          release: read.release,
+          public: { related: read.public?.related ?? {} },
+        }}
         locale={locale}
         feedback={{ ...feedback, address }}
         onChange={(value) => update(statement(value))}
@@ -196,7 +179,11 @@ export function MangaInitialField({
       className="min-w-0 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
-        <ContentItemHeading level={3} className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>
+        <ContentItemHeading
+          level={3}
+          className="font-sans text-lg font-semibold"
+          lang={title.lang ?? undefined}
+        >
           {title.text}
         </ContentItemHeading>
         <fieldset
@@ -282,13 +269,18 @@ export function MangaInitialField({
                 <ContentItemHeading
                   level={4}
                   className="font-sans text-sm font-medium"
-                  lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
+                  lang={
+                    pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ??
+                    undefined
+                  }
                 >
                   {name(part.property.id)}
                 </ContentItemHeading>
                 {control(part, `qualifier-${qualifierIds[index]}`, (value) => ({
                   ...row.statement,
-                  qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
+                  qualifiers: row.statement.qualifiers!.map((snak, at) =>
+                    at === index ? { ...snak, value } : snak,
+                  ),
                 }))}
                 <Button
                   id={`${feedback.id}-qualifier-${qualifierIds[index]}-remove`}
@@ -311,7 +303,12 @@ export function MangaInitialField({
                   >
                     <p>{m.curation_remove_title({ template: name(part.property.id) }, o)}</p>
                     <div className="flex flex-wrap gap-3">
-                      <Button type="button" autoFocus disabled={disabled} onClick={() => removeQualifier(index)}>
+                      <Button
+                        type="button"
+                        autoFocus
+                        disabled={disabled}
+                        onClick={() => removeQualifier(index)}
+                      >
                         {m.contribution_confirm({}, o)}
                       </Button>
                       <Button
@@ -321,7 +318,9 @@ export function MangaInitialField({
                         onClick={() => {
                           if (!editable()) return;
                           setRemovingQualifier(undefined);
-                          document.getElementById(`${feedback.id}-qualifier-${qualifierIds[index]}-remove`)?.focus();
+                          document
+                            .getElementById(`${feedback.id}-qualifier-${qualifierIds[index]}-remove`)
+                            ?.focus();
                         }}
                       >
                         {m.action_cancel({}, o)}
@@ -334,7 +333,8 @@ export function MangaInitialField({
           </div>
           {!!property.qualifiers.filter(
             (id) =>
-              read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
+              read.release.properties[id]?.datatype === 'wikibase-item' ||
+              editableScalar(read.release.properties[id]),
           ).length && (
             <div className="flex min-w-0 flex-wrap items-end gap-3">
               <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
@@ -381,7 +381,10 @@ export function MangaInitialField({
                       ...row.statement,
                       qualifiers: [
                         ...qualifiers,
-                        { property: { id: qualifier }, value: { type: 'value', content: '' } },
+                        {
+                          property: { id: qualifier },
+                          value: { type: 'value', content: '' },
+                        },
                       ],
                     },
                   });
@@ -425,55 +428,14 @@ export function MangaInitialField({
               }}
             />
           </Field>
-          {confirming ? (
-            <div
-              role="group"
-              aria-label={m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}
-              className="space-y-2"
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault();
-                  cancelRemoval();
-                }
-              }}
-            >
-              <p>{m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  ref={cancel}
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-h-11 whitespace-normal"
-                  disabled={disabled}
-                  onClick={cancelRemoval}
-                >
-                  {m.candidate_cancel({}, o)}
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="h-auto min-h-11 whitespace-normal"
-                  disabled={disabled}
-                  onClick={remove}
-                >
-                  {m.recipe_remove_field({}, o)}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button
-              ref={trigger}
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-              type="button"
-              variant="ghost"
-              disabled={disabled}
-              onClick={() => {
-                if (editable()) populated ? setConfirmingRow(row.id) : remove();
-              }}
-            >
-              {m.recipe_remove_field({}, o)}
-            </Button>
-          )}
+          <MangaRowRemove
+            row={row}
+            locale={locale}
+            disabled={disabled}
+            populated={populated}
+            onRemove={onRemove}
+            removalAllowed={removalAllowed}
+          />
         </fieldset>
       </ContentItemFrame>
     </section>
@@ -509,7 +471,8 @@ function PickedTarget({
         (await search(query, signal)).filter((entry) =>
           entry.types.some(
             (type) =>
-              mangaTarget(read.release, part.property.id, type) && (!mangaWork || type === 'schema:ComicSeries'),
+              mangaTarget(read.release, part.property.id, type) &&
+              (!mangaWork || type === 'schema:ComicSeries'),
           ),
         )
       }
@@ -517,5 +480,139 @@ function PickedTarget({
         onChange({ type: 'value', content: items[0]?.id ?? '' }, items);
       }}
     />
+  );
+}
+
+/** Confirm one private row incarnation without consulting current public target data. */
+export function MangaRowRemove({
+  row,
+  locale,
+  disabled,
+  populated = true,
+  onRemove,
+  removalAllowed = () => true,
+}: {
+  row: MangaRow;
+  locale: string;
+  disabled: boolean;
+  populated?: boolean;
+  onRemove: () => void;
+  removalAllowed?: (() => boolean) | undefined;
+}) {
+  const o = { locale: locale as never };
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(false);
+  const [choice, setChoice] = useState<{
+    row: MangaRow;
+    active: () => boolean;
+  } | null>(null);
+  const restoreFocus = useRef(false);
+  const current = useRef({ row, disabled, onRemove, removalAllowed, choice });
+  current.current = { row, disabled, onRemove, removalAllowed, choice };
+  const confirming = choice?.row === row && choice.active();
+  const editable = () =>
+    mounted.current &&
+    removalAllowed() &&
+    !current.current.disabled &&
+    current.current.row === row &&
+    current.current.removalAllowed();
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (!editable()) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      restoreFocus.current = false;
+      trigger.current?.focus();
+    }
+  }, [confirming, disabled]);
+  function dismiss() {
+    if (!editable() || current.current.choice !== choice) return;
+    current.current.choice = null;
+    restoreFocus.current = true;
+    setChoice(null);
+  }
+  function remove(owner: { row: MangaRow; active: () => boolean }) {
+    const section = holder.current?.closest('section');
+    if (
+      !editable() ||
+      !owner.active() ||
+      owner.row !== current.current.row ||
+      (choice && current.current.choice !== owner) ||
+      !section?.isConnected
+    )
+      return;
+    const controls = [
+      ...(section.parentElement?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
+    ];
+    const first = controls.findIndex((control) => section.contains(control));
+    const last = controls.findLastIndex((control) => section.contains(control));
+    const surviving = [...controls.slice(last + 1), ...controls.slice(0, first).reverse()];
+    current.current.choice = null;
+    flushSync(() => current.current.onRemove());
+    if (section.isConnected || !owner.active()) return;
+    surviving
+      .find(
+        (control) =>
+          control.isConnected &&
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+  }
+  const label = m.recipe_remove_field({}, o);
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: label }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              dismiss();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: label }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button ref={cancel} type="button" variant="outline" disabled={disabled} onClick={dismiss}>
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button type="button" variant="destructive" disabled={disabled} onClick={() => remove(choice)}>
+              {label}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (!editable()) return;
+            const owner = { row, active: current.current.removalAllowed };
+            if (populated) {
+              current.current.choice = owner;
+              setChoice(owner);
+            } else remove(owner);
+          }}
+        >
+          {label}
+        </Button>
+      )}
+    </div>
   );
 }
