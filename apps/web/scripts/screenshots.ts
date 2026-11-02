@@ -485,7 +485,7 @@ function serve(directory: string): TemporarySite {
     },
   });
   return {
-    port: server.port,
+    port: server.port!,
     async close() {
       accepting = false;
       await server.stop(true);
