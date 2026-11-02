@@ -1,7 +1,12 @@
 # Search real-worker outcome harness
 
-Status: the harness contract is adopted; its implementation and real-source/default-worker verification are
-pending. This document defines the proof required and is not evidence that the proof passed. The [Search contract](../../src/search/README.md#visibility-completeness-and-convergence), [Semantic witness and dependency design](../../src/semantic/relation-facets-design.md), and [durable rebuild design](../../src/semantic/relation-facet-rebuilds-design.md) remain authoritative for their product behavior. Research rationale is in the [visibility report](../../../../docs/research/search-visibility-witnesses.md) and [worker harness report](../../../../docs/research/search-worker-outcome-harness.md).
+Status: the harness contract is adopted. Adapter tests pin default registrations and starters, Search-only
+pause/resume, replacement-runner stop, real Semantic writes and witnesses, rebuild/alias/cursor recovery,
+observable consumer checkpoints, drain, and concurrent fixture isolation. Adapter cursor recovery uses the
+production Search service bound to the worker-owned prefix and generation. Public rating-sort consumption
+remains the existing native-rating-outcomes suite. Native execution of those suites, frozen Search API
+suites against this driver, production scope activation and promotion remain pending. This document is not
+evidence that the proof passed. The [Search contract](../../src/search/README.md#visibility-completeness-and-convergence), [Semantic witness and dependency design](../../src/semantic/relation-facets-design.md), and [durable rebuild design](../../src/semantic/relation-facet-rebuilds-design.md) remain authoritative for their product behavior. Research rationale is in the [visibility report](../../../../docs/research/search-visibility-witnesses.md) and [worker harness report](../../../../docs/research/search-worker-outcome-harness.md).
 
 ## Process and resource ownership
 
