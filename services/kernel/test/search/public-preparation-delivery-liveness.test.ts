@@ -153,7 +153,9 @@ test('repeated due discovery keeps delayed repair and population deliveries disp
   });
   const store = createPublicPreparationStore(pool, work, owner);
   const other = createPublicPreparationStore(pool, work, isolated);
-  const repairId = track(await active.enqueueRepair(job));
+  const repairId = track(
+    await store.retain({ kind: 'repair', key: JSON.stringify(job), job }, Date.now() + 86_400_000),
+  );
   const populationId = track(await store.retain(frontier, Date.now() + 86_400_000));
   const otherId = track(
     await other.retain(
