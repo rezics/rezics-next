@@ -70,7 +70,10 @@ test('People correction reload hands off only current keyboard focus intent', as
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <CandidateReaderBoundary observed={{ state: 'signed-in', subject: 'viewer', csrfToken: 'token' }} address={fixture.id}>
+          <CandidateReaderBoundary
+            observed={{ state: 'signed-in', subject: 'viewer', csrfToken: 'token' }}
+            address={fixture.id}
+          >
             <PeopleProfileEditor
               id={fixture.id}
               locale="en"

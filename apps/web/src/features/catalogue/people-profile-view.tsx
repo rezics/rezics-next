@@ -1,15 +1,6 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-  type Ref,
-} from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode, type Ref } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -718,11 +709,7 @@ function PeopleProfileEditorLive({
         correctionIntent.current = undefined;
         return;
       }
-      if (
-        event.target !== intent.opener &&
-        event.target !== document.body &&
-        event.target !== document.documentElement
-      )
+      if (event.target !== intent.opener && event.target !== document.body && event.target !== document.documentElement)
         correctionIntent.current = undefined;
     };
     document.addEventListener('pointerdown', cancel, true);
