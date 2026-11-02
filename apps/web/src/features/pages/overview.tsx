@@ -327,7 +327,13 @@ export function Failed({
       <p id={`${id}-status`} role="status" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
         {m.subject_section_failed({}, options)}
       </p>
-      <a data-slot="retry" href="" aria-describedby={`${id}-title ${id}-status`} className={sectionActionClass}>
+      <a
+        data-slot="retry"
+        href=""
+        role="link"
+        aria-describedby={`${id}-title ${id}-status`}
+        className={sectionActionClass}
+      >
         {m.subject_section_retry({}, options)}
       </a>
     </section>
