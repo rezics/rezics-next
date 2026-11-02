@@ -5,6 +5,7 @@ import { env } from 'cloudflare:workers';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SearchPage } from '../search/search.tsx';
 import { searchQueryOptions } from '../search/search-queries';
+import { searchSessionOwner } from '../search/search-session-owner';
 import { useSearchQuery } from '../search/use-search-query';
 import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/realm-discovery-loader';
 import { correctSearchInput, removeSearchInput, searchLoaderDeps, searchParams } from '../search/search-params';
@@ -12,6 +13,7 @@ import { SearchInputRecovery } from '../search/search-input-recovery';
 import { PageHeading } from '../shell/page-heading';
 import { pageHead } from '../shell/head';
 import { validatePublicOrigin } from '../shell/origin';
+import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 
@@ -100,12 +102,14 @@ function SearchRoute() {
 function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
   const { data, retry } = useSearchQuery(locale, deps);
   const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
+  const session = searchSessionOwner(useSession());
   return (
     <SearchPage
       query={deps.query}
       data={data}
       locale={locale}
       onRetry={retry}
+      session={session}
       {...(realms.data ? { realmDiscovery: realms.data } : {})}
     />
   );

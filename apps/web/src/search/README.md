@@ -37,9 +37,11 @@ changes retire prior suggestions and pending requests.
 A successful manual retry keeps keyboard focus on Retry when that control remains, otherwise the first term or the named
 trending region, using the request's currentness callback and without stealing focus if the reader moved away.
 A keyboard Search result Retry that disappears while loading restores focus to that action when it remains, otherwise
-the named results region of the same committed search, locale and session (omitted session is null), and leaves focus
-where the reader moved. Committed identity is SearchPage's existing stateKey (Type, kinds, facets, ranges, ordered
-languages, condition, sort, cursor and Realm browsing); unfinished Filters drafts are not that identity.
+the named results region of the same committed search, locale and session (unknown omitted as null; signed-out and
+admitted subjects stay distinct; CSRF is not this owner), and leaves focus where the reader moved. The Search route
+observes the mounted browser session for that owner. Committed identity is SearchPage's existing stateKey (Type, kinds,
+facets, ranges, ordered languages, condition, sort, cursor and Realm browsing); unfinished Filters drafts are not that
+identity.
 
 Native Trending may repeat a query when distinct sources share a public label; `literalQuery` is the quoted display,
 so a repeated query repeats that display, and each delivered `{query, display}` occurrence keeps its own row identity.
