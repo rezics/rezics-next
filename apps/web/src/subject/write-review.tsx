@@ -185,7 +185,10 @@ function WriteReviewVisitView({
                             <span dir="auto" className="block min-w-0 max-w-full">
                               {board.title ?? m.threads_untitled()}
                             </span>
-                            <span dir="auto" className="mt-1 block min-w-0 max-w-full text-sm font-normal text-muted-foreground">
+                            <span
+                              dir="auto"
+                              className="mt-1 block min-w-0 max-w-full text-sm font-normal text-muted-foreground"
+                            >
                               {board.realmName}
                             </span>
                           </ContentItemTitleLink>
