@@ -58,7 +58,7 @@ export const GROWTH_BASELINE: readonly GrowthBaselineEntry[] = [
     reason: 'T: docs/research/growth-shadow-triage-content-b.md',
   },
   {
-    name: 'current board disclosure',
+    name: 'current board, post, post-page and revision-page disclosure',
     file: 'services/kernel/test/content/read.test.ts',
     reason: 'T: docs/research/growth-shadow-triage-content-b.md',
   },
@@ -121,47 +121,281 @@ export const GROWTH_BASELINE: readonly GrowthBaselineEntry[] = [
 
 const repositoryRoot = resolve(import.meta.dir, '../../../../');
 
-function quotedChoices(source: string): string[] | undefined {
-  const parts = source
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.length === 0 || parts.some((part) => !/^(?:'[^'\\]*'|"[^"\\]*")$/.test(part))) return undefined;
-  return parts.map((part) => part.slice(1, -1));
+type Literal = Readonly<{ start: number; end: number; kind: 'string' | 'template' }>;
+
+function maskNonCode(source: string): { code: string; literals: readonly Literal[] } {
+  const characters = source.split('');
+  const literals: Literal[] = [];
+  const blank = (start: number, end: number) => {
+    for (let index = start; index < end; index++) if (source[index] !== '\n' && source[index] !== '\r') characters[index] = ' ';
+  };
+  const skipQuoted = (start: number, quote: string): number => {
+    let index = start + 1;
+    while (index < source.length) {
+      if (source[index] === '\\') index += 2;
+      else if (source[index] === quote) return index + 1;
+      else index++;
+    }
+    return source.length;
+  };
+  const skipTemplate = (start: number): number => {
+    let index = start + 1;
+    while (index < source.length) {
+      if (source[index] === '\\') index += 2;
+      else if (source[index] === '`') return index + 1;
+      else if (source.startsWith('${', index)) index = skipTemplateExpression(index + 2);
+      else index++;
+    }
+    return source.length;
+  };
+  const skipTemplateExpression = (start: number): number => {
+    let depth = 1;
+    let index = start;
+    while (index < source.length) {
+      if (source.startsWith('//', index)) {
+        index = source.indexOf('\n', index + 2);
+        if (index < 0) return source.length;
+      } else if (source.startsWith('/*', index)) {
+        const end = source.indexOf('*/', index + 2);
+        index = end < 0 ? source.length : end + 2;
+      } else if (source[index] === "'" || source[index] === '"') index = skipQuoted(index, source[index]!);
+      else if (source[index] === '`') index = skipTemplate(index);
+      else if (source[index] === '{') {
+        depth++;
+        index++;
+      } else if (source[index] === '}') {
+        index++;
+        if (--depth === 0) return index;
+      } else index++;
+    }
+    return source.length;
+  };
+
+  for (let index = 0; index < source.length; ) {
+    if (source.startsWith('//', index)) {
+      let end = source.indexOf('\n', index + 2);
+      if (end < 0) end = source.length;
+      blank(index, end);
+      index = end;
+    } else if (source.startsWith('/*', index)) {
+      const end = source.indexOf('*/', index + 2);
+      const after = end < 0 ? source.length : end + 2;
+      blank(index, after);
+      index = after;
+    } else if (source[index] === "'" || source[index] === '"' || source[index] === '`') {
+      const kind = source[index] === '`' ? 'template' : 'string';
+      const end = kind === 'template' ? skipTemplate(index) : skipQuoted(index, source[index]!);
+      literals.push({ start: index, end, kind });
+      blank(index, end);
+      characters[index] = source[index]!;
+      if (end > index + 1) characters[end - 1] = source[end - 1]!;
+      index = end;
+    } else index++;
+  }
+  return { code: characters.join(''), literals };
+}
+
+function matchingDelimiter(code: string, start: number): number | undefined {
+  const expected: string[] = [];
+  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+  for (let index = start; index < code.length; index++) {
+    const character = code[index]!;
+    if (pairs[character]) expected.push(pairs[character]!);
+    else if (character === ')' || character === ']' || character === '}') {
+      if (expected.pop() !== character) return undefined;
+      if (expected.length === 0) return index;
+    }
+  }
+  return undefined;
+}
+
+function skipSpace(code: string, index: number, end: number): number {
+  while (index < end && /\s/.test(code[index]!)) index++;
+  return index;
+}
+
+function splitArguments(code: string, open: number, close: number): { start: number; end: number }[] {
+  const arguments_: { start: number; end: number }[] = [];
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+  let start = open + 1;
+  for (let index = start; index < close; index++) {
+    const character = code[index]!;
+    if (pairs[character]) stack.push(pairs[character]!);
+    else if (character === ')' || character === ']' || character === '}') stack.pop();
+    else if (character === ',' && stack.length === 0) {
+      arguments_.push({ start, end: index });
+      start = index + 1;
+    }
+  }
+  if (start < close || arguments_.length > 0) arguments_.push({ start, end: close });
+  return arguments_;
+}
+
+function topLevelEnd(code: string, start: number, end: number): number {
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+  for (let index = start; index < end; index++) {
+    const character = code[index]!;
+    if (pairs[character]) stack.push(pairs[character]!);
+    else if (character === ')' || character === ']' || character === '}') stack.pop();
+    else if (character === ',' && stack.length === 0) return index;
+  }
+  return end;
+}
+
+function findNameValue(code: string, open: number, close: number): { start: number; end: number } | undefined {
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+  for (let index = open + 1; index < close; ) {
+    if (stack.length === 0 && /[A-Za-z_$]/.test(code[index]!)) {
+      const start = index++;
+      while (index < close && /[\w$]/.test(code[index]!)) index++;
+      if (code.slice(start, index) === 'name') {
+        const colon = skipSpace(code, index, close);
+        if (code[colon] === ':') {
+          const valueStart = skipSpace(code, colon + 1, close);
+          return { start: valueStart, end: topLevelEnd(code, valueStart, close) };
+        }
+      }
+      continue;
+    }
+    const character = code[index]!;
+    if (pairs[character]) stack.push(pairs[character]!);
+    else if (character === ')' || character === ']' || character === '}') stack.pop();
+    index++;
+  }
+  return undefined;
+}
+
+function literalText(source: string, literal: Literal): string | undefined {
+  const content = source.slice(literal.start + 1, literal.end - 1);
+  return content.includes('\\') ? undefined : content;
+}
+
+function quotedArrayChoices(
+  source: string,
+  code: string,
+  literals: readonly Literal[],
+  start: number,
+  end: number,
+): string[] | undefined {
+  const literalAt = new Map(literals.map((literal) => [literal.start, literal]));
+  const choices: string[] = [];
+  let index = start + 1;
+  while (index < end) {
+    index = skipSpace(code, index, end);
+    if (index === end) return choices.length ? choices : undefined;
+    const literal = literalAt.get(index);
+    if (!literal || literal.kind !== 'string' || literal.end > end) return undefined;
+    const value = literalText(source, literal);
+    if (value === undefined) return undefined;
+    choices.push(value);
+    index = skipSpace(code, literal.end, end);
+    if (index === end) return choices;
+    if (code[index] !== ',') return undefined;
+    index++;
+  }
+  return choices.length ? choices : undefined;
+}
+
+function loopChoices(
+  source: string,
+  code: string,
+  literals: readonly Literal[],
+  name: string,
+  callStart: number,
+): string[] | undefined {
+  for (const loop of code.matchAll(/\bfor\s*\(/g)) {
+    const open = code.indexOf('(', loop.index);
+    const close = matchingDelimiter(code, open);
+    if (close === undefined || close >= callStart) continue;
+    const header = code.slice(open + 1, close);
+    const declaration = header.match(/^\s*const\s+([A-Za-z_$][\w$]*)\s+of\s*\[/);
+    if (!declaration || declaration[1] !== name) continue;
+    const axisOpen = open + 1 + header.indexOf('[', declaration.index + declaration[0].length - 1);
+    const axisClose = matchingDelimiter(code, axisOpen);
+    if (axisClose === undefined || axisClose > close) continue;
+    const body = skipSpace(code, close + 1, code.length);
+    let bodyEnd: number;
+    if (code[body] === '{') {
+      const closingBody = matchingDelimiter(code, body);
+      if (closingBody === undefined) continue;
+      bodyEnd = closingBody;
+    } else {
+      const semicolon = code.indexOf(';', body);
+      const newline = code.indexOf('\n', body);
+      bodyEnd = semicolon < 0 ? (newline < 0 ? code.length : newline) : newline < 0 ? semicolon : Math.min(semicolon, newline);
+    }
+    if (callStart < body || callStart > bodyEnd) continue;
+    return quotedArrayChoices(source, code, literals, axisOpen, axisClose);
+  }
+  return undefined;
 }
 
 function escapePattern(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Recognize the finite names defined by literal for-of axes without executing a test's fixtures. */
+function templateMatches(
+  source: string,
+  literal: Literal,
+  name: string,
+  code: string,
+  literals: readonly Literal[],
+  callStart: number,
+): boolean {
+  const template = literalText(source, literal);
+  if (template === undefined) return false;
+  if (!template.includes('${')) return template === name;
+  let pattern = '^';
+  let previous = 0;
+  for (const interpolation of template.matchAll(/\$\{([^}]+)\}/g)) {
+    pattern += escapePattern(template.slice(previous, interpolation.index));
+    const expression = interpolation[1]!.trim();
+    let choices: string[] | undefined;
+    const conditional = expression.match(
+      /^[A-Za-z_$][\w$]*\s*\?\s*('[^'\\]*'|"[^"\\]*")\s*:\s*('[^'\\]*'|"[^"\\]*")$/,
+    );
+    if (conditional) choices = [conditional[1]!.slice(1, -1), conditional[2]!.slice(1, -1)];
+    else if (/^[A-Za-z_$][\w$]*$/.test(expression))
+      choices = loopChoices(source, code, literals, expression, callStart);
+    if (!choices?.length) return false;
+    pattern += `(?:${choices.map(escapePattern).join('|')})`;
+    previous = interpolation.index + interpolation[0].length;
+  }
+  return previous > 0 && new RegExp(`${pattern}${escapePattern(template.slice(previous))}$`).test(name);
+}
+
+/** Match only names declared on a checkGrowth call, without executing its fixture module. */
 function containsCheckName(source: string, name: string): boolean {
-  if (source.includes(name)) return true;
-  for (const template of source.matchAll(/\bname:\s*`([^`]+)`/g)) {
-    let pattern = '^';
-    let previous = 0;
-    let supported = true;
-    for (const interpolation of template[1]!.matchAll(/\$\{([^}]+)\}/g)) {
-      pattern += escapePattern(template[1]!.slice(previous, interpolation.index));
-      const expression = interpolation[1]!.trim();
-      let choices: string[] | undefined;
-      const conditional = expression.match(
-        /^[A-Za-z_$][\w$]*\s*\?\s*('[^'\\]*'|"[^"\\]*")\s*:\s*('[^'\\]*'|"[^"\\]*")$/,
-      );
-      if (conditional) choices = [conditional[1]!.slice(1, -1), conditional[2]!.slice(1, -1)];
-      else if (/^[A-Za-z_$][\w$]*$/.test(expression)) {
-        const axes = new RegExp(`for\\s*\\(\\s*const\\s+${escapePattern(expression)}\\s+of\\s+\\[([^\\]]*)\\]`, 'g');
-        choices = [...source.matchAll(axes)].flatMap((axis) => quotedChoices(axis[1]!) ?? []);
-      }
-      if (!choices?.length) {
-        supported = false;
-        break;
-      }
-      pattern += `(?:${choices.map(escapePattern).join('|')})`;
-      previous = interpolation.index + interpolation[0].length;
+  const { code, literals } = maskNonCode(source);
+  const literalAt = new Map(literals.map((literal) => [literal.start, literal]));
+  for (const match of code.matchAll(/\bcheckGrowth\b/g)) {
+    const open = skipSpace(code, match.index! + match[0].length, code.length);
+    if (code[open] !== '(') continue;
+    const close = matchingDelimiter(code, open);
+    if (close === undefined) continue;
+    const args = splitArguments(code, open, close);
+    if (args.length < 2) continue;
+    let { start, end } = args[1]!;
+    start = skipSpace(code, start, end);
+    while (code[start] === '(') {
+      const wrappedEnd = matchingDelimiter(code, start);
+      if (wrappedEnd !== end - 1) break;
+      start++;
+      end = wrappedEnd;
+      start = skipSpace(code, start, end);
     }
-    if (supported && previous > 0 && new RegExp(`${pattern}${escapePattern(template[1]!.slice(previous))}$`).test(name))
-      return true;
+    if (code[start] !== '{') continue;
+    const objectEnd = matchingDelimiter(code, start);
+    if (objectEnd === undefined || objectEnd > end) continue;
+    const value = findNameValue(code, start, objectEnd);
+    if (!value) continue;
+    const literal = literalAt.get(value.start);
+    if (!literal || literal.end > value.end) continue;
+    if (literal.kind === 'string' && literalText(source, literal) === name) return true;
+    if (literal.kind === 'template' && templateMatches(source, literal, name, code, literals, match.index!)) return true;
   }
   return false;
 }

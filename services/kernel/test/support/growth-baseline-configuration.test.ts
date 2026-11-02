@@ -2,6 +2,10 @@ import { expect, test } from 'bun:test';
 import { GROWTH_BASELINE } from './growth-baseline.ts';
 import { checkGrowth, type GrowthCheck, type GrowthDatabase } from './growth.ts';
 
+// A retired exemption can survive as text after its check is gone.
+const commentOnlyName = ['retired check', ' comment sentinel'].join('');
+const unrelatedMessage = 'unrelated diagnostic string sentinel';
+
 // Configuration errors must be reported before touching a database or running a fixture.
 const database = new Proxy({} as GrowthDatabase, {
   get() {
@@ -68,4 +72,12 @@ test('the shrinking baseline excludes harness tests and only records triage or v
     expect(entry.file).not.toContain('/test/support/');
     expect(entry.reason).toMatch(/^(?:[BT]: docs\/research\/growth-shadow-triage-[\w-]+\.md|verification run)$/);
   }
+});
+
+test('baseline validation ignores names that remain only in comments or unrelated strings', () => {
+  const file = 'services/kernel/test/support/growth-baseline-configuration.test.ts';
+  for (const name of [commentOnlyName, unrelatedMessage])
+    expect(() => validateGrowthBaseline([{ name, file, reason: 'verification run' }])).toThrow(
+      `Growth baseline entry ${name} is not present in ${file}`,
+    );
 });

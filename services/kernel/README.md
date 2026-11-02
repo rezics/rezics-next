@@ -436,9 +436,11 @@ length, and every other text field uses its UTF-8 byte length. Command tags, not
 harness's own `SET` statements are not counted. Foreground and background statement bytes are reported separately.
 Growth checks support `step` and `series` rules. `series` is the default; `check.rule` selects an explicit rule, and
 `GROWTH_RULE=series` also runs checks on the step baseline under series. Any other set value of `GROWTH_RULE` is a
-configuration error. The only checks that use step by default are in `test/support/growth-baseline.ts`; each entry names
-a check, its repository-relative test file and the triage reason. The list may only shrink, and new checks are never
-added. A listed check may not set `rule` explicitly. When rows, blocks and statements all pass the series rule, the
+configuration error. The only checks that use step by default are in `test/support/growth-baseline.ts`; each entry must
+match a name declared directly on a `checkGrowth` call in its repository-relative test file. Finite generated names
+from literal loop axes and literal conditional choices are recognized without running the fixture. Each entry records
+the check and triage reason. The list may only shrink, and new checks are never added. A listed check may not set `rule`
+explicitly. When rows, blocks and statements all pass the series rule, the
 harness fails with instructions to delete the entry. Owners remove an entry in the same change that fixes the fixture or
 bound so series establishes the derivation; declare `indexProbes` for index-level block steps where needed. A growth
 check fails only when it establishes growth above its bound. Each metric's series is judged on its running maximum, so a
