@@ -122,11 +122,14 @@ type Bounded<T> = { state: 'fulfilled'; value: T } | { state: 'rejected'; error:
 function bounded<T>(promise: Promise<T>, timeoutMs: number): Promise<Bounded<T>> {
   return new Promise((resolve) => {
     let finished = false;
-    const timer = setTimeout(() => {
-      if (finished) return;
-      finished = true;
-      resolve({ state: 'timeout' });
-    }, Math.max(1, timeoutMs));
+    const timer = setTimeout(
+      () => {
+        if (finished) return;
+        finished = true;
+        resolve({ state: 'timeout' });
+      },
+      Math.max(1, timeoutMs),
+    );
     promise.then(
       (value) => {
         if (finished) return;
@@ -538,7 +541,10 @@ async function build(
     env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1', CACHE_DIR: cacheDir },
   };
   const child = runtime.spawn
-    ? runtime.spawn([storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'], settings)
+    ? runtime.spawn(
+        [storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'],
+        settings,
+      )
     : Bun.spawn([storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'], settings);
   const stdout = readBoundedOutput(child.stdout);
   const stderr = readBoundedOutput(child.stderr);
@@ -561,7 +567,9 @@ async function build(
     );
     outputSettled = true;
     if (code !== 0)
-      throw new Error(`Storybook build failed (${code}):\n${boundedText(stdoutText, buildOutputLimit)}\n${boundedText(stderrText, buildOutputLimit)}`);
+      throw new Error(
+        `Storybook build failed (${code}):\n${boundedText(stdoutText, buildOutputLimit)}\n${boundedText(stderrText, buildOutputLimit)}`,
+      );
     // Keep the successful child output drained, but do not expose it unless a build fails.
     void stdoutText;
     void stderrText;
@@ -790,7 +798,8 @@ function observeStorybook(): void {
         },
       );
       const recordError = (error: { message?: string; title?: string; description?: string }) => {
-        if (current() === render) rememberError(error.message ?? [error.title, error.description].filter(Boolean).join(': '));
+        if (current() === render)
+          rememberError(error.message ?? [error.title, error.description].filter(Boolean).join(': '));
       };
       for (const event of ['playFunctionThrewException', 'storyThrewException', 'storyErrored'])
         next.on(event, recordError);
@@ -938,11 +947,10 @@ async function captureOne(page: Page, origin: string, job: Job, out: string, sig
           scale: 'css',
           timeout: 5_000,
         }),
-      )
-        .then(
-          () => true,
-          () => false,
-        );
+      ).then(
+        () => true,
+        () => false,
+      );
       if (retained) {
         throw new Error(
           `${error instanceof Error ? error.message : String(error)} Diagnostic artifact (not a successful review): ${diagnostic}`,
@@ -1054,7 +1062,11 @@ async function capture(
       const pages = await Promise.all(
         contexts.map(async (context, worker) => {
           await waitForSignal(context.addInitScript(observeStorybook), lifetime.signal.signal);
-          return scope.acquire(`page ${worker + 1} at ${width}px`, () => context.newPage(), (page) => page.close());
+          return scope.acquire(
+            `page ${worker + 1} at ${width}px`,
+            () => context.newPage(),
+            (page) => page.close(),
+          );
         }),
       );
       const result = await captureJobs(
@@ -1177,7 +1189,11 @@ export async function runCaptureLifecycle(options: Options, runtime: ScreenshotR
         async () => runtime.serve(site),
         (site) => site.close(),
       );
-      const browser = await lifetime.resources.acquire('Playwright browser', () => runtime.launch(), (value) => value.close());
+      const browser = await lifetime.resources.acquire(
+        'Playwright browser',
+        () => runtime.launch(),
+        (value) => value.close(),
+      );
       if (lifetime.signal.signal.aborted) throw abortedError(lifetime.signal.signal);
       const origin = `http://127.0.0.1:${siteLease.port}`;
       const jobs = stories.flatMap((id) =>

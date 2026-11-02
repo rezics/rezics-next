@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import type { Browser, BrowserContext, Page } from 'playwright';
-import { createProgressReporter, parseOptions, runCaptureLifecycle, type ScreenshotRuntime } from '../scripts/screenshots.ts';
+import {
+  createProgressReporter,
+  parseOptions,
+  runCaptureLifecycle,
+  type ScreenshotRuntime,
+} from '../scripts/screenshots.ts';
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void };
 
@@ -23,12 +28,14 @@ function stream(text = '', open = false): ReadableStream<Uint8Array> {
   });
 }
 
-function child(options: {
-  exit?: Promise<number>;
-  stdout?: ReadableStream<Uint8Array>;
-  stderr?: ReadableStream<Uint8Array>;
-  kill?: (signal?: number) => void;
-} = {}): ReturnType<typeof Bun.spawn> {
+function child(
+  options: {
+    exit?: Promise<number>;
+    stdout?: ReadableStream<Uint8Array>;
+    stderr?: ReadableStream<Uint8Array>;
+    kill?: (signal?: number) => void;
+  } = {},
+): ReturnType<typeof Bun.spawn> {
   return {
     stdout: options.stdout ?? stream(),
     stderr: options.stderr ?? stream(),
@@ -84,7 +91,11 @@ type Hooks = {
   buildTimeoutMs?: number;
 };
 
-function setup(hooks: Hooks = {}): { runtime: ScreenshotRuntime; events: Harness; signals: ReturnType<typeof signalHarness> } {
+function setup(hooks: Hooks = {}): {
+  runtime: ScreenshotRuntime;
+  events: Harness;
+  signals: ReturnType<typeof signalHarness>;
+} {
   const events: Harness = {
     widths: [],
     files: [],
@@ -192,15 +203,7 @@ function setup(hooks: Hooks = {}): { runtime: ScreenshotRuntime; events: Harness
 }
 
 function options(args: string[] = []): ReturnType<typeof parseOptions> {
-  return parseOptions([
-    '--locale',
-    'en',
-    '--theme',
-    'dark',
-    '--out',
-    '.temp/lifetime-review',
-    ...args,
-  ]);
+  return parseOptions(['--locale', 'en', '--theme', 'dark', '--out', '.temp/lifetime-review', ...args]);
 }
 
 test('the injected production composition preserves file order, progress and width batches', async () => {
@@ -337,98 +340,104 @@ test.each(['addInitScript', 'newPage'] as const)('%s setup failure retires every
   expect(events.removed).toEqual(['/fake/.temp/storybook-build-lifetime']);
 });
 
-test.each(['reject', 'hang'] as const)('one context close that %s does not prevent independent cleanup', async (mode) => {
-  const { runtime, events } = setup({
-    closeContext: async (index) => {
-      if (index === 0 && mode === 'reject') throw new Error('context close rejected');
-      if (index === 0 && mode === 'hang') await new Promise<void>(() => undefined);
-    },
-    cleanupTimeoutMs: 8,
-  });
+test.each(['reject', 'hang'] as const)(
+  'one context close that %s does not prevent independent cleanup',
+  async (mode) => {
+    const { runtime, events } = setup({
+      closeContext: async (index) => {
+        if (index === 0 && mode === 'reject') throw new Error('context close rejected');
+        if (index === 0 && mode === 'hang') await new Promise<void>(() => undefined);
+      },
+      cleanupTimeoutMs: 8,
+    });
 
-  await expect(runCaptureLifecycle(options(['--story', 'components-example--*']), runtime)).rejects.toThrow(
-    'Build directory retained at /fake/.temp/storybook-build-lifetime',
-  );
-  expect(events.contextClosed.sort()).toEqual([0, 1]);
-  expect(events.pageClosed.sort()).toEqual([0, 1]);
-  expect(events.serverClosed).toBe(1);
-  expect(events.browserClosed).toBe(1);
-  expect(events.removed).toEqual([]);
-});
+    await expect(runCaptureLifecycle(options(['--story', 'components-example--*']), runtime)).rejects.toThrow(
+      'Build directory retained at /fake/.temp/storybook-build-lifetime',
+    );
+    expect(events.contextClosed.sort()).toEqual([0, 1]);
+    expect(events.pageClosed.sort()).toEqual([0, 1]);
+    expect(events.serverClosed).toBe(1);
+    expect(events.browserClosed).toBe(1);
+    expect(events.removed).toEqual([]);
+  },
+);
 
-test.each(['browser', 'context', 'page'] as const)('a late %s acquisition closes once after signal without starting jobs', async (target) => {
-  const signals = signalHarness();
-  const reached = deferred<void>();
-  const late = deferred<Browser | BrowserContext | Page>();
-  const closed = deferred<void>();
-  let closeCount = 0;
-  const closeLate = async () => {
-    closeCount += 1;
-    closed.resolve();
-  };
-  const lateHandle = {
-    async close() {
-      await closeLate();
-    },
-    async newContext() {
-      reached.resolve();
-      return (await late.promise) as unknown as BrowserContext;
-    },
-    async newPage() {
-      reached.resolve();
-      return (await late.promise) as unknown as Page;
-    },
-    async addInitScript() {},
-  };
-  const base = setup({ signals, stories: ['components-example--a'], cleanupTimeoutMs: 8 });
-  const runtime: ScreenshotRuntime = {
-    ...base.runtime,
-    launch:
-      target === 'browser'
-        ? async () => {
-            reached.resolve();
-            return (await late.promise) as unknown as Browser;
-          }
-        : async () =>
-            ({
-              async newContext() {
+test.each(['browser', 'context', 'page'] as const)(
+  'a late %s acquisition closes once after signal without starting jobs',
+  async (target) => {
+    const signals = signalHarness();
+    const reached = deferred<void>();
+    const late = deferred<Browser | BrowserContext | Page>();
+    const closed = deferred<void>();
+    let closeCount = 0;
+    const closeLate = async () => {
+      closeCount += 1;
+      closed.resolve();
+    };
+    const lateHandle = {
+      async close() {
+        await closeLate();
+      },
+      async newContext() {
+        reached.resolve();
+        return (await late.promise) as unknown as BrowserContext;
+      },
+      async newPage() {
+        reached.resolve();
+        return (await late.promise) as unknown as Page;
+      },
+      async addInitScript() {},
+    };
+    const base = setup({ signals, stories: ['components-example--a'], cleanupTimeoutMs: 8 });
+    const runtime: ScreenshotRuntime = {
+      ...base.runtime,
+      launch:
+        target === 'browser'
+          ? async () => {
+              reached.resolve();
+              return (await late.promise) as unknown as Browser;
+            }
+          : async () =>
+              ({
+                async newContext() {
+                  reached.resolve();
+                  return (await late.promise) as unknown as BrowserContext;
+                },
+                async close() {
+                  base.events.browserClosed += 1;
+                },
+              }) as unknown as Browser,
+    };
+    if (target === 'page') {
+      runtime.launch = async () =>
+        ({
+          async newContext() {
+            return {
+              async addInitScript() {},
+              async newPage() {
                 reached.resolve();
-                return (await late.promise) as unknown as BrowserContext;
+                return (await late.promise) as unknown as Page;
               },
               async close() {
-                base.events.browserClosed += 1;
+                base.events.contextClosed.push(0);
               },
-            }) as unknown as Browser,
-  };
-  if (target === 'page') {
-    runtime.launch = async () =>
-      ({
-        async newContext() {
-          return {
-            async addInitScript() {},
-            async newPage() {
-              reached.resolve();
-              return (await late.promise) as unknown as Page;
-            },
-            async close() {
-              base.events.contextClosed.push(0);
-            },
-          } as unknown as BrowserContext;
-        },
-        async close() {
-          base.events.browserClosed += 1;
-        },
-      }) as unknown as Browser;
-  }
-  const running = runCaptureLifecycle(options(['--story', 'components-example--a']), runtime);
-  await reached.promise;
-  signals.fire('SIGTERM');
-  await expect(running).rejects.toThrow('Build directory retained');
-  expect(base.events.navigations).toEqual([]);
+            } as unknown as BrowserContext;
+          },
+          async close() {
+            base.events.browserClosed += 1;
+          },
+        }) as unknown as Browser;
+    }
+    const running = runCaptureLifecycle(options(['--story', 'components-example--a']), runtime);
+    await reached.promise;
+    signals.fire('SIGTERM');
+    await expect(running).rejects.toThrow('Build directory retained');
+    expect(base.events.navigations).toEqual([]);
 
-  late.resolve(lateHandle as unknown as Browser | BrowserContext | Page);
-  await closed.promise;
-  await Promise.resolve();
-  expect(closeCount).toBe(1);
-  expect(signals.count()).toBe(0);
-});
+    late.resolve(lateHandle as unknown as Browser | BrowserContext | Page);
+    await closed.promise;
+    await Promise.resolve();
+    expect(closeCount).toBe(1);
+    expect(signals.count()).toBe(0);
+  },
+);
