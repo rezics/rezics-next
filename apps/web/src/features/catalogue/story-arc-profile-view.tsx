@@ -66,6 +66,9 @@ function StoryArcProfileLive({
   const [work, setWork] = useState(initialWork);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const selection = JSON.stringify([id, work]);
+  const [reloadAttempt, setReloadAttempt] = useState<{ selection: string; sequence: number }>();
+  const reloadSequence = useRef(0);
+  const reloading = reloadAttempt?.selection === selection;
   const query = useQuery({
     queryKey: [...['story-arc-profile', id, work, locale, session], lifetime.generation],
     queryFn: () => transport.load({ id, work }),
@@ -85,7 +88,7 @@ function StoryArcProfileLive({
   // Retained data supplies private holders only; public markup uses the current read.
   if (retained.current?.selection !== selection) retained.current = undefined;
   if (query.data?.ok) retained.current = { selection, read: query.data };
-  const readable = !query.isError && query.data?.ok === true;
+  const readable = !reloading && !query.isError && query.data?.ok === true;
   const current = readable && query.data?.ok ? query.data : undefined;
   const privateRead = retained.current?.read;
   const arc = current?.arc;
@@ -103,6 +106,15 @@ function StoryArcProfileLive({
     observation.current = { readable, selection, token: {} };
   const token = observation.current.token;
   const canEdit = () => lifetime.active() && editable && observation.current.token === token;
+  const reload = () => {
+    if (query.isFetching) return;
+    const sequence = ++reloadSequence.current;
+    observation.current = { readable: false, selection, token: {} };
+    setReloadAttempt({ selection, sequence });
+    void query.refetch().finally(() => {
+      setReloadAttempt((active) => (active?.sequence === sequence ? undefined : active));
+    });
+  };
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
       <ViewHeadingActions
@@ -118,7 +130,7 @@ function StoryArcProfileLive({
         }
       />
       <p className="text-muted-foreground">{id ? m.story_arc_intro({}, o) : m.story_arc_creation_help({}, o)}</p>
-      {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {(query.isPending || reloading) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {(query.isError || (query.data && !query.data.ok)) && (
         <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
       )}
@@ -126,7 +138,7 @@ function StoryArcProfileLive({
         variant="outline"
         className={callerActionClass}
         disabled={query.isFetching}
-        onClick={() => void query.refetch()}
+        onClick={reload}
       >
         {m.correction_reload({}, o)}
       </Button>
