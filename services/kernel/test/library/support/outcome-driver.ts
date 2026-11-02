@@ -5,7 +5,7 @@ import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose'
 import { Pool, type PoolClient } from 'pg';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { Anchor, LibraryDriver, LibraryInspection, Persona } from '../../../../../specs/library-driver.ts';
+import type { Anchor, LibraryInspection, Persona } from '../../../../../specs/library-driver.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { createAuthBindings, type AuthProvisioningReceipt } from '../../../src/access/auth-bindings.ts';

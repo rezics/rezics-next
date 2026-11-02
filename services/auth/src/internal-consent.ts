@@ -17,7 +17,6 @@ import {
 } from '@rezics/auth-contract';
 import type {
   KindConsentEnrollmentInput,
-  KindConsentEnrollmentResult,
   KindConsentParticipant,
   KindConsentEnrollmentVerificationUsage,
 } from '@rezics/auth-contract';

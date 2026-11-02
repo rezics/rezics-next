@@ -23,7 +23,6 @@ import { ImportTransportError } from './import-client.ts';
 import { readDump } from './dumps.ts';
 import { ImportSession } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
-import type { RecordRow } from './record-store.ts';
 import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { resolveOwnReferences } from './own-references.ts';

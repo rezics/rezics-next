@@ -36,16 +36,10 @@ import {
 } from './definition-catalogue-publication.ts';
 
 import { authoritativeTimeValue, commandTime } from '../command/command.ts';
-import {
-  currentOperationalResources,
-  hasLiveOperationalTransaction,
-  type OperationalTransaction,
-} from '../command/operational.ts';
-import type { CollectionKindCapture } from '../library/collection-kind.ts';
+import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import {
   admitCollectionKindPreparationStep,
   readCollectionKindWorkDefinition,
-  type CollectionKindPreparationLocator,
 } from '../library/collection-kind-work-admission.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { ProblemError } from '../http/problem.ts';

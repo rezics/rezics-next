@@ -5,10 +5,10 @@ import { fileURLToPath } from 'node:url';
 import historicalBundle from '../fixtures/bundled-historical-construction.json';
 // The compatibility corpus predates optional presentation extensions. Keep its exact released input.
 const bundledRelease = historicalBundle as Release;
-import { RELEASE_LIMITS, validateRelease, valueSchema, type Release } from '../../src/index.ts';
+import { valueSchema, type Release } from '../../src/index.ts';
 import { analyzePattern } from '../../src/pattern-safety.ts';
 import { materializeHistoricalConstruction } from './historical-construction.ts';
-import { admitFilter, parseFilter, validateFilter, type FilterDocument } from '../../../filter/src/filter.ts';
+import type { FilterDocument } from '../../../filter/src/filter.ts';
 
 export const scales = [64, 512, 4096] as const;
 export const candidateAnalysisMax = 16_384;

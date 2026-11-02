@@ -703,13 +703,6 @@ function boardRowFromView(board: BoardView): Row {
   };
 }
 
-type BoardAccess = Readonly<{
-  board: Row;
-  realm: RealmBatchRow | null;
-  boardAllowed: boolean;
-  realmAllowed: boolean;
-}>;
-
 async function decideBoardAndRealms(
   client: AccessClient,
   decisions: ReadDecisions,

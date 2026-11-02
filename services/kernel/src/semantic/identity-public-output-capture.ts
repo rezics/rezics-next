@@ -28,7 +28,7 @@ import type { PublicFilterSourceFactory } from './public-filter-source-contract.
 import { createPublicFilterSourceBinding, type PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
 import { publicFilterSource } from './public-filter-source.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { WorkAllowance } from '../library/collection-source.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { recordIdentityEpochNativeCommit } from './identity-epoch-store.ts';
 import { readIdentityMappings } from './identity-epoch-read.ts';

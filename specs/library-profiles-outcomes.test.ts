@@ -7,8 +7,6 @@ import type {
   LibraryProfilesDriver,
   LibraryProfilesFixture,
   ProfileEntryGuard,
-  ProfileCompilation,
-  ProfileMigrationBoundary,
   ProfileReleaseScenario,
 } from './library-profiles-driver.ts';
 

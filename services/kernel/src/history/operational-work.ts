@@ -7,7 +7,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient, WorkIntent } from '../work/client.ts';
 import { receiveOperationalHistoryWork } from '../work/history-enqueue.ts';
 import { guardHistoryAccounts } from './gates.ts';
-import { encodeLocator, validateScope, type AccountReference, type HistoryScope } from './locator.ts';
+import { encodeLocator, validateScope, type HistoryScope } from './locator.ts';
 import { commandHistoryIdentityAccounts, unionHistoryScope } from './record.ts';
 import {
   debitOperationalWork,

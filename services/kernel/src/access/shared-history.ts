@@ -20,7 +20,6 @@ import {
 import {
   identityHistoryCommand,
   reserveIdentityHistoryWork,
-  nativeWork,
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   IdentityHistoryWorkUnavailable,
 } from '../history/agent-identity-inventory-work.ts';

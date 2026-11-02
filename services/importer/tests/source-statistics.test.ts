@@ -132,7 +132,6 @@ test('the production import transport PUTs the VNDB statistic route with its ide
     licence: 'ODbL-1.0',
     attribution: 'VNDB',
   };
-  const metadata = sourceRecordMetadataFixture();
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'test-token',

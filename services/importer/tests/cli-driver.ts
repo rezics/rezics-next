@@ -1,6 +1,5 @@
 import { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
 import type { BatchWriteRequest } from '@rezics/definitions/bulk';
 import { IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from '../src/credentials.ts';
 import { ImportSession } from '../src/import-session.ts';

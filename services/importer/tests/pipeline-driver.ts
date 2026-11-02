@@ -9,7 +9,6 @@ import type { MediaImportAccepted, MediaImportRequest, MediaImportStatus } from 
 import type {
   CreateImportPipelineDriver,
   Exchange,
-  MediaMode,
   Phase,
   PipelineOptions,
   PipelineRecord,
@@ -18,7 +17,6 @@ import type {
 import { Importer, type ImportMediaResolution, type ImporterOptions } from '../src/importer.ts';
 import { createImportTransport, type ImportTransportOptions } from '../src/import-client.ts';
 import { createMediaResolver } from '../src/media-resolver.ts';
-import type { Owner } from '../src/record-bindings.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
 const fixture = JSON.parse(

@@ -3,7 +3,7 @@ import { recordSemanticProducerRole } from './erasure-producer.ts';
 import { initializeSubjectPagePublication } from './subject-page-publication-store.ts';
 import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import type { Pool, PoolClient } from 'pg';
-import { currentCommand, runCommand, type CommandTransaction } from '../command/command.ts';
+import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';

@@ -23,7 +23,6 @@ import type {
   PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
   PublicFilterConsumerUnavailable,
-  PublicFilterQueriedObservation,
 } from './public-filter-consumer-contract.ts';
 import type { SearchWriterPublicationFence, SearchWriterPublicationGuard } from './writer-guard.ts';
 import type { DiscoveryConsumerCaptureInput, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';

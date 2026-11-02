@@ -26,7 +26,6 @@ import {
   collectionPublishQueryRequestSchema,
 } from './collection-publication-http.ts';
 import { collectionPresentation } from './collection-presentation.ts';
-import { parseCollectionRule } from './collection-rules.ts';
 import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';

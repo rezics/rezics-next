@@ -316,7 +316,6 @@ export async function listBoardThreads(
     boardAnchor,
     { partition: boardAnchor.partition, epoch: selected.epoch, position: selected.position },
   ];
-  const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   const entries: string[] = [];
   const entryPositions: BoardPageAfter[] = [];
   const expectedRevisions = new Map<string, string>();

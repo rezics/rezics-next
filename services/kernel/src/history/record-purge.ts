@@ -7,7 +7,7 @@ import {
   type RecordPurgeAuthority,
   type RecordPurgeSource,
 } from '../semantic/record-purge-authority.ts';
-import { purgeSourceKey, sameRecordPurgeSource, type RecordHistoryLocalJob } from './record-source-lock.ts';
+import { sameRecordPurgeSource, type RecordHistoryLocalJob } from './record-source-lock.ts';
 import { recordHistoryPurgeLocator } from './record-resource-adapter.ts';
 import { minimizeHistoryReceipt } from './receipt.ts';
 import { minimizeHistoryOutbox } from './outbox.ts';

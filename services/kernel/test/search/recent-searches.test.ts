@@ -123,7 +123,7 @@ test('observed revisions preserve updates, remove and clear across devices; rece
 });
 
 test('visited Collection names come from the native current owner read and disappear when the Collection is removed', async () => {
-  const { client: c, actor, id } = await viewer();
+  const { client: c, actor } = await viewer();
   const commands = createCollectionCommands({ pool, access });
   const collection = await commands.createCollection(
     actor,
@@ -142,7 +142,7 @@ test('visited Collection names come from the native current owner read and disap
 });
 
 test('the list is capped at twenty, cursors bind to the principal and revision, and expired private entries are withheld', async () => {
-  const { client: c, actor, id } = await viewer();
+  const { client: c, id } = await viewer();
   for (let n = 0; n < 21; n++) expect((await use(c, { kind: 'query', text: `query ${n}` }, n)).status).toBe(200);
   const first = await c.recentSearches.get();
   expect(first.data?.recentSearches).toHaveLength(20);

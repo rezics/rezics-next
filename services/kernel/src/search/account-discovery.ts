@@ -4,7 +4,7 @@ import { withConnection, discardConnection } from '../database/pool.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { Release } from '@rezics/definitions';
-import { accountDiscoverySource, readAccountDiscoveryBindings } from '../access/account-discovery-source.ts';
+import { readAccountDiscoveryBindings } from '../access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
 import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';

@@ -9,7 +9,6 @@ import { createLibraryDriver } from './outcome-driver.ts';
 import { costOf } from '../../support/growth.ts';
 import { compileProfileRelease, profileTypes } from './native-conformance-profiles.ts';
 import { json, write, setEntry, publish, requestKey, unavailable, deleteAccount } from './native-conformance.ts';
-import { routeOf } from '../../../src/route/route.ts';
 import { purgeLabelRetentionPage } from '../../../src/library/label-retention.ts';
 
 /** Transport mapping only: expectedRevision is the fixture interface's name for the public revision field. */

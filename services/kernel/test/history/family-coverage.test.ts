@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
-import { newId, partitionOf, routeOf, PARTITIONS } from '../../src/route/route.ts';
+import { newId, partitionOf, PARTITIONS } from '../../src/route/route.ts';
 import { HistoryRegistry, type HistoryBarrier, type HistoryFamilySource } from '../../src/history/registry.ts';
 import { advanceHistoryFamilyCoverage, installHistoryFamilyDefinitions } from '../../src/history/family-coverage.ts';
 import {

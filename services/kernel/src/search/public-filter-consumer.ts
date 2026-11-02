@@ -583,7 +583,6 @@ import type {
   PublicFilterSourceBootstrapBinding,
   PublicSourceBootstrap,
   PublicSourceRepair,
-  PublicFilterSourceDefinition,
 } from '../semantic/public-filter-source-binding.ts';
 import type {
   PublicCanonicalCaptureInput,
@@ -620,9 +619,9 @@ import {
 } from './writer-guard.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-discovery.ts';
 import { discoveryConsumer } from './generations.ts';
-import { validatePublicSuggestionInput, compilePublicSuggestion } from './public-suggestion-input.ts';
+import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { type SubjectDocument } from './document.ts';
-import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
+import type { DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { readDiscoveryEngineResult } from './discovery-query.ts';

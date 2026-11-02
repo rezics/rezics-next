@@ -31,7 +31,6 @@ export type CommunityPresentation = Readonly<{
 }>;
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
-const nullable = <T extends import('typebox').TSchema>(schema: T) => t.Union([schema, t.Null()]);
 const optional = <T extends import('typebox').TSchema>(schema: T) =>
   t.Union([
     t.Object({ state: t.Literal('available'), value: schema }, closed),

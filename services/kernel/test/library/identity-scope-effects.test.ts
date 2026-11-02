@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { principalCommandIdentity, noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import {
   stepIdentityEpochBootstrapWork,

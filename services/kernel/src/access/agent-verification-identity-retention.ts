@@ -27,7 +27,6 @@ import {
   type AgentIdentitySourceKey,
 } from '../history/agent-identity-source.ts';
 import {
-  readIdentitySourceConsumerCustody,
   verifyIdentitySourceConsumerCustody,
   type IdentitySourceConsumerCustody,
 } from '../semantic/identity-source-consumer-custody.ts';

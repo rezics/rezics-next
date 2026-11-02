@@ -16,7 +16,6 @@ import {
   collectionKindSourceBindings,
   createCollectionKindNative,
   validateCollectionKindPage,
-  type CollectionKindCapture,
   type CollectionKindNative,
 } from './collection-kind.ts';
 import parentQuery from './collection-kind-parent.sql';

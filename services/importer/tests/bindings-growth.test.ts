@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { BatchWriteResult } from '@rezics/definitions/bulk';
 import type { MediaImportAccepted, MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import { countedSample, countedViolations, type CountedCheck } from '../../kernel/test/support/growth-counters.ts';
 

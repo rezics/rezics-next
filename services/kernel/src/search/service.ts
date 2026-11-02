@@ -28,7 +28,6 @@ import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import {
   admitProperties,
-  chooseTexts,
   projectFacts,
   projectHit,
   validateHitOptions,

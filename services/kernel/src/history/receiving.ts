@@ -299,8 +299,7 @@ export async function historyReceivingGap(
     const artifact = await lockAgentIdentityReceivingArtifact(tx, association[0]!.custody_id);
     if (!artifact) return 'outbox-receiving-custody-unavailable';
     {
-      const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
-        await import('./agent-identity-inventory-work.ts');
+      const { reserveIdentityHistoryWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
       const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
         await import('./agent-identity-sdk-fence.ts');
       await reserveIdentityHistoryWork(
@@ -487,8 +486,7 @@ export async function verifyHistoryReceivingReceipt(
     return false;
   if (artifact.locator.artifactType === 'durable-work/v1') {
     const { pool, deadline } = currentCommandResources(tx);
-    const { reserveIdentityHistoryWork, nativeWork, addNativeWork } =
-      await import('./agent-identity-inventory-work.ts');
+    const { reserveIdentityHistoryWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
     const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
       await import('./agent-identity-sdk-fence.ts');
     await reserveIdentityHistoryWork(
@@ -501,7 +499,7 @@ export async function verifyHistoryReceivingReceipt(
       { deadline },
     );
   }
-  const { pool, deadline } = currentCommandResources(tx);
+  const { pool } = currentCommandResources(tx);
   const current = await nativeReceipt(tx, barrier, artifact, pool);
   return current !== null && current.epoch === bound.epoch && current.roleDigest.equals(bound.roleDigest);
 }
@@ -605,7 +603,7 @@ async function recordIdentityReceivingProof(
   const { currentCommandResources } = await import('../command/command.ts');
   const { lockRecordedAgentIdentityHistory, AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
     await import('./agent-identity-sdk-fence.ts');
-  const { reserveIdentityHistoryWork, nativeWork, addNativeWork, HISTORY_RECEIVING_INVALIDATION } =
+  const { reserveIdentityHistoryWork, addNativeWork, HISTORY_RECEIVING_INVALIDATION } =
     await import('./agent-identity-inventory-work.ts');
   const unit = currentAgentIdentityHistoryUnit();
   if (!unit?.stage || !unit.client || partition !== 0) return 'identity-history-current-unit-unavailable';

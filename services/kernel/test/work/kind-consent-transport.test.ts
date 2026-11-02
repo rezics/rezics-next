@@ -8,7 +8,6 @@ import { trustedAccessPorts } from '../../../auth/test/support/trusted-access.ts
 
 const issuer = 'https://kind-consent-auth.test';
 const accessIssuer = 'https://kind-consent.cloudflareaccess.com';
-const audience = 'kind-consent-api';
 const accessAudience = 'kind-consent-private';
 const serviceTokenId = 'kind-consent-worker.access';
 const serviceTokenSecret = 'kind-consent-worker-private-service-secret';

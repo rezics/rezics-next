@@ -5,11 +5,10 @@ import {
   readCollectionPublicationEpisode,
   readCollectionPublicationEpisodeVersion,
 } from './collection-publication-episodes.ts';
-import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
+import { enqueueIntent, runOperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
 import { stageCollectionPublicationStep } from './collection-publication-staging.ts';
 import { createCollectionPublicationFinalActivation } from './collection-publication-final.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';

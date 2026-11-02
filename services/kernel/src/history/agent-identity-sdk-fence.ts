@@ -249,8 +249,7 @@ async function receivingBinding(
 ): Promise<AgentIdentitySDKReceivingObservation> {
   historyDeadline(context, 0);
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const { identityHistoryCommand, reserveIdentityHistoryWork, nativeWork } =
-    await import('./agent-identity-inventory-work.ts');
+  const { identityHistoryCommand, reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
   await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkReceiving, context);
   if (owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline)) {
     return identityHistoryCommand(pool, context, (tx) =>
@@ -571,7 +570,7 @@ export async function lockRecordedAgentIdentityHistory(
 ): Promise<
   Pending | Readonly<{ state: 'guarded'; receipt: AgentIdentitySDKRetirementReceipt; writer: SdkWriterState }>
 > {
-  const { reserveIdentityHistoryWork, nativeWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
+  const { reserveIdentityHistoryWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
   const { pool, deadline } = currentCommandResources(tx);
   const { assertAgentIdentityHistoryUnit } = await import('./agent-identity-retirement.ts');
   assertAgentIdentityHistoryUnit(pool, context, client);

@@ -52,17 +52,7 @@ type FinalAttempt = Readonly<{
   work: NativeCollectionWork;
 }>;
 type OutputInventoryRow = Readonly<{ generation: string; state: string; outputMode: string }>;
-type CurrentCollection = Readonly<{
-  owner: string | null;
-  state: string;
-  membershipKind: string;
-  visibility: string;
-  revision: number;
-  sourceGeneration: string;
-  incarnation: string;
-}>;
 const unavailable = () => new ProblemError('dependency_unavailable');
-const conflict = () => new ProblemError('conflict');
 const finalCommandKind = 'library.collection.publication.activate';
 const receiptKeyPattern = /^[\x21-\x7e]{1,255}$/;
 

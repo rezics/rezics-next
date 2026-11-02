@@ -5,7 +5,6 @@ import type {
   Fixture,
   NativeAccountWorkflowDriver,
   Revocation,
-  Step,
   Work,
 } from './native-account-workflow-driver.ts';
 

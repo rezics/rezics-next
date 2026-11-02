@@ -552,7 +552,6 @@ test('labels overlap optional state and retained sessions or holdings preserve E
 test('source fact changes invalidate old cursors and expose current keyset membership', async () => {
   const first = await subjectIn('game');
   const second = await subjectIn('game');
-  const firstState = driver.profiles.game.states[0]!;
   const secondState = driver.profiles.game.states[1]!;
   const firstView = await stateCollection('game', 0);
   const secondView = await stateCollection('game', 1);
@@ -757,6 +756,7 @@ test('account deletion freezes adopted public subjects without waiting for consu
   await driver.resumeAndSettle();
   const before = (await members(published.id, 'anonymous')).members.map((item) => item.subjectId);
   expect(before).toContain(publicSubject.id);
+  expect(before).not.toContain(privateSubject.id);
 
   await driver.holdProjectionConsumer();
   await okay(await driver.deleteAccount());

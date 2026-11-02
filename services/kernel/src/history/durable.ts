@@ -19,7 +19,6 @@ import {
   lockRecordedAgentIdentityHistory,
   readAgentIdentitySDKWriterState,
   readAgentIdentitySDKFence,
-  type AgentIdentitySDKRetirementReceipt,
 } from './agent-identity-sdk-fence.ts';
 import canonicalize from 'canonicalize';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
@@ -30,7 +29,6 @@ import {
   accountHistoryWork,
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   reserveIdentityHistoryWork,
-  nativeWork,
   addNativeWork,
   HISTORY_WORK_INVALIDATION,
   HISTORY_WORK_WAKE,

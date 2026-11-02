@@ -150,13 +150,16 @@ async function fixture() {
       );
     },
     async resume() {
-      return importer.runRecords(
+      let consumed = false;
+      const result = await importer.runRecords(
         registration,
         (async function* () {
-          throw new Error('Sealed recovery consumed replacement source records');
+          consumed = true;
           yield record(9, 900);
         })(),
       );
+      expect(consumed).toBe(false);
+      return result;
     },
     async reopen() {
       await importer.close();

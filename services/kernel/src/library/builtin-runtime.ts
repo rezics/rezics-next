@@ -1,6 +1,5 @@
 import { readLikedOriginalPage, readLikedOriginalVersion } from './liked-source.ts';
 import { readOwnerMembers } from './owner-index-members.ts';
-import type { KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { nextOwnerPin } from './owner-index-metadata.ts';
 import type { Pool, PoolClient } from 'pg';

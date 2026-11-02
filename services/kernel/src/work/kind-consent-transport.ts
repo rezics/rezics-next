@@ -5,7 +5,6 @@ import {
   KIND_CONSENT_ENROLLMENT_RESPONSE_MAX_BYTES,
   kindConsentEnrollmentVerifiedBound,
   kindConsentEnrollmentResultValid,
-  kindConsentOperationBound,
   kindConsentTransportActual,
   kindConsentTransportBound,
   kindConsentWorkWithin,

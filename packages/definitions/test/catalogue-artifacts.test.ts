@@ -24,7 +24,7 @@ import {
   type CatalogueRootV2,
   type KindCataloguePin,
 } from '../src/catalogue-artifacts.ts';
-import { catalogueFileStore, publishCatalogueRoot, readCatalogueRootFile } from '../src/catalogue-files.ts';
+import { publishCatalogueRoot, readCatalogueRootFile } from '../src/catalogue-files.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const workspace = join(root, 'packages/definitions');

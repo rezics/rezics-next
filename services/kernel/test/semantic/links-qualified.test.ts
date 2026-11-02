@@ -5,9 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { openApiDocument } from '../../src/http/openapi.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { disclosedRelationStatement, linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -79,7 +77,6 @@ const statement = (property: string, content: unknown) => ({
   property: { id: property },
   value: { type: 'value', content },
 });
-const reference = { parts: [statement('schema:url', 'https://www.aozora.gr.jp/cards/000148/card773.html')] };
 async function created(body: unknown, target = kernel): Promise<Record<string, any>> {
   const answer = await call('POST', '/v1/subjects', { as: 'editor', key: key(), body, kernel: target });
   expect(answer.response.status).toBe(201);

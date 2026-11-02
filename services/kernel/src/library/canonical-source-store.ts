@@ -194,7 +194,7 @@ import {
   readNativeCollectionRawPage,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance } from './collection-source.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
 import ownerFacts from './collection-source-native-facts.sql';
 import { deadlineClient } from '../access/authenticate.ts';

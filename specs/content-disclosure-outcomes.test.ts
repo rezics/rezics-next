@@ -334,7 +334,10 @@ test('moderator denial and revocation precede receipt replay and expose no store
     const accepted = await ok(await d().takedown('moderator', thread, 'replay-key'));
     const once = await d().observe(thread);
     await d().setModeration('moderator', thread, mode);
-    await denied(await d().takedown('moderator', thread, 'replay-key'), ['"securityRevision"']);
+    await denied(await d().takedown('moderator', thread, 'replay-key'), [
+      JSON.stringify(accepted),
+      '"securityRevision"',
+    ]);
     await denied(await d().takedown('moderator', thread, 'fresh-denied-key'));
     expect(await d().observe(thread)).toEqual(once);
   }
