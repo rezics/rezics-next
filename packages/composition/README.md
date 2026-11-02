@@ -245,11 +245,9 @@ owner's opaque continuation, including on an empty page.
 `Cover`, `Summary` and `Sources` read the page subject. `Appearances` and `Credits` take the
 statements of one relation property in one of two directions. `inverse`, the default, is the
 `links` read `RelationGroups` uses: the subjects whose `property` statement points at the page
-subject, which is how a person's works and a character's appearances are found. `forward` takes
-the statements the page subject itself holds from the subject read it already shares, which is how
-a work's cast and staff are found; `filter` and `type` apply to `inverse` only. A forward list is
-the subject's statements of that property in statement order, previewed to `limit` with their
-count.
+subject, which is how a person's works and a character's appearances are found. `forward` uses the
+separate native outbound `relations` stream, which is how a work's cast and staff are found;
+`filter` and `type` apply to `inverse` only. A forward list is previewed to `limit` with its count.
 
 `RatingSummary` plans no composition read. `ThreadList` and `ReviewList` bind the existing Content
 `subject_threads.list` operation with `kind: discussion` and `kind: review` respectively. The guarded
