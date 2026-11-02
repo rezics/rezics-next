@@ -121,9 +121,13 @@ export function mangaCreateFeedback(
       }
     }
     if (suffix[0] === 'qualifiers' && /^(0|[1-9]\d*)$/.test(suffix[1] ?? '')) {
-      const part = row.statement.qualifiers?.[Number(suffix[1])];
+      const index = Number(suffix[1]);
+      const part = row.statement.qualifiers?.[index];
+      const address = `${rowId}-qualifier-${row.qualifierIds?.[index] ?? index}`;
+      const oldAddress = `${rowId}-qualifier-${index}`;
+      if (target.startsWith(`${oldAddress}-`)) target = address + target.slice(oldAddress.length);
       if (part && read.release.properties[part.property.id]?.datatype === 'wikibase-item') {
-        target = `${rowId}-qualifier-${suffix[1]}`;
+        target = address;
         instruction = m.correction_error_value({}, o);
       }
     }

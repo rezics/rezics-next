@@ -26,6 +26,8 @@ export type MangaRow = {
   original?: boolean;
   authored?: AuthoredField;
   targets?: Record<string, EntityPickerSubject[]>;
+  // Local control identities; never included in the native statement.
+  qualifierIds?: string[];
 };
 export function MangaInitialField({
   row,
@@ -60,6 +62,7 @@ export function MangaInitialField({
         .join(' ') || undefined,
   });
   const [qualifier, setQualifier] = useState('');
+  const [removingQualifier, setRemovingQualifier] = useState<string>();
   const qualifierId = useId();
   const section = useRef<HTMLElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -75,7 +78,7 @@ export function MangaInitialField({
     if (editable()) onChange(next);
   };
   useLayoutEffect(() => {
-    if (disabled) return;
+    if (!editable()) return;
     if (confirming) cancel.current?.focus();
     else if (restoreFocus.current) {
       trigger.current?.focus();
@@ -106,6 +109,8 @@ export function MangaInitialField({
       ?.focus();
     onRemove();
   };
+  const qualifiers = row.statement.qualifiers ?? [];
+  const qualifierIds = qualifiers.map((_, index) => row.qualifierIds?.[index] ?? String(index));
   const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
   const citation =
     citationPart?.value.type === 'value' && typeof citationPart.value.content === 'string'
@@ -130,6 +135,31 @@ export function MangaInitialField({
   const update = (statement: StatementInput) => change({ ...row, statement });
   const updateAuthored = (next: AuthoredField) =>
     change({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
+  const removeQualifier = (index: number) => {
+    if (!editable() || !section.current?.isConnected) return;
+    const next = {
+      ...row,
+      qualifierIds: qualifierIds.filter((_, at) => at !== index),
+      statement: { ...row.statement, qualifiers: qualifiers.filter((_, at) => at !== index) },
+    };
+    const propertyId = qualifiers[index]!.property.id;
+    if (
+      row.targets?.[propertyId] &&
+      row.statement.property.id !== propertyId &&
+      !next.statement.qualifiers.some((part) => part.property.id === propertyId)
+    ) {
+      next.targets = { ...row.targets };
+      delete next.targets[propertyId];
+    }
+    change(next);
+    setRemovingQualifier(undefined);
+    const retainedId = qualifierIds.find((_, at) => at !== index);
+    (
+      document.getElementById(qualifierId) ??
+      document.getElementById(`${feedback.id}-qualifier-${retainedId}-remove`) ??
+      document.getElementById(`${feedback.id}-qualifiers`)
+    )?.focus();
+  };
   const name = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale).text;
   const control = (part: SnakInput, address: string, statement: (value: SnakInput['value']) => StatementInput) => {
     const definition = read.release.properties[part.property.id];
@@ -239,10 +269,10 @@ export function MangaInitialField({
             )}
           </div>
           <div id={`${feedback.id}-qualifiers`} tabIndex={-1} className="min-w-0 space-y-4">
-            {(row.statement.qualifiers ?? []).map((part, index) => (
+            {qualifiers.map((part, index) => (
               <div
-                key={index}
-                id={`${feedback.id}-qualifier-${index}`}
+                key={qualifierIds[index]}
+                id={`${feedback.id}-qualifier-${qualifierIds[index]}`}
                 data-manga-picker={
                   read.release.properties[part.property.id]?.datatype === 'wikibase-item' ? '' : undefined
                 }
@@ -256,10 +286,49 @@ export function MangaInitialField({
                 >
                   {name(part.property.id)}
                 </ContentItemHeading>
-                {control(part, `qualifier-${index}`, (value) => ({
+                {control(part, `qualifier-${qualifierIds[index]}`, (value) => ({
                   ...row.statement,
                   qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
                 }))}
+                <Button
+                  id={`${feedback.id}-qualifier-${qualifierIds[index]}-remove`}
+                  type="button"
+                  variant="ghost"
+                  aria-expanded={removingQualifier === qualifierIds[index]}
+                  onClick={() => {
+                    if (!editable()) return;
+                    if (part.value.type === 'value' && part.value.content === '') removeQualifier(index);
+                    else setRemovingQualifier(qualifierIds[index]);
+                  }}
+                >
+                  {m.relation_remove({}, o)}
+                </Button>
+                {removingQualifier === qualifierIds[index] && (
+                  <div
+                    role="group"
+                    aria-label={m.curation_remove_title({ template: name(part.property.id) }, o)}
+                    className="space-y-2"
+                  >
+                    <p>{m.curation_remove_title({ template: name(part.property.id) }, o)}</p>
+                    <div className="flex flex-wrap gap-3">
+                      <Button type="button" autoFocus disabled={disabled} onClick={() => removeQualifier(index)}>
+                        {m.contribution_confirm({}, o)}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={disabled}
+                        onClick={() => {
+                          if (!editable()) return;
+                          setRemovingQualifier(undefined);
+                          document.getElementById(`${feedback.id}-qualifier-${qualifierIds[index]}-remove`)?.focus();
+                        }}
+                      >
+                        {m.action_cancel({}, o)}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -304,12 +373,17 @@ export function MangaInitialField({
                 variant="outline"
                 disabled={!qualifier}
                 onClick={() => {
-                  update({
-                    ...row.statement,
-                    qualifiers: [
-                      ...(row.statement.qualifiers ?? []),
-                      { property: { id: qualifier }, value: { type: 'value', content: '' } },
-                    ],
+                  if (!editable()) return;
+                  change({
+                    ...row,
+                    qualifierIds: [...qualifierIds, crypto.randomUUID()],
+                    statement: {
+                      ...row.statement,
+                      qualifiers: [
+                        ...qualifiers,
+                        { property: { id: qualifier }, value: { type: 'value', content: '' } },
+                      ],
+                    },
                   });
                   setQualifier('');
                 }}

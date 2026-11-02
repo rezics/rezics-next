@@ -55,6 +55,7 @@ Manga creation confirms populated initial-field removal locally, including autho
 Manga creation resolves rejection addresses by decoded property and assertion index to stable draft rows and
 supported inner controls; ambiguous or unsupported addresses stay at their named section with technical details,
 duplicate-language feedback targets the later row, and unavailable sessions offer a sign-in check retry.
+Removing an unsent Manga qualifier keeps the assertion and sibling drafts, confirms populated values locally with Cancel, clears obsolete submission feedback and returns focus to Add qualifier; retained controls keep their identities and sealed commands freeze removal.
 People creation resolves only its produced assertion and editable scalar or citation parts to stable, named controls;
 unsupported addresses remain inspectable without links, and retired Types retain staged facts for explicit removal.
 With a supplied work, creation retains the credit context and offers the exact returned reader through its explicit link.
