@@ -232,6 +232,7 @@ function shellDestinations(own: Messages, locale: string, signed: boolean, deskt
       ? [
           entry('nav_library', '/library'),
           ...(desktop ? [entry('nav_inbox', '/inbox')] : []),
+          entry('moderation_reports_heading', '/moderation/catalogue'),
           entry('ctxw_title', '/my/contexts'),
           entry('zones_owner_title', '/my/zones'),
           entry('library_collection_new', '/collections/new'),
