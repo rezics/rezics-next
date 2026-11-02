@@ -50,6 +50,7 @@ const source = (changes: Partial<RenameSource> = {}): RenameSource => ({
   ...changes,
 });
 const flush = async (action: () => unknown) => act(async () => void (await action()));
+const tick = () => flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => (resolve = done));
@@ -87,6 +88,7 @@ async function mount(initial: RenameSource) {
   document.body.append(host);
   const root = createRoot(host);
   await flush(() => root.render(<RouterProvider router={router} />));
+  await tick();
   close = async () => {
     await flush(() => root.unmount());
     host.remove();
@@ -117,6 +119,7 @@ test('clean navigation is quiet; Stay preserves the proposed handle and confirma
   await flush(() => clean);
   const { navigation: back } = await startNavigation(ui.router, '/account/rename');
   await flush(() => back);
+  await tick();
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
   const { navigation } = await startNavigation(ui.router, '/next');
@@ -138,6 +141,7 @@ test('Leave clears an unsent review before navigation', async () => {
   await flush(() => navigation);
   expect(readRenameContinuation()).toBeNull();
   await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
+  await tick();
   expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('');
 });
 
@@ -176,10 +180,12 @@ test('step-up return is allowed and a replacement account revokes the old review
   expect(ui.host.querySelector('[role="alertdialog"]')).toBeNull();
   const { navigation: returned } = await startNavigation(ui.router, '/account/rename');
   await flush(() => returned);
+  await tick();
   expect(ui.host.textContent).toContain(m.auth_rename_reconfirm());
   const { navigation: leaving } = await startNavigation(ui.router, '/next');
   await ui.replaceSource(source({ readCurrent: async () => ready('replacement') }));
   await flush(() => leaving);
   await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
+  await tick();
   expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('');
 });
