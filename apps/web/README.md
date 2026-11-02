@@ -2656,6 +2656,7 @@ Like the composer, an in-flight erasure intent stays mounted but hidden/inert du
 reloading personal permissions cannot discard an uncertain request's key. Operation hydration retains its refresh budget.
 An uncertain intent remains scoped to the same thread and actor across a temporary session gap; changing either starts a
 new intent.
+Decision: same-author session recovery keeps the open confirmation and original key; explicit retry uses current credentials.
 
 Opening or explicitly refreshing the region makes one current generated `threads({id}).get(options)` read through
 `readThreadAuthorErasureAdmission`, the safe server-side BFF session and private/no-store responses. No read runs

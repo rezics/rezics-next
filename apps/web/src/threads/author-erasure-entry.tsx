@@ -54,7 +54,7 @@ async function readNative(threadId: string, isCurrent: () => boolean = () => tru
   return readThreadAuthorErasureAdmission({ data: { threadId } });
 }
 
-/** Cache notifications key each mounted visit, including away/back and same-account CSRF changes. */
+/** Session revisions retire responses; the thread and actor retain the confirmed command intent. */
 export function AuthorErasureEntry(props: {
   threadId: string;
   viewerId?: string | null;

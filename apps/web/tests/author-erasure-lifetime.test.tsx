@@ -227,14 +227,14 @@ test('The complete author erasure caller retires private admission command callb
     lateAdmission.resolve({ kind: 'current', authorId: authorA, mayErase: true });
     await ui.flush();
     expect(ui.host.textContent).not.toContain(ui.m.author_erasure_forbidden());
-    await ui.click(ui.m.author_erasure_action());
+    await ui.click(ui.m.author_erasure_check_again());
     await ui.flush();
     expect(admissionReads).toBe(2);
     expect(ui.button(ui.m.author_erasure_confirm()).disabled).toBe(true);
     currentAdmission.resolve({ kind: 'current', authorId: authorA, mayErase: true });
     await ui.flush();
-    expect(ui.button(ui.m.author_erasure_confirm()).disabled).toBe(false);
     await ui.confirm();
+    expect(ui.button(ui.m.author_erasure_confirm()).disabled).toBe(false);
     await act(async () => {
       ui.button(ui.m.author_erasure_confirm()).click();
       ui.button(ui.m.author_erasure_confirm()).click();
@@ -250,12 +250,11 @@ test('The complete author erasure caller retires private admission command callb
     expect(callbacks).toBe(0);
     expect(ui.host.textContent).not.toContain(ui.m.author_erasure_view_progress());
 
-    await ui.click(ui.m.author_erasure_action());
-    await ui.flush();
-    await ui.confirm();
-    await ui.click(ui.m.author_erasure_confirm());
+    expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+    await ui.click(ui.m.author_erasure_retry());
     await ui.flush();
     expect(sent).toHaveLength(2);
+    expect(sent[0]).toEqual(sent[1]);
     expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
     await act(async () => ui.setSession({ state: 'unavailable', subject: null, csrfToken: null }));
     await ui.flush();
@@ -297,10 +296,9 @@ test('The complete author erasure caller retires private admission command callb
     expect(callbacks).toBe(1);
     expect(ui.host.textContent).not.toContain(ui.m.author_erasure_view_progress());
 
-    await ui.click(ui.m.author_erasure_action());
-    await ui.flush();
-    await ui.confirm();
-    await ui.click(ui.m.author_erasure_confirm());
+    expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+    await ui.click(ui.m.author_erasure_retry());
+    expect(sent[4]).toEqual(sent[5]);
     await act(async () => ui.setSession({ state: 'signed-out', subject: null, csrfToken: null }));
     readinessRetirement.resolve({ kind: 'accepted', operationId: operationA });
     await ui.flush();
