@@ -134,13 +134,24 @@ async function insertBatch(admin: pg.Pool, tables: TableRows[]): Promise<void> {
 
 async function writeRange(target: SeedTarget, population: Population, range: SeedRange): Promise<void> {
   let next = range.from;
+  let failed = false;
+  let failure: unknown;
   const worker = async (): Promise<void> => {
-    while (next < range.to) {
+    while (!failed && next < range.to) {
       const ordinal = next++;
-      await population.write!(target, placement(population, ordinal));
+      try {
+        await population.write!(target, placement(population, ordinal));
+      } catch (error) {
+        if (!failed) {
+          failed = true;
+          failure = error;
+        }
+        return;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(WRITE_CONCURRENCY, range.to - range.from) }, worker));
+  if (failed) throw failure;
 }
 
 export async function seed(target: SeedTarget, population: Population, range: SeedRange): Promise<void> {

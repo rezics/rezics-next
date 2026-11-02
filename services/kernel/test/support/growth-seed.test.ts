@@ -84,6 +84,39 @@ test('seeds through a production write path when the population supplies write',
   expect((await pool.query('SELECT count(*)::int AS count FROM growth_seed_write.parent')).rows[0]!.count).toBe(12);
 });
 
+test('stops admitting production writes after failure and waits for admitted writes', async () => {
+  const failure = new Error('write failed');
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  let signalStarted!: () => void;
+  const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+  const ordinals: number[] = [];
+  let finishCalls = 0;
+  const population: Population = {
+    name: 'failed-write',
+    hotPartition: 4,
+    write: async (_target, { ordinal }) => {
+      ordinals.push(ordinal);
+      if (ordinals.length === 4) signalStarted();
+      if (ordinal === 0) throw failure;
+      await pending;
+    },
+    finish: async () => { finishCalls++; },
+  };
+  const seeding = seed({ pool, admin: database.admin }, population, { from: 0, to: 8 });
+  let settled = false;
+  void seeding.then(() => { settled = true; }, () => { settled = true; });
+  await started;
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const settledBeforeRelease = settled;
+  release();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await expect(seeding).rejects.toBe(failure);
+  expect(settledBeforeRelease).toBe(false);
+  expect(ordinals).toEqual([0, 1, 2, 3]);
+  expect(finishCalls).toBe(0);
+});
+
 test('rejects rows whose columns differ within a table or name an invalid table', async () => {
   const mismatched: Population = {
     name: 'mismatched',
