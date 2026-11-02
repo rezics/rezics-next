@@ -134,6 +134,10 @@ test('Recipe creation and current correction share complete frames with independ
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
     return (Reflect.get(element, key) as { onClick: () => void }).onClick;
   };
+  const retainedChange = (element: HTMLElement) => {
+    const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
+    return (Reflect.get(element, key) as { onChange: (event: { target: { value: string } }) => void }).onChange;
+  };
   const cancelRemoval = async (scope: HTMLElement) => {
     const trigger = within(scope).getByRole('button', { name: m.recipe_remove_field() });
     const controls = () => [
@@ -298,7 +302,10 @@ test('Recipe creation and current correction share complete frames with independ
     );
     await replace(input(ownIngredient, m.correction_value()), '400 ml water');
     await replace(input(ownIngredient, m.correction_language()), 'en');
+    const retiredCitation = retainedChange(input(ownIngredient, m.relation_citation()));
     await replace(input(ownIngredient, m.relation_citation()), longCitation);
+    await act(async () => retiredCitation({ target: { value: 'https://example.test/retired' } }));
+    expect(input(ownIngredient, m.relation_citation()).value).toBe(longCitation);
     await replace(input(draft, m.relation_citation()), longCitation);
     const citation = input(draft, m.relation_citation());
     await act(async () => {
