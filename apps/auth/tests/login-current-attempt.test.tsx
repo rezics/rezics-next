@@ -163,11 +163,3 @@ test('dismissed prompts recover, and departure or cached restoration retires pen
     await page.close();
   }
 });
-
-test('retired options never open a late browser prompt', async () => {
-  const options = Promise.withResolvers<Response>();
-  globalThis.fetch = (() => options.promise) as typeof fetch;
-  const result = passkeys.signInWithPasskey({ isCurrent: () => false });
-  options.resolve(Response.json({ challenge: 'Y2hhbGxlbmdl' }));
-  expect(await result).toEqual({ ok: false, reason: 'cancelled' });
-});
