@@ -478,11 +478,7 @@ class SuiteLifetime {
 
 const suiteLifetime = new SuiteLifetime();
 
-function retireSuite(
-  lifetime: SuiteLifetime,
-  label: string,
-  actions: Parameters<typeof cleanupAll>[0],
-) {
+function retireSuite(lifetime: SuiteLifetime, label: string, actions: Parameters<typeof cleanupAll>[0]) {
   lifetime.retire();
   return cleanupAll([
     ...lifetime.cleanupActions(),
@@ -556,13 +552,10 @@ function freePort(lifetime: SuiteLifetime, label: string): Promise<number> {
     });
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      void closeProbe().then(
-        () => {
-          release();
-          resolve(port);
-        },
-        reject,
-      );
+      void closeProbe().then(() => {
+        release();
+        resolve(port);
+      }, reject);
     });
   });
 }
@@ -699,7 +692,9 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
   return suiteLifetime.run('Home Continue sign-in setup', async () => {
     const origin = await site();
     suiteLifetime.assertActive('Home Continue sign-in request');
-    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
+    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
+      redirect: 'manual',
+    });
     suiteLifetime.assertActive('Home Continue sign-in response');
     const location = new URL(start.headers.get('location')!);
     const params = location.searchParams;
@@ -736,128 +731,140 @@ const alice = async () => {
 async function readPage(path: string, cookie?: string) {
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
-  return suiteLifetime.run('Home Continue page setup', async () => withCleanup(async () => {
-    const origin = await site();
-    suiteLifetime.assertActive('Home Continue page browser launch');
-    browser = await launchBrowser();
-    suiteLifetime.assertActive('Home Continue page context setup');
-    context = await createContext(browser, {}, 'Home Continue page context acquisition');
-    suiteLifetime.assertActive('Home Continue page context acquisition completion');
-    if (cookie) {
-      await context.addCookies([
-        { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
-      ]);
-      suiteLifetime.assertActive('Home Continue page cookie setup');
-    }
-    const page = await context.newPage();
-    suiteLifetime.assertActive('Home Continue page creation');
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    suiteLifetime.assertActive('Home Continue page navigation');
-    await page.locator('[data-session-slot]').waitFor();
-    suiteLifetime.assertActive('Home Continue session readiness');
-    if (cookie) await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
-    suiteLifetime.assertActive('Home Continue personal readiness');
-    await page.waitForLoadState('networkidle');
-    suiteLifetime.assertActive('Home Continue final network readiness');
-    const html = await page.content();
-    suiteLifetime.assertActive('Home Continue page snapshot');
-    return { status: response!.status(), html };
-  }, [
-    { label: 'Home Continue page context', run: () => (context ? closeContext(context) : undefined), timeoutMs: 6000 },
-    { label: 'Home Continue page browser', run: () => (browser ? closeBrowser(browser) : undefined), timeoutMs: 6000 },
-  ]));
+  return suiteLifetime.run('Home Continue page setup', async () =>
+    withCleanup(async () => {
+      const origin = await site();
+      suiteLifetime.assertActive('Home Continue page browser launch');
+      browser = await launchBrowser();
+      suiteLifetime.assertActive('Home Continue page context setup');
+      context = await createContext(browser, {}, 'Home Continue page context acquisition');
+      suiteLifetime.assertActive('Home Continue page context acquisition completion');
+      if (cookie) {
+        await context.addCookies([
+          { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
+        ]);
+        suiteLifetime.assertActive('Home Continue page cookie setup');
+      }
+      const page = await context.newPage();
+      suiteLifetime.assertActive('Home Continue page creation');
+      const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      suiteLifetime.assertActive('Home Continue page navigation');
+      await page.locator('[data-session-slot]').waitFor();
+      suiteLifetime.assertActive('Home Continue session readiness');
+      if (cookie) await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
+      suiteLifetime.assertActive('Home Continue personal readiness');
+      await page.waitForLoadState('networkidle');
+      suiteLifetime.assertActive('Home Continue final network readiness');
+      const html = await page.content();
+      suiteLifetime.assertActive('Home Continue page snapshot');
+      return { status: response!.status(), html };
+    }, [
+      {
+        label: 'Home Continue page context',
+        run: () => (context ? closeContext(context) : undefined),
+        timeoutMs: 6000,
+      },
+      {
+        label: 'Home Continue page browser',
+        run: () => (browser ? closeBrowser(browser) : undefined),
+        timeoutMs: 6000,
+      },
+    ]),
+  );
 }
 
 async function inspectHome(path: string, cookie: string, width: number, openMenu = false) {
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
-  return suiteLifetime.run('Home Continue page inspection setup', async () => withCleanup(async () => {
-    const origin = await site();
-    suiteLifetime.assertActive('Home Continue inspection browser launch');
-    browser = await launchBrowser();
-    suiteLifetime.assertActive('Home Continue inspection context setup');
-    context = await createContext(
-      browser,
-      { viewport: { width, height: 844 }, hasTouch: false },
-      'Home Continue inspection context acquisition',
-    );
-    suiteLifetime.assertActive('Home Continue inspection context acquisition completion');
-    await context.addCookies([
-      { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
-    ]);
-    suiteLifetime.assertActive('Home Continue inspection cookie setup');
-    const page = await context.newPage();
-    suiteLifetime.assertActive('Home Continue inspection page creation');
-    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    suiteLifetime.assertActive('Home Continue inspection navigation');
-    await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
-    suiteLifetime.assertActive('Home Continue inspection personal readiness');
-    await page.waitForLoadState('networkidle');
-    suiteLifetime.assertActive('Home Continue inspection network readiness');
-    if (openMenu) {
-      await page.locator('[data-slot="cover-card-actions"] button').first().click();
-      suiteLifetime.assertActive('Home Continue inspection menu action');
-      await page.locator('[data-slot="drawer-content"]').waitFor();
-      suiteLifetime.assertActive('Home Continue inspection drawer readiness');
-    }
-    const inspection = await page.evaluate(() => {
-      const personal = document.querySelector<HTMLElement>('[data-slot="personal"]');
-      const row = personal?.querySelector<HTMLElement>('[data-slot="cover-row"]');
-      const cards = [...(personal?.querySelectorAll<HTMLElement>('[data-slot="cover-card"]') ?? [])];
-      const next = personal?.nextElementSibling as HTMLElement | null;
-      const bounds = (element: HTMLElement | null) => {
-        const rect = element?.getBoundingClientRect();
-        return rect ? { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right } : null;
-      };
-      const style = row ? getComputedStyle(row) : null;
-      return {
-        personalClass: personal?.className ?? '',
-        personal: bounds(personal ?? null),
-        next: bounds(next),
-        row: row
-          ? {
-              clientWidth: row.clientWidth,
-              scrollWidth: row.scrollWidth,
-              snap: style?.scrollSnapType ?? '',
-              bounds: bounds(row),
-              cards: cards.map(bounds),
-            }
-          : null,
-        cardCount: cards.length,
-        titlesInCovers: cards.map((card) => card.querySelector('[data-slot="cover"]')?.textContent?.trim() ?? ''),
-        captionCount: personal?.querySelectorAll('[data-slot="cover-caption"]').length ?? 0,
-        progressCount: personal?.querySelectorAll('[data-slot="progress-row"]').length ?? 0,
-        placeholderGlyphCount: [...(personal?.querySelectorAll('[data-slot="cover"]') ?? [])].filter((cover) =>
-          cover.textContent?.includes('…'),
-        ).length,
-        drawerOpen: !!document.querySelector('[data-slot="drawer-content"]'),
-        menuButtons: [...(personal?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? [])].map((button) =>
-          button.getAttribute('aria-label'),
-        ),
-        controlVisibility: Object.fromEntries(
-          [
-            ...(personal?.querySelectorAll<HTMLButtonElement>(
-              'button[aria-label="Next Continue items"], button[aria-label="Previous Continue items"]',
-            ) ?? []),
-          ].map((button) => [button.getAttribute('aria-label'), getComputedStyle(button).display !== 'none']),
-        ),
-        scrollWidth: document.documentElement.scrollWidth,
-      };
-    });
-    suiteLifetime.assertActive('Home Continue inspection result');
-    return inspection;
-  }, [
-    {
-      label: 'Home Continue inspection context',
-      run: () => (context ? closeContext(context) : undefined),
-      timeoutMs: 6000,
-    },
-    {
-      label: 'Home Continue inspection browser',
-      run: () => (browser ? closeBrowser(browser) : undefined),
-      timeoutMs: 6000,
-    },
-  ]));
+  return suiteLifetime.run('Home Continue page inspection setup', async () =>
+    withCleanup(async () => {
+      const origin = await site();
+      suiteLifetime.assertActive('Home Continue inspection browser launch');
+      browser = await launchBrowser();
+      suiteLifetime.assertActive('Home Continue inspection context setup');
+      context = await createContext(
+        browser,
+        { viewport: { width, height: 844 }, hasTouch: false },
+        'Home Continue inspection context acquisition',
+      );
+      suiteLifetime.assertActive('Home Continue inspection context acquisition completion');
+      await context.addCookies([
+        { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
+      ]);
+      suiteLifetime.assertActive('Home Continue inspection cookie setup');
+      const page = await context.newPage();
+      suiteLifetime.assertActive('Home Continue inspection page creation');
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      suiteLifetime.assertActive('Home Continue inspection navigation');
+      await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
+      suiteLifetime.assertActive('Home Continue inspection personal readiness');
+      await page.waitForLoadState('networkidle');
+      suiteLifetime.assertActive('Home Continue inspection network readiness');
+      if (openMenu) {
+        await page.locator('[data-slot="cover-card-actions"] button').first().click();
+        suiteLifetime.assertActive('Home Continue inspection menu action');
+        await page.locator('[data-slot="drawer-content"]').waitFor();
+        suiteLifetime.assertActive('Home Continue inspection drawer readiness');
+      }
+      const inspection = await page.evaluate(() => {
+        const personal = document.querySelector<HTMLElement>('[data-slot="personal"]');
+        const row = personal?.querySelector<HTMLElement>('[data-slot="cover-row"]');
+        const cards = [...(personal?.querySelectorAll<HTMLElement>('[data-slot="cover-card"]') ?? [])];
+        const next = personal?.nextElementSibling as HTMLElement | null;
+        const bounds = (element: HTMLElement | null) => {
+          const rect = element?.getBoundingClientRect();
+          return rect ? { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right } : null;
+        };
+        const style = row ? getComputedStyle(row) : null;
+        return {
+          personalClass: personal?.className ?? '',
+          personal: bounds(personal ?? null),
+          next: bounds(next),
+          row: row
+            ? {
+                clientWidth: row.clientWidth,
+                scrollWidth: row.scrollWidth,
+                snap: style?.scrollSnapType ?? '',
+                bounds: bounds(row),
+                cards: cards.map(bounds),
+              }
+            : null,
+          cardCount: cards.length,
+          titlesInCovers: cards.map((card) => card.querySelector('[data-slot="cover"]')?.textContent?.trim() ?? ''),
+          captionCount: personal?.querySelectorAll('[data-slot="cover-caption"]').length ?? 0,
+          progressCount: personal?.querySelectorAll('[data-slot="progress-row"]').length ?? 0,
+          placeholderGlyphCount: [...(personal?.querySelectorAll('[data-slot="cover"]') ?? [])].filter((cover) =>
+            cover.textContent?.includes('…'),
+          ).length,
+          drawerOpen: !!document.querySelector('[data-slot="drawer-content"]'),
+          menuButtons: [...(personal?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? [])].map((button) =>
+            button.getAttribute('aria-label'),
+          ),
+          controlVisibility: Object.fromEntries(
+            [
+              ...(personal?.querySelectorAll<HTMLButtonElement>(
+                'button[aria-label="Next Continue items"], button[aria-label="Previous Continue items"]',
+              ) ?? []),
+            ].map((button) => [button.getAttribute('aria-label'), getComputedStyle(button).display !== 'none']),
+          ),
+          scrollWidth: document.documentElement.scrollWidth,
+        };
+      });
+      suiteLifetime.assertActive('Home Continue inspection result');
+      return inspection;
+    }, [
+      {
+        label: 'Home Continue inspection context',
+        run: () => (context ? closeContext(context) : undefined),
+        timeoutMs: 6000,
+      },
+      {
+        label: 'Home Continue inspection browser',
+        run: () => (browser ? closeBrowser(browser) : undefined),
+        timeoutMs: 6000,
+      },
+    ]),
+  );
 }
 function main(html: string) {
   return /<main\b[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? html;
@@ -907,13 +914,18 @@ test('Home Continue retirement fences late startup and closes late browser/conte
   const portStarted = deferred<void>();
   const pendingPort = deferred<number>();
   let viteLaunches = 0;
-  const startup = startWithPort(lifetime, 'fixture Vite startup', () => {
-    portStarted.resolve();
-    return pendingPort.promise;
-  }, async () => {
-    viteLaunches += 1;
-    return 'http://127.0.0.1:4173';
-  });
+  const startup = startWithPort(
+    lifetime,
+    'fixture Vite startup',
+    () => {
+      portStarted.resolve();
+      return pendingPort.promise;
+    },
+    async () => {
+      viteLaunches += 1;
+      return 'http://127.0.0.1:4173';
+    },
+  );
   await portStarted.promise;
 
   const browserStarted = deferred<void>();

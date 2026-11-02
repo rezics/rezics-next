@@ -406,12 +406,7 @@ class SuiteLifetime {
     adopt: (resource: T) => void,
     close: (resource: T) => Promise<void>,
   ): Promise<T> {
-    return this.observe(
-      label,
-      acquire,
-      adopt,
-      (resource) => this.closeLate(label, resource, close),
-    );
+    return this.observe(label, acquire, adopt, (resource) => this.closeLate(label, resource, close));
   }
 
   retainCleanup(label: string, close: () => Promise<void>, timeoutMs = 5000) {
@@ -476,9 +471,7 @@ class SuiteLifetime {
     const retained: LateSuiteResource = { label, close: () => close(resource) };
     this.lateResources.add(retained);
     try {
-      await cleanupAll([
-        { label: `Home cards late ${label}`, run: retained.close, timeoutMs: 5000 },
-      ]);
+      await cleanupAll([{ label: `Home cards late ${label}`, run: retained.close, timeoutMs: 5000 }]);
       this.lateResources.delete(retained);
     } catch (error) {
       throw new Error(`Home cards late ${label} cleanup failed`, { cause: error });
@@ -522,11 +515,7 @@ class SuiteLifetime {
 
 const suiteLifetime = new SuiteLifetime();
 
-function retireSuite(
-  lifetime: SuiteLifetime,
-  label: string,
-  actions: Parameters<typeof cleanupAll>[0],
-) {
+function retireSuite(lifetime: SuiteLifetime, label: string, actions: Parameters<typeof cleanupAll>[0]) {
   lifetime.retire();
   return cleanupAll([
     ...lifetime.cleanupActions(),
@@ -623,13 +612,10 @@ function freePort(lifetime: SuiteLifetime, label: string): Promise<number> {
     });
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      void closeProbe().then(
-        () => {
-          release();
-          resolve(port);
-        },
-        reject,
-      );
+      void closeProbe().then(() => {
+        release();
+        resolve(port);
+      }, reject);
     });
   });
 }
@@ -724,7 +710,9 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
   return suiteLifetime.run('Home cards sign-in setup', async () => {
     const origin = await site();
     suiteLifetime.assertActive('Home cards sign-in request');
-    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
+    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
+      redirect: 'manual',
+    });
     suiteLifetime.assertActive('Home cards sign-in response');
     const location = new URL(start.headers.get('location')!);
     const params = location.searchParams;
@@ -840,13 +828,18 @@ test('Home cards teardown fences a late port, closes late browser/context handle
   const portRequestStarted = deferred<void>();
   const pendingPort = deferred<number>();
   let viteLaunches = 0;
-  const startup = startWithPort(lifetime, 'fixture Vite startup', () => {
-    portRequestStarted.resolve();
-    return pendingPort.promise;
-  }, async () => {
-    viteLaunches += 1;
-    return 'http://127.0.0.1:4173';
-  });
+  const startup = startWithPort(
+    lifetime,
+    'fixture Vite startup',
+    () => {
+      portRequestStarted.resolve();
+      return pendingPort.promise;
+    },
+    async () => {
+      viteLaunches += 1;
+      return 'http://127.0.0.1:4173';
+    },
+  );
   await portRequestStarted.promise;
 
   const browserLaunchStarted = deferred<void>();
@@ -864,18 +857,18 @@ test('Home cards teardown fences a late port, closes late browser/context handle
       (acquisition) => {
         browserAcquisition = acquisition;
       },
-    () => {
-      browserLaunches += 1;
-      browserLaunchStarted.resolve();
-      return pendingBrowser.promise;
-    },
+      () => {
+        browserLaunches += 1;
+        browserLaunchStarted.resolve();
+        return pendingBrowser.promise;
+      },
       (resource) => {
         currentBrowser = resource;
       },
-    async () => {
-      lateBrowserCloses += 1;
-    },
-  );
+      async () => {
+        lateBrowserCloses += 1;
+      },
+    );
   const browser = getFixtureBrowser();
   const sharedBrowser = getFixtureBrowser();
   expect(sharedBrowser).toBe(browser);

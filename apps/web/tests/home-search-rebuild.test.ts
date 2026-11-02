@@ -633,11 +633,7 @@ class SuiteLifetime {
 
 const suiteLifetime = new SuiteLifetime();
 
-function retireSuite(
-  lifetime: SuiteLifetime,
-  label: string,
-  actions: Parameters<typeof cleanupAll>[0],
-) {
+function retireSuite(lifetime: SuiteLifetime, label: string, actions: Parameters<typeof cleanupAll>[0]) {
   lifetime.retire();
   return cleanupAll([
     ...lifetime.cleanupActions(),
@@ -734,13 +730,10 @@ function freePort(lifetime: SuiteLifetime, label: string): Promise<number> {
     });
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      void closeProbe().then(
-        () => {
-          release();
-          resolve(port);
-        },
-        reject,
-      );
+      void closeProbe().then(() => {
+        release();
+        resolve(port);
+      }, reject);
     });
   });
 }
@@ -830,7 +823,9 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
   return suiteLifetime.run('Home search rebuild sign-in setup', async () => {
     const origin = await site();
     suiteLifetime.assertActive('Home search rebuild sign-in request');
-    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
+    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
+      redirect: 'manual',
+    });
     suiteLifetime.assertActive('Home search rebuild sign-in response');
     const location = new URL(start.headers.get('location')!);
     const params = location.searchParams;
@@ -1049,13 +1044,18 @@ test('Home search rebuild retirement fences the Vite port, shares browser launch
   const portStarted = deferred<void>();
   const pendingPort = deferred<number>();
   let viteLaunches = 0;
-  const startup = startWithPort(lifetime, 'fixture Vite startup', () => {
-    portStarted.resolve();
-    return pendingPort.promise;
-  }, async () => {
-    viteLaunches += 1;
-    return 'http://127.0.0.1:4173';
-  });
+  const startup = startWithPort(
+    lifetime,
+    'fixture Vite startup',
+    () => {
+      portStarted.resolve();
+      return pendingPort.promise;
+    },
+    async () => {
+      viteLaunches += 1;
+      return 'http://127.0.0.1:4173';
+    },
+  );
   await portStarted.promise;
 
   const browserStarted = deferred<void>();
@@ -1093,11 +1093,7 @@ test('Home search rebuild retirement fences the Vite port, shares browser launch
   lifetime.retire();
   pendingPort.resolve(4173);
   pendingBrowser.resolve({ name: 'late browser' });
-  const [startupResult, firstResult, secondResult] = await Promise.allSettled([
-    startup,
-    firstBrowser,
-    secondBrowser,
-  ]);
+  const [startupResult, firstResult, secondResult] = await Promise.allSettled([startup, firstBrowser, secondBrowser]);
   await lifetime.settlePending();
   expect(startupResult.status).toBe('rejected');
   expect(firstResult.status).toBe('rejected');
