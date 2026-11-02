@@ -49,9 +49,11 @@ test('shared scans account for a producer once and unmatched scans remain visibl
   );
   expect(shared.sharedHit).toBe(12);
 
-  const unmatched = cost(node('Result', 7, {
-    plans: [node('Result', 20, { producer: 'items' }), node('CTE Scan', 7, { scan: 'other' })],
-  }));
+  const unmatched = cost(
+    node('Result', 7, {
+      plans: [node('Result', 20, { producer: 'items' }), node('CTE Scan', 7, { scan: 'other' })],
+    }),
+  );
   expect(unmatched.sharedHit).toBe(27);
   expect(medianCost([unmatched]).limitations).toEqual(unmatched.limitations);
   expect(unmatched.limitations).toHaveLength(1);
