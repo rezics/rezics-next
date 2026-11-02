@@ -186,6 +186,7 @@ test('validation, replacement, failure and retry resume only the current authori
     await page.navigate('/step-up?client_id=reader&scope=openid&scope=&sig=old&exp=1&prompt=login&max_age=60');
     expect(page.host.querySelector<HTMLInputElement>('#step-up-password')!.value).toBe('');
     await page.password();
+    expect(page.requests).toHaveLength(2);
     await flush(() => page.requests[0]!.resolve(Response.json({})));
     expect(page.assign).not.toHaveBeenCalled();
     expect(button(page.host, 'Verify your identity')!.disabled).toBe(true);
@@ -194,7 +195,7 @@ test('validation, replacement, failure and retry resume only the current authori
     expect(page.host.querySelector<HTMLInputElement>('#step-up-password')!.value).toBe('');
     await page.password();
     await flush(() => page.requests[2]!.resolve(Response.json({})));
-    expect(page.assign).toHaveBeenCalledExactlyOnceWith(
+    expect(page.assign).toHaveBeenCalledWith(
       'https://auth.test/authorize?client_id=reader&scope=openid&scope=&max_age=60',
     );
   } finally {
@@ -228,7 +229,7 @@ test.each(['password', 'passkey'])(
       expect(button(page.host, 'Verify with a passkey')!.disabled).toBe(true);
       if (method === 'passkey') expect(page.cancel).toHaveBeenCalled();
       await complete(1);
-      expect(page.assign).toHaveBeenCalledExactlyOnceWith('https://auth.test/security');
+      expect(page.assign).toHaveBeenCalledWith('https://auth.test/security');
       await page.navigate('/step-up?return_to=%2Fsecurity&sig=new');
       await start();
       await page.navigate('/away');

@@ -28,10 +28,16 @@ class ConfirmationJourney {
   active = false;
   private pending: { kind: 'password' | 'passkey' } | null = null;
 
-  constructor(readonly href: string) {}
+  private request: { href: string; query: string; origin: string } | null = null;
+
+  activate() {
+    // Capture the browser spelling, preserving repeated/empty signed parameters through router normalization.
+    this.request = { href: window.location.href, query: window.location.search, origin: window.location.origin };
+    this.active = true;
+  }
 
   private isCurrent() {
-    return this.active && this.href === window.location.pathname + window.location.search + window.location.hash;
+    return this.active && this.request?.href === window.location.href;
   }
 
   private cancel() {
@@ -52,6 +58,8 @@ class ConfirmationJourney {
     this.pending = pending;
     const isCurrent = () => this.isCurrent() && this.pending === pending;
     return {
+      query: this.request!.query,
+      origin: this.request!.origin,
       isCurrent,
       finish: (success: boolean) => {
         if (!isCurrent()) return false;
@@ -67,9 +75,9 @@ function StepUpPage() {
   const href = useLocation({ select: (location) => location.href });
   const [generation, setGeneration] = useState(0);
   const [suspended, setSuspended] = useState(false);
-  const journey = useMemo(() => new ConfirmationJourney(href), [href, generation]);
+  const journey = useMemo(() => new ConfirmationJourney(), [href, generation]);
   useLayoutEffect(() => {
-    journey.active = true;
+    journey.activate();
     const hide = () => {
       journey.retire();
       setSuspended(true);
@@ -91,11 +99,11 @@ function StepUpPage() {
   return suspended ? (
     <AuthPage heading={m.auth_step_up_heading()} />
   ) : (
-    <StepUpForm key={`${href}:${generation}`} journey={journey} query={new URL(href, 'https://auth.invalid').search} />
+    <StepUpForm key={`${href}:${generation}`} journey={journey} />
   );
 }
 
-function StepUpForm({ journey, query }: { journey: ConfirmationJourney; query: string }) {
+function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -124,7 +132,7 @@ function StepUpForm({ journey, query }: { journey: ConfirmationJourney; query: s
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    const outcome = await confirmStepUpWithPasskey(query, window.location.origin, completion.isCurrent);
+    const outcome = await confirmStepUpWithPasskey(completion.query, completion.origin, completion.isCurrent);
     if (!completion.finish(outcome.ok)) return;
     if (outcome.ok) {
       window.location.assign(outcome.target);
@@ -150,7 +158,7 @@ function StepUpForm({ journey, query }: { journey: ConfirmationJourney; query: s
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    const outcome = await confirmStepUp(email, password, query, window.location.origin, completion.isCurrent);
+    const outcome = await confirmStepUp(email, password, completion.query, completion.origin, completion.isCurrent);
     if (!completion.finish(outcome.ok)) return;
     setPassword('');
     if (outcome.ok) {
