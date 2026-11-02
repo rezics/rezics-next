@@ -36,6 +36,11 @@ An uncertain submit freezes the exact draft and idempotency key for retry; concu
 A key conflict requires explicit review before a new request. A confirmed creation with an unavailable reader
 keeps its exact ID and offers an ordinary read retry without creating again. This private, uncached form is noindex.
 
+Character creation keeps multilingual terms and optional initial facts in semantic field groups using the shared
+content frame; terms use one column on phones and two on desktop. Confirmed creation leads with its status and
+reader actions, with the exact returned ID in labeled technical details; concealment and unavailable-reader
+messages remain visible beside the read retry.
+
 ## Create and correct a recipe
 
 `/{locale}/catalogue/recipe`, linked from catalogue creation, creates a released `schema:Recipe` with initial

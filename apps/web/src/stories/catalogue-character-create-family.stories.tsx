@@ -171,6 +171,13 @@ export const Phone: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.character_create() }));
     await expect(canvas.findByRole('link', { name: m.candidate_view_public() })).resolves.toBeVisible();
     await expect(canvas.getByRole('link', { name: m.character_correct() })).toBeVisible();
+    for (const name of [m.candidate_view_public(), m.character_correct()]) {
+      const link = canvas.getByRole('link', { name });
+      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(canvasElement.querySelector('[data-slot="character-created"] details')!.hasAttribute('open')).toBe(
+      false,
+    );
     await expect(canvas.queryByRole('form')).toBeNull();
   },
 };

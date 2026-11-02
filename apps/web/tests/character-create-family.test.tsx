@@ -175,6 +175,9 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       `${reader.getAttribute('href')}/character`,
     );
     expect(host.querySelector('[data-slot="character-created"]')!.textContent).toContain(m.character_created());
+    const readback = host.querySelector('[data-slot="character-created"]')!;
+    expect(readback.querySelector('details')!.open).toBe(false);
+    expect(readback.querySelector('code')!.textContent).toBe(characterCreatedId);
     expect(host.querySelector('form')).toBeNull();
 
     const invalid = characterProfileFixture();
@@ -267,6 +270,26 @@ test('Character creation keeps multilingual identity, initial facts, correction 
         expect(canvas().queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
       }
     }
+    // A recovered ordinary read opens the returned identity without sending another creation command.
+    const recovered = characterProfileFixture('reader-unavailable');
+    const readIds: string[] = [];
+    await render(recovered, {
+      ...recovered.transport,
+      read: async (id) => {
+        readIds.push(id);
+        return { state: 'ready', href: `/en/subjects/${id}/recovered-traveler` };
+      },
+    });
+    await name('Recovered traveler');
+    await submit();
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
+    await click(m.correction_retry());
+    expect(readIds).toEqual([characterCreatedId]);
+    expect(canvas().getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toBe(
+      `/en/subjects/${characterCreatedId}/recovered-traveler`,
+    );
+    expect(writes(recovered)).toHaveLength(1);
+
     const conflict = characterProfileFixture();
     const attempts: CharacterCommand[] = [];
     const conflicting: CharacterTransport = {

@@ -4,7 +4,7 @@ import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -23,7 +23,7 @@ import {
 import { characterDraft, characterGroups, type CharacterCommand, type CharacterTransport } from './character-profile';
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
 /** Initial terms and explicitly added facts use the existing validators, scalar controls and subject POST. */
@@ -180,94 +180,99 @@ function CharacterProfileCreateLive({
           {m.catalogue_create_aliases_help({}, o)}
         </p>
         {terms.map((term, index) => (
-          <fieldset
+          <ContentItemFrame
+            as="div"
             key={term.id}
-            id={`${termsId}-${term.id}`}
-            className="min-w-0 space-y-3 border-s-2 border-border ps-4"
+            data-slot="character-create-language"
+            className="min-w-0 max-w-full py-3 sm:py-4"
           >
-            <legend className="mb-3 max-w-full font-medium">
-              {m.character_create_correction_term({ number: index + 1 }, o)}
-              {term.language && <span className="ms-2 text-sm text-muted-foreground">{term.language}</span>}
-            </legend>
-            {(['language', 'label', 'description', 'aliases'] as const).map((key) => (
-              <Field key={key} className="min-w-0">
-                <FieldLabel className={labelClassName} htmlFor={`${termsId}-${key}-${term.id}`}>
-                  {
-                    {
-                      language: m.catalogue_create_language({}, o),
-                      label: m.catalogue_create_label({}, o),
-                      description: m.catalogue_create_description({}, o),
-                      aliases: m.catalogue_create_aliases({}, o),
-                    }[key]
-                  }
-                </FieldLabel>
-                {key === 'aliases' ? (
-                  <Textarea
-                    className="min-w-0 max-w-full"
-                    id={`${termsId}-${key}-${term.id}`}
-                    {...feedback(`${termsId}-${key}-${term.id}`)}
-                    aria-describedby={
-                      [feedback(`${termsId}-${key}-${term.id}`)['aria-describedby'], `${termsId}-aliases-help`]
-                        .filter(Boolean)
-                        .join(' ') || undefined
-                    }
-                    lang={/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(term.language) ? term.language : undefined}
-                    dir="auto"
-                    value={term[key]}
-                    onChange={(event) =>
-                      setTerms((previous) =>
-                        previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
-                      )
-                    }
-                  />
-                ) : (
-                  <Input
-                    className="min-h-11 min-w-0 max-w-full md:pointer-fine:min-h-8"
-                    id={`${termsId}-${key}-${term.id}`}
-                    {...feedback(`${termsId}-${key}-${term.id}`)}
-                    aria-describedby={
-                      [
-                        feedback(`${termsId}-${key}-${term.id}`)['aria-describedby'],
-                        key === 'language' ? `${termsId}-${key}-help` : undefined,
-                      ]
-                        .filter(Boolean)
-                        .join(' ') || undefined
-                    }
-                    lang={
-                      key !== 'language' && /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(term.language)
-                        ? term.language
-                        : undefined
-                    }
-                    dir={key === 'language' ? 'ltr' : 'auto'}
-                    aria-required={key === 'label' || undefined}
-                    value={term[key]}
-                    onChange={(event) =>
-                      setTerms((previous) =>
-                        previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
-                      )
-                    }
-                  />
-                )}
-              </Field>
-            ))}
-            {index > 0 && (
-              <CreateSubjectLanguageRemove
-                locale={locale}
-                rowId={`${termsId}-${term.id}`}
-                focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
-                disabled={locked}
-                onRemove={() => {
-                  if (locked || running.current || pending.current) return;
-                  setTerms((previous) => previous.filter((row) => row.id !== term.id));
-                  setFailure(undefined);
-                }}
-              />
-            )}
-          </fieldset>
+            <fieldset id={`${termsId}-${term.id}`} className="min-w-0 space-y-3">
+              <legend className="mb-3 max-w-full font-medium">
+                {m.character_create_correction_term({ number: index + 1 }, o)}
+                {term.language && <span className="ms-2 text-sm text-muted-foreground">{term.language}</span>}
+              </legend>
+              <FieldGroup className="grid min-w-0 gap-4 sm:grid-cols-2">
+                {(['language', 'label', 'description', 'aliases'] as const).map((key) => (
+                  <Field key={key} className="min-w-0">
+                    <FieldLabel className={labelClassName} htmlFor={`${termsId}-${key}-${term.id}`}>
+                      {
+                        {
+                          language: m.catalogue_create_language({}, o),
+                          label: m.catalogue_create_label({}, o),
+                          description: m.catalogue_create_description({}, o),
+                          aliases: m.catalogue_create_aliases({}, o),
+                        }[key]
+                      }
+                    </FieldLabel>
+                    {key === 'aliases' ? (
+                      <Textarea
+                        className="min-w-0 max-w-full"
+                        id={`${termsId}-${key}-${term.id}`}
+                        {...feedback(`${termsId}-${key}-${term.id}`)}
+                        aria-describedby={
+                          [feedback(`${termsId}-${key}-${term.id}`)['aria-describedby'], `${termsId}-aliases-help`]
+                            .filter(Boolean)
+                            .join(' ') || undefined
+                        }
+                        lang={/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(term.language) ? term.language : undefined}
+                        dir="auto"
+                        value={term[key]}
+                        onChange={(event) =>
+                          setTerms((previous) =>
+                            previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
+                          )
+                        }
+                      />
+                    ) : (
+                      <Input
+                        className="min-h-11 min-w-0 max-w-full md:pointer-fine:min-h-8"
+                        id={`${termsId}-${key}-${term.id}`}
+                        {...feedback(`${termsId}-${key}-${term.id}`)}
+                        aria-describedby={
+                          [
+                            feedback(`${termsId}-${key}-${term.id}`)['aria-describedby'],
+                            key === 'language' ? `${termsId}-${key}-help` : undefined,
+                          ]
+                            .filter(Boolean)
+                            .join(' ') || undefined
+                        }
+                        lang={
+                          key !== 'language' && /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(term.language)
+                            ? term.language
+                            : undefined
+                        }
+                        dir={key === 'language' ? 'ltr' : 'auto'}
+                        aria-required={key === 'label' || undefined}
+                        value={term[key]}
+                        onChange={(event) =>
+                          setTerms((previous) =>
+                            previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
+                          )
+                        }
+                      />
+                    )}
+                  </Field>
+                ))}
+              </FieldGroup>
+              {index > 0 && (
+                <CreateSubjectLanguageRemove
+                  locale={locale}
+                  rowId={`${termsId}-${term.id}`}
+                  focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
+                  disabled={locked}
+                  onRemove={() => {
+                    if (locked || running.current || pending.current) return;
+                    setTerms((previous) => previous.filter((row) => row.id !== term.id));
+                    setFailure(undefined);
+                  }}
+                />
+              )}
+            </fieldset>
+          </ContentItemFrame>
         ))}
         <Button
           id={`${termsId}-add`}
-          className="h-auto min-h-11 max-w-full whitespace-normal"
+          className={actionClassName}
           type="button"
           variant="outline"
           disabled={locked}
@@ -402,7 +407,12 @@ function CharacterProfileCreateLive({
         })}
       </fieldset>
       {failure && (
-        <div role="alert" className="space-y-2">
+        <ContentItemFrame
+          as="div"
+          role="alert"
+          data-slot="character-create-recovery"
+          className="min-w-0 space-y-2 py-3 sm:py-4"
+        >
           <EditorFailure reason={failure.reason === 'conflict' ? 'stale' : failure.reason} locale={locale} />
           {failure.reason === 'unavailable' && <p>{m.catalogue_create_uncertain({}, o)}</p>}
           {failure.reason === 'conflict' && <p>{m.catalogue_create_conflict({}, o)}</p>}
@@ -464,7 +474,7 @@ function CharacterProfileCreateLive({
               {m.catalogue_create_review_new({}, o)}
             </Button>
           )}
-        </div>
+        </ContentItemFrame>
       )}
       <Button className={actionClassName} type="submit" disabled={busy || failure?.reason === 'conflict'}>
         {busy

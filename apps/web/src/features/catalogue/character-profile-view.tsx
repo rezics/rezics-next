@@ -160,7 +160,17 @@ function CharacterProfileLive({
                 className="min-w-0 space-y-3 py-3 [overflow-wrap:anywhere]"
               >
                 <p role="status">{m.character_created({}, o)}</p>
-                <code className="break-all">{created.id}</code>
+                <details className="min-w-0 text-sm">
+                  <summary className="min-h-11 cursor-pointer py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                    {m.catalogue_creation_technical_details({}, o)}
+                  </summary>
+                  <dl className="min-w-0">
+                    <dt>{m.specialist_identity_subject_id({}, o)}</dt>
+                    <dd>
+                      <code className="select-all [overflow-wrap:anywhere]">{created.id}</code>
+                    </dd>
+                  </dl>
+                </details>
                 {created.reader.state === 'ready' ? (
                   <div className="flex flex-wrap gap-2">
                     <a className={buttonVariants({ className: createActionClass })} href={created.reader.href}>
