@@ -349,6 +349,8 @@ implement them in this stack.
 
 The variant and placeholder code lives in `media-image-sources.ts`, so `Cover` can import the same summary types and `srcset` writer.
 
+The content-owned `NativeDocumentImage` keeps its wrapper where derivative failure must stay bound to the native `id` plus digest identity and hide source credit when no derivative remains available.
+
 ## Entity picker
 
 `EntityPicker` chooses subjects by searching. Import it from `@rezics/ui/entity-picker`. The site passes `search(text, signal)`, which resolves `{ id, title, types, typeLabel, year?, cover }[]`, and the `src` builder `Cover` needs.
