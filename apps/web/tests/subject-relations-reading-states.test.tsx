@@ -10,11 +10,14 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-test('The mounted standalone Subject Relations page distinguishes failed, empty and populated reading states and keeps its actual native continuation usable without inferring absent relations.', async () => {
+test('The mounted Relations page distinguishes failure from a decoded empty current page and preserves its real native continuation.', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/subjects/reading/relations' });
+  const window = new Window({
+    url: 'https://site.test/en/subjects/reading/relations?property=wdt%3AP155&cursor=previous',
+    width: 320,
+  });
   const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
   for (const [key, value] of Object.entries(globals))
@@ -23,7 +26,6 @@ test('The mounted standalone Subject Relations page distinguishes failed, empty 
     { createRoot },
     { RelationsView },
     { SubjectFrame, subjectFrame },
-    { PendingPage },
     { PlainLink },
     { defaultReader },
     { m },
@@ -32,7 +34,6 @@ test('The mounted standalone Subject Relations page distinguishes failed, empty 
     import('react-dom/client'),
     import('../src/features/pages/relations-view'),
     import('../src/features/pages/subject-frame'),
-    import('../src/shell/pending'),
     import('../src/features/pages/shared'),
     import('../src/subject/reader'),
     import('../src/paraglide/messages.js'),
@@ -63,30 +64,24 @@ test('The mounted standalone Subject Relations page distinguishes failed, empty 
       },
     },
   };
-  const render = async (body?: Record<string, unknown>) =>
+  const render = async (body: Record<string, unknown>) =>
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
           <AnonymousSessionContext.Provider value>
-            {body ? (
-              <RelationsView
-                locale="en"
-                subject={{ id: frame.id, label: frame.title.text }}
-                frame={<SubjectFrame frame={frame} locale="en" unlabelled="Unlabelled" view="relations" />}
-                data={{ body, property: 'wdt:P155' }}
-                relations={definitions}
-                value={value}
-              />
-            ) : (
-              <PendingPage />
-            )}
+            <RelationsView
+              locale="en"
+              subject={{ id: frame.id, label: frame.title.text }}
+              frame={<SubjectFrame frame={frame} locale="en" unlabelled="Unlabelled" view="relations" />}
+              data={{ body, property: 'wdt:P155' }}
+              relations={definitions}
+              value={value}
+            />
           </AnonymousSessionContext.Provider>
         </QueryClientProvider>,
       ),
     );
   try {
-    await render();
-    expect(host.querySelector('[aria-busy="true"]')?.getAttribute('aria-label')).toBe(m.candidate_loading());
     const rows = links.links.filter((row) => row.property === 'wdt:P155');
     for (const [body, message, count] of [
       [{ links: null, next: cursor }, m.subject_section_failed(), undefined],
@@ -95,6 +90,7 @@ test('The mounted standalone Subject Relations page distinguishes failed, empty 
       [{ links: rows, count: { value: 40, exact: true }, next: cursor }, null, '40'],
     ] as const) {
       await render(body);
+      expect(host.querySelectorAll('h1')).toHaveLength(1);
       expect(host.querySelector('h1')?.textContent).toBe('Sequel');
       expect(host.querySelector('[role="alert"], [role="status"]')?.textContent ?? null).toBe(message);
       expect(host.querySelector('[data-slot="view-heading"] [data-slot="count"]')?.textContent).toBe(count);

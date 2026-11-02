@@ -5,67 +5,65 @@ import { SubjectFrame, subjectFrame } from '../features/pages/subject-frame';
 import { SubjectLink, viewTabLabels } from '../features/pages/route-support';
 import { subjectTabs } from '../features/pages/views';
 import recording from '../kernel/recorded/subject-page.json';
+import links from '../kernel/recorded/subject-links.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
-import { PendingPage } from '../shell/pending';
 import { defaultReader } from '../subject/reader';
 import { PatternStory } from './page';
 
-type State = 'empty' | 'unavailable' | 'loading' | 'sparse';
+type State = 'empty' | 'unavailable' | 'populated';
 function ReadingPage({ state }: { state: State }) {
   const locale = getLocale();
   const frame = subjectFrame(recording as never, locale)!;
   const body =
     state === 'unavailable'
       ? {}
-      : {
-          links: [],
-          count: { value: state === 'empty' ? 0 : 9, exact: state === 'empty' },
-          next: state === 'sparse' ? 'opaque:/+?=&% 日本語#' : null,
-        };
+      : state === 'populated'
+        ? links
+        : {
+            links: [],
+            count: { value: 9, exact: false },
+            next: 'opaque:/+?=&% 日本語#',
+          };
   return (
     <PatternStory path={`/subjects/${frame.id}/reading/relations`}>
       <AppShell>
-        {state === 'loading' ? (
-          <PendingPage />
-        ) : (
-          <RelationsView
-            locale={locale}
-            subject={{ id: frame.id, label: frame.title.text }}
-            frame={
-              <SubjectFrame
-                frame={frame}
-                locale={locale}
-                link={SubjectLink}
-                reader={defaultReader}
-                unlabelled={m.subject_value_unlabelled()}
-                tabs={subjectTabs(recording as never)}
-                tabLabels={viewTabLabels()}
-                view="relations"
-              />
-            }
-            data={{ body, property: null }}
-            relations={{}}
-            value={{
-              locale,
-              link: SubjectLink,
-              reader: defaultReader,
-              unlabelled: m.subject_value_unlabelled(),
+        <RelationsView
+          locale={locale}
+          subject={{ id: frame.id, label: frame.title.text }}
+          frame={
+            <SubjectFrame
+              frame={frame}
+              locale={locale}
+              link={SubjectLink}
+              reader={defaultReader}
+              unlabelled={m.subject_value_unlabelled()}
+              tabs={subjectTabs(recording as never)}
+              tabLabels={viewTabLabels()}
+              view="relations"
+            />
+          }
+          data={{ body, property: null }}
+          relations={{}}
+          value={{
+            locale,
+            link: SubjectLink,
+            reader: defaultReader,
+            unlabelled: m.subject_value_unlabelled(),
+            spoilerShow: m.subject_spoiler_show(),
+            labels: {
               spoilerShow: m.subject_spoiler_show(),
-              labels: {
-                spoilerShow: m.subject_spoiler_show(),
-                documentSpoiler: m.thread_reveal_spoiler(),
-                cover: {
-                  withheld: m.subject_cover_withheld(),
-                  reveal: m.subject_cover_reveal(),
-                  credit: m.subject_cover_credit(),
-                  via: m.subject_cover_via(),
-                },
+              documentSpoiler: m.thread_reveal_spoiler(),
+              cover: {
+                withheld: m.subject_cover_withheld(),
+                reveal: m.subject_cover_reveal(),
+                credit: m.subject_cover_credit(),
+                via: m.subject_cover_via(),
               },
-            }}
-          />
-        )}
+            },
+          }}
+        />
       </AppShell>
     </PatternStory>
   );
@@ -82,7 +80,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Actual standalone RelationsView and frame with supplied native-format reading states. Sparse means this page is empty while its supplied continuation remains usable. Browser and native integration verification are separate.',
+          'Actual RelationsView and frame: an empty current page with continuation, an unavailable read with restart, and recorded populated relations. The empty page does not establish global absence.',
       },
     },
   },
@@ -90,28 +88,24 @@ const meta = {
   globals: { locale: 'en', viewport: { value: 'phone320' } },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    if (args.state === 'loading') {
-      await expect(await view.findByRole('region', { name: m.candidate_loading() })).toHaveAttribute(
-        'aria-busy',
-        'true',
-      );
-      await expect(view.queryByRole('alert')).toBeNull();
-      await expect(view.queryByText(m.subject_relation_empty_page())).toBeNull();
-      return;
-    }
     const heading = await view.findByRole('heading', { level: 1 });
     const region = heading.closest<HTMLElement>('[data-slot="relations-view"]')!;
     await expect(within(region).getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    await expect(within(region).getByRole(args.state === 'unavailable' ? 'alert' : 'status')).toHaveTextContent(
-      args.state === 'unavailable' ? m.subject_section_failed() : m.subject_relation_empty_page(),
-    );
+    if (args.state === 'populated') {
+      await expect(within(region).queryByRole('alert')).toBeNull();
+      await expect(within(region).queryByRole('status')).toBeNull();
+      await expect(within(region).getAllByRole('article')).toHaveLength(links.links.length);
+    } else
+      await expect(within(region).getByRole(args.state === 'unavailable' ? 'alert' : 'status')).toHaveTextContent(
+        args.state === 'unavailable' ? m.subject_section_failed() : m.subject_relation_empty_page(),
+      );
     const anchor = region.querySelector<HTMLAnchorElement>('[data-slot="next-page"], [data-slot="restart-page"]');
     if (!anchor) {
-      await expect(args.state).toBe('empty');
+      await expect(args.state).toBe('populated');
       return;
     }
     const destination = anchor.getAttribute('href');
-    if (args.state === 'sparse')
+    if (args.state === 'empty')
       await expect(new URL(anchor.href).searchParams.get('cursor')).toBe('opaque:/+?=&% 日本語#');
     else await expect(new URL(anchor.href).searchParams.has('cursor')).toBe(false);
     // Stress the actual native control without changing its destination or the locale catalogue.
@@ -137,7 +131,6 @@ const meta = {
 } satisfies Meta<typeof ReadingPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Empty: Story = {};
+export const Empty: Story = { globals: { locale: 'de' } };
 export const Unavailable: Story = { args: { state: 'unavailable' } };
-export const Loading: Story = { args: { state: 'loading' } };
-export const SparseWithContinuation: Story = { args: { state: 'sparse' }, globals: { locale: 'de' } };
+export const Populated: Story = { args: { state: 'populated' } };
