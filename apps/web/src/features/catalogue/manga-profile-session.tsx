@@ -41,11 +41,7 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
       search={search}
       transport={{
         load,
-        create: (data) =>
-          createCatalogueManga({
-            data: editorRequest(data, editorWork),
-            headers: csrfHeaders(),
-          }),
+        create: (data) => createCatalogueManga({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       correction={
@@ -59,23 +55,14 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
                     : { ok: false, reason: 'unavailable' };
                 },
                 propose: (data) =>
-                  submitFactCorrection({
-                    data: editorRequest(data, editorWork),
-                    headers: csrfHeaders(),
-                  }),
+                  submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
               },
               review: (_property, initialSession) => {
                 return {
                   read: async (property, cursor, session = initialSession, work) => {
                     if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await readSubjectCandidates({
-                      data: {
-                        expectedReader: work.reader,
-                        id,
-                        property,
-                        cursor,
-                        session,
-                      },
+                      data: { expectedReader: work.reader, id, property, cursor, session },
                       headers: csrfHeaders(),
                     });
                     return result;
@@ -139,26 +126,12 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
           initial={query.data}
           transport={{
             read,
-            propose: (data) =>
-              submitAuthoredField({
-                data: editorRequest(data, editorWork),
-                headers: csrfHeaders(),
-              }),
+            propose: (data) => submitAuthoredField({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
             review: (property, candidate, cursor, session, work) =>
               !work?.live()
-                ? Promise.resolve({
-                    comparison: { ok: false, reason: 'denied' },
-                    body: null,
-                  })
+                ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
                 : loadAuthoredReview({
-                    data: {
-                      id,
-                      property,
-                      candidate,
-                      cursor,
-                      session,
-                      expectedReader: work.reader,
-                    },
+                    data: { id, property, candidate, cursor, session, expectedReader: work.reader },
                     headers: csrfHeaders(),
                   }),
           }}

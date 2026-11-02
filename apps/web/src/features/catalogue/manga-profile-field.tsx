@@ -68,11 +68,7 @@ export function MangaInitialField({
   const authored = row.authored ?? newAuthoredField();
   const update = (statement: StatementInput) => onChange({ ...row, statement });
   const updateAuthored = (next: AuthoredField) =>
-    onChange({
-      ...row,
-      authored: next,
-      statement: { ...row.statement, value: authoredFieldValue(next) },
-    });
+    onChange({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
   const name = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale).text;
   const control = (part: SnakInput, address: string, statement: (value: SnakInput['value']) => StatementInput) => {
     const definition = read.release.properties[part.property.id];
@@ -86,21 +82,14 @@ export function MangaInitialField({
         picked={row.targets?.[part.property.id] ?? []}
         mangaWork={type === 'schema:PublicationVolume' && part.property.id === 'wdt:P179'}
         onChange={(value, items) =>
-          onChange({
-            ...row,
-            statement: statement(value),
-            targets: { ...row.targets, [part.property.id]: items },
-          })
+          onChange({ ...row, statement: statement(value), targets: { ...row.targets, [part.property.id]: items } })
         }
       />
     ) : (
       <ScalarControl
         part={part}
         definition={definition}
-        read={{
-          release: read.release,
-          public: { related: read.public?.related ?? {} },
-        }}
+        read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
         locale={locale}
         feedback={{ ...feedback, address }}
         onChange={(value) => update(statement(value))}
@@ -247,10 +236,7 @@ export function MangaInitialField({
                     ...row.statement,
                     qualifiers: [
                       ...(row.statement.qualifiers ?? []),
-                      {
-                        property: { id: qualifier },
-                        value: { type: 'value', content: '' },
-                      },
+                      { property: { id: qualifier }, value: { type: 'value', content: '' } },
                     ],
                   });
                   setQualifier('');
