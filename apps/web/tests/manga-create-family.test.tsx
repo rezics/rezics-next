@@ -288,10 +288,14 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(a.querySelector(`a[href="#original-${authored.id.replace('manga-row-', '')}"]`)).not.toBeNull();
     await act(async () => user.click(within(authored).getByRole('checkbox', { name: m.authored_original() })));
     await replace(input(authored, m.relation_citation()), 'https://example.org/original-summary');
+    await click(authored, m.recipe_remove_field());
     await click(a, m.manga_title());
     await until(() => a.textContent!.includes(m.correction_unavailable()));
     expect(posts(series)).toHaveLength(1);
     const sealed = structuredClone(commands[0]!);
+    expect(within(authored).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled')).toBe(true);
+    await click(authored, m.recipe_remove_field());
+    expect(authored.isConnected).toBe(true);
     expect((input(a, m.catalogue_create_label()) as HTMLInputElement).matches(':disabled')).toBe(true);
     expect(within(a).getByRole('button', { name: m.catalogue_create_add_language() }).matches(':disabled')).toBe(true);
     expect(within(b).getByRole('button', { name: m.catalogue_create_add_language() }).matches(':disabled')).toBe(false);
@@ -518,7 +522,6 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     const staleLink = host.querySelector<HTMLAnchorElement>(`a[href="#${staleRow.id}"]`)!;
     await act(async () => user.click(staleLink));
     expect(window.document.activeElement).toBe(stalePanel);
-    await click(stalePanel, m.recipe_remove_field());
     await click(stalePanel, m.recipe_remove_field());
     expect(host.querySelector(`#${staleRow.id}`)).toBeNull();
     await click(host, m.manga_title());

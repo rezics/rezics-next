@@ -89,15 +89,21 @@ export function MangaInitialField({
   const remove = () => {
     if (!editable() || !section.current?.isConnected) return;
     const root = section.current;
-    const controls = [...((root.closest('form') ?? root.parentElement)?.querySelectorAll<HTMLElement>(
-      'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
-    ) ?? [])];
+    const controls = [
+      ...((root.closest('form') ?? root.parentElement)?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
+    ];
     const first = controls.findIndex((control) => root.contains(control));
     const last = controls.findLastIndex((control) => root.contains(control));
     const surviving = [...controls.slice(last + 1), ...controls.slice(0, first).reverse()];
-    surviving.find((control) =>
-      !control.matches(':disabled, [aria-disabled="true"]') && !control.closest('[hidden], [inert]'),
-    )?.focus();
+    surviving
+      .find(
+        (control) =>
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
     onRemove();
   };
   const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
@@ -359,10 +365,10 @@ export function MangaInitialField({
             >
               <p>{m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}</p>
               <div className="flex flex-wrap gap-2">
-                <Button ref={cancel} type="button" variant="outline" disabled={disabled} onClick={cancelRemoval}>
+                <Button ref={cancel} type="button" variant="outline" className="h-auto min-h-11 whitespace-normal" disabled={disabled} onClick={cancelRemoval}>
                   {m.candidate_cancel({}, o)}
                 </Button>
-                <Button type="button" variant="destructive" disabled={disabled} onClick={remove}>
+                <Button type="button" variant="destructive" className="h-auto min-h-11 whitespace-normal" disabled={disabled} onClick={remove}>
                   {m.recipe_remove_field({}, o)}
                 </Button>
               </div>

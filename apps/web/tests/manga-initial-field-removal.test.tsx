@@ -31,14 +31,15 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
   const read = { ok: true as const, release: fixture.release, public: null };
   const blank = (id: string, property = 'schema:inLanguage'): MangaRow => ({ id, statement: blankMangaStatement(property) });
   let rows: MangaRow[] = [], disabled = false, changes = 0;
-  const render = () => act(async () => root.render(<form>
+  const paint = () => root.render(<form>
     <input aria-label="Name" defaultValue="Shared terms" />
     <div>{rows.map((row) => <MangaInitialField key={row.id} row={row} read={read} type="schema:ComicSeries"
       locale="en" search={async () => []} disabled={disabled} feedback={{ id: `manga-row-${row.id}`, errors: [] }}
-      onChange={(next) => { changes++; rows = rows.map((item) => item.id === row.id ? next : item); void render(); }}
-      onRemove={() => { rows = rows.filter((item) => item.id !== row.id); void render(); }} />)}
+      onChange={(next) => { changes++; rows = rows.map((item) => item.id === row.id ? next : item); paint(); }}
+      onRemove={() => { rows = rows.filter((item) => item.id !== row.id); paint(); }} />)}
     <button type="button">Add field</button></div>
-  </form>));
+  </form>);
+  const render = () => act(async () => paint());
   const region = (id: string) => host.querySelector<HTMLElement>(`#manga-row-${id}`)!;
   const click = (scope: HTMLElement, label: string) => act(async () => user.click(within(scope).getByRole('button', { name: label })));
   const variants: MangaRow[] = [
