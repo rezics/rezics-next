@@ -200,38 +200,24 @@ function isAggregateFigure(value: unknown): value is Figure {
     typeof value.population !== 'string' ||
     !isInteger(value.count) ||
     value.count < 0 ||
-    !isFreshness(value.freshness)
+    (value.freshness !== undefined && !isFreshness(value.freshness)) ||
+    (value.mean !== undefined && (typeof value.mean !== 'number' || !Number.isFinite(value.mean))) ||
+    (value.histogram !== undefined &&
+      (!Array.isArray(value.histogram) ||
+        value.histogram.length < 1 ||
+        !value.histogram.every((count) => isInteger(count) && count >= 0))) ||
+    (value.remaining !== undefined && (!isInteger(value.remaining) || value.remaining < 1))
   )
     return false;
-
-  const hasMean = 'mean' in value;
-  const hasHistogram = 'histogram' in value;
-  const hasRemaining = 'remaining' in value;
-  if (hasMean || hasHistogram) {
-    return (
-      hasMean &&
-      hasHistogram &&
-      !hasRemaining &&
-      typeof value.mean === 'number' &&
-      Number.isFinite(value.mean) &&
-      Array.isArray(value.histogram) &&
-      value.histogram.length >= 1 &&
-      value.histogram.every((count) => isInteger(count) && count >= 0)
-    );
-  }
-  return !hasRemaining || (isInteger(value.remaining) && value.remaining >= 1);
+  return true;
 }
 
 function isStatistic(value: unknown): value is Statistic {
   if (!isRecord(value) || !isRecord(value.scale)) return false;
   const { min, max } = value.scale;
   return (
-    value.source === 'vndb' &&
-    typeof value.sourceRecordId === 'string' &&
-    value.sourceRecordId.length >= 1 &&
-    value.sourceRecordId.length <= 1024 &&
-    (value.sourceAlias === undefined ||
-      (typeof value.sourceAlias === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(value.sourceAlias))) &&
+    typeof value.source === 'string' &&
+    value.source.length > 0 &&
     isInteger(min) &&
     min >= 0 &&
     min <= 4096 &&
@@ -247,12 +233,10 @@ function isStatistic(value: unknown): value is Statistic {
     value.count >= 1 &&
     value.count <= 2_147_483_647 &&
     isDate(value.asOf) &&
-    typeof value.licence === 'string' &&
-    value.licence.length >= 1 &&
-    value.licence.length <= 1024 &&
-    typeof value.attribution === 'string' &&
-    value.attribution.length >= 1 &&
-    value.attribution.length <= 2000
+    (value.licence === undefined ||
+      (typeof value.licence === 'string' && value.licence.length >= 1 && value.licence.length <= 1024)) &&
+    (value.attribution === undefined ||
+      (typeof value.attribution === 'string' && value.attribution.length >= 1 && value.attribution.length <= 2000))
   );
 }
 
