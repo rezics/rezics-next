@@ -50,14 +50,21 @@ export function InitialFieldChoice({
   if (withdrawn) setChoice({ property: '', withdrawn: true });
   const property = withdrawn ? '' : choice.property;
   const explanation = withdrawn || choice.withdrawn;
-  const options = (properties: string[]) => properties.map((id) => {
-    const label = pickText(release.properties[id]!.labels, locale);
-    return <NativeSelectOption key={id} value={id} lang={label.lang ?? undefined}>{label.text}</NativeSelectOption>;
-  });
+  const options = (properties: string[]) =>
+    properties.map((id) => {
+      const label = pickText(release.properties[id]!.labels, locale);
+      return (
+        <NativeSelectOption key={id} value={id} lang={label.lang ?? undefined}>
+          {label.text}
+        </NativeSelectOption>
+      );
+    });
   return (
     <>
       <Field className={fieldClassName}>
-        <FieldLabel className={labelClassName} htmlFor={selectId}>{m.character_add_fact({}, o)}</FieldLabel>
+        <FieldLabel className={labelClassName} htmlFor={selectId}>
+          {m.character_add_fact({}, o)}
+        </FieldLabel>
         <NativeSelect
           id={selectId}
           className={selectClassName}
@@ -67,13 +74,23 @@ export function InitialFieldChoice({
           onChange={(event) => setChoice({ property: event.target.value, withdrawn: false })}
         >
           <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-          {offeredGroups.map((group, index) => group.properties.length > 0 && (
-            group.label
-              ? <optgroup key={index} label={group.label}>{options(group.properties)}</optgroup>
-              : options(group.properties)
-          ))}
+          {offeredGroups.map(
+            (group, index) =>
+              group.properties.length > 0 &&
+              (group.label ? (
+                <optgroup key={index} label={group.label}>
+                  {options(group.properties)}
+                </optgroup>
+              ) : (
+                options(group.properties)
+              )),
+          )}
         </NativeSelect>
-        {explanation && <p id={`${selectId}-withdrawn`} role="status" className="text-sm text-muted-foreground">{m.initial_field_choice_withdrawn({}, o)}</p>}
+        {explanation && (
+          <p id={`${selectId}-withdrawn`} role="status" className="text-sm text-muted-foreground">
+            {m.initial_field_choice_withdrawn({}, o)}
+          </p>
+        )}
       </Field>
       <Button
         type="button"

@@ -272,7 +272,10 @@ export function GameInitialFacts({
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
       <InitialFieldChoice
-        groups={Object.entries(groups).map(([group, properties]) => ({ label: gameGroupLabel(group, locale), properties }))}
+        groups={Object.entries(groups).map(([group, properties]) => ({
+          label: gameGroupLabel(group, locale),
+          properties,
+        }))}
         release={release}
         occupied={statements.map((row) => row.statement.property.id)}
         locale={locale}

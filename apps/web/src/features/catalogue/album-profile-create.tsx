@@ -314,7 +314,8 @@ function AlbumProfileCreateLive({
             selectClassName="w-full [&>select]:min-h-11"
             buttonClassName="h-auto min-h-11 max-w-full whitespace-normal"
             add={(property) => {
-              if (!lifetime.active() || locked || running.current || pending.current || !metadataCurrent(release)) return;
+              if (!lifetime.active() || locked || running.current || pending.current || !metadataCurrent(release))
+                return;
               setRows([
                 ...rows,
                 {
