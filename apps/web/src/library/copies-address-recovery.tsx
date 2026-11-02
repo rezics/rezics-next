@@ -33,7 +33,7 @@ export function CopiesAddressRecovery({ address, current }: { address: CopiesAdd
         <input
           id={field}
           name={subjectIssue ? 'subjectId' : 'cursor'}
-          defaultValue={subjectIssue && (address.subjectId?.length ?? 0) <= 36 ? (address.subjectId ?? '') : ''}
+          defaultValue={subjectIssue && (address.subjectId?.length ?? 0) <= 128 ? (address.subjectId ?? '') : ''}
           required
           maxLength={subjectIssue ? 36 : 2048}
           pattern={

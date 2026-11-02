@@ -287,6 +287,7 @@ test('requested cursor provenance survives one bounded native read and the exist
       { subjectId: edition, ...(cursor ? { cursor } : {}) },
     );
     expect(page.requestedCursor ?? null).toBe(cursor ?? null);
+    expect(Boolean(page.cursorRestarted)).toBe(Boolean(cursor?.startsWith('invalid')));
     expect(page.subjectId).toBe(edition);
     expect(calls).toHaveLength(cursor?.startsWith('invalid') ? 2 : 1);
     expect(calls.every((call) => new URL(call.url).searchParams.get('subjectId') === edition)).toBe(true);
