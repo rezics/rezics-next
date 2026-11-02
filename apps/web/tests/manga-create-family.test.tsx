@@ -10,7 +10,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/catalogue/manga', width: 390, height: 844 });
+  const window = new Window({
+    url: 'https://site.test/en/catalogue/manga',
+    width: 390,
+    height: 844,
+  });
   const globals = {
     window,
     document: window.document,
@@ -45,7 +49,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value,
+    });
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -64,7 +72,9 @@ test('complete Manga creation keeps series and volume drafts, independent contro
   outside.textContent = 'Current reader focus';
   window.document.body.append(host, outside);
   const root = createRoot(host);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
   const show = (node: ReactNode) =>
     act(async () => root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>));
   const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -125,7 +135,37 @@ test('complete Manga creation keeps series and volume drafts, independent contro
   const longAlias = `Alternative ${'unbrokenalias'.repeat(20)}`;
   try {
     const series = mangaFixture('uncertain');
-    const volume = mangaFixture();
+    const volume = mangaFixture('reader-unavailable');
+    let rejectVolume = true;
+    const volumeTransport: MangaTransport = {
+      ...volume.transport,
+      create: async (command) => {
+        if (!rejectVolume) return volume.transport.create(command);
+        rejectVolume = false;
+        return {
+          ok: false,
+          reason: 'invalid',
+          errors: [
+            {
+              pointer: '/statements/schema:inLanguage/1/references/0/parts/0/value/content',
+              code: 'invalid_format',
+            },
+            {
+              pointer: '/statements/schema:inLanguage/1/value/content',
+              code: 'invalid_format',
+            },
+            {
+              pointer: '/statements/wdt:P179/0/qualifiers/0/value/content',
+              code: 'invalid_format',
+            },
+            {
+              pointer: '/statements/schema:inLanguage/99/value/content',
+              code: 'invalid_format',
+            },
+          ],
+        };
+      },
+    };
     const commands: MangaCommand[] = [];
     const seriesTransport = {
       ...series.transport,
@@ -135,8 +175,16 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       },
     };
     const search = async () => [
-      { id: mangaSeriesId, title: 'The Paper Observatory', types: ['schema:ComicSeries'] },
-      { id: '00000000-0000-4000-8000-00000000d103', title: 'Wrong membership kind', types: ['schema:Person'] },
+      {
+        id: mangaSeriesId,
+        title: 'The Paper Observatory',
+        types: ['schema:ComicSeries'],
+      },
+      {
+        id: '00000000-0000-4000-8000-00000000d103',
+        title: 'Wrong membership kind',
+        types: ['schema:Person'],
+      },
     ];
     const pair = () => (
       <>
@@ -144,7 +192,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
           <MangaProfileEditor locale="en" session="signed-in" transport={seriesTransport} search={search} />
         </div>
         <div data-mount="volume">
-          <MangaProfileEditor locale="en" session="signed-in" transport={volume.transport} search={search} />
+          <MangaProfileEditor locale="en" session="signed-in" transport={volumeTransport} search={search} />
         </div>
       </>
     );
@@ -182,12 +230,20 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     await replace(input(a, m.catalogue_create_aliases()), `${longAlias}\nNight atlas`);
     await click(a, m.catalogue_create_add_language());
     await click(a, m.catalogue_create_add_language());
-    const terms = within(a).getByRole('group', { name: m.catalogue_create_terms() });
-    const languages = within(terms).getAllByRole('textbox', { name: m.catalogue_create_language() });
+    const terms = within(a).getByRole('group', {
+      name: m.catalogue_create_terms(),
+    });
+    const languages = within(terms).getAllByRole('textbox', {
+      name: m.catalogue_create_language(),
+    });
     await replace(languages[2]!, 'ja');
-    const labels = within(terms).getAllByRole('textbox', { name: m.catalogue_create_label() });
+    const labels = within(terms).getAllByRole('textbox', {
+      name: m.catalogue_create_label(),
+    });
     await replace(labels[2]!, '紙の天文台');
-    const removes = within(terms).getAllByRole('button', { name: m.catalogue_create_remove_language() });
+    const removes = within(terms).getAllByRole('button', {
+      name: m.catalogue_create_remove_language(),
+    });
     const removedId = removes[0]!.getAttribute('aria-controls')!;
     await act(async () => {
       removes[0]!.focus();
@@ -197,7 +253,9 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(window.document.activeElement).toBe(languages[2]);
     await click(a, m.catalogue_create_remove_language());
     expect(window.document.activeElement).toBe(
-      within(a).getByRole('button', { name: m.catalogue_create_add_language() }),
+      within(a).getByRole('button', {
+        name: m.catalogue_create_add_language(),
+      }),
     );
     expect(input(a, m.catalogue_create_label()).value).toBe(longName);
     expect(input(a, m.catalogue_create_aliases()).value).toBe(`${longAlias}\nNight atlas`);
@@ -217,28 +275,50 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     await select(authorA, m.correction_add_qualifier(), 'schema:position');
     expect(qualifierB.value).toBe('');
     expect(
-      (within(authorB).getByRole('button', { name: m.relation_add_qualifier() }) as HTMLButtonElement).disabled,
+      (
+        within(authorB).getByRole('button', {
+          name: m.relation_add_qualifier(),
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     await click(authorA, m.relation_add_qualifier());
-    expect(within(authorA).getByRole('heading', { name: title(series, 'schema:position'), level: 4 })).not.toBeNull();
-    expect(within(authorB).queryByRole('heading', { name: title(volume, 'schema:position'), level: 4 })).toBeNull();
+    expect(
+      within(authorA).getByRole('heading', {
+        name: title(series, 'schema:position'),
+        level: 4,
+      }),
+    ).not.toBeNull();
+    expect(
+      within(authorB).queryByRole('heading', {
+        name: title(volume, 'schema:position'),
+        level: 4,
+      }),
+    ).toBeNull();
     expect(qualifierA.value).toBe('');
     await click(authorA, m.recipe_remove_field());
     await click(authorB, m.recipe_remove_field());
     const language = await add(a, m.manga_publication(), 'schema:inLanguage', title(series, 'schema:inLanguage'));
     await replace(input(language, m.correction_value()), 'ja');
-    const publicationPicker = within(a).getByRole('combobox', { name: m.manga_publication() });
+    const publicationPicker = within(a).getByRole('combobox', {
+      name: m.manga_publication(),
+    });
     await select(a, m.manga_publication(), 'schema:inLanguage');
     await act(async () => {
       publicationPicker.focus();
       await user.tab();
     });
     expect(window.document.activeElement).toBe(
-      within(publicationPicker.closest('section')!).getByRole('button', { name: m.correction_add() }),
+      within(publicationPicker.closest('section')!).getByRole('button', {
+        name: m.correction_add(),
+      }),
     );
     // Type switches retain only the native separate field drafts; terms remain shared.
     await select(a, m.manga_grain(), 'schema:PublicationVolume');
-    expect(within(a).queryByRole('region', { name: title(series, 'schema:inLanguage') })).toBeNull();
+    expect(
+      within(a).queryByRole('region', {
+        name: title(series, 'schema:inLanguage'),
+      }),
+    ).toBeNull();
     await select(a, m.manga_grain(), 'schema:ComicSeries');
     expect(input(row(a, title(series, 'schema:inLanguage')), m.correction_value()).value).toBe('ja');
     const authored = await add(a, m.authored_title(), 'schema:abstract', title(series, 'schema:abstract'));
@@ -254,7 +334,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     });
     await click(a, m.manga_title());
     expect(posts(series)).toHaveLength(0);
-    expect(a.querySelector(`a[href="#${authored.id}"]`)).not.toBeNull();
+    expect(a.querySelector(`a[href="#original-${authored.id.replace('manga-row-', '')}"]`)).not.toBeNull();
     await act(async () => user.click(within(authored).getByRole('checkbox', { name: m.authored_original() })));
     await replace(input(authored, m.relation_citation()), 'https://example.org/original-summary');
     await click(a, m.manga_title());
@@ -280,7 +360,10 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(sealed.independent).toBe(false);
     expect(sealed.item.labels).toEqual({ en: longName });
     expect(sealed.item.aliases).toEqual({ en: [longAlias, 'Night atlas'] });
-    expect(sealed.item.statements['schema:inLanguage']![0]!.value).toEqual({ type: 'value', content: 'ja' });
+    expect(sealed.item.statements['schema:inLanguage']![0]!.value).toEqual({
+      type: 'value',
+      content: 'ja',
+    });
     const content = sealed.item.statements['schema:abstract']![0]!.value;
     if (content.type !== 'value') throw new Error('Expected authored value');
     const body = content.content as {
@@ -297,7 +380,13 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(sealed.item.statements['schema:abstract']![0]!.references).toEqual([
       {
         parts: [
-          { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/original-summary' } },
+          {
+            property: { id: 'schema:url' },
+            value: {
+              type: 'value',
+              content: 'https://example.org/original-summary',
+            },
+          },
         ],
       },
     ]);
@@ -308,7 +397,9 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     await select(b, m.manga_grain(), 'schema:PublicationVolume');
     await replace(input(b, m.catalogue_create_label()), 'The Paper Observatory, volume 2');
     const work = await add(b, m.manga_membership(), 'wdt:P179', title(volume, 'wdt:P179'));
-    const target = within(work).getByRole('combobox', { name: title(volume, 'wdt:P179') });
+    const target = within(work).getByRole('combobox', {
+      name: title(volume, 'wdt:P179'),
+    });
     await act(async () => user.type(target, 'Paper'));
     await until(
       () =>
@@ -323,18 +414,41 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       target.focus();
       await user.keyboard('{ArrowDown}{Enter}');
     });
-    const qualifier = within(work).getByRole('combobox', { name: m.correction_add_qualifier() });
+    const qualifier = within(work).getByRole('combobox', {
+      name: m.correction_add_qualifier(),
+    });
     await selectAssociation(qualifier, work);
     await select(work, m.correction_add_qualifier(), 'schema:position');
     await click(work, m.relation_add_qualifier());
     await replace(input(work, m.correction_value()), '2');
-    expect(within(work).getByRole('heading', { name: title(volume, 'schema:position'), level: 4 })).not.toBeNull();
+    expect(
+      within(work).getByRole('heading', {
+        name: title(volume, 'schema:position'),
+        level: 4,
+      }),
+    ).not.toBeNull();
     const pages = await add(b, m.manga_publication(), 'schema:numberOfPages', title(volume, 'schema:numberOfPages'));
     await replace(input(pages, m.correction_amount()), '+192');
     await select(pages, m.correction_unit(), '1');
     await replace(input(pages, m.relation_citation()), mangaVolumeCitation);
     const isbn = await add(b, m.manga_publication(), 'schema:isbn', title(volume, 'schema:isbn'));
     await replace(input(isbn, m.correction_value()), '9781234567897');
+    const firstLanguage = await add(b, m.manga_publication(), 'schema:inLanguage', title(volume, 'schema:inLanguage'));
+    const secondLanguage = await add(b, m.manga_publication(), 'schema:inLanguage', title(volume, 'schema:inLanguage'));
+    await replace(input(firstLanguage, m.correction_value()), 'ja');
+    await replace(input(secondLanguage, m.correction_value()), 'en');
+    await replace(input(secondLanguage, m.relation_citation()), 'https://example.org/old-citation');
+    await click(b, m.catalogue_create_add_language());
+    const termLanguages = within(b).getAllByRole('textbox', {
+      name: m.catalogue_create_language(),
+    });
+    await replace(termLanguages[1]!, 'en');
+    await replace(
+      within(b).getAllByRole('textbox', {
+        name: m.catalogue_create_label(),
+      })[1]!,
+      '紙の天文台 第二巻',
+    );
     expect(
       within(b)
         .getByRole('combobox', { name: m.manga_publication() })
@@ -343,7 +457,35 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     await click(b, m.manga_title());
     expect(posts(volume)).toHaveLength(0);
     expect(b.querySelector('a[href="#manga-independent"]')).not.toBeNull();
+    const acknowledgement = b.querySelector<HTMLAnchorElement>('a[href="#manga-independent"]')!;
+    expect(acknowledgement.textContent).toBe(m.manga_independent());
+    await act(async () => user.click(acknowledgement));
+    expect(window.document.activeElement).toBe(within(b).getByRole('checkbox', { name: m.manga_independent() }));
+    const duplicate = b.querySelector<HTMLAnchorElement>(`a[href="#${CSS.escape(termLanguages[1]!.id)}"]`)!;
+    expect(duplicate.closest('li')!.textContent).toContain(m.catalogue_create_validation_language_unique());
+    await act(async () => user.click(duplicate));
+    expect(window.document.activeElement).toBe(termLanguages[1]);
+    await replace(termLanguages[1]!, 'ja');
     await act(async () => user.click(within(b).getByRole('checkbox', { name: m.manga_independent() })));
+    await click(b, m.manga_title());
+    await until(() => b.textContent!.includes(m.correction_error_url()));
+    const rejectionLinks = [...b.querySelectorAll<HTMLAnchorElement>('form li a')];
+    for (const [link, control] of [
+      [rejectionLinks[0]!, input(secondLanguage, m.relation_citation())],
+      [rejectionLinks[1]!, input(secondLanguage, m.correction_value())],
+      [rejectionLinks[2]!, input(work, m.correction_value())],
+    ] as const) {
+      await act(async () => user.click(link));
+      expect(window.document.activeElement).toBe(control);
+      expect(control.getAttribute('aria-invalid')).toBe('true');
+      expect(window.document.getElementById(control.getAttribute('aria-describedby')!)!.textContent).toContain(
+        link.textContent!,
+      );
+    }
+    expect(rejectionLinks[3]!.getAttribute('href')).toBe('#manga-fields');
+    expect(rejectionLinks[0]!.textContent).toContain(m.relation_citation());
+    expect(input(firstLanguage, m.relation_citation()).getAttribute('aria-invalid')).toBeNull();
+    await replace(input(secondLanguage, m.relation_citation()), 'https://example.org/correct-citation');
     await click(b, m.manga_title());
     await until(() => b.textContent!.includes(m.manga_created()));
     expect(posts(volume)).toHaveLength(1);
@@ -352,15 +494,51 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(volume.calls.filter((call) => call.path === `/v1/subjects/${mangaVolumeId}`)).toHaveLength(1);
     expect(posts(volume)[0]!.body).toEqual({
       type: 'schema:PublicationVolume',
-      labels: { en: 'The Paper Observatory, volume 2' },
+      labels: {
+        en: 'The Paper Observatory, volume 2',
+        ja: '紙の天文台 第二巻',
+      },
       descriptions: {},
       aliases: {},
       statements: {
+        'schema:inLanguage': [
+          {
+            property: { id: 'schema:inLanguage' },
+            value: { type: 'value', content: 'ja' },
+            qualifiers: [],
+            references: [],
+            rank: 'normal',
+          },
+          {
+            property: { id: 'schema:inLanguage' },
+            value: { type: 'value', content: 'en' },
+            qualifiers: [],
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: {
+                      type: 'value',
+                      content: 'https://example.org/correct-citation',
+                    },
+                  },
+                ],
+              },
+            ],
+            rank: 'normal',
+          },
+        ],
         'wdt:P179': [
           {
             property: { id: 'wdt:P179' },
             value: { type: 'value', content: mangaSeriesId },
-            qualifiers: [{ property: { id: 'schema:position' }, value: { type: 'value', content: '2' } }],
+            qualifiers: [
+              {
+                property: { id: 'schema:position' },
+                value: { type: 'value', content: '2' },
+              },
+            ],
             references: [],
             rank: 'normal',
           },
@@ -371,7 +549,14 @@ test('complete Manga creation keeps series and volume drafts, independent contro
             value: { type: 'value', content: { amount: '+192', unit: '1' } },
             qualifiers: [],
             references: [
-              { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: mangaVolumeCitation } }] },
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: mangaVolumeCitation },
+                  },
+                ],
+              },
             ],
             rank: 'normal',
           },
@@ -387,9 +572,12 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         ],
       },
     });
-    expect(within(b).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toContain(
-      mangaVolumeId,
-    );
+    expect(within(b).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
+    volume.setScenario('ready');
+    await click(b, m.correction_retry());
+    await until(() => within(b).queryByRole('link', { name: m.candidate_view_public() }) !== null);
+    expect(volume.calls.at(-1)!.path).toBe(`/v1/subjects/${mangaVolumeId}`);
+    expect(posts(volume)).toHaveLength(1);
     // Real validation refresh makes a removed released field stale, retaining its removal route.
     const stale = mangaFixture();
     await fresh(stale, 'stale-field');
@@ -418,7 +606,13 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       await until(() => posts(fixture).length === 1 && host.querySelector('[role="alert"]') !== null);
       const conflict = scenario === 'stale' || scenario === 'conflict';
       if (conflict) {
-        expect((within(host).getByRole('button', { name: m.manga_title() }) as HTMLButtonElement).disabled).toBe(true);
+        expect(
+          (
+            within(host).getByRole('button', {
+              name: m.manga_title(),
+            }) as HTMLButtonElement
+          ).disabled,
+        ).toBe(true);
         await click(host, m.catalogue_create_review_new());
       } else expect(host.textContent).toContain(scenario === 'denied' ? m.correction_denied() : m.correction_invalid());
       expect(input(host, m.catalogue_create_label()).value).toBe('Retained draft');
@@ -446,7 +640,12 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       expect(fixture.calls).toHaveLength(before);
       fixture.setScenario('ready');
       await click(host, m.correction_retry());
-      await until(() => within(host).queryByRole('link', { name: m.candidate_view_public() }) !== null);
+      await until(
+        () =>
+          within(host).queryByRole('link', {
+            name: m.candidate_view_public(),
+          }) !== null,
+      );
       expect(fixture.calls).toHaveLength(before + 1);
       expect(fixture.calls.at(-1)!.path).toBe(`/v1/subjects/${mangaSeriesId}`);
       expect(posts(fixture)).toHaveLength(1);
@@ -463,12 +662,22 @@ test('complete Manga creation keeps series and volume drafts, independent contro
           return Reflect.ownKeys(target);
         },
       });
-      const read = { ...supplied, public: { ...fixture.reads.get(mangaSeriesId)!, related } };
-      await fresh(fixture, `growth-${count}`, { ...fixture.transport, load: async () => read });
+      const read = {
+        ...supplied,
+        public: { ...fixture.reads.get(mangaSeriesId)!, related },
+      };
+      await fresh(fixture, `growth-${count}`, {
+        ...fixture.transport,
+        load: async () => read,
+      });
       const before = structuredClone(fixture.calls);
       for (let index = 0; index < count; index++)
         await add(host, m.manga_publication(), 'schema:inLanguage', title(fixture, 'schema:inLanguage'));
-      expect(within(host).getAllByRole('region', { name: title(fixture, 'schema:inLanguage') })).toHaveLength(count);
+      expect(
+        within(host).getAllByRole('region', {
+          name: title(fixture, 'schema:inLanguage'),
+        }),
+      ).toHaveLength(count);
       const ids = [...host.querySelectorAll('section[id^="manga-row-"]')].map((element) => element.id);
       expect(new Set(ids).size).toBe(count);
       expect(fixture.calls).toEqual(before);
@@ -493,7 +702,13 @@ test('complete Manga creation keeps series and volume drafts, independent contro
             ? m.candidate_loading()
             : m.correction_unavailable();
       await until(() => host.textContent!.includes(message));
-      expect((within(host).getByRole('button', { name: m.manga_title() }) as HTMLButtonElement).disabled).toBe(true);
+      expect(
+        (
+          within(host).getByRole('button', {
+            name: m.manga_title(),
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
       expect(posts(fixture)).toHaveLength(0);
     }
     const signedOut = mangaFixture();
@@ -507,8 +722,38 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       />,
     );
     await until(() => host.textContent!.includes(m.catalogue_create_signed_out()));
-    expect((within(host).getByRole('button', { name: m.manga_title() }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (
+        within(host).getByRole('button', {
+          name: m.manga_title(),
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
     expect(posts(signedOut)).toHaveLength(0);
+    let retries = 0;
+    const sessionView = (session: string) => (
+      <MangaProfileEditor
+        key="session-recovery"
+        locale="en"
+        session={session}
+        retrySession={async () => {
+          retries++;
+        }}
+        transport={signedOut.transport}
+        search={async () => []}
+      />
+    );
+    await show(sessionView('signed-in'));
+    await until(() => !host.querySelector<HTMLFieldSetElement>('fieldset')!.disabled);
+    await replace(input(host, m.catalogue_create_label()), 'Private session draft');
+    await show(sessionView('unavailable'));
+    expect(host.textContent).toContain(m.catalogue_create_unavailable());
+    expect(host.textContent).not.toContain(m.candidate_loading());
+    expect(within(host).getByRole('button', { name: m.manga_title() }).matches(':disabled')).toBe(true);
+    await click(host, m.erasure_retry_session());
+    expect(retries).toBe(1);
+    await show(sessionView('signed-in'));
+    expect(input(host, m.catalogue_create_label()).value).toBe('Private session draft');
     // Late command outcomes and queued submit cannot escape a retired reader. Fresh work succeeds.
     for (const delivery of ['success', 'failure', 'throw'] as const) {
       const fixture = mangaFixture();
@@ -531,7 +776,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         <CandidateReaderBoundary
           key={delivery}
           address="manga-create"
-          observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
+          observed={{
+            state: 'signed-in',
+            subject: reader,
+            csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+          }}
         >
           <MangaProfileEditor locale="en" session="signed-in" transport={transport} search={async () => []} />
         </CandidateReaderBoundary>
@@ -543,8 +792,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       await replace(input(host, m.catalogue_create_label()), 'Old reader draft');
       const form = host.querySelector('form')!;
       const reactProps = Object.keys(form).find((key) => key.startsWith('__reactProps$'))!;
-      const oldSubmit = (Reflect.get(form, reactProps) as { onSubmit: (event: { preventDefault: () => void }) => void })
-        .onSubmit;
+      const oldSubmit = (
+        Reflect.get(form, reactProps) as {
+          onSubmit: (event: { preventDefault: () => void }) => void;
+        }
+      ).onSubmit;
       await click(host, m.manga_title());
       await entered.promise;
       expect(posts(fixture)).toHaveLength(1);
@@ -597,7 +849,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         <CandidateReaderBoundary
           key={`load-${delivery}`}
           address="manga-load"
-          observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
+          observed={{
+            state: 'signed-in',
+            subject: reader,
+            csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+          }}
         >
           <MangaProfileEditor locale="en" session="signed-in" transport={transport} search={async () => []} />
         </CandidateReaderBoundary>
@@ -642,7 +898,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         <CandidateReaderBoundary
           key={`reader-${delivery}`}
           address="manga-readback"
-          observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
+          observed={{
+            state: 'signed-in',
+            subject: reader,
+            csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+          }}
         >
           <MangaProfileEditor locale="en" session="signed-in" transport={transport} search={async () => []} />
         </CandidateReaderBoundary>
@@ -655,7 +915,9 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       await click(host, m.manga_title());
       await until(() => host.textContent!.includes(m.catalogue_create_reader_unavailable()));
       fixture.setScenario('ready');
-      const retry = within(host).getByRole('button', { name: m.correction_retry() });
+      const retry = within(host).getByRole('button', {
+        name: m.correction_retry(),
+      });
       const props = Object.keys(retry).find((key) => key.startsWith('__reactProps$'))!;
       const oldRetry = (Reflect.get(retry, props) as { onClick: () => Promise<void> }).onClick;
       await click(host, m.correction_retry());

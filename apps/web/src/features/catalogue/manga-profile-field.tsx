@@ -15,6 +15,7 @@ import { authoredFieldValue, newAuthoredField, type AuthoredField } from './auth
 import { ScalarControl } from './statement-editor-view';
 import { editableScalar, type SnakInput, type StatementInput } from './statement-editor';
 import { mangaTarget, type MangaType } from './manga-profile';
+import type { StatementFeedback } from './statement-validation-presentation';
 import type { MangaReady } from './manga-profile-view';
 
 export type MangaRow = {
@@ -34,6 +35,7 @@ export function MangaInitialField({
   disabled,
   onChange,
   onRemove,
+  feedback,
 }: {
   row: MangaRow;
   read: MangaReady;
@@ -43,10 +45,19 @@ export function MangaInitialField({
   disabled: boolean;
   onChange: (row: MangaRow) => void;
   onRemove: () => void;
+  feedback: StatementFeedback;
 }) {
   const o = { locale: locale as never };
   const property = read.release.properties[row.statement.property.id]!;
   const title = pickText(property.labels, locale);
+  const invalid = (id: string) => ({
+    'aria-invalid': feedback.errors.some((error) => error.target === id) || undefined,
+    'aria-describedby':
+      feedback.errors
+        .filter((error) => error.target === id)
+        .map((error) => error.id)
+        .join(' ') || undefined,
+  });
   const [qualifier, setQualifier] = useState('');
   const qualifierId = useId();
   const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
@@ -57,9 +68,13 @@ export function MangaInitialField({
   const authored = row.authored ?? newAuthoredField();
   const update = (statement: StatementInput) => onChange({ ...row, statement });
   const updateAuthored = (next: AuthoredField) =>
-    onChange({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
+    onChange({
+      ...row,
+      authored: next,
+      statement: { ...row.statement, value: authoredFieldValue(next) },
+    });
   const name = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale).text;
-  const control = (part: SnakInput, statement: (value: SnakInput['value']) => StatementInput) => {
+  const control = (part: SnakInput, address: string, statement: (value: SnakInput['value']) => StatementInput) => {
     const definition = read.release.properties[part.property.id];
     return definition?.datatype === 'wikibase-item' ? (
       <PickedTarget
@@ -71,15 +86,23 @@ export function MangaInitialField({
         picked={row.targets?.[part.property.id] ?? []}
         mangaWork={type === 'schema:PublicationVolume' && part.property.id === 'wdt:P179'}
         onChange={(value, items) =>
-          onChange({ ...row, statement: statement(value), targets: { ...row.targets, [part.property.id]: items } })
+          onChange({
+            ...row,
+            statement: statement(value),
+            targets: { ...row.targets, [part.property.id]: items },
+          })
         }
       />
     ) : (
       <ScalarControl
         part={part}
         definition={definition}
-        read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
+        read={{
+          release: read.release,
+          public: { related: read.public?.related ?? {} },
+        }}
         locale={locale}
+        feedback={{ ...feedback, address }}
         onChange={(value) => update(statement(value))}
       />
     );
@@ -96,64 +119,91 @@ export function MangaInitialField({
           {title.text}
         </ContentItemHeading>
         <fieldset
+          id={`${feedback.id}-fields`}
+          tabIndex={-1}
           disabled={disabled}
           data-content-item-slot="preview"
           className="min-w-0 space-y-4 [&_label]:whitespace-normal [&_label]:text-start"
         >
-          {property.datatype === 'document' ? (
-            <>
-              <p className="text-sm text-muted-foreground">{m.authored_citation_hint({}, o)}</p>
-              <Field className="min-w-0">
-                <FieldLabel htmlFor={`language-${row.id}`}>{m.authored_language({}, o)}</FieldLabel>
-                <Input
-                  id={`language-${row.id}`}
-                  value={authored.language}
-                  onChange={(event) => updateAuthored({ ...authored, language: event.target.value })}
+          <div id={`${feedback.id}-fact`} tabIndex={-1} className="min-w-0 space-y-4">
+            {property.datatype === 'document' ? (
+              <>
+                <p className="text-sm text-muted-foreground">{m.authored_citation_hint({}, o)}</p>
+                <Field className="min-w-0">
+                  <FieldLabel htmlFor={`language-${row.id}`}>{m.authored_language({}, o)}</FieldLabel>
+                  <Input
+                    id={`language-${row.id}`}
+                    {...invalid(`language-${row.id}`)}
+                    value={authored.language}
+                    onChange={(event) =>
+                      updateAuthored({
+                        ...authored,
+                        language: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
+                <Field className="min-w-0">
+                  <FieldLabel htmlFor={`licence-${row.id}`}>{m.authored_licence({}, o)}</FieldLabel>
+                  <Input
+                    id={`licence-${row.id}`}
+                    {...invalid(`licence-${row.id}`)}
+                    value={authored.licence}
+                    onChange={(event) =>
+                      updateAuthored({
+                        ...authored,
+                        licence: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
+                <RichTextEditor
+                  label={title.text}
+                  labels={editorLabels()}
+                  lang={authored.language}
+                  value={authored.document}
+                  disabled={disabled}
+                  onChange={(document) => updateAuthored({ ...authored, document })}
                 />
-              </Field>
-              <Field className="min-w-0">
-                <FieldLabel htmlFor={`licence-${row.id}`}>{m.authored_licence({}, o)}</FieldLabel>
-                <Input
-                  id={`licence-${row.id}`}
-                  value={authored.licence}
-                  onChange={(event) => updateAuthored({ ...authored, licence: event.target.value })}
-                />
-              </Field>
-              <RichTextEditor
-                label={title.text}
-                labels={editorLabels()}
-                lang={authored.language}
-                value={authored.document}
-                disabled={disabled}
-                onChange={(document) => updateAuthored({ ...authored, document })}
-              />
-              <Field orientation="horizontal">
-                <Checkbox
-                  id={`original-${row.id}`}
-                  checked={row.original ?? false}
-                  onCheckedChange={(value) => onChange({ ...row, original: value === true })}
-                />
-                <FieldLabel htmlFor={`original-${row.id}`}>{m.authored_original({}, o)}</FieldLabel>
-              </Field>
-            </>
-          ) : (
-            control(row.statement, (value) => ({ ...row.statement, value }))
-          )}
-          {(row.statement.qualifiers ?? []).map((part, index) => (
-            <div key={index} className="min-w-0 space-y-2 border-s-2 ps-3">
-              <ContentItemHeading
-                level={4}
-                className="font-sans text-sm font-medium"
-                lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
-              >
-                {name(part.property.id)}
-              </ContentItemHeading>
-              {control(part, (value) => ({
+                <Field orientation="horizontal">
+                  <Checkbox
+                    id={`original-${row.id}`}
+                    {...invalid(`original-${row.id}`)}
+                    checked={row.original ?? false}
+                    onCheckedChange={(value) => onChange({ ...row, original: value === true })}
+                  />
+                  <FieldLabel htmlFor={`original-${row.id}`}>{m.authored_original({}, o)}</FieldLabel>
+                </Field>
+              </>
+            ) : (
+              control(row.statement, 'fact', (value) => ({
                 ...row.statement,
-                qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
-              }))}
-            </div>
-          ))}
+                value,
+              }))
+            )}
+          </div>
+          <div id={`${feedback.id}-qualifiers`} tabIndex={-1} className="min-w-0 space-y-4">
+            {(row.statement.qualifiers ?? []).map((part, index) => (
+              <div
+                key={index}
+                id={`${feedback.id}-qualifier-${index}`}
+                tabIndex={-1}
+                className="min-w-0 space-y-2 border-s-2 ps-3"
+              >
+                <ContentItemHeading
+                  level={4}
+                  className="font-sans text-sm font-medium"
+                  lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
+                >
+                  {name(part.property.id)}
+                </ContentItemHeading>
+                {control(part, `qualifier-${index}`, (value) => ({
+                  ...row.statement,
+                  qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
+                }))}
+              </div>
+            ))}
+          </div>
           {!!property.qualifiers.filter(
             (id) =>
               read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
@@ -197,7 +247,10 @@ export function MangaInitialField({
                     ...row.statement,
                     qualifiers: [
                       ...(row.statement.qualifiers ?? []),
-                      { property: { id: qualifier }, value: { type: 'value', content: '' } },
+                      {
+                        property: { id: qualifier },
+                        value: { type: 'value', content: '' },
+                      },
                     ],
                   });
                   setQualifier('');
@@ -207,19 +260,35 @@ export function MangaInitialField({
               </Button>
             </div>
           )}
-          <Field className="min-w-0">
+          <Field id={`${feedback.id}-references`} tabIndex={-1} className="min-w-0">
             <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
             <Input
               type="url"
               id={`citation-${row.id}`}
+              {...invalid(`citation-${row.id}`)}
               value={citation}
               onChange={(event) => {
                 const url = event.target.value;
+                const references = structuredClone(row.statement.references);
+                const reference = references[0] ?? { parts: [] };
+                const at = reference.parts.findIndex((part) => part.property.id === 'schema:url');
+                const part = {
+                  property: { id: 'schema:url' },
+                  value: { type: 'value' as const, content: url.trim() },
+                };
+                if (url.trim()) {
+                  if (at < 0) reference.parts.push(part);
+                  else
+                    reference.parts[at] = {
+                      ...reference.parts[at]!,
+                      value: part.value,
+                    };
+                } else if (at >= 0) reference.parts.splice(at, 1);
+                if (!references.length && reference.parts.length) references.push(reference);
+                if (references[0]?.parts.length === 0) references.shift();
                 update({
                   ...row.statement,
-                  references: url.trim()
-                    ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url.trim() } }] }]
-                    : [],
+                  references,
                 });
               }}
             />

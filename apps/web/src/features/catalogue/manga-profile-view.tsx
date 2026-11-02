@@ -18,6 +18,7 @@ import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import { EditorFailure } from './statement-editor-view';
 import { MangaInitialField, type MangaRow } from './manga-profile-field';
+import { mangaCreateFeedback } from './manga-create-feedback';
 import { MangaCorrections, type MangaCorrectionPorts } from './manga-profile-corrections';
 import {
   blankMangaStatement,
@@ -53,6 +54,7 @@ function MangaProfileEditorLive({
   transport,
   search,
   correction,
+  retrySession,
 }: {
   id?: string | undefined;
   locale: string;
@@ -60,6 +62,7 @@ function MangaProfileEditorLive({
   transport: MangaTransport;
   search: EntityPickerSearch;
   correction?: MangaCorrectionPorts | undefined;
+  retrySession?: (() => Promise<unknown>) | undefined;
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
@@ -77,11 +80,19 @@ function MangaProfileEditorLive({
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
       <p className="max-w-prose text-muted-foreground">{m.manga_intro({}, o)}</p>
-      {session !== 'signed-in' && (
-        <p role="status">
-          {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
-        </p>
-      )}
+      {session !== 'signed-in' &&
+        (session === 'unavailable' ? (
+          <div className="space-y-3">
+            <p role="alert">{m.catalogue_create_unavailable({}, o)}</p>
+            <Button onClick={() => void retrySession?.()} disabled={!retrySession}>
+              {m.erasure_retry_session({}, o)}
+            </Button>
+          </div>
+        ) : (
+          <p role="status">
+            {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
+          </p>
+        ))}
       {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
       {read && !mangaTypes.some((type) => read.release.types[type]) && (
         <p role="status">{m.catalogue_create_empty({}, o)}</p>
@@ -155,6 +166,7 @@ function MangaCreate({
   const rows = drafts[type];
   const groups = read ? mangaGroups(read.release, type, locale) : undefined;
   const labels = mangaGroupLabels(locale);
+  const feedback = mangaCreateFeedback(failure?.errors ?? [], rows, terms, read, locale, termsId);
   function changeRows(next: MangaRow[]) {
     if (!locked) {
       setDrafts({ ...drafts, [type]: next });
@@ -176,12 +188,19 @@ function MangaCreate({
         draft.errors.push({ pointer: '/independent', code: 'required' });
       for (const row of rows)
         if (read.release.properties[row.statement.property.id]?.datatype === 'document' && !row.original)
-          draft.errors.push({ pointer: `/statements/${row.statement.property.id}`, code: 'required' });
+          draft.errors.push({
+            pointer: `/statements/${row.statement.property.id}/${rows.filter((item) => item.statement.property.id === row.statement.property.id).indexOf(row)}/original`,
+            code: 'required',
+          });
       if (draft.errors.length) {
         setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
-      request.current = { key: crypto.randomUUID(), item: draft.item, independent };
+      request.current = {
+        key: crypto.randomUUID(),
+        item: draft.item,
+        independent,
+      };
     }
     running.current = true;
     setBusy(true);
@@ -207,22 +226,6 @@ function MangaCreate({
       setBusy(false);
     }
   }
-  function errorControl(pointer: string) {
-    if (pointer === '/independent') return 'manga-independent';
-    if (pointer === '/type') return 'manga-type';
-    if (/^\/(labels|aliases|descriptions)\//.test(pointer)) {
-      const language = pointer.split('/')[2]?.replaceAll('~1', '/').replaceAll('~0', '~');
-      const term = terms.find((row) => row.language.trim() === language) ?? terms[0]!;
-      const field = pointer.startsWith('/labels')
-        ? 'label'
-        : pointer.startsWith('/aliases')
-          ? 'aliases'
-          : 'description';
-      return `${termsId}-${field}-${term.id}`;
-    }
-    const row = rows.find((row) => pointer.includes(row.statement.property.id));
-    return row ? `manga-row-${row.id}` : 'manga-fields';
-  }
   if (created)
     return (
       <section className="min-w-0 [overflow-wrap:anywhere]">
@@ -233,7 +236,9 @@ function MangaCreate({
           <p className="break-all font-mono text-sm">{created.id}</p>
           {created.reader.state === 'ready' ? (
             <a
-              className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
+              className={buttonVariants({
+                className: 'h-auto min-h-11 max-w-full whitespace-normal text-start',
+              })}
               href={created.reader.href}
             >
               {m.candidate_view_public({}, o)}
@@ -259,7 +264,10 @@ function MangaCreate({
                     setCreated({ ...created, reader });
                   } catch {
                     if (!lifetime.active()) return;
-                    setCreated({ ...created, reader: { state: 'unavailable' } });
+                    setCreated({
+                      ...created,
+                      reader: { state: 'unavailable' },
+                    });
                   } finally {
                     if (!lifetime.active()) return;
                     running.current = false;
@@ -336,7 +344,17 @@ function MangaCreate({
                 <Checkbox
                   id="manga-independent"
                   checked={independent}
-                  onCheckedChange={(value) => setIndependent(value === true)}
+                  aria-invalid={feedback.some((error) => error.target === 'manga-independent') || undefined}
+                  aria-describedby={
+                    feedback
+                      .filter((error) => error.target === 'manga-independent')
+                      .map((error) => error.id)
+                      .join(' ') || undefined
+                  }
+                  onCheckedChange={(value) => {
+                    setIndependent(value === true);
+                    setFailure(undefined);
+                  }}
                 />
                 <FieldLabel htmlFor="manga-independent">{m.manga_independent({}, o)}</FieldLabel>
               </Field>
@@ -366,6 +384,13 @@ function MangaCreate({
                 const props = {
                   id: `${termsId}-${field}-${term.id}`,
                   value: term[field],
+                  'aria-invalid':
+                    feedback.some((error) => error.target === `${termsId}-${field}-${term.id}`) || undefined,
+                  'aria-describedby':
+                    feedback
+                      .filter((error) => error.target === `${termsId}-${field}-${term.id}`)
+                      .map((error) => error.id)
+                      .join(' ') || undefined,
                   onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
                     setTerms((previous) =>
                       previous.map((item) => (item.id === term.id ? { ...item, [field]: event.target.value } : item)),
@@ -405,7 +430,13 @@ function MangaCreate({
               if (locked || running.current || request.current) return;
               setTerms((previous) => [
                 ...previous,
-                { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
+                {
+                  id: nextTermId.current++,
+                  language: '',
+                  label: '',
+                  description: '',
+                  aliases: '',
+                },
               ]);
             }}
           >
@@ -442,6 +473,10 @@ function MangaCreate({
                             locale={locale}
                             search={search}
                             disabled={locked}
+                            feedback={{
+                              id: `manga-row-${row.id}`,
+                              errors: feedback,
+                            }}
                             onChange={(next) => changeRows(rows.map((item) => (item.id === row.id ? next : item)))}
                             onRemove={() => changeRows(rows.filter((item) => item.id !== row.id))}
                           />
@@ -512,20 +547,32 @@ function MangaCreate({
             <EditorFailure locale={locale} reason={failure.reason} />
             {!!failure.errors?.length && (
               <ul className="list-disc ps-5">
-                {failure.errors.map((error, index) => (
-                  <li key={index}>
-                    <a className="underline" href={`#${errorControl(error.pointer)}`}>
-                      {m.correction_invalid_part({}, o)} ·{' '}
-                      {rows.find((row) => error.pointer.includes(row.statement.property.id))
-                        ? pickText(
-                            read?.release.properties[
-                              rows.find((row) => error.pointer.includes(row.statement.property.id))!.statement.property
-                                .id
-                            ]?.labels ?? {},
-                            locale,
-                          ).text
-                        : m.catalogue_create_terms({}, o)}
+                {feedback.map((error, index) => (
+                  <li key={error.id} id={error.id}>
+                    <a
+                      className="underline"
+                      href={`#${error.target}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        const target = event.currentTarget
+                          .closest('form')
+                          ?.querySelector<HTMLElement>(`[id="${CSS.escape(error.target)}"]`);
+                        const control = target?.matches('input, textarea, select, button, [role="combobox"]')
+                          ? target
+                          : (target?.querySelector<HTMLElement>('input, textarea, select, button, [role="combobox"]') ??
+                            target);
+                        control?.focus();
+                      }}
+                    >
+                      {error.label}
                     </a>
+                    <p>{error.instruction}</p>
+                    {error.instruction.includes(m.correction_error_uneditable({}, o)) && (
+                      <details>
+                        <summary>{m.catalogue_creation_technical_details({}, o)}</summary>
+                        <code>{failure.errors![index]!.pointer}</code>
+                      </details>
+                    )}
                   </li>
                 ))}
               </ul>

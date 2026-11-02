@@ -48,6 +48,9 @@ row-local removal confirmation with Cancel; surviving inputs retain their stable
 submissions keep removal and editing locked to the original request.
 
 Album creation resolves rejected submitted indices to stable assertion rows and authored language controls; following an invalid correction explicitly reviews a new command, while conflicts still require Review and uncertain commands remain sealed. Unknown addresses remain inspectable without a correction link.
+Manga creation resolves rejection addresses by decoded property and assertion index to stable draft rows and
+supported inner controls; ambiguous or unsupported addresses stay at their named section with technical details,
+duplicate-language feedback targets the later row, and unavailable sessions offer a sign-in check retry.
 
 ## Create and correct a recipe
 

@@ -4,7 +4,7 @@ import { candidateSession, useCandidateWork } from '../../subject/candidate-life
 import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useSession } from '../../session/query';
+import { sessionQuery, useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { MangaProfileEditor } from './manga-profile-view';
@@ -26,6 +26,7 @@ import { EditorFailure } from './statement-editor-view';
 function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
+  const session = useQuery({ ...sessionQuery, enabled: false });
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
@@ -35,11 +36,16 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
     <MangaProfileEditor
       id={id}
       locale={locale}
-      session={state}
+      session={state === 'unknown' && session.isError ? 'unavailable' : state}
+      retrySession={() => session.refetch()}
       search={search}
       transport={{
         load,
-        create: (data) => createCatalogueManga({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        create: (data) =>
+          createCatalogueManga({
+            data: editorRequest(data, editorWork),
+            headers: csrfHeaders(),
+          }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       correction={
@@ -53,14 +59,23 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
                     : { ok: false, reason: 'unavailable' };
                 },
                 propose: (data) =>
-                  submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+                  submitFactCorrection({
+                    data: editorRequest(data, editorWork),
+                    headers: csrfHeaders(),
+                  }),
               },
               review: (_property, initialSession) => {
                 return {
                   read: async (property, cursor, session = initialSession, work) => {
                     if (!work?.live()) return { ok: false, reason: 'denied' };
                     const result = await readSubjectCandidates({
-                      data: { expectedReader: work.reader, id, property, cursor, session },
+                      data: {
+                        expectedReader: work.reader,
+                        id,
+                        property,
+                        cursor,
+                        session,
+                      },
                       headers: csrfHeaders(),
                     });
                     return result;
@@ -124,12 +139,26 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
           initial={query.data}
           transport={{
             read,
-            propose: (data) => submitAuthoredField({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+            propose: (data) =>
+              submitAuthoredField({
+                data: editorRequest(data, editorWork),
+                headers: csrfHeaders(),
+              }),
             review: (property, candidate, cursor, session, work) =>
               !work?.live()
-                ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
+                ? Promise.resolve({
+                    comparison: { ok: false, reason: 'denied' },
+                    body: null,
+                  })
                 : loadAuthoredReview({
-                    data: { id, property, candidate, cursor, session, expectedReader: work.reader },
+                    data: {
+                      id,
+                      property,
+                      candidate,
+                      cursor,
+                      session,
+                      expectedReader: work.reader,
+                    },
                     headers: csrfHeaders(),
                   }),
           }}
