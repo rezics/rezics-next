@@ -35,6 +35,7 @@ import {
 } from './search-recovery';
 import { SearchRecovery } from './search-recovery-view';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
+import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
 import { ResultKindNavigation } from './result-kind-navigation';
 import { DiscoveryResults } from './discovery-results';
@@ -258,15 +259,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       body = undefined;
     }
     const filter = body?.filter;
-    const hasSearch = Boolean(
-      data.query ||
-      type ||
-      data.kinds?.length ||
-      data.filter ||
-      data.condition ||
-      Object.keys(data.facetValues).length ||
-      Object.keys(data.ranges ?? {}).length,
-    );
+    const hasSearch = hasResultSearchIntent(queryState);
     const languages = data.languages ?? requestLanguages(data.locale);
     const years = release ? yearProperties(release, knownType) : [];
     const properties = release

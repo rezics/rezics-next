@@ -5,6 +5,7 @@ import { loadRealmDiscovery } from '../community/realm-discovery/source';
 import type { RealmDiscoverySort, RealmDiscoveryState } from '../community/realm-discovery';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SearchLoaderDeps } from './search-params';
+import { hasResultSearchIntent } from './search-intent';
 
 export type RealmDiscoveryPage = Exclude<RealmDiscoveryState, { kind: 'loading' }>;
 export type RealmDiscoveryReadInput = Readonly<{ locale: string; sort: RealmDiscoverySort; cursor?: string }>;
@@ -37,18 +38,7 @@ export const readRealmDiscovery = createServerFn({ method: 'GET' })
 
 /** Browsing never substitutes for a query, selected scope, filter or advanced draft. */
 export function isRealmDiscoverySearch(state: SearchLoaderDeps): boolean {
-  return !(
-    state.query ||
-    state.type ||
-    state.cursor ||
-    state.sort ||
-    state.filter ||
-    state.condition ||
-    state.kinds?.length ||
-    state.languages?.length ||
-    Object.keys(state.facets).length ||
-    Object.keys(state.ranges ?? {}).length
-  );
+  return !hasResultSearchIntent(state);
 }
 
 /** One cache entry per anonymous locale/sort/page, with no background refills or automatic retries. */
