@@ -1,38 +1,27 @@
-import { catalogueEditor, useEditorLifetime } from "./editor-lifetime";
-import { LiteraryProfileEntry } from "./literary-profile-entry";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, buttonVariants } from "@rezics/ui/shadcn/button";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@rezics/ui/shadcn/field";
-import { Input } from "@rezics/ui/shadcn/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@rezics/ui/shadcn/native-select";
-import { Textarea } from "@rezics/ui/shadcn/textarea";
-import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { m } from "../../paraglide/messages.js";
-import { PageHeading } from "../../shell/page-heading";
-import { DefinitionGuideLink } from "./definition-guide-view";
-import { DefinitionMeaning } from "./definition-meaning";
-import { GameProfileEntry } from "./game-profile-entry";
-import type { ReactNode } from "react";
-import type { InitialSubject } from "./create-subject";
-import type { Violation } from "@rezics/definitions/validate";
-import { RecipeEditorEntry } from "./recipe-editor-entry";
-import { CharacterProfileEntry } from "./character-profile-entry";
-import { ScreenProfileEntry } from "./screen-profile-entry";
-import { MangaProfileEntry } from "./manga-profile-entry";
-import { PeopleProfileEntry } from "./people-profile-entry";
-import { AlbumProfileEntry } from "./album-profile-entry";
-import {
-  createSubjectControls,
-  createSubjectGuidance,
-} from "./create-subject-guidance";
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { LiteraryProfileEntry } from './literary-profile-entry';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { m } from '../../paraglide/messages.js';
+import { PageHeading } from '../../shell/page-heading';
+import { DefinitionGuideLink } from './definition-guide-view';
+import { DefinitionMeaning } from './definition-meaning';
+import { GameProfileEntry } from './game-profile-entry';
+import type { ReactNode } from 'react';
+import type { InitialSubject } from './create-subject';
+import type { Violation } from '@rezics/definitions/validate';
+import { RecipeEditorEntry } from './recipe-editor-entry';
+import { CharacterProfileEntry } from './character-profile-entry';
+import { ScreenProfileEntry } from './screen-profile-entry';
+import { MangaProfileEntry } from './manga-profile-entry';
+import { PeopleProfileEntry } from './people-profile-entry';
+import { AlbumProfileEntry } from './album-profile-entry';
+import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import {
   initialTerms,
   type CreateFailure,
@@ -40,9 +29,9 @@ import {
   type CreateSubjectCommand,
   type CreateTransport,
   type TermDraft,
-} from "./create-subject";
+} from './create-subject';
 
-type Session = "unknown" | "signed-in" | "signed-out" | "unavailable";
+type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 type Created = Extract<CreateResult, { ok: true }>;
 
 /** Read the producer's current label after commit; no property meaning is inferred from an endpoint or ID. */
@@ -59,29 +48,18 @@ function CreationCorrection({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [current, setCurrent] = useState({
-    label: "",
+    label: '',
     language: undefined as string | undefined,
     available: false,
   });
   useLayoutEffect(() => {
-    const form = ref.current?.closest("form");
-    const target = id
-      ? ref.current?.ownerDocument.getElementById(id)
-      : undefined;
+    const form = ref.current?.closest('form');
+    const target = id ? ref.current?.ownerDocument.getElementById(id) : undefined;
     const mapped = !!target && !!form?.contains(target);
-    const available = mapped && !target.closest("[hidden]");
-    const labelledBy = mapped
-      ? target.getAttribute("aria-labelledby")?.split(/\s+/)
-      : undefined;
-    const heading = mapped
-      ? target.querySelector<HTMLElement>(
-          ":scope > legend, :scope > h2, :scope > h3",
-        )
-      : undefined;
-    const labels =
-      mapped && "labels" in target
-        ? (target as HTMLInputElement).labels
-        : undefined;
+    const available = mapped && !target.closest('[hidden]');
+    const labelledBy = mapped ? target.getAttribute('aria-labelledby')?.split(/\s+/) : undefined;
+    const heading = mapped ? target.querySelector<HTMLElement>(':scope > legend, :scope > h2, :scope > h3') : undefined;
+    const labels = mapped && 'labels' in target ? (target as HTMLInputElement).labels : undefined;
     const source = labelledBy
       ?.map((key) => target!.ownerDocument.getElementById(key))
       .filter((node) => node && form?.contains(node));
@@ -89,31 +67,24 @@ function CreationCorrection({
       label?.trim() ||
       source
         ?.map((node) => node!.textContent)
-        .join(" ")
+        .join(' ')
         .trim() ||
-      (mapped ? target.getAttribute("aria-label")?.trim() : "") ||
+      (mapped ? target.getAttribute('aria-label')?.trim() : '') ||
       (labels
         ? Array.from(labels, (node) => node.textContent)
-            .join(" ")
+            .join(' ')
             .trim()
-        : "") ||
+        : '') ||
       heading?.textContent?.trim() ||
-      "";
-    const property = pointer.startsWith("/statements/")
-      ? pointer.split("/")[2]?.replaceAll("~1", "/").replaceAll("~0", "~")
+      '';
+    const property = pointer.startsWith('/statements/')
+      ? pointer.split('/')[2]?.replaceAll('~1', '/').replaceAll('~0', '~')
       : undefined;
-    const text =
-      named === id || named === pointer || named === property ? "" : named;
+    const text = named === id || named === pointer || named === property ? '' : named;
     const language = label
       ? undefined
-      : ((source?.[0] ?? labels?.[0] ?? heading ?? target)
-          ?.closest("[lang]")
-          ?.getAttribute("lang") ?? undefined);
-    if (
-      text !== current.label ||
-      language !== current.language ||
-      available !== current.available
-    )
+      : ((source?.[0] ?? labels?.[0] ?? heading ?? target)?.closest('[lang]')?.getAttribute('lang') ?? undefined);
+    if (text !== current.label || language !== current.language || available !== current.available)
       setCurrent({ label: text, language, available });
   });
   return (
@@ -121,44 +92,31 @@ function CreationCorrection({
       {current.available ? (
         <a
           className="inline-flex min-h-11 max-w-full items-center whitespace-normal underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          href={`#${encodeURIComponent(id ?? "")}`}
+          href={`#${encodeURIComponent(id ?? '')}`}
           lang={current.label ? current.language : locale}
           onClick={(event) => {
-            const target = id
-              ? event.currentTarget.ownerDocument.getElementById(id)
-              : null;
-            if (
-              !target ||
-              !event.currentTarget.closest("form")?.contains(target)
-            )
-              return;
+            const target = id ? event.currentTarget.ownerDocument.getElementById(id) : null;
+            if (!target || !event.currentTarget.closest('form')?.contains(target)) return;
             // Profile mappings can point to a named field group rather than its inner input.
-            for (
-              let parent = target.parentElement;
-              parent;
-              parent = parent.parentElement
-            )
-              if (parent.tagName === "DETAILS")
-                (parent as HTMLDetailsElement).open = true;
-            const focus = target.matches("input, select, textarea, button")
+            for (let parent = target.parentElement; parent; parent = parent.parentElement)
+              if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
+            const focus = target.matches('input, select, textarea, button')
               ? target
               : target.querySelector<HTMLElement>(
-                  "input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])",
+                  'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
                 );
             if (focus) focus.focus();
             else {
-              target.setAttribute("tabindex", "-1");
+              target.setAttribute('tabindex', '-1');
               target.focus();
             }
           }}
         >
-          {current.label ||
-            m.catalogue_creation_field_unknown({}, { locale: locale as never })}
+          {current.label || m.catalogue_creation_field_unknown({}, { locale: locale as never })}
         </a>
       ) : (
         <span lang={current.label ? current.language : locale}>
-          {current.label ||
-            m.catalogue_creation_field_unknown({}, { locale: locale as never })}
+          {current.label || m.catalogue_creation_field_unknown({}, { locale: locale as never })}
         </span>
       )}
     </span>
@@ -181,10 +139,7 @@ function CreateSubjectFormLive({
     scope: string;
     hideHeading?: boolean;
     readOnlyType?: boolean;
-    control?: (
-      pointer: string,
-      type: string,
-    ) => string | { id: string; label: string } | undefined;
+    control?: (pointer: string, type: string) => string | { id: string; label: string } | undefined;
     errorLabel?: (id: string) => string | undefined;
     type?: string;
     intro?: string;
@@ -206,17 +161,12 @@ function CreateSubjectFormLive({
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const client = useQueryClient();
-  const queryKey = [
-    "catalogue-create",
-    "definitions",
-    locale,
-    String(lifetime.generation),
-  ];
+  const queryKey = ['catalogue-create', 'definitions', locale, String(lifetime.generation)];
   if (profile) queryKey.push(profile.scope);
   async function loadDefinitions(refresh = false) {
     const result = await transport.definitions(refresh);
     // A failed reload must not replace the last usable choices or unmount the draft's controls.
-    if (!result.ok) throw new Error("Creation definitions unavailable");
+    if (!result.ok) throw new Error('Creation definitions unavailable');
     return result;
   }
   // Definitions and the route's session read start independently.
@@ -235,10 +185,8 @@ function CreateSubjectFormLive({
       })
       .catch(() => undefined);
   }
-  const [type, setType] = useState(profile?.type ?? "");
-  const [rows, setRows] = useState<TermDraft[]>([
-    { language: locale, label: "", description: "", aliases: "" },
-  ]);
+  const [type, setType] = useState(profile?.type ?? '');
+  const [rows, setRows] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
   const [failure, setFailure] = useState<CreateFailure>();
   // Capture profile addresses at rejection, before row deletion or Type changes can shift native indices.
   const targets = useRef(new Map<string, { id: string; label?: string }>());
@@ -246,11 +194,7 @@ function CreateSubjectFormLive({
     targets.current = new Map();
     for (const error of result.errors ?? []) {
       const target = profile?.control?.(error.pointer, type);
-      if (target)
-        targets.current.set(
-          error.pointer,
-          typeof target === "string" ? { id: target } : target,
-        );
+      if (target) targets.current.set(error.pointer, typeof target === 'string' ? { id: target } : target);
     }
     setFailure(result);
   }
@@ -264,35 +208,24 @@ function CreateSubjectFormLive({
   const unresolvedProfile = useRef(false);
   const request = useRef<CreateSubjectCommand | null>(null);
   const types = definitions.data?.ok
-    ? definitions.data.types.filter(
-        (entry) => !profile?.type || entry.id === profile.type,
-      )
+    ? definitions.data.types.filter((entry) => !profile?.type || entry.id === profile.type)
     : [];
   const selectedType = types.find((entry) => entry.id === type);
   const selectedTypeName = selectedType?.label.trim();
   const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
   const uncertain =
-    (failure?.reason === "unavailable" && request.current !== null) ||
-    (!!profile && unresolvedProfile.current);
-  const locked = busy || uncertain || failure?.reason === "conflict";
-  const disabled = locked || session !== "signed-in";
+    (failure?.reason === 'unavailable' && request.current !== null) || (!!profile && unresolvedProfile.current);
+  const locked = busy || uncertain || failure?.reason === 'conflict';
+  const disabled = locked || session !== 'signed-in';
   const errors = failure?.errors ?? [];
   const readOnlyType = !!profile?.type && profile.readOnlyType;
-  const hasDraft =
-    !!type ||
-    rows.some((row) => !!(row.label || row.description || row.aliases));
+  const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
-  const definitionsBlocked =
-    !request.current &&
-    (definitions.isError || definitions.isFetching || types.length === 0);
+  const definitionsBlocked = !request.current && (definitions.isError || definitions.isFetching || types.length === 0);
 
   const termControl = createSubjectControls(rows);
-  const control = (pointer: string) =>
-    targets.current.get(pointer)?.id || termControl(pointer);
-  const corrections = new Map<
-    string,
-    { id: string | undefined; label: string | undefined; errors: Violation[] }
-  >();
+  const control = (pointer: string) => targets.current.get(pointer)?.id || termControl(pointer);
+  const corrections = new Map<string, { id: string | undefined; label: string | undefined; errors: Violation[] }>();
   for (const error of errors) {
     const id = control(error.pointer);
     const key = id ? `control:${id}` : `pointer:${error.pointer}`;
@@ -305,46 +238,27 @@ function CreateSubjectFormLive({
     corrections.set(key, group);
   }
   const invalid = (id: string) => corrections.has(`control:${id}`);
-  function guidance(
-    id: string,
-    field: keyof TermDraft | "type",
-    index?: number,
-  ) {
+  function guidance(id: string, field: keyof TermDraft | 'type', index?: number) {
     return [
       ...new Set(
         (corrections.get(`control:${id}`)?.errors ?? []).map((error) =>
           targets.current.has(error.pointer)
             ? m.catalogue_create_invalid_field({}, options)
-            : createSubjectGuidance(
-                error,
-                field,
-                { type, rows, index: index ?? 0 },
-                locale,
-              ),
+            : createSubjectGuidance(error, field, { type, rows, index: index ?? 0 }, locale),
         ),
       ),
-    ].join(" ");
+    ].join(' ');
   }
 
   function update(index: number, field: keyof TermDraft, value: string) {
-    setRows((current) =>
-      current.map((row, at) =>
-        at === index ? { ...row, [field]: value } : row,
-      ),
-    );
+    setRows((current) => current.map((row, at) => (at === index ? { ...row, [field]: value } : row)));
     setFailure(undefined);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     if (!lifetime.active()) return;
     event.preventDefault();
-    if (
-      running.current ||
-      session !== "signed-in" ||
-      created ||
-      failure?.reason === "conflict" ||
-      definitionsBlocked
-    )
+    if (running.current || session !== 'signed-in' || created || failure?.reason === 'conflict' || definitionsBlocked)
       return;
     if (!request.current) {
       const draft = initialTerms(type, rows);
@@ -353,10 +267,9 @@ function CreateSubjectFormLive({
         draft.item = prepared.item;
         draft.errors.push(...prepared.errors);
       }
-      if (!types.some((entry) => entry.id === type))
-        draft.errors.push({ pointer: "/type", code: "unsupported" });
+      if (!types.some((entry) => entry.id === type)) draft.errors.push({ pointer: '/type', code: 'unsupported' });
       if (draft.errors.length) {
-        reject({ ok: false, reason: "invalid", errors: draft.errors });
+        reject({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
       request.current = { item: draft.item, key: crypto.randomUUID() };
@@ -370,17 +283,12 @@ function CreateSubjectFormLive({
       if (result.ok) {
         setCreated(result);
         onCreated?.(result);
-        if (result.reader.state === "ready") onNavigate(result.reader.href);
+        if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
         reject(result);
-        if (profile && result.reason === "unavailable")
-          unresolvedProfile.current = true;
+        if (profile && result.reason === 'unavailable') unresolvedProfile.current = true;
         // Uncertain delivery and key conflicts retain the exact frozen command. Never silently create a second identity.
-        if (
-          !unresolvedProfile.current &&
-          result.reason !== "unavailable" &&
-          result.reason !== "conflict"
-        )
+        if (!unresolvedProfile.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
           request.current = null;
         if (result.refreshDefinitions) {
           await reloadDefinitions();
@@ -389,7 +297,7 @@ function CreateSubjectFormLive({
     } catch {
       if (!lifetime.active()) return;
       if (profile) unresolvedProfile.current = true;
-      setFailure({ ok: false, reason: "unavailable" });
+      setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -407,10 +315,10 @@ function CreateSubjectFormLive({
       if (!lifetime.active()) return;
       setCreated({ ...created, reader });
       onCreated?.({ ...created, reader });
-      if (reader.state === "ready") onNavigate(reader.href);
+      if (reader.state === 'ready') onNavigate(reader.href);
     } catch {
       if (!lifetime.active()) return;
-      setCreated({ ...created, reader: { state: "unavailable" } });
+      setCreated({ ...created, reader: { state: 'unavailable' } });
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -427,9 +335,7 @@ function CreateSubjectFormLive({
           ) : (
             <PageHeading>{m.catalogue_create_title({}, options)}</PageHeading>
           )}
-          <p className="text-muted-foreground">
-            {profile?.intro ?? m.catalogue_create_intro({}, options)}
-          </p>
+          <p className="text-muted-foreground">{profile?.intro ?? m.catalogue_create_intro({}, options)}</p>
         </header>
       )}
       {created ? (
@@ -439,26 +345,19 @@ function CreateSubjectFormLive({
           role="status"
           className="space-y-4 rounded-xl border border-border bg-card p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-6"
         >
-          <p className="font-medium">
-            {m.catalogue_create_created({}, options)}
-          </p>
-          {created.reader.state === "ready" ? (
+          <p className="font-medium">{m.catalogue_create_created({}, options)}</p>
+          {created.reader.state === 'ready' ? (
             <a href={created.reader.href} className={buttonVariants()}>
               {m.catalogue_create_open({}, options)}
             </a>
           ) : (
             <>
               <p>
-                {created.reader.state === "concealed"
+                {created.reader.state === 'concealed'
                   ? m.catalogue_create_concealed({}, options)
                   : m.catalogue_create_reader_unavailable({}, options)}
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => void openCreated()}
-              >
+              <Button type="button" variant="outline" disabled={busy} onClick={() => void openCreated()}>
                 {m.catalogue_create_retry({}, options)}
               </Button>
             </>
@@ -466,12 +365,12 @@ function CreateSubjectFormLive({
         </section>
       ) : (
         <>
-          {(session === "unknown" || definitions.isPending) && (
+          {(session === 'unknown' || definitions.isPending) && (
             <p role="status">{m.catalogue_create_loading({}, options)}</p>
           )}
-          {session === "signed-out" && (
+          {session === 'signed-out' && (
             <p role="status">
-              {m.catalogue_create_signed_out({}, options)}{" "}
+              {m.catalogue_create_signed_out({}, options)}{' '}
               <a
                 className="underline"
                 href={`/auth/sign-in?return_to=${encodeURIComponent(profile?.href ?? `/${locale}/catalogue/new`)}`}
@@ -480,7 +379,7 @@ function CreateSubjectFormLive({
               </a>
             </p>
           )}
-          {(session === "unavailable" || definitions.isError) && (
+          {(session === 'unavailable' || definitions.isError) && (
             <div role="alert" className="space-y-3">
               <p>{m.catalogue_create_unavailable({}, options)}</p>
               <Button
@@ -488,113 +387,85 @@ function CreateSubjectFormLive({
                 variant="outline"
                 onClick={() => {
                   void reloadDefinitions();
-                  void client.invalidateQueries({ queryKey: ["session"] });
+                  void client.invalidateQueries({ queryKey: ['session'] });
                 }}
               >
                 {m.catalogue_create_retry({}, options)}
               </Button>
             </div>
           )}
-          {definitions.data?.ok && types.length === 0 && (
-            <p role="status">{m.catalogue_create_empty({}, options)}</p>
-          )}
+          {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && (types.length > 0 || hasDraft) && (
-            <form
-              className="space-y-6"
-              noValidate
-              onSubmit={(event) => void submit(event)}
-              aria-busy={busy}
-            >
+            <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
               {rows.map((row, index) => (
                 <fieldset
                   key={index}
                   disabled={disabled}
                   className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
                 >
-                  <legend className="px-1 text-sm font-semibold">
-                    {m.catalogue_create_terms({}, options)}
-                  </legend>
-                  {(
-                    ["label", "language", "description", "aliases"] as const
-                  ).map((field) => {
+                  <legend className="px-1 text-sm font-semibold">{m.catalogue_create_terms({}, options)}</legend>
+                  {(['label', 'language', 'description', 'aliases'] as const).map((field) => {
                     const id = `create-${field}-${index}`;
                     const describedBy =
-                      [
-                        field !== "description" ? `${id}-help` : undefined,
-                        invalid(id) ? `${id}-error` : undefined,
-                      ]
+                      [field !== 'description' ? `${id}-help` : undefined, invalid(id) ? `${id}-error` : undefined]
                         .filter(Boolean)
-                        .join(" ") || undefined;
+                        .join(' ') || undefined;
                     const label =
-                      field === "language"
+                      field === 'language'
                         ? m.catalogue_create_language({}, options)
-                        : field === "label"
+                        : field === 'label'
                           ? m.catalogue_create_label({}, options)
-                          : field === "description"
+                          : field === 'description'
                             ? m.catalogue_create_description({}, options)
                             : m.catalogue_create_aliases({}, options);
                     return (
-                      <Field
-                        key={field}
-                        data-invalid={invalid(id) || undefined}
-                      >
+                      <Field key={field} data-invalid={invalid(id) || undefined}>
                         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-                        {field === "aliases" ? (
+                        {field === 'aliases' ? (
                           <Textarea
                             id={id}
                             value={row[field]}
                             rows={3}
                             aria-invalid={invalid(id)}
                             aria-describedby={describedBy}
-                            onChange={(event) =>
-                              update(index, field, event.target.value)
-                            }
+                            onChange={(event) => update(index, field, event.target.value)}
                           />
                         ) : (
                           <Input
                             id={id}
                             value={row[field]}
-                            maxLength={field === "language" ? 64 : 250}
-                            required={field === "language" || field === "label"}
+                            maxLength={field === 'language' ? 64 : 250}
+                            required={field === 'language' || field === 'label'}
                             aria-invalid={invalid(id)}
                             aria-describedby={describedBy}
-                            onChange={(event) =>
-                              update(index, field, event.target.value)
-                            }
+                            onChange={(event) => update(index, field, event.target.value)}
                           />
                         )}
-                        {field === "label" && (
+                        {field === 'label' && (
                           <FieldDescription id={`${id}-help`}>
-                            {m.catalogue_create_duplicate_help({}, options)}{" "}
+                            {m.catalogue_create_duplicate_help({}, options)}{' '}
                             <a
                               className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-                              href={`/${locale}/search${row.label.trim() ? `?q=${encodeURIComponent(row.label.trim())}` : ""}`}
+                              href={`/${locale}/search${row.label.trim() ? `?q=${encodeURIComponent(row.label.trim())}` : ''}`}
                               target="_blank"
                               rel="noopener noreferrer"
                             >
                               {m.catalogue_create_search({}, options)}
-                              <span className="sr-only">
-                                {" "}
-                                · {m.guide_new_tab({}, options)}
-                              </span>
+                              <span className="sr-only"> · {m.guide_new_tab({}, options)}</span>
                             </a>
                           </FieldDescription>
                         )}
-                        {field === "language" && (
+                        {field === 'language' && (
                           <FieldDescription id={`${id}-help`}>
                             {m.catalogue_create_language_help({}, options)}
                           </FieldDescription>
                         )}
-                        {field === "aliases" && (
+                        {field === 'aliases' && (
                           <FieldDescription id={`${id}-help`}>
                             {m.catalogue_create_aliases_help({}, options)}
                           </FieldDescription>
                         )}
-                        {invalid(id) && (
-                          <FieldError id={`${id}-error`}>
-                            {guidance(id, field, index)}
-                          </FieldError>
-                        )}
+                        {invalid(id) && <FieldError id={`${id}-error`}>{guidance(id, field, index)}</FieldError>}
                       </Field>
                     );
                   })}
@@ -616,59 +487,44 @@ function CreateSubjectFormLive({
                 type="button"
                 variant="outline"
                 disabled={disabled}
-                onClick={() =>
-                  setRows([
-                    ...rows,
-                    { language: "", label: "", description: "", aliases: "" },
-                  ])
-                }
+                onClick={() => setRows([...rows, { language: '', label: '', description: '', aliases: '' }])}
               >
                 {m.catalogue_create_add_language({}, options)}
               </Button>
               <Field
                 hidden={!!profile?.type && profile.hideHeading && !readOnlyType}
-                data-invalid={invalid("create-type") || undefined}
+                data-invalid={invalid('create-type') || undefined}
               >
                 {readOnlyType ? (
                   <div
                     id="create-type"
                     tabIndex={-1}
                     aria-labelledby="create-type-label"
-                    aria-invalid={invalid("create-type")}
-                    aria-describedby={`create-type-help${invalid("create-type") ? " create-type-error" : ""}`}
+                    aria-invalid={invalid('create-type')}
+                    aria-describedby={`create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                   >
                     <p id="create-type-label" className="text-sm font-medium">
                       {m.catalogue_create_type({}, options)}
                     </p>
-                    <p
-                      lang={
-                        hasTypeName ? profile?.labelLanguage?.(type) : locale
-                      }
-                    >
-                      {hasTypeName
-                        ? selectedTypeName
-                        : m.catalogue_creation_type_unlabelled({}, options)}
+                    <p lang={hasTypeName ? profile?.labelLanguage?.(type) : locale}>
+                      {hasTypeName ? selectedTypeName : m.catalogue_creation_type_unlabelled({}, options)}
                     </p>
                   </div>
                 ) : (
                   <>
-                    <FieldLabel htmlFor="create-type">
-                      {m.catalogue_create_type({}, options)}
-                    </FieldLabel>
+                    <FieldLabel htmlFor="create-type">{m.catalogue_create_type({}, options)}</FieldLabel>
                     <NativeSelect
                       id="create-type"
                       value={type}
                       disabled={disabled}
-                      aria-invalid={invalid("create-type")}
-                      aria-describedby={`create-grain create-type-help${invalid("create-type") ? " create-type-error" : ""}`}
+                      aria-invalid={invalid('create-type')}
+                      aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                       onChange={(event) => {
                         setType(event.target.value);
                         setFailure(undefined);
                       }}
                     >
-                      <NativeSelectOption value="">
-                        {m.catalogue_create_choose_type({}, options)}
-                      </NativeSelectOption>
+                      <NativeSelectOption value="">{m.catalogue_create_choose_type({}, options)}</NativeSelectOption>
                       {type && !types.some((entry) => entry.id === type) && (
                         <NativeSelectOption value={type} disabled>
                           {m.catalogue_create_choose_type({}, options)}
@@ -679,9 +535,7 @@ function CreateSubjectFormLive({
                           key={entry.id}
                           value={entry.id}
                           lang={
-                            entry.label.trim() && entry.label !== entry.id
-                              ? profile?.labelLanguage?.(entry.id)
-                              : locale
+                            entry.label.trim() && entry.label !== entry.id ? profile?.labelLanguage?.(entry.id) : locale
                           }
                         >
                           {entry.label.trim() && entry.label !== entry.id
@@ -690,9 +544,7 @@ function CreateSubjectFormLive({
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
-                    <FieldDescription id="create-grain">
-                      {m.catalogue_create_grain({}, options)}
-                    </FieldDescription>
+                    <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
                   </>
                 )}
                 <FieldDescription id="create-type-help">
@@ -717,14 +569,9 @@ function CreateSubjectFormLive({
                     </dl>
                   </details>
                 ) : null}
-                <DefinitionGuideLink
-                  locale={locale}
-                  address={{ type, returnTo: `/${locale}/catalogue/new` }}
-                />
-                {invalid("create-type") && (
-                  <FieldError id="create-type-error">
-                    {guidance("create-type", "type")}
-                  </FieldError>
+                <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
+                {invalid('create-type') && (
+                  <FieldError id="create-type-error">{guidance('create-type', 'type')}</FieldError>
                 )}
               </Field>
               {profile?.fields(type, disabled)}
@@ -736,17 +583,17 @@ function CreateSubjectFormLive({
                   className="space-y-3 rounded-xl border border-destructive/40 p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <p>
-                    {failure.reason === "denied"
+                    {failure.reason === 'denied'
                       ? m.catalogue_create_denied({}, options)
-                      : failure.reason === "signed-out"
+                      : failure.reason === 'signed-out'
                         ? m.catalogue_create_signed_out({}, options)
-                        : failure.reason === "conflict"
+                        : failure.reason === 'conflict'
                           ? m.catalogue_create_conflict({}, options)
-                          : failure.reason === "invalid"
+                          : failure.reason === 'invalid'
                             ? m.catalogue_create_invalid({}, options)
                             : m.catalogue_create_uncertain({}, options)}
                   </p>
-                  {failure.reason === "signed-out" && (
+                  {failure.reason === 'signed-out' && (
                     <a
                       className="underline"
                       href={`/auth/sign-in?return_to=${encodeURIComponent(profile?.href ?? `/${locale}/catalogue/new`)}`}
@@ -756,86 +603,56 @@ function CreateSubjectFormLive({
                   )}
                   {errors.length > 0 && (
                     <ul className="flex min-w-0 list-inside list-disc flex-col gap-2">
-                      {[...corrections].map(
-                        ([key, { id, label, errors: fieldErrors }]) => (
-                          <li key={key}>
-                            <CreationCorrection
-                              id={id}
-                              label={
-                                label ??
-                                (id ? profile?.errorLabel?.(id) : undefined)
-                              }
-                              pointer={fieldErrors[0]!.pointer}
-                              locale={locale}
-                            />
-                            <details className="min-w-0 text-sm">
-                              <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                                {m.catalogue_creation_technical_details(
-                                  {},
-                                  options,
-                                )}
-                              </summary>
-                              {fieldErrors.map((error, index) => (
-                                <dl
-                                  key={index}
-                                  className="flex min-w-0 flex-col gap-1 py-2"
-                                >
-                                  <dt>
-                                    {m.catalogue_creation_pointer({}, options)}
-                                  </dt>
-                                  <dd>
-                                    <code className="select-all break-all">
-                                      {error.pointer === ""
-                                        ? '""'
-                                        : error.pointer}
-                                    </code>
-                                  </dd>
-                                  <dt>
-                                    {m.catalogue_creation_error_code(
-                                      {},
-                                      options,
-                                    )}
-                                  </dt>
-                                  <dd>
-                                    <code className="select-all break-all">
-                                      {error.code}
-                                    </code>
-                                  </dd>
-                                </dl>
-                              ))}
-                            </details>
-                          </li>
-                        ),
-                      )}
+                      {[...corrections].map(([key, { id, label, errors: fieldErrors }]) => (
+                        <li key={key}>
+                          <CreationCorrection
+                            id={id}
+                            label={label ?? (id ? profile?.errorLabel?.(id) : undefined)}
+                            pointer={fieldErrors[0]!.pointer}
+                            locale={locale}
+                          />
+                          <details className="min-w-0 text-sm">
+                            <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                              {m.catalogue_creation_technical_details({}, options)}
+                            </summary>
+                            {fieldErrors.map((error, index) => (
+                              <dl key={index} className="flex min-w-0 flex-col gap-1 py-2">
+                                <dt>{m.catalogue_creation_pointer({}, options)}</dt>
+                                <dd>
+                                  <code className="select-all break-all">
+                                    {error.pointer === '' ? '""' : error.pointer}
+                                  </code>
+                                </dd>
+                                <dt>{m.catalogue_creation_error_code({}, options)}</dt>
+                                <dd>
+                                  <code className="select-all break-all">{error.code}</code>
+                                </dd>
+                              </dl>
+                            ))}
+                          </details>
+                        </li>
+                      ))}
                     </ul>
                   )}
-                  {failure.refreshDefinitions && (
-                    <p>{m.catalogue_create_refresh({}, options)}</p>
+                  {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, options)}</p>}
+                  {failure.reason === 'conflict' && !unresolvedProfile.current && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        request.current = null;
+                        setFailure(undefined);
+                      }}
+                    >
+                      {m.catalogue_create_review_new({}, options)}
+                    </Button>
                   )}
-                  {failure.reason === "conflict" &&
-                    !unresolvedProfile.current && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          request.current = null;
-                          setFailure(undefined);
-                        }}
-                      >
-                        {m.catalogue_create_review_new({}, options)}
-                      </Button>
-                    )}
                 </div>
               )}
               <div>
                 <Button
                   type="submit"
-                  disabled={
-                    busy ||
-                    session !== "signed-in" ||
-                    failure?.reason === "conflict" ||
-                    definitionsBlocked
-                  }
+                  disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict' || definitionsBlocked}
                 >
                   {busy
                     ? m.catalogue_create_saving({}, options)

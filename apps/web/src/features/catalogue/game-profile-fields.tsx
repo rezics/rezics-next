@@ -1,62 +1,36 @@
-import { useId, useRef, useState } from "react";
-import { pickText } from "@rezics/composition";
-import type { Release } from "@rezics/definitions";
-import { ContentItemFrame, ContentItemHeading } from "@rezics/ui/content-item";
-import {
-  EntityPicker,
-  type EntityPickerSearch,
-  type EntityPickerSubject,
-} from "@rezics/ui/entity-picker";
-import { Button } from "@rezics/ui/shadcn/button";
-import { Field, FieldLabel } from "@rezics/ui/shadcn/field";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@rezics/ui/shadcn/native-select";
-import { coverSrc } from "../../media/cover-src";
-import { m } from "../../paraglide/messages.js";
-import {
-  CandidateReview,
-  type CandidateTransport,
-} from "../../subject/candidate-review";
-import { controlId } from "./statement-validation-presentation";
-import { gameGroups, gameTarget, type GameRead } from "./game-profile";
-import {
-  StatementFields,
-  PartValue,
-  EditorFailure,
-  type StatementFieldsRead,
-} from "./statement-editor-view";
-import {
-  statementInput,
-  type SnakInput,
-  type StatementInput,
-} from "./statement-editor";
-import {
-  factChanged,
-  factLocked,
-  sealFacts,
-  sendFacts,
-  type FactDraft,
-  type FactsTransport,
-} from "./subject-facts";
+import { useId, useRef, useState } from 'react';
+import { pickText } from '@rezics/composition';
+import type { Release } from '@rezics/definitions';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { coverSrc } from '../../media/cover-src';
+import { m } from '../../paraglide/messages.js';
+import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
+import { controlId } from './statement-validation-presentation';
+import { gameGroups, gameTarget, type GameRead } from './game-profile';
+import { StatementFields, PartValue, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
+import { statementInput, type SnakInput, type StatementInput } from './statement-editor';
+import { factChanged, factLocked, sealFacts, sendFacts, type FactDraft, type FactsTransport } from './subject-facts';
 
 const gameActionClass =
-  "min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11";
+  'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
 const gamePropertySelectClass =
-  "w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full [@media(max-width:639px)_and_(pointer:coarse)]:[&>select]:min-h-11";
+  'w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full [@media(max-width:639px)_and_(pointer:coarse)]:[&>select]:min-h-11';
 // Raise native controls individually above the shared surface, without a panel-wide hit target.
 const gameFieldFrameClass =
-  "min-w-0 max-w-full space-y-4 p-4 [overflow-wrap:anywhere] [&_a]:relative [&_a]:z-10 [&_button]:relative [&_button]:z-10 [&_label]:relative [&_label]:z-10 [&_input]:relative [&_input]:z-10 [&_select]:relative [&_select]:z-10 [&_textarea]:relative [&_textarea]:z-10 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring";
+  'min-w-0 max-w-full space-y-4 p-4 [overflow-wrap:anywhere] [&_a]:relative [&_a]:z-10 [&_button]:relative [&_button]:z-10 [&_label]:relative [&_label]:z-10 [&_input]:relative [&_input]:z-10 [&_select]:relative [&_select]:z-10 [&_textarea]:relative [&_textarea]:z-10 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring';
 
 type Ready = Extract<GameRead, { ok: true }>;
 export function gameGroupLabel(group: string, locale: string) {
   const o = { locale: locale as never };
-  return group === "credits"
+  return group === 'credits'
     ? m.game_profile_credits({}, o)
-    : group === "classification"
+    : group === 'classification'
       ? m.game_profile_classification({}, o)
-      : group === "relations"
+      : group === 'relations'
         ? m.game_profile_relations({}, o)
         : m.game_profile_facts({}, o);
 }
@@ -71,16 +45,13 @@ function GameItemControl({
   context: StatementFieldsRead;
   locale: string;
   search: EntityPickerSearch;
-  change: (value: SnakInput["value"]) => void;
+  change: (value: SnakInput['value']) => void;
 }) {
   const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
   const property = part.property.id;
   const definition = context.release.properties[property]!;
   const label = pickText(definition.labels, locale);
-  const value =
-    part.value.type === "value" && typeof part.value.content === "string"
-      ? part.value.content
-      : "";
+  const value = part.value.type === 'value' && typeof part.value.content === 'string' ? part.value.content : '';
   const target = value ? picked.find((item) => item.id === value) : undefined;
   return (
     <EntityPicker
@@ -92,11 +63,10 @@ function GameItemControl({
               target ?? {
                 id: value,
                 title:
-                  pickText(context.public.related[value]?.labels ?? {}, locale)
-                    .text ||
+                  pickText(context.public.related[value]?.labels ?? {}, locale).text ||
                   m.subject_value_unlabelled({}, { locale: locale as never }),
                 types: [],
-                typeLabel: "",
+                typeLabel: '',
                 cover: null,
               },
             ]
@@ -104,14 +74,12 @@ function GameItemControl({
       }
       search={async (text, signal) =>
         (await search(text, signal)).filter((item) =>
-          item.types.some((type) =>
-            gameTarget(context.release, property, type),
-          ),
+          item.types.some((type) => gameTarget(context.release, property, type)),
         )
       }
       onValueChange={(items) => {
         setPicked(items);
-        change({ type: "value", content: items[0]?.id ?? "" });
+        change({ type: 'value', content: items[0]?.id ?? '' });
       }}
     />
   );
@@ -131,33 +99,19 @@ export function GameStatementFields({
   search: EntityPickerSearch;
   change: (next: StatementInput) => void;
 }) {
-  const control = (
-    part: SnakInput,
-    update: (value: SnakInput["value"]) => void,
-  ) => {
-    if (
-      context.release.properties[part.property.id]?.datatype !== "wikibase-item"
-    )
-      return;
+  const control = (part: SnakInput, update: (value: SnakInput['value']) => void) => {
+    if (context.release.properties[part.property.id]?.datatype !== 'wikibase-item') return;
     const qualifier = statement.qualifiers?.indexOf(part) ?? -1;
-    const reference = statement.references.findIndex((item) =>
-      item.parts.includes(part),
-    );
+    const reference = statement.references.findIndex((item) => item.parts.includes(part));
     const address =
       part === statement
-        ? "fact"
+        ? 'fact'
         : qualifier >= 0
           ? `qualifier-${qualifier}`
           : `reference-${reference}-part-${statement.references[reference]?.parts.indexOf(part)}`;
     return (
-      <div id={id ? controlId(id, address, "value") : undefined}>
-        <GameItemControl
-          part={part}
-          context={context}
-          locale={locale}
-          search={search}
-          change={update}
-        />
+      <div id={id ? controlId(id, address, 'value') : undefined}>
+        <GameItemControl part={part} context={context} locale={locale} search={search} change={update} />
       </div>
     );
   };
@@ -168,9 +122,7 @@ export function GameStatementFields({
       current={context}
       locale={locale}
       change={change}
-      valueControl={control(statement, (value) =>
-        change({ ...statement, value }),
-      )}
+      valueControl={control(statement, (value) => change({ ...statement, value }))}
       partControl={control}
     />
   );
@@ -193,7 +145,7 @@ export function GameInitialFacts({
   change: (rows: { key: string; statement: StatementInput }[]) => void;
 }) {
   const propertySelectId = useId();
-  const [property, setProperty] = useState("");
+  const [property, setProperty] = useState('');
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
   const context: StatementFieldsRead = {
@@ -203,12 +155,8 @@ export function GameInitialFacts({
   };
   return (
     <fieldset disabled={disabled} className="min-w-0 max-w-full space-y-5">
-      <legend className="font-sans text-lg font-semibold">
-        {m.game_profile_initial({}, o)}
-      </legend>
-      <p className="text-sm text-muted-foreground">
-        {m.game_profile_optional({}, o)}
-      </p>
+      <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
+      <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
       <Field className="min-w-0 max-w-full">
         <FieldLabel
           htmlFor={propertySelectId}
@@ -223,9 +171,7 @@ export function GameInitialFacts({
           value={property}
           onChange={(event) => setProperty(event.target.value)}
         >
-          <NativeSelectOption value="">
-            {m.correction_choose({}, o)}
-          </NativeSelectOption>
+          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
           {Object.entries(groups)
             .filter(([, ids]) => ids.length)
             .map(([group, ids]) => (
@@ -234,21 +180,12 @@ export function GameInitialFacts({
                   .filter(
                     (id) =>
                       release.properties[id]!.multivalued ||
-                      !statements.some(
-                        (row) => row.statement.property.id === id,
-                      ),
+                      !statements.some((row) => row.statement.property.id === id),
                   )
                   .map((id) => {
-                    const label = pickText(
-                      release.properties[id]!.labels,
-                      locale,
-                    );
+                    const label = pickText(release.properties[id]!.labels, locale);
                     return (
-                      <NativeSelectOption
-                        key={id}
-                        value={id}
-                        lang={label.lang ?? undefined}
-                      >
+                      <NativeSelectOption key={id} value={id} lang={label.lang ?? undefined}>
                         {label.text}
                       </NativeSelectOption>
                     );
@@ -261,10 +198,7 @@ export function GameInitialFacts({
         type="button"
         className={gameActionClass}
         variant="outline"
-        disabled={
-          !Object.values(groups).flat().includes(property) ||
-          statements.length >= 32
-        }
+        disabled={!Object.values(groups).flat().includes(property) || statements.length >= 32}
         onClick={() => {
           change([
             ...statements,
@@ -272,30 +206,23 @@ export function GameInitialFacts({
               key: crypto.randomUUID(),
               statement: {
                 property: { id: property },
-                value: { type: "value", content: "" },
+                value: { type: 'value', content: '' },
                 qualifiers: [],
                 references: [],
-                rank: "normal",
+                rank: 'normal',
               },
             },
           ]);
-          setProperty("");
+          setProperty('');
         }}
       >
         {m.correction_add({}, o)}
       </Button>
       {statements.map((row) => {
-        const label = pickText(
-          release.properties[row.statement.property.id]?.labels ?? {},
-          locale,
-        );
+        const label = pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale);
         return (
           <section key={row.key} className="min-w-0 max-w-full">
-            <ContentItemFrame
-              as="div"
-              data-slot="game-initial-fact"
-              className={gameFieldFrameClass}
-            >
+            <ContentItemFrame as="div" data-slot="game-initial-fact" className={gameFieldFrameClass}>
               <ContentItemHeading
                 level={2}
                 className="min-w-0 max-w-full whitespace-normal break-words font-sans text-lg font-semibold"
@@ -310,20 +237,14 @@ export function GameInitialFacts({
                 locale={locale}
                 search={search}
                 change={(statement) =>
-                  change(
-                    statements.map((item) =>
-                      item.key === row.key ? { ...item, statement } : item,
-                    ),
-                  )
+                  change(statements.map((item) => (item.key === row.key ? { ...item, statement } : item)))
                 }
               />
               <Button
                 type="button"
                 className={gameActionClass}
                 variant="ghost"
-                onClick={() =>
-                  change(statements.filter((item) => item.key !== row.key))
-                }
+                onClick={() => change(statements.filter((item) => item.key !== row.key))}
               >
                 {m.recipe_remove_field({}, o)}
               </Button>
@@ -342,7 +263,7 @@ export function GameClassifications({
   transport,
   review,
 }: {
-  read: Ready & { public: NonNullable<Ready["public"]> };
+  read: Ready & { public: NonNullable<Ready['public']> };
   locale: string;
   search: EntityPickerSearch;
   transport: FactsTransport;
@@ -359,10 +280,7 @@ export function GameClassifications({
   const [comparison, setComparison] = useState<CandidateTransport>();
   const o = { locale: locale as never };
   const context = { ...read, source: null };
-  const fields = gameGroups(
-    read.release,
-    read.public.subject.type,
-  ).classification;
+  const fields = gameGroups(read.release, read.public.subject.type).classification;
   async function submit() {
     if (running.current) return;
     running.current = true;
@@ -371,11 +289,7 @@ export function GameClassifications({
     setDrafts(sealed);
     try {
       await sendFacts(sealed, transport.propose, (property, result) =>
-        setDrafts((rows) =>
-          rows.map((row) =>
-            row.property === property ? { ...row, result } : row,
-          ),
-        ),
+        setDrafts((rows) => rows.map((row) => (row.property === property ? { ...row, result } : row))),
       );
     } finally {
       running.current = false;
@@ -384,17 +298,10 @@ export function GameClassifications({
   }
   return (
     <section className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
-      <h2 className="font-sans text-xl font-semibold">
-        {m.game_profile_classification({}, o)}
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        {m.facts_separate_results({}, o)}
-      </p>
+      <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
+      <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
       {fields.map((property) => {
-        const label = pickText(
-          read.release.properties[property]!.labels,
-          locale,
-        );
+        const label = pickText(read.release.properties[property]!.labels, locale);
         const selected = read.public.subject.statements[property] ?? [];
         const draft = drafts.find((row) => row.property === property);
         const stage = (source: (typeof selected)[number] | null) => {
@@ -410,21 +317,17 @@ export function GameClassifications({
                 ? structuredClone(baseline)
                 : {
                     property: { id: property },
-                    value: { type: "value", content: "" },
+                    value: { type: 'value', content: '' },
                     qualifiers: [],
                     references: [],
-                    rank: "normal",
+                    rank: 'normal',
                   },
             },
           ]);
         };
         return (
           <section key={property} className="min-w-0 max-w-full">
-            <ContentItemFrame
-              as="div"
-              data-slot="game-classification"
-              className={gameFieldFrameClass}
-            >
+            <ContentItemFrame as="div" data-slot="game-classification" className={gameFieldFrameClass}>
               <ContentItemHeading
                 level={3}
                 className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans font-semibold"
@@ -441,28 +344,14 @@ export function GameClassifications({
                   <PartValue part={statement} read={context} locale={locale} />
                   {statement.qualifiers.map((part, i) => (
                     <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
-                      <span>
-                        {
-                          pickText(
-                            read.release.properties[part.property.id]?.labels ??
-                              {},
-                            locale,
-                          ).text
-                        }
-                        :{" "}
-                      </span>
+                      <span>{pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}: </span>
                       <PartValue part={part} read={context} locale={locale} />
                     </div>
                   ))}
                   {statement.references.map((reference, i) => (
                     <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
                       {reference.parts.map((part, j) => (
-                        <PartValue
-                          key={j}
-                          part={part}
-                          read={context}
-                          locale={locale}
-                        />
+                        <PartValue key={j} part={part} read={context} locale={locale} />
                       ))}
                     </div>
                   ))}
@@ -479,25 +368,20 @@ export function GameClassifications({
                   )}
                 </div>
               ))}
-              {!draft &&
-                (!selected.length ||
-                  read.release.properties[property]!.multivalued) && (
-                  <Button
-                    className={gameActionClass}
-                    type="button"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => stage(null)}
-                  >
-                    {m.facts_add_value({}, o)}
-                  </Button>
-                )}
+              {!draft && (!selected.length || read.release.properties[property]!.multivalued) && (
+                <Button
+                  className={gameActionClass}
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => stage(null)}
+                >
+                  {m.facts_add_value({}, o)}
+                </Button>
+              )}
               {draft && (
                 <>
-                  <fieldset
-                    className="space-y-4"
-                    disabled={busy || factLocked(draft) || !!draft.command}
-                  >
+                  <fieldset className="space-y-4" disabled={busy || factLocked(draft) || !!draft.command}>
                     <GameStatementFields
                       statement={draft.statement}
                       context={context}
@@ -519,12 +403,7 @@ export function GameClassifications({
                       }
                     />
                   </fieldset>
-                  {draft.result && !draft.result.ok && (
-                    <EditorFailure
-                      reason={draft.result.reason}
-                      locale={locale}
-                    />
-                  )}
+                  {draft.result && !draft.result.ok && <EditorFailure reason={draft.result.reason} locale={locale} />}
                   {draft.result?.ok && (
                     <div role="status">
                       <p>{m.correction_proposed({}, o)}</p>
@@ -538,9 +417,7 @@ export function GameClassifications({
                               candidate: draft.result.candidate,
                               session: draft.result.session,
                             });
-                            setComparison(
-                              review(property, draft.result.session),
-                            );
+                            setComparison(review(property, draft.result.session));
                           }
                         }}
                       >
@@ -548,31 +425,28 @@ export function GameClassifications({
                       </Button>
                     </div>
                   )}
-                  {draft.command &&
-                    draft.result &&
-                    !draft.result.ok &&
-                    !factLocked(draft) && (
-                      <Button
-                        className={gameActionClass}
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          setDrafts((rows) =>
-                            rows.map((row) =>
-                              row.property === property
-                                ? {
-                                    ...row,
-                                    command: undefined,
-                                    result: undefined,
-                                  }
-                                : row,
-                            ),
-                          )
-                        }
-                      >
-                        {m.catalogue_create_review_new({}, o)}
-                      </Button>
-                    )}
+                  {draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
+                    <Button
+                      className={gameActionClass}
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setDrafts((rows) =>
+                          rows.map((row) =>
+                            row.property === property
+                              ? {
+                                  ...row,
+                                  command: undefined,
+                                  result: undefined,
+                                }
+                              : row,
+                          ),
+                        )
+                      }
+                    >
+                      {m.catalogue_create_review_new({}, o)}
+                    </Button>
+                  )}
                 </>
               )}
             </ContentItemFrame>
@@ -584,10 +458,7 @@ export function GameClassifications({
         type="button"
         disabled={
           busy ||
-          drafts.some(
-            (row) =>
-              row.result && !row.result.ok && row.result.reason === "stale",
-          ) ||
+          drafts.some((row) => row.result && !row.result.ok && row.result.reason === 'stale') ||
           !drafts.some((row) => factChanged(row) && !row.result?.ok)
         }
         onClick={() => void submit()}
