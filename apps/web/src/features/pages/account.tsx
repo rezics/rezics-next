@@ -4,13 +4,13 @@ import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import type { ReactNode } from 'react';
+import { useCallback, useId, useRef, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { accountOf, viewIsPublic, accountOperationAllowed, readAccountViewerActions } from './account-read';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
-import { useSession } from '../../session/query';
+import { sessionQuery, useSession } from '../../session/query';
 import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
 import { threadHref as canonicalThreadHref, threadTitle } from '../../threads/thread-href';
@@ -29,10 +29,44 @@ function dateText(value: unknown, locale: string): string | null {
 /** Private controls start after hydration and disappear throughout every refresh. */
 function AccountManagementLinks({ id, value }: { id: string; value: OverviewValue }) {
   const session = useSession();
+  const client = useQueryClient();
+  const mount = useId();
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      client.getQueryCache().subscribe(({ query }) => {
+        const key = query.queryKey;
+        if (key.length === sessionQuery.queryKey.length && key[0] === sessionQuery.queryKey[0]) listener();
+      }),
+    [client],
+  );
+  const getSnapshot = useCallback(() => client.getQueryState(sessionQuery.queryKey), [client]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, () => undefined);
+  const scope = useRef({ snapshot, revision: 0 });
+  // A successful refresh of the same reader also replaces the permission observation.
+  // Query state identity covers removal/recreation and batched account changes.
+  if (scope.current.snapshot !== snapshot)
+    scope.current = { snapshot, revision: scope.current.revision + 1 };
+  const observation = scope.current;
+  const enabled =
+    personalRead.enabled &&
+    session.state === 'signed-in' &&
+    !!session.subject &&
+    snapshot?.status === 'success' &&
+    snapshot.fetchStatus === 'idle' &&
+    !snapshot.isInvalidated;
+  const currentReader = () => enabled && scope.current === observation && getSnapshot() === snapshot;
+  const queryKey = [
+    'account-viewer-actions',
+    id,
+    session.subject,
+    session.csrfToken,
+    mount,
+    observation.revision,
+  ];
   const query = useQuery({
     ...personalRead,
-    queryKey: ['account-viewer-actions', id, session.state, session.subject, session.csrfToken],
-    enabled: personalRead.enabled && session.state === 'signed-in',
+    queryKey,
+    enabled,
     queryFn: () => readAccountViewerActions({ data: id }),
     gcTime: 0,
     retry: false,
@@ -40,13 +74,19 @@ function AccountManagementLinks({ id, value }: { id: string; value: OverviewValu
     refetchOnWindowFocus: 'always',
     refetchOnReconnect: 'always',
   });
-  if (session.state !== 'signed-in' || query.isPending || query.isFetching) return null;
+  if (!currentReader() || query.isPending || query.fetchStatus !== 'idle') return null;
   const options = { locale: value.locale as never };
   if (query.isError || query.data?.state === 'unavailable')
     return (
       <p role="status" className="text-sm text-muted-foreground">
         {m.settings_unavailable_title({}, options)}{' '}
-        <button type="button" className={linkClass} onClick={() => void query.refetch()}>
+        <button
+          type="button"
+          className={linkClass}
+          onClick={() => {
+            if (currentReader()) void query.refetch();
+          }}
+        >
           {m.settings_retry({}, options)}
         </button>
       </p>
@@ -63,11 +103,25 @@ function AccountManagementLinks({ id, value }: { id: string; value: OverviewValu
   const prefix = `/${encodeURIComponent(value.locale)}`;
   const securityHref = settings && query.data?.state === 'ready' ? query.data.securityHref : null;
   if (!profile && !settings && !verification) return null;
+  const guardNavigation = (event: SyntheticEvent) => {
+    // A retained link cannot dispatch between a cache publication and React's render.
+    const permissions = client.getQueryState(queryKey);
+    if (
+      !currentReader() ||
+      permissions?.status !== 'success' ||
+      permissions.fetchStatus !== 'idle' ||
+      permissions.isInvalidated ||
+      permissions.data !== query.data
+    )
+      event.preventDefault();
+  };
   return (
     <nav
       aria-label={m.av_accounts({}, options)}
       data-slot="account-management-links"
       className="flex flex-wrap gap-x-4 gap-y-2 text-sm"
+      onClickCapture={guardNavigation}
+      onAuxClickCapture={guardNavigation}
     >
       {settings && <value.link href={`${prefix}/settings`}>{m.settings_heading({}, options)}</value.link>}
       {profile && <value.link href={`${prefix}/accounts`}>{m.av_accounts({}, options)}</value.link>}
