@@ -30,6 +30,7 @@ import { createCollectionSource, type PreparedCollectionSource } from './collect
 import { requireMembersReservationBudget } from './members-preparation-cost.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { admitFilter, parseFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';

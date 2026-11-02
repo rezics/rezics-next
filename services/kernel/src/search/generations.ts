@@ -46,7 +46,8 @@ export { observedWrite };
 import type { SubjectSource } from './source.ts';
 import { subjectConsumer, startDiscoveryIndexing } from './runner.ts';
 
-export { discoveryConsumer } from './consumer-name.ts';
+import { discoveryConsumer } from './consumer-name.ts';
+export { discoveryConsumer };
 
 export { MAX_SUBJECT_GENERATIONS } from './indices.ts';
 export type RebuildReason = 'timeout' | 'mismatch' | 'busy' | 'running' | 'limit';
