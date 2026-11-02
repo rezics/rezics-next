@@ -229,13 +229,42 @@ export function InitialFacts({
   const observation = useMemo(() => ({}), [type, locale, read.release, disabled, canEdit]);
   const current = useRef<object | null>(observation);
   current.current = observation;
+  const addFocus = useRef<{
+    observation: object;
+    row: InitialRow;
+    source: HTMLButtonElement;
+    release: () => void;
+  } | null>(null);
+  const cancelAddFocus = () => {
+    addFocus.current?.release();
+    addFocus.current = null;
+  };
   useLayoutEffect(() => {
     current.current = observation;
     return () => {
       current.current = null;
+      cancelAddFocus();
     };
   }, [observation]);
   const admitted = () => current.current === observation && !disabled && canEdit();
+  useLayoutEffect(() => {
+    const intent = addFocus.current;
+    if (!intent) return;
+    // Consume once: a missing, replaced or retired row cannot regain this intent later.
+    cancelAddFocus();
+    const row = latest.current.rows.find((row) => row.id === intent.row.id);
+    const document = intent.source.ownerDocument;
+    if (
+      intent.observation !== observation ||
+      !admitted() ||
+      !row ||
+      holders.current.get(row)?.row !== holders.current.get(intent.row)?.row ||
+      (document.activeElement !== intent.source && document.activeElement !== document.body)
+    )
+      return;
+    const target = document.getElementById(controlId(`literary-fact-${row.id}`, 'fact', 'state'));
+    if (target?.isConnected && !target.matches(':disabled') && !target.closest('[hidden], [inert]')) target.focus();
+  });
   if (!isLiteraryType(type)) return null;
   const fields = literaryFields(read.release, type, locale).scalars;
   const context = { release: read.release, public: { related: {} } };
@@ -383,7 +412,8 @@ export function InitialFacts({
               (!read.release.properties[property]?.multivalued &&
                 rows.some((row) => row.statement.property.id === property))
             }
-            onClick={() => {
+            onClick={(event) => {
+              cancelAddFocus();
               const currentRows = latest.current.rows;
               if (
                 !admitted() ||
@@ -393,19 +423,36 @@ export function InitialFacts({
                   currentRows.some((row) => row.statement.property.id === property))
               )
                 return;
-              const updated = [
-                ...currentRows,
-                {
-                  id: crypto.randomUUID(),
-                  statement: {
-                    property: { id: property },
-                    value: { type: 'value' as const, content: '' },
-                    qualifiers: [],
-                    references: [],
-                    rank: 'normal' as const,
-                  },
+              const row: InitialRow = {
+                id: crypto.randomUUID(),
+                statement: {
+                  property: { id: property },
+                  value: { type: 'value', content: '' },
+                  qualifiers: [],
+                  references: [],
+                  rank: 'normal',
                 },
-              ];
+              };
+              holders.current.set(row, { row: {}, value: {}, citation: {} });
+              const source = event.currentTarget;
+              const document = source.ownerDocument;
+              if (event.detail === 0 && document.activeElement === source) {
+                const moved = (event: FocusEvent) => {
+                  if (event.target !== source) cancelAddFocus();
+                };
+                document.addEventListener('focusin', moved);
+                document.addEventListener('pointerdown', cancelAddFocus);
+                addFocus.current = {
+                  observation,
+                  row,
+                  source,
+                  release: () => {
+                    document.removeEventListener('focusin', moved);
+                    document.removeEventListener('pointerdown', cancelAddFocus);
+                  },
+                };
+              }
+              const updated = [...currentRows, row];
               latest.current = { ...latest.current, rows: updated };
               latest.current.change(updated);
               setProperty('');

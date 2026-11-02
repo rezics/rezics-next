@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act, createElement as h, type ReactNode } from 'react';
+import { act, createElement as h, useState, type ComponentProps, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LiteraryRead } from '../src/features/catalogue/literary-profile';
 
@@ -134,6 +134,79 @@ function queuedSubmit(form: HTMLFormElement) {
   const key = Object.keys(form).find((key) => key.startsWith('__reactProps$'))!;
   return Reflect.get(form, key).onSubmit as (event: { preventDefault: () => void }) => Promise<void>;
 }
+
+test('Literary keyboard Add reaches the exact repeated row and cancels rejected or retired focus intent', async () => {
+  await mounted(async ({ host, render, change, input }) => {
+    const { InitialFacts } = await import('../src/features/catalogue/literary-profile-view');
+    const { literaryRelease } = await import('../src/kernel/fake/catalogue-literary-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    type Row = ComponentProps<typeof InitialFacts>['rows'][number];
+    let rows: Row[] = [],
+      mode = '',
+      disabled = false;
+    const canEdit = () => mode !== 'reject';
+    function Draft() {
+      const [, update] = useState(0);
+      return h(
+        'form',
+        {},
+        h('input', { 'aria-label': 'Terms', defaultValue: 'Private title' }),
+        h(InitialFacts, {
+          type: 'schema:Book',
+          read: { ok: true, release: literaryRelease, current: null },
+          locale: 'en',
+          disabled,
+          rows,
+          canEdit,
+          change: (next) => {
+            rows = mode === 'replace' ? structuredClone(next) : next;
+            if (mode === 'move') host.querySelector<HTMLInputElement>('[aria-label="Terms"]')!.focus();
+            if (mode === 'retire') disabled = true;
+            update((value) => value + 1);
+          },
+        }),
+      );
+    }
+    await render(h(Draft));
+    const panel = initialPanel(host, m.literary_bibliography());
+    const add = async (detail = 0) => {
+      await change(propertyControl(panel), 'schema:inLanguage');
+      const trigger = button(panel, m.correction_add());
+      trigger.focus();
+      await act(async () =>
+        trigger.dispatchEvent(new host.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true, detail })),
+      );
+      return trigger;
+    };
+    const target = (row: Row) => host.querySelector(`#literary-fact-${row.id}-fact-state`);
+    await add();
+    const first = rows[0]!,
+      firstControl = target(first);
+    expect(host.ownerDocument.activeElement).toBe(firstControl);
+    await input(host.querySelector<HTMLInputElement>(`#literary-fact-${first.id}-fact-value`)!, 'ja');
+    await add();
+    expect(rows).toHaveLength(2);
+    expect(host.ownerDocument.activeElement).toBe(target(rows[1]!));
+    expect(target(first)).toBe(firstControl);
+    expect(rows[0]!.statement.value).toEqual({ type: 'value', content: 'ja' });
+    expect(propertyControl(panel).value).toBe('');
+    const before = structuredClone(rows);
+    mode = 'reject';
+    const rejected = await add();
+    expect(rows).toEqual(before);
+    expect(host.ownerDocument.activeElement).toBe(rejected);
+    for (mode of ['pointer', 'move', 'replace', 'retire']) {
+      const trigger = await add(mode === 'pointer' ? 1 : 0);
+      expect(host.ownerDocument.activeElement).not.toBe(target(rows.at(-1)!));
+      if (mode === 'pointer') expect(host.ownerDocument.activeElement).toBe(trigger);
+      if (mode === 'move') expect(host.ownerDocument.activeElement).toBe(host.querySelector('[aria-label="Terms"]'));
+    }
+    disabled = false;
+    await render(h(Draft));
+    expect(host.ownerDocument.activeElement).not.toBe(target(rows.at(-1)!));
+    expect(host.querySelector<HTMLInputElement>('[aria-label="Terms"]')!.value).toBe('Private title');
+  });
+});
 
 test('Literary native corrections name only current scalar and citation controls across sibling removal', async () => {
   await mounted(async ({ host, client, render, click, change, input, until }) => {

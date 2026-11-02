@@ -52,6 +52,7 @@ localized subject address; a failed or concealed read never becomes a fabricated
 Definitions loading, no available Types, signed-out, denied, invalid, conflict, unavailable and saving have explicit
 states. Errors link to controls. Server value rejection refreshes the active release while retaining the draft.
 An uncertain submit freezes the exact draft and idempotency key for retry; concurrent clicks issue one command.
+Decision: Literary keyboard Add focuses the exact new assertion's value-state control; pointer additions, rejected additions, moved focus and retired rows or workspaces never restore that intent.
 Game creation retains multilingual terms, per-Type rows and applicable sealed commands across unavailable metadata refresh, blocks new intent until recovery, and binds known initial-fact correction links to stable rows and inner controls; unsupported pointers stay in technical details.
 Album and Game creation clear a withdrawn or newly occupied single-valued initial-field choice, explain it beside the chooser, and require deliberate current re-selection even if that field returns; authored facts, multilingual terms and sealed commands are retained.
 Game creation confirms removal of populated optional initial facts locally, including selected items, qualifiers and references; Cancel or Escape preserves mounted controls and restores trigger focus, confirmation focuses a surviving control, blank scaffolding may remove immediately, and current command locks apply to open confirmations.
