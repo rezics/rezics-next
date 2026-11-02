@@ -29,3 +29,4 @@ acceptance and native/browser evidence is deferred under the current delivery po
 does not establish those outcomes.
 
 Recent history keeps failed local writes in its memory fallback until a write succeeds; observed durable removals and `localStorage.clear()` invalidate cached durable values, while account labels remain native-hydrated.
+Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve existing valid authored tags verbatim, remove or move individual entries, and use the page-language default only when the user clears the list.

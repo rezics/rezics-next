@@ -11,9 +11,9 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/fiel
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
-import { locales } from '../paraglide/runtime.js';
 import { localizedLabel } from './results';
 import { ConditionRangeInput } from './condition-range-input';
+import { ConditionLanguages } from './condition-languages';
 import {
   CONDITION_POINTER,
   conditionChoiceLabels,
@@ -79,7 +79,6 @@ export function ConditionEditor({
   extension?: ConditionExtension;
   embedded?: boolean;
 }) {
-  const languageId = useId();
   const root = useRef<HTMLDivElement>(null);
   const [announcement, setAnnouncement] = useState({ text: '', version: 0 });
   const announce = (message: string, pointer: string) => {
@@ -115,24 +114,7 @@ export function ConditionEditor({
         <span key={announcement.version}>{announcement.text}</span>
       </p>
       {onLanguages && (
-        <Field>
-          <FieldLabel htmlFor={languageId}>{m.condition_language()}</FieldLabel>
-          <NativeSelect
-            id={languageId}
-            value={languages?.[0] ?? ''}
-            onChange={(event) => {
-              const selected = event.currentTarget.value;
-              onLanguages(selected ? [selected, ...(languages?.slice(1).filter((tag) => tag !== selected) ?? [])] : []);
-            }}
-          >
-            <NativeSelectOption value="">{m.condition_language_default()}</NativeSelectOption>
-            {[...new Set([...locales, ...(languages ?? [])])].map((tag) => (
-              <NativeSelectOption key={tag} value={tag}>
-                {new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
+        <ConditionLanguages languages={languages ?? []} locale={locale} disabled={disabled} onChange={onLanguages} />
       )}
       {issues.length > 0 && (
         <div role="alert" tabIndex={-1} data-condition-errors className="space-y-1 text-sm text-destructive">
