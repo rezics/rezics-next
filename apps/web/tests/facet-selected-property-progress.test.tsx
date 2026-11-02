@@ -80,16 +80,26 @@ function makeProps(query: string, load: Props['load']): Props {
   };
 }
 
-function moreFor(label: string) {
+function fieldsetFor(label: string) {
   const fieldset = [...host.querySelectorAll('fieldset')].find((node) =>
     [...node.querySelectorAll('legend')].some((legend) => legend.textContent?.trim() === label),
   );
   expect(fieldset).toBeDefined();
-  const found = [...fieldset!.querySelectorAll('button')].find(
+  return fieldset!;
+}
+
+function moreFor(label: string) {
+  const found = [...fieldsetFor(label).querySelectorAll('button')].find(
     (node) => node.textContent?.trim() === m.refinement_more_values(),
   );
   expect(found).toBeDefined();
   return found!;
+}
+
+function hasMore(label: string) {
+  return [...fieldsetFor(label).querySelectorAll('button')].some(
+    (node) => node.textContent?.trim() === m.refinement_more_values(),
+  );
 }
 
 async function replace(next: Props) {
@@ -165,9 +175,7 @@ test('A newly selected retained facet property keeps cursor-cycle history and it
   expect(cursors).toEqual(Array.from({ length: MAX_FACET_CONTINUATIONS }, (_, index) => `cursor-${index}`));
   expect(host.textContent).toContain(`window-${MAX_FACET_CONTINUATIONS}`);
   expect(host.textContent).toContain(m.refinement_restart());
-  expect(
-    [...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === m.refinement_more_values()),
-  ).toBe(false);
+  expect(hasMore('Property 8')).toBe(false);
 
   const fresh: (string | undefined)[] = [];
   await replace(
@@ -208,10 +216,12 @@ test('a replacement property keeps consumed cursors until genuine eviction remov
 
   await act(async () => moreFor('Property 0').click());
   await selectProperty('schema:p8');
-  await act(async () => moreFor('Property 0').click());
+  expect(hasMore('Property 0')).toBe(true);
   expect(host.textContent).toContain('later-p0');
 
   await act(async () => moreFor('Property 8').click());
+  expect(p8Cursors).toEqual([undefined, 'cursor-0']);
+  expect(host.textContent).toContain('continued-p8');
   await act(async () => moreFor('Property 8').click());
   expect(host.textContent).toContain(m.refinement_restart());
   expect(host.textContent).toContain('continued-p8');
