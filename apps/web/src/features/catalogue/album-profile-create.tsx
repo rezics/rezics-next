@@ -268,19 +268,30 @@ function AlbumProfileCreateLive({
       <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-label={m.album_initial_facts({}, o)}>
         <ContentItemHeading className="text-xl font-semibold">{m.album_initial_facts({}, o)}</ContentItemHeading>
         <p className="text-sm text-muted-foreground">{m.album_initial_help({}, o)}</p>
-        {rows.map((row, index) => (
+        {rows.map((row) => (
           <AlbumInitialField
             key={row.id}
             row={row}
-            index={index}
             release={release}
             metadataReady={metadataReady}
             locale={locale}
             search={search}
             disabled={locked}
             change={(statement) => {
+              if (!lifetime.active() || locked || running.current || pending.current) return;
               if (statement.qualifiers?.length !== row.statement.qualifiers?.length) setFailure(undefined);
-              setRows((previous) => previous.map((item) => (item.id === row.id ? { ...item, statement } : item)));
+              setRows((previous) =>
+                previous.map((item) => {
+                  if (item.id !== row.id) return item;
+                  const before = item.statement.qualifiers ?? [];
+                  let nextQualifierId = item.nextQualifierId ?? before.length;
+                  const qualifierIds = (statement.qualifiers ?? []).map((part) => {
+                    const at = before.findIndex((old) => old.property.id === part.property.id);
+                    return at < 0 ? nextQualifierId++ : (item.qualifierIds?.[at] ?? at);
+                  });
+                  return { ...item, statement, qualifierIds, nextQualifierId };
+                }),
+              );
             }}
             remove={() => {
               if (!lifetime.active() || locked || running.current || pending.current) return;
@@ -443,7 +454,6 @@ function AlbumProfileCreateLive({
 
 function AlbumInitialField({
   row,
-  index,
   release,
   metadataReady,
   locale,
@@ -453,7 +463,6 @@ function AlbumInitialField({
   remove,
 }: {
   row: Row;
-  index: number;
   release: Release;
   metadataReady: boolean;
   locale: string;
@@ -649,9 +658,11 @@ function AlbumInitialField({
           )}
           {qualifiers.map((part, at) => {
             const metadata = release.properties[part.property.id];
+            const identity = row.qualifierIds?.[at] ?? at;
+            const controlId = `album-row-${row.id}-qualifier-${identity}`;
             return (
-              <div key={at} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                <div id={`album-row-${row.id}-qualifier-${at}`} tabIndex={-1} className={qualifierClassName}>
+              <div key={identity} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <div id={controlId} tabIndex={-1} className={qualifierClassName}>
                   <QualifierInput
                     definition={
                       metadata
@@ -664,7 +675,7 @@ function AlbumInitialField({
                         : undefined
                     }
                     snak={{ ...part, property: { ...part.property, data_type: metadata?.datatype ?? 'string' } }}
-                    index={index * 100 + at}
+                    index={identity}
                     label={named(part.property.id)}
                     search={targetSearch(part.property.id)}
                     target={target}
@@ -678,15 +689,18 @@ function AlbumInitialField({
                     }
                   />
                 </div>
-                <Button
-                  className={actionClassName}
-                  type="button"
-                  variant="outline"
-                  aria-label={`${m.relation_remove({}, o)}: ${named(part.property.id)}`}
-                  onClick={() => change({ ...statement, qualifiers: qualifiers.filter((_, pos) => pos !== at) })}
-                >
-                  {m.relation_remove({}, o)}
-                </Button>
+                <AlbumQualifierRemoval
+                  locale={locale}
+                  label={named(part.property.id)}
+                  populated={meaningful(part)}
+                  disabled={disabled}
+                  onRemove={() => change({ ...statement, qualifiers: qualifiers.filter((_, pos) => pos !== at) })}
+                  focusId={
+                    qualifiers.length > 1
+                      ? `album-row-${row.id}-qualifier-${row.qualifierIds?.[at + 1 < qualifiers.length ? at + 1 : at - 1] ?? (at + 1 < qualifiers.length ? at + 1 : at - 1)}`
+                      : `album-qualifier-${row.id}`
+                  }
+                />
               </div>
             );
           })}
@@ -760,5 +774,109 @@ function AlbumInitialField({
         </div>
       </ContentItemFrame>
     </fieldset>
+  );
+}
+
+/** Each mounted qualifier owns its pending choice; sibling edits cannot redirect it. */
+function AlbumQualifierRemoval({
+  locale,
+  label,
+  populated,
+  disabled,
+  onRemove,
+  focusId,
+}: {
+  locale: string;
+  label: string;
+  populated: boolean;
+  disabled: boolean;
+  onRemove: () => void;
+  focusId: string;
+}) {
+  const lifetime = useEditorLifetime();
+  const o = { locale: locale as never };
+  const action = `${m.relation_remove({}, o)}: ${label}`;
+  const [confirming, setConfirming] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const current = useRef({ disabled, onRemove, focusId });
+  current.current = { disabled, onRemove, focusId };
+  const editable = () => lifetime.active() && !current.current.disabled;
+  useLayoutEffect(() => {
+    if (!editable()) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setConfirming(false);
+  };
+  const confirmRemoval = () => {
+    if (!editable() || !trigger.current?.isConnected) return;
+    const destination = current.current.focusId;
+    flushSync(() => current.current.onRemove());
+    const target = document.getElementById(destination);
+    (
+      target?.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),button:not(:disabled)') ?? target
+    )?.focus();
+  };
+  return (
+    <div className="space-y-2">
+      <Button
+        ref={trigger}
+        className={actionClassName}
+        type="button"
+        variant="outline"
+        aria-label={action}
+        disabled={disabled}
+        hidden={confirming}
+        onClick={() => {
+          if (editable()) populated ? setConfirming(true) : confirmRemoval();
+        }}
+      >
+        {m.relation_remove({}, o)}
+      </Button>
+      {confirming && (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              ref={cancel}
+              className={actionClassName}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button
+              className={actionClassName}
+              type="button"
+              variant="destructive"
+              aria-label={action}
+              disabled={disabled}
+              onClick={confirmRemoval}
+            >
+              {m.relation_remove({}, o)}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

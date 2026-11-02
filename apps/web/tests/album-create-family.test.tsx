@@ -256,6 +256,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect([...qualifierSelect.options].filter((option) => option.value)).toHaveLength(0);
     // Remove and explicitly re-add a qualifier without losing the statement target or citation.
     await click(credit, `${m.relation_remove()}: ${name(fixture, 'schema:position')}`);
+    await click(credit, `${m.relation_remove()}: ${name(fixture, 'schema:position')}`);
     await select(credit, m.relation_qualifier(), 'schema:position');
     await replace(textbox(credit, name(fixture, 'schema:position')), '1');
     const relation = await add(scope, 'wdt:P179');

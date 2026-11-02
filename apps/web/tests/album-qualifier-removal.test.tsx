@@ -1,0 +1,205 @@
+import { expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act } from 'react';
+import type { AlbumCommand, AlbumTransport } from '../src/features/catalogue/album-profile';
+
+test('Album qualifier cancellation, stable correction targets, selective removal and immutable command locks', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/catalogue/album' });
+  const globals: Record<string, unknown> = { window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true };
+  for (const key of [
+    'navigator',
+    'HTMLElement',
+    'HTMLInputElement',
+    'HTMLSelectElement',
+    'HTMLButtonElement',
+    'Element',
+    'Node',
+    'Text',
+    'NodeFilter',
+    'Document',
+    'ShadowRoot',
+    'Event',
+    'KeyboardEvent',
+    'FocusEvent',
+    'MouseEvent',
+    'PointerEvent',
+    'CSS',
+    'DocumentFragment',
+    'DOMParser',
+    'MutationObserver',
+    'ResizeObserver',
+    'Range',
+    'DOMRect',
+  ])
+    globals[key] = Reflect.get(window, key);
+  for (const key of ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'])
+    globals[key] = Reflect.get(window, key).bind(window);
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { AlbumProfileCreate } = await import('../src/features/catalogue/album-profile-create');
+  const { albumFixture, artistId, roleId } = await import('../src/kernel/fake/catalogue-album-profile');
+  const { m } = await import('../src/paraglide/messages.js');
+  const testing = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
+  const { within } = await import(Bun.resolveSync('@testing-library/dom', testing));
+  const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', testing));
+  const user = userEvent.setup({ document: window.document });
+  const host = window.document.createElement('main') as unknown as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host),
+    client = new QueryClient();
+  const { release, publicRead } = albumFixture();
+  const name = (id: string) => release.properties[id]!.labels.en!;
+  const commands: AlbumCommand[] = [];
+  let enabled = true,
+    metadata = true;
+  let finish!: (result: Awaited<ReturnType<AlbumTransport['create']>>) => void;
+  const invalid = {
+    ok: false as const,
+    reason: 'invalid' as const,
+    errors: [{ pointer: '/statements/schema:contributor/0/qualifiers/0/value/content', code: 'unsupported' }],
+  };
+  const transport: AlbumTransport = {
+    load: async () => ({ ok: true, release, public: null }),
+    read: async () => ({ state: 'unavailable' }),
+    create: async (command) => {
+      commands.push(command);
+      if (commands.length === 2) {
+        Object.assign(command, { credential: 'original-credential' });
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      }
+      return invalid;
+    },
+  };
+  const paint = () =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <AlbumProfileCreate
+            release={release}
+            metadataCurrent={() => metadata}
+            onReload={async () => {}}
+            locale="en"
+            enabled={enabled}
+            transport={transport}
+            search={async () =>
+              [artistId, roleId].map((id) => ({
+                id,
+                title: publicRead.related[id]!.labels.en!,
+                types: [publicRead.related[id]!.type!],
+                typeLabel: '',
+                cover: null,
+              }))
+            }
+          />
+        </QueryClientProvider>,
+      ),
+    );
+  const click = (scope: HTMLElement, name: string) =>
+    act(async () => user.click(within(scope).getByRole('button', { name })));
+  const select = (scope: HTMLElement, label: string, value: string) =>
+    act(async () => user.selectOptions(within(scope).getByRole('combobox', { name: label }), value));
+  const type = (scope: HTMLElement, label: string, value: string) =>
+    act(async () => user.type(within(scope).getByRole('textbox', { name: label }), value));
+  const choose = async (scope: HTMLElement, property: string, id: string) => {
+    await act(async () =>
+      user.type(within(scope).getByRole('combobox', { name: name(property) }), publicRead.related[id]!.labels.en!),
+    );
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
+    await act(async () => user.click(within(host).getByRole('option')));
+  };
+  const remove = (id: string) => `${m.relation_remove()}: ${name(id)}`;
+  try {
+    await paint();
+    await type(host, m.catalogue_create_label(), 'Private Album');
+    await select(host, m.character_add_fact(), 'schema:contributor');
+    await click(host, m.correction_add());
+    const row = host.querySelector<HTMLElement>('fieldset[id^="album-row-"]')!;
+    await choose(row, 'schema:contributor', artistId);
+    await type(row, m.relation_citation(), 'https://example.test/source');
+    await select(row, m.relation_qualifier(), 'wdt:P1932');
+    await type(row, name('wdt:P1932'), 'Credited name');
+    const original = within(row).getByRole('textbox', { name: name('wdt:P1932') });
+    await select(row, m.relation_qualifier(), 'wdt:P3831');
+    await choose(row, 'wdt:P3831', roleId);
+    const role = within(row).getByRole('combobox', { name: name('wdt:P3831') });
+    const roleTarget = role.closest('[id^="album-row-"]')!.id;
+    await select(row, m.relation_qualifier(), 'schema:position');
+    await select(host, m.character_add_fact(), 'schema:sameAs');
+    await click(host, m.correction_add());
+    const sibling = [...host.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!;
+    await type(sibling, m.correction_url(), 'https://example.test/album');
+    await click(row, remove('wdt:P1932'));
+    await click(row, m.candidate_cancel());
+    expect(within(row).getByRole('textbox', { name: name('wdt:P1932') })).toBe(original);
+    expect((original as HTMLInputElement).value).toBe('Credited name');
+    expect(window.document.activeElement).toBe(within(row).getByRole('button', { name: remove('wdt:P1932') }));
+    await click(row, remove('wdt:P3831'));
+    await act(async () => user.keyboard('{Escape}'));
+    expect(window.document.activeElement).toBe(within(row).getByRole('button', { name: remove('wdt:P3831') }));
+    await click(row, remove('wdt:P3831'));
+    await click(row, remove('schema:position')); // Untouched scaffolding removes immediately.
+    await click(row, remove('wdt:P1932'));
+    await click(row, remove('wdt:P1932'));
+    expect(window.document.activeElement).toBe(role);
+    expect(within(row).getByRole('combobox', { name: name('wdt:P3831') })).toBe(role);
+    expect(role.closest('[id^="album-row-"]')!.id).toBe(roleTarget);
+    await click(row, m.candidate_cancel());
+    expect(row.textContent).toContain(publicRead.related[roleId]!.labels.en!);
+    await click(row, remove('wdt:P3831'));
+    enabled = false;
+    await paint();
+    await click(row, remove('wdt:P3831'));
+    expect(role.isConnected).toBe(true);
+    enabled = true;
+    metadata = false;
+    await paint();
+    expect(row.textContent).toContain(roleId);
+    expect(row.querySelector('input')).toBeNull();
+    metadata = true;
+    await paint();
+    await click(row, remove('wdt:P3831'));
+    await click(host, m.album_create());
+    const correction = host.querySelector<HTMLAnchorElement>(`a[href="#${roleTarget}"]`)!;
+    expect(correction).not.toBeNull();
+    await click(row, remove('wdt:P3831')); // Sealed invalid command.
+    await act(async () => user.click(correction));
+    expect(row.contains(window.document.activeElement)).toBe(true);
+    await click(host, m.album_create());
+    const exact = structuredClone(commands[1]);
+    await click(row, remove('wdt:P3831')); // Busy command.
+    await act(async () => finish({ ok: false, reason: 'unavailable' }));
+    await click(row, remove('wdt:P3831')); // Uncertain command.
+    await click(host, m.catalogue_create_retry());
+    expect(commands[2]).toBe(commands[1]);
+    expect(commands[2]).toEqual(exact);
+    await click(host, m.catalogue_create_review_new());
+    await click(row, remove('wdt:P3831'));
+    expect(window.document.activeElement).toBe(within(row).getByRole('combobox', { name: m.relation_qualifier() }));
+    await click(host, m.album_create());
+    const facts = commands.at(-1)!.item.statements;
+    expect(facts['schema:contributor']![0]!.qualifiers).toEqual([]);
+    expect(facts['schema:contributor']![0]!.value).toEqual({ type: 'value', content: artistId });
+    expect(facts['schema:contributor']![0]!.references[0]!.parts[0]!.value).toEqual({
+      type: 'value',
+      content: 'https://example.test/source',
+    });
+    expect(facts['schema:sameAs']![0]!.value).toEqual({ type: 'value', content: 'https://example.test/album' });
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    await window.happyDOM.close();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});

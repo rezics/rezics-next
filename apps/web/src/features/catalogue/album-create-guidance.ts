@@ -7,7 +7,13 @@ import { createSubjectControls, createSubjectGuidance } from './create-subject-g
 import type { StatementInput } from './statement-editor';
 import { presentStatementViolations } from './statement-validation-presentation';
 
-export type AlbumRow = { id: string; statement: StatementInput };
+export type AlbumRow = {
+  id: string;
+  statement: StatementInput;
+  // Private editor identities; native correction addresses still use submitted positions.
+  qualifierIds?: number[];
+  nextQualifierId?: number;
+};
 export type AlbumCorrection = { pointer: string; code: string; target?: string; label: string; advice: string };
 const canonicalIndex = /^(0|[1-9]\d*)$/;
 
@@ -118,7 +124,7 @@ export function albumCreateCorrections(
       const qualifier = row.statement.qualifiers?.[index];
       if (qualifier?.value.type === 'value' && typeof qualifier.value.content === 'string')
         return result(
-          `${id}-qualifier-${index}`,
+          `${id}-qualifier-${row.qualifierIds?.[index] ?? index}`,
           `${m.relation_qualifier({}, o)} · ${pickText(release.properties[qualifier.property.id]?.labels ?? {}, locale).text}`,
           m.correction_error_value({}, o),
         );
