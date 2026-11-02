@@ -316,10 +316,13 @@ test('host publishes once per completed UTC hour without waiting for the report 
   let now = new Date('2026-10-31T02:30:00.000Z');
   const calls: string[] = [];
   const neverFinishes = new Promise<void>(() => {});
-  const publish = createHourlyReportScheduler(async (bucket) => {
-    calls.push(bucket);
-    await neverFinishes;
-  }, () => now);
+  const publish = createHourlyReportScheduler(
+    async (bucket) => {
+      calls.push(bucket);
+      await neverFinishes;
+    },
+    () => now,
+  );
 
   expect(publish()).toBeUndefined();
   expect(publish()).toBeUndefined();

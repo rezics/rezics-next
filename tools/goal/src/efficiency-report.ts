@@ -68,7 +68,12 @@ function hasTable(db: Database, name: string): boolean {
 }
 
 function clean(value: unknown): string {
-  return String(value ?? 'unknown').replace(/[\r\n\t]/g, ' ').trim().slice(0, 160) || 'unknown';
+  return (
+    String(value ?? 'unknown')
+      .replace(/[\r\n\t]/g, ' ')
+      .trim()
+      .slice(0, 160) || 'unknown'
+  );
 }
 
 function targetFor(row: LandingRow): 'dev' | 'stabilize' | 'main' | 'unknown' {
@@ -91,7 +96,11 @@ function targetFor(row: LandingRow): 'dev' | 'stabilize' | 'main' | 'unknown' {
   if (row.target !== null && row.target !== undefined && row.target !== 'stabilize') return 'unknown';
   if (row.goal !== 'control-plane') return 'dev';
   try {
-    const paths: unknown = row.declared_paths ? JSON.parse(row.declared_paths) : row.paths ? JSON.parse(row.paths) : null;
+    const paths: unknown = row.declared_paths
+      ? JSON.parse(row.declared_paths)
+      : row.paths
+        ? JSON.parse(row.paths)
+        : null;
     if (
       Array.isArray(paths) &&
       paths.length > 0 &&
@@ -243,7 +252,14 @@ function waitIdentities(metrics: ReturnType<typeof lifecycleMetrics> | null, ava
   return `Current wait identities: ${entries.join('; ')}${omitted ? `; ${omitted} more omitted` : ''}.`;
 }
 
-type TokenUsage = { ended: number; measured: number; input: number; output: number; diffLines: number; diffKnown: number };
+type TokenUsage = {
+  ended: number;
+  measured: number;
+  input: number;
+  output: number;
+  diffLines: number;
+  diffKnown: number;
+};
 
 function usageSummary(db: Database, bucket: UtcHour): string {
   if (!hasTable(db, 'worker_attempts') || !hasTable(db, 'worker_records'))
@@ -301,9 +317,16 @@ function promotionSummary(db: Database, metrics: ReturnType<typeof lifecycleMetr
     return 'Promotion: unknown (record is malformed).';
   }
   const phase = typeof body.phase === 'string' ? body.phase : 'unknown';
-  const mainResult = body.mainResult && typeof body.mainResult === 'object' ? (body.mainResult as { passed?: unknown }) : null;
-  const result = mainResult?.passed === true ? 'main gate passed' : mainResult?.passed === false ? 'main gate failed' : 'main gate result unknown';
-  const disposition = phase === 'blocked' || phase === 'stabilize-blocked' ? 'blocked' : 'recorded phase; process status unknown';
+  const mainResult =
+    body.mainResult && typeof body.mainResult === 'object' ? (body.mainResult as { passed?: unknown }) : null;
+  const result =
+    mainResult?.passed === true
+      ? 'main gate passed'
+      : mainResult?.passed === false
+        ? 'main gate failed'
+        : 'main gate result unknown';
+  const disposition =
+    phase === 'blocked' || phase === 'stabilize-blocked' ? 'blocked' : 'recorded phase; process status unknown';
   const age = metrics?.promotion.phaseAgeMs ?? null;
   return `Promotion: ${disposition}; phase ${phase}; ${result}; phase age ${age === null ? 'unknown' : `${Math.round(age / 60_000)}m`}.`;
 }
@@ -377,21 +400,24 @@ function nextActions(
       actions.push('Resolve the recorded promotion gate or blocker, then run Goal promote.');
     const oldestWait = metrics.waiting.entries[0];
     if (oldestWait)
-      actions.push(`Inspect ${clean(oldestWait.taskId)}#${oldestWait.attempt} (${clean(oldestWait.stage ?? oldestWait.kind)}) with Goal status.`);
+      actions.push(
+        `Inspect ${clean(oldestWait.taskId)}#${oldestWait.attempt} (${clean(oldestWait.stage ?? oldestWait.kind)}) with Goal status.`,
+      );
     const firstQuarantine = metrics.quarantines.current?.[0];
     if (firstQuarantine)
-      actions.push(`Review quarantined task ${clean(firstQuarantine.taskId)}#${firstQuarantine.attempt} before retrying it.`);
+      actions.push(
+        `Review quarantined task ${clean(firstQuarantine.taskId)}#${firstQuarantine.attempt} before retrying it.`,
+      );
   }
   const incident = incidents[0];
   if (incident)
-    actions.push(`Review the shared blocker at probe ${clean(incident.probe.taskId)}#${incident.probe.attempt}; delivery operations owns follow-up.`);
+    actions.push(
+      `Review the shared blocker at probe ${clean(incident.probe.taskId)}#${incident.probe.attempt}; delivery operations owns follow-up.`,
+    );
   return actions.length ? actions.map((action, index) => `${index + 1}. ${action}`) : ['None from recorded evidence.'];
 }
 
-export async function renderHourlyEfficiencyReport(
-  db: Database,
-  options: ReportOptions,
-): Promise<string> {
+export async function renderHourlyEfficiencyReport(db: Database, options: ReportOptions): Promise<string> {
   const bucket = options.bucket ? parseUtcHour(options.bucket) : completedUtcHour(options.now);
   const flowAvailable = hasTable(db, 'flow_events');
   if (flowAvailable) ensureFlow(db);
@@ -432,7 +458,7 @@ export async function renderHourlyEfficiencyReport(
   const lifecycleLines = metrics
     ? [
         flowAvailable
-          ? aggregateLines[0] ?? 'Launches in trailing hour: unknown.'
+          ? (aggregateLines[0] ?? 'Launches in trailing hour: unknown.')
           : 'Launches in trailing hour: unknown (flow history unavailable).',
         ...launchTaskLines.slice(0, 8),
         ...(launchTaskLines.length > 8 ? [`  … ${launchTaskLines.length - 8} additional task rows.`] : []),
@@ -469,11 +495,22 @@ export async function renderHourlyEfficiencyReport(
   ];
   const report = lines.join('\n');
   if (Buffer.byteLength(report) <= MAX_REPORT_BYTES) return report;
-  const prefix = Buffer.from(report).subarray(0, MAX_REPORT_BYTES - 40).toString('utf8').replace(/\uFFFD$/, '');
+  const prefix = Buffer.from(report)
+    .subarray(0, MAX_REPORT_BYTES - 40)
+    .toString('utf8')
+    .replace(/\uFFFD$/, '');
   return `${prefix}\n… report truncated at ${MAX_REPORT_BYTES} bytes.`;
 }
 
-export type DeliveryDisposition = 'disabled' | 'sent' | 'failed' | 'unknown' | 'claimed' | 'already-sent' | 'already-failed' | 'already-unknown';
+export type DeliveryDisposition =
+  | 'disabled'
+  | 'sent'
+  | 'failed'
+  | 'unknown'
+  | 'claimed'
+  | 'already-sent'
+  | 'already-failed'
+  | 'already-unknown';
 export type DeliveryResult = {
   disposition: DeliveryDisposition;
   bucket: string;
@@ -481,9 +518,16 @@ export type DeliveryResult = {
   detail?: string;
 };
 
-function saveOutcome(db: Database, bucket: string, status: 'sent' | 'failed' | 'unknown', detail: string, now: Date): void {
-  db.query('UPDATE efficiency_report_deliveries SET status=?, finished_at=?, detail=? WHERE hour_bucket=? AND status=\'claimed\'')
-    .run(status, now.toISOString(), detail, bucket);
+function saveOutcome(
+  db: Database,
+  bucket: string,
+  status: 'sent' | 'failed' | 'unknown',
+  detail: string,
+  now: Date,
+): void {
+  db.query(
+    "UPDATE efficiency_report_deliveries SET status=?, finished_at=?, detail=? WHERE hour_bucket=? AND status='claimed'",
+  ).run(status, now.toISOString(), detail, bucket);
 }
 
 function drainBounded(stream: Readable | null, onBytes: (bytes: number) => boolean): void {
@@ -494,7 +538,11 @@ function drainBounded(stream: Readable | null, onBytes: (bytes: number) => boole
   });
 }
 
-function invokeNotifier(argv: readonly string[], report: string, timeoutMs: number): Promise<{ status: 'sent' | 'failed' | 'unknown'; detail: string }> {
+function invokeNotifier(
+  argv: readonly string[],
+  report: string,
+  timeoutMs: number,
+): Promise<{ status: 'sent' | 'failed' | 'unknown'; detail: string }> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
     try {
@@ -541,9 +589,11 @@ function invokeNotifier(argv: readonly string[], report: string, timeoutMs: numb
     }, timeoutMs);
     child.once('error', () => finish({ status: 'failed', detail: 'notifier could not start' }));
     child.once('close', (code, signal) => {
-      if (outputLimitHit) finish({ status: 'unknown', detail: 'notifier output limit exceeded; delivery outcome unknown' });
+      if (outputLimitHit)
+        finish({ status: 'unknown', detail: 'notifier output limit exceeded; delivery outcome unknown' });
       else if (code === 0 && signal === null) finish({ status: 'sent', detail: 'notifier exited successfully' });
-      else if (signal === null && code !== null) finish({ status: 'failed', detail: `notifier exited with code ${code}` });
+      else if (signal === null && code !== null)
+        finish({ status: 'failed', detail: `notifier exited with code ${code}` });
       else finish({ status: 'unknown', detail: 'notifier ended without a conclusive result' });
     });
   });
@@ -558,23 +608,24 @@ export async function sendHourlyEfficiencyReport(
   now = new Date(),
 ): Promise<DeliveryResult> {
   const bucket = parseUtcHour(bucketValue);
-  if (!notifier?.length) return { disposition: 'disabled', bucket: bucket.start, reportRef: null, detail: 'notifier unconfigured' };
+  if (!notifier?.length)
+    return { disposition: 'disabled', bucket: bucket.start, reportRef: null, detail: 'notifier unconfigured' };
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000)
     throw new Error('invalid hourly report notifier timeout');
   const reportRef = createHash('sha256').update(report).digest('hex');
   migrate(db, efficiencyReportMigrations);
-  db
-    .transaction(() => {
-      db.query(
-        `INSERT OR IGNORE INTO efficiency_report_deliveries(hour_bucket, report_ref, report, status, created_at)
+  db.transaction(() => {
+    db.query(
+      `INSERT OR IGNORE INTO efficiency_report_deliveries(hour_bucket, report_ref, report, status, created_at)
          VALUES (?, ?, ?, 'pending', ?)`,
-      ).run(bucket.start, reportRef, report, now.toISOString());
-    })
-    .immediate();
+    ).run(bucket.start, reportRef, report, now.toISOString());
+  }).immediate();
   const claim = db
     .transaction(() => {
       let row = db
-        .query('SELECT report_ref, report, status, claimed_at, detail FROM efficiency_report_deliveries WHERE hour_bucket=?')
+        .query(
+          'SELECT report_ref, report, status, claimed_at, detail FROM efficiency_report_deliveries WHERE hour_bucket=?',
+        )
         .get(bucket.start) as {
         report_ref: string;
         report: string;
@@ -613,7 +664,12 @@ export async function sendHourlyEfficiencyReport(
           : claimed.status === 'unknown'
             ? 'already-unknown'
             : 'claimed';
-    return { disposition, bucket: bucket.start, reportRef: claimed.report_ref, ...(claimed.detail ? { detail: claimed.detail } : {}) };
+    return {
+      disposition,
+      bucket: bucket.start,
+      reportRef: claimed.report_ref,
+      ...(claimed.detail ? { detail: claimed.detail } : {}),
+    };
   }
 
   // A successful send belongs only to this exact first persisted report; later sweeps never replace its identity.

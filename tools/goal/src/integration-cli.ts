@@ -587,12 +587,15 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
           let finished = false;
           let timedOut = false;
           let killTimer: ReturnType<typeof setTimeout> | undefined;
-          const timeout = setTimeout(() => {
-            timedOut = true;
-            child.kill('SIGTERM');
-            killTimer = setTimeout(() => child.kill('SIGKILL'), 250);
-            killTimer.unref();
-          }, Math.min(150_000, configured.timeoutMs + 30_000));
+          const timeout = setTimeout(
+            () => {
+              timedOut = true;
+              child.kill('SIGTERM');
+              killTimer = setTimeout(() => child.kill('SIGKILL'), 250);
+              killTimer.unref();
+            },
+            Math.min(150_000, configured.timeoutMs + 30_000),
+          );
           timeout.unref();
           const finish = (message: string, error = false) => {
             if (finished) return;
@@ -606,9 +609,10 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
           });
           child.once('error', () => finish('runner could not start; no outcome recorded.', true));
           child.once('close', (code, signal) => {
-            const match = /^Delivery: (disabled|sent|failed|unknown|claimed|already-sent|already-failed|already-unknown)\b/m.exec(
-              output,
-            );
+            const match =
+              /^Delivery: (disabled|sent|failed|unknown|claimed|already-sent|already-failed|already-unknown)\b/m.exec(
+                output,
+              );
             if (timedOut) finish('runner timed out; delivery outcome unknown.', true);
             else if (match) finish(match[1]! + '.');
             else finish(`no outcome recorded (runner ${code ?? signal ?? 'unknown'}).`, true);

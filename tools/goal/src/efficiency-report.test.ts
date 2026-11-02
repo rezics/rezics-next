@@ -13,7 +13,14 @@ function fixture() {
   const db = openDb(join(directory.path, 'goal.sqlite'));
   const store = new WorkerStore(db);
   new SqliteLandingQueue(db, store);
-  return { db, directory, close: () => { db.close(); directory.close(); } };
+  return {
+    db,
+    directory,
+    close: () => {
+      db.close();
+      directory.close();
+    },
+  };
 }
 
 function task(db: ReturnType<typeof openDb>, id: string, state: string, goal: string, attempt = 1): void {
@@ -33,25 +40,32 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     task(h.db, 'landed', 'integrated', 'search', 2);
     task(h.db, 'queued', 'landing', 'content');
     task(h.db, 'orphan', 'landing', 'content', 2);
-    h.db.query('INSERT INTO worker_attempts(task_id,attempt,body) VALUES (?,?,?)').run(
-      'queued',
-      1,
-      JSON.stringify({ taskId: 'queued', attempt: 1, state: 'waiting' }),
-    );
-    h.db.query('INSERT INTO landing_queue(task,attempt,request) VALUES (?,?,?)').run(
-      'queued',
-      1,
-      JSON.stringify({ taskId: 'queued', attempt: 1, declaredPaths: ['services/sample/src/index.ts'] }),
-    );
+    h.db
+      .query('INSERT INTO worker_attempts(task_id,attempt,body) VALUES (?,?,?)')
+      .run('queued', 1, JSON.stringify({ taskId: 'queued', attempt: 1, state: 'waiting' }));
+    h.db
+      .query('INSERT INTO landing_queue(task,attempt,request) VALUES (?,?,?)')
+      .run(
+        'queued',
+        1,
+        JSON.stringify({ taskId: 'queued', attempt: 1, declaredPaths: ['services/sample/src/index.ts'] }),
+      );
     const at = (minute: number) => new Date(Date.parse(bucket) + minute * 60_000).toISOString();
-    recordFlow(h.db, { taskId: 'landed', attempt: 2, stage: 'integration', action: 'integrated', at: at(10), detail: JSON.stringify({ integrationTarget: 'integration' }) });
+    recordFlow(h.db, {
+      taskId: 'landed',
+      attempt: 2,
+      stage: 'integration',
+      action: 'integrated',
+      at: at(10),
+      detail: JSON.stringify({ integrationTarget: 'integration' }),
+    });
     recordFlow(h.db, { taskId: 'landed', attempt: 2, stage: 'worker', action: 'started', at: at(2) });
     recordFlow(h.db, { taskId: 'landed', attempt: 2, stage: 'worker', action: 'started', at: at(3) });
     recordFlow(h.db, { taskId: 'landed', attempt: 2, stage: 'worker', action: 'finished', at: at(12) });
     recordFlow(h.db, { taskId: 'queued', attempt: 1, stage: 'landing', action: 'enqueued', at: at(15) });
-    h.db.query('INSERT INTO worker_promotions(id,body) VALUES (1,?)').run(
-      JSON.stringify({ id: 'promotion', phase: 'stabilize-blocked' }),
-    );
+    h.db
+      .query('INSERT INTO worker_promotions(id,body) VALUES (1,?)')
+      .run(JSON.stringify({ id: 'promotion', phase: 'stabilize-blocked' }));
 
     const report = await renderHourlyEfficiencyReport(h.db, { bucket, now });
     expect(report).toContain('Landings in UTC hour: dev 1; stabilize 0; main 0; unknown 0 (each task counted once).');
@@ -61,7 +75,9 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     expect(report).toContain('Current landing queue age: 1 queued attempts; oldest 2700000 ms.');
     expect(report).toContain('queued#1');
     expect(report).toContain('Orphaned landings: 1 (orphan).');
-    expect(report).toContain('Promotion: blocked; phase stabilize-blocked; main gate result unknown; phase age unknown.');
+    expect(report).toContain(
+      'Promotion: blocked; phase stabilize-blocked; main gate result unknown; phase age unknown.',
+    );
     expect(report).toContain('worker diff churn: unknown.');
   } finally {
     h.close();
@@ -107,8 +123,13 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
     );
     expect(duplicate.disposition).toBe('already-sent');
     expect(readFileSync(capture, 'utf8')).toBe('sent\n');
-    const stored = h.db.query('SELECT report, status, created_at, finished_at FROM efficiency_report_deliveries WHERE hour_bucket=?').get(bucket) as {
-      report: string; status: string; created_at: string; finished_at: string;
+    const stored = h.db
+      .query('SELECT report, status, created_at, finished_at FROM efficiency_report_deliveries WHERE hour_bucket=?')
+      .get(bucket) as {
+      report: string;
+      status: string;
+      created_at: string;
+      finished_at: string;
     };
     expect(stored).toMatchObject({ report: 'hourly report', status: 'sent', created_at: '2026-10-31T02:15:00.000Z' });
     expect(Date.parse(stored.finished_at)).not.toBeNaN();
@@ -132,7 +153,13 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
       25,
     );
     expect(timedOut.disposition).toBe('unknown');
-    expect((h.db.query('SELECT status FROM efficiency_report_deliveries WHERE hour_bucket=?').get(timedOut.bucket) as { status: string }).status).toBe('unknown');
+    expect(
+      (
+        h.db.query('SELECT status FROM efficiency_report_deliveries WHERE hour_bucket=?').get(timedOut.bucket) as {
+          status: string;
+        }
+      ).status,
+    ).toBe('unknown');
   } finally {
     h.close();
   }
