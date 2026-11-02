@@ -105,8 +105,7 @@ export function CharacterClassification({
   const needsDeparture = (value: FactDraft | undefined) =>
     !!value &&
     !value.result?.ok &&
-    ((factChanged(value) && (value.baseline !== null || hasAuthoredFactContent(value.statement))) ||
-      unresolved(value));
+    ((factChanged(value) && (value.baseline !== null || hasAuthoredFactContent(value.statement))) || unresolved(value));
   useAuthoringDeparture(
     () => !retired.current && needsDeparture(draft),
     () => !retired.current && unresolved(draft),

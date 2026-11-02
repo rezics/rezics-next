@@ -7,7 +7,9 @@ import { characterProfileFixture, characterProfileId } from '../src/kernel/fake/
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-async function mounted(run: (page: { host: HTMLElement; render: (node: ReactNode) => Promise<void> }) => Promise<void>) {
+async function mounted(
+  run: (page: { host: HTMLElement; render: (node: ReactNode) => Promise<void> }) => Promise<void>,
+) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en' });
@@ -60,7 +62,9 @@ async function mounted(run: (page: { host: HTMLElement; render: (node: ReactNode
 }
 
 function button(scope: ParentNode, label: string) {
-  const found = [...scope.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === label);
+  const found = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
+    (node) => node.textContent?.trim() === label,
+  );
   expect(found).toBeDefined();
   return found!;
 }
@@ -180,7 +184,11 @@ test('classification holders share departure protection through recovery, retrie
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'concept');
         input.dispatchEvent(new window.Event('input', { bubbles: true }));
       });
-      await settle(() => [...host.ownerDocument.querySelectorAll('[role="option"]')].some((option) => option.textContent?.includes(title)));
+      await settle(() =>
+        [...host.ownerDocument.querySelectorAll('[role="option"]')].some((option) =>
+          option.textContent?.includes(title),
+        ),
+      );
       await act(async () => {
         [...host.ownerDocument.querySelectorAll<HTMLElement>('[role="option"]')]
           .find((option) => option.textContent?.includes(title))!
