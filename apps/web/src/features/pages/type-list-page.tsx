@@ -338,7 +338,7 @@ export function TypeListPage({
   node: string;
   cursor?: string;
   locale: string;
-  focusRef: Ref<HTMLElement>;
+  focusRef?: Ref<HTMLDivElement>;
 }) {
   const list = findTypeList(page.document, node);
   if (!list) return null;

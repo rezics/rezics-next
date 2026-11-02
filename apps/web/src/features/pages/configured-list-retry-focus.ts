@@ -23,9 +23,9 @@ const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useLa
 
 /** Keeps one deliberate Retry focused on its current recovery or result while the admitted list read settles. */
 export function useConfiguredListRetryFocus(owner: ConfiguredListRetryFocusOwner, outcome: Outcome, retrying: boolean) {
-  const statusRef = useRef<HTMLElement>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
-  const resultRef = useRef<HTMLElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   const pending = useRef<Pending | null>(null);
   const ownerRef = useRef(owner);
   ownerRef.current = owner;
