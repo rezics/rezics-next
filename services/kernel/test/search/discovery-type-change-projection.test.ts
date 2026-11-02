@@ -142,8 +142,9 @@ test('replay of a Subject changing between released Types deletes its old kind a
   }
   await allocateDiscovery(pool, prefix, registry);
   await advanceDiscovery({ pool, search, prefix, registry, listing });
-  const target = (await discoveryGenerations(pool, prefix))[0] as DiscoveryTarget | undefined;
-  if (!target?.uuid) throw new Error('Native generation was not allocated');
+  const allocated = (await discoveryGenerations(pool, prefix))[0];
+  if (!allocated?.uuid) throw new Error('Native generation was not allocated');
+  const target: DiscoveryTarget = allocated;
   const index = discoveryIndexName(prefix, target.generation);
   const consumer = discoveryConsumer(prefix, target.generation);
   const projection = createDiscoveryProjection({ pool, search, registry, listing, target });
