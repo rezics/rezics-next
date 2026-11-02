@@ -150,11 +150,11 @@ export function ValueExplanationPage({
 
   function activate(event: MouseEvent<HTMLButtonElement>, kind: ValueActionKind, run: (action: ValueAction) => void) {
     const source = event.currentTarget;
-    const action = {
+    const action: ValueAction = {
       kind,
       source,
       keyboard: event.detail === 0 && source.ownerDocument.activeElement === source,
-    } satisfies ValueAction;
+    };
     run(action);
     beginAction(action, action.token);
   }
