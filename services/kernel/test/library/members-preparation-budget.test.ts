@@ -18,7 +18,16 @@ const axes = [
   'statements',
   'bytes',
 ] as const;
-const cost = (amount: number) => Object.fromEntries(axes.map((axis) => [axis, amount])) as WorkDimensions;
+const cost = (amount: number): WorkDimensions => ({
+  candidateKeys: amount,
+  nativeRows: amount,
+  identityMetadataRows: amount,
+  emptySeeks: amount,
+  nativePoints: amount,
+  witnessKeys: amount,
+  statements: amount,
+  bytes: amount,
+});
 const declarations = (): MembersPreparationDeclarations =>
   Object.fromEntries(MEMBERS_PREPARATION_CHILDREN.map((name) => [name, cost(2)])) as MembersPreparationDeclarations;
 const parent = (amount = MEMBERS_PREPARATION_CHILDREN.length * 2, deadline = Date.now() + 60000) =>
