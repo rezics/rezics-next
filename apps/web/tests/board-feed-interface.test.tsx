@@ -93,6 +93,7 @@ test('same-Board and distinct-Board instances label only their own localized h2,
         expect(headings).toHaveLength(1);
         expect(feed[1]).toBe(headings[0]![1]);
         expect(headings[0]![2]).toBe(m.board_threads_heading());
+        expect(headings[0]![0]).toMatch(/\btabindex="-1"/u);
         ids.push(feed[1]!);
       }
       expect(new Set(ids).size).toBe(3);

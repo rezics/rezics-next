@@ -1,5 +1,5 @@
-import { useId, type ReactNode } from 'react';
-import { Link } from '@tanstack/react-router';
+import { useId, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { MessageSquareIcon, HeartIcon } from 'lucide-react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -16,6 +16,8 @@ import {
   type BoardFeedThread,
   type CommunityBoardPage,
 } from './board-feed-data';
+
+const consumedContinuationStates = new WeakSet<object>();
 
 function ThreadCard({
   thread,
@@ -120,7 +122,18 @@ export function BoardFeed({
   actions?: ReactNode;
 }) {
   const headingId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
   const locale = getLocale();
+  const location = useLocation();
+  const router = useRouter();
+  useLayoutEffect(() => {
+    const state = location.state as Record<string, unknown>;
+    if (state.__boardNextPage !== true || router.history.action !== 'PUSH' || consumedContinuationStates.has(state))
+      return;
+    if (!heading.current) return;
+    consumedContinuationStates.add(state);
+    heading.current.focus();
+  }, [location.state, router]);
   const refreshedAt =
     sort !== 'new' && page.rankRefreshedAt && !Number.isNaN(Date.parse(page.rankRefreshedAt))
       ? page.rankRefreshedAt
@@ -128,7 +141,7 @@ export function BoardFeed({
   return (
     <section className="min-w-0 space-y-3 [overflow-wrap:anywhere]" aria-labelledby={headingId}>
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
-        <h2 id={headingId} className="min-w-0 max-w-full text-lg font-semibold">
+        <h2 ref={heading} id={headingId} tabIndex={-1} className="min-w-0 max-w-full text-lg font-semibold">
           {m.board_threads_heading()}
         </h2>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:py-2 [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:py-2 [&_button]:whitespace-normal [&_svg]:shrink-0">
@@ -173,6 +186,7 @@ export function BoardFeed({
             to="/boards/$id"
             params={{ id: boardId }}
             search={{ cursor: page.next, ...(sort === 'active' ? {} : { sort }) }}
+            state={{ __boardNextPage: true }}
             className={buttonVariants({
               variant: 'outline',
               size: 'lg',

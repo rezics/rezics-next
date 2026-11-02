@@ -40,6 +40,7 @@ const client = createKernelClient('https://kernel.test', { fetch: createStoryRec
 const page = await loadBoardPageWithAuthors(client, { id: continuationBoardId, cursor: continuationCursor });
 const thread = page.threads.threads[0]!;
 type Props = ComponentProps<typeof BoardFeed>;
+let router: ReturnType<typeof createRouter>;
 let props: Props, update: (next: Props) => void, root: ReturnType<typeof createRoot>;
 const writes: ReturnType<typeof Promise.withResolvers<void>>[] = [];
 Object.defineProperty(window.navigator, 'clipboard', {
@@ -87,7 +88,7 @@ beforeEach(async () => {
     return <BoardFeed {...value} />;
   }
   const route = createRootRoute({ component: Feed });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();
   root = createRoot(host);
   await act(async () => root.render(<RouterProvider router={router} />));
@@ -153,4 +154,16 @@ test('replaced destinations, boards, erased rows and removed rows retire pending
   expect(host.textContent).not.toContain(changed.title);
   await replace({ page: { ...props.page, threads: [] } });
   expect(host.querySelector('input, [role="status"]')).toBeNull();
+});
+
+test('a committed Next continuation focuses the empty-page boundary once without stealing later focus', async () => {
+  await replace({ page: { ...props.page, threads: [], next: 'signed:next/+opaque=' } });
+  const boundary = host.querySelector<HTMLHeadingElement>('h2')!;
+  expect(host.querySelector('nav a')?.textContent).toBe(m.threads_next_page());
+  await act(async () => router.navigate({ to: '/', state: { __boardNextPage: true } }));
+  expect(document.activeElement).toBe(boundary);
+  const sort = host.querySelector<HTMLAnchorElement>('nav a')!;
+  sort.focus();
+  await replace({ page: { ...props.page, threads: [], next: null } });
+  expect(document.activeElement).toBe(sort);
 });
