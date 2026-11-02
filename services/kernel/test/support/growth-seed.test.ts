@@ -11,6 +11,7 @@ const schemas = [
   'growth_seed_write',
   'growth_seed_mutable_rows',
 ];
+type MutablePopulation = { -readonly [Key in keyof Population]: Population[Key] };
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
@@ -77,7 +78,7 @@ test('grows cumulatively: seeding 0..8n after 0..n equals seeding 0..8n at once'
 
 test('seeds through a production write path when the population supplies write', async () => {
   let calls = 0;
-  const population: Population = {
+  const population: MutablePopulation = {
     name: 'write',
     hotPartition: 4,
     write: async ({ pool: writePool }, { ordinal, route }) => {
@@ -140,7 +141,7 @@ test('keeps the admitted placement and rows callback when rows mutate the popula
   const expected = [placement(original, 210), placement(original, 211)];
   const placements: ReturnType<typeof placement>[] = [];
   let replacementRows = 0;
-  let population!: Population;
+  let population!: MutablePopulation;
   population = {
     ...original,
     rows: (value) => {
