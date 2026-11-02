@@ -165,7 +165,7 @@ test('Recipe creation and current correction share complete frames with independ
   };
   const scalar = (scope: HTMLElement) =>
     retainedProps<ComponentProps<typeof ScalarControl>>(
-      input(scope, m.correction_value()),
+      scope.querySelector('input')!,
       (props) => !!props.part && !!props.onChange,
     ).onChange;
   const document = (scope: HTMLElement) =>
@@ -177,7 +177,7 @@ test('Recipe creation and current correction share complete frames with independ
     retainedProps<ComponentProps<typeof EntityPicker>>(
       within(scope).getByRole('combobox'),
       (props) => !!props.onValueChange,
-    ).onValueChange;
+    ).onValueChange!;
   const cancelRemoval = async (scope: HTMLElement) => {
     const trigger = within(scope).getByRole('button', { name: m.recipe_remove_field() });
     const controls = () => [
@@ -562,7 +562,7 @@ test('Recipe creation and current correction share complete frames with independ
     expect(creationCommands).toHaveLength(2);
     const sealedCreation = a.innerHTML;
     await act(async () => {
-      lockedDocument.onChange!(structuredClone(lockedDocument.value!));
+      lockedDocument.onChange!(fromPlainText('Locked document delivery'));
       lockedPicker([]);
       lockedCreateScalar({ type: 'novalue' });
       lockedCreateCitation({
