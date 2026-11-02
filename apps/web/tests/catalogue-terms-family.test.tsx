@@ -342,9 +342,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     function TermsRoute() {
       const [session, setSession] = useState<'signed-in' | 'signed-out'>('signed-in');
       signOut = () => setSession('signed-out');
-      return (
-        <SubjectTermsPage id={termsSubjectId} locale="en" session={session} transport={navigation.transport} />
-      );
+      return <SubjectTermsPage id={termsSubjectId} locale="en" session={session} transport={navigation.transport} />;
     }
     function Destination() {
       useEffect(() => {

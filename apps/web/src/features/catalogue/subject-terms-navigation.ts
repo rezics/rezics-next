@@ -37,15 +37,7 @@ export function SubjectTermsNavigationGuard({ active, dirty, pending, locale }: 
   return router ? createElement(RouterDepartureGuard, { protect, pending, locale }) : null;
 }
 
-function RouterDepartureGuard({
-  protect,
-  pending,
-  locale,
-}: {
-  protect: boolean;
-  pending: boolean;
-  locale: string;
-}) {
+function RouterDepartureGuard({ protect, pending, locale }: { protect: boolean; pending: boolean; locale: string }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const resolved = useRef(false);
@@ -99,8 +91,7 @@ function RouterDepartureGuard({
       AlertDialogContent,
       {
         initialFocus: stayButton,
-        finalFocus: () =>
-          leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false,
+        finalFocus: () => (leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false),
       },
       createElement(
         AlertDialogHeader,
