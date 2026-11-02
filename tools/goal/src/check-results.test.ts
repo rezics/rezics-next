@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { CheckResults, checkResultKey, reusableCommand } from './check-results.ts';
+import { CHECK_RESULT_SCHEMA, CheckResults, checkResultKey, reusableCommand } from './check-results.ts';
 import { gateRunner } from './merge.ts';
 import { openDb } from './db.ts';
 
@@ -159,6 +159,37 @@ describe('check result reuse keys', () => {
     expect(changed.key).not.toBe(goal.key);
     expect(results.lookup(changed.key)).toBeUndefined();
     expect(key(join(root, 'apps/app'))).toBe(app);
+  });
+
+  test('Reading the check-result cache ignores obsolete schemas and invalid timestamps while retaining valid current-schema TTL reuse.', () => {
+    const now = Date.now();
+    const put = (key: string, time: number | string, schema = CHECK_RESULT_SCHEMA) =>
+      db.exec(
+        `INSERT OR REPLACE INTO check_results VALUES(${JSON.stringify(key)},'u',1,'p','h',1,'l',${JSON.stringify(time)},${schema})`,
+      );
+    put('obsolete', now, 0);
+    put('invalid', 'bad');
+    put('future', now + 1);
+    put('valid', now - 1);
+    expect(results.lookup('obsolete', now)).toBeUndefined();
+    expect(results.lookup('invalid', now)).toBeUndefined();
+    expect(results.lookup('future', now)).toBeUndefined();
+    expect(results.lookup('valid', now)?.passed).toBe(true);
+    results.record(
+      {
+        key: 'late',
+        unit: 'u',
+        passed: true,
+        producer: 'p',
+        host: 'h',
+        duration: 1,
+        logPath: 'l',
+        time: now + 1,
+        schemaVersion: CHECK_RESULT_SCHEMA,
+      },
+      now,
+    );
+    expect(db.query('SELECT key FROM check_results WHERE key=?').get('late')).toBeNull();
   });
 
   test('shadow mode logs hits, runs fresh checks, and alerts once when a hit fails', async () => {

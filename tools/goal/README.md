@@ -1397,6 +1397,7 @@ allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_B
 ids for the command workspace and its `workspace:` dependency closure (or the whole tree for a root command), global
 inputs such as the lockfile, root package manifest, scripts, contracts, specs, patches, and lint/format configuration,
 and the Bun revision, service images, OS/architecture, and key schema version. Results expire after seven days.
+Lookup and record reuse a stored row only when its schema is current and its time is a finite timestamp in that window ending at the read or insert instant; incompatible rows are declined rather than deleted.
 
 Failures, timeouts, interrupted or partial runs, infrastructure failures, dirty or modified worktrees, install and
 generator commands, and checks that depend on external live state (including mail, payments, clocks, and capability

@@ -117,6 +117,15 @@ test('worktree cleanup skips vanished proc entries but reports unreadable cwd in
     rmSync(root, { recursive: true, force: true });
   }
 });
+test("worktree cleanup on the real proc table passes over other users' processes it cannot inspect", async () => {
+  // PID 1 and sd-pam hide their cwd from an ordinary user; that is not a failure of the cleanup.
+  const root = tempDirectory();
+  try {
+    await expect(stopProcessesUnder(join(root, 'worktree'), 0)).resolves.toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test('a failing pidfd waiter falls back to the identity and resolves only once the process is gone', async () => {
   const root = tempDirectory(),
     bin = join(root, 'bin');
