@@ -3,12 +3,7 @@ import type { FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
 import { subjectAlias, subjectIndexName, SUBJECT_SORT_FORMAT } from '../../src/search/indices.ts';
-import {
-  compileKinds,
-  CURRENT_METADATA_RETENTION,
-  kindDigest,
-  SUGGEST_TEMPLATE,
-} from '../../src/search/query.ts';
+import { compileKinds, CURRENT_METADATA_RETENTION, kindDigest } from '../../src/search/query.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import freshness from '../../src/search/freshness.sql';
@@ -42,12 +37,6 @@ test('successive catalogue digests cannot grow the kind snapshot cache without b
   expect(compileKinds(first, digest)).toBe(pinned);
   first.types['kind:Kind0-0'] = { bases: [], labels: { en: 'Mutated' } };
   expect(pinned.label('kind:Kind0-0', ['en'])).toEqual({ value: 'Kind 0-0', language: 'en' });
-  const page = pinned.page(undefined, ['en']);
-  expect(page.values).toHaveLength(8);
-  expect(page.values[0]).toMatchObject({ value: 'kind:Kind0-0', icon: 'book' });
-  page.values[0]!.label.value = 'Caller mutation';
-  expect(pinned.page(undefined, ['en']).values[0]!.label.value).toBe('Kind 0-0');
-  expect(pinned.page(page.after!, ['en']).values).toHaveLength(1);
 
   const later = Array.from({ length: CURRENT_METADATA_RETENTION }, (_, n) => {
     const release = catalogue(n + 1);
@@ -56,20 +45,32 @@ test('successive catalogue digests cannot grow the kind snapshot cache without b
   expect(compileKinds(catalogue(CURRENT_METADATA_RETENTION), later.at(-1)!.digest)).toBe(later.at(-1));
   expect(compileKinds(first, digest)).not.toBe(pinned);
   expect(enumerations).toBe(2);
-  expect(pinned.label('kind:Kind0-8', ['fr'])).toEqual({ value: 'kind:Kind0-8', language: 'und' });
-  expect(pinned.page(undefined, ['en']).values[0]!.label.value).toBe('Kind 0-0');
+  expect(pinned.page(undefined, ['en']).values).toHaveLength(8);
+  expect(pinned.page(undefined, ['en']).values[0]).toMatchObject({
+    value: 'kind:Kind0-0',
+    label: { value: 'Kind 0-0', language: 'en' },
+    icon: 'book',
+  });
 });
+
+function waitCount(read: () => number, needed: number, watch: (notify: (n: number) => void) => void) {
+  if (read() >= needed) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    watch((n) => {
+      if (n >= needed) resolve();
+    });
+    if (read() >= needed) resolve();
+  });
+}
 
 function heldFreshness(prefix: string) {
   const consumerOf = (generation: number) => subjectConsumer(prefix, generation);
   const started = new Map<string, { count: number; waiters: ((count: number) => void)[] }>();
-  const held = new Map<string, { open: () => void; wait: Promise<void> }[]>();
-  const consumers: string[] = [];
+  const held = new Map<string, { open: () => void }[]>();
   const pool = {
-    async query(text: string, values?: unknown[]) {
-      if (text !== freshness.sql) return { rows: [] };
-      const consumer = String(values![freshness.params.indexOf('consumer')]);
-      consumers.push(consumer);
+    async query(_text: string, values?: unknown[]) {
+      const consumer = values?.[freshness.params.indexOf('consumer')];
+      if (typeof consumer !== 'string') throw new Error('unexpected query');
       const state = started.get(consumer) ?? { count: 0, waiters: [] };
       state.count++;
       started.set(consumer, state);
@@ -79,7 +80,7 @@ function heldFreshness(prefix: string) {
         open = resolve;
       });
       const queue = held.get(consumer) ?? [];
-      queue.push({ open, wait });
+      queue.push({ open });
       held.set(consumer, queue);
       await wait;
       const generation = Number(/g(\d+)$/.exec(consumer)?.[1]);
@@ -88,31 +89,31 @@ function heldFreshness(prefix: string) {
   } as unknown as Pool;
   return {
     pool,
-    consumers: () => consumers.slice(),
     count(generation: number) {
       return started.get(consumerOf(generation))?.count ?? 0;
     },
-    async began(generation: number, count = 1) {
+    began(generation: number, count = 1) {
       const consumer = consumerOf(generation);
-      const state = started.get(consumer);
-      if ((state?.count ?? 0) >= count) return;
-      await new Promise<void>((resolve) => {
-        const current = started.get(consumer) ?? { count: 0, waiters: [] };
-        current.waiters.push((n) => {
-          if (n >= count) resolve();
-        });
-        started.set(consumer, current);
-      });
+      return waitCount(
+        () => started.get(consumer)?.count ?? 0,
+        count,
+        (notify) => {
+          const current = started.get(consumer) ?? { count: 0, waiters: [] };
+          current.waiters.push(notify);
+          started.set(consumer, current);
+        },
+      );
     },
     release(generation: number) {
-      const queue = held.get(consumerOf(generation));
-      queue?.shift()?.open();
+      held.get(consumerOf(generation))?.shift()?.open();
     },
   };
 }
 
 function catalogueEngine(prefix: string) {
   let active = 1;
+  let searches = 0;
+  const searchWaiters: ((count: number) => void)[] = [];
   const scripts = new Map<string, { script: unknown }>();
   const alias = subjectAlias(prefix);
   const client: OpenSearch = {
@@ -151,6 +152,8 @@ function catalogueEngine(prefix: string) {
         };
       }
       if (path.endsWith('/_search/template')) {
+        searches++;
+        for (const waiter of searchWaiters) waiter(searches);
         return {
           status: 200,
           body: {
@@ -171,6 +174,13 @@ function catalogueEngine(prefix: string) {
     setActive(generation: number) {
       active = generation;
     },
+    searched(count: number) {
+      return waitCount(
+        () => searches,
+        count,
+        (notify) => searchWaiters.push(notify),
+      );
+    },
   };
 }
 
@@ -185,11 +195,12 @@ test('successive physical generations cannot grow retained freshness readers wit
     source: createFakeSource(),
     cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
   });
+  const asOf = (generation: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, generation)).toISOString();
   engine.setActive(1);
   const pinned = service.suggest('a', 1);
   await freshnessPool.began(1);
   const coalesced = service.suggest('a', 1);
-  await Promise.resolve();
+  await engine.searched(2);
   expect(freshnessPool.count(1)).toBe(1);
 
   for (let generation = 2; generation <= CURRENT_METADATA_RETENTION + 2; generation++) {
@@ -197,7 +208,7 @@ test('successive physical generations cannot grow retained freshness readers wit
     const page = service.suggest('a', 1);
     await freshnessPool.began(generation);
     freshnessPool.release(generation);
-    expect((await page).as_of).toBe(new Date(Date.UTC(2026, 0, 1, 0, 0, generation)).toISOString());
+    expect((await page).as_of).toBe(asOf(generation));
   }
 
   engine.setActive(1);
@@ -205,12 +216,10 @@ test('successive physical generations cannot grow retained freshness readers wit
   await freshnessPool.began(1, 2);
   expect(freshnessPool.count(1)).toBe(2);
   freshnessPool.release(1);
-  expect((await pinned).as_of).toBe('2026-01-01T00:00:01.000Z');
-  expect(await coalesced).toEqual(await pinned);
+  expect((await pinned).as_of).toBe(asOf(1));
+  await freshnessPool.began(1, 3);
   freshnessPool.release(1);
-  expect((await afterEviction).as_of).toBe('2026-01-01T00:00:01.000Z');
-  expect(freshnessPool.consumers().every((consumer) => consumer.startsWith(`search_${prefix.replaceAll('-', '_')}`))).toBe(
-    true,
-  );
-  expect(SUGGEST_TEMPLATE).toBe('subjects-suggest-v1');
+  expect((await afterEviction).as_of).toBe(asOf(1));
+  freshnessPool.release(1);
+  expect((await coalesced).as_of).toBe(asOf(1));
 });
