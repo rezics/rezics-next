@@ -155,8 +155,7 @@ function AlbumProfileCreateLive({
         // Native success releases departure protection before exposing its returned reader.
         departure.release();
         setCreated(result);
-      }
-      else {
+      } else {
         setFailure(result);
         setCorrections(albumCreateCorrections(result.errors ?? [], terms, rows, release, locale, termsId));
         if (result.refreshDefinitions) await onReload();
