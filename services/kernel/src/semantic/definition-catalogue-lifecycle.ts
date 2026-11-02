@@ -12,16 +12,19 @@ import retirementConsumers from './definition-catalogue-retirement-consumers.sql
 import retirementCaptures from './definition-catalogue-retirement-captures.sql';
 import retirementRead from './definition-catalogue-retirement-read.sql';
 import retirementStart from './definition-catalogue-retirement-start.sql';
-import { assertKindCatalogueEnrollmentAdmission } from './definition-catalogue.ts';
-import type { KindCatalogueNativeContext } from './definition-catalogue-types.ts';
 import { assertCataloguePublisherFrame } from './definition-catalogue-publication-work.ts';
 import { randomUUID } from 'node:crypto';
-import type { KindCataloguePin } from '@rezics/definitions';
+import { catalogueBytes, catalogueDigest, type KindCataloguePin } from '@rezics/definitions';
+import type { Pool } from 'pg';
+import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { CATALOGUE_COMMAND_BOUND } from './definition-catalogue-publication-work.ts';
+import enrollConsumer from './definition-catalogue-enroll.sql';
+import consumerRead from './definition-catalogue-consumer-read.sql';
+import withdrawalAck from './definition-catalogue-withdrawal-ack.sql';
 import type { CommandTransaction } from '../command/command.ts';
 import { currentCommand, currentCommandResources } from '../command/command.ts';
 import { hasLiveOperationalTransaction, currentOperationalResources } from '../command/operational.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
-import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { GLOBAL_CONTEXT, StaleEditorialHeadError } from './definitions.ts';
 import { CATALOGUE_BODY_COST as cost, catalogueBodyWork, catalogueSQLCost } from './definition-catalogue-work-cost.ts';
 import registerRoot from './definition-catalogue-register-root.sql';
@@ -114,15 +117,7 @@ export async function lockCatalogueEnrollment(tx: CommandTransaction, root: stri
   return lockEnrollmentRows(tx, root, work);
 }
 
-/** Kind authority is verified by the actual Kind receiving boundary, independently
- * of publisher authority. A structural context, publisher grant or ALS presence
- * cannot satisfy it. Missing Accounts admission refuses before either row lock. */
-export async function lockKindCatalogueEnrollment(context: KindCatalogueNativeContext, root: string) {
-  assertKindCatalogueEnrollmentAdmission(context);
-  return lockEnrollmentRows(context.tx, root, context.work);
-}
-
-// Common physical primitive. Neither caller is allowed to bypass its own original guard.
+// Shared head-then-root locks serialize enrollment with closure.
 async function lockEnrollmentRows(tx: CommandTransaction, root: string, work: NativeCollectionWork) {
   const head = await lifecycleBodyWork(tx, work, catalogueSQLCost(cost.headLock, headLock.sql, {}), () =>
     headLock.run(tx),
@@ -283,10 +278,10 @@ export async function advanceCatalogueActivation(
   );
   if (pending) {
     const page = { root, previous: state.previous_root ?? unavailable() };
-    // A LEFT JOIN preserves missing/uncertain consumers as retained obligations. No Source proof is synthesized.
-    await lifecycleBodyWork(tx, work, catalogueSQLCost(cost.frontierRead, frontierRead.sql, page), () =>
+    const rows = await lifecycleBodyWork(tx, work, catalogueSQLCost(cost.frontierRead, frontierRead.sql, page), () =>
       frontierRead.run(tx, page),
     );
+    for (const row of rows) await consumeWithdrawal(tx, root, activationId, state.previous_root!, row, work);
     return { activationId, state: 'invalidating', pending: true };
   }
   if (state.previous_root !== null && state.staged_sequence !== state.closed_sequence) {
@@ -301,8 +296,7 @@ export async function advanceCatalogueActivation(
       frontierStage.run(tx, page),
     );
   }
-  // Nonempty cuts require the original Source invalidation + current-owner/nonrevival producer.
-  // It is absent. Retain every pending/negative/in-flight/uncertain obligation without dispatch or pruning.
+  // Staging and withdrawal are separate durable checkpoints. No caller supplies a complete bit.
   return { activationId, state: 'invalidating', pending: state.closed_sequence !== '0' };
 }
 
@@ -323,7 +317,7 @@ export async function finishCatalogueActivation(
   if (head.root_digest === pin.rootDigest && state.state === 'active') return head.head;
   if (head.head !== state.expected_head || head.root_digest !== state.previous_root)
     throw new StaleEditorialHeadError();
-  if (state.state !== 'invalidating' || state.closed_sequence !== '0') return null;
+  if (state.state !== 'invalidating' || state.staged_sequence !== state.closed_sequence) return null;
   // The SQL rechecks the genuine closed frontier, not this local branch, counters supplied by a caller, or a complete bit.
   const params = {
     root: pin.rootDigest,
@@ -359,20 +353,181 @@ export async function readCatalogueActivationFrontier(
   );
 }
 
-/** No exported Source producer currently returns a committed catalogue dependency
- * withdrawal/nonrevival acknowledgement with a current owner/restore generation verifier.
- * readAndHold/revalidateHold prove a live read; releaseHold and retireCapture do not
- * withdraw a Kind consumer. An arbitrary object, old revision or precommit locator
- * cannot be consumed here. Keep the durable obligation and fail before foreign IO.
+/** A Source adapter reads its own committed withdrawal and verifies the current
+ * owner/restore generations. Its acknowledgement must forbid revival of this exact
+ * dependency; a release/hold receipt or a precommit transaction locator is insufficient.
+ * No public route accepts adapters or acknowledgement bytes.
  */
+export type CatalogueConsumerCapture = Readonly<{
+  root: string;
+  id: string;
+  sequence: string;
+  closedGeneration: string;
+  consumer: Buffer;
+  provenance: Buffer;
+  dependency: Buffer;
+  enrollmentGeneration: string;
+}>;
+export type CatalogueWithdrawalAcknowledgement = Readonly<{
+  captureDigest: string;
+  receipt: Uint8Array;
+  ownerGeneration: string;
+  restoreGeneration: string;
+}>;
+export interface CatalogueConsumerSource {
+  readCurrentWithdrawal(
+    tx: CommandTransaction,
+    capture: CatalogueConsumerCapture,
+  ): Promise<CatalogueWithdrawalAcknowledgement | null>;
+}
+const consumerSources = new WeakMap<Pool, ReadonlyMap<string, CatalogueConsumerSource>>();
+/** Minimal seam for native dependency owners; automatic Collection presentation has no consumer. */
+export function configureCatalogueConsumerSources(pool: Pool, sources: ReadonlyMap<string, CatalogueConsumerSource>) {
+  consumerSources.set(pool, new Map(sources));
+}
+export function catalogueConsumerCaptureDigest(capture: CatalogueConsumerCapture): string {
+  return catalogueDigest(
+    catalogueBytes({
+      ...capture,
+      consumer: capture.consumer.toString('base64'),
+      provenance: capture.provenance.toString('base64'),
+      dependency: capture.dependency.toString('base64'),
+    }),
+  );
+}
+/** Called by a dependency owner's ordinary command. Every decision, including a
+ * negative/pending one, retains exact immutable provenance before it can be used.
+ */
+export async function enrollCatalogueConsumer(
+  tx: CommandTransaction,
+  root: string,
+  input: Readonly<{
+    consumer: Readonly<{ source: string; key: unknown }>;
+    provenance: unknown;
+    dependency: unknown;
+  }>,
+) {
+  const command = currentCommand(tx),
+    resources = currentCommandResources(tx);
+  if (
+    command.partition !== 0 ||
+    !/^sha256:[a-f0-9]{64}$/.test(root) ||
+    !consumerSources.get(resources.pool)?.has(input.consumer.source)
+  )
+    return unavailable();
+  const consumer = Buffer.from(catalogueBytes(input.consumer)),
+    provenance = Buffer.from(catalogueBytes(input.provenance)),
+    dependency = Buffer.from(catalogueBytes(input.dependency));
+  if (consumer.length > 8192 || provenance.length > 8192 || dependency.length > 65536) return unavailable();
+  const id = catalogueDigest(
+    catalogueBytes([consumer.toString('base64'), provenance.toString('base64'), dependency.toString('base64')]),
+  );
+  const work = new NativeCollectionWork(
+    { reservationId: command.transactionId, remaining: CATALOGUE_COMMAND_BOUND },
+    resources.deadline,
+  );
+  const { head, enrollment } = await lockEnrollmentRows(tx, root, work);
+  if (head.root_digest !== root || enrollment.protocol !== 1 || enrollment.state !== 'open') return unavailable();
+  const point = { root, id };
+  const existing = await lifecycleBodyWork(tx, work, catalogueSQLCost(cost.consumerRead, consumerRead.sql, point), () =>
+    consumerRead.run(tx, point),
+  );
+  if (existing) {
+    if (
+      !Buffer.from(existing.consumer).equals(consumer) ||
+      !Buffer.from(existing.provenance).equals(provenance) ||
+      !Buffer.from(existing.dependency).equals(dependency)
+    )
+      return unavailable();
+    return { id, enrollmentGeneration: existing.enrollment_generation };
+  }
+  const params = { root, id, consumer, provenance, dependency, generation: enrollment.generation };
+  const saved = await lifecycleBodyWork(tx, work, catalogueSQLCost(cost.enroll, enrollConsumer.sql, params), () =>
+    enrollConsumer.run(tx, params),
+  );
+  if (!saved) return unavailable();
+  return { id, enrollmentGeneration: saved.enrollment_generation };
+}
+
 export async function consumeCatalogueWithdrawalAcknowledgement(
   tx: CommandTransaction,
-  input: Readonly<{ root: string; activationId: string; slot: number; acknowledgement: unknown }>,
+  input: Readonly<{ root: string; activationId: string; slot: number }>,
   work: NativeCollectionWork,
-): Promise<never> {
+): Promise<boolean> {
   const rows = await readCatalogueActivationFrontier(tx, input.root, input.activationId, work);
-  if (!Number.isSafeInteger(input.slot) || !rows.some((row) => row.slot === input.slot)) return unavailable();
-  return unavailable();
+  const row = rows.find((row) => row.slot === input.slot);
+  if (!Number.isSafeInteger(input.slot) || !row) return unavailable();
+  const state = (await readActivation(tx, input.root, work)) ?? unavailable();
+  return consumeWithdrawal(tx, input.root, input.activationId, state.previous_root ?? unavailable(), row, work);
+}
+async function consumeWithdrawal(
+  tx: CommandTransaction,
+  root: string,
+  activationId: string,
+  previousRoot: string,
+  row: Awaited<ReturnType<typeof frontierRead.run>>[number],
+  work: NativeCollectionWork,
+): Promise<boolean> {
+  // Disappearance, an uncertain mutation and an owner ABA never erase the capture.
+  if (
+    !Buffer.from(row.current_consumer ?? []).equals(Buffer.from(row.consumer)) ||
+    !Buffer.from(row.current_provenance ?? []).equals(Buffer.from(row.provenance)) ||
+    !Buffer.from(row.current_dependency ?? []).equals(Buffer.from(row.dependency)) ||
+    row.current_enrollment_generation !== row.enrollment_generation ||
+    row.current_state !== row.consumer_state
+  )
+    return false;
+  let sourceName: unknown;
+  try {
+    sourceName = JSON.parse(row.consumer.toString()).source;
+  } catch {
+    return false;
+  }
+  if (typeof sourceName !== 'string') return false;
+  const source = consumerSources.get(currentCommandResources(tx).pool)?.get(sourceName);
+  if (!source) return false;
+  const capture: CatalogueConsumerCapture = {
+    root: previousRoot,
+    id: row.consumer_id,
+    sequence: row.sequence,
+    closedGeneration: row.closed_generation,
+    consumer: row.consumer,
+    provenance: row.provenance,
+    dependency: row.dependency,
+    enrollmentGeneration: row.enrollment_generation,
+  };
+  const ack = await source.readCurrentWithdrawal(tx, capture);
+  if (
+    !ack ||
+    ack.captureDigest !== catalogueConsumerCaptureDigest(capture) ||
+    !(ack.receipt instanceof Uint8Array) ||
+    ack.receipt.byteLength < 1 ||
+    ack.receipt.byteLength > 8192 ||
+    !ack.ownerGeneration ||
+    !ack.restoreGeneration ||
+    ack.ownerGeneration.length > 256 ||
+    ack.restoreGeneration.length > 256
+  )
+    return false;
+  const params = {
+    root,
+    activation_id: activationId,
+    slot: row.slot,
+    previous: previousRoot,
+    id: row.consumer_id,
+    sequence: row.sequence,
+    generation: row.closed_generation,
+    consumer: row.consumer,
+    provenance: row.provenance,
+    dependency: row.dependency,
+    enrollment_generation: row.enrollment_generation,
+    receipt: Buffer.from(ack.receipt),
+    owner: ack.ownerGeneration,
+    restore: ack.restoreGeneration,
+  };
+  return !!(await lifecycleBodyWork(tx, work, catalogueSQLCost(cost.withdrawalAck, withdrawalAck.sql, params), () =>
+    withdrawalAck.run(tx, params),
+  ));
 }
 
 export type CatalogueRetirementProgress = Readonly<{

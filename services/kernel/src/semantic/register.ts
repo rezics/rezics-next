@@ -8,17 +8,20 @@ import { CATALOGUE_BUILD_REQUESTED, CATALOGUE_ACTIVATION_REQUESTED } from './eve
 export function registerDefinitionCatalogueWork(context: WorkContext) {
   const workflowName = 'semantic.definitionCatalogue';
   const step = DBOS.registerStep(
-    (rootDigest: string) => runCatalogueBuildStep(context.pool, cataloguePin(rootDigest), context.clock),
+    (rootDigest: string, position: string) =>
+      runCatalogueBuildStep(context.pool, cataloguePin(rootDigest), context.clock, position),
     {
       name: `${workflowName}.step`,
-      // A failed original dispatch stays spent; DBOS may not start a fresh allowance.
+      // Core preserves uncertain commits; a retry uses the same durable job position.
       retriesAllowed: false,
     },
   );
   DBOS.registerWorkflow(
     async ({ rootDigest }: { rootDigest: string }) => {
+      let position = '0';
       while (true) {
-        const progress = await step(rootDigest);
+        const progress = await step(rootDigest, position);
+        position = progress.steps;
         if (progress.state === 'ready' || progress.state === 'refused') return progress;
         // Missing bytes are retained input, never successful empty closure. No connection is held during sleep.
         if (progress.state === 'incomplete') await DBOS.sleep(30_000);
@@ -37,8 +40,7 @@ export function registerDefinitionCatalogueWork(context: WorkContext) {
       activationStep(rootDigest, activationId),
     { name: activationName },
   );
-  // A wakeup selects an existing intent. It never grants another attempt or
-  // retries an unresolved dispatch; fresh final authorization stays in HTTP.
+  // A wakeup selects an existing intent; final publication retains fresh HTTP authorization.
   context.addEffects([
     {
       name: 'definition_catalogue_activation',

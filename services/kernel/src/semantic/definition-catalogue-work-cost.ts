@@ -1,3 +1,5 @@
+import { CatalogueArtifactError } from '@rezics/definitions';
+import nativeWithdrawalAck from './definition-catalogue-withdrawal-ack.sql';
 import nativeactivationCAS from './definition-catalogue-activation-cas.sql';
 import nativefrontierRead from './definition-catalogue-frontier-read.sql';
 import nativefrontierStage from './definition-catalogue-frontier-stage.sql';
@@ -34,7 +36,7 @@ import type { WorkDimensions } from '../library/collection-source.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 
-/** OWN catalogue body only. Original Access, executor, Source and receipt verification are additional producers. */
+/** Static catalogue operation bounds. Ordinary Core execution owns Access, receipts and transaction controls. */
 /** Native SQL components. Every operation has a closed SQL identity below.
  * Consumer captures are 8192 + 8192 + 65536 = 81920 octets. Staging
  * reads AND writes 100 captures (16384000 bytes); a frontier read returns
@@ -42,6 +44,16 @@ import type { NativeCollectionWork } from '../library/collection-source-work.ts'
  * 512 scalar bytes per row. FK reverse probes are included in points.
  */
 export const CATALOGUE_BODY_COST = Object.freeze({
+  withdrawalAck: Object.freeze({
+    candidateKeys: 1,
+    identityMetadataRows: 0,
+    nativeRows: 5,
+    nativePoints: 8,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: 164000,
+    emptySeeks: 1,
+  }),
   registerRoot: Object.freeze({
     candidateKeys: 0,
     identityMetadataRows: 0,
@@ -270,7 +282,10 @@ export async function catalogueBodyWork<T>(
     if (Date.now() >= deadline) throw new ProblemError('dependency_unavailable');
     return result;
   } catch (error) {
-    work.failure = error instanceof Error ? error : new Error('Catalogue body failed');
+    // A bounded domain refusal can be recorded after rolling back the step savepoint.
+    // Infrastructure and unexpected failures still poison the frame.
+    if (!(error instanceof CatalogueArtifactError))
+      work.failure = error instanceof Error ? error : new Error('Catalogue body failed');
     throw error;
   } finally {
     reservation.settle();
@@ -328,23 +343,10 @@ export function catalogueSQLCost(base: WorkDimensions, sql: string, params: unkn
   return Object.freeze({ ...base, bytes: base.bytes + Buffer.byteLength(sql) + bytes });
 }
 
-/** Exact OWN child sequence, not a transitive price for unavailable foreign producers.
- * SQL wire/input bytes are added by catalogueSQLCost immediately before dispatch.
- * Each entry is one pre-dispatched literal. Accounts must add its original executor,
- * admission, Source custody and fresh receipt verification declarations separately.
- */
+/** Closed native operation sequences; ordinary Core execution supplies framework and Access behavior. */
 export const CATALOGUE_CHILD_COMPOSITION = Object.freeze({
-  prepare: Object.freeze(['kindPrepareInput']),
-  readHeadBeforeEnrollment: Object.freeze(['kindAdmission', 'kindDecision', 'headRead']),
-  readPinnedBeforeEnrollment: Object.freeze(['kindAdmission', 'kindDecision']),
   register: Object.freeze(['lifecycleIdentity', 'headLock', 'registerRoot']),
-  enroll: Object.freeze(['kindAdmission', 'kindEnrollment', 'headLock', 'rootLock', 'consumerRead', 'enroll']),
-  lock: Object.freeze(['kindAdmission', 'kindLock', 'headLock', 'rootLock', 'consumerRead']),
-  readReady: Object.freeze(['buildRead']),
-  readKinds: Object.freeze(['kindSizes', 'kindBodies']),
-  candidateCursor: Object.freeze(['boundary']),
-  candidateRange: Object.freeze(['candidateRange']),
-  candidateBodies: Object.freeze(['kindBodies']),
+  enroll: Object.freeze(['headLock', 'rootLock', 'consumerRead', 'enroll']),
   requestActivation: Object.freeze([
     'lifecycleIdentity',
     'headLock',
@@ -375,26 +377,8 @@ export const CATALOGUE_CHILD_COMPOSITION = Object.freeze({
     'frontierStage',
   ]),
   readFrontier: Object.freeze(['lifecycleIdentity', 'headLock', 'rootLock', 'activationRead', 'frontierRead']),
-  finishEmpty: Object.freeze(['lifecycleIdentity', 'headLock', 'rootLock', 'activationRead', 'activationCAS']),
-} as const satisfies Record<
-  string,
-  readonly (
-    | keyof typeof CATALOGUE_BODY_COST
-    | 'kindPrepareInput'
-    | 'kindAdmission'
-    | 'kindDecision'
-    | 'kindEnrollment'
-    | 'kindLock'
-    | 'lifecycleIdentity'
-  )[]
->);
-
-/** Undefined foreign declarations are a refusal, never a zero-price child. */
-export const CATALOGUE_NATIVE_CHILD_REQUIREMENTS = Object.freeze([
-  'Core original finite frame: executor/framework, registry/control, fences, retries, failure/rollback and cleanup',
-  'Accounts SAME NativeCollectionWork: original Kind preparation admission and complete native work definition',
-  'Source: original consumer commit provenance, custody, withdrawal/nonrevival and current owner/restore verifier',
-] as const);
+  finish: Object.freeze(['lifecycleIdentity', 'headLock', 'rootLock', 'activationRead', 'activationCAS']),
+});
 
 /** An operation is the SQL literal plus its actual parameter/output representation.
  * Rows count addressed heap rows, including a failed FK/duplicate point; points
@@ -429,6 +413,30 @@ function literalOperation(
   });
 }
 export const CATALOGUE_PUBLISHER_OPERATIONS = Object.freeze({
+  buildIdentity: literalOperation(
+    'SELECT recorded_transaction_id FROM semantic.definition_catalogue_build WHERE route=0 AND root_digest=$1',
+    1,
+    1,
+    0,
+    36,
+    [71],
+  ),
+  checkpointRead: literalOperation(
+    'SELECT result FROM semantic.definition_catalogue_checkpoint WHERE route=0 AND root_digest=$1 AND phase=$2 AND job_id=$3 AND position=$4',
+    1,
+    1,
+    0,
+    131072,
+    [71, 15, 36, 19],
+  ),
+  checkpointWrite: literalOperation(
+    'INSERT INTO semantic.definition_catalogue_checkpoint(route,root_digest,phase,job_id,position,result,recorded_transaction_id) VALUES(0,$1,$2,$3,$4,$5,$6)',
+    2,
+    3,
+    0,
+    0,
+    [71, 15, 36, 19, 65536, 36],
+  ),
   artifactRead: literalOperation(
     'SELECT bytes FROM semantic.definition_catalogue_artifact WHERE route=0 AND digest=$1',
     1,
@@ -722,8 +730,8 @@ export function catalogueOperationCost(
     bytes: operation.bound.bytes + Buffer.byteLength(operation.sql) + inputBytes,
   });
 }
-/** Additive package only. Foreign framework/auth/outbox/bootstrap are missing terms,
- * never a zero child or a giant guessed phase envelope. Multiplicities below come
+/** Additive package only. Core owns framework/auth/outbox/bootstrap.
+ * These components describe the bounded catalogue body. Multiplicities below come
  * from ONE executable step: 256 node entries, 64 members or 64 labels.
  */
 export const CATALOGUE_PUBLISHER_PATHS = Object.freeze({
@@ -888,6 +896,26 @@ export function catalogueLedgerCost(
 }
 
 export const CATALOGUE_NATIVE_OPERATIONS = Object.freeze({
+  withdrawalAck: Object.freeze({
+    sql: nativeWithdrawalAck.sql,
+    bound: CATALOGUE_BODY_COST.withdrawalAck,
+    parameters: Object.freeze({
+      root: 71,
+      activation_id: 36,
+      slot: 3,
+      previous: 71,
+      id: 71,
+      sequence: 20,
+      generation: 20,
+      consumer: 8192,
+      provenance: 8192,
+      dependency: 65536,
+      enrollment_generation: 20,
+      receipt: 8192,
+      owner: 1024,
+      restore: 1024,
+    }),
+  }),
   registerRoot: Object.freeze({
     sql: nativeregisterRoot.sql,
     bound: CATALOGUE_BODY_COST.registerRoot,
@@ -1028,13 +1056,8 @@ export const CATALOGUE_PUBLISHER_CONTROLS = Object.freeze({
 /** Local control representation only: immutable input plus bounded decoded/canonical
  * output. The 256-byte lifecycle tuple covers root(71), activation/transaction
  * UUIDs(72), action(21), Global ID(36), partition/head(24), deadline(16), framing(16).
- * Original/Access/Source callbacks are separate missing children, never included.
+ * Source adapters own their documented static native read/withdrawal bounds.
  */
 export const CATALOGUE_NATIVE_CONTROLS = Object.freeze({
-  kindPrepareInput: controlOperation(2 * 65536),
-  kindAdmission: controlOperation(2 * 8192 + 256),
-  kindDecision: controlOperation(65536 + 2 * 1048576 + 2 * 8192),
-  kindEnrollment: controlOperation(2 * (8192 + 8192 + 65536) + 256),
-  kindLock: controlOperation(2 * (8192 + 8192 + 65536) + 256),
   lifecycleIdentity: controlOperation(256),
 });

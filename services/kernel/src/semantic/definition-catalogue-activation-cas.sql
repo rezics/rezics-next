@@ -4,8 +4,8 @@ eligible AS MATERIALIZED (
  JOIN semantic.definition_catalogue_enrollment target ON target.route=0 AND target.root_digest=a.root_digest
  JOIN semantic.definition_catalogue_build b ON b.route=0 AND b.root_digest=a.root_digest
  WHERE a.route=0 AND a.root_digest=(SELECT p_root FROM input) AND a.activation_id=:activation_id::uuid
- -- Nonempty cuts stay closed and pending until the original Source proof producer exists.
- AND a.closed_sequence=0 AND a.state='invalidating' AND target.protocol=1 AND target.state='open' AND b.state='ready'
+ -- Every captured dependency must have an exact durable withdrawal before publication.
+ AND a.state='invalidating' AND target.protocol=1 AND target.state='open' AND b.state='ready'
  AND a.expected_head=:head::integer AND a.previous_root IS NOT DISTINCT FROM (SELECT p_previous FROM input)
  AND NOT EXISTS (SELECT 1 FROM semantic.definition_catalogue_frontier f WHERE f.route=0 AND f.root_digest=a.root_digest LIMIT 1)
  AND ((a.previous_root IS NULL AND a.closed_generation=0 AND a.closed_sequence=0 AND a.staged_sequence=0)

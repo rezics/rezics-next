@@ -1,12 +1,13 @@
+import { catalogueCheckpoint } from './definition-catalogue-checkpoint.ts';
 import type { Pool } from 'pg';
 import {
   cataloguePublisherInvocation,
   cataloguePublisherQuery,
   cataloguePublisherControl,
-  captureCataloguePublisherPosition,
 } from './definition-catalogue-publication-work.ts';
 import {
   registerCatalogueRoot,
+  lockCatalogueEnrollment,
   requestCatalogueActivation,
   advanceCatalogueActivation,
   finishCatalogueActivation,
@@ -193,7 +194,6 @@ export async function startCatalogueBuild(pool: Pool, options: WriteOptions & { 
         const inserted = await cataloguePublisherQuery(tx, 'buildInsert', [pin.rootDigest, pin, transactionId]);
         if (inserted.rowCount) {
           await registerCatalogueRoot(tx, pin.rootDigest, transactionId, work);
-          await captureCataloguePublisherPosition(tx);
           const task = await cataloguePublisherQuery<{ task_id: string }>(tx, 'firstTask', [
             pin.rootDigest,
             root.directoryDigest,
@@ -429,7 +429,6 @@ export async function stepCatalogueBuild(pool: Pool, options: WriteOptions & { p
       commandOptions(options, 'definition_catalogues.step', 'definitions:publish'),
       async (tx) => {
         const value = await advanceCatalogueBuild(tx, pin);
-        await captureCataloguePublisherPosition(tx);
         return {
           value,
           events: [event(CATALOGUE_PROGRESS, { rootDigest: pin.rootDigest, state: value.state, steps: value.steps })],
@@ -438,16 +437,30 @@ export async function stepCatalogueBuild(pool: Pool, options: WriteOptions & { p
     ),
   );
 }
-export async function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, clock: () => Date) {
+export async function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, clock: () => Date, position = '0') {
   const invocation = cataloguePublisherInvocation(pool, 'step');
+  const parsed = parseCataloguePin(pin);
   return (
-    await invocation.run(pin.rootDigest, { partition: 0, clock }, async (tx) => {
-      const value = await advanceCatalogueBuild(tx, parseCataloguePin(pin));
-      await captureCataloguePublisherPosition(tx);
-      return {
-        value,
-        events: [],
-      };
+    await invocation.run(parsed.rootDigest, { partition: 0, clock }, async (tx) => {
+      // Public steps and the scheduler share this lock. The committed build identity
+      // and selected position identify a single native mutation/result association.
+      const build = (await cataloguePublisherQuery<Build>(tx, 'buildLock', [parsed.rootDigest])).rows[0];
+      if (!build) throw new DefinitionNotFoundError();
+      const job = await cataloguePublisherQuery<{ recorded_transaction_id: string }>(tx, 'buildIdentity', [
+        parsed.rootDigest,
+      ]);
+      const value = await catalogueCheckpoint(
+        tx,
+        { root: parsed.rootDigest, phase: 'step', jobId: job.rows[0]!.recorded_transaction_id, position },
+        async () => {
+          if (BigInt(position) > BigInt(build.steps))
+            catalogueFail('conflict', 'Catalogue position is ahead of committed progress');
+          return BigInt(position) < BigInt(build.steps)
+            ? (await readCatalogueBuild(tx, parsed))!
+            : advanceCatalogueBuild(tx, parsed);
+        },
+      );
+      return { value, events: [] };
     })
   ).value;
 }
@@ -459,19 +472,24 @@ export async function runCatalogueActivationStep(
   pin: KindCataloguePin,
   activationId: string,
   clock: () => Date,
+  position = '0',
 ) {
   const invocation = cataloguePublisherInvocation(pool, 'activation-step');
   const parsed = parseCataloguePin(pin);
   return (
     await invocation.run(parsed.rootDigest, { partition: 0, clock }, async (tx, _context, work) => {
-      const progress = await advanceCatalogueActivation(tx, parsed.rootDigest, activationId, work);
-      // Close and cut are separate replay-safe transitions. At most two are dispatched.
-      const value =
-        progress.state === 'closing'
-          ? await advanceCatalogueActivation(tx, parsed.rootDigest, activationId, work)
-          : progress;
-      await captureCataloguePublisherPosition(tx);
-      if (value.state === 'active') await advanceCatalogueRetirement(tx, parsed.rootDigest, work);
+      // Head/root order is shared with enrollment and all activation callers.
+      await lockCatalogueEnrollment(tx, parsed.rootDigest, work);
+      const value = await catalogueCheckpoint(
+        tx,
+        { root: parsed.rootDigest, phase: 'activation-step', jobId: activationId, position },
+        async () => {
+          const progress = await advanceCatalogueActivation(tx, parsed.rootDigest, activationId, work);
+          return progress.state === 'closing'
+            ? advanceCatalogueActivation(tx, parsed.rootDigest, activationId, work)
+            : progress;
+        },
+      );
       return { value, events: [] };
     })
   ).value;
@@ -495,7 +513,6 @@ export async function activateCatalogue(
       if (first.state === 'closing')
         await advanceCatalogueActivation(tx, pin.rootDigest, activation.activation_id, work);
       const head = await finishCatalogueActivation(tx, pin, activation.activation_id, transactionId, work);
-      await captureCataloguePublisherPosition(tx);
       if (head !== null) await advanceCatalogueRetirement(tx, pin.rootDigest, work);
       return {
         value: { pin, head },
@@ -518,7 +535,6 @@ export async function activateCatalogue(
   // Pending progress, receipt and wakeup commit together. Throwing inside the
   // command would roll back the close and lose the retained withdrawal cut.
   // A replay preserves this result; fresh final authorization uses a fresh key.
-  if (command.value.head === null)
-    catalogueFail('missing', 'Catalogue Source withdrawal acknowledgements are unavailable');
+  if (command.value.head === null) catalogueFail('missing', 'Catalogue dependency withdrawal is pending');
   return result({ ...command, value: { pin: command.value.pin, head: command.value.head! } });
 }
