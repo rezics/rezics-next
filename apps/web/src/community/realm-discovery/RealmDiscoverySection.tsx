@@ -15,12 +15,14 @@ export function RealmDiscoverySection({
   locale,
   pending = false,
   retry = false,
+  restart = false,
   onNext,
   onRetry,
 }: RealmDiscoverySectionProps): ReactElement {
   const language = locales.find((value) => value === locale) ?? 'en';
   const options = { locale: language };
   const title = sort === 'popular' ? m.realm_discovery_popular({}, options) : m.realm_discovery_trending({}, options);
+  const retryLabel = restart ? m.discovery_restart_action({}, options) : m.realm_discovery_retry({}, options);
   return (
     <section
       data-slot="realm-discovery"
@@ -104,7 +106,7 @@ export function RealmDiscoverySection({
           ) : null}
           {retry && !pending && onRetry ? (
             <Button variant="outline" className="min-h-11" onClick={onRetry}>
-              {m.realm_discovery_retry({}, options)}
+              {retryLabel}
             </Button>
           ) : null}
           {state.realms.map((realm) =>
@@ -130,7 +132,7 @@ export function RealmDiscoverySection({
           </p>
           {state.kind === 'unavailable' && onRetry ? (
             <Button variant="outline" className="min-h-11" onClick={onRetry}>
-              {m.realm_discovery_retry({}, options)}
+              {retryLabel}
             </Button>
           ) : null}
         </div>

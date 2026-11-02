@@ -74,26 +74,50 @@ export type RealmDiscoveryWindow = Readonly<{
   state: RealmDiscoveryState;
   pending: boolean;
   retry: boolean;
+  restart: boolean;
 }>;
 
-/** Sparse pages advance only on More. Unavailable continuations retain the exact retry cursor and useful rows. */
+export const REALM_DISCOVERY_PAGE_SIZE = 20;
+
+export function createRealmDiscoveryWindow(state: RealmDiscoveryState): RealmDiscoveryWindow {
+  return reduceRealmDiscovery({
+    state: { kind: 'loading' },
+    pending: false,
+    retry: false,
+    restart: false,
+  }, state);
+}
+
+/** Successful pages replace the finite window; pending and failed requests retain the accepted window. */
 export function reduceRealmDiscovery(
   previous: RealmDiscoveryWindow,
   incoming: RealmDiscoveryState,
 ): RealmDiscoveryWindow {
   if (incoming.kind !== 'ready') {
     if (incoming.kind === 'loading')
-      return { state: previous.state.kind === 'ready' ? previous.state : incoming, pending: true, retry: false };
-    if (incoming.kind === 'closed') return { state: incoming, pending: false, retry: false };
+      return {
+        state: previous.state.kind === 'ready' ? previous.state : incoming,
+        pending: true,
+        retry: false,
+        restart: false,
+      };
+    if (incoming.kind === 'closed') return { state: incoming, pending: false, retry: false, restart: false };
     return {
       state: previous.state.kind === 'ready' ? previous.state : incoming,
       pending: false,
       retry: true,
+      restart: false,
     };
   }
-  const realms = new Map(
-    (previous.state.kind === 'ready' ? previous.state.realms : []).map((realm) => [realm.realmId, realm]),
-  );
-  for (const realm of incoming.realms) realms.set(realm.realmId, realm);
-  return { state: { ...incoming, realms: [...realms.values()] }, pending: false, retry: false };
+  return {
+    state: { ...incoming, realms: incoming.realms.slice(0, REALM_DISCOVERY_PAGE_SIZE) },
+    pending: false,
+    retry: false,
+    restart: false,
+  };
+}
+
+/** A broken continuation keeps the last accepted rows visible and turns Retry into a first-page restart. */
+export function requireRealmDiscoveryRestart(previous: RealmDiscoveryWindow): RealmDiscoveryWindow {
+  return { ...previous, pending: false, retry: true, restart: true };
 }

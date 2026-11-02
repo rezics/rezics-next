@@ -21,6 +21,7 @@ export type RealmDiscoverySectionProps = Readonly<{
   locale: string;
   pending?: boolean;
   retry?: boolean;
+  restart?: boolean;
   onNext?: () => void;
   onRetry?: () => void;
 }>;

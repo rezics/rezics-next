@@ -29,7 +29,7 @@ const card: RealmDiscoveryCard = {
   avatar: null,
 };
 const fresh = (state: RealmDiscoveryPage): RealmDiscoveryWindow =>
-  reduceRealmDiscovery({ state: { kind: 'loading' }, pending: false, retry: false }, state);
+  reduceRealmDiscovery({ state: { kind: 'loading' }, pending: false, retry: false, restart: false }, state);
 
 test('the existing empty-query Search page composes the sole Content section without fetching during render', () => {
   const client = new QueryClient();
@@ -151,17 +151,17 @@ test('each requested page uses one shared loader call and locale, sort and reque
   }
 });
 
-test('empty ready pages are sparse progress; More retains useful rows and retries the actual cursor', () => {
+test('sparse pages advance explicitly, accepted pages replace the finite window, and failures retain it', () => {
   let window = fresh({ kind: 'ready', realms: [card], next: cursor });
   window = reduceRealmDiscovery(window, { kind: 'loading' });
   expect(window.pending).toBe(true);
   expect(window.state).toEqual({ kind: 'ready', realms: [card], next: cursor });
   window = reduceRealmDiscovery(window, { kind: 'ready', realms: [], next: secondCursor });
-  expect(window.state).toEqual({ kind: 'ready', realms: [card], next: secondCursor });
+  expect(window.state).toEqual({ kind: 'ready', realms: [], next: secondCursor });
   window = reduceRealmDiscovery(window, { kind: 'unavailable' });
   expect(window.retry).toBe(true);
   expect(window.pending).toBe(false);
-  expect(window.state).toEqual({ kind: 'ready', realms: [card], next: secondCursor });
+  expect(window.state).toEqual({ kind: 'ready', realms: [], next: secondCursor });
   window = reduceRealmDiscovery(window, { kind: 'loading' });
   window = reduceRealmDiscovery(window, { kind: 'ready', realms: [{ ...card, name: 'Current title' }], next: null });
   expect(window.retry).toBe(false);

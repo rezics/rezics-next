@@ -28,6 +28,7 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 Includes the public index tier, admitted catalogue plans and preparation, presentation profiles, compositions and
 page read aggregation. [Public scope](../scope.md) owns discovery boundaries. Private library facts remain in their
 owner's PostgreSQL partition; a public index is never an authorization authority. Web owns interface integration.
+Realm browsing advances one explicit page at a time: successful More replaces the visible window (up to 20 rows), pending and failed reads preserve it, and broken cursors offer a first-page restart.
 After profile persistence, any activation refusal remains retryable with its original head and idempotency keys; later edits stay in the separate draft.
 Recent queries repeat `language` values in preference order; missing selections use the current locale fallback.
 Subject population switches clear `context`, `node` and `cursor`, preserve the localized subject/view and fragment, and add `realm` only for a Realm retry.

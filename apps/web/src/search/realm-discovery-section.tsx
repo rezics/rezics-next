@@ -1,8 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { RealmDiscoverySection, loadRealmDiscovery, type RealmDiscoveryState } from '../community/realm-discovery';
-import { isPlatformClosedError } from '../kernel/platform-closed';
-import { reduceRealmDiscovery, type RealmDiscoveryWindow } from './realm-discovery-loader';
+import { type RealmDiscoveryWindow } from './realm-discovery-loader';
+import { createRealmPageProgress } from './realm-page-progress';
 
 export type {
   RealmDiscoveryCard,
@@ -40,50 +40,26 @@ const loadSearchRealmDiscovery: SearchRealmDiscoveryLoader = (data) => readSearc
 export function createSearchRealmDiscoveryPage(
   load: SearchRealmDiscoveryLoader,
   locale: string,
-  publish: (state: RealmDiscoveryState, progress: Pick<RealmDiscoveryWindow, 'pending' | 'retry'>) => void,
+  publish: (state: RealmDiscoveryState, progress: Pick<RealmDiscoveryWindow, 'pending' | 'retry' | 'restart'>) => void,
 ) {
-  let window: RealmDiscoveryWindow = { state: { kind: 'loading' }, pending: false, retry: false };
-  let cursor: string | undefined;
-  let disposed = false;
-  let started = false;
-  const update = (page: RealmDiscoveryState) => {
-    window = reduceRealmDiscovery(window, page);
-    publish(window.state, { pending: window.pending, retry: window.retry });
-  };
-  const request = async (nextCursor?: string) => {
-    if (disposed || window.pending) return;
-    cursor = nextCursor;
-    update({ kind: 'loading' });
-    let page: Page;
-    try {
-      page = await load({
-        locale,
-        sort: 'trending',
-        limit: REALM_DISCOVERY_LIMIT,
-        ...(cursor === undefined ? {} : { cursor }),
-      });
-    } catch (error) {
-      page = { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
-    }
-    if (disposed) return;
-    update(page);
-  };
+  const page = createRealmPageProgress({
+    read: ({ cursor }) => load({
+      locale,
+      sort: 'trending',
+      limit: REALM_DISCOVERY_LIMIT,
+      ...(cursor === undefined ? {} : { cursor }),
+    }),
+    publish: (window) => publish(window.state, {
+      pending: window.pending,
+      retry: window.retry,
+      restart: window.restart,
+    }),
+  });
   return {
-    start() {
-      if (started) return;
-      started = true;
-      return request();
-    },
-    next() {
-      if (!window.retry && window.state.kind === 'ready' && window.state.next !== null)
-        return request(window.state.next);
-    },
-    retry() {
-      if (window.retry) return request(cursor);
-    },
-    dispose() {
-      disposed = true;
-    },
+    start: () => page.start(),
+    next: () => page.next(),
+    retry: () => page.retry(),
+    dispose: () => page.dispose(),
   };
 }
 
@@ -114,8 +90,10 @@ export function SearchRealmDiscoverySection({
       if (current.current === page) current.current = null;
     };
   }, [owner]);
-  const { state, pending, retry } =
-    snapshot?.owner === owner ? snapshot : { state: { kind: 'loading' as const }, pending: false, retry: false };
+  const { state, pending, retry, restart } =
+    snapshot?.owner === owner
+      ? snapshot
+      : { state: { kind: 'loading' as const }, pending: false, retry: false, restart: false };
   return (
     <div data-search-realm-discovery data-state={state.kind}>
       <RealmDiscoverySection
@@ -124,6 +102,7 @@ export function SearchRealmDiscoverySection({
         locale={locale}
         pending={pending}
         retry={retry}
+        restart={restart}
         {...(state.kind === 'ready' && state.next !== null && !retry
           ? { onNext: () => void current.current?.next() }
           : {})}
