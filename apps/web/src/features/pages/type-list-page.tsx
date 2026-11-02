@@ -132,7 +132,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
       : undefined;
   const queryKey = options.queryKey;
   const queryIdentity = JSON.stringify(queryKey);
-  const routeIdentity = JSON.stringify([locale, list, page, cursor ?? null, target.realm, sourceFingerprint]);
+  const routeIdentity = JSON.stringify([locale, list, page, cursor ?? null, sourceFingerprint]);
   const sessionIdentity = healthySession(currentSession)
     ? JSON.stringify([currentSession.state, currentSession.subject ?? null, currentSession.csrfToken])
     : null;
