@@ -3,7 +3,6 @@ import {
   formatRelationIdentity,
   legacyRelationKey,
   relationIdentityKey,
-  relationIdentityMatches,
   type RelationIdentity,
 } from './growth-relation-identity.ts';
 
@@ -44,15 +43,82 @@ function relationLabel(requested: RelationRequest): string {
   return typeof requested === 'string' ? requested : formatRelationIdentity(requested);
 }
 
-function relationMatches(
+interface RelationCostEvidence {
+  readonly key: string;
+  readonly cost: unknown;
+  readonly identity?: RelationIdentity;
+}
+
+interface EvidenceBucket<T> {
+  readonly count: number;
+  readonly first: T;
+  readonly candidates: string;
+}
+
+interface EvidenceBucketBuilder<T> {
+  count: number;
+  first: T;
+  candidates: string[];
+}
+
+function addEvidence<T>(
+  buckets: Map<string, EvidenceBucketBuilder<T>>,
+  key: string,
+  evidence: T,
+  candidate: string,
+): void {
+  const bucket = buckets.get(key);
+  if (bucket === undefined) {
+    buckets.set(key, { count: 1, first: evidence, candidates: [candidate] });
+    return;
+  }
+  bucket.count++;
+  bucket.candidates.push(candidate);
+}
+
+function finishEvidence<T>(
+  builders: Map<string, EvidenceBucketBuilder<T>>,
+): ReadonlyMap<string, EvidenceBucket<T>> {
+  const entries: [string, EvidenceBucket<T>][] = [];
+  for (const [key, bucket] of builders)
+    entries.push([key, { count: bucket.count, first: bucket.first, candidates: bucket.candidates.join(', ') }]);
+  return new Map(entries);
+}
+
+function relationFieldsKey(identity: RelationIdentity): string {
+  return JSON.stringify([identity.kind, identity.name]);
+}
+
+function relationDatabaseKey(identity: RelationIdentity): string {
+  return JSON.stringify([identity.database ?? null, identity.kind, identity.name]);
+}
+
+function relationSchemaKey(identity: RelationIdentity): string {
+  return JSON.stringify([identity.schema ?? null, identity.kind, identity.name]);
+}
+
+interface RelationCostIndex {
+  readonly byLegacySelector: ReadonlyMap<string, EvidenceBucket<RelationCostEvidence>>;
+  readonly byIdentity: ReadonlyMap<string, EvidenceBucket<RelationCostEvidence>>;
+  readonly byDatabase: ReadonlyMap<string, EvidenceBucket<RelationCostEvidence>>;
+  readonly bySchema: ReadonlyMap<string, EvidenceBucket<RelationCostEvidence>>;
+  readonly byKindAndName: ReadonlyMap<string, EvidenceBucket<RelationCostEvidence>>;
+}
+
+function indexRelationCosts(
   name: string,
   sampleIndex: number,
   repetitionIndex: number,
   costs: Record<string, unknown>,
-  requested: RelationRequest,
-): { readonly key: string; readonly cost: unknown; readonly identity?: RelationIdentity } | undefined {
-  const matches = Object.entries(costs).flatMap(([key, cost]) => {
-    if (!isRecord(cost)) return [];
+): RelationCostIndex {
+  const legacySelectors = new Map<string, EvidenceBucketBuilder<RelationCostEvidence>>();
+  const identities = new Map<string, EvidenceBucketBuilder<RelationCostEvidence>>();
+  const databases = new Map<string, EvidenceBucketBuilder<RelationCostEvidence>>();
+  const schemas = new Map<string, EvidenceBucketBuilder<RelationCostEvidence>>();
+  const kindsAndNames = new Map<string, EvidenceBucketBuilder<RelationCostEvidence>>();
+
+  for (const [key, cost] of Object.entries(costs)) {
+    if (!isRecord(cost)) continue;
     const rawIdentity = cost.identity;
     if (rawIdentity !== undefined && !isRelationIdentity(rawIdentity))
       invalidEvidence(
@@ -63,47 +129,88 @@ function relationMatches(
         'expected a database/schema/relation identity',
       );
     const identity = rawIdentity as RelationIdentity | undefined;
-    const matchesRequest =
-      identity === undefined
-        ? typeof requested === 'string' && key === requested
-        : typeof requested === 'string'
-          ? legacyRelationKey(identity) === requested
-          : relationIdentityMatches(identity, requested);
-    return matchesRequest ? [{ key, cost, ...(identity === undefined ? {} : { identity }) }] : [];
-  });
-  if (matches.length > 1) {
-    const candidates = matches.map(({ identity }) =>
-      identity === undefined ? '<unknown identity>' : formatRelationIdentity(identity),
-    );
+    const evidence = { key, cost, ...(identity === undefined ? {} : { identity }) };
+    const label = identity === undefined ? '<unknown identity>' : formatRelationIdentity(identity);
+    addEvidence(legacySelectors, identity === undefined ? key : legacyRelationKey(identity), evidence, label);
+    if (identity !== undefined) {
+      addEvidence(identities, relationIdentityKey(identity), evidence, label);
+      addEvidence(databases, relationDatabaseKey(identity), evidence, label);
+      addEvidence(schemas, relationSchemaKey(identity), evidence, label);
+      addEvidence(kindsAndNames, relationFieldsKey(identity), evidence, label);
+    }
+  }
+
+  return {
+    byLegacySelector: finishEvidence(legacySelectors),
+    byIdentity: finishEvidence(identities),
+    byDatabase: finishEvidence(databases),
+    bySchema: finishEvidence(schemas),
+    byKindAndName: finishEvidence(kindsAndNames),
+  };
+}
+
+function identityMatches(
+  index: RelationCostIndex,
+  requested: RelationIdentity,
+): EvidenceBucket<RelationCostEvidence> | undefined {
+  if (requested.database !== undefined && requested.schema !== undefined)
+    return index.byIdentity.get(relationIdentityKey(requested));
+  if (requested.database !== undefined) return index.byDatabase.get(relationDatabaseKey(requested));
+  if (requested.schema !== undefined) return index.bySchema.get(relationSchemaKey(requested));
+  return index.byKindAndName.get(relationFieldsKey(requested));
+}
+
+function relationMatch(
+  name: string,
+  sampleIndex: number,
+  repetitionIndex: number,
+  costs: Record<string, unknown>,
+  index: RelationCostIndex,
+  requested: RelationRequest,
+): RelationCostEvidence | undefined {
+  const matches =
+    typeof requested === 'string'
+      ? index.byLegacySelector.get(requested)
+      : identityMatches(index, requested);
+  if (matches !== undefined && matches.count > 1) {
     invalidEvidence(
       name,
       sampleIndex,
       repetitionIndex,
       'relations',
-      `relation ${relationLabel(requested)} is ambiguous across ${candidates.join(', ')}; pass an identity with database and schema`,
+      `relation ${relationLabel(requested)} is ambiguous across ${matches.candidates}; pass an identity with database and schema`,
     );
   }
-  if (matches.length === 1) return matches[0];
+  if (matches !== undefined) return matches.first;
   if (typeof requested === 'string' && Object.hasOwn(costs, requested))
     return { key: requested, cost: costs[requested] };
   return undefined;
+}
+
+function indexRelationSizes(
+  sizes: Record<string, unknown>,
+): ReadonlyMap<string, EvidenceBucket<Record<string, unknown>>> {
+  const builders = new Map<string, EvidenceBucketBuilder<Record<string, unknown>>>();
+  for (const [, size] of Object.entries(sizes)) {
+    if (!isRecord(size)) continue;
+    const identity = size.identity;
+    if (!isRelationIdentity(identity)) continue;
+    addEvidence(builders, relationIdentityKey(identity), size, formatRelationIdentity(identity));
+  }
+  return finishEvidence(builders);
 }
 
 function measuredPages(
   name: string,
   sampleIndex: number,
   repetitionIndex: number,
-  sample: AccessPathSample,
-  match: { readonly key: string; readonly identity?: RelationIdentity },
+  sizes: Record<string, unknown> | undefined,
+  identityIndex: ReadonlyMap<string, EvidenceBucket<Record<string, unknown>>> | undefined,
+  match: RelationCostEvidence,
 ): unknown {
-  const sizes = sample.relationSizes;
-  if (!isRecord(sizes)) return undefined;
   if (match.identity !== undefined) {
-    const key = relationIdentityKey(match.identity);
-    const matches = Object.entries(sizes).filter(
-      ([, size]) => isRecord(size) && isRelationIdentity(size.identity) && relationIdentityKey(size.identity) === key,
-    );
-    if (matches.length > 1)
+    const matches = identityIndex?.get(relationIdentityKey(match.identity));
+    if (matches !== undefined && matches.count > 1)
       invalidEvidence(
         name,
         sampleIndex,
@@ -111,8 +218,9 @@ function measuredPages(
         'relationSizes',
         `duplicate footprint evidence for ${formatRelationIdentity(match.identity)}`,
       );
-    if (matches.length === 1) return (matches[0]![1] as Record<string, unknown>).relpages;
+    if (matches !== undefined) return matches.first.relpages;
   }
+  if (sizes === undefined) return undefined;
   const size = sizes[match.key];
   return isRecord(size) ? size.relpages : undefined;
 }
@@ -139,6 +247,11 @@ export function assertGrowthAccessPaths(
     if (!Array.isArray(repetitions) || repetitions.length === 0) {
       invalidEvidence(name, sampleIndex, 0, 'repetitions', 'expected at least one measured repetition');
     }
+
+    let sizes: Record<string, unknown> | undefined;
+    let sizesLoaded = false;
+    let sizeIdentities: ReadonlyMap<string, EvidenceBucket<Record<string, unknown>>> | undefined;
+    let sizeIdentitiesLoaded = false;
 
     for (let repetitionIndex = 0; repetitionIndex < repetitions.length; repetitionIndex++) {
       if (!Object.hasOwn(repetitions, repetitionIndex)) {
@@ -170,12 +283,21 @@ export function assertGrowthAccessPaths(
           'expected a relation-cost object',
         );
       }
+      const relationIndex = indexRelationCosts(name, sampleIndex, repetitionIndex, costs);
 
       for (const requested of relations) {
-        const evidence = relationMatches(name, sampleIndex, repetitionIndex, costs, requested);
+        const evidence = relationMatch(name, sampleIndex, repetitionIndex, costs, relationIndex, requested);
         if (evidence === undefined) continue;
         const relation = evidence.identity === undefined ? evidence.key : formatRelationIdentity(evidence.identity);
-        const pages = measuredPages(name, sampleIndex, repetitionIndex, sample, evidence);
+        if (!sizesLoaded) {
+          sizes = isRecord(sample.relationSizes) ? sample.relationSizes : undefined;
+          sizesLoaded = true;
+        }
+        if (evidence.identity !== undefined && !sizeIdentitiesLoaded) {
+          sizeIdentities = sizes === undefined ? undefined : indexRelationSizes(sizes);
+          sizeIdentitiesLoaded = true;
+        }
+        const pages = measuredPages(name, sampleIndex, repetitionIndex, sizes, sizeIdentities, evidence);
         const relationCost = evidence.cost;
         if (!isRecord(relationCost)) {
           invalidEvidence(
