@@ -114,7 +114,13 @@ class ProgressDeparture {
 
 const DepartureContext = createContext<ProgressDeparture | null>(null);
 
-export function PublicationNoteDraftNavigation({ children }: { children: ReactNode }) {
+export function PublicationNoteDraftNavigation({
+  children,
+  messages = 'publication-note',
+}: {
+  children: ReactNode;
+  messages?: 'publication-note' | 'progress';
+}) {
   const [navigation] = useState(() => new ProgressDeparture());
   useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
   const stayButton = useRef<HTMLButtonElement>(null);
@@ -151,20 +157,32 @@ export function PublicationNoteDraftNavigation({ children }: { children: ReactNo
           }
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>{m.library_publication_note_draft_navigation_title()}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {messages === 'progress'
+                ? m.library_progress_draft_navigation_title()
+                : m.library_publication_note_draft_navigation_title()}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {navigation.isLocked()
-                ? m.library_publication_note_draft_navigation_pending()
-                : m.library_publication_note_draft_navigation_description()}
+              {messages === 'progress'
+                ? navigation.isLocked()
+                  ? m.library_progress_draft_navigation_pending()
+                  : m.library_progress_draft_navigation_description()
+                : navigation.isLocked()
+                  ? m.library_publication_note_draft_navigation_pending()
+                  : m.library_publication_note_draft_navigation_description()}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel ref={stayButton} onClick={navigation.stay}>
-              {m.library_publication_note_draft_navigation_stay()}
+              {messages === 'progress'
+                ? m.library_progress_draft_navigation_stay()
+                : m.library_publication_note_draft_navigation_stay()}
             </AlertDialogCancel>
             {!navigation.isLocked() ? (
               <AlertDialogAction onClick={navigation.discard}>
-                {m.library_publication_note_draft_navigation_discard()}
+                {messages === 'progress'
+                  ? m.library_progress_draft_navigation_discard()
+                  : m.library_publication_note_draft_navigation_discard()}
               </AlertDialogAction>
             ) : null}
           </AlertDialogFooter>
@@ -198,4 +216,13 @@ export function usePublicationNoteDraftNavigation(options: DraftOptions) {
   }, [navigation, options.identity]);
 
   useLayoutEffect(() => navigation?.refresh(), [navigation, active, dirty, locked, options.identity]);
+
+  return {
+    requestNavigation: () =>
+      Promise.resolve(
+        navigation?.requestNavigation(
+          document.activeElement instanceof HTMLElement ? document.activeElement : null,
+        ) ?? false,
+      ),
+  };
 }

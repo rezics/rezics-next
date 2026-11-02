@@ -318,6 +318,25 @@ type EditorLifetime = {
   history: symbol | null;
 };
 type EditorCustody = { retry?: CapturedIntent; credential?: HeadersInit; flight?: object };
+type ProgressDraftBaseline = {
+  amount: string;
+  locator: string;
+  position: string;
+  addText: string;
+  removeText: string;
+};
+
+function hasUnsavedProgressDraft(
+  mode: LoadedPage['session']['mode'],
+  baseline: ProgressDraftBaseline,
+  draft: ProgressDraftBaseline,
+): boolean {
+  if (mode === 'scalar_amount') return draft.amount.trim() !== baseline.amount.trim();
+  if (mode === 'cursor_position')
+    return draft.locator !== baseline.locator || draft.position.trim() !== baseline.position.trim();
+  return draft.addText.trim() !== baseline.addText.trim() || draft.removeText.trim() !== baseline.removeText.trim();
+}
+
 const editors = new WeakMap<object, EditorCustody>();
 function editorLifetime(page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime {
   const key = originating?.lifetime ?? originating;
@@ -502,7 +521,7 @@ export function ProgressSessionPage({
 }) {
   if (!page.signedIn) return null;
   return (
-    <PublicationNoteDraftNavigation>
+    <PublicationNoteDraftNavigation messages="progress">
       <SessionEditor page={page} logsCursor={logsCursor} originating={originating}>
         {children}
       </SessionEditor>
@@ -522,6 +541,7 @@ function SessionEditor({
   originating?: ProgressDetailOrigin | undefined;
 }) {
   const lifetime = useRef<EditorLifetime | null>(null);
+  const draftBaseline = useRef<ProgressDraftBaseline | null>(null);
   lifetime.current ??= editorLifetime(page, originating);
   const retained = lifetime.current.custody.retry;
   const retainedRecord = retained && retained.kind !== 'finish' ? retained.data : undefined;
@@ -596,9 +616,19 @@ function SessionEditor({
     const retry = lifetime.current?.custody.retry;
     const recording = retry && retry.kind !== 'finish' ? retry.data : undefined;
     if (!draftOpened) {
-      setAmount(recording?.amount ?? session.amount ?? '');
-      setLocator(recording?.locator ?? session.locator ?? '');
-      setPosition(recording?.position ?? session.position ?? '');
+      const baseline = {
+        amount: recording?.amount ?? session.amount ?? '',
+        locator: recording?.locator ?? session.locator ?? '',
+        position: recording?.position ?? session.position ?? '',
+        addText: recording?.add?.join('\n') ?? '',
+        removeText: recording?.remove?.join('\n') ?? '',
+      };
+      draftBaseline.current = baseline;
+      setAmount(baseline.amount);
+      setLocator(baseline.locator);
+      setPosition(baseline.position);
+      setAddText(baseline.addText);
+      setRemoveText(baseline.removeText);
       setDraftOpened(true);
     }
     if (retry) setReview(retry);
@@ -625,6 +655,7 @@ function SessionEditor({
       setPosition('');
       setAddText('');
       setRemoveText('');
+      draftBaseline.current = null;
       setEditing(false);
       setReview(null);
       setBusy(false);
@@ -645,31 +676,32 @@ function SessionEditor({
     );
   }
 
-  const progressDraftDirty = () =>
-    (draftOpened &&
-      (amount !== (session.amount ?? '') ||
-        locator !== (session.locator ?? '') ||
-        position !== (session.position ?? ''))) ||
-    addText.length > 0 ||
-    removeText.length > 0 ||
-    review !== null ||
-    confirming !== null;
-  const progressCommandLocked = () => !!(lifetime.current?.custody.flight || lifetime.current?.custody.retry);
-  usePublicationNoteDraftNavigation({
+  const pendingCommand = lifetime.current?.custody.retry !== undefined || lifetime.current?.custody.flight !== undefined;
+  const baseline = draftBaseline.current;
+  const draftDirty =
+    draftOpened &&
+    baseline !== null &&
+    session.state === 'active' &&
+    offered &&
+    hasUnsavedProgressDraft(session.mode, baseline, { amount, locator, position, addText, removeText });
+  const stagedIntent = review !== null && !pendingCommand;
+  const progressDraftDirty = () => draftDirty || stagedIntent || confirming !== null;
+  const departure = usePublicationNoteDraftNavigation({
     identity: lifetime.current!,
     state: {
       active: isCurrent(lifetime.current),
       dirty: progressDraftDirty(),
-      locked: progressCommandLocked(),
+      locked: pendingCommand,
     },
     getState: () => ({
       active: isCurrent(lifetime.current),
       dirty: progressDraftDirty(),
-      locked: progressCommandLocked(),
+      locked: lifetime.current?.custody.flight !== undefined || lifetime.current?.custody.retry !== undefined,
     }),
     discard: () => {
       const origin = lifetime.current;
       if (!isCurrent(origin) || origin.custody.flight || origin.custody.retry) return;
+      draftBaseline.current = null;
       setAmount(session.amount ?? '');
       setLocator(session.locator ?? '');
       setPosition(session.position ?? '');
@@ -678,14 +710,36 @@ function SessionEditor({
       setDraftOpened(false);
       setEditing(false);
       setReview(null);
+      setConflict(false);
       setConfirming(null);
       setAlert(null);
     },
   });
+  function closeUpdate() {
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin)) return;
+    void departure.requestNavigation().then((stay) => {
+      if (!stay && canHandle() && isCurrent(origin)) setEditing(false);
+    });
+  }
 
   function explain(reason: ProgressFailure['reason'], recording = false) {
     setAlert(progressFailureMessage(reason));
     if (reason === 'forbidden' || reason === 'closed') {
+      const origin = lifetime.current;
+      if (origin) {
+        delete origin.custody.retry;
+        delete origin.custody.credential;
+      }
+      draftBaseline.current = null;
+      setDraftOpened(false);
+      setAmount('');
+      setLocator('');
+      setPosition('');
+      setAddText('');
+      setRemoveText('');
+      setReview(null);
+      setConflict(false);
       setSession((current) => ({ ...current, subject: null, versionSubject: null, recordingState: 'unavailable' }));
       setEditing(false);
     }
@@ -792,6 +846,7 @@ function SessionEditor({
       if (captured.kind === 'add') setAddText('');
       if (captured.kind === 'remove') setRemoveText('');
       if (captured.kind === 'finish') setConfirming(null);
+      draftBaseline.current = null;
       setSession((current) =>
         !originating || result.session.revision >= current.revision ? { ...current, ...result.session } : current,
       );
@@ -1255,7 +1310,7 @@ function SessionEditor({
         phone ? (
           <BottomSheet
             open={editing}
-            onOpenChange={(value) => edit(() => setEditing(value))}
+            onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}
             title={m.library_progress_update()}
           >
             <input type="hidden" name="idempotencyKey" value={key} />
@@ -1267,7 +1322,10 @@ function SessionEditor({
             {editorContent}
           </BottomSheet>
         ) : (
-          <Dialog open={editing} onOpenChange={(value) => edit(() => setEditing(value))}>
+          <Dialog
+            open={editing}
+            onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}
+          >
             <DialogContent className="max-h-[85dvh] overflow-y-auto">
               <DialogTitle>{m.library_progress_update()}</DialogTitle>
               <input type="hidden" name="idempotencyKey" value={key} />

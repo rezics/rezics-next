@@ -91,7 +91,7 @@ mock.module('../src/library/progress-server', () => ({
 }));
 const { createRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { within, userEvent } = await import('storybook/test');
 const { ProgressSessionPage } = await import('../src/library/progress-session');
@@ -100,7 +100,8 @@ const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 type LoadedPage = Extract<Page, { signedIn: true }>;
 type Kind = 'record' | 'add' | 'remove' | 'finish';
-function page(id = 'original', kind: Kind = 'record'): LoadedPage {
+type Mode = 'scalar_amount' | 'cursor_position' | 'completed_units';
+function page(id = 'original', kind: Kind = 'record', mode?: Mode): LoadedPage {
   return {
     signedIn: true,
     idempotencyKey: crypto.randomUUID(),
@@ -112,7 +113,7 @@ function page(id = 'original', kind: Kind = 'record'): LoadedPage {
       versionSubjectId: null,
       subject: { id: `subject-${id}`, type: 'book', types: ['book'], label: `Subject ${id}`, cover: null },
       versionSubject: null,
-      mode: kind === 'add' || kind === 'remove' ? 'completed_units' : 'scalar_amount',
+      mode: mode ?? (kind === 'add' || kind === 'remove' ? 'completed_units' : 'scalar_amount'),
       unit: 'accepted-unit',
       unitLabel: 'pages',
       meaning: 'known',
@@ -120,8 +121,8 @@ function page(id = 'original', kind: Kind = 'record'): LoadedPage {
       inputRules: { min: '0', max: '100', step: '0.01', total: 'optional' },
       total: '100',
       amount: '2.5',
-      locator: null,
-      position: null,
+      locator: mode === 'cursor_position' ? 'chapter 1' : null,
+      position: mode === 'cursor_position' ? '10' : null,
       completedUnitCount: 0,
       state: 'active',
       revision: 7,
@@ -156,15 +157,21 @@ async function settle(action: () => void) {
     action();
   });
 }
-async function mount(initial: LoadedPage) {
+async function mount(initial: LoadedPage, phone = false) {
   commands.length = histories.length = 0;
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const rootRoute = createRootRoute();
+  const destinationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/destination' });
   const router = createRouter({
-    routeTree: createRootRoute(),
+    routeTree: rootRoute.addChildren([destinationRoute]),
     history: createMemoryHistory({ initialEntries: ['/'] }),
   });
+  const originalMatchMedia = window.matchMedia;
+  if (phone)
+    window.matchMedia = ((query: string) =>
+      ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList) as typeof window.matchMedia;
   await router.load();
   const tree = (p: Page | null) => (
     <StrictMode>
@@ -181,6 +188,10 @@ async function mount(initial: LoadedPage) {
       await user.click(body.getByRole('button', { name: label, exact: true }));
     });
   const dialog = () => body.getByRole('dialog');
+  const escape = async () =>
+    act(async () => {
+      dialog().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
   const field = (label: string) => within(dialog()).getByLabelText(label) as HTMLInputElement;
   const fill = async (label: string, value: string) =>
     act(async () => {
@@ -246,16 +257,20 @@ async function mount(initial: LoadedPage) {
     show,
     click,
     dialog,
+    escape,
     field,
     fill,
     key,
     submit,
+    navigate: () => router.navigate({ to: '/destination' }),
+    path: () => router.state.location.pathname,
     start,
     intact,
     ssr: () => renderToString(tree(initial)),
     close: async () => {
       await settle(() => root.unmount());
       host.remove();
+      if (phone) window.matchMedia = originalMatchMedia;
     },
   };
 }
@@ -412,6 +427,9 @@ test('same-page retries keep uncertain intent, successful saves refresh authorit
     };
     await settle(() => histories[0]!.work.resolve(authoritative));
     expect(h.body.queryByRole('dialog')).toBeNull();
+        const savedUnload = new window.Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(savedUnload);
+        expect(savedUnload.defaultPrevented).toBe(false);
     expect(h.host.textContent).toContain('authoritative-unit');
     await h.show(initial); // An ordinary rerender with the same loader object must not reset state.
     await h.click(m.library_progress_update());
@@ -438,12 +456,12 @@ test('correction review keeps a closed draft and recovers a conflict only after 
     expect(commands).toHaveLength(0);
     await h.click(m.library_progress_cancel());
     expect(h.field(m.library_progress_amount()).value).toBe('0');
-    // Closing the dialog and reopening must preserve the deliberate zero.
-    await act(async () => {
-      h.dialog().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    });
-    expect(h.body.queryByRole('dialog')).toBeNull();
-    await h.click(m.library_progress_update());
+    // Stay keeps the deliberate zero in the open editor.
+    await h.escape();
+    expect(h.body.getByRole('alertdialog')).toBeDefined();
+    await h.click(m.library_progress_draft_navigation_stay());
+    expect(h.body.queryByRole('alertdialog')).toBeNull();
+    expect(h.body.queryByRole('dialog')).not.toBeNull();
     expect(h.field(m.library_progress_amount()).value).toBe('0');
     await h.submit('record');
     const original = commands[0]!.data;
@@ -461,6 +479,166 @@ test('correction review keeps a closed draft and recovers a conflict only after 
     expect(commands[2]!.data.idempotencyKey).not.toBe(original.idempotencyKey);
   } finally {
     await h.close();
+  }
+});
+
+test('Stay preserves the exact Progress draft across dialog and sheet modes, and Discard requires confirmation', async () => {
+  const cases = [
+    {
+      id: 'scalar',
+      kind: 'record' as const,
+      mode: 'scalar_amount' as const,
+      phone: false,
+      values: [[m.library_progress_amount(), '0']] as const,
+      baseline: [[m.library_progress_amount(), '2.5']] as const,
+    },
+    {
+      id: 'cursor',
+      kind: 'record' as const,
+      mode: 'cursor_position' as const,
+      phone: true,
+      values: [
+        [m.library_progress_locator(), 'chapter 2'],
+        [m.library_progress_position(), '18'],
+      ] as const,
+      baseline: [
+        [m.library_progress_locator(), 'chapter 1'],
+        [m.library_progress_position(), '10'],
+      ] as const,
+    },
+    {
+      id: 'add',
+      kind: 'add' as const,
+      mode: 'completed_units' as const,
+      phone: false,
+      values: [[m.library_progress_add_units(), 'part:1\npart~9']] as const,
+      baseline: [[m.library_progress_add_units(), '']] as const,
+    },
+    {
+      id: 'remove',
+      kind: 'remove' as const,
+      mode: 'completed_units' as const,
+      phone: false,
+      values: [[m.library_progress_remove_units(), 'part:1\npart~9']] as const,
+      baseline: [[m.library_progress_remove_units(), '']] as const,
+    },
+  ];
+  for (const scenario of cases) {
+    const h = await mount(page(scenario.id, scenario.kind, scenario.mode), scenario.phone);
+    try {
+      await h.click(m.library_progress_update());
+      for (const [label, value] of scenario.values) await h.fill(label, value);
+      await h.escape();
+      expect(h.body.getByRole('alertdialog')).toBeDefined();
+      await h.click(m.library_progress_draft_navigation_stay());
+      for (const [label, value] of scenario.values) expect(h.field(label).value).toBe(value);
+      if (scenario.id === 'scalar') {
+        await h.escape();
+        expect(h.body.getByRole('alertdialog')).toBeDefined();
+        await h.click(m.library_progress_draft_navigation_discard());
+        expect(h.body.queryByRole('dialog')).toBeNull();
+        await h.click(m.library_progress_update());
+        for (const [label, value] of scenario.baseline) expect(h.field(label).value).toBe(value);
+      }
+    } finally {
+      await h.close();
+    }
+  }
+});
+
+test('Pristine, reverted, and intentionally empty scalar drafts do not warn on departure', async () => {
+  const h = await mount(page());
+  try {
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '0');
+    await h.fill(m.library_progress_amount(), '2.5');
+    const reverted = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(reverted);
+    expect(reverted.defaultPrevented).toBe(false);
+    await h.escape();
+    expect(h.body.queryByRole('alertdialog')).toBeNull();
+    expect(h.body.queryByRole('dialog')).toBeNull();
+  } finally {
+    await h.close();
+  }
+
+  const emptyPage = page('empty');
+  emptyPage.session.amount = null;
+  const empty = await mount(emptyPage);
+  try {
+    await empty.click(m.library_progress_update());
+    const untouched = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(untouched);
+    expect(untouched.defaultPrevented).toBe(false);
+  } finally {
+    await empty.close();
+  }
+});
+
+test('Internal navigation offers Stay or confirmed Discard and keeps unresolved commands stay-only', async () => {
+  const h = await mount(page());
+  try {
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '0');
+    const unload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    let stayNavigation!: Promise<void>;
+    await act(async () => {
+      stayNavigation = h.navigate();
+      await Promise.resolve();
+    });
+    expect(h.body.getByRole('alertdialog')).toBeDefined();
+    await h.click(m.library_progress_draft_navigation_stay());
+    await act(async () => stayNavigation);
+    expect(h.path()).toBe('/');
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+
+    let discardNavigation!: Promise<void>;
+    await act(async () => {
+      discardNavigation = h.navigate();
+      await Promise.resolve();
+    });
+    await h.click(m.library_progress_draft_navigation_discard());
+    await act(async () => discardNavigation);
+    expect(h.path()).toBe('/destination');
+    expect(h.body.queryByRole('dialog')).toBeNull();
+    expect(commands).toHaveLength(0);
+
+    await h.click(m.library_progress_clear());
+    await h.escape();
+    expect(h.body.getByRole('alertdialog')).toBeDefined();
+    await h.click(m.library_progress_draft_navigation_stay());
+    expect(h.body.textContent).toContain(m.library_progress_clear_scope());
+    await h.click(m.library_progress_cancel());
+  } finally {
+    await h.close();
+  }
+
+  const pending = await mount(page('pending'));
+  try {
+    await pending.click(m.library_progress_update());
+    await pending.fill(m.library_progress_amount(), '0');
+    await pending.submit('record');
+    const original = commands[0]!.data;
+    let navigation!: Promise<void>;
+    await act(async () => {
+      navigation = pending.navigate();
+      await Promise.resolve();
+    });
+    expect(pending.body.getByRole('alertdialog')).toBeDefined();
+    expect(pending.body.queryByRole('button', { name: m.library_progress_draft_navigation_discard() })).toBeNull();
+    await pending.click(m.library_progress_draft_navigation_stay());
+    await act(async () => navigation);
+    expect(pending.path()).toBe('/');
+    expect(commands).toHaveLength(1);
+    await settle(() => commands[0]!.work.reject(new Error('unknown commit outcome')));
+    await pending.click(m.library_progress_confirm_correction());
+    expect(commands[1]!.data).toEqual(original);
+    await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'unavailable' }));
+  } finally {
+    await pending.close();
   }
 });
 

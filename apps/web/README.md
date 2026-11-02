@@ -1668,6 +1668,8 @@ Active corrections and clearing use a confirmation showing exact captured operan
 `{revision, clear: true}` to the existing record API, retaining session identity, lifecycle, accepted meaning,
 captured total and history. Drafts survive closing the editor; retries retain the original revision, key and
 operands. After a definite conflict, explicit latest-progress review retains the draft and creates a new intent.
+Decision: Stay keeps the editor open with its exact fields; confirmed Discard closes it and drops only the unsent update.
+Decision: Stay keeps the editor open with its exact fields; confirmed Discard closes it and drops only the unsent update.
 
 - **Touches:** One session credential read, then GET session, one changes page and one completed-units page started
   together (`view=FULL`). A record is one POST `:record` after that credential read.
