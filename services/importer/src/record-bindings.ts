@@ -11,10 +11,7 @@ import {
 } from '@rezics/definitions/media-import';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
 import { isImportSourceRecord, isImportSourceRecordMetadataResult } from './source-record-runtime.ts';
-import {
-  type ImportSourceRecordMetadataCommand,
-  type ImportSourceRecordMetadataResult,
-} from './import-contract.ts';
+import { type ImportSourceRecordMetadataCommand, type ImportSourceRecordMetadataResult } from './import-contract.ts';
 
 const { Errors } = createRequire(import.meta.resolve('@rezics/definitions/media-import'))('typebox/schema') as {
   Errors(schema: unknown, input: unknown): [unknown, Iterable<unknown>];
