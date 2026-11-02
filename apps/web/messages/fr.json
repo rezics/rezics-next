@@ -4372,5 +4372,15 @@
   "search_constraint_identity_value_unavailable": "Nom de la valeur indisponible",
   "search_constraint_identity_unit_unavailable": "Nom de l’unité indisponible",
   "search_constraint_identity_filter": "Filtre {number} : {label}",
-  "search_constraint_identity_details": "Détails techniques des filtres"
+  "search_constraint_identity_details": "Détails techniques des filtres",
+  "access_identity_details": "Détails techniques d’identité",
+  "access_identity_resource_id": "Identifiant de la ressource",
+  "access_identity_type": "Type de ressource",
+  "access_identity_route": "Route de la ressource",
+  "access_identity_subject_id": "Identifiant du destinataire",
+  "access_identity_acting_id": "Identifiant du compte agissant",
+  "access_identity_principal_id": "Identifiant du mandant",
+  "access_identity_from_id": "Identifiant du compte du propriétaire actuel",
+  "access_identity_to_id": "Identifiant du compte du nouveau propriétaire",
+  "access_identity_valid": "Période exacte de validité du droit"
 }

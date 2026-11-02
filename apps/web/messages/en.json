@@ -4373,5 +4373,15 @@
   "search_constraint_identity_value_unavailable": "Value name unavailable",
   "search_constraint_identity_unit_unavailable": "Unit name unavailable",
   "search_constraint_identity_filter": "Filter {number}: {label}",
-  "search_constraint_identity_details": "Technical filter details"
+  "search_constraint_identity_details": "Technical filter details",
+  "access_identity_details": "Technical identity details",
+  "access_identity_resource_id": "Resource ID",
+  "access_identity_type": "Resource type",
+  "access_identity_route": "Resource route",
+  "access_identity_subject_id": "Recipient ID",
+  "access_identity_acting_id": "Acting account ID",
+  "access_identity_principal_id": "Delegating principal ID",
+  "access_identity_from_id": "Current owner account ID",
+  "access_identity_to_id": "New owner account ID",
+  "access_identity_valid": "Exact grant validity"
 }

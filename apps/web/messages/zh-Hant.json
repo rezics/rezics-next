@@ -4372,5 +4372,15 @@
   "search_constraint_identity_value_unavailable": "值名稱暫時無法取得",
   "search_constraint_identity_unit_unavailable": "單位名稱暫時無法取得",
   "search_constraint_identity_filter": "篩選條件 {number}：{label}",
-  "search_constraint_identity_details": "篩選條件技術詳情"
+  "search_constraint_identity_details": "篩選條件技術詳情",
+  "access_identity_details": "技術身分詳情",
+  "access_identity_resource_id": "資源 ID",
+  "access_identity_type": "資源類型",
+  "access_identity_route": "資源路由",
+  "access_identity_subject_id": "授權對象 ID",
+  "access_identity_acting_id": "目前操作帳戶 ID",
+  "access_identity_principal_id": "委託主體 ID",
+  "access_identity_from_id": "目前擁有者帳戶 ID",
+  "access_identity_to_id": "新擁有者帳戶 ID",
+  "access_identity_valid": "授權的完整有效期間"
 }

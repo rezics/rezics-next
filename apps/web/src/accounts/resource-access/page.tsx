@@ -1,4 +1,4 @@
-import { OwnerTransferForm } from './owner-transfer.tsx';
+import { OwnerTransferForm, resourceLabel, IdentityDetails } from './owner-transfer.tsx';
 import { transferableOwner } from './owner-transfer.ts';
 import { Menu } from '@rezics/ui/menu';
 import { Tombstone } from '@rezics/ui/tombstone';
@@ -34,16 +34,17 @@ import {
 } from './data';
 import { AccessRecovery } from './recovery';
 
-function identityName(identity: Identity | undefined, fallback?: string) {
+function identityName(identity: Identity | undefined) {
   if (identity?.state === 'deleted') return m.access_deleted_account();
-  return identity?.displayName || (identity?.handle ? `@${identity.handle}` : fallback) || m.access_unknown_account();
+  if (identity?.state !== 'active') return m.access_unknown_account();
+  return identity.displayName || (identity.handle ? `@${identity.handle}` : m.access_unknown_account());
 }
 function subjectTitle(subject: Subject, identity: Identity | undefined) {
   if (subject.kind === 'active_accounts') return m.access_active_accounts();
   if (subject.kind === 'realm')
-    return `${subject.id} · ${subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members()}`;
-  const name = identityName(identity, subject.id);
-  return subject.kind === 'organization' && identity?.state !== 'deleted'
+    return subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members();
+  const name = identityName(identity);
+  return subject.kind === 'organization'
     ? `${name} · ${subject.role === 'owner' ? m.access_org_owners() : m.access_org_members()}`
     : name;
 }
@@ -52,15 +53,22 @@ function SubjectName({ subject, page }: { subject: Subject; page: AccessSnapshot
   if (subject.kind === 'realm')
     return (
       <>
-        {subject.id} · {subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members()}
+        {subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members()}
       </>
     );
   const identity = page.identities.find((identity) => identity.id === subject.id);
   if (identity?.state === 'deleted')
-    return <Tombstone shape="row" reason="deleted" labels={{ deleted: m.access_deleted_account() }} />;
+    return (
+      <>
+        <Tombstone shape="row" reason="deleted" labels={{ deleted: m.access_deleted_account() }} />
+        {subject.kind === 'organization' ? (
+          <span>{subject.role === 'owner' ? m.access_org_owners() : m.access_org_members()}</span>
+        ) : null}
+      </>
+    );
   return (
     <>
-      <span>{identityName(identity, subject.id)}</span>
+      <span>{identityName(identity)}</span>
       {subject.kind === 'organization' ? (
         <span className="text-muted-foreground">
           {' '}
@@ -405,29 +413,32 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
         </section>
       ) : (
         <>
-          <section className="space-y-2" aria-label={m.access_resource()}>
-            <p className="text-sm text-muted-foreground">
-              {m.access_resource()} <span className="break-all font-medium text-foreground">{page.resource.id}</span>
-            </p>
+          <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-label={m.access_resource()}>
+            <h2 className="text-lg font-semibold">{resourceLabel(page.resource.type)}</h2>
             <p className="text-sm">
               {m.access_acting_as({
-                name: identityName(
-                  page.identities.find((item) => item.id === page.authority.accountId),
-                  page.authority.accountId,
-                ),
+                name: identityName(page.identities.find((item) => item.id === page.authority.accountId)),
               })}
             </p>
             {page.authority.principalId ? (
               <p className="text-sm text-muted-foreground">
                 {m.access_delegated_by({
-                  name: identityName(
-                    page.identities.find((item) => item.id === page.authority.principalId),
-                    page.authority.principalId,
-                  ),
+                  name: identityName(page.identities.find((item) => item.id === page.authority.principalId)),
                 })}
               </p>
             ) : null}
             <p className="text-sm text-muted-foreground">{m.access_authority_help()}</p>
+            <IdentityDetails
+              entries={[
+                [m.access_identity_resource_id(), page.resource.id],
+                [m.access_identity_type(), page.resource.type],
+                [m.access_identity_route(), page.resource.route],
+                [m.access_identity_acting_id(), page.authority.accountId],
+                ...(page.authority.principalId
+                  ? [[m.access_identity_principal_id(), page.authority.principalId] as const]
+                  : []),
+              ]}
+            />
           </section>
           {page.mutationState === 'realm_guard_unavailable' ? (
             <p role="status" className="rounded-lg bg-muted p-4">
@@ -514,7 +525,7 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
                 return (
                   <ContentItem
                     key={index}
-                    className="p-3 sm:p-4"
+                    className="p-3 sm:p-4 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
                     title={subjectTitle(subject, identity)}
                     headingLevel={3}
                     metadata={grant.kind === 'role' ? roleName(grant.role!) : m.access_direct_action()}
@@ -529,6 +540,15 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
                             end: dateLabel(grant.endsAt, m.access_no_end()),
                           })}
                         </p>
+                        <IdentityDetails
+                          entries={[
+                            ...(subject.kind !== 'active_accounts'
+                              ? [[m.access_identity_subject_id(), subject.id] as const]
+                              : []),
+                            ...(grant.role ? [[m.access_named_role(), grant.role] as const] : []),
+                            [m.access_identity_valid(), grant.valid],
+                          ]}
+                        />
                       </>
                     }
                     state={

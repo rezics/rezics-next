@@ -8,7 +8,7 @@ import { m } from '../../../paraglide/messages.js';
 import { snapshot, managerId, readerId } from './fixtures';
 
 /** Presentation-only HTTP responses exercise the real local transport, never simulate native proof. */
-function Example({ scenario = 'current' }: { scenario?: 'current' | 'lost' | 'denied' }) {
+function Example({ scenario = 'current' }: { scenario?: 'current' | 'lost' | 'denied' | 'long' | 'unresolved' | 'deleted' }) {
   const [setup] = useState(() => {
     const page: AccessSnapshot = {
       ...structuredClone(snapshot),
@@ -24,6 +24,12 @@ function Example({ scenario = 'current' }: { scenario?: 'current' | 'lost' | 'de
         },
       ],
     };
+    if (scenario === 'long') {
+      page.identities[0] = { ...snapshot.identities[0]!, displayName: 'Mira · 管理者 · ' + 'Responsable de la communauté '.repeat(8) };
+      page.identities[1] = { ...snapshot.identities[1]!, displayName: 'Aki · 新しい所有者 · ' + '독서 모임 관리자 '.repeat(12) };
+    }
+    if (scenario === 'unresolved') page.identities = page.identities.filter((item) => item.id !== managerId);
+    if (scenario === 'deleted') page.identities[0] = { id: managerId, kind: 'actor', state: 'deleted' };
     const initial: AccessState = { status: 'ready', page: structuredClone(page) };
     let denied = false;
     const receipts = new Map<string, unknown>();
@@ -112,3 +118,36 @@ export const AuthorityLost: Story = {
     await expect(canvas.queryByRole('button', { name: m.access_grant_actions() })).not.toBeInTheDocument();
   },
 };
+
+// Illustrative current review, not a native transfer or a recorded capture.
+async function review({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: m.access_grant_actions() }));
+  await userEvent.click(await screen.findByText(m.access_transfer_owner(), { selector: '[role="menuitem"], button' }));
+  await userEvent.type(canvas.getByLabelText(m.access_handle()), 'aki');
+  await userEvent.click(canvas.getByRole('button', { name: m.access_find_account() }));
+  await userEvent.click(canvas.getByRole('button', { name: m.access_transfer_owner() }));
+  const element = await screen.findByRole('alertdialog');
+  const dialog = within(element);
+  await expect(dialog.getByText(m.access_identity_resource_id())).toBeVisible();
+  for (const value of [snapshot.resource.id, 'community.realm', String(snapshot.resource.route), managerId, readerId, snapshot.grants[0]!.valid]) {
+    const exact = dialog.getByText(value, { exact: true, selector: 'dd' });
+    await expect(exact).toBeVisible();
+    await expect(exact.closest('details')).toBeNull();
+    await expect(exact).toHaveClass('select-all', 'break-all');
+    await expect(exact.scrollWidth).toBeLessThanOrEqual(exact.clientWidth + 1);
+    exact.focus();
+    await expect(exact).toHaveFocus();
+  }
+  await expect(dialog.getByText((text) => text.includes(m.access_transfer_responsibility()))).toBeVisible();
+  await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+}
+export const CurrentTransferReview: Story = { play: review };
+export const LongTransferReviewPhone: Story = {
+  args: { scenario: 'long' }, globals: { viewport: { value: 'phone390', isRotated: false } }, play: review,
+};
+export const LongTransferReviewDesktop: Story = {
+  args: { scenario: 'long' }, globals: { viewport: { value: 'desktop1280', isRotated: false } }, play: review,
+};
+export const UnresolvedOwnerReview: Story = { args: { scenario: 'unresolved' }, play: review };
+export const DeletedOwnerReview: Story = { args: { scenario: 'deleted' }, play: review };

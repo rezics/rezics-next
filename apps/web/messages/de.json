@@ -4372,5 +4372,15 @@
   "search_constraint_identity_value_unavailable": "Wertname nicht verfügbar",
   "search_constraint_identity_unit_unavailable": "Einheitenname nicht verfügbar",
   "search_constraint_identity_filter": "Filter {number}: {label}",
-  "search_constraint_identity_details": "Technische Filterdetails"
+  "search_constraint_identity_details": "Technische Filterdetails",
+  "access_identity_details": "Technische Identitätsdetails",
+  "access_identity_resource_id": "Ressourcen-ID",
+  "access_identity_type": "Ressourcentyp",
+  "access_identity_route": "Ressourcenroute",
+  "access_identity_subject_id": "Empfänger-ID",
+  "access_identity_acting_id": "ID des handelnden Kontos",
+  "access_identity_principal_id": "ID des delegierenden Prinzipals",
+  "access_identity_from_id": "Konto-ID des bisherigen Eigentümers",
+  "access_identity_to_id": "Konto-ID des neuen Eigentümers",
+  "access_identity_valid": "Exakter Gültigkeitszeitraum der Berechtigung"
 }

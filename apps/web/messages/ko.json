@@ -4372,5 +4372,15 @@
   "search_constraint_identity_value_unavailable": "값 이름을 확인할 수 없음",
   "search_constraint_identity_unit_unavailable": "단위 이름을 확인할 수 없음",
   "search_constraint_identity_filter": "필터 {number}: {label}",
-  "search_constraint_identity_details": "필터 기술 세부 정보"
+  "search_constraint_identity_details": "필터 기술 세부 정보",
+  "access_identity_details": "기술 식별 정보",
+  "access_identity_resource_id": "리소스 ID",
+  "access_identity_type": "리소스 유형",
+  "access_identity_route": "리소스 경로",
+  "access_identity_subject_id": "권한 수신자 ID",
+  "access_identity_acting_id": "작업 중인 계정 ID",
+  "access_identity_principal_id": "위임 주체 ID",
+  "access_identity_from_id": "현재 소유자 계정 ID",
+  "access_identity_to_id": "새 소유자 계정 ID",
+  "access_identity_valid": "정확한 권한 유효 기간"
 }

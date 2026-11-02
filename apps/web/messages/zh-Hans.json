@@ -4373,5 +4373,15 @@
   "search_constraint_identity_value_unavailable": "值名称暂不可用",
   "search_constraint_identity_unit_unavailable": "单位名称暂不可用",
   "search_constraint_identity_filter": "筛选条件 {number}：{label}",
-  "search_constraint_identity_details": "筛选条件技术详情"
+  "search_constraint_identity_details": "筛选条件技术详情",
+  "access_identity_details": "技术身份详情",
+  "access_identity_resource_id": "资源 ID",
+  "access_identity_type": "资源类型",
+  "access_identity_route": "资源路由",
+  "access_identity_subject_id": "授权对象 ID",
+  "access_identity_acting_id": "当前操作账户 ID",
+  "access_identity_principal_id": "委托主体 ID",
+  "access_identity_from_id": "当前所有者账户 ID",
+  "access_identity_to_id": "新所有者账户 ID",
+  "access_identity_valid": "授权的完整有效期"
 }

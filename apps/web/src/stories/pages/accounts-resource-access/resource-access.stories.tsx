@@ -20,10 +20,29 @@ function Example({
   scenario = 'current',
 }: {
   status?: AccessState['status'];
-  scenario?: 'current' | 'empty' | 'lost' | 'refused' | 'realm' | 'scheduled' | 'deleted-unknown' | 'organization';
+  scenario?: 'current' | 'empty' | 'lost' | 'refused' | 'realm' | 'scheduled' | 'deleted-unknown' | 'organization' | 'delegated' | 'long' | 'generic' | 'reload' | 'retired';
 }) {
   const [setup] = useState(() => {
     let page = structuredClone(snapshot);
+    // Illustrative supplied summaries; no directory or per-row identity requests.
+    if (scenario === 'delegated') page.authority.principalId = '0192f3a0-6c1e-7b2a-a001-000200000099';
+    if (scenario === 'generic') page.resource.type = 'illustrative.unrecognized_resource_type_' + 'exact_'.repeat(20);
+    if (scenario === 'long') {
+      const identity = page.identities[1]!;
+      page.identities = [
+        { ...page.identities[0]!, displayName: 'Mira · 管理者 · Administratrice · 관리자' },
+        { ...identity, id: '0192f3a0-6c1e-7b2a-a001-000200000098', displayName: 'Delegating account · 委任元' },
+        ...Array.from({ length: 20 }, (_, index) => ({
+          ...identity,
+          id: `0192f3a0-6c1e-7b2a-a001-${String(300000000 + index).padStart(12, '0')}`,
+          displayName: `読書会 · Cercle de lecture · 독서 모임 · ${'研究と共同作業'.repeat(12)} ${index + 1}`,
+        })),
+      ];
+      page.authority.principalId = page.identities[1]!.id;
+      page.grants = page.identities.slice(2).map((identity) => ({
+        ...page.grants[0]!, subject: { kind: 'account', id: identity.id },
+      }));
+    }
     if (scenario === 'empty') page.grants = [];
     if (scenario === 'deleted-unknown') {
       page.identities[1]!.state = 'deleted';
@@ -73,9 +92,9 @@ function Example({
         const url = new URL(request.url);
         if (request.method === 'GET') {
           if (url.pathname === '/v1/accounts') return Response.json({ accounts: [page.identities[1]], next: null });
-          return status === 'ready'
+          return (status === 'ready' || scenario === 'reload') && scenario !== 'retired'
             ? Response.json(page)
-            : Response.json({ type: 'not_found' }, { status: status === 'denied' ? 404 : 503 });
+            : Response.json({ type: 'not_found' }, { status: status === 'denied' || scenario === 'retired' ? 404 : 503 });
         }
         if (scenario === 'refused') return Response.json({ type: 'forbidden' }, { status: 403 });
         const key = request.headers.get('idempotency-key')!;
@@ -192,12 +211,14 @@ export const RealmGuard: Story = {
     const canvas = within(canvasElement);
     const title = canvas.getByRole('heading', {
       level: 3,
-      name: `${snapshot.resource.id} · ${m.access_realm_members()}`,
+      name: m.access_realm_members(),
     });
     const row = within(title.closest('li')!);
     await expect(title).toBeVisible();
     await expect(row.getByText(m.access_role_member())).toBeVisible();
-    await expect(row.queryByRole('button')).toBeNull();
+    await expect(row.getAllByRole('heading')).toHaveLength(1);
+    await expect(row.queryAllByRole('button').filter((control) => control.tagName !== 'SUMMARY')).toHaveLength(0);
+    await inspectIdentity(title.closest('li')!, snapshot.resource.id);
     await expect(row.queryByRole('link')).toBeNull();
     await expect(canvas.getByText(m.access_realm_guard())).toBeVisible();
   },
@@ -236,9 +257,10 @@ export const DeletedAndUnknown: Story = {
     await expect(deleted.queryByText('Aki')).toBeNull();
     await expect(deleted.queryByText('@aki')).toBeNull();
     await expect(
-      within(rows[1]!).getByRole('heading', { level: 3, name: '0192f3a0-6c1e-7b2a-a001-000200000099' }),
+      within(rows[1]!).getByRole('heading', { level: 3, name: m.access_unknown_account() }),
     ).toBeVisible();
-    await expect(within(rows[1]!).queryByRole('button')).toBeNull();
+    await expect(within(rows[1]!).queryAllByRole('button').filter((control) => control.tagName !== 'SUMMARY')).toHaveLength(0);
+    await inspectIdentity(rows[1]!, '0192f3a0-6c1e-7b2a-a001-000200000099');
     for (const row of rows) {
       await expect(within(row).getAllByRole('heading')).toHaveLength(1);
       await expect(within(row).queryByRole('link')).toBeNull();
@@ -257,5 +279,85 @@ export const OrganizationGroups: Story = {
       await expect(row.queryByRole('link')).toBeNull();
       await expect(row.getByRole('button', { name: m.access_grant_actions() })).toBeEnabled();
     }
+  },
+};
+
+// Authored only: browser geometry and keyboard assertions remain UNRUN.
+async function inspectIdentity(element: HTMLElement, id: string) {
+  const summary = within(element).getByText(m.access_identity_details(), { selector: 'summary' });
+  summary.focus();
+  await expect(summary).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  const details = summary.closest('details')!;
+  await expect(details.open).toBe(true);
+  await expect(within(details).getByText(m.access_identity_subject_id())).toBeVisible();
+  const reference = within(details).getByText(id, { exact: true, selector: 'dd' });
+  await expect(reference).toBeVisible();
+  await expect(reference).toHaveClass('select-all', 'break-all');
+  await expect(reference.scrollWidth).toBeLessThanOrEqual(reference.clientWidth + 1);
+  await userEvent.keyboard(' ');
+  await expect(details.open).toBe(false);
+}
+export const DelegatedAccess: Story = {
+  args: { scenario: 'delegated' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: m.library_following_kind_collection() })).toBeVisible();
+    await expect(canvas.getByText(m.access_acting_as({ name: 'Mira' }))).toBeVisible();
+    await expect(canvas.getByText(m.access_delegated_by({ name: m.access_unknown_account() }))).toBeVisible();
+    const section = canvas.getByRole('region', { name: m.access_resource() });
+    await userEvent.click(within(section).getByText(m.access_identity_details(), { selector: 'summary' }));
+    await expect(within(section).getByText(m.access_identity_principal_id())).toBeVisible();
+    await expect(within(section).getByText('0192f3a0-6c1e-7b2a-a001-000200000099')).toBeVisible();
+  },
+};
+async function longIdentities({ canvasElement }: { canvasElement: HTMLElement }) {
+  const rows = within(canvasElement).getAllByRole('listitem');
+  await expect(rows).toHaveLength(20);
+  for (const row of rows) {
+    const title = within(row).getByRole('heading', { level: 3 });
+    await expect(title).toHaveTextContent('読書会 · Cercle de lecture · 독서 모임');
+    await expect(getComputedStyle(title).getPropertyValue('-webkit-line-clamp')).toBe('none');
+    await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
+    const id = row.querySelector('dd')!.textContent!;
+    await inspectIdentity(row, id);
+  }
+  await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
+}
+export const LongIdentitiesPhone: Story = {
+  args: { scenario: 'long' }, globals: { viewport: { value: 'phone390', isRotated: false } }, play: longIdentities,
+};
+export const LongIdentitiesDesktop: Story = {
+  args: { scenario: 'long' }, globals: { viewport: { value: 'desktop1280', isRotated: false } }, play: longIdentities,
+};
+export const GenericResource: Story = {
+  args: { scenario: 'generic' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: m.access_resource(), exact: true })).toBeVisible();
+    const section = canvas.getByRole('region', { name: m.access_resource() });
+    await userEvent.click(within(section).getByText(m.access_identity_details(), { selector: 'summary' }));
+    const type = within(section).getByText(/^illustrative\.unrecognized_resource_type_/, { selector: 'dd' });
+    await expect(type).toHaveClass('select-all', 'break-all');
+    await expect(type.scrollWidth).toBeLessThanOrEqual(type.clientWidth + 1);
+  },
+};
+export const ReloadUnavailable: Story = {
+  args: { status: 'unavailable', scenario: 'reload' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.access_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.access_reload() }));
+    await expect(canvas.getByRole('heading', { level: 3, name: 'Aki' })).toBeVisible();
+  },
+};
+export const RetiredAccess: Story = {
+  args: { scenario: 'retired' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.access_reload() }));
+    await expect(canvas.queryByRole('heading', { level: 3 })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.access_grant_actions() })).toBeNull();
+    await expect(canvas.queryByText(snapshot.resource.id)).toBeNull();
   },
 };

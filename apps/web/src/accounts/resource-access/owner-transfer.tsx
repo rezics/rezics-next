@@ -16,9 +16,51 @@ import { m } from '../../paraglide/messages.js';
 import type { AccessIO, AccessSnapshot, Grant, Identity } from './data';
 import { transferableOwner, type OwnerTransfer } from './owner-transfer.ts';
 
-function label(identity: Identity | undefined, id: string) {
-  if (!identity || identity.state !== 'active') return id;
-  return `${identity.displayName || identity.handle || id}${identity.handle ? ` (@${identity.handle})` : ''} · ${id}`;
+export function resourceLabel(type: string) {
+  if (type === 'library.collection') return m.library_following_kind_collection();
+  if (type === 'community.realm') return m.space_realm_heading();
+  if (type === 'community.space') return m.library_following_kind_space();
+  return m.access_resource();
+}
+
+/** Exact references are supplied by the current DTO, never resolved by this presentation. */
+export function IdentityFacts({ entries }: { entries: ReadonlyArray<readonly [string, string | number]> }) {
+  return (
+    <dl className="grid min-w-0 gap-3 text-sm">
+      {entries.map(([name, value]) => (
+        <div key={name} className="min-w-0">
+          <dt className="text-muted-foreground">{name}</dt>
+          <dd
+            tabIndex={0}
+            className="min-w-0 select-all break-all whitespace-normal font-mono text-xs focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+export function IdentityDetails({ entries }: { entries: ReadonlyArray<readonly [string, string | number]> }) {
+  return (
+    <details className="min-w-0" aria-label={m.access_identity_details()}>
+      <summary className="min-h-11 cursor-pointer content-center py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+        {m.access_identity_details()}
+      </summary>
+      <IdentityFacts entries={entries} />
+    </details>
+  );
+}
+
+function label(identity: Identity | undefined) {
+  if (identity?.state === 'deleted') return m.access_deleted_account();
+  if (identity?.state !== 'active') return m.access_unknown_account();
+  return identity.displayName
+    ? `${identity.displayName}${identity.handle ? ` (@${identity.handle})` : ''}`
+    : identity.handle
+      ? `@${identity.handle}`
+      : m.access_unknown_account();
 }
 
 export function OwnerTransferForm({
@@ -41,11 +83,8 @@ export function OwnerTransferForm({
   const [confirming, setConfirming] = useState(false);
   if (!transferableOwner(page, grant) || grant.subject.kind !== 'account' || !io.transfer) return null;
   const fromAccountId = grant.subject.id;
-  const source = label(
-    page.identities.find((item) => item.id === fromAccountId),
-    fromAccountId,
-  );
-  const target = recipient ? label(recipient, recipient.id) : '';
+  const source = label(page.identities.find((item) => item.id === fromAccountId));
+  const target = recipient ? label(recipient) : '';
   const lookup = async () => {
     setFinding(true);
     setRecipient(null);
@@ -65,7 +104,8 @@ export function OwnerTransferForm({
       <h2 id="owner-transfer-heading" className="text-lg font-semibold">
         {m.access_transfer_owner()}
       </h2>
-      <p>{m.access_transfer_source({ name: source })}</p>
+      <p className="break-words [overflow-wrap:anywhere]">{m.access_transfer_source({ name: source })}</p>
+      <p className="font-medium">{resourceLabel(page.resource.type)}</p>
       <p className="text-sm text-muted-foreground">{m.access_transfer_responsibility()}</p>
       <Field>
         <FieldLabel htmlFor="owner-transfer-handle">{m.access_handle()}</FieldLabel>
@@ -86,8 +126,20 @@ export function OwnerTransferForm({
             {m.access_find_account()}
           </Button>
         </div>
-        <FieldDescription>{recipient ? target : m.access_confirm_identity()}</FieldDescription>
+        <FieldDescription className="[overflow-wrap:anywhere]">
+          {recipient ? target : m.access_confirm_identity()}
+        </FieldDescription>
       </Field>
+      <IdentityDetails
+        entries={[
+          [m.access_identity_resource_id(), page.resource.id],
+          [m.access_identity_type(), page.resource.type],
+          [m.access_identity_route(), page.resource.route],
+          [m.access_identity_from_id(), fromAccountId],
+          ...(recipient ? [[m.access_identity_to_id(), recipient.id] as const] : []),
+          [m.access_identity_valid(), grant.valid],
+        ]}
+      />
       {error ? <p role="alert">{m.access_transfer_lookup_failed()}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="button" disabled={!recipient || finding} onClick={() => setConfirming(true)}>
@@ -105,6 +157,17 @@ export function OwnerTransferForm({
               {m.access_transfer_confirm({ source, recipient: target })} {m.access_transfer_responsibility()}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <IdentityFacts
+            entries={[
+              [m.access_resource(), resourceLabel(page.resource.type)],
+              [m.access_identity_resource_id(), page.resource.id],
+              [m.access_identity_type(), page.resource.type],
+              [m.access_identity_route(), page.resource.route],
+              [m.access_identity_from_id(), fromAccountId],
+              ...(recipient ? [[m.access_identity_to_id(), recipient.id] as const] : []),
+              [m.access_identity_valid(), grant.valid],
+            ]}
+          />
           <AlertDialogFooter>
             <AlertDialogCancel>{m.access_cancel()}</AlertDialogCancel>
             <AlertDialogAction
