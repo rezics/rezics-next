@@ -51,7 +51,11 @@ Object.defineProperty(window.navigator, 'clipboard', {
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('../src/report/actions', () => ({ sendReport: async () => { throw new Error('unexpected report'); } }));
+mock.module('../src/report/actions', () => ({
+  sendReport: async () => {
+    throw new Error('unexpected report');
+  },
+}));
 
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
