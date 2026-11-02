@@ -76,13 +76,18 @@ test('discussion readers keep human context primary and exact source data reacha
   } as unknown as HistoryPage['revisions'][number];
   const exactPage = {
     ...ready,
-    revision: { ...selected, subjectIds: [sourceId], voteCitation: { questionId, units: 14, revision: 2 }, body: completeDocument },
+    revision: {
+      ...selected,
+      subjectIds: [sourceId],
+      voteCitation: { questionId, units: 14, revision: 2 },
+      body: completeDocument,
+    },
   };
-  const exactHtml = renderToStaticMarkup(
-    createElement(ExactRevisionView, { identity, page: exactPage }),
-  );
+  const exactHtml = renderToStaticMarkup(createElement(ExactRevisionView, { identity, page: exactPage }));
   const historyHtml = renderToStaticMarkup(
-    createElement('ol', null,
+    createElement(
+      'ol',
+      null,
       createElement(RevisionEntry, {
         revision,
         number: 1,

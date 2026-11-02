@@ -70,7 +70,9 @@ export function RevisionProvenance({
         <dl className="space-y-2 [overflow-wrap:anywhere]">
           <div>
             <dt className="font-medium">{m.thread_provenance_rating()}</dt>
-            <dd>{m.discussion_provenance_details_rating_units({ units: formatNumber(revision.voteCitation.units) })}</dd>
+            <dd>
+              {m.discussion_provenance_details_rating_units({ units: formatNumber(revision.voteCitation.units) })}
+            </dd>
           </div>
           {comparison ? (
             <div>

@@ -33,7 +33,8 @@ const meta = {
     },
     docs: {
       description: {
-        story: 'This composition uses supplied example values to show the reading hierarchy; it is not native response or authorization evidence.',
+        story:
+          'This composition uses supplied example values to show the reading hierarchy; it is not native response or authorization evidence.',
       },
     },
   },
@@ -68,7 +69,8 @@ export const ChangedVote: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Constructed author-private vote example; it is shown only as supplied currentVote data and is not native authorization evidence.',
+        story:
+          'Constructed author-private vote example; it is shown only as supplied currentVote data and is not native authorization evidence.',
       },
     },
   },
@@ -81,8 +83,12 @@ export const ChangedVote: Story = {
     await expect(summary).not.toHaveTextContent(STANDARD_QUESTION_ID);
     const detailsSummary = canvas.getByText(m.discussion_provenance_details_heading());
     await userEvent.click(detailsSummary);
-    await expect(canvas.getByText(m.thread_provenance_vote({ units: '14', questionId: STANDARD_QUESTION_ID, revision: '2' }))).toBeVisible();
-    await expect(canvas.getByText(m.thread_provenance_vote({ units: '0', questionId: STANDARD_QUESTION_ID, revision: '7' }))).toBeVisible();
+    await expect(
+      canvas.getByText(m.thread_provenance_vote({ units: '14', questionId: STANDARD_QUESTION_ID, revision: '2' })),
+    ).toBeVisible();
+    await expect(
+      canvas.getByText(m.thread_provenance_vote({ units: '0', questionId: STANDARD_QUESTION_ID, revision: '7' })),
+    ).toBeVisible();
   },
 };
 export const UnavailableReference: Story = {
@@ -130,7 +136,8 @@ export const LongLocalizedReferences: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Constructed long-label and author-private vote example for the 390px and 1280px viewports; it is not native authorization evidence.',
+        story:
+          'Constructed long-label and author-private vote example for the 390px and 1280px viewports; it is not native authorization evidence.',
       },
     },
   },

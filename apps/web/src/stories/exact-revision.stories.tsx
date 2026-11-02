@@ -62,7 +62,8 @@ export const LongSourceReferences: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Constructed immutable revision example with long unresolved source IDs for the 390px and 1280px viewports; it is not native response or authorization evidence.',
+        story:
+          'Constructed immutable revision example with long unresolved source IDs for the 390px and 1280px viewports; it is not native response or authorization evidence.',
       },
     },
   },
