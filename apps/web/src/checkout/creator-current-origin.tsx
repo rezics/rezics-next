@@ -94,7 +94,9 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
     if (
       next.state !== 'signed-in' ||
       next.subject !== this.workspace.subject ||
-      (next.observation === this.observed.observation && next.exposure !== this.observed.exposure) ||
+      (this.observed.admission === 'admitted' &&
+        next.observation === this.observed.observation &&
+        next.exposure !== this.observed.exposure) ||
       next.admission === 'closed' ||
       next.admission === 'unavailable'
     )
